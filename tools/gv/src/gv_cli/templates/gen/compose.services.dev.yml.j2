@@ -1,0 +1,9 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Локальная разработка: порты сервисов на хосте и читаемые логи.
+services:
+{% for s in services %}
+  {{ s.dns }}:
+    ports: ["127.0.0.1:{{ s.dev_port }}:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+{% endfor %}

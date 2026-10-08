@@ -1,0 +1,13 @@
+[project]
+name = "gv-core"
+version = "0.1.0"
+description = "Базовые строительные блоки домена: идентификаторы, агрегаты, события, ошибки, контекст запроса."
+requires-python = ">=3.13"
+dependencies = []
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gv_core"]

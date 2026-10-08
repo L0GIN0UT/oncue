@@ -1,0 +1,22 @@
+# Gateway (Nginx): единственная точка входа снаружи.
+name: guessverse
+
+services:
+  gateway:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    networks: [backend]
+    ports:
+      - "${GATEWAY_HTTP_PORT:-80}:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/generated:/etc/nginx/generated:ro
+      - ../nginx/snippets:/etc/nginx/snippets:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 128M}

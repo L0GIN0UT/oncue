@@ -1,0 +1,14 @@
+# {{ s.name }}
+
+{{ s.description }}.
+
+- Пакет: `{{ s.package }}`; запуск: `{{ s.name }} api|relay|consumer|worker|all|migrate`
+- Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
+- Публичный API: {% if s.public %}`/api/{{ s.public }}/v1/...` на gateway{% else %}нет (только internal){% endif %}
+
+- Зависимости: {% if s.database %}PostgreSQL{% endif %}{% if s.redis %}, Redis{% endif %}{% if s.kafka %}, Redpanda{% endif %}{% if s.rabbitmq %}, RabbitMQ{% endif %}
+
+- Статус: заглушка этапа 0 (health, метрики, outbox/inbox). Домен — по roadmap.
+
+## Особенности
+<!-- Дописывать сюда неочевидное: инварианты, подводные камни, решения. 10–15 строк максимум. -->

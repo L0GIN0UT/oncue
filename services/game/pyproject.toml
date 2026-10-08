@@ -1,0 +1,16 @@
+[project]
+name = "guessverse-game"
+version = "0.1.0"
+description = "Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32"
+requires-python = ">=3.13"
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+
+[project.scripts]
+game = "game_service.main:run"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/game_service"]

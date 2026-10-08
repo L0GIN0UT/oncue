@@ -1,0 +1,63 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Локальная разработка: порты сервисов на хосте и читаемые логи.
+services:
+  identity:
+    ports: ["127.0.0.1:8100:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  catalog:
+    ports: ["127.0.0.1:8101:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  media-pipeline:
+    ports: ["127.0.0.1:8102:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  game:
+    ports: ["127.0.0.1:8103:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  match:
+    ports: ["127.0.0.1:8104:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  rating:
+    ports: ["127.0.0.1:8105:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  collections:
+    ports: ["127.0.0.1:8106:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  library:
+    ports: ["127.0.0.1:8107:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  integrations:
+    ports: ["127.0.0.1:8108:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  progression:
+    ports: ["127.0.0.1:8109:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  payments:
+    ports: ["127.0.0.1:8110:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  social:
+    ports: ["127.0.0.1:8111:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  notifications:
+    ports: ["127.0.0.1:8112:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  bff-web:
+    ports: ["127.0.0.1:8113:8000"]
+    environment:
+      GV_LOG_JSON: "false"
+  admin:
+    ports: ["127.0.0.1:8114:8000"]
+    environment:
+      GV_LOG_JSON: "false"

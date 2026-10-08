@@ -1,0 +1,90 @@
+# Корень монорепозитория Guessverse (виртуальный uv workspace).
+# Сам корень не является пакетом: здесь только состав workspace, общие dev-зависимости
+# и единые настройки инструментов.
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*", "tools/gv"]
+
+[tool.uv.sources]
+gv-core = { workspace = true }
+gv-db = { workspace = true }
+gv-messaging = { workspace = true }
+gv-observability = { workspace = true }
+gv-service = { workspace = true }
+gv-auth = { workspace = true }
+gv-flags = { workspace = true }
+gv-testkit = { workspace = true }
+gv-cli = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "gv-testkit",
+    "gv-cli",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.115",
+    "pyyaml>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "import-linter>=2.1",
+    "pre-commit>=4.0",
+    "mkdocs>=1.6,<2",  # MkDocs 2.0 несовместим с плагинами (mkdocstrings, material)
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["tools/gv/src/gv_cli/templates", "docs"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "B", "UP", "N", "S", "A", "C4", "DTZ", "T20", "SIM",
+    "RET", "ARG", "PTH", "ERA", "PL", "TRY", "RUF", "ASYNC", "PERF", "FBT",
+]
+ignore = [
+    "PLR0913",  # use-case-конструкторы с DI законно принимают много зависимостей
+    "TRY003",   # длинные сообщения в исключениях допустимы
+    "PLC0415",  # ленивые импорты тяжёлых/опциональных модулей делаем осознанно
+    "RUF001", "RUF002", "RUF003",  # кириллица в строках, докстрингах и комментариях — норма проекта
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S311", "PLR2004", "ARG001", "ARG002", "FBT001", "S105", "S106"]
+"tools/gv/**" = ["T201", "S603", "S607", "FBT001", "FBT002"]  # typer: bool-опции — норма
+"libs/testkit/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gv_*"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+exclude = ["tools/gv/src/gv_cli/templates/"]
+
+[[tool.mypy.overrides]]
+module = ["aiokafka.*", "aio_pika.*", "UnleashClient.*", "testcontainers.*", "asgi_lifespan.*", "docker.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "--strict-markers -ra --import-mode=importlib"
+xfail_strict = true
+
+[tool.coverage.run]
+# Источник покрытия задаётся при запуске: `--cov=<пакет модуля>` (gv test --cov, CI).
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]

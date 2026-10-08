@@ -1,0 +1,75 @@
+# Работа с AI-ассистентом: скиллы и зоны ответственности
+
+> Статус: принято (v1). Документ для Claude и для разработчика: какой инструмент в какой момент использовать.
+
+## 1. Порядок загрузки контекста (экономия токенов)
+
+1. **Всегда первым** читается `CLAUDE.md` в корне: выжимка проекта, правила, карта документов.
+2. Затем `services/<name>/CLAUDE.md` того сервиса, с которым идёт работа.
+3. Из `docs/` — **только документ по теме задачи** (карта в [README.md](README.md)). Всю документацию подряд не читать.
+4. Документацию библиотек брать через **context7** (точная версия), а не через веб-поиск и не по памяти.
+5. Широкий поиск по коду («где используется», «как устроено X») — через агента `feature-dev:code-explorer`. Он возвращает вывод, а не дамп файлов.
+6. Скиллы подключаются по таблице ниже, а не «на всякий случай».
+
+## 2. Карта: этап работы → инструмент
+
+| Этап / ситуация | Обязательно | По необходимости |
+|---|---|---|
+| **Новая фича** (больше одного файла) | `feature-dev:feature-dev` | `feature-dev:code-architect` для плана |
+| **Новый бэкенд-компонент** (endpoint, consumer, worker, cron) | `backend-design:think-before-coding` → `backend-design:design` | `backend-design:component-architect` |
+| **Выбор новой технологии** | `backend-design:boring-by-default` | агент `backend-design:boring-tech-advisor`; ADR по итогам |
+| **Схема БД, ORM-модели** | `backend-design:data-modeling-discipline` | агент `backend-design:schema-reviewer` |
+| **Миграция** | `backend-design:migration-safety` + `backend-design:review-migration` | — |
+| **Запросы, репозитории** | `backend-design:query-discipline` | `backend-design:hunt-n-plus-one`, `backend-design:explain-this-query` |
+| **Изменение состояния, события, вызовы внешних API** | `backend-design:idempotency-and-side-effects` (outbox, `opId`) | — |
+| **Обработка ошибок, ретраи, деградация** | `backend-design:error-handling-as-design` | агенты `backend-design:incident-thinker`, `pr-review-toolkit:silent-failure-hunter` |
+| **Отказоустойчивость перед выкатом компонента** | агент `backend-design:incident-thinker` | — |
+| **Логи, метрики, трейсы** | `backend-design:observability-by-default` | `observability:setup-otel-propagation` |
+| **Производительность, масштаб** | `backend-design:performance-and-scaling` | — |
+| **Redis** (сессии, комнаты, лидерборды, lease) | `redis-development:redis-core` | `redis-connections`, `redis-clustering`, `redis-security`, `redis-observability` |
+| **Тесты** | `backend-design:testing-with-discernment` + [04-testing.md](04-testing.md) | агент `pr-review-toolkit:pr-test-analyzer` |
+| **Фронтенд: UI и визуал** | `frontend-design:frontend-design` | ui-ux-pro-max (если доступен) |
+| **E2E фронта** | playwright (MCP) | — |
+| **Типы и доменные модели** | — | агент `pr-review-toolkit:type-design-analyzer` |
+| **Комментарии и докстринги** | правила §4 | агент `pr-review-toolkit:comment-analyzer` |
+| **После написания кода** | агент `code-simplifier` | — |
+| **Перед коммитом / PR** | `pr-review-toolkit:review-pr` | `code-review:code-review` |
+| **Прод сломался / медленно** | `backend-design:debugging-discipline` | агент `backend-design:incident-investigator` |
+
+## 3. Безопасность: обязательные проверки
+
+Security Guidance работает автоматически: хуки на каждой правке и при завершении. Поверх этого по зонам:
+
+| Зона | Перед merge обязательно |
+|---|---|
+| **Любой diff** | `backend-design:security-discipline` |
+| **Новый endpoint или права доступа** | `backend-design:auth-and-authorization` + агент `backend-design:security-reviewer` |
+| **identity, auth, токены, сессии, роли** | всё выше + `finecomb:finecomb` по изменённому модулю |
+| **payments, progression (ledger), entitlements** | всё выше + `finecomb:finecomb` + `backend-design:idempotency-and-side-effects`. Ручная проверка владельцем проекта |
+| **Изменение OpenAPI контракта** | `42crunch-api-security-testing:42crunch-audit` по спецификации |
+| **Перед релизом** | `finecomb:finecomb` по всему репозиторию + 42crunch audit + scan на staging |
+| **Перед включением биллинга** (`billing.enabled=true`) | Всё выше + внешний аудит или пентест платёжного контура. Ни один плагин его не заменяет |
+
+## 4. Комментарии и автодокументация в коде
+
+- **Докстринги** (Google style) обязательны для: публичных классов и функций `domain` и `application`, портов, плагинов game-kernel, публичных функций `libs/*`. Докстринг объясняет **что делает и какие инварианты держит**, а не пересказывает код.
+- **Комментарии в коде** — только «почему»: неочевидное решение, ссылка на ADR (`# см. ADR 0010: single-writer`), обход бага библиотеки со ссылкой на issue.
+- Запрещены комментарии, которые дублируют код, и закомментированный код.
+- Язык докстрингов и комментариев — **русский**, идентификаторы — английский.
+- API-документация генерируется из кода (OpenAPI из FastAPI, `description` у полей Pydantic). Справочник libs — `mkdocs` + `mkdocstrings` из докстрингов (этап 0).
+- После больших правок документации — агент `pr-review-toolkit:comment-analyzer`.
+
+## 5. Проектные скиллы
+
+| Скилл | Когда |
+|---|---|
+| `guessverse-conventions` | Любая работа с кодом Guessverse: структура сервиса, слои, именование, события, тесты |
+| `guessverse-new-service` | Создание сервиса или библиотеки по шаблону |
+
+Скиллы и `CLAUDE.md` обновляются в том же PR, что и правила, которые они описывают.
+
+## 6. Чего не делать
+
+- Не запускать все ревью-агенты подряд на мелкий diff: для правки в 20 строк достаточно `security-discipline` + `code-simplifier`.
+- Не использовать `code-review:code-review` и `pr-review-toolkit:review-pr` одновременно на одном PR.
+- Не принимать технологию, которой нет в [architecture/README.md](architecture/README.md) §6, без ADR.

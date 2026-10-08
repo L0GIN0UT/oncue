@@ -1,0 +1,206 @@
+# Инфраструктура Guessverse: хранилища, брокеры, realtime, фича-флаги.
+# Версии образов закреплены явно; обновлять осознанно и проверять тегом в реестре.
+name: guessverse
+
+networks:
+  backend:
+    name: guessverse_backend
+
+volumes:
+  pgdata:
+  redisdata:
+  redpandadata:
+  rabbitmqdata:
+  opensearchdata:
+  s3data:
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5"}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    # Пароли БД сервисов нужны init-скрипту (генерируется `gv gen`).
+    env_file: .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - max_connections=300   # 15 сервисов × пул (5 + 5) + админка и запас
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - log_min_duration_statement=500
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 3G}
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?задайте REDIS_PASSWORD}
+    # noeviction: в Redis живут игровые сессии и комнаты — их нельзя молча вытеснять.
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDISCLI_AUTH" --appendonly yes --maxmemory 768mb --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 1G}
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.7
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      - --set=redpanda.auto_create_topics_enabled=true
+      - --default-log-level=warn
+    volumes:
+      - redpandadata:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 1536M}
+
+  rabbitmq:
+    image: rabbitmq:4.0-management-alpine
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guessverse}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 512M}
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      discovery.type: single-node
+      OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+      # Доступен только во внутренней сети backend, порт наружу не публикуется.
+      # При выносе в отдельный кластер — включить security plugin и TLS.
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock: {soft: -1, hard: -1}
+      nofile: {soft: 65536, hard: 65536}
+    volumes:
+      - opensearchdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+    deploy:
+      resources:
+        limits: {memory: 2G}
+
+  # S3-совместимое хранилище ассетов. Код работает через S3 API, поэтому MinIO можно
+  # заменить (Garage, SeaweedFS, облачный S3) без изменений в сервисах.
+  # ВНИМАНИЕ: проверить политику распространения образов MinIO перед продом.
+  s3:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-guessverse}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?задайте MINIO_ROOT_PASSWORD}
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 512M}
+
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    command: ["centrifugo"]
+    environment:
+      CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY:?задайте CENTRIFUGO_API_KEY}
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_TOKEN_HMAC_SECRET:?задайте CENTRIFUGO_TOKEN_HMAC_SECRET}
+      CENTRIFUGO_ENGINE_TYPE: redis
+      CENTRIFUGO_ENGINE_REDIS_ADDRESS: redis://:${REDIS_PASSWORD}@redis:6379/1
+      CENTRIFUGO_HEALTH_ENABLED: "true"
+    depends_on:
+      redis: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  unleash:
+    image: unleashorg/unleash-server:6
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      DATABASE_URL: postgres://unleash:${PG_PASSWORD_UNLEASH:?задайте PG_PASSWORD_UNLEASH}@postgres:5432/unleash
+      DATABASE_SSL: "false"
+      INIT_ADMIN_API_TOKENS: "*:*.${UNLEASH_ADMIN_TOKEN:?задайте UNLEASH_ADMIN_TOKEN}"
+      LOG_LEVEL: warn
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 384M}

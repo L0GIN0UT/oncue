@@ -1,0 +1,455 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Проверка: uv run lint-imports
+
+[importlinter]
+root_packages =
+    gv_core
+    gv_db
+    gv_messaging
+    gv_observability
+    gv_service
+    gv_auth
+    gv_flags
+    gv_testkit
+    identity_service
+    catalog_service
+    media_pipeline_service
+    game_service
+    match_service
+    rating_service
+    collections_service
+    library_service
+    integrations_service
+    progression_service
+    payments_service
+    social_service
+    notifications_service
+    bff_web_service
+    admin_service
+include_external_packages = True
+
+[importlinter:contract:core-is-pure]
+name = gv_core не зависит от инфраструктуры и других библиотек
+type = forbidden
+source_modules = gv_core
+forbidden_modules =
+    gv_db
+    gv_messaging
+    gv_observability
+    gv_service
+    gv_auth
+    gv_flags
+    gv_testkit
+    sqlalchemy
+    fastapi
+    pydantic
+    redis
+
+[importlinter:contract:libs-do-not-import-services]
+name = Библиотеки не импортируют сервисы
+type = forbidden
+source_modules =
+    gv_core
+    gv_db
+    gv_messaging
+    gv_observability
+    gv_service
+    gv_auth
+    gv_flags
+    gv_testkit
+forbidden_modules =
+    identity_service
+    catalog_service
+    media_pipeline_service
+    game_service
+    match_service
+    rating_service
+    collections_service
+    library_service
+    integrations_service
+    progression_service
+    payments_service
+    social_service
+    notifications_service
+    bff_web_service
+    admin_service
+
+[importlinter:contract:services-independent]
+name = Сервисы не импортируют друг друга
+type = independence
+modules =
+    identity_service
+    catalog_service
+    media_pipeline_service
+    game_service
+    match_service
+    rating_service
+    collections_service
+    library_service
+    integrations_service
+    progression_service
+    payments_service
+    social_service
+    notifications_service
+    bff_web_service
+    admin_service
+
+[importlinter:contract:identity-layers]
+name = identity: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    identity_service.api | identity_service.infrastructure
+    identity_service.application
+    identity_service.domain
+
+[importlinter:contract:identity-domain-pure]
+name = identity: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = identity_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:catalog-layers]
+name = catalog: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    catalog_service.api | catalog_service.infrastructure
+    catalog_service.application
+    catalog_service.domain
+
+[importlinter:contract:catalog-domain-pure]
+name = catalog: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = catalog_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:media_pipeline-layers]
+name = media_pipeline: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    media_pipeline_service.api | media_pipeline_service.infrastructure
+    media_pipeline_service.application
+    media_pipeline_service.domain
+
+[importlinter:contract:media_pipeline-domain-pure]
+name = media_pipeline: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = media_pipeline_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:game-layers]
+name = game: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    game_service.api | game_service.infrastructure
+    game_service.application
+    game_service.domain
+
+[importlinter:contract:game-domain-pure]
+name = game: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = game_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:match-layers]
+name = match: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    match_service.api | match_service.infrastructure
+    match_service.application
+    match_service.domain
+
+[importlinter:contract:match-domain-pure]
+name = match: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = match_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:rating-layers]
+name = rating: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    rating_service.api | rating_service.infrastructure
+    rating_service.application
+    rating_service.domain
+
+[importlinter:contract:rating-domain-pure]
+name = rating: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = rating_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:collections-layers]
+name = collections: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    collections_service.api | collections_service.infrastructure
+    collections_service.application
+    collections_service.domain
+
+[importlinter:contract:collections-domain-pure]
+name = collections: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = collections_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:library-layers]
+name = library: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    library_service.api | library_service.infrastructure
+    library_service.application
+    library_service.domain
+
+[importlinter:contract:library-domain-pure]
+name = library: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = library_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:integrations-layers]
+name = integrations: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    integrations_service.api | integrations_service.infrastructure
+    integrations_service.application
+    integrations_service.domain
+
+[importlinter:contract:integrations-domain-pure]
+name = integrations: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = integrations_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:progression-layers]
+name = progression: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    progression_service.api | progression_service.infrastructure
+    progression_service.application
+    progression_service.domain
+
+[importlinter:contract:progression-domain-pure]
+name = progression: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = progression_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:payments-layers]
+name = payments: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    payments_service.api | payments_service.infrastructure
+    payments_service.application
+    payments_service.domain
+
+[importlinter:contract:payments-domain-pure]
+name = payments: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = payments_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:social-layers]
+name = social: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    social_service.api | social_service.infrastructure
+    social_service.application
+    social_service.domain
+
+[importlinter:contract:social-domain-pure]
+name = social: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = social_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:notifications-layers]
+name = notifications: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    notifications_service.api | notifications_service.infrastructure
+    notifications_service.application
+    notifications_service.domain
+
+[importlinter:contract:notifications-domain-pure]
+name = notifications: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = notifications_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:bff_web-layers]
+name = bff_web: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    bff_web_service.api | bff_web_service.infrastructure
+    bff_web_service.application
+    bff_web_service.domain
+
+[importlinter:contract:bff_web-domain-pure]
+name = bff_web: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = bff_web_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+
+[importlinter:contract:admin-layers]
+name = admin: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    admin_service.api | admin_service.infrastructure
+    admin_service.application
+    admin_service.domain
+
+[importlinter:contract:admin-domain-pure]
+name = admin: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = admin_service.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability

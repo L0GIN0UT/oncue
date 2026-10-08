@@ -1,0 +1,85 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Проверка: uv run lint-imports
+
+[importlinter]
+root_packages =
+    gv_core
+    gv_db
+    gv_messaging
+    gv_observability
+    gv_service
+    gv_auth
+    gv_flags
+    gv_testkit
+{% for s in services %}
+    {{ s.package }}
+{% endfor %}
+include_external_packages = True
+
+[importlinter:contract:core-is-pure]
+name = gv_core не зависит от инфраструктуры и других библиотек
+type = forbidden
+source_modules = gv_core
+forbidden_modules =
+    gv_db
+    gv_messaging
+    gv_observability
+    gv_service
+    gv_auth
+    gv_flags
+    gv_testkit
+    sqlalchemy
+    fastapi
+    pydantic
+    redis
+
+[importlinter:contract:libs-do-not-import-services]
+name = Библиотеки не импортируют сервисы
+type = forbidden
+source_modules =
+    gv_core
+    gv_db
+    gv_messaging
+    gv_observability
+    gv_service
+    gv_auth
+    gv_flags
+    gv_testkit
+forbidden_modules =
+{% for s in services %}
+    {{ s.package }}
+{% endfor %}
+
+[importlinter:contract:services-independent]
+name = Сервисы не импортируют друг друга
+type = independence
+modules =
+{% for s in services %}
+    {{ s.package }}
+{% endfor %}
+{% for s in services %}
+
+[importlinter:contract:{{ s.name }}-layers]
+name = {{ s.name }}: слои domain ← application ← infrastructure | api
+type = layers
+layers =
+    {{ s.package }}.api | {{ s.package }}.infrastructure
+    {{ s.package }}.application
+    {{ s.package }}.domain
+
+[importlinter:contract:{{ s.name }}-domain-pure]
+name = {{ s.name }}: домен без фреймворков и инфраструктуры
+type = forbidden
+source_modules = {{ s.package }}.domain
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    aiokafka
+    aio_pika
+    httpx
+    gv_db
+    gv_messaging
+    gv_service
+    gv_observability
+{% endfor %}

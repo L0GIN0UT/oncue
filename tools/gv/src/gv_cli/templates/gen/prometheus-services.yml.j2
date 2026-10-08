@@ -1,0 +1,6 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# file_sd для Prometheus: цели сбора метрик сервисов.
+{% for s in services %}
+- targets: ["{{ s.dns }}:8000"]
+  labels: {service: "{{ s.name }}"}
+{% endfor %}

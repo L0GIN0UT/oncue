@@ -1,0 +1,17 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Подключается внутри server {}.
+# Публичный API: /api/<префикс>/v1/... → сервис получает /v1/...
+# Внутренние (/internal), админские (/admin), health, метрики и документация снаружи недоступны.
+
+{% for s in services if s.public %}
+location /api/{{ s.public }}/ {
+    # Закрываем и /internal/v1/..., и /v1/internal/... — на случай, если ручку смонтируют не по конвенции.
+    location ~ ^/api/{{ s.public }}/(v[0-9]+/)?(internal|admin|health|metrics|docs|openapi\.json)(/|$) {
+        return 404;
+    }
+    limit_req zone=api_per_ip burst=40 nodelay;
+    proxy_pass http://gv_{{ s.name }}/;
+    include /etc/nginx/snippets/proxy.conf;
+}
+
+{% endfor %}

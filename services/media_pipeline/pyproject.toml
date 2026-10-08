@@ -1,0 +1,16 @@
+[project]
+name = "guessverse-media-pipeline"
+version = "0.1.0"
+description = "Генерация ассетов загадок по уровням, хранение в S3, подписанные ссылки, проверка UGC-изображений"
+requires-python = ">=3.13"
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+
+[project.scripts]
+media_pipeline = "media_pipeline_service.main:run"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/media_pipeline_service"]

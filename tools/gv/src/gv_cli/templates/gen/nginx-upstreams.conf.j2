@@ -1,0 +1,12 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Подключается на уровне http {}. `resolve` + `zone`: nginx перерезолвит имя контейнера
+# в рантайме, поэтому gateway стартует и работает, даже если часть сервисов ещё не поднята
+# (деградация вместо падения; нужен nginx >= 1.27.3).
+
+{% for s in services if s.public %}
+upstream gv_{{ s.name }} {
+    zone gv_{{ s.name }} 64k;
+    server {{ s.dns }}:8000 resolve max_fails=3 fail_timeout=10s;
+    keepalive 16;
+}
+{% endfor %}

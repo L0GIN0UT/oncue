@@ -1,0 +1,650 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Запуск: см. infra/compose/README.md
+
+x-python-service: &python-service
+  build:
+    context: ../..
+    dockerfile: infra/docker/python-service.Dockerfile
+  restart: unless-stopped
+  stop_grace_period: 30s
+  networks: [backend]
+  logging:
+    driver: json-file
+    options: {max-size: "20m", max-file: "5"}
+  healthcheck:
+    test: ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).status == 200 else 1)"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 20s
+
+x-common-env: &common-env
+  GV_ENVIRONMENT: ${GV_ENVIRONMENT:?задайте GV_ENVIRONMENT (local|staging|production)}
+  GV_LOG_LEVEL: ${GV_LOG_LEVEL:-INFO}
+  GV_OTLP_ENDPOINT: ${GV_OTLP_ENDPOINT:-}
+  GV_JWKS_URL: http://identity:8000/.well-known/jwks.json
+  GV_JWT_ISSUER: ${GV_JWT_ISSUER:-https://identity.guessverse.local}
+
+services:
+  # ---------------------------------------------------------------- identity
+  # Аккаунты, вход, сессии и токены, привязка провайдеров, слияние и удаление аккаунтов, роли и права
+  identity-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: identity}
+    image: ${GV_REGISTRY:-guessverse}/identity:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: identity
+      GV_DATABASE_URL: postgresql+asyncpg://identity:${PG_PASSWORD_IDENTITY:?задайте PG_PASSWORD_IDENTITY}@postgres:5432/identity
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  identity:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: identity}
+    image: ${GV_REGISTRY:-guessverse}/identity:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: identity
+      GV_DATABASE_URL: postgresql+asyncpg://identity:${PG_PASSWORD_IDENTITY:?задайте PG_PASSWORD_IDENTITY}@postgres:5432/identity
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      identity-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- catalog
+  # Медиа-единицы (треки, фильмы, сериалы, аниме), персоны, франшизы, алиасы, поиск и автокомплит
+  catalog-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: catalog}
+    image: ${GV_REGISTRY:-guessverse}/catalog:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: catalog
+      GV_DATABASE_URL: postgresql+asyncpg://catalog:${PG_PASSWORD_CATALOG:?задайте PG_PASSWORD_CATALOG}@postgres:5432/catalog
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  catalog:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: catalog}
+    image: ${GV_REGISTRY:-guessverse}/catalog:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: catalog
+      GV_DATABASE_URL: postgresql+asyncpg://catalog:${PG_PASSWORD_CATALOG:?задайте PG_PASSWORD_CATALOG}@postgres:5432/catalog
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      catalog-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 320M}
+  # ---------------------------------------------------------------- media_pipeline
+  # Генерация ассетов загадок по уровням, хранение в S3, подписанные ссылки, проверка UGC-изображений
+  media-pipeline-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: media_pipeline}
+    image: ${GV_REGISTRY:-guessverse}/media-pipeline:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: media_pipeline
+      GV_DATABASE_URL: postgresql+asyncpg://media_pipeline:${PG_PASSWORD_MEDIA_PIPELINE:?задайте PG_PASSWORD_MEDIA_PIPELINE}@postgres:5432/media_pipeline
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  media-pipeline:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: media_pipeline}
+    image: ${GV_REGISTRY:-guessverse}/media-pipeline:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: media_pipeline
+      GV_DATABASE_URL: postgresql+asyncpg://media_pipeline:${PG_PASSWORD_MEDIA_PIPELINE:?задайте PG_PASSWORD_MEDIA_PIPELINE}@postgres:5432/media_pipeline
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      media-pipeline-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 512M}
+  # ---------------------------------------------------------------- game
+  # Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32
+  game-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: game}
+    image: ${GV_REGISTRY:-guessverse}/game:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: game
+      GV_DATABASE_URL: postgresql+asyncpg://game:${PG_PASSWORD_GAME:?задайте PG_PASSWORD_GAME}@postgres:5432/game
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  game:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: game}
+    image: ${GV_REGISTRY:-guessverse}/game:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: game
+      GV_DATABASE_URL: postgresql+asyncpg://game:${PG_PASSWORD_GAME:?задайте PG_PASSWORD_GAME}@postgres:5432/game
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      game-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 320M}
+  # ---------------------------------------------------------------- match
+  # Онлайн: лобби, комнаты, матчмейкинг, конечный автомат матча, таймеры, реконнект, наблюдение
+  match-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: match}
+    image: ${GV_REGISTRY:-guessverse}/match:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: match
+      GV_DATABASE_URL: postgresql+asyncpg://match:${PG_PASSWORD_MATCH:?задайте PG_PASSWORD_MATCH}@postgres:5432/match
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  match:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: match}
+    image: ${GV_REGISTRY:-guessverse}/match:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: match
+      GV_DATABASE_URL: postgresql+asyncpg://match:${PG_PASSWORD_MATCH:?задайте PG_PASSWORD_MATCH}@postgres:5432/match
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      match-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 320M}
+  # ---------------------------------------------------------------- rating
+  # Эло, калибровка, звания, сезоны, топы недели и сезона, лидерборды
+  rating-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: rating}
+    image: ${GV_REGISTRY:-guessverse}/rating:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: rating
+      GV_DATABASE_URL: postgresql+asyncpg://rating:${PG_PASSWORD_RATING:?задайте PG_PASSWORD_RATING}@postgres:5432/rating
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  rating:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: rating}
+    image: ${GV_REGISTRY:-guessverse}/rating:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: rating
+      GV_DATABASE_URL: postgresql+asyncpg://rating:${PG_PASSWORD_RATING:?задайте PG_PASSWORD_RATING}@postgres:5432/rating
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      rating-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- collections
+  # Пользовательские и кураторские сборники: конструктор, черновики, каталог, лайки, избранное
+  collections-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: collections}
+    image: ${GV_REGISTRY:-guessverse}/collections:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: collections
+      GV_DATABASE_URL: postgresql+asyncpg://collections:${PG_PASSWORD_COLLECTIONS:?задайте PG_PASSWORD_COLLECTIONS}@postgres:5432/collections
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  collections:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: collections}
+    image: ${GV_REGISTRY:-guessverse}/collections:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: collections
+      GV_DATABASE_URL: postgresql+asyncpg://collections:${PG_PASSWORD_COLLECTIONS:?задайте PG_PASSWORD_COLLECTIONS}@postgres:5432/collections
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      collections-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- library
+  # Личная медиатека: плейлисты, «смотреть позже», «просмотрено», «любимое»
+  library-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: library}
+    image: ${GV_REGISTRY:-guessverse}/library:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: library
+      GV_DATABASE_URL: postgresql+asyncpg://library:${PG_PASSWORD_LIBRARY:?задайте PG_PASSWORD_LIBRARY}@postgres:5432/library
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  library:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: library}
+    image: ${GV_REGISTRY:-guessverse}/library:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: library
+      GV_DATABASE_URL: postgresql+asyncpg://library:${PG_PASSWORD_LIBRARY:?задайте PG_PASSWORD_LIBRARY}@postgres:5432/library
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      library-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- integrations
+  # Адаптеры внешних провайдеров, шифрованные токены, синхронизация и импорт
+  integrations-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: integrations}
+    image: ${GV_REGISTRY:-guessverse}/integrations:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: integrations
+      GV_DATABASE_URL: postgresql+asyncpg://integrations:${PG_PASSWORD_INTEGRATIONS:?задайте PG_PASSWORD_INTEGRATIONS}@postgres:5432/integrations
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  integrations:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: integrations}
+    image: ${GV_REGISTRY:-guessverse}/integrations:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: integrations
+      GV_DATABASE_URL: postgresql+asyncpg://integrations:${PG_PASSWORD_INTEGRATIONS:?задайте PG_PASSWORD_INTEGRATIONS}@postgres:5432/integrations
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      integrations-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- progression
+  # Опыт и уровни, валюта (журнал проводок), задания, бейджи, магазин, инвентарь, оформление профиля
+  progression-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: progression}
+    image: ${GV_REGISTRY:-guessverse}/progression:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: progression
+      GV_DATABASE_URL: postgresql+asyncpg://progression:${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}@postgres:5432/progression
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  progression:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: progression}
+    image: ${GV_REGISTRY:-guessverse}/progression:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: progression
+      GV_DATABASE_URL: postgresql+asyncpg://progression:${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}@postgres:5432/progression
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      progression-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- payments
+  # Тарифы и подписки, платёжный провайдер, вебхуки, entitlements. Выключен флагом billing.enabled
+  payments-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: payments}
+    image: ${GV_REGISTRY:-guessverse}/payments:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: payments
+      GV_DATABASE_URL: postgresql+asyncpg://payments:${PG_PASSWORD_PAYMENTS:?задайте PG_PASSWORD_PAYMENTS}@postgres:5432/payments
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  payments:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: payments}
+    image: ${GV_REGISTRY:-guessverse}/payments:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: payments
+      GV_DATABASE_URL: postgresql+asyncpg://payments:${PG_PASSWORD_PAYMENTS:?задайте PG_PASSWORD_PAYMENTS}@postgres:5432/payments
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      payments-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- social
+  # Друзья, комментарии, жалобы, модерация, шкалы поведения и санкции, приватность
+  social-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: social}
+    image: ${GV_REGISTRY:-guessverse}/social:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: social
+      GV_DATABASE_URL: postgresql+asyncpg://social:${PG_PASSWORD_SOCIAL:?задайте PG_PASSWORD_SOCIAL}@postgres:5432/social
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  social:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: social}
+    image: ${GV_REGISTRY:-guessverse}/social:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: social
+      GV_DATABASE_URL: postgresql+asyncpg://social:${PG_PASSWORD_SOCIAL:?задайте PG_PASSWORD_SOCIAL}@postgres:5432/social
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+    depends_on:
+      social-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- notifications
+  # In-app уведомления, realtime-доставка, e-mail, web-push, отключение по типам
+  notifications-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: notifications}
+    image: ${GV_REGISTRY:-guessverse}/notifications:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: notifications
+      GV_DATABASE_URL: postgresql+asyncpg://notifications:${PG_PASSWORD_NOTIFICATIONS:?задайте PG_PASSWORD_NOTIFICATIONS}@postgres:5432/notifications
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  notifications:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: notifications}
+    image: ${GV_REGISTRY:-guessverse}/notifications:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: notifications
+      GV_DATABASE_URL: postgresql+asyncpg://notifications:${PG_PASSWORD_NOTIFICATIONS:?задайте PG_PASSWORD_NOTIFICATIONS}@postgres:5432/notifications
+      GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+    depends_on:
+      notifications-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- bff_web
+  # Backend-for-frontend: агрегация данных под экраны веб-клиента
+
+  bff-web:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: bff_web}
+    image: ${GV_REGISTRY:-guessverse}/bff-web:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: bff_web
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+    depends_on:
+      redis: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+  # ---------------------------------------------------------------- admin
+  # Админ-панель (Django на этапе 1): модерация, контент, конфиги режимов; сейчас — заглушка
+  admin-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: admin}
+    image: ${GV_REGISTRY:-guessverse}/admin:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: admin
+      GV_DATABASE_URL: postgresql+asyncpg://admin:${PG_PASSWORD_ADMIN:?задайте PG_PASSWORD_ADMIN}@postgres:5432/admin
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+
+  admin:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: admin}
+    image: ${GV_REGISTRY:-guessverse}/admin:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: admin
+      GV_DATABASE_URL: postgresql+asyncpg://admin:${PG_PASSWORD_ADMIN:?задайте PG_PASSWORD_ADMIN}@postgres:5432/admin
+      GV_DATABASE_POOL_SIZE: "5"
+    depends_on:
+      admin-migrate: {condition: service_completed_successfully}
+    deploy:
+      resources:
+        limits: {memory: 256M}

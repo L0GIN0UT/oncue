@@ -1,0 +1,107 @@
+# Наблюдаемость: метрики, логи, трейсы. Рекомендуется отдельный VPS (docs/07-infrastructure.md).
+# Подключается к сети backend основного стека, чтобы собирать метрики сервисов.
+name: guessverse-observability
+
+networks:
+  backend:
+    name: guessverse_backend
+    external: true
+
+volumes:
+  prometheusdata:
+  grafanadata:
+  esdata:
+  tempodata:
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "3"}
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ../observability/prometheus:/etc/prometheus:ro
+      - prometheusdata:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    deploy: {resources: {limits: {memory: 1G}}}
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?задайте GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafanadata:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+    deploy: {resources: {limits: {memory: 384M}}}
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      # Только во внутренней сети. При выносе наружу — включить xpack.security и TLS.
+      xpack.security.enabled: "false"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    deploy: {resources: {limits: {memory: 2G}}}
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports: ["127.0.0.1:5601:5601"]
+    depends_on: [elasticsearch]
+    deploy: {resources: {limits: {memory: 1G}}}
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.15.3
+    restart: unless-stopped
+    user: root  # чтение логов контейнеров Docker
+    networks: [backend]
+    logging: *logging
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ../observability/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [elasticsearch]
+    deploy: {resources: {limits: {memory: 256M}}}
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ../observability/otel/config.yaml:/etc/otel/config.yaml:ro
+    deploy: {resources: {limits: {memory: 256M}}}
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    restart: unless-stopped
+    networks: [backend]
+    logging: *logging
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ../observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempodata:/var/tempo
+    deploy: {resources: {limits: {memory: 512M}}}

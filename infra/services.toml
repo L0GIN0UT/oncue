@@ -1,0 +1,156 @@
+# Реестр сервисов Guessverse — ЕДИНЫЙ источник истины о составе системы.
+#
+# Из этого файла `gv gen` генерирует:
+#   infra/compose/compose.services.yml        — сервисы в docker-compose
+#   infra/compose/postgres/10-service-databases.sh — БД и пользователь на каждый сервис
+#   infra/compose/.env.example                — переменные окружения
+#   infra/nginx/generated/{upstreams,routes}.conf — маршрутизация gateway
+#   infra/observability/prometheus/services.yml — цели сбора метрик
+#   .importlinter                             — правила слоёв и независимости сервисов
+#
+# Руками сгенерированные файлы не правим: изменить реестр → `gv gen` → закоммитить всё вместе.
+# CI проверяет актуальность командой `gv gen --check`.
+#
+# Поля сервиса:
+#   description  — назначение (попадает в OpenAPI и CLAUDE.md сервиса)
+#   public       — префикс публичного API на gateway: /api/<public>/v1/... ("" — не публикуется)
+#   database     — своя БД PostgreSQL
+#   redis        — использует Redis
+#   kafka        — публикует/читает доменные события (relay + consumer)
+#   rabbitmq     — фоновые задачи
+#   memory_mb    — лимит памяти контейнера
+
+[services.identity]
+description = "Аккаунты, вход, сессии и токены, привязка провайдеров, слияние и удаление аккаунтов, роли и права"
+public = "identity"
+database = true
+redis = true
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.catalog]
+description = "Медиа-единицы (треки, фильмы, сериалы, аниме), персоны, франшизы, алиасы, поиск и автокомплит"
+public = "catalog"
+database = true
+redis = true
+kafka = true
+rabbitmq = false
+memory_mb = 320
+
+[services.media_pipeline]
+description = "Генерация ассетов загадок по уровням, хранение в S3, подписанные ссылки, проверка UGC-изображений"
+public = ""
+database = true
+redis = false
+kafka = true
+rabbitmq = true
+memory_mb = 512
+
+[services.game]
+description = "Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32"
+public = "game"
+database = true
+redis = true
+kafka = true
+rabbitmq = false
+memory_mb = 320
+
+[services.match]
+description = "Онлайн: лобби, комнаты, матчмейкинг, конечный автомат матча, таймеры, реконнект, наблюдение"
+public = "match"
+database = true
+redis = true
+kafka = true
+rabbitmq = false
+memory_mb = 320
+
+[services.rating]
+description = "Эло, калибровка, звания, сезоны, топы недели и сезона, лидерборды"
+public = "rating"
+database = true
+redis = true
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.collections]
+description = "Пользовательские и кураторские сборники: конструктор, черновики, каталог, лайки, избранное"
+public = "collections"
+database = true
+redis = false
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.library]
+description = "Личная медиатека: плейлисты, «смотреть позже», «просмотрено», «любимое»"
+public = "library"
+database = true
+redis = false
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.integrations]
+description = "Адаптеры внешних провайдеров, шифрованные токены, синхронизация и импорт"
+public = "integrations"
+database = true
+redis = false
+kafka = true
+rabbitmq = true
+memory_mb = 256
+
+[services.progression]
+description = "Опыт и уровни, валюта (журнал проводок), задания, бейджи, магазин, инвентарь, оформление профиля"
+public = "progression"
+database = true
+redis = false
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.payments]
+description = "Тарифы и подписки, платёжный провайдер, вебхуки, entitlements. Выключен флагом billing.enabled"
+public = "payments"
+database = true
+redis = false
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.social]
+description = "Друзья, комментарии, жалобы, модерация, шкалы поведения и санкции, приватность"
+public = "social"
+database = true
+redis = false
+kafka = true
+rabbitmq = false
+memory_mb = 256
+
+[services.notifications]
+description = "In-app уведомления, realtime-доставка, e-mail, web-push, отключение по типам"
+public = "notifications"
+database = true
+redis = false
+kafka = true
+rabbitmq = true
+memory_mb = 256
+
+[services.bff_web]
+description = "Backend-for-frontend: агрегация данных под экраны веб-клиента"
+public = "web"
+database = false
+redis = true
+kafka = false
+rabbitmq = false
+memory_mb = 256
+
+[services.admin]
+description = "Админ-панель (Django на этапе 1): модерация, контент, конфиги режимов; сейчас — заглушка"
+public = ""
+database = true
+redis = false
+kafka = false
+rabbitmq = false
+memory_mb = 256

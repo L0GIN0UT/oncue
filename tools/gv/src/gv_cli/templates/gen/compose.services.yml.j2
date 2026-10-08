@@ -1,0 +1,97 @@
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Запуск: см. infra/compose/README.md
+
+x-python-service: &python-service
+  build:
+    context: ../..
+    dockerfile: infra/docker/python-service.Dockerfile
+  restart: unless-stopped
+  stop_grace_period: 30s
+  networks: [backend]
+  logging:
+    driver: json-file
+    options: {max-size: "20m", max-file: "5"}
+  healthcheck:
+    test: ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3).status == 200 else 1)"]
+    interval: 10s
+    timeout: 5s
+    retries: 6
+    start_period: 20s
+
+x-common-env: &common-env
+  GV_ENVIRONMENT: ${GV_ENVIRONMENT:?задайте GV_ENVIRONMENT (local|staging|production)}
+  GV_LOG_LEVEL: ${GV_LOG_LEVEL:-INFO}
+  GV_OTLP_ENDPOINT: ${GV_OTLP_ENDPOINT:-}
+  GV_JWKS_URL: http://identity:8000/.well-known/jwks.json
+  GV_JWT_ISSUER: ${GV_JWT_ISSUER:-https://identity.guessverse.local}
+
+services:
+{% for s in services %}
+  # ---------------------------------------------------------------- {{ s.name }}
+  # {{ s.description }}
+{% if s.database %}
+  {{ s.dns }}-migrate:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: {{ s.name }}}
+    image: ${GV_REGISTRY:-guessverse}/{{ s.dns }}:${GV_TAG:-local}
+    command: ["migrate"]
+    restart: "no"
+    healthcheck: {disable: true}
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: {{ s.name }}
+      GV_DATABASE_URL: postgresql+asyncpg://{{ s.name }}:${ {{- s.db_password_env }}:?задайте {{ s.db_password_env }}}@postgres:5432/{{ s.name }}
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {memory: 256M}
+{% endif %}
+
+  {{ s.dns }}:
+    <<: *python-service
+    build:
+      context: ../..
+      dockerfile: infra/docker/python-service.Dockerfile
+      args: {SERVICE: {{ s.name }}}
+    image: ${GV_REGISTRY:-guessverse}/{{ s.dns }}:${GV_TAG:-local}
+    command: ["all"]
+    environment:
+      <<: *common-env
+      GV_SERVICE_NAME: {{ s.name }}
+{% if s.database %}
+      GV_DATABASE_URL: postgresql+asyncpg://{{ s.name }}:${ {{- s.db_password_env }}:?задайте {{ s.db_password_env }}}@postgres:5432/{{ s.name }}
+      GV_DATABASE_POOL_SIZE: "5"
+{% endif %}
+{% if s.redis %}
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
+{% endif %}
+{% if s.kafka %}
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
+{% endif %}
+{% if s.rabbitmq %}
+      GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+{% endif %}
+    depends_on:
+{% if s.database %}
+      {{ s.dns }}-migrate: {condition: service_completed_successfully}
+{% endif %}
+{% if s.redis %}
+      redis: {condition: service_healthy}
+{% endif %}
+{% if s.kafka %}
+      redpanda: {condition: service_healthy}
+{% endif %}
+{% if s.rabbitmq %}
+      rabbitmq: {condition: service_healthy}
+{% endif %}
+{% if not (s.database or s.redis or s.kafka or s.rabbitmq) %}
+      {}
+{% endif %}
+    deploy:
+      resources:
+        limits: {memory: {{ s.memory_mb }}M}
+{% endfor %}

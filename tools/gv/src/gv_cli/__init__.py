@@ -1,0 +1,1 @@
+"""gv — CLI разработчика Guessverse."""

@@ -1,0 +1,16 @@
+[project]
+name = "guessverse-integrations"
+version = "0.1.0"
+description = "Адаптеры внешних провайдеров, шифрованные токены, синхронизация и импорт"
+requires-python = ">=3.13"
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+
+[project.scripts]
+integrations = "integrations_service.main:run"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/integrations_service"]

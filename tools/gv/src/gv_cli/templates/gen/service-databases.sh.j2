@@ -1,0 +1,21 @@
+#!/bin/sh
+# СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
+# Выполняется контейнером postgres один раз при инициализации пустого тома.
+# Каждому сервису — своя БД и свой пользователь без доступа к чужим базам.
+set -eu
+
+create_service_db() {
+  # Имя и пароль передаются переменными psql (:"name", :'password') — без SQL-инъекций
+  # и проблем с кавычками в пароле.
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
+    -v name="$1" -v password="$2" <<'SQL'
+CREATE ROLE :"name" LOGIN PASSWORD :'password';
+CREATE DATABASE :"name" OWNER :"name";
+REVOKE ALL ON DATABASE :"name" FROM PUBLIC;
+SQL
+}
+
+{% for s in services if s.database %}
+create_service_db {{ s.name }} "${ {{- s.db_password_env }}:?задайте {{ s.db_password_env }}}"
+{% endfor %}
+create_service_db unleash "${PG_PASSWORD_UNLEASH:?задайте PG_PASSWORD_UNLEASH}"

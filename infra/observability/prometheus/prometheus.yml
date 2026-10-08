@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Сервисы Guessverse: список целей генерирует `gv gen` (services.yml).
+  - job_name: guessverse-services
+    metrics_path: /metrics
+    file_sd_configs:
+      - files: [/etc/prometheus/services.yml]
+        refresh_interval: 1m
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,66 @@
+"""Фабрика FastAPI-приложения сервиса."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from fastapi import FastAPI
+
+from gv_auth.verifier import JwtVerifier, http_jwks_loader
+from gv_observability.metrics import MetricsMiddleware, metrics_endpoint
+from gv_observability.tracing import instrument_app
+from gv_service.definition import Infrastructure, ServiceDefinition
+from gv_service.health import health_router
+from gv_service.middleware import RequestContextMiddleware
+from gv_service.problems import register_problem_handlers
+
+
+def create_app(
+    definition: ServiceDefinition,
+    infra: Infrastructure,
+    *,
+    is_shutting_down: Callable[[], bool] = lambda: False,
+    tracing_enabled: bool = False,
+    jwt_verifier: JwtVerifier | None = None,
+) -> FastAPI:
+    """Собрать приложение: роутеры сервиса, health, метрики, Problem Details, middleware.
+
+    Жизненным циклом ``infra`` управляет вызывающий (runner или тест), а не приложение:
+    так в режиме ``all`` одна инфраструктура разделяется между api и фоновыми процессами.
+
+    Args:
+        jwt_verifier: Явный верификатор (тесты). По умолчанию создаётся по ``GV_JWKS_URL``;
+            без него ручки с ``require_perm`` отвечают 500 — это ошибка конфигурации.
+    """
+    settings = infra.settings
+    docs_enabled = not settings.is_production
+    app = FastAPI(
+        title=f"guessverse-{definition.name}",
+        description=definition.description,
+        version="0.1.0",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+    )
+    app.state.infra = infra
+    if jwt_verifier is None and settings.jwks_url:
+        jwt_verifier = JwtVerifier(
+            http_jwks_loader(settings.jwks_url),
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+        )
+    app.state.jwt_verifier = jwt_verifier
+
+    register_problem_handlers(app)
+    for router in definition.build_routers(infra):
+        app.include_router(router)
+    app.include_router(health_router(infra.readiness_checks(), is_shutting_down))
+    app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
+
+    # Порядок: последний добавленный выполняется первым. Контекст запроса должен быть
+    # установлен до метрик и обработки, чтобы correlation_id попал во все логи.
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(RequestContextMiddleware)
+    if tracing_enabled:
+        instrument_app(app)
+    return app

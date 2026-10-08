@@ -1,0 +1,77 @@
+# Документация Guessverse: `uv run mkdocs serve` (локально), `uv run mkdocs build --strict` (CI).
+site_name: Guessverse
+docs_dir: docs
+site_dir: site
+strict: true
+theme:
+  name: material
+  language: ru
+  features: [navigation.sections, navigation.top, search.highlight, content.code.copy]
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+      # Якоря из кириллических заголовков (иначе ссылки вида #критерии-... не работают).
+      slugify: !!python/object/apply:pymdownx.slugs.slugify { kwds: { case: lower } }
+  - pymdownx.superfences
+  - pymdownx.highlight
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [libs/core/src, libs/db/src, libs/messaging/src, libs/auth/src, libs/observability/src, libs/service/src, libs/flags/src, libs/testkit/src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            members_order: source
+            show_if_no_docstring: false
+            filters: ["!^_"]
+not_in_nav: |
+  reference/*
+nav:
+  - Главная: README.md
+  - Продукт: 01-concept.md
+  - Архитектура:
+      - Обзор: architecture/README.md
+      - Сервисы: architecture/services.md
+      - Взаимодействие: architecture/communication.md
+      - Данные: architecture/data.md
+      - Масштаб и отказоустойчивость: architecture/scalability-resilience.md
+      - Безопасность: architecture/security.md
+  - Игровой движок: 02-game-engine.md
+  - Разработка:
+      - Стандарты кода: 03-code-standards.md
+      - Тестирование: 04-testing.md
+      - Процесс: 08-development-workflow.md
+      - AI-ассистент: 10-ai-assistant.md
+  - Админка: 05-admin-panel.md
+  - Платежи: 06-payments.md
+  - Инфраструктура: 07-infrastructure.md
+  - Roadmap: 09-roadmap.md
+  - ADR:
+      - adr/README.md
+      - adr/0000-template.md
+      - adr/0001-microservices-by-bounded-context.md
+      - adr/0002-hexagonal-architecture.md
+      - adr/0003-two-brokers.md
+      - adr/0004-outbox-and-idempotency.md
+      - adr/0005-vps-first-kubernetes-ready.md
+      - adr/0006-django-admin-panel.md
+      - adr/0007-billing-disabled-by-flag.md
+      - adr/0008-plugin-game-engine.md
+      - adr/0009-monorepo.md
+      - adr/0010-match-room-single-writer.md
+      - adr/0011-service-definition-composition-root.md
+  - Справочник libs:
+      - api/index.md
+      - libs/core: api/core.md
+      - libs/db: api/db.md
+      - libs/messaging: api/messaging.md
+      - libs/auth: api/auth.md
+      - libs/observability: api/observability.md
+      - libs/service: api/service.md
+      - libs/flags: api/flags.md
+      - libs/testkit: api/testkit.md

@@ -1,0 +1,53 @@
+"""Служебные таблицы outbox и inbox.
+
+Revision ID: 0001
+Revises:
+Create Date: 2026-10-07
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from alembic import op
+
+revision: str = "0001"
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "outbox",
+        sa.Column("event_id", sa.Uuid(), nullable=False),
+        sa.Column("topic", sa.String(length=255), nullable=False),
+        sa.Column("key", sa.String(length=255), nullable=False),
+        sa.Column("event_type", sa.String(length=255), nullable=False),
+        sa.Column("payload", sa.LargeBinary(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("last_error", sa.Text(), nullable=True),
+        sa.CheckConstraint("attempts >= 0", name=op.f("ck_outbox_attempts_non_negative")),
+        sa.PrimaryKeyConstraint("event_id", name=op.f("pk_outbox")),
+    )
+    op.create_index(
+        "ix_outbox_unpublished",
+        "outbox",
+        ["created_at", "event_id"],
+        unique=False,
+        postgresql_where=sa.text("published_at IS NULL"),
+    )
+    op.create_table(
+        "inbox",
+        sa.Column("consumer", sa.String(length=255), nullable=False),
+        sa.Column("event_id", sa.Uuid(), nullable=False),
+        sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("consumer", "event_id", name=op.f("pk_inbox")),
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("inbox")
+    op.drop_index("ix_outbox_unpublished", table_name="outbox", postgresql_where=sa.text("published_at IS NULL"))
+    op.drop_table("outbox")

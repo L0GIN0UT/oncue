@@ -1,0 +1,27 @@
+# Логи всех контейнеров проекта → Elasticsearch. JSON-логи сервисов разбираются в поля.
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      hints.enabled: false
+      templates:
+        - condition:
+            contains:
+              docker.container.labels.com_docker_compose_project: guessverse
+          config:
+            - type: container
+              paths:
+                - /var/lib/docker/containers/${data.docker.container.id}/*.log
+              processors:
+                - decode_json_fields:
+                    fields: ["message"]
+                    target: ""
+                    overwrite_keys: true
+                    add_error_key: true
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  index: "guessverse-%{+yyyy.MM.dd}"
+
+setup.template.name: guessverse
+setup.template.pattern: "guessverse-*"
+setup.ilm.enabled: false

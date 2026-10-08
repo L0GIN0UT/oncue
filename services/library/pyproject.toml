@@ -1,0 +1,16 @@
+[project]
+name = "guessverse-library"
+version = "0.1.0"
+description = "Личная медиатека: плейлисты, «смотреть позже», «просмотрено», «любимое»"
+requires-python = ">=3.13"
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+
+[project.scripts]
+library = "library_service.main:run"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/library_service"]

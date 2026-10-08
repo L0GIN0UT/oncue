@@ -1,0 +1,16 @@
+[project]
+name = "guessverse-identity"
+version = "0.1.0"
+description = "Аккаунты, вход, сессии и токены, привязка провайдеров, слияние и удаление аккаунтов, роли и права"
+requires-python = ">=3.13"
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+
+[project.scripts]
+identity = "identity_service.main:run"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/identity_service"]

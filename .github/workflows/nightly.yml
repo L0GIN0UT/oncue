@@ -1,0 +1,40 @@
+# Ночной прогон: все модули целиком, независимо от изменений (ловит дрейф окружения,
+# новые уязвимости и флейки). Полный e2e, фаззинг API и тест восстановления
+# подключаются здесь же по мере появления (docs/04-testing.md §7).
+name: nightly
+
+on:
+  schedule:
+    - cron: "0 23 * * *"   # 02:00 МСК
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  all-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      CI: "true"
+      UV_FROZEN: "1"
+      GV_TEST_POSTGRES_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+      GV_TEST_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true, python-version: "3.13" }
+      - run: uv sync --all-packages
+      - run: uv run gv lint
+      - run: uv run gv test --cov
+      - name: Уязвимости зависимостей
+        run: uvx pip-audit --strict --progress-spinner off -r <(uv export --all-packages --no-dev --no-hashes --no-emit-workspace)

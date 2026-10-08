@@ -1,0 +1,16 @@
+[project]
+name = "gv-cli"
+version = "0.1.0"
+description = "CLI разработчика Guessverse: тесты, локальное окружение, генерация конфигов, шаблон сервиса."
+requires-python = ">=3.13"
+dependencies = ["typer>=0.13", "jinja2>=3.1"]
+
+[project.scripts]
+gv = "gv_cli.main:app"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gv_cli"]

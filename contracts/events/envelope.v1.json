@@ -1,0 +1,84 @@
+{
+  "$id": "urn:guessverse:contracts:events:envelope:v1",
+  "description": "Доменное событие с метаданными доставки.\n\nAttributes:\n    event_id: Уникальный идентификатор (UUID v7) — ключ идемпотентности потребителей.\n    event_type: ``<producer>.<EventName>``, например ``match.MatchFinished``.\n    event_version: Версия схемы ``payload``.\n    occurred_at: Когда событие произошло (UTC).\n    producer: Сервис-источник.\n    aggregate_type: Тип агрегата — часть имени топика.\n    aggregate_id: Идентификатор агрегата — ключ партиции.\n    correlation_id: Сквозной идентификатор цепочки.\n    causation_id: Что непосредственно вызвало событие.\n    payload: Данные события.",
+  "properties": {
+    "aggregate_id": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Aggregate Id",
+      "type": "string"
+    },
+    "aggregate_type": {
+      "title": "Aggregate Type",
+      "type": "string"
+    },
+    "causation_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Causation Id"
+    },
+    "correlation_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Correlation Id"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "maxLength": 200,
+      "minLength": 3,
+      "title": "Event Type",
+      "type": "string"
+    },
+    "event_version": {
+      "minimum": 1,
+      "title": "Event Version",
+      "type": "integer"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "occurred_at",
+    "producer",
+    "aggregate_type",
+    "aggregate_id",
+    "payload"
+  ],
+  "title": "EventEnvelope",
+  "type": "object"
+}

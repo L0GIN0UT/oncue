@@ -1,0 +1,15 @@
+**/__pycache__
+**/.venv
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+**/tests
+**/*.md
+.git
+docs
+frontend
+e2e
+load
+infra
+!infra/docker
+site
