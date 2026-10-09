@@ -4,11 +4,51 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gv_service import ServiceDefinition, main
-from media_pipeline_service.api import build_routers
+from fastapi import APIRouter
+
+from gv_messaging import EventHandlerRegistry
+from gv_messaging.ports import TaskHandler
+from gv_service import Infrastructure, ServiceDefinition, main
+from media_pipeline_service.api.admin import build_admin_router
+from media_pipeline_service.api.internal import build_internal_router
+from media_pipeline_service.api.public import build_public_router
+from media_pipeline_service.infrastructure import messaging
+from media_pipeline_service.infrastructure.container import MediaAdapters, MediaContainer
 from media_pipeline_service.infrastructure.db.tables import TABLES
-from media_pipeline_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from media_pipeline_service.settings import Settings
+
+_MB = 1024 * 1024
+
+
+def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) -> list[APIRouter]:
+    """Все роутеры сервиса (DI через ``infra``; тесты подменяют ``adapters``)."""
+    c = MediaContainer(infra, adapters)
+    return [
+        build_public_router(infra),
+        build_internal_router(c.issue_link, c.list_sets),
+        build_admin_router(
+            upload=c.upload,
+            regenerate=c.regenerate,
+            list_sets=c.list_sets,
+            idempotent=c.idempotent,
+            max_upload_bytes=c.settings.media.max_upload_mb * _MB,
+        ),
+    ]
+
+
+def build_event_handlers(
+    infra: Infrastructure, adapters: MediaAdapters | None = None
+) -> EventHandlerRegistry:
+    """Обработчики событий catalog."""
+    return messaging.build_event_handlers(MediaContainer(infra, adapters))
+
+
+def build_task_handlers(
+    infra: Infrastructure, adapters: MediaAdapters | None = None
+) -> dict[str, TaskHandler]:
+    """Обработчики задач RabbitMQ."""
+    return messaging.build_task_handlers(MediaContainer(infra, adapters))
+
 
 DEFINITION = ServiceDefinition(
     name="media_pipeline",
@@ -20,8 +60,9 @@ DEFINITION = ServiceDefinition(
     tables=TABLES,
     migrations_path=Path(__file__).parent / "infrastructure" / "db" / "migrations",
     build_event_handlers=build_event_handlers,
-    consumer_topics=CONSUMED_TOPICS,
+    consumer_topics=messaging.CONSUMED_TOPICS,
     build_routers=build_routers,
+    build_task_handlers=build_task_handlers,
 )
 
 

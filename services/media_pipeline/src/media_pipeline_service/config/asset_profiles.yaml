@@ -1,0 +1,41 @@
+# Профили уровней ассетов (D5 плана этапа 1).
+# Параметры каждого профиля проверяются по contracts/clues/<clue_type>.params.v1.json
+# (contract-тест) и моделям домена при старте сервиса (плюс монотонность уровней).
+# Изменение params меняет params_hash: для единиц будут созданы новые наборы ассетов.
+version: 1
+profiles:
+  - clue_type: audio_intro
+    profile_key: default
+    domains: [music]
+    params:
+      start_s: 0
+      levels:
+        - { seconds: 0.5 }
+        - { seconds: 1 }
+        - { seconds: 2 }
+        - { seconds: 4 }
+        - { seconds: 8 }
+        - { seconds: 15 }
+
+  - clue_type: frame_progressive
+    profile_key: default
+    domains: [film]
+    params:
+      levels:
+        - { blur_px: 48, crop: 0.35, max_width: 960 }
+        - { blur_px: 32, crop: 0.5, max_width: 960 }
+        - { blur_px: 20, crop: 0.7, max_width: 960 }
+        - { blur_px: 12, crop: 1.0, max_width: 960 }
+        - { blur_px: 6, crop: 1.0, max_width: 960 }
+        - { blur_px: 0, crop: 1.0, max_width: 960 }
+
+  - clue_type: poster_masked
+    profile_key: default
+    domains: [film]
+    params:
+      levels:
+        - { pixel_block: 48 }
+        - { pixel_block: 24 }
+        - { pixel_block: 12 }
+        - { pixel_block: 6 }
+        - { pixel_block: 1 }

@@ -1,1 +1,499 @@
-"""Фикстуры тестов media_pipeline. Инфраструктура и фейки — из gv_testkit."""
+"""Фикстуры тестов media_pipeline.
+
+Инфраструктура и фейки общего назначения (часы, очередь задач, токены, клиент API) —
+из ``gv_testkit``. Здесь только фейки портов самого сервиса (testkit не знает его домена):
+репозитории в памяти с транзакционной семантикой, хранилище, обработка медиа, подпись
+ссылок. Тесты получают их через фикстуру ``media`` (без импорта модуля и правки sys.path).
+"""
+
+from __future__ import annotations
+
+import copy
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
+from types import TracebackType
+from typing import Any, Self
+from uuid import UUID
+
+import pytest
+from media_pipeline_service.application.errors import GenerationError
+from media_pipeline_service.application.ports import (
+    AdminAction,
+    FetchedSource,
+    IdempotencyRecord,
+    ImageOps,
+    NormalizedMedia,
+    RenderedImage,
+    StorageArea,
+)
+from media_pipeline_service.domain.asset_set import AssetSet
+from media_pipeline_service.domain.media_items import MediaItemState
+from media_pipeline_service.domain.sources import SourceMedia
+
+from gv_core.domain import AggregateRoot, DomainEvent
+from gv_core.errors import ConflictError
+
+
+@dataclass
+class MemoryDb:
+    """«База» в памяти, общая для всех UoW теста."""
+
+    asset_sets: dict[UUID, AssetSet] = field(default_factory=dict)
+    sources: dict[UUID, SourceMedia] = field(default_factory=dict)
+    items: dict[UUID, MediaItemState] = field(default_factory=dict)
+    links: list[dict[str, Any]] = field(default_factory=list)
+    idempotency: dict[tuple[str, str], IdempotencyRecord] = field(default_factory=dict)
+    audit: list[AdminAction] = field(default_factory=list)
+    events: list[DomainEvent] = field(default_factory=list)
+
+
+class _Repo:
+    def __init__(self, uow: FakeMediaUnitOfWork) -> None:
+        self._uow = uow
+
+    @property
+    def db(self) -> MemoryDb:
+        return self._uow.view
+
+
+class FakeAssetSets(_Repo):
+    async def get(self, asset_set_id: UUID, *, for_update: bool = False) -> AssetSet | None:
+        found = self.db.asset_sets.get(asset_set_id)
+        return copy.deepcopy(found) if found else None
+
+    async def list_for_item(
+        self, media_item_id: UUID, clue_type: str | None = None, *, for_update: bool = False
+    ) -> list[AssetSet]:
+        return [
+            copy.deepcopy(s)
+            for s in sorted(self.db.asset_sets.values(), key=lambda a: a.created_at)
+            if s.media_item_id == media_item_id and clue_type in (None, s.clue_type)
+        ]
+
+    async def add(self, aggregate: AssetSet) -> None:
+        if any(
+            (s.media_item_id, s.clue_type, s.profile_key, s.params_hash)
+            == (
+                aggregate.media_item_id,
+                aggregate.clue_type,
+                aggregate.profile_key,
+                aggregate.params_hash,
+            )
+            for s in self.db.asset_sets.values()
+        ):
+            raise ConflictError("дубль набора")
+        stored = copy.deepcopy(aggregate)
+        stored.persisted_version = stored.version
+        stored.pull_events()
+        self.db.asset_sets[aggregate.id] = stored
+        aggregate.persisted_version = aggregate.version
+
+    async def save(self, aggregate: AssetSet) -> None:
+        current = self.db.asset_sets.get(aggregate.id)
+        if current is None or current.version != aggregate.persisted_version:
+            raise ConflictError("версия набора изменилась")
+        stored = copy.deepcopy(aggregate)
+        stored.persisted_version = stored.version
+        stored.pull_events()
+        self.db.asset_sets[aggregate.id] = stored
+        aggregate.persisted_version = aggregate.version
+
+
+class FakeSources(_Repo):
+    async def get(self, source_id: UUID) -> SourceMedia | None:
+        found = self.db.sources.get(source_id)
+        return copy.deepcopy(found) if found else None
+
+    async def list_for_item(self, media_item_id: UUID) -> list[SourceMedia]:
+        return [
+            copy.deepcopy(s) for s in self.db.sources.values() if s.media_item_id == media_item_id
+        ]
+
+    async def add(self, source: SourceMedia) -> None:
+        self.db.sources.setdefault(source.id, copy.deepcopy(source))
+
+    async def save(self, source: SourceMedia) -> None:
+        self.db.sources[source.id] = copy.deepcopy(source)
+
+
+class FakeItems(_Repo):
+    async def get(self, media_item_id: UUID, *, for_update: bool = False) -> MediaItemState | None:
+        found = self.db.items.get(media_item_id)
+        return copy.deepcopy(found) if found else None
+
+    async def upsert(self, state: MediaItemState) -> None:
+        self.db.items[state.id] = copy.deepcopy(state)
+
+
+class FakeLinks(_Repo):
+    async def record(
+        self,
+        *,
+        asset_set_id: UUID,
+        level: int,
+        subject: str,
+        issued_at: datetime,
+        expires_at: datetime,
+    ) -> None:
+        self.db.links.append(
+            {
+                "asset_set_id": asset_set_id,
+                "level": level,
+                "subject": subject,
+                "issued_at": issued_at,
+                "expires_at": expires_at,
+            }
+        )
+
+    async def purge_older_than(self, cutoff: datetime, *, limit: int) -> int:
+        before = len(self.db.links)
+        self.db.links[:] = [r for r in self.db.links if r["issued_at"] >= cutoff]
+        return before - len(self.db.links)
+
+
+class FakeIdempotency(_Repo):
+    async def reserve(
+        self, scope: str, key: str, request_hash: str, now: datetime
+    ) -> IdempotencyRecord | None:
+        existing = self.db.idempotency.get((scope, key))
+        if existing is not None:
+            return existing
+        self.db.idempotency[(scope, key)] = IdempotencyRecord(request_hash, None, None)
+        return None
+
+    async def complete(
+        self, scope: str, key: str, status_code: int, response: dict[str, Any]
+    ) -> None:
+        record = self.db.idempotency[(scope, key)]
+        self.db.idempotency[(scope, key)] = IdempotencyRecord(
+            record.request_hash, status_code, response
+        )
+
+    async def release(self, scope: str, key: str) -> None:
+        self.db.idempotency.pop((scope, key), None)
+
+
+class FakeAudit(_Repo):
+    async def record(self, action: AdminAction) -> None:
+        self.db.audit.append(action)
+
+
+class FakeMediaUnitOfWork:
+    """UoW в памяти: изменения видны другим UoW только после ``commit``."""
+
+    def __init__(self, db: MemoryDb) -> None:
+        self._db = db
+        self.view = db
+        self._tracked: list[AggregateRoot[Any]] = []
+        self.committed = False
+        self.asset_sets = FakeAssetSets(self)
+        self.sources = FakeSources(self)
+        self.items = FakeItems(self)
+        self.links = FakeLinks(self)
+        self.idempotency = FakeIdempotency(self)
+        self.audit = FakeAudit(self)
+
+    async def __aenter__(self) -> Self:
+        self.view = copy.deepcopy(self._db)
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if not self.committed:
+            await self.rollback()
+
+    def track(self, aggregate: AggregateRoot[Any]) -> None:
+        if aggregate not in self._tracked:
+            self._tracked.append(aggregate)
+
+    async def commit(self) -> None:
+        for aggregate in self._tracked:
+            self.view.events.extend(aggregate.pull_events())
+        for name in ("asset_sets", "sources", "items", "idempotency"):
+            setattr(self._db, name, getattr(self.view, name))
+        self._db.links[:] = self.view.links
+        self._db.audit[:] = self.view.audit
+        self._db.events[:] = self.view.events
+        self.committed = True
+
+    async def rollback(self) -> None:
+        for aggregate in self._tracked:
+            aggregate.pull_events()
+        self.view = self._db
+
+
+@dataclass
+class FakeStorage:
+    """Хранилище объектов в памяти."""
+
+    objects: dict[tuple[StorageArea, str], tuple[bytes, str]] = field(default_factory=dict)
+    fail_put: bool = False
+
+    async def put(self, area: StorageArea, key: str, data: bytes, content_type: str) -> None:
+        if self.fail_put:
+            raise ConnectionError("S3 недоступен (фейк)")
+        self.objects[(area, key)] = (data, content_type)
+
+    async def get(self, area: StorageArea, key: str, *, max_bytes: int) -> bytes:
+        data, _ = self.objects[(area, key)]
+        if len(data) > max_bytes:
+            raise GenerationError("source.too_large", retryable=False)
+        return data
+
+    async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
+        for key in keys:
+            self.objects.pop((area, key), None)
+
+    def keys(self, area: StorageArea) -> list[str]:
+        return [k for a, k in self.objects if a is area]
+
+
+@dataclass
+class FakeFetcher:
+    """Отдаёт заранее заданные ответы по адресу."""
+
+    responses: dict[str, bytes | GenerationError] = field(default_factory=dict)
+    calls: list[str] = field(default_factory=list)
+
+    async def fetch(self, uri: str) -> FetchedSource:
+        self.calls.append(uri)
+        result = self.responses.get(uri)
+        if result is None:
+            raise GenerationError("source.not_found", retryable=False)
+        if isinstance(result, GenerationError):
+            raise result
+        return FetchedSource(result, None)
+
+
+@dataclass
+class FakeTranscoder:
+    """«Аудио» — байты, где каждый байт = 10 мс; нарезка берёт срез."""
+
+    duration_ms: int | None = None
+    cuts: list[tuple[float, float]] = field(default_factory=list)
+
+    async def normalize(self, data: bytes) -> NormalizedMedia:
+        if b"broken" in data:
+            raise GenerationError("source.undecodable", retryable=False)
+        return NormalizedMedia(b"fLaC" + data[4:], "audio/flac", "flac")
+
+    async def probe_duration_ms(self, data: bytes) -> int:
+        return self.duration_ms if self.duration_ms is not None else len(data) * 10
+
+    async def cut_audio(self, data: bytes, *, start_s: float, duration_s: float) -> bytes:
+        self.cuts.append((start_s, duration_s))
+        start = round(start_s * 100)
+        return data[start : start + round(duration_s * 100)]
+
+
+@dataclass
+class FakeImageProcessor:
+    """Записывает операции; «рендер» — описание операции в байтах."""
+
+    ops: list[ImageOps] = field(default_factory=list)
+
+    async def normalize(self, data: bytes) -> NormalizedMedia:
+        if b"broken" in data:
+            raise GenerationError("source.undecodable", retryable=False)
+        return NormalizedMedia(b"\x89PNG\r\n\x1a\n" + data, "image/png", "png")
+
+    async def render(self, data: bytes, ops: ImageOps) -> RenderedImage:
+        self.ops.append(ops)
+        payload = f"{ops.crop}|{ops.blur_px}|{ops.pixel_block}|{ops.max_width}".encode()
+        return RenderedImage(payload, ops.max_width, ops.max_width)
+
+
+class FakeSigner:
+    """Подпись без секрета: URL содержит ключ и срок."""
+
+    def sign(self, object_key: str, expires_at: datetime) -> str:
+        return f"https://cdn.test/media/{object_key}?expires={int(expires_at.timestamp())}"
+
+
+@dataclass
+class FakeLimiter:
+    """Счётчик в памяти без окна (окно проверяет integration-тест Redis)."""
+
+    counts: dict[str, int] = field(default_factory=dict)
+
+    async def hit(self, key: str, window_s: int) -> int:
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+
+class SeqTokens:
+    """Детерминированные «случайные» токены."""
+
+    def __init__(self) -> None:
+        self._n = 0
+
+    def token_hex(self) -> str:
+        self._n += 1
+        return f"{self._n:032x}"
+
+
+# ---------------------------------------------------------------- сборка use-cases на фейках
+TEST_PROFILES: dict[str, Any] = {
+    "version": 1,
+    "profiles": [
+        {
+            "clue_type": "audio_intro",
+            "profile_key": "default",
+            "domains": ["music"],
+            "params": {"start_s": 0, "levels": [{"seconds": 0.5}, {"seconds": 1}, {"seconds": 2}]},
+        },
+        {
+            "clue_type": "frame_progressive",
+            "profile_key": "default",
+            "domains": ["film"],
+            "params": {
+                "levels": [
+                    {"blur_px": 30, "crop": 0.4, "max_width": 640},
+                    {"blur_px": 10, "crop": 0.7, "max_width": 640},
+                    {"blur_px": 0, "crop": 1, "max_width": 640},
+                ]
+            },
+        },
+        {
+            "clue_type": "poster_masked",
+            "profile_key": "default",
+            "domains": ["film"],
+            "params": {
+                "levels": [{"pixel_block": 32}, {"pixel_block": 8}, {"pixel_block": 1}],
+                "mask_regions": [{"x": 0, "y": 0.8, "w": 1, "h": 0.2}],
+            },
+        },
+    ],
+}
+
+
+class MediaHarness:
+    """Use-cases сервиса, собранные на фейках портов."""
+
+    def __init__(self, *, max_attempts: int = 3, link_max: int = 3) -> None:
+        from datetime import timedelta
+
+        from media_pipeline_service.application.commands.catalog import (
+            DisableItemAssets,
+            PlanAssetSets,
+            RegisterSourceFromCatalog,
+            RestoreItemAssets,
+            SyncMediaItem,
+        )
+        from media_pipeline_service.application.commands.generation import (
+            GenerateAssetSet,
+            RegenerateAssetSet,
+        )
+        from media_pipeline_service.application.commands.links import IssueAssetLink
+        from media_pipeline_service.application.commands.sources import UploadSource
+        from media_pipeline_service.application.generators import (
+            AudioIntroGenerator,
+            FrameProgressiveGenerator,
+            GeneratorRegistry,
+            PosterMaskedGenerator,
+        )
+        from media_pipeline_service.application.idempotency import IdempotentExecutor
+        from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+        from media_pipeline_service.application.sources import SourceIngestor
+        from media_pipeline_service.domain.links import LinkPolicy
+        from media_pipeline_service.domain.sources import SourceKind
+
+        from gv_testkit import FakeClock, InMemoryTaskQueue
+
+        self.db = MemoryDb()
+        self.clock = FakeClock()
+        self.queue = InMemoryTaskQueue()
+        self.storage = FakeStorage()
+        self.fetcher = FakeFetcher()
+        self.transcoder = FakeTranscoder()
+        self.images = FakeImageProcessor()
+        self.limiter = FakeLimiter()
+        self.tokens = SeqTokens()
+        self.registry = GeneratorRegistry(
+            [
+                AudioIntroGenerator(self.transcoder),
+                FrameProgressiveGenerator(self.images),
+                PosterMaskedGenerator(self.images, max_width=480),
+            ]
+        )
+        self.profiles = self.registry.build_catalog(TEST_PROFILES)
+
+        def uow() -> FakeMediaUnitOfWork:
+            return FakeMediaUnitOfWork(self.db)
+
+        self.uow = uow
+        self.ingestor = SourceIngestor(
+            self.storage,
+            {
+                SourceKind.AUDIO: self.transcoder,
+                SourceKind.FRAME: self.images,
+                SourceKind.POSTER: self.images,
+            },
+            self.tokens,
+            max_bytes=10_000,
+        )
+        self.plan = PlanAssetSets(uow, self.clock, self.profiles, self.queue, self.storage)
+        self.disable = DisableItemAssets(uow, self.clock, self.storage)
+        self.restore = RestoreItemAssets(uow, self.clock, self.queue)
+        self.register = RegisterSourceFromCatalog(uow, self.clock)
+        self.sync = SyncMediaItem(
+            uow,
+            self.clock,
+            register_sources=self.register,
+            plan=self.plan,
+            disable=self.disable,
+            restore=self.restore,
+        )
+        self.generate = GenerateAssetSet(
+            uow,
+            self.clock,
+            registry=self.registry,
+            storage=self.storage,
+            fetcher=self.fetcher,
+            ingestor=self.ingestor,
+            tokens=self.tokens,
+            max_attempts=max_attempts,
+            max_source_bytes=10_000,
+        )
+        self.regenerate = RegenerateAssetSet(uow, self.clock, self.queue, self.storage)
+        self.upload = UploadSource(uow, self.clock, self.ingestor, self.profiles, self.plan)
+        self.policy = LinkPolicy(ttl_s=60, max_per_window=link_max, window_s=60)
+        self.issue_link = IssueAssetLink(
+            uow,
+            self.clock,
+            FakeSigner(),
+            self.limiter,
+            self.policy,
+            retention=timedelta(days=7),
+        )
+        self.list_sets = ListAssetSets(uow)
+        self.idempotent = IdempotentExecutor(uow, self.clock)
+
+    async def run_tasks(self) -> int:
+        """Выполнить все поставленные задачи генерации (повторы — как ретраи очереди)."""
+        from uuid import UUID
+
+        done = 0
+        while self.queue.tasks:
+            task = self.queue.tasks.pop(0)
+            payload = task["payload"]
+            await self.generate.execute(UUID(payload["asset_set_id"]), int(payload["generation"]))
+            done += 1
+        return done
+
+
+@pytest.fixture
+def media() -> MediaHarness:
+    """Use-cases на фейках портов (unit)."""
+    return MediaHarness()
+
+
+@pytest.fixture
+def media_factory() -> type[MediaHarness]:
+    """Конструктор harness с параметрами (``max_attempts``, ``link_max``)."""
+    return MediaHarness

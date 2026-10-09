@@ -1,0 +1,102 @@
+"""S3-совместимое хранилище (MinIO) на aioboto3: приватные бакеты исходников и ассетов."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Any
+
+import aioboto3  # type: ignore[import-untyped]  # у aioboto3 нет стабов; API — как у boto3 S3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+
+from gv_core.errors import DependencyUnavailableError
+from media_pipeline_service.application.errors import GenerationError
+from media_pipeline_service.application.ports import StorageArea
+from media_pipeline_service.settings import S3Settings
+
+_DELETE_BATCH = 1000  # предел DeleteObjects в S3
+
+
+class S3Storage:
+    """Объекты без ACL (приватные), с явным ``Content-Type`` и без пользовательских метаданных.
+
+    Gateway раздаёт бакет ассетов по префиксу ``a/`` через ``secure_link`` (ADR 0012);
+    бакет исходников наружу не публикуется.
+    """
+
+    def __init__(self, settings: S3Settings) -> None:
+        self._settings = settings
+        self._session = aioboto3.Session()
+        self._buckets = {
+            StorageArea.SOURCES: settings.bucket_sources,
+            StorageArea.ASSETS: settings.bucket_assets,
+        }
+        self._config = Config(
+            connect_timeout=settings.timeout_s,
+            read_timeout=settings.timeout_s,
+            retries={"max_attempts": 3, "mode": "standard"},
+            s3={"addressing_style": "path"},
+        )
+
+    def _client(self) -> Any:
+        s = self._settings
+        if s.endpoint is None:
+            raise DependencyUnavailableError("хранилище не настроено (GV_S3__ENDPOINT)")
+        return self._session.client(
+            "s3",
+            endpoint_url=s.endpoint,
+            aws_access_key_id=s.access_key.get_secret_value() if s.access_key else None,
+            aws_secret_access_key=s.secret_key.get_secret_value() if s.secret_key else None,
+            region_name=s.region,
+            config=self._config,
+        )
+
+    def bucket(self, area: StorageArea) -> str:
+        """Имя бакета области."""
+        return self._buckets[area]
+
+    async def ensure_buckets(self) -> None:
+        """Создать бакеты, если их нет (локальная разработка и тесты; на проде — infra)."""
+        async with self._client() as s3:
+            for name in self._buckets.values():
+                try:
+                    await s3.head_bucket(Bucket=name)
+                except ClientError:
+                    await s3.create_bucket(Bucket=name)
+
+    async def put(self, area: StorageArea, key: str, data: bytes, content_type: str) -> None:
+        """Записать объект."""
+        async with self._client() as s3:
+            await s3.put_object(
+                Bucket=self.bucket(area), Key=key, Body=data, ContentType=content_type
+            )
+
+    async def get(self, area: StorageArea, key: str, *, max_bytes: int) -> bytes:
+        """Прочитать объект не больше ``max_bytes`` байт."""
+        async with self._client() as s3:
+            try:
+                response = await s3.get_object(Bucket=self.bucket(area), Key=key)
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in {"NoSuchKey", "404"}:
+                    raise GenerationError("source.missing", retryable=False) from exc
+                raise
+            if int(response.get("ContentLength", 0)) > max_bytes:
+                raise GenerationError("source.too_large", retryable=False)
+            async with response["Body"] as body:
+                data: bytes = await body.read()
+        if len(data) > max_bytes:
+            raise GenerationError("source.too_large", retryable=False)
+        return data
+
+    async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
+        """Удалить объекты пачками."""
+        if not keys:
+            return
+        async with self._client() as s3:
+            for start in range(0, len(keys), _DELETE_BATCH):
+                batch = keys[start : start + _DELETE_BATCH]
+                await s3.delete_objects(
+                    Bucket=self.bucket(area),
+                    Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+                )
