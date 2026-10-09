@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gv_service import ServiceDefinition, main
+from fastapi import APIRouter
+
+from gv_service import Infrastructure, ServiceDefinition, main
 from identity_service.api import build_routers
 from identity_service.infrastructure.db.tables import TABLES
 from identity_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from identity_service.settings import Settings
+from identity_service.wiring import build_api_deps
+
+
+def _routers(infra: Infrastructure) -> list[APIRouter]:
+    return build_routers(build_api_deps(infra))
+
 
 DEFINITION = ServiceDefinition(
     name="identity",
@@ -21,7 +29,7 @@ DEFINITION = ServiceDefinition(
     migrations_path=Path(__file__).parent / "infrastructure" / "db" / "migrations",
     build_event_handlers=build_event_handlers,
     consumer_topics=CONSUMED_TOPICS,
-    build_routers=build_routers,
+    build_routers=_routers,
 )
 
 

@@ -32,6 +32,8 @@ class Principal:
     sanctions: Sanction = Sanction.NONE
     plan: str | None = None
     token_id: str | None = None
+    session_id: str | None = None
+    """Сессия identity (claim ``sid``): по ней отзываются выданные access-токены."""
 
     def has_perm(self, perm: str) -> bool:
         """Есть ли право ``perm``."""
