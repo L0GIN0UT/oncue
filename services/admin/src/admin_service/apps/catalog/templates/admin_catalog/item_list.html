@@ -1,0 +1,25 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get" class="module">
+  {{ form.q.label_tag }} {{ form.q }} {{ form.domain.label_tag }} {{ form.domain }}
+  {{ form.status.label_tag }} {{ form.status }} <input type="submit" value="Найти">
+  <a href="{% url 'catalog:import_new' %}">Импорт…</a>
+</form>
+<table id="result_list">
+  <thead><tr><th>Название</th><th>Год</th><th>Домен</th><th>Статус</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+    <tr>
+      <td>{% if item.admin_url %}<a href="{{ item.admin_url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}{% if item.original_title %} <small>({{ item.original_title }})</small>{% endif %}</td>
+      <td>{{ item.year|default:"—" }}</td><td>{{ item.domain }}</td><td>{{ item.status }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4">Ничего не найдено</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if next_cursor %}
+<p><a href="?{% for k, v in params.items %}{{ k|urlencode }}={{ v|urlencode }}&amp;{% endfor %}cursor={{ next_cursor|urlencode }}">Дальше →</a></p>
+{% endif %}
+{% endblock %}

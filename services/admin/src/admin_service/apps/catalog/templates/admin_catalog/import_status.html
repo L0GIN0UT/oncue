@@ -1,0 +1,9 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p>Импорт {{ import_id }}</p>
+{% if job %}
+<table>{% for k, v in job.items %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</table>
+{% endif %}
+<p><a href="">Обновить</a> · <a href="{% url 'catalog:items' %}">к каталогу</a></p>
+{% endblock %}
