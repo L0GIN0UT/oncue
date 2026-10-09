@@ -67,6 +67,12 @@ class MetricsMiddleware:
             HTTP_REQUESTS.labels(method, route, str(status)).inc()
 
 
+def render_metrics() -> tuple[bytes, str]:
+    """Текущие метрики процесса в формате Prometheus: тело и Content-Type."""
+    return generate_latest(), CONTENT_TYPE_LATEST
+
+
 async def metrics_endpoint(_: Request) -> Response:
     """Отдать метрики в формате Prometheus."""
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    body, content_type = render_metrics()
+    return Response(body, media_type=content_type)

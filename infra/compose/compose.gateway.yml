@@ -1,4 +1,15 @@
-# Gateway (Nginx): единственная точка входа снаружи.
+# Gateway (Nginx): единственная точка входа снаружи. HTTP (80) только редиректит на HTTPS
+# и отвечает на HTTP-01 certbot; API и ассеты — на 443.
+#
+# Сертификаты: infra/nginx/certs/{fullchain,privkey}.pem (в git не попадают).
+#   dev:  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 365 \
+#           -subj /CN=localhost -keyout infra/nginx/certs/privkey.pem \
+#           -out infra/nginx/certs/fullchain.pem
+#   prod: первичный выпуск —
+#           docker compose -f compose.gateway.yml --profile certbot run --rm certbot certonly \
+#             --webroot -w /var/www/certbot -d "$GV_DOMAIN" --agree-tos -m "$GV_ACME_EMAIL" \
+#             --deploy-hook 'cp -L "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" /certs/'
+#         продление — сервис certbot (профиль certbot), затем `nginx -s reload` в gateway.
 name: guessverse
 
 services:
@@ -8,10 +19,27 @@ services:
     networks: [backend]
     ports:
       - "${GATEWAY_HTTP_PORT:-80}:80"
+      - "${GATEWAY_HTTPS_PORT:-443}:443"
+    environment:
+      # Шаблоны /etc/nginx/templates/*.template → /etc/nginx/conf.d/*.conf (envsubst при старте).
+      # Подставляются только GV_*: переменные nginx ($uri и т.п.) envsubst не трогает.
+      NGINX_ENVSUBST_FILTER: "^GV_"
+      # Общий с media-pipeline секрет подписи /media/-ссылок (ADR 0012). Без него gateway
+      # не стартует, а пустое значение дало бы ссылки, которые подделает кто угодно.
+      GV_MEDIA_SIGNING_SECRET: ${GV_MEDIA_SIGNING_SECRET:?задайте GV_MEDIA_SIGNING_SECRET}
+      GV_MEDIA_ASSETS_BUCKET: ${GV_MEDIA_ASSETS_BUCKET:-gv-assets}
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../nginx/generated:/etc/nginx/generated:ro
       - ../nginx/snippets:/etc/nginx/snippets:ro
+      - ../nginx/templates:/etc/nginx/templates:ro
+      - ../nginx/certs:/etc/nginx/certs:ro
+      - acme-webroot:/var/www/certbot:ro
+      - media-cache:/var/cache/nginx/media
+    # Пустой conf.d: убирает default.conf образа (второй default_server на :80);
+    # сюда же пишутся отрендеренные шаблоны.
+    tmpfs:
+      - /etc/nginx/conf.d
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 10s
@@ -19,4 +47,30 @@ services:
       retries: 10
     deploy:
       resources:
-        limits: {memory: 128M}
+        limits: {memory: 192M}
+
+  # Продление сертификатов Let's Encrypt (webroot). Включается профилем на проде:
+  #   docker compose -f compose.gateway.yml --profile certbot up -d certbot
+  certbot:
+    image: certbot/certbot:v3.1.0
+    profiles: [certbot]
+    restart: unless-stopped
+    networks: [backend]
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        trap exit TERM;
+        while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet
+        --deploy-hook 'cp -L "$$RENEWED_LINEAGE/fullchain.pem" "$$RENEWED_LINEAGE/privkey.pem" /certs/';
+        sleep 12h & wait $${!};
+        done
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - acme-webroot:/var/www/certbot
+      - ../nginx/certs:/certs
+
+volumes:
+  acme-webroot:
+  letsencrypt:
+  media-cache:
