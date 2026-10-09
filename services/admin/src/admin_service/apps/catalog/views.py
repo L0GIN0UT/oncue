@@ -82,7 +82,7 @@ def _asset_sets(item_id: UUID, rows: Any) -> list[dict[str, Any]]:
 def _item_context(request: HttpRequest, item_id: UUID, **forms: Any) -> dict[str, Any]:
     item, error = fetch(request, CATALOG, f"/admin/v1/items/{item_id}")
     asset_sets, assets_error = fetch(
-        request, MEDIA, "/internal/v1/asset-sets", media_item_id=str(item_id)
+        request, MEDIA, "/admin/v1/asset-sets", media_item_id=str(item_id)
     )
     item = item if isinstance(item, dict) else None
     context: dict[str, Any] = {
@@ -127,6 +127,7 @@ def _status_change(request: HttpRequest, item_id: UUID, *, block: bool) -> HttpR
         reason=reason,
         idempotency_key=key,
         before=before,
+        audit_fields=("status",),
         call=lambda c: c.post(
             f"/admin/v1/items/{item_id}/{verb}", idempotency_key=key, json={"reason": reason}
         ),
@@ -170,6 +171,7 @@ def item_aliases(request: HttpRequest, item_id: UUID) -> HttpResponse:
         reason=reason,
         idempotency_key=key,
         before=before,
+        audit_fields=("aliases",),
         call=lambda c: c.put(
             f"/admin/v1/items/{item_id}/aliases",
             idempotency_key=key,
@@ -235,6 +237,7 @@ def asset_set_regenerate(request: HttpRequest, item_id: UUID, asset_set_id: UUID
         target_id=str(asset_set_id),
         reason=reason,
         idempotency_key=key,
+        audit_fields=("status", "generation"),
         call=lambda c: c.post(
             f"/admin/v1/asset-sets/{asset_set_id}/regenerate",
             idempotency_key=key,
@@ -261,6 +264,7 @@ def import_new(request: HttpRequest) -> HttpResponse:
             target_id=payload.get("ref") or payload.get("file_id", ""),
             reason=reason,
             idempotency_key=key,
+            audit_fields=("import_id", "status"),
             call=lambda c: c.post(
                 "/admin/v1/imports", idempotency_key=key, json={**payload, "reason": reason}
             ),

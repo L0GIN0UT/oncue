@@ -9,8 +9,8 @@ from admin_service.settings import Settings
 pytestmark = pytest.mark.unit
 
 
-def _settings(**kw: object) -> Settings:
-    return Settings(metrics_port=None, **kw)  # type: ignore[arg-type]
+def _settings(kafka_bootstrap: str | None = None) -> Settings:
+    return Settings(metrics_port=None, kafka_bootstrap=kafka_bootstrap)
 
 
 def test_unknown_command_exits() -> None:

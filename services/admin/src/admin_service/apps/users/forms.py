@@ -14,7 +14,7 @@ _ROLE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 class UserSearchForm(forms.Form):
     """Поиск пользователей identity."""
 
-    q = forms.CharField(label="Поиск", required=False, max_length=100)
+    q = forms.CharField(label="Поиск", required=False, max_length=64)
 
 
 class RolesForm(MutationForm):

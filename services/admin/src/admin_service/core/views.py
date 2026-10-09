@@ -59,6 +59,7 @@ def mutate(
     idempotency_key: str,
     call: Callable[[ServiceClient], Any],
     before: Any = None,
+    audit_fields: tuple[str, ...] = (),
     audit_after: Any = None,
     success: str = "Готово",
 ) -> tuple[bool, Any]:
@@ -67,8 +68,10 @@ def mutate(
     Returns:
         ``(успех, ответ сервиса)``; сообщение пользователю уже добавлено.
 
-    ``audit_after`` — что записать в аудит как «после», если ответ сервиса для этого
-    не годится (например, при загрузке файла).
+    В аудит как «после» попадают только изменяемые действием поля ответа (``audit_fields``),
+    а не весь ответ: в нём бывают персональные данные (e-mail в карточке пользователя),
+    которым в неизменяемом журнале не место. ``audit_after`` — явное значение, если ответ
+    сервиса для этого не годится (например, при загрузке файла).
     """
     user = request.user
     if not isinstance(user, AdminUser):  # require_perm гарантирует вход; защита от ошибки маршрута
@@ -91,10 +94,43 @@ def mutate(
         record(**common, error_code=exc.code)
         messages.error(request, exc.message)
         return False, None
-    record(**common, after=result if audit_after is None else audit_after)
+    after = audit_after if audit_after is not None else _pick(result, audit_fields)
+    record(**common, after=after)
     log.info("admin.action", action=action, target_id=target_id)
     messages.success(request, success)
     return True, result
+
+
+def _pick(result: Any, fields: tuple[str, ...]) -> dict[str, Any] | None:
+    if not fields or not isinstance(result, dict):
+        return None
+    return {f: result.get(f) for f in fields}
+
+
+def audit_read(
+    request: HttpRequest,
+    *,
+    action: str,
+    service: str,
+    target_type: str,
+    target_id: str,
+    **after: Any,
+) -> None:
+    """Аудит просмотра персональных данных (списки и карточки пользователей с e-mail)."""
+    user = request.user
+    if not isinstance(user, AdminUser):
+        raise PermissionDenied
+    record(
+        actor=user,
+        action=action,
+        service=service,
+        target_type=target_type,
+        target_id=target_id,
+        reason="просмотр",
+        request_id=request_id(request),
+        idempotency_key="",
+        after=after or None,
+    )
 
 
 def with_links(rows: Any, route: str, kwarg: str, *id_keys: str) -> list[dict[str, Any]]:

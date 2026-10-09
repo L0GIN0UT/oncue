@@ -55,6 +55,23 @@ def _secret_key() -> str:
     return secrets.token_urlsafe(50)
 
 
+def _caches() -> dict[str, Any]:
+    """Кэш Django — счётчики лимита попыток входа.
+
+    С ``GV_REDIS_URL`` — Redis (общий для всех реплик); без него — память процесса: лимит
+    действует на каждую реплику отдельно (для local/ci достаточно, на проде нужен Redis).
+    """
+    if GV.redis_url is not None:
+        return {
+            "default": {
+                "BACKEND": "django.core.cache.backends.redis.RedisCache",
+                "LOCATION": GV.redis_url.get_secret_value(),
+                "KEY_PREFIX": "admin",
+            }
+        }
+    return {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+
 _LOCAL = GV.environment is Environment.LOCAL
 
 SECRET_KEY = _secret_key()
@@ -116,6 +133,8 @@ DATABASES = {
 DATABASE_ROUTERS: list[str] = []
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+CACHES = _caches()
+
 # Своих паролей нет: вход только через identity (D2 плана этапа 1).
 AUTH_USER_MODEL = "core.AdminUser"
 AUTHENTICATION_BACKENDS = ["admin_service.core.auth.IdentityAuthBackend"]
@@ -156,5 +175,10 @@ GV_JWT_ISSUER = GV.jwt_issuer
 GV_JWT_AUDIENCE = GV.jwt_audience
 GV_SERVICE_URLS = dict(GV.admin.service_urls)
 GV_SERVICE_TIMEOUT_S = GV.admin.service_timeout_s
-GV_IP_ALLOWLIST = list(GV.admin.ip_allowlist)
+GV_IP_ALLOWLIST = list(GV.effective_ip_allowlist)
 GV_MAX_UPLOAD_MB = GV.admin.max_upload_mb
+GV_SESSION_ENC_KEY = (
+    GV.admin.session_enc_key.get_secret_value() if GV.admin.session_enc_key is not None else None
+)
+GV_LOGIN_ATTEMPTS_LIMIT = GV.admin.login_attempts_limit
+GV_LOGIN_ATTEMPTS_WINDOW_S = GV.admin.login_attempts_window_s
