@@ -15,3 +15,6 @@
 | [0009](0009-monorepo.md) | Монорепозиторий |
 | [0010](0010-match-room-single-writer.md) | Single-writer для комнат матча |
 | [0011](0011-service-definition-composition-root.md) | Composition root через ServiceDefinition вместо DI-контейнера |
+| [0012](0012-signed-asset-links-nginx.md) | Подписанные ссылки на ассеты: короткий TTL, проверка на Nginx |
+| [0013](0013-admin-catalog-via-admin-api.md) | Админка в этапе 1 читает и пишет через admin-API сервисов |
+| [0014](0014-music-sources.md) | Источники музыкальных метаданных и аудио |

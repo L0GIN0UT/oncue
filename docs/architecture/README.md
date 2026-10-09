@@ -77,6 +77,9 @@
 | 9 | Монорепозиторий | [0009](../adr/0009-monorepo.md) |
 | 10 | Single-writer для комнат матча | [0010](../adr/0010-match-room-single-writer.md) |
 | 11 | Composition root через ServiceDefinition | [0011](../adr/0011-service-definition-composition-root.md) |
+| 12 | Подписанные ссылки на ассеты (Nginx, TTL 60 с) | [0012](../adr/0012-signed-asset-links-nginx.md) |
+| 13 | Админка этапа 1 через admin-API | [0013](../adr/0013-admin-catalog-via-admin-api.md) |
+| 14 | Источники музыкальных метаданных и аудио | [0014](../adr/0014-music-sources.md) |
 
 ## 6. Технологии
 

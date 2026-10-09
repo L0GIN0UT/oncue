@@ -51,6 +51,8 @@ nav:
   - Платежи: 06-payments.md
   - Инфраструктура: 07-infrastructure.md
   - Roadmap: 09-roadmap.md
+  - Планы:
+      - Этап 1: plans/stage-1.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md
@@ -65,6 +67,9 @@ nav:
       - adr/0009-monorepo.md
       - adr/0010-match-room-single-writer.md
       - adr/0011-service-definition-composition-root.md
+      - adr/0012-signed-asset-links-nginx.md
+      - adr/0013-admin-catalog-via-admin-api.md
+      - adr/0014-music-sources.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md
