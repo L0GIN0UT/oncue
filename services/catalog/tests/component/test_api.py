@@ -14,8 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
-from catalog_service.application.commands.imports import IMPORT_TASK, RequestImport
-from catalog_service.domain.import_job import ImportSource
+from catalog_service.application.commands.imports import IMPORT_TASK
 from catalog_service.infrastructure.clients.resilience import CircuitBreaker, ResilientHttp
 from catalog_service.infrastructure.clients.tmdb import TmdbClient
 from catalog_service.infrastructure.container import CatalogContainer
@@ -47,6 +46,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures" / "external"
 async def client(
     catalog_infra: Infrastructure, container: CatalogContainer, token_issuer: TestTokenIssuer
 ) -> AsyncIterator[httpx.AsyncClient]:
+    # Подмена cached_property фейком того же протокола: mypy ждёт LazyTaskQueue.
     container.tasks = InMemoryTaskQueue()  # type: ignore[assignment]
     app = create_app(DEFINITION, catalog_infra, jwt_verifier=token_issuer.verifier())
     async with service_client(app) as c:
@@ -122,7 +122,8 @@ async def test_file_import_events_and_autocomplete(
     )
     assert films["status"] == tracks["status"] == "done"
     assert films["counters"] == {"created": 22, "updated": 0, "unchanged": 0, "failed": 0}
-    assert container.tasks.tasks  # type: ignore[attr-defined]  # задача поставлена в очередь
+    assert isinstance(container.tasks, InMemoryTaskQueue)
+    assert container.tasks.tasks  # задача поставлена в очередь
 
     assert await consume_own_events(catalog_infra) == 44
 
@@ -179,8 +180,9 @@ async def test_block_hides_item_everywhere(
     admin_view = await client.get(f"/admin/v1/items/{item_id}", headers=admin)
     assert admin_view.json()["blocked_reason_code"] == "copyright.claim"
 
-    async with catalog_infra.sessions() as session:  # type: ignore[misc]
-        events = await outbox_envelopes(session, catalog_infra.tables.outbox)  # type: ignore[union-attr]
+    assert catalog_infra.sessions is not None and catalog_infra.tables is not None
+    async with catalog_infra.sessions() as session:
+        events = await outbox_envelopes(session, catalog_infra.tables.outbox)
     [blocked_event] = [e for e in events if e.event_type == "catalog.MediaItemBlocked"]
     assert_event_matches_schema(blocked_event)
     assert blocked_event.payload["reason_code"] == "copyright.claim"
@@ -247,7 +249,15 @@ async def test_admin_api_requires_perms_and_idempotency_key(
     )
     moderator = auth(token_issuer, "admin.access", "catalog.block_item")
     no_key = await client.post(f"/admin/v1/items/{item}/block", json=body, headers=moderator)
-    assert_problem(no_key, 422, "request.validation_failed")
+    assert_problem(no_key, 422, "idempotency.key_required")
+    bad_key = await client.post(
+        f"/admin/v1/items/{item}/block", json=body, headers=moderator | {"Idempotency-Key": "x"}
+    )
+    assert_problem(bad_key, 422, "idempotency.key_invalid")
+    blank_reason = await client.post(
+        f"/admin/v1/items/{item}/block", json={"reason": "   "}, headers=moderator | key()
+    )
+    assert_problem(blank_reason, 422, "request.validation_failed")
     no_reason = await client.post(
         f"/admin/v1/items/{item}/block", json={}, headers=moderator | key()
     )
@@ -293,11 +303,9 @@ async def test_tmdb_import_through_admin_api(
     container: CatalogContainer,
     token_issuer: TestTokenIssuer,
 ) -> None:
-    # Включаем TMDB для этого теста: внешний API — заглушка на записанном ответе.
-    container.request_import = RequestImport(  # type: ignore[misc]
-        container.uow, container.tasks, frozenset(ImportSource)
-    )
-    container.film_provider = TmdbClient(  # type: ignore[misc]
+    # Включаем TMDB для этого теста: внешний API — заглушка на записанном ответе. Реестр
+    # источников собирается лениво, при первом импорте — уже с этим провайдером.
+    container.film_provider = TmdbClient(
         ResilientHttp(
             "tmdb",
             httpx.AsyncClient(base_url="https://api.themoviedb.org/3"),

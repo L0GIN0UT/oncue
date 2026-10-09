@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import unicodedata
+
 import pytest
 from catalog_service.domain.normalization import NormalizerConfig, TitleNormalizer
 from hypothesis import given
@@ -87,7 +89,9 @@ def test_normalize_has_no_edge_or_double_spaces(text: str) -> None:
     value = N.normalize(text)
     assert value == value.strip()
     assert "  " not in value
-    assert value == value.casefold()
+    # casefold некоторых составных символов (U+1F50 «ὐ») даёт разложенную форму —
+    # нормализатор сознательно возвращает её в NFKC, поэтому сравниваем с ней.
+    assert value == unicodedata.normalize("NFKC", value.casefold())
     assert "ё" not in value
 
 

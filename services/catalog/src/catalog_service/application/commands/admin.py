@@ -1,14 +1,14 @@
 """Админ-мутации единиц: блокировка, разблокировка, замена алиасов.
 
-Все мутации идемпотентны по ``(actor_id, Idempotency-Key)``: повтор с тем же ключом и
-телом возвращает сохранённый ответ, с другим телом — 409. Каждое действие пишется в аудит
-(``admin_actions``) в той же транзакции, что и изменение, вместе с причиной.
+Все мутации идемпотентны по ``(actor_id, Idempotency-Key)`` через ``gv_db.idempotency``:
+ключ и ответ сохраняются в той же транзакции, что и изменение; повтор с тем же ключом и
+телом возвращает сохранённый ответ, с другим телом — 409 ``idempotency.key_reused``.
+Каждое выполненное действие пишется в аудит (``admin_actions``) в той же транзакции,
+вместе с причиной.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -21,8 +21,9 @@ from catalog_service.application.ports import CatalogUnitOfWork, PrefixCache, Un
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import AliasDraft
 from catalog_service.domain.normalization import TitleNormalizer
-from gv_core.errors import ConflictError, NotFoundError
+from gv_core.errors import NotFoundError
 from gv_core.ids import uuid7
+from gv_db.idempotency import request_fingerprint, run_idempotent
 
 log = structlog.get_logger(__name__)
 
@@ -36,17 +37,6 @@ class AdminContext:
     reason: str
 
 
-def request_hash(action: str, target_id: uuid.UUID, body: dict[str, Any]) -> str:
-    """Отпечаток запроса: тот же ключ с другим телом — ошибка клиента."""
-    raw = json.dumps(
-        {"action": action, "target": str(target_id), "body": body},
-        sort_keys=True,
-        ensure_ascii=False,
-        default=str,
-    )
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
 async def _idempotent(
     uow: CatalogUnitOfWork,
     ctx: AdminContext,
@@ -56,33 +46,32 @@ async def _idempotent(
     body: dict[str, Any],
     perform: Callable[[], Awaitable[dict[str, Any]]],
 ) -> tuple[dict[str, Any], bool]:
-    """Выполнить ``perform`` один раз на ключ.
+    """Выполнить ``perform`` и записать аудит один раз на ключ (``run_idempotent``).
 
     Returns:
-        Ответ и признак «выполнено сейчас» (``False`` — повтор, ответ из аудита).
+        Ответ и признак «выполнено сейчас» (``False`` — повтор, ответ из хранилища ключей).
     """
-    fingerprint = request_hash(action, target_id, body)
-    existing = await uow.actions.find(ctx.actor_id, ctx.idempotency_key)
-    if existing is not None:
-        if existing.request_hash != fingerprint:
-            raise ConflictError(
-                "Idempotency-Key уже использован с другим запросом", code="idempotency.key_reused"
+    fingerprint = request_fingerprint(action, target_id, body)
+
+    async def perform_and_audit() -> dict[str, Any]:
+        response = await perform()
+        await uow.actions.record(
+            RecordedAction(
+                id=uuid7(),
+                actor_id=ctx.actor_id,
+                idempotency_key=ctx.idempotency_key,
+                action=action,
+                target_id=target_id,
+                reason=ctx.reason,
+                request_hash=fingerprint,
+                response=response,
             )
-        return existing.response, False
-    response = await perform()
-    await uow.actions.record(
-        RecordedAction(
-            id=uuid7(),
-            actor_id=ctx.actor_id,
-            idempotency_key=ctx.idempotency_key,
-            action=action,
-            target_id=target_id,
-            reason=ctx.reason,
-            request_hash=fingerprint,
-            response=response,
         )
+        return response
+
+    return await run_idempotent(
+        uow.idempotency, ctx.actor_id, ctx.idempotency_key, fingerprint, perform_and_audit
     )
-    return response, True
 
 
 async def _load(uow: CatalogUnitOfWork, item_id: uuid.UUID) -> MediaItem:

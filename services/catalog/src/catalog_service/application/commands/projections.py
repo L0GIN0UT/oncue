@@ -14,6 +14,7 @@ from catalog_service.application.ports import (
     PrefixCache,
     SearchIndex,
 )
+from gv_core.errors import DependencyUnavailableError
 
 log = structlog.get_logger(__name__)
 
@@ -42,6 +43,10 @@ class IndexItem:
         Returns:
             ``True`` — индекс обновлён; ``False`` — индекс выключен, единицы нет или
             в индексе уже не меньшая версия.
+
+        Raises:
+            DependencyUnavailableError: ``catalog.index_lag`` — строка БД отстаёт от
+                события; событие будет повторено.
         """
         if self._index is None:
             return False
@@ -52,7 +57,9 @@ class IndexItem:
         if item.version < event_version:
             # Строка БД не может отставать от своего же события (оно пишется в той же
             # транзакции). Если так — читаем реплику с лагом; повторим позже.
-            raise RuntimeError("версия в БД меньше версии события")
+            raise DependencyUnavailableError(
+                "версия в БД меньше версии события", code="catalog.index_lag"
+            )
         updated = await self._index.index(SearchDocument.from_item(item))
         if updated and self._cache is not None:
             await self._cache.invalidate()
@@ -83,8 +90,10 @@ class MarkClueAssets:
     async def __call__(self, event: ClueAssetsEvent) -> bool:
         """Применить событие.
 
-        Устаревшее событие того же набора ассетов (``version`` не больше применённой)
-        отбрасывается; событие нового набора (другой ``asset_set_id``) заменяет старый.
+        ``version`` монотонна по ``media_item_id`` (контракт media-pipeline), поэтому
+        событие с ``version`` не больше применённой к этой загадке отбрасывается
+        **независимо от** ``asset_set_id``: запоздавшее событие перегенерации старого
+        набора не вытесняет более новый набор.
 
         Returns:
             ``True``, если проекция изменилась.
@@ -93,13 +102,10 @@ class MarkClueAssets:
             log.warning("catalog.clue_assets_unknown_item", media_item_id=str(event.media_item_id))
             return False
         current = await self._statuses.get(event.media_item_id, event.clue_type, event.profile_key)
-        if (
-            current is not None
-            and current.asset_set_id == event.asset_set_id
-            and current.version >= event.version
-        ):
+        if current is not None and current.version >= event.version:
             log.info(
                 "catalog.clue_assets_stale",
+                media_item_id=str(event.media_item_id),
                 asset_set_id=str(event.asset_set_id),
                 version=event.version,
                 applied=current.version,

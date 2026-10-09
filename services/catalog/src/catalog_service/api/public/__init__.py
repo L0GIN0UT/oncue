@@ -13,6 +13,7 @@ from catalog_service.application.services import CatalogServices
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import MediaDomain
 from gv_core.errors import RateLimitedError
+from gv_service import problem_responses
 
 # Жёсткий потолок на уровне HTTP; рабочий лимит длины (64) проверяет use-case
 # с понятным кодом ``catalog.query_too_long``.
@@ -110,6 +111,7 @@ def build_public_router(c: CatalogServices) -> APIRouter:
         response_model=SuggestionList,
         summary="Автокомплит названий (только активные единицы)",
         dependencies=[Depends(rate_limit)],
+        responses=problem_responses(422, 429),
     )
     async def autocomplete(
         q: Annotated[str, Query(max_length=_Q_HARD_MAX, description="Префикс, ≤ 64 символов")],
@@ -124,6 +126,7 @@ def build_public_router(c: CatalogServices) -> APIRouter:
         response_model=SuggestionList,
         summary="Поиск по названиям и алиасам",
         dependencies=[Depends(rate_limit)],
+        responses=problem_responses(422, 429),
     )
     async def search(
         q: Annotated[str, Query(max_length=_Q_HARD_MAX)],
@@ -133,7 +136,12 @@ def build_public_router(c: CatalogServices) -> APIRouter:
         hits = await c.search(q, domain, limit)
         return SuggestionList(items=[SuggestionOut.of(s) for s in hits])
 
-    @router.get("/items/{item_id}", response_model=ItemCard, summary="Карточка единицы")
+    @router.get(
+        "/items/{item_id}",
+        response_model=ItemCard,
+        summary="Карточка единицы",
+        responses=problem_responses(404, 422),
+    )
     async def get_item(item_id: uuid.UUID) -> ItemCard:
         return ItemCard.of(await c.get_item.public(item_id))
 

@@ -29,6 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 
 from gv_db import create_metadata
+from gv_db.idempotency import idempotency_table
 
 TABLES = create_metadata()
 _md = TABLES.metadata
@@ -209,6 +210,8 @@ import_jobs = Table(
     CheckConstraint("(ref IS NULL) <> (file_id IS NULL)", name="ref_xor_file"),
 )
 
+# Аудит админ-мутаций. Ответы для повторов по Idempotency-Key — в ``idempotency_keys``;
+# ``request_hash``/``response`` здесь остаются как часть аудита.
 admin_actions = Table(
     "admin_actions",
     _md,
@@ -224,3 +227,6 @@ admin_actions = Table(
     UniqueConstraint("actor_id", "idempotency_key"),
     Index("ix_admin_actions_target_id", "target_id"),
 )
+
+idempotency_keys = idempotency_table(_md)
+"""Ключи идемпотентности admin-мутаций (``gv_db.idempotency``)."""
