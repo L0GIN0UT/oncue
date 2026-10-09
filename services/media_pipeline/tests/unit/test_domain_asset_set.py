@@ -84,16 +84,17 @@ def test_plan_starts_pending_and_new() -> None:
     assert aggregate.params_hash == _profile().params_hash
 
 
-def test_happy_path_records_assets_ready_with_growing_version() -> None:
+def test_happy_path_records_assets_ready_with_item_event_version() -> None:
     aggregate = _planned()
     aggregate.start_attempt(1, NOW)
     assert aggregate.status is AssetSetStatus.PROCESSING
-    aggregate.complete(1, _levels(3), NOW)
+    aggregate.complete(1, _levels(3), NOW, event_version=7)
     (event,) = aggregate.pull_events()
     assert isinstance(event, AssetsReady)
     assert event.aggregate_id == str(ITEM)
     assert event.levels_count == 3
-    assert event.version == aggregate.version == 3
+    # версия события — из счётчика единицы, а не версия агрегата-набора
+    assert (event.version, aggregate.version) == (7, 3)
     assert aggregate.level(2).level == 2
 
 
@@ -101,35 +102,48 @@ def test_complete_rejects_wrong_level_numbers() -> None:
     aggregate = _planned()
     aggregate.start_attempt(1, NOW)
     with pytest.raises(DomainError) as exc:
-        aggregate.complete(1, _levels(2), NOW)
+        aggregate.complete(1, _levels(2), NOW, event_version=1)
     assert exc.value.code == "asset_set.levels_mismatch"
 
 
 def test_retryable_failure_returns_to_pending_until_attempts_exhausted() -> None:
     aggregate = _planned()
     aggregate.start_attempt(1, NOW)
-    assert aggregate.fail(1, "source.unavailable", retryable=True, max_attempts=2, now=NOW) is False
+    assert (
+        aggregate.fail(
+            1, "source.unavailable", retryable=True, max_attempts=2, now=NOW, event_version=4
+        )
+        is False
+    )
     assert aggregate.status is AssetSetStatus.PENDING
     assert aggregate.pending_events == ()
     aggregate.start_attempt(1, NOW)
-    assert aggregate.fail(1, "source.unavailable", retryable=True, max_attempts=2, now=NOW) is True
+    assert (
+        aggregate.fail(
+            1, "source.unavailable", retryable=True, max_attempts=2, now=NOW, event_version=4
+        )
+        is True
+    )
     (event,) = aggregate.pull_events()
     assert isinstance(event, AssetsFailed)
     assert (event.attempts, event.retryable, event.error_code) == (2, True, "source.unavailable")
+    assert event.version == 4
     assert aggregate.status is AssetSetStatus.FAILED
 
 
 def test_permanent_failure_is_final_on_first_attempt() -> None:
     aggregate = _planned()
     aggregate.start_attempt(1, NOW)
-    assert aggregate.fail(1, "source.forbidden", retryable=False, max_attempts=5, now=NOW)
+    assert aggregate.fail(
+        1, "source.forbidden", retryable=False, max_attempts=5, now=NOW, event_version=1
+    )
     assert aggregate.status is AssetSetStatus.FAILED
 
 
 def test_stale_generation_is_rejected() -> None:
     aggregate = _planned()
     aggregate.start_attempt(1, NOW)
-    aggregate.complete(1, _levels(3), NOW)
+    aggregate.complete(1, _levels(3), NOW, event_version=1)
     old = aggregate.regenerate(NOW)
     assert [lvl.level for lvl in old] == [1, 2, 3]
     assert aggregate.generation == 2
@@ -144,7 +158,7 @@ def test_level_access_errors_follow_contract_order() -> None:
     with pytest.raises(AssetNotReadyError):
         aggregate.level(1)
     aggregate.start_attempt(1, NOW)
-    aggregate.complete(1, _levels(3), NOW)
+    aggregate.complete(1, _levels(3), NOW, event_version=1)
     with pytest.raises(LevelOutOfRangeError):
         aggregate.level(4)
     with pytest.raises(LevelOutOfRangeError):

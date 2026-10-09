@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
@@ -21,7 +21,6 @@ from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import (
     AdminAction,
     FetchedSource,
-    IdempotencyRecord,
     ImageOps,
     NormalizedMedia,
     RenderedImage,
@@ -33,6 +32,7 @@ from media_pipeline_service.domain.sources import SourceMedia
 
 from gv_core.domain import AggregateRoot, DomainEvent
 from gv_core.errors import ConflictError
+from gv_db.idempotency import IdempotencyRecord
 
 
 @dataclass
@@ -42,8 +42,10 @@ class MemoryDb:
     asset_sets: dict[UUID, AssetSet] = field(default_factory=dict)
     sources: dict[UUID, SourceMedia] = field(default_factory=dict)
     items: dict[UUID, MediaItemState] = field(default_factory=dict)
+    # Счётчик версий событий по единице (колонка media_items_state.events_version).
+    event_versions: dict[UUID, int] = field(default_factory=dict)
     links: list[dict[str, Any]] = field(default_factory=list)
-    idempotency: dict[tuple[str, str], IdempotencyRecord] = field(default_factory=dict)
+    idempotency: dict[tuple[UUID, str], IdempotencyRecord] = field(default_factory=dict)
     audit: list[AdminAction] = field(default_factory=list)
     events: list[DomainEvent] = field(default_factory=list)
 
@@ -125,6 +127,13 @@ class FakeItems(_Repo):
     async def upsert(self, state: MediaItemState) -> None:
         self.db.items[state.id] = copy.deepcopy(state)
 
+    async def next_event_version(self, media_item_id: UUID) -> int:
+        if media_item_id not in self.db.items:
+            raise AssertionError("набор без проекции единицы (в БД это FK)")
+        value = self.db.event_versions.get(media_item_id, 0) + 1
+        self.db.event_versions[media_item_id] = value
+        return value
+
 
 class FakeLinks(_Repo):
     async def record(
@@ -132,7 +141,7 @@ class FakeLinks(_Repo):
         *,
         asset_set_id: UUID,
         level: int,
-        subject: str,
+        subject_hash: str,
         issued_at: datetime,
         expires_at: datetime,
     ) -> None:
@@ -140,7 +149,7 @@ class FakeLinks(_Repo):
             {
                 "asset_set_id": asset_set_id,
                 "level": level,
-                "subject": subject,
+                "subject_hash": subject_hash,
                 "issued_at": issued_at,
                 "expires_at": expires_at,
             }
@@ -153,25 +162,36 @@ class FakeLinks(_Repo):
 
 
 class FakeIdempotency(_Repo):
-    async def reserve(
-        self, scope: str, key: str, request_hash: str, now: datetime
-    ) -> IdempotencyRecord | None:
-        existing = self.db.idempotency.get((scope, key))
-        if existing is not None:
-            return existing
-        self.db.idempotency[(scope, key)] = IdempotencyRecord(request_hash, None, None)
-        return None
+    """``gv_db.idempotency.IdempotencyStore`` в транзакции фейкового UoW.
 
-    async def complete(
-        self, scope: str, key: str, status_code: int, response: dict[str, Any]
+    В отличие от ``gv_testkit.InMemoryIdempotencyStore`` ключ живёт в «снимке» UoW: откат
+    транзакции мутации откатывает и ключ — как в PostgreSQL.
+    """
+
+    async def find(self, actor_id: UUID, key: str) -> IdempotencyRecord | None:
+        return self.db.idempotency.get((actor_id, key))
+
+    async def save(
+        self,
+        actor_id: UUID,
+        key: str,
+        request_hash: str,
+        response: dict[str, Any],
+        *,
+        status_code: int = 200,
     ) -> None:
-        record = self.db.idempotency[(scope, key)]
-        self.db.idempotency[(scope, key)] = IdempotencyRecord(
-            record.request_hash, status_code, response
+        if (actor_id, key) in self.db.idempotency:
+            raise ConflictError(
+                "запрос с этим Idempotency-Key уже выполняется", code="idempotency.in_progress"
+            )
+        self.db.idempotency[actor_id, key] = IdempotencyRecord(
+            actor_id=actor_id,
+            key=key,
+            request_hash=request_hash,
+            response=response,
+            status_code=status_code,
+            created_at=self._uow.clock_now,
         )
-
-    async def release(self, scope: str, key: str) -> None:
-        self.db.idempotency.pop((scope, key), None)
 
 
 class FakeAudit(_Repo):
@@ -180,11 +200,25 @@ class FakeAudit(_Repo):
 
 
 class FakeMediaUnitOfWork:
-    """UoW в памяти: изменения видны другим UoW только после ``commit``."""
+    """UoW в памяти: изменения видны другим UoW только после ``commit``.
 
-    def __init__(self, db: MemoryDb) -> None:
+    Хуки для тестов сбоев (получают «базу», могут бросить исключение):
+    ``fail_commit`` — перед фиксацией (коммит не случится, как при обрыве соединения),
+    ``after_commit`` — сразу после фиксации (процесс «упал» после коммита).
+    """
+
+    def __init__(
+        self,
+        db: MemoryDb,
+        clock_now: datetime,
+        fail_commit: Callable[[MemoryDb], None] | None = None,
+        after_commit: Callable[[MemoryDb], None] | None = None,
+    ) -> None:
         self._db = db
         self.view = db
+        self.clock_now = clock_now
+        self._fail_commit = fail_commit
+        self._after_commit = after_commit
         self._tracked: list[AggregateRoot[Any]] = []
         self.committed = False
         self.asset_sets = FakeAssetSets(self)
@@ -212,14 +246,18 @@ class FakeMediaUnitOfWork:
             self._tracked.append(aggregate)
 
     async def commit(self) -> None:
+        if self._fail_commit is not None:
+            self._fail_commit(self.view)
         for aggregate in self._tracked:
             self.view.events.extend(aggregate.pull_events())
-        for name in ("asset_sets", "sources", "items", "idempotency"):
+        for name in ("asset_sets", "sources", "items", "event_versions", "idempotency"):
             setattr(self._db, name, getattr(self.view, name))
         self._db.links[:] = self.view.links
         self._db.audit[:] = self.view.audit
         self._db.events[:] = self.view.events
         self.committed = True
+        if self._after_commit is not None:
+            self._after_commit(self._db)
 
     async def rollback(self) -> None:
         for aggregate in self._tracked:
@@ -397,7 +435,6 @@ class MediaHarness:
             GeneratorRegistry,
             PosterMaskedGenerator,
         )
-        from media_pipeline_service.application.idempotency import IdempotentExecutor
         from media_pipeline_service.application.queries.asset_sets import ListAssetSets
         from media_pipeline_service.application.sources import SourceIngestor
         from media_pipeline_service.domain.links import LinkPolicy
@@ -423,8 +460,14 @@ class MediaHarness:
         )
         self.profiles = self.registry.build_catalog(TEST_PROFILES)
 
+        # Тест может задать хуки сбоев коммита (см. ``FakeMediaUnitOfWork``).
+        self.fail_commit: Callable[[MemoryDb], None] | None = None
+        self.after_commit: Callable[[MemoryDb], None] | None = None
+
         def uow() -> FakeMediaUnitOfWork:
-            return FakeMediaUnitOfWork(self.db)
+            return FakeMediaUnitOfWork(
+                self.db, self.clock.now(), self.fail_commit, self.after_commit
+            )
 
         self.uow = uow
         self.ingestor = SourceIngestor(
@@ -461,7 +504,9 @@ class MediaHarness:
             max_source_bytes=10_000,
         )
         self.regenerate = RegenerateAssetSet(uow, self.clock, self.queue, self.storage)
-        self.upload = UploadSource(uow, self.clock, self.ingestor, self.profiles, self.plan)
+        self.upload = UploadSource(
+            uow, self.clock, self.ingestor, self.profiles, self.plan, storage=self.storage
+        )
         self.policy = LinkPolicy(ttl_s=60, max_per_window=link_max, window_s=60)
         self.issue_link = IssueAssetLink(
             uow,
@@ -472,7 +517,6 @@ class MediaHarness:
             retention=timedelta(days=7),
         )
         self.list_sets = ListAssetSets(uow)
-        self.idempotent = IdempotentExecutor(uow, self.clock)
 
     async def run_tasks(self) -> int:
         """Выполнить все поставленные задачи генерации (повторы — как ретраи очереди)."""

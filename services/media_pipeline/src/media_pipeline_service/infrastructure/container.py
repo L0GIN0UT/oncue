@@ -35,7 +35,6 @@ from media_pipeline_service.application.generators import (
     GeneratorRegistry,
     PosterMaskedGenerator,
 )
-from media_pipeline_service.application.idempotency import IdempotentExecutor
 from media_pipeline_service.application.ports import (
     ImageProcessor,
     LinkRateLimiter,
@@ -61,6 +60,7 @@ from media_pipeline_service.infrastructure.links import (
     RedisLinkRateLimiter,
     SecretsTokenSource,
     UnconfiguredSigner,
+    limiter_unavailable,
 )
 from media_pipeline_service.infrastructure.storage import S3Storage
 from media_pipeline_service.infrastructure.tasks import LazyRabbitTaskQueue
@@ -70,8 +70,11 @@ _MB = 1024 * 1024
 
 
 class _NoRedisLimiter:
+    def __init__(self, retry_after_s: int) -> None:
+        self._retry_after_s = retry_after_s
+
     async def hit(self, key: str, window_s: int) -> int:  # noqa: ARG002 — сигнатура порта
-        raise DependencyUnavailableError("лимитер ссылок не настроен (GV_REDIS_URL)")
+        raise limiter_unavailable(self._retry_after_s, "лимитер ссылок не настроен (GV_REDIS_URL)")
 
 
 @dataclass
@@ -113,7 +116,11 @@ class MediaAdapters:
             ),
             images=PillowImageProcessor(max_pixels=m.max_image_pixels, webp_quality=m.webp_quality),
             signer=signer,
-            limiter=RedisLinkRateLimiter(infra.redis) if infra.redis else _NoRedisLimiter(),
+            limiter=(
+                RedisLinkRateLimiter(infra.redis, retry_after_s=m.link_limiter_retry_after_s)
+                if infra.redis
+                else _NoRedisLimiter(m.link_limiter_retry_after_s)
+            ),
             queue=LazyRabbitTaskQueue(
                 settings.rabbitmq_url.get_secret_value() if settings.rabbitmq_url else None,
                 settings.service_name,
@@ -228,7 +235,12 @@ class MediaContainer:
     def upload(self) -> UploadSource:
         """Загрузка исходника админом."""
         return UploadSource(
-            self.uow_factory(), self.clock, self.ingestor, self.profiles, self.plan()
+            self.uow_factory(),
+            self.clock,
+            self.ingestor,
+            self.profiles,
+            self.plan(),
+            storage=self.adapters.storage,
         )
 
     @cached_property
@@ -251,7 +263,27 @@ class MediaContainer:
         """Список наборов."""
         return ListAssetSets(self.uow_factory())
 
-    @cached_property
-    def idempotent(self) -> IdempotentExecutor:
-        """Идемпотентность admin-мутаций."""
-        return IdempotentExecutor(self.uow_factory(), self.clock)
+    async def close(self) -> None:
+        """Закрыть клиенты, открытые лениво (соединение RabbitMQ очереди задач)."""
+        if isinstance(self.adapters.queue, LazyRabbitTaskQueue):
+            await self.adapters.queue.close()
+
+
+_ATTR = "_media_container"
+
+
+def container_for(infra: Infrastructure, adapters: MediaAdapters | None = None) -> MediaContainer:
+    """Один контейнер на процесс: api, consumer и worker в режиме ``all`` делят адаптеры
+    (и одно соединение RabbitMQ), а закрыть их можно в одном месте.
+
+    Хранится атрибутом ``Infrastructure`` (у ``ServiceDefinition`` нет своего хука жизненного
+    цикла). Явные ``adapters`` (тесты) создают отдельный контейнер.
+    """
+    if adapters is not None:
+        return MediaContainer(infra, adapters)
+    existing = getattr(infra, _ATTR, None)
+    if isinstance(existing, MediaContainer):
+        return existing
+    container = MediaContainer(infra)
+    setattr(infra, _ATTR, container)
+    return container

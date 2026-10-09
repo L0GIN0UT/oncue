@@ -1,6 +1,6 @@
 """Порты application-слоя: хранилище, исходники, обработка медиа, подпись ссылок, репозитории.
 
-Реализации — в ``infrastructure``; фейки для unit-тестов — в ``tests/unit/fakes.py``.
+Реализации — в ``infrastructure``; фейки для unit-тестов — в ``tests/conftest.py``.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from gv_core.uow import UnitOfWork
+from gv_db.idempotency import IdempotencyStore
 from media_pipeline_service.domain.asset_set import AssetSet
 from media_pipeline_service.domain.clues import MaskRegion
 from media_pipeline_service.domain.media_items import MediaItemState
@@ -210,6 +211,18 @@ class MediaItemStateRepository(Protocol):
         """Создать или обновить проекцию."""
         ...
 
+    async def next_event_version(self, media_item_id: UUID) -> int:
+        """Следующая версия событий ``AssetsReady``/``AssetsFailed`` единицы.
+
+        Счётчик растёт в транзакции вызывающего (той же, где событие пишется в outbox) и
+        блокирует строку единицы до коммита — версии монотонны по ``media_item_id``
+        (возможны пропуски, если транзакция откатилась или событие не понадобилось).
+
+        Raises:
+            MediaItemNotFoundError: проекции единицы нет.
+        """
+        ...
+
 
 class LinkIssuanceJournal(Protocol):
     """Журнал выдачи ссылок (ADR 0012)."""
@@ -219,49 +232,15 @@ class LinkIssuanceJournal(Protocol):
         *,
         asset_set_id: UUID,
         level: int,
-        subject: str,
+        subject_hash: str,
         issued_at: datetime,
         expires_at: datetime,
     ) -> None:
-        """Записать выдачу."""
+        """Записать выдачу. Субъект — только sha256-хэшем (ПДн не храним)."""
         ...
 
     async def purge_older_than(self, cutoff: datetime, *, limit: int) -> int:
         """Удалить записи старше ``cutoff`` (не больше ``limit``), вернуть число удалённых."""
-        ...
-
-
-@dataclass(frozen=True, slots=True)
-class IdempotencyRecord:
-    """Сохранённый результат мутации по ``Idempotency-Key``."""
-
-    request_hash: str
-    status_code: int | None
-    response: dict[str, Any] | None
-
-    @property
-    def completed(self) -> bool:
-        """Мутация завершена, ответ сохранён."""
-        return self.status_code is not None
-
-
-class IdempotencyStore(Protocol):
-    """Ключи идемпотентности admin-мутаций."""
-
-    async def reserve(
-        self, scope: str, key: str, request_hash: str, now: datetime
-    ) -> IdempotencyRecord | None:
-        """Занять ключ. ``None`` — ключ новый; иначе — существующая запись."""
-        ...
-
-    async def complete(
-        self, scope: str, key: str, status_code: int, response: dict[str, Any]
-    ) -> None:
-        """Сохранить ответ."""
-        ...
-
-    async def release(self, scope: str, key: str) -> None:
-        """Освободить ключ после ошибки (повтор с тем же ключом выполнит мутацию)."""
         ...
 
 
@@ -292,6 +271,7 @@ class MediaUnitOfWork(UnitOfWork, Protocol):
     sources: SourceMediaRepository
     items: MediaItemStateRepository
     links: LinkIssuanceJournal
+    # Ключи admin-мутаций в транзакции этого UoW (``gv_db.idempotency``).
     idempotency: IdempotencyStore
     audit: AdminAuditLog
 

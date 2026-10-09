@@ -23,6 +23,7 @@ from media_pipeline_service.infrastructure.links import (
 )
 from media_pipeline_service.infrastructure.storage import S3Storage
 from media_pipeline_service.settings import S3Settings
+from pydantic import SecretStr
 from redis.asyncio import Redis
 
 from gv_core import uuid7
@@ -220,7 +221,7 @@ def test_signer_requires_strong_secret_and_unconfigured_is_503() -> None:
 async def test_redis_limiter_counts_within_window(infra: InfraProvider) -> None:
     redis = Redis.from_url(infra.redis_url())
     prefix = f"test:media:{uuid7().hex[-12:]}:"
-    limiter = RedisLinkRateLimiter(redis, prefix=prefix)
+    limiter = RedisLinkRateLimiter(redis, retry_after_s=5, prefix=prefix)
     try:
         assert [await limiter.hit("k", 60) for _ in range(3)] == [1, 2, 3]
         assert await limiter.hit("other", 60) == 1
@@ -233,11 +234,13 @@ async def test_redis_limiter_counts_within_window(infra: InfraProvider) -> None:
         await redis.aclose()
 
 
-async def test_redis_limiter_fails_closed() -> None:
+async def test_redis_limiter_fails_closed_with_retry_after() -> None:
     redis = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.2)
     try:
-        with pytest.raises(DependencyUnavailableError):
-            await RedisLinkRateLimiter(redis).hit("k", 60)
+        with pytest.raises(DependencyUnavailableError) as exc:
+            await RedisLinkRateLimiter(redis, retry_after_s=7).hit("k", 60)
+        # 503 с details.retry_after → gv_service ставит заголовок Retry-After
+        assert exc.value.details == {"retry_after": 7}
     finally:
         await redis.aclose()
 
@@ -247,8 +250,8 @@ def s3_settings(endpoint: S3Endpoint) -> S3Settings:
     suffix = uuid7().hex[-12:]
     return S3Settings(
         endpoint=endpoint.url,
-        access_key=endpoint.access_key,  # type: ignore[arg-type]
-        secret_key=endpoint.secret_key,  # type: ignore[arg-type]
+        access_key=SecretStr(endpoint.access_key),
+        secret_key=SecretStr(endpoint.secret_key),
         bucket_sources=f"gv-src-{suffix}",
         bucket_assets=f"gv-assets-{suffix}",
     )

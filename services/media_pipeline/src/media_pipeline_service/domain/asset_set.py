@@ -66,7 +66,11 @@ class AssetLevel:
 
 @dataclass(frozen=True, kw_only=True)
 class AssetsReady(DomainEvent):
-    """Набор готов (``media_pipeline.AssetsReady`` v1). ``aggregate_id`` — id единицы."""
+    """Набор готов (``media_pipeline.AssetsReady`` v1).
+
+    ``aggregate_id`` — id единицы; ``version`` монотонна по единице (а не по набору):
+    потребитель хранит последнюю версию на ``media_item_id`` и отбрасывает не большие.
+    """
 
     aggregate_type: ClassVar[str] = "asset_set"
 
@@ -81,7 +85,10 @@ class AssetsReady(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class AssetsFailed(DomainEvent):
-    """Генерация окончательно не удалась (``media_pipeline.AssetsFailed`` v1)."""
+    """Генерация окончательно не удалась (``media_pipeline.AssetsFailed`` v1).
+
+    ``version`` — из того же счётчика единицы, что и у ``AssetsReady``.
+    """
 
     aggregate_type: ClassVar[str] = "asset_set"
 
@@ -98,9 +105,9 @@ class AssetsFailed(DomainEvent):
 class AssetSet(AggregateRoot[UUID]):
     """Набор ассетов одного профиля для одной единицы.
 
-    ``version`` растёт на каждом изменении состояния и попадает в события (монотонна для
-    агрегата); ``persisted_version`` — версия при загрузке, по ней репозиторий делает
-    оптимистичную блокировку.
+    ``version`` растёт на каждом изменении состояния; ``persisted_version`` — версия при
+    загрузке, по ней репозиторий делает оптимистичную блокировку. В события идёт не она, а
+    ``event_version`` — версия по единице (``MediaItemStateRepository.next_event_version``).
     """
 
     def __init__(
@@ -213,8 +220,19 @@ class AssetSet(AggregateRoot[UUID]):
         self.attempts += 1
         self._touch(now)
 
-    def complete(self, generation: int, levels: Sequence[AssetLevel], now: datetime) -> None:
-        """Сохранить объекты уровней и опубликовать ``AssetsReady``."""
+    def complete(
+        self,
+        generation: int,
+        levels: Sequence[AssetLevel],
+        now: datetime,
+        *,
+        event_version: int,
+    ) -> None:
+        """Сохранить объекты уровней и опубликовать ``AssetsReady``.
+
+        Args:
+            event_version: Версия события по единице (монотонна по ``media_item_id``).
+        """
         self._require_current(generation)
         if self.status is not AssetSetStatus.PROCESSING:
             raise DomainError("набор не в обработке", code="asset_set.invalid_transition")
@@ -237,7 +255,7 @@ class AssetSet(AggregateRoot[UUID]):
                 profile_key=self.profile_key,
                 params_hash=self.params_hash,
                 levels_count=self.levels_count,
-                version=self.version,
+                version=event_version,
             )
         )
 
@@ -249,8 +267,13 @@ class AssetSet(AggregateRoot[UUID]):
         retryable: bool,
         max_attempts: int,
         now: datetime,
+        event_version: int,
     ) -> bool:
         """Зафиксировать неудачную попытку.
+
+        Args:
+            event_version: Версия ``AssetsFailed`` по единице; при повторяемой неудаче не
+                используется (в счётчике остаётся пропуск — потребителю это не мешает).
 
         Returns:
             ``True`` — неудача окончательная (опубликовано ``AssetsFailed``);
@@ -274,7 +297,7 @@ class AssetSet(AggregateRoot[UUID]):
                 error_code=self.error_code,
                 retryable=retryable,
                 attempts=max(self.attempts, 1),
-                version=self.version,
+                version=event_version,
             )
         )
         return True

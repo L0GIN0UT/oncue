@@ -18,19 +18,19 @@ from gv_core.context import current_context
 from gv_core.domain import AggregateRoot
 from gv_core.errors import ConflictError
 from gv_core.ids import uuid7
+from gv_db.idempotency import IdempotencyStore, SqlIdempotencyStore
 from gv_messaging.envelope import EventEnvelope
 from gv_messaging.outbox import OutboxWriter
 from media_pipeline_service.application.ports import (
     AdminAction,
     AdminAuditLog,
     AssetSetRepository,
-    IdempotencyRecord,
-    IdempotencyStore,
     LinkIssuanceJournal,
     MediaItemStateRepository,
     SourceMediaRepository,
 )
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
+from media_pipeline_service.domain.errors import MediaItemNotFoundError
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.sources import (
     SourceKind,
@@ -317,8 +317,25 @@ class SqlMediaItemStateRepository:
             )
         )
 
+    async def next_event_version(self, media_item_id: UUID) -> int:
+        """Увеличить счётчик версий событий единицы и вернуть новое значение.
 
-# ---------------------------------------------------------------- журнал, идемпотентность, аудит
+        ``UPDATE … RETURNING`` берёт блокировку строки до конца транзакции: параллельные
+        транзакции по той же единице получают версии строго по порядку коммита.
+        """
+        result = await self._s.execute(
+            update(media_items_state)
+            .where(media_items_state.c.media_item_id == media_item_id)
+            .values(events_version=media_items_state.c.events_version + 1)
+            .returning(media_items_state.c.events_version)
+        )
+        value = result.scalar_one_or_none()
+        if value is None:
+            raise MediaItemNotFoundError("медиа-единица не найдена")
+        return int(value)
+
+
+# ---------------------------------------------------------------- журнал и аудит
 class SqlLinkIssuanceJournal:
     """Журнал выдачи ссылок."""
 
@@ -330,17 +347,17 @@ class SqlLinkIssuanceJournal:
         *,
         asset_set_id: UUID,
         level: int,
-        subject: str,
+        subject_hash: str,
         issued_at: datetime,
         expires_at: datetime,
     ) -> None:
-        """Записать выдачу."""
+        """Записать выдачу (субъект — только хэшем)."""
         await self._s.execute(
             insert(link_issuance).values(
                 id=uuid7(),
                 asset_set_id=asset_set_id,
                 level=level,
-                subject=subject,
+                subject_hash=subject_hash,
                 issued_at=issued_at,
                 expires_at=expires_at,
             )
@@ -357,58 +374,6 @@ class SqlLinkIssuanceJournal:
             .returning(link_issuance.c.id)
         )
         return len(result.all())
-
-
-class SqlIdempotencyStore:
-    """Ключи идемпотентности admin-мутаций."""
-
-    def __init__(self, session: AsyncSession) -> None:
-        self._s = session
-
-    async def reserve(
-        self, scope: str, key: str, request_hash: str, now: datetime
-    ) -> IdempotencyRecord | None:
-        """Занять ключ или вернуть существующую запись."""
-        inserted = await self._s.execute(
-            pg_insert(idempotency_keys)
-            .values(scope=scope, key=key, request_hash=request_hash, created_at=now)
-            .on_conflict_do_nothing()
-            .returning(idempotency_keys.c.key)
-        )
-        if inserted.first() is not None:
-            return None
-        row = (
-            (
-                await self._s.execute(
-                    select(idempotency_keys).where(
-                        idempotency_keys.c.scope == scope, idempotency_keys.c.key == key
-                    )
-                )
-            )
-            .mappings()
-            .one()
-        )
-        return IdempotencyRecord(row["request_hash"], row["status_code"], row["response"])
-
-    async def complete(
-        self, scope: str, key: str, status_code: int, response: dict[str, Any]
-    ) -> None:
-        """Сохранить ответ."""
-        await self._s.execute(
-            update(idempotency_keys)
-            .where(idempotency_keys.c.scope == scope, idempotency_keys.c.key == key)
-            .values(status_code=status_code, response=response)
-        )
-
-    async def release(self, scope: str, key: str) -> None:
-        """Освободить незавершённый ключ."""
-        await self._s.execute(
-            delete(idempotency_keys).where(
-                idempotency_keys.c.scope == scope,
-                idempotency_keys.c.key == key,
-                idempotency_keys.c.status_code.is_(None),
-            )
-        )
 
 
 class SqlAdminAuditLog:
@@ -487,7 +452,7 @@ class SqlMediaUnitOfWork:
         self.sources = SqlSourceMediaRepository(s)
         self.items = SqlMediaItemStateRepository(s)
         self.links = SqlLinkIssuanceJournal(s)
-        self.idempotency = SqlIdempotencyStore(s)
+        self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         self.audit = SqlAdminAuditLog(s)
         return self
 

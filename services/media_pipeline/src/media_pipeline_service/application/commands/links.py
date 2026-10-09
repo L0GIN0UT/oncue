@@ -73,7 +73,7 @@ class IssueAssetLink:
             await uow.links.record(
                 asset_set_id=asset_set_id,
                 level=level,
-                subject=subject,
+                subject_hash=LinkPolicy.subject_hash(subject),
                 issued_at=now,
                 expires_at=expires_at,
             )

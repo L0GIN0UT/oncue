@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from gv_core.errors import AppError, ConflictError, InvalidInputError, NotFoundError
+from gv_core.errors import ConflictError, GoneError, InvalidInputError, NotFoundError
 
 
 class AssetSetNotFoundError(NotFoundError):
@@ -17,11 +17,8 @@ class AssetNotReadyError(ConflictError):
     default_code = "asset.not_ready"
 
 
-class AssetBlockedError(AppError):
-    """Единица заблокирована, ассеты выключены (410 Gone).
-
-    В ``gv_service.problems`` нет класса для 410, поэтому API отображает её явно.
-    """
+class AssetBlockedError(GoneError):
+    """Единица заблокирована, ассеты выключены (410 Gone)."""
 
     default_code = "asset.blocked"
 

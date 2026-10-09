@@ -17,6 +17,9 @@
 - Блокировка единицы удаляет объекты ассетов сразу (выданные ссылки перестают работать до TTL); разблокировка — новое поколение генерации.
 - Ключи объектов `a/<128 бит hex>.<ext>`; объект без строки в `asset_levels` недоступен (ссылки выдаются только по БД).
 - Аудио: `-ss/-t` стоят ДО `-i` (уровень физически не содержит позднего звука); длительность файла = отрывок + 1 AAC-кадр тишины (23 мс).
-- 410 `asset.blocked` отдаётся вручную (`api/common.gone_on_blocked`): в `gv_service.problems` нет класса для 410.
-- Лимит выдачи ссылок в Redis — fail-closed (503). Журнал `link_issuance` чистится из `IssueAssetLink` не чаще раза в 10 мин.
-- Тестовые фейки портов сервиса — в `tests/conftest.py` (фикстура `media`), без правки `sys.path`. У всех примеров `contracts/events` один `event_id` — в тестах брать копию с новым id.
+- `AssetBlockedError` — наследник `gv_core.GoneError`: 410 `asset.blocked` отдаёт общий обработчик `gv_service` (своих Problem/`problem_responses` в сервисе нет).
+- Версия `AssetsReady`/`AssetsFailed` монотонна по `media_item_id` (= `aggregate_id`), а не по набору: счётчик `media_items_state.events_version`, инкремент `items.next_event_version` в транзакции записи события в outbox (возможны пропуски). Порядок блокировок: строка единицы → набор (как в consumer).
+- Admin-мутации (upload, regenerate): `admin.access` + своё право, `gv_service.IdempotencyKey`, `gv_service.Reason`; ключ и ответ — `gv_db.idempotency.run_idempotent` в транзакции мутации (`uow.idempotency`, таблица `idempotency_keys`). Повтор upload отвечает до перекодирования файла. Чтение `GET /admin/v1/asset-sets` — `admin.access`.
+- Лимит выдачи ссылок в Redis — fail-closed: 503 с `details.retry_after` (`GV_MEDIA__LINK_LIMITER_RETRY_AFTER_S`) → заголовок `Retry-After`. Журнал `link_issuance` хранит только sha256 субъекта (`subject_hash`), чистится из `IssueAssetLink` не чаще раза в 10 мин.
+- Один `MediaContainer` на процесс (`container_for`); ленивое соединение RabbitMQ закрывается на shutdown приложения (api). В процессах consumer/worker без api хука остановки нет — соединение закрывается вместе с процессом.
+- Тестовые фейки портов сервиса — в `tests/conftest.py` (фикстура `media`, хуки сбоев `fail_commit`/`after_commit`), без правки `sys.path`. `load_example` по умолчанию даёт новый `event_id`; `fresh_id=False` — только для проверки дублей.

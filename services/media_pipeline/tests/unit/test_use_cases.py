@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import timedelta
 from typing import Any
@@ -41,6 +42,11 @@ POSTER_REF = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000300")
 POSTER_URI = "https://image.tmdb.org/t/p/original/abc.jpg"
 JPEG = b"\xff\xd8\xff\xe0" + b"jpegdata" * 4
 ACTOR = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000002")
+
+
+def key() -> str:
+    """Новый Idempotency-Key."""
+    return f"key-{uuid7().hex}"
 
 
 def snapshot(
@@ -238,7 +244,9 @@ async def test_issue_link_happy_path_records_journal(media: Any) -> None:
     key = media.db.asset_sets[asset_set_id].levels[1].object_key
     assert key in link.url
     (row,) = media.db.links
-    assert (row["level"], row["subject"]) == (2, "session:1")
+    # субъект — только sha256-хэшем (ПДн в журнале не храним)
+    assert (row["level"], row["subject_hash"]) == (2, hashlib.sha256(b"session:1").hexdigest())
+    assert "session:1" not in repr(media.db.links)
 
 
 async def test_issue_link_error_contract(media: Any) -> None:
@@ -267,14 +275,16 @@ async def test_link_journal_is_purged_after_retention(media: Any) -> None:
     await media.issue_link.execute(asset_set_id, 1, "a")
     media.clock.advance(days=8)
     await media.issue_link.execute(asset_set_id, 1, "b")
-    assert [r["subject"] for r in media.db.links] == ["b"]
+    assert [r["subject_hash"] for r in media.db.links] == [hashlib.sha256(b"b").hexdigest()]
 
 
 # ---------------------------------------------------------------- admin
 async def test_regenerate_starts_new_generation_and_audits(media: Any) -> None:
     asset_set_id = await ready_poster(media)
     old_keys = set(media.storage.keys(StorageArea.ASSETS))
-    view = await media.regenerate.execute(asset_set_id, actor_id=ACTOR, reason="плохой кадр")
+    view = await media.regenerate.execute(
+        asset_set_id, actor_id=ACTOR, reason="плохой кадр", idempotency_key=key()
+    )
     assert (view.status, view.generation) == ("pending", 2)
     assert media.storage.keys(StorageArea.ASSETS) == []
     (audit,) = media.db.audit
@@ -286,20 +296,27 @@ async def test_regenerate_starts_new_generation_and_audits(media: Any) -> None:
     await media.run_tasks()
     assert set(media.storage.keys(StorageArea.ASSETS)).isdisjoint(old_keys)
     with pytest.raises(AssetSetNotFoundError):
-        await media.regenerate.execute(uuid7(), actor_id=ACTOR, reason="x")
+        await media.regenerate.execute(uuid7(), actor_id=ACTOR, reason="x", idempotency_key=key())
 
 
 async def test_regenerate_blocked_is_rejected(media: Any) -> None:
     asset_set_id = await ready_poster(media)
     await media.sync.apply_status(ITEM, 2, ItemStatus.BLOCKED)
     with pytest.raises(AssetBlockedError):
-        await media.regenerate.execute(asset_set_id, actor_id=ACTOR, reason="x")
+        await media.regenerate.execute(
+            asset_set_id, actor_id=ACTOR, reason="x", idempotency_key=key()
+        )
 
 
 async def test_upload_replaces_catalog_source_and_regenerates(media: Any) -> None:
     asset_set_id = await ready_poster(media)
     result = await media.upload.execute(
-        media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="без надписей"
+        media_item_id=ITEM,
+        kind=SourceKind.POSTER,
+        data=JPEG,
+        actor_id=ACTOR,
+        reason="без надписей",
+        idempotency_key=key(),
     )
     assert result.scheduled_asset_set_ids == (asset_set_id,)
     assert result.mime == "image/png"
@@ -312,7 +329,12 @@ async def test_upload_replaces_catalog_source_and_regenerates(media: Any) -> Non
 async def test_upload_frame_creates_new_set(media: Any) -> None:
     await media.sync.apply_snapshot(snapshot(sources=()))
     result = await media.upload.execute(
-        media_item_id=ITEM, kind=SourceKind.FRAME, data=JPEG, actor_id=ACTOR, reason="кадр"
+        media_item_id=ITEM,
+        kind=SourceKind.FRAME,
+        data=JPEG,
+        actor_id=ACTOR,
+        reason="кадр",
+        idempotency_key=key(),
     )
     (scheduled,) = result.scheduled_asset_set_ids
     await media.run_tasks()
@@ -336,7 +358,12 @@ async def test_upload_validation(
     await media.sync.apply_snapshot(snapshot(sources=()))
     with pytest.raises(error):
         await media.upload.execute(
-            media_item_id=ITEM, kind=kind, data=data, actor_id=ACTOR, reason="r"
+            media_item_id=ITEM,
+            kind=kind,
+            data=data,
+            actor_id=ACTOR,
+            reason="r",
+            idempotency_key=key(),
         )
     assert media.storage.keys(StorageArea.SOURCES) == []
 
@@ -350,6 +377,7 @@ async def test_upload_undecodable_file_is_invalid_input(media: Any) -> None:
             data=b"\xff\xd8\xffbroken",
             actor_id=ACTOR,
             reason="r",
+            idempotency_key=key(),
         )
     assert exc.value.code == "source.undecodable"
 
@@ -357,66 +385,190 @@ async def test_upload_undecodable_file_is_invalid_input(media: Any) -> None:
 async def test_upload_for_unknown_or_blocked_item(media: Any) -> None:
     with pytest.raises(MediaItemNotFoundError):
         await media.upload.execute(
-            media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="r"
+            media_item_id=ITEM,
+            kind=SourceKind.POSTER,
+            data=JPEG,
+            actor_id=ACTOR,
+            reason="r",
+            idempotency_key=key(),
         )
     await media.sync.apply_snapshot(snapshot(status=ItemStatus.BLOCKED))
     with pytest.raises(ConflictError) as exc:
         await media.upload.execute(
-            media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="r"
+            media_item_id=ITEM,
+            kind=SourceKind.POSTER,
+            data=JPEG,
+            actor_id=ACTOR,
+            reason="r",
+            idempotency_key=key(),
         )
     assert exc.value.code == "media_item.blocked"
 
 
 # ---------------------------------------------------------------- идемпотентность
-async def test_idempotent_executor_replays_and_detects_reuse(media: Any) -> None:
-    calls = 0
-
-    async def action() -> tuple[int, dict[str, Any]]:
-        nonlocal calls
-        calls += 1
-        return 202, {"n": calls}
-
-    first = await media.idempotent.run(scope="a", key="key-12345", request_hash="h1", action=action)
-    second = await media.idempotent.run(
-        scope="a", key="key-12345", request_hash="h1", action=action
+async def test_regenerate_replays_saved_response_and_detects_key_reuse(media: Any) -> None:
+    asset_set_id = await ready_poster(media)
+    k = key()
+    first = await media.regenerate.execute(
+        asset_set_id, actor_id=ACTOR, reason="плохой кадр", idempotency_key=k
     )
-    assert first == second == (202, {"n": 1})
+    replay = await media.regenerate.execute(
+        asset_set_id, actor_id=ACTOR, reason="плохой кадр", idempotency_key=k
+    )
+    assert replay == first
+    assert (media.db.asset_sets[asset_set_id].generation, len(media.db.audit)) == (2, 1)
     with pytest.raises(ConflictError) as exc:
-        await media.idempotent.run(scope="a", key="key-12345", request_hash="h2", action=action)
+        await media.regenerate.execute(
+            asset_set_id, actor_id=ACTOR, reason="другая причина", idempotency_key=k
+        )
+    assert exc.value.code == "idempotency.key_reused"
+    # ключи разных акторов независимы
+    other = await media.regenerate.execute(
+        asset_set_id, actor_id=uuid7(), reason="плохой кадр", idempotency_key=k
+    )
+    assert other.generation == 3
+
+
+async def test_regenerate_failure_after_mutation_leaves_no_stuck_key(media: Any) -> None:
+    """Регресс: ключ резервировался отдельной транзакцией и «залипал» (409 in_progress)."""
+    asset_set_id = await ready_poster(media)
+    k = key()
+
+    def db_down(_: Any) -> None:
+        raise ConnectionError("обрыв соединения с БД на коммите")
+
+    media.fail_commit = db_down
+    with pytest.raises(ConnectionError):
+        await media.regenerate.execute(
+            asset_set_id, actor_id=ACTOR, reason="кадр", idempotency_key=k
+        )
+    media.fail_commit = None
+    assert media.db.idempotency == {} and media.db.audit == []
+
+    view = await media.regenerate.execute(
+        asset_set_id, actor_id=ACTOR, reason="кадр", idempotency_key=k
+    )
+    assert view.generation == 2  # повтор выполнил мутацию заново, ровно один раз
+    assert len(media.db.audit) == 1
+
+
+async def test_crash_right_after_mutation_commit_replays_instead_of_409(media: Any) -> None:
+    """Регресс: процесс упал между коммитом мутации и сохранением ответа."""
+    asset_set_id = await ready_poster(media)
+    k = key()
+
+    class Crash(BaseException):
+        """Падение процесса (не ``Exception`` — обработчики ошибок его не ловят)."""
+
+    def crash(db: Any) -> None:
+        if db.audit:  # коммит, в котором уже есть мутация
+            raise Crash
+
+    media.after_commit = crash
+    with pytest.raises(Crash):
+        await media.regenerate.execute(
+            asset_set_id, actor_id=ACTOR, reason="кадр", idempotency_key=k
+        )
+    media.after_commit = None
+
+    view = await media.regenerate.execute(
+        asset_set_id, actor_id=ACTOR, reason="кадр", idempotency_key=k
+    )
+    assert view.generation == 2  # сохранённый ответ, мутация не повторилась
+    assert len(media.db.audit) == 1
+
+
+async def test_upload_replay_skips_processing_and_returns_saved_response(media: Any) -> None:
+    await media.sync.apply_snapshot(snapshot(sources=()))
+    k = key()
+    first = await media.upload.execute(
+        media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="r",
+        idempotency_key=k,
+    )  # fmt: skip
+    stored = media.storage.keys(StorageArea.SOURCES)
+    replay = await media.upload.execute(
+        media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="r",
+        idempotency_key=k,
+    )  # fmt: skip
+    assert replay == first
+    assert media.storage.keys(StorageArea.SOURCES) == stored  # файл не обрабатывался заново
+    assert len(media.db.sources) == 1
+    with pytest.raises(ConflictError) as exc:
+        await media.upload.execute(
+            media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG + b"x", actor_id=ACTOR,
+            reason="r", idempotency_key=k,
+        )  # fmt: skip
     assert exc.value.code == "idempotency.key_reused"
 
 
-async def test_idempotent_executor_releases_key_on_error(media: Any) -> None:
-    async def failing() -> tuple[int, dict[str, Any]]:
-        raise AssetSetNotFoundError("нет")
+async def test_upload_failed_commit_cleans_object_and_retry_executes(media: Any) -> None:
+    await media.sync.apply_snapshot(snapshot(sources=()))
+    k = key()
 
-    async def ok() -> tuple[int, dict[str, Any]]:
-        return 200, {}
+    def db_down(_: Any) -> None:
+        raise ConnectionError("обрыв")
 
-    with pytest.raises(AssetSetNotFoundError):
-        await media.idempotent.run(scope="a", key="key-12345", request_hash="h", action=failing)
-    assert await media.idempotent.run(scope="a", key="key-12345", request_hash="h", action=ok) == (
-        200,
-        {},
+    media.fail_commit = db_down
+    with pytest.raises(ConnectionError):
+        await media.upload.execute(
+            media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="r",
+            idempotency_key=k,
+        )  # fmt: skip
+    media.fail_commit = None
+    assert media.storage.keys(StorageArea.SOURCES) == []  # осиротевший объект удалён
+    assert media.db.idempotency == {}
+    result = await media.upload.execute(
+        media_item_id=ITEM, kind=SourceKind.POSTER, data=JPEG, actor_id=ACTOR, reason="r",
+        idempotency_key=k,
+    )  # fmt: skip
+    assert media.db.sources[result.source_media_id].is_stored
+
+
+# ---------------------------------------------------------------- версии событий
+async def test_event_version_is_monotonic_per_media_item_not_per_asset_set(media: Any) -> None:
+    """Перегенерация старого набора после нового даёт событие с большей version.
+
+    Consumer catalog хранит последнюю версию по media_item_id и сравнивает только её:
+    версия набора (у старого набора она меньше) привела бы к потере события.
+    """
+    frame_uri = "https://image.tmdb.org/frame.jpg"
+    media.fetcher.responses[POSTER_URI] = JPEG
+    media.fetcher.responses[frame_uri] = JPEG
+    frame = CatalogSource(uuid7(), SourceKind.FRAME, SourceOrigin.TMDB, frame_uri)
+    poster = CatalogSource(POSTER_REF, SourceKind.POSTER, SourceOrigin.TMDB, POSTER_URI)
+    await media.sync.apply_snapshot(snapshot(sources=(poster,)))
+    await media.run_tasks()
+    (old_set,) = await media.list_sets.execute(ITEM, "poster_masked")
+    await media.sync.apply_snapshot(snapshot(version=2, sources=(poster, frame)))
+    await media.run_tasks()
+    (new_set,) = await media.list_sets.execute(ITEM, "frame_progressive")
+    # Новый набор «обгоняет» старый по собственной версии агрегата.
+    for _ in range(3):
+        await media.regenerate.execute(
+            new_set.asset_set_id, actor_id=ACTOR, reason="ещё раз", idempotency_key=key()
+        )
+        await media.run_tasks()
+    await media.regenerate.execute(
+        old_set.asset_set_id, actor_id=ACTOR, reason="старый", idempotency_key=key()
     )
+    await media.run_tasks()
+
+    ready = [e for e in media.db.events if isinstance(e, AssetsReady)]
+    assert ready[-1].asset_set_id == old_set.asset_set_id
+    assert media.db.asset_sets[old_set.asset_set_id].version < (
+        media.db.asset_sets[new_set.asset_set_id].version
+    )
+    versions = [e.version for e in ready]
+    assert versions == sorted(versions) and len(set(versions)) == len(versions)
+    assert all(e.aggregate_id == str(ITEM) for e in ready)
 
 
-async def test_idempotent_in_progress_conflict(media: Any) -> None:
-    from media_pipeline_service.application.ports import IdempotencyRecord
-
-    media.db.idempotency[("a", "key-12345")] = IdempotencyRecord("h", None, None)
-
-    async def ok() -> tuple[int, dict[str, Any]]:
-        return 200, {}
-
-    with pytest.raises(ConflictError) as exc:
-        await media.idempotent.run(scope="a", key="key-12345", request_hash="h", action=ok)
-    assert exc.value.code == "idempotency.in_progress"
-
-
-@pytest.mark.parametrize("key", [None, "", "short", "with space!!", "x" * 200])
-def test_idempotency_key_format(key: str | None) -> None:
-    from media_pipeline_service.application.idempotency import validate_key
-
-    with pytest.raises(InvalidInputError):
-        validate_key(key)
+async def test_assets_failed_shares_item_event_counter(media: Any) -> None:
+    asset_set_id = await ready_poster(media)
+    await media.regenerate.execute(asset_set_id, actor_id=ACTOR, reason="r", idempotency_key=key())
+    media.fetcher.responses.clear()
+    media.db.sources[POSTER_REF].object_key = None  # заставить скачать заново
+    await media.run_tasks()
+    ready, failed = media.db.events
+    assert isinstance(ready, AssetsReady) and isinstance(failed, AssetsFailed)
+    assert failed.version > ready.version

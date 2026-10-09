@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from media_pipeline_service.domain.asset_set import AssetSet
@@ -43,6 +44,35 @@ class AssetSetView:
             error_code=aggregate.error_code,
         )
 
+    def to_json(self) -> dict[str, Any]:
+        """JSON-объект для хранения ответа идемпотентной мутации."""
+        return {
+            "asset_set_id": str(self.asset_set_id),
+            "media_item_id": str(self.media_item_id),
+            "clue_type": self.clue_type,
+            "profile_key": self.profile_key,
+            "params_hash": self.params_hash,
+            "status": self.status,
+            "levels_count": self.levels_count,
+            "generation": self.generation,
+            "error_code": self.error_code,
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> AssetSetView:
+        """Из сохранённого ответа (повтор запроса с тем же ``Idempotency-Key``)."""
+        return cls(
+            asset_set_id=UUID(data["asset_set_id"]),
+            media_item_id=UUID(data["media_item_id"]),
+            clue_type=data["clue_type"],
+            profile_key=data["profile_key"],
+            params_hash=data["params_hash"],
+            status=data["status"],
+            levels_count=int(data["levels_count"]),
+            generation=int(data["generation"]),
+            error_code=data["error_code"],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class IssuedLink:
@@ -65,6 +95,31 @@ class UploadResult:
     size_bytes: int
     mime: str
     scheduled_asset_set_ids: tuple[UUID, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        """JSON-объект для хранения ответа идемпотентной мутации."""
+        return {
+            "source_media_id": str(self.source_media_id),
+            "media_item_id": str(self.media_item_id),
+            "kind": self.kind.value,
+            "sha256": self.sha256,
+            "size_bytes": self.size_bytes,
+            "mime": self.mime,
+            "scheduled_asset_set_ids": [str(i) for i in self.scheduled_asset_set_ids],
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> UploadResult:
+        """Из сохранённого ответа (повтор запроса с тем же ``Idempotency-Key``)."""
+        return cls(
+            source_media_id=UUID(data["source_media_id"]),
+            media_item_id=UUID(data["media_item_id"]),
+            kind=SourceKind(data["kind"]),
+            sha256=data["sha256"],
+            size_bytes=int(data["size_bytes"]),
+            mime=data["mime"],
+            scheduled_asset_set_ids=tuple(UUID(i) for i in data["scheduled_asset_set_ids"]),
+        )
 
 
 @dataclass(frozen=True, slots=True)
