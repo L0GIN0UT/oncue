@@ -1,0 +1,16 @@
+{
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000000900",
+  "event_type": "catalog.MediaItemUnblocked",
+  "event_version": 1,
+  "occurred_at": "2026-10-09T12:00:00Z",
+  "producer": "catalog",
+  "aggregate_type": "media_item",
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "causation_id": null,
+  "payload": {
+    "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+    "version": 4,
+    "actor_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002"
+  }
+}

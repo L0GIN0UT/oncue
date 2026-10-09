@@ -17,7 +17,7 @@ import pytest
 if TYPE_CHECKING:
     from gv_testkit.auth import TestTokenIssuer
     from gv_testkit.fakes import FakeClock, FakeEventPublisher
-    from gv_testkit.infra import InfraProvider
+    from gv_testkit.infra import InfraProvider, S3Endpoint
 
 LEVELS = {
     "unit": "без IO, только фейки портов",
@@ -57,6 +57,18 @@ async def database_url(infra: InfraProvider) -> AsyncIterator[str]:
 
     async with temporary_database(infra.postgres_url()) as url:
         yield url
+
+
+@pytest.fixture
+def opensearch_url(infra: InfraProvider) -> str:
+    """URL OpenSearch на сессию; индексы в тестах — с уникальным суффиксом."""
+    return infra.opensearch_url()
+
+
+@pytest.fixture
+def s3_endpoint(infra: InfraProvider) -> S3Endpoint:
+    """S3-совместимое хранилище на сессию; бакеты в тестах — с уникальным суффиксом."""
+    return infra.s3_endpoint()
 
 
 @pytest.fixture

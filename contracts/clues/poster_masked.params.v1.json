@@ -1,0 +1,67 @@
+{
+  "$id": "urn:guessverse:contracts:clues:poster_masked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Постер без названия, пикселизация уменьшается по уровням.",
+  "properties": {
+    "levels": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "pixel_block": {
+            "maximum": 256,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pixel_block"
+        ],
+        "type": "object"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+    },
+    "mask_regions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "h": {
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "type": "number"
+          },
+          "w": {
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "type": "number"
+          },
+          "x": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "levels"
+  ],
+  "title": "poster_masked params v1",
+  "type": "object"
+}

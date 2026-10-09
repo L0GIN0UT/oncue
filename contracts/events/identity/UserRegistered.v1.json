@@ -1,0 +1,45 @@
+{
+  "$id": "urn:guessverse:contracts:events:identity:UserRegistered:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Пользователь зарегистрирован. Без e-mail и других ПДн (минимизация).",
+  "properties": {
+    "display_name": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+    },
+    "locale": {
+      "maxLength": 16,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "nickname": {
+      "maxLength": 24,
+      "minLength": 3,
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "nickname",
+    "display_name",
+    "locale",
+    "version"
+  ],
+  "title": "identity.UserRegistered v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "identity.user.v1"
+}

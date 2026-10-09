@@ -1,0 +1,37 @@
+{
+  "$id": "urn:guessverse:contracts:events:catalog:MediaItemUnblocked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Блокировка снята.",
+  "properties": {
+    "actor_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "media_item_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "media_item_id",
+    "version",
+    "actor_id"
+  ],
+  "title": "catalog.MediaItemUnblocked v1",
+  "type": "object",
+  "x-aggregate-type": "media_item",
+  "x-topic": "catalog.media_item.v1"
+}

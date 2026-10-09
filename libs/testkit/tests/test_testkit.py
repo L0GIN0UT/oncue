@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -108,3 +109,42 @@ class TestTokenIssuerContract:
         token = issuer.issue(now=datetime.now(UTC) - timedelta(hours=1), ttl=timedelta(minutes=1))
         with pytest.raises(UnauthenticatedError):
             await issuer.verifier().verify(token)
+
+
+class TestS3Endpoint:
+    def test_parses_credentials_from_url(self) -> None:
+        from gv_testkit import S3Endpoint
+
+        endpoint = S3Endpoint.parse("http://key:secret@127.0.0.1:9000")
+        assert (endpoint.url, endpoint.access_key, endpoint.secret_key) == (
+            "http://127.0.0.1:9000",
+            "key",
+            "secret",
+        )
+        with pytest.raises(ValueError):
+            S3Endpoint.parse("http://127.0.0.1:9000")
+
+
+class TestStubs:
+    async def test_stub_answers_and_checks_contract(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+    ) -> None:
+        import json
+
+        import httpx
+
+        from gv_testkit import stub_service
+
+        (tmp_path / "events").mkdir()
+        (tmp_path / "openapi").mkdir()
+        (tmp_path / "openapi" / "demo.json").write_text(
+            json.dumps({"paths": {"/v1/items/{item_id}": {"get": {}}}})
+        )
+        monkeypatch.setenv("GV_CONTRACTS_DIR", str(tmp_path))
+        with stub_service("http://demo:8000", service="demo") as demo:
+            demo.route("GET", "/v1/items/42").respond(200, json={"id": 42})
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://demo:8000/v1/items/42")
+            assert response.json() == {"id": 42}
+            with pytest.raises(AssertionError, match=r"нет в contracts/openapi/demo\.json"):
+                demo.route("POST", "/v1/items/42")

@@ -3,7 +3,7 @@ name = "guessverse-identity"
 version = "0.1.0"
 description = "Аккаунты, вход, сессии и токены, привязка провайдеров, слияние и удаление аккаунтов, роли и права"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "argon2-cffi>=23.1", "email-validator>=2.2", "aiosmtplib>=3.0", "httpx>=0.28", "cryptography>=43"]
 
 [project.scripts]
 identity = "identity_service.main:run"

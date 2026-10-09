@@ -1,0 +1,256 @@
+{
+  "$id": "urn:guessverse:contracts:events:catalog:MediaItemCreated:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Создана медиа-единица (полный снимок).",
+  "properties": {
+    "aliases": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "title",
+              "alt",
+              "translit",
+              "short"
+            ],
+            "type": "string"
+          },
+          "lang": {
+            "maxLength": 8,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "normalized": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "normalized",
+          "lang",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "external_refs": {
+      "additionalProperties": false,
+      "properties": {
+        "isrc": {
+          "type": "string"
+        },
+        "musicbrainz": {
+          "type": "string"
+        },
+        "spotify": {
+          "type": "string"
+        },
+        "tmdb": {
+          "type": "string"
+        },
+        "yandex_music": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "genres": {
+      "items": {
+        "maxLength": 64,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "track",
+        "film"
+      ],
+      "type": "string"
+    },
+    "media_item_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "popularity": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "revenue_usd": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "runtime_min": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "vote_average": {
+          "maximum": 10,
+          "minimum": 0,
+          "type": "number"
+        },
+        "vote_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "original_title": {
+      "maxLength": 300,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "persons": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "person_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "artist",
+              "director",
+              "actor"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "name",
+          "role",
+          "order"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "source_media": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "audio",
+              "frame",
+              "poster"
+            ],
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "upload",
+              "tmdb"
+            ],
+            "type": "string"
+          },
+          "source_media_ref": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "uri": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_media_ref",
+          "kind",
+          "origin",
+          "uri"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 300,
+      "minLength": 1,
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "year": {
+      "maximum": 2100,
+      "minimum": 1870,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "media_item_id",
+    "version",
+    "domain",
+    "kind",
+    "title",
+    "original_title",
+    "year",
+    "status",
+    "aliases",
+    "persons",
+    "genres",
+    "external_refs",
+    "metrics",
+    "source_media"
+  ],
+  "title": "catalog.MediaItemCreated v1",
+  "type": "object",
+  "x-aggregate-type": "media_item",
+  "x-topic": "catalog.media_item.v1"
+}

@@ -83,6 +83,7 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       # CI=true: недоступная инфраструктура роняет тест, а не пропускает его (gv_testkit.infra).
+      # Kafka, RabbitMQ, OpenSearch и MinIO поднимает testcontainers (Docker на раннере).
       CI: "true"
       GV_TEST_POSTGRES_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
       GV_TEST_REDIS_URL: redis://localhost:6379/0
@@ -91,6 +92,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
       - run: uv sync --all-packages
+      - name: Системные пакеты для тестов media-pipeline
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
       - name: unit + integration + component + contract
         run: uv run gv test "${{ matrix.path }}" --cov
       - uses: actions/upload-artifact@v4

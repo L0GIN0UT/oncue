@@ -429,27 +429,3 @@ forbidden_modules =
     gv_messaging
     gv_service
     gv_observability
-
-[importlinter:contract:admin-layers]
-name = admin: слои domain ← application ← infrastructure | api
-type = layers
-layers =
-    admin_service.api | admin_service.infrastructure
-    admin_service.application
-    admin_service.domain
-
-[importlinter:contract:admin-domain-pure]
-name = admin: домен без фреймворков и инфраструктуры
-type = forbidden
-source_modules = admin_service.domain
-forbidden_modules =
-    fastapi
-    sqlalchemy
-    redis
-    aiokafka
-    aio_pika
-    httpx
-    gv_db
-    gv_messaging
-    gv_service
-    gv_observability

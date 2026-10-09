@@ -1,0 +1,37 @@
+{
+  "$id": "urn:guessverse:contracts:events:identity:UserProfileBasicsChanged:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Изменились публичные данные профиля.",
+  "properties": {
+    "display_name": {
+      "maxLength": 40,
+      "minLength": 1,
+      "type": "string"
+    },
+    "nickname": {
+      "maxLength": 24,
+      "minLength": 3,
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "nickname",
+    "display_name",
+    "version"
+  ],
+  "title": "identity.UserProfileBasicsChanged v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "identity.user.v1"
+}

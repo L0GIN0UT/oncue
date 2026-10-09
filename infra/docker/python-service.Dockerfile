@@ -33,6 +33,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ------------------------------------------------------------------ рантайм
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
+# Системные пакеты сервиса из реестра (поле apt, например ffmpeg для media-pipeline).
+ARG APT_PACKAGES=""
+RUN if [ -n "${APT_PACKAGES}" ]; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends ${APT_PACKAGES} \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 RUN groupadd --gid 10001 app \
  && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 

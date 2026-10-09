@@ -1,0 +1,30 @@
+{
+  "$id": "urn:guessverse:contracts:events:identity:UserDeleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Аккаунт удалён: каждый сервис анонимизирует или удаляет свои данные пользователя.",
+  "properties": {
+    "deleted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "deleted_at",
+    "version"
+  ],
+  "title": "identity.UserDeleted v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "identity.user.v1"
+}

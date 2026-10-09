@@ -1,0 +1,20 @@
+{
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000000900",
+  "event_type": "media_pipeline.AssetsReady",
+  "event_version": 1,
+  "occurred_at": "2026-10-09T12:00:00Z",
+  "producer": "media_pipeline",
+  "aggregate_type": "asset_set",
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "causation_id": null,
+  "payload": {
+    "asset_set_id": "0192a3b4-c5d6-7e8f-9a0b-000000000400",
+    "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+    "clue_type": "poster_masked",
+    "profile_key": "default",
+    "params_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "levels_count": 5,
+    "version": 1
+  }
+}

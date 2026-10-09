@@ -19,6 +19,8 @@
 #   kafka        — публикует/читает доменные события (relay + consumer)
 #   rabbitmq     — фоновые задачи
 #   memory_mb    — лимит памяти контейнера
+#   framework    — fastapi (по умолчанию) | django (admin)
+#   apt          — системные пакеты образа (например ffmpeg), ставятся при сборке
 
 [services.identity]
 description = "Аккаунты, вход, сессии и токены, привязка провайдеров, слияние и удаление аккаунтов, роли и права"
@@ -35,17 +37,18 @@ public = "catalog"
 database = true
 redis = true
 kafka = true
-rabbitmq = false
+rabbitmq = true
 memory_mb = 320
 
 [services.media_pipeline]
 description = "Генерация ассетов загадок по уровням, хранение в S3, подписанные ссылки, проверка UGC-изображений"
 public = ""
 database = true
-redis = false
+redis = true
 kafka = true
 rabbitmq = true
 memory_mb = 512
+apt = ["ffmpeg"]
 
 [services.game]
 description = "Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32"
@@ -151,6 +154,7 @@ description = "Админ-панель (Django на этапе 1): модера�
 public = ""
 database = true
 redis = false
-kafka = false
+kafka = true
 rabbitmq = false
 memory_mb = 256
+framework = "django"

@@ -1,0 +1,16 @@
+{
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000000900",
+  "event_type": "identity.ExternalAccountUnlinked",
+  "event_version": 1,
+  "occurred_at": "2026-10-09T12:00:00Z",
+  "producer": "identity",
+  "aggregate_type": "user",
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000001",
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "causation_id": null,
+  "payload": {
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000001",
+    "provider": "yandex",
+    "version": 6
+  }
+}

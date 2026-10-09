@@ -50,6 +50,7 @@ def create_app(
             audience=settings.jwt_audience,
         )
     app.state.jwt_verifier = jwt_verifier
+    app.state.csrf_origins = frozenset(settings.public_origins)
 
     register_problem_handlers(app)
     for router in definition.build_routers(infra):

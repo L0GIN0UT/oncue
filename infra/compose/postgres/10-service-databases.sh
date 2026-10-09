@@ -13,6 +13,9 @@ CREATE ROLE :"name" LOGIN PASSWORD :'password';
 CREATE DATABASE :"name" OWNER :"name";
 REVOKE ALL ON DATABASE :"name" FROM PUBLIC;
 SQL
+  # Расширения создаёт суперпользователь: у сервисной роли таких прав нет (и не должно быть).
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$1" \
+    -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm' -c 'CREATE EXTENSION IF NOT EXISTS citext'
 }
 
 create_service_db identity "${PG_PASSWORD_IDENTITY:?задайте PG_PASSWORD_IDENTITY}"

@@ -89,3 +89,42 @@ def test_compare_with_base_detects_deleted_contract(tmp_path: Path) -> None:
     assert len(contracts.compare_with_base(tmp_path, "main")) == 1
     schema.unlink()
     assert "удалён" in contracts.compare_with_base(tmp_path, "main")[0].detail
+
+
+class TestHandWrittenContracts:
+    """Схемы событий и параметров загадок пишутся руками (contract-first) — проверяем их."""
+
+    @staticmethod
+    def _schemas() -> list[Path]:
+        root = ROOT / "contracts"
+        return sorted(
+            p
+            for p in [*root.glob("events/*/*.json"), *root.glob("clues/*.json")]
+            if "examples" not in p.parts
+        )
+
+    def test_schemas_are_valid_json_schema(self) -> None:
+        from jsonschema import Draft202012Validator
+
+        schemas = self._schemas()
+        assert schemas, "нет ни одной схемы"
+        for path in schemas:
+            Draft202012Validator.check_schema(json.loads(path.read_text(encoding="utf-8")))
+
+    def test_every_event_has_valid_example(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from gv_testkit.contracts import assert_event_matches_schema, load_example
+
+        monkeypatch.setenv("GV_CONTRACTS_DIR", str(ROOT / "contracts"))
+        events = [p for p in self._schemas() if p.parent.parent.name == "events"]
+        assert events
+        for path in events:
+            service, (event, version) = path.parent.name, path.stem.split(".v")
+            envelope = load_example(f"{service}.{event}", int(version))
+            assert envelope.event_type == f"{service}.{event}"
+            assert_event_matches_schema(envelope)
+
+    def test_schema_ids_match_paths(self) -> None:
+        for path in self._schemas():
+            schema = json.loads(path.read_text(encoding="utf-8"))
+            name = path.stem.split(".")[0]
+            assert f":{name}:" in schema["$id"], path

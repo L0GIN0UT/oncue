@@ -1,0 +1,44 @@
+{
+  "$id": "urn:guessverse:contracts:clues:frame_progressive:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Кадр становится чётче с каждым уровнем.",
+  "properties": {
+    "levels": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "blur_px": {
+            "maximum": 200,
+            "minimum": 0,
+            "type": "number"
+          },
+          "crop": {
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "type": "number"
+          },
+          "max_width": {
+            "maximum": 4096,
+            "minimum": 64,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blur_px",
+          "crop",
+          "max_width"
+        ],
+        "type": "object"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "levels"
+  ],
+  "title": "frame_progressive params v1",
+  "type": "object"
+}

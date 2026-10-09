@@ -1,0 +1,67 @@
+{
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000000900",
+  "event_type": "catalog.MediaItemUpdated",
+  "event_version": 1,
+  "occurred_at": "2026-10-09T12:00:00Z",
+  "producer": "catalog",
+  "aggregate_type": "media_item",
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "causation_id": null,
+  "payload": {
+    "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+    "version": 2,
+    "domain": "film",
+    "kind": "film",
+    "title": "Интерстеллар",
+    "original_title": "Interstellar",
+    "year": 2014,
+    "status": "active",
+    "aliases": [
+      {
+        "text": "Интерстеллар",
+        "normalized": "интерстеллар",
+        "lang": "ru",
+        "kind": "title"
+      },
+      {
+        "text": "Interstellar",
+        "normalized": "interstellar",
+        "lang": "en",
+        "kind": "alt"
+      }
+    ],
+    "persons": [
+      {
+        "person_id": "0192a3b4-c5d6-7e8f-9a0b-000000000200",
+        "name": "Кристофер Нолан",
+        "role": "director",
+        "order": 0
+      }
+    ],
+    "genres": [
+      "sci-fi",
+      "drama"
+    ],
+    "external_refs": {
+      "tmdb": "157336"
+    },
+    "metrics": {
+      "popularity": 120.5,
+      "vote_average": 8.4,
+      "vote_count": 35000,
+      "runtime_min": 169
+    },
+    "source_media": [
+      {
+        "source_media_ref": "0192a3b4-c5d6-7e8f-9a0b-000000000300",
+        "kind": "poster",
+        "origin": "tmdb",
+        "uri": "https://image.tmdb.org/t/p/original/abc.jpg"
+      }
+    ],
+    "changed_fields": [
+      "aliases"
+    ]
+  }
+}

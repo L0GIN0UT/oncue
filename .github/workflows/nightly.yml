@@ -34,6 +34,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true, python-version: "3.13" }
       - run: uv sync --all-packages
+      - name: Системные пакеты для тестов media-pipeline
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg
       - run: uv run gv lint
       - run: uv run gv test --cov
       - name: Уязвимости зависимостей

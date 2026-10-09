@@ -1,0 +1,43 @@
+{
+  "$id": "urn:guessverse:contracts:events:catalog:MediaItemBlocked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Единица заблокирована: убрать из игр, поиска и выдачи ассетов.",
+  "properties": {
+    "actor_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "media_item_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "reason_code": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_.]*$",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "media_item_id",
+    "version",
+    "reason_code",
+    "actor_id"
+  ],
+  "title": "catalog.MediaItemBlocked v1",
+  "type": "object",
+  "x-aggregate-type": "media_item",
+  "x-topic": "catalog.media_item.v1"
+}

@@ -35,7 +35,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: {{ s.name }}}
+      args: {SERVICE: {{ s.name }}, APT_PACKAGES: "{{ s.apt_packages }}"}
     image: ${GV_REGISTRY:-guessverse}/{{ s.dns }}:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -56,7 +56,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: {{ s.name }}}
+      args: {SERVICE: {{ s.name }}, APT_PACKAGES: "{{ s.apt_packages }}"}
     image: ${GV_REGISTRY:-guessverse}/{{ s.dns }}:${GV_TAG:-local}
     command: ["all"]
     environment:

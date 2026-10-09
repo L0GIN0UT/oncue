@@ -66,6 +66,8 @@ def render_all(services: list[Service]) -> dict[Path, str]:
     """Все генерируемые контракты: относительный путь → содержимое."""
     files = {ENVELOPE_PATH: dump(render_envelope_schema())}
     for service in services:
+        if service.is_django:
+            continue  # админка (Django) не публикует API — её контракт с сервисами описан у них
         files[OPENAPI_DIR / f"{service.name}.json"] = dump(render_openapi(service))
     return files
 
@@ -170,8 +172,8 @@ def compare_with_base(root: Path, base: str) -> list[Breaking]:
     """Сравнить текущие контракты с базовой ревизией git."""
     problems: list[Breaking] = []
     for rel in _git_ls(root, base, str(CONTRACTS_DIR)):
-        if not rel.endswith(".json"):
-            continue
+        if not rel.endswith(".json") or "/examples/" in rel:
+            continue  # примеры событий — не схемы; их валидность проверяют тесты контрактов
         old_text = _git_show(root, base, rel)
         if old_text is None:
             continue

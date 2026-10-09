@@ -1,0 +1,36 @@
+{
+  "$id": "urn:guessverse:contracts:events:identity:ExternalAccountLinked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "К аккаунту привязан внешний сервис. Без внешнего идентификатора и токенов.",
+  "properties": {
+    "provider": {
+      "enum": [
+        "yandex",
+        "spotify",
+        "shikimori",
+        "anilist",
+        "trakt"
+      ],
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "provider",
+    "version"
+  ],
+  "title": "identity.ExternalAccountLinked v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "identity.user.v1"
+}

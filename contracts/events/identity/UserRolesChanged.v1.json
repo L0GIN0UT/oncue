@@ -1,0 +1,63 @@
+{
+  "$id": "urn:guessverse:contracts:events:identity:UserRolesChanged:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Роли и итоговые права пользователя (полный снимок).",
+  "properties": {
+    "actor_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "perms": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "reason": {
+      "maxLength": 500,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "roles": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "roles",
+    "perms",
+    "version",
+    "actor_id",
+    "reason"
+  ],
+  "title": "identity.UserRolesChanged v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "identity.user.v1"
+}

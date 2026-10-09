@@ -41,6 +41,12 @@ class ServiceSettings(BaseSettings):
 
     http_host: str = "0.0.0.0"  # noqa: S104 — внутри контейнера слушаем все интерфейсы
     http_port: int = Field(default=8000, ge=1, le=65535)
+    # Отдельный внутренний порт метрик для всех процессов (api, consumer, worker, relay);
+    # None — метрики не публикуются. Переход с /metrics на основном порту — этап 1, поток D.
+    metrics_port: int | None = Field(default=9100, ge=1, le=65535)
+    # Разрешённые Origin для мутаций с cookie-аутентификацией (CSRF), JSON-массив в env:
+    # GV_PUBLIC_ORIGINS='["https://guessverse.ru"]'.
+    public_origins: tuple[str, ...] = ()
     shutdown_timeout_s: float = Field(default=25.0, gt=0)
 
     database_url: SecretStr | None = None

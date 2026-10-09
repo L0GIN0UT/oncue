@@ -33,6 +33,18 @@ class Service:
     rabbitmq: bool
     memory_mb: int
     index: int
+    framework: str = "fastapi"
+    apt: tuple[str, ...] = ()
+
+    @property
+    def is_django(self) -> bool:
+        """Сервис на Django (админка): своя структура, без OpenAPI-снимка и слоёв hexagonal."""
+        return self.framework == "django"
+
+    @property
+    def apt_packages(self) -> str:
+        """Системные пакеты образа через пробел (build-arg APT_PACKAGES)."""
+        return " ".join(self.apt)
 
     @property
     def package(self) -> str:
@@ -61,6 +73,26 @@ class Service:
         return f"PG_PASSWORD_{self.name.upper()}"
 
 
+FRAMEWORKS = frozenset({"fastapi", "django"})
+APT_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
+
+
+def _framework(name: str, raw: dict[str, object]) -> str:
+    framework = str(raw.get("framework", "fastapi"))
+    if framework not in FRAMEWORKS:
+        raise SystemExit(f"{name}: framework должен быть одним из {sorted(FRAMEWORKS)}")
+    return framework
+
+
+def _apt(name: str, raw: dict[str, object]) -> tuple[str, ...]:
+    packages = raw.get("apt", [])
+    if not isinstance(packages, list) or not all(
+        isinstance(p, str) and APT_RE.match(p) for p in packages
+    ):
+        raise SystemExit(f"{name}: apt — список имён пакетов Debian")
+    return tuple(packages)
+
+
 def load_services(root: Path) -> list[Service]:
     """Загрузить и проверить реестр."""
     data = tomllib.loads((root / "infra" / "services.toml").read_text(encoding="utf-8"))
@@ -87,6 +119,8 @@ def load_services(root: Path) -> list[Service]:
                 rabbitmq=bool(raw.get("rabbitmq", False)),
                 memory_mb=int(raw.get("memory_mb", 256)),
                 index=index,
+                framework=_framework(name, raw),
+                apt=_apt(name, raw),
             )
         )
     return services

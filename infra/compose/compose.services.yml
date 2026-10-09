@@ -33,7 +33,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: identity}
+      args: {SERVICE: identity, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/identity:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -53,7 +53,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: identity}
+      args: {SERVICE: identity, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/identity:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -77,7 +77,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: catalog}
+      args: {SERVICE: catalog, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/catalog:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -97,7 +97,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: catalog}
+      args: {SERVICE: catalog, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/catalog:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -107,10 +107,12 @@ services:
       GV_DATABASE_POOL_SIZE: "5"
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
     depends_on:
       catalog-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
     deploy:
       resources:
         limits: {memory: 320M}
@@ -121,7 +123,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: media_pipeline}
+      args: {SERVICE: media_pipeline, APT_PACKAGES: "ffmpeg"}
     image: ${GV_REGISTRY:-guessverse}/media-pipeline:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -141,7 +143,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: media_pipeline}
+      args: {SERVICE: media_pipeline, APT_PACKAGES: "ffmpeg"}
     image: ${GV_REGISTRY:-guessverse}/media-pipeline:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -149,10 +151,12 @@ services:
       GV_SERVICE_NAME: media_pipeline
       GV_DATABASE_URL: postgresql+asyncpg://media_pipeline:${PG_PASSWORD_MEDIA_PIPELINE:?задайте PG_PASSWORD_MEDIA_PIPELINE}@postgres:5432/media_pipeline
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
     depends_on:
       media-pipeline-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     deploy:
@@ -165,7 +169,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: game}
+      args: {SERVICE: game, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/game:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -185,7 +189,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: game}
+      args: {SERVICE: game, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/game:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -209,7 +213,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: match}
+      args: {SERVICE: match, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/match:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -229,7 +233,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: match}
+      args: {SERVICE: match, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/match:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -253,7 +257,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: rating}
+      args: {SERVICE: rating, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/rating:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -273,7 +277,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: rating}
+      args: {SERVICE: rating, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/rating:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -297,7 +301,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: collections}
+      args: {SERVICE: collections, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/collections:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -317,7 +321,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: collections}
+      args: {SERVICE: collections, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/collections:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -339,7 +343,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: library}
+      args: {SERVICE: library, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/library:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -359,7 +363,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: library}
+      args: {SERVICE: library, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/library:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -381,7 +385,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: integrations}
+      args: {SERVICE: integrations, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/integrations:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -401,7 +405,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: integrations}
+      args: {SERVICE: integrations, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/integrations:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -425,7 +429,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: progression}
+      args: {SERVICE: progression, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/progression:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -445,7 +449,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: progression}
+      args: {SERVICE: progression, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/progression:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -467,7 +471,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: payments}
+      args: {SERVICE: payments, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/payments:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -487,7 +491,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: payments}
+      args: {SERVICE: payments, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/payments:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -509,7 +513,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: social}
+      args: {SERVICE: social, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/social:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -529,7 +533,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: social}
+      args: {SERVICE: social, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/social:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -551,7 +555,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: notifications}
+      args: {SERVICE: notifications, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/notifications:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -571,7 +575,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: notifications}
+      args: {SERVICE: notifications, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/notifications:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -596,7 +600,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: bff_web}
+      args: {SERVICE: bff_web, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/bff-web:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -615,7 +619,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: admin}
+      args: {SERVICE: admin, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/admin:${GV_TAG:-local}
     command: ["migrate"]
     restart: "no"
@@ -635,7 +639,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/python-service.Dockerfile
-      args: {SERVICE: admin}
+      args: {SERVICE: admin, APT_PACKAGES: ""}
     image: ${GV_REGISTRY:-guessverse}/admin:${GV_TAG:-local}
     command: ["all"]
     environment:
@@ -643,8 +647,10 @@ services:
       GV_SERVICE_NAME: admin
       GV_DATABASE_URL: postgresql+asyncpg://admin:${PG_PASSWORD_ADMIN:?задайте PG_PASSWORD_ADMIN}@postgres:5432/admin
       GV_DATABASE_POOL_SIZE: "5"
+      GV_KAFKA_BOOTSTRAP: redpanda:9092
     depends_on:
       admin-migrate: {condition: service_completed_successfully}
+      redpanda: {condition: service_healthy}
     deploy:
       resources:
         limits: {memory: 256M}
