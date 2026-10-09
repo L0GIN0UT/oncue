@@ -52,3 +52,21 @@ def test_sql_update_and_delete_are_blocked_by_trigger(entry: AuditEntry, sql: st
     ):
         cur.execute(sql)
     assert AuditEntry.objects.get(pk=entry.pk).reason == "r"
+
+
+def test_truncate_is_blocked_by_trigger(entry: AuditEntry) -> None:
+    with connection.cursor() as cur:
+        # Триггер создан миграцией; в тестовой БД он выключен ради flush (см. conftest) —
+        # включаем в транзакции теста, откат вернёт как было.
+        cur.execute("SELECT count(*) FROM pg_trigger WHERE tgname = 'audit_auditentry_no_truncate'")
+        assert cur.fetchone() == (1,)
+        # Отложенные проверки FK от вставки записи мешают ALTER TABLE — выполнить их сейчас.
+        cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        cur.execute("ALTER TABLE audit_auditentry ENABLE TRIGGER audit_auditentry_no_truncate")
+    with (
+        pytest.raises(DatabaseError, match="append-only"),
+        transaction.atomic(),
+        connection.cursor() as cur,
+    ):
+        cur.execute("TRUNCATE audit_auditentry")
+    assert AuditEntry.objects.filter(pk=entry.pk).exists()

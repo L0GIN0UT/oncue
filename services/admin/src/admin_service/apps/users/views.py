@@ -12,9 +12,10 @@ from django.views.decorators.http import require_GET, require_POST
 from admin_service.apps.users.forms import RolesForm, UserSearchForm
 from admin_service.core.models import AdminUser
 from admin_service.core.permissions import django_perm, require_perm
-from admin_service.core.views import fetch, mutate, with_links
+from admin_service.core.views import audit_read, fetch, mutate, with_links
 
 IDENTITY = "identity"
+EMAIL_QUERY = "<e-mail>"
 
 
 @require_GET
@@ -26,6 +27,18 @@ def user_list(request: HttpRequest) -> HttpResponse:
     page, error = fetch(request, IDENTITY, "/admin/v1/users", q=q)
     rows = page.get("items") if isinstance(page, dict) else page
     items = with_links(rows, "users:user", "user_id", "id", "user_id")
+    if error is None:
+        # Ответ содержит e-mail: кто, что искал и чьи записи увидел — в аудит, но без
+        # самих персональных данных (поиск по e-mail записывается без адреса).
+        audit_read(
+            request,
+            action="identity.view_users",
+            service=IDENTITY,
+            target_type="user_list",
+            target_id="",
+            q=EMAIL_QUERY if "@" in q else q,
+            user_ids=[str(row.get("id")) for row in items],
+        )
     return render(
         request,
         "admin_users/user_list.html",
@@ -35,6 +48,14 @@ def user_list(request: HttpRequest) -> HttpResponse:
 
 def _context(request: HttpRequest, user_id: UUID, **extra: Any) -> dict[str, Any]:
     user, error = fetch(request, IDENTITY, f"/admin/v1/users/{user_id}")
+    if error is None:
+        audit_read(
+            request,
+            action="identity.view_user",
+            service=IDENTITY,
+            target_type="user",
+            target_id=str(user_id),
+        )
     user = user if isinstance(user, dict) else None
     roles = ", ".join(str(r) for r in (user or {}).get("roles", []) or [])
     context: dict[str, Any] = {
@@ -78,6 +99,7 @@ def user_roles(request: HttpRequest, user_id: UUID) -> HttpResponse:
         reason=reason,
         idempotency_key=key,
         before=before,
+        audit_fields=("roles",),
         call=lambda c: c.put(
             f"/admin/v1/users/{user_id}/roles",
             idempotency_key=key,
