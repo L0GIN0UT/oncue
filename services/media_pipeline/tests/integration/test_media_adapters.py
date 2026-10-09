@@ -170,14 +170,21 @@ def _riff_chunks(webp: bytes) -> set[bytes]:
 def _detail(data: bytes) -> float:
     """Средний модуль разности соседних пикселей (энергия высоких частот)."""
     image = Image.open(io.BytesIO(data)).convert("L")
-    px = image.load()
-    assert px is not None
+    px = image.tobytes()  # режим "L": один байт на пиксель, построчно
     w, h = image.size
     total = 0
     for y in range(0, h, 2):
+        row = y * w
         for x in range(1, w):
-            total += abs(int(px[x, y]) - int(px[x - 1, y]))  # type: ignore[arg-type]
+            total += abs(px[row + x] - px[row + x - 1])
     return total / (w * h / 2)
+
+
+def _rgb(image: Image.Image, x: int, y: int) -> tuple[int, ...]:
+    """Пиксель RGB-изображения кортежем (``getpixel`` типизирован шире)."""
+    pixel = image.getpixel((x, y))
+    assert isinstance(pixel, tuple)
+    return tuple(int(c) for c in pixel)
 
 
 @pytest.fixture(scope="module")
@@ -208,8 +215,8 @@ async def test_center_crop_and_mask(processor: PillowImageProcessor) -> None:
         ImageOps(max_width=800, mask_regions=(MaskRegion(x=0, y=0.5, w=1, h=0.5),)),
     )
     image = Image.open(io.BytesIO(masked.data)).convert("RGB")
-    assert max(image.getpixel((400, 500))) < 20  # type: ignore[arg-type]
-    assert max(image.getpixel((400, 100))) > 20  # type: ignore[arg-type]
+    assert max(_rgb(image, 400, 500)) < 20
+    assert max(_rgb(image, 400, 100)) > 20
 
 
 @pytest.mark.parametrize(

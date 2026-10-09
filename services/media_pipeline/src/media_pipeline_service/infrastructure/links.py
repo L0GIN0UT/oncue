@@ -67,16 +67,22 @@ class UnconfiguredSigner:
         )
 
 
+def limiter_unavailable(retry_after_s: int, message: str) -> DependencyUnavailableError:
+    """503 лимитера ссылок; ``details.retry_after`` превращается в заголовок ``Retry-After``."""
+    return DependencyUnavailableError(message, details={"retry_after": retry_after_s})
+
+
 class RedisLinkRateLimiter:
     """Фиксированное окно: ``INCR`` + ``EXPIRE`` при первом попадании (атомарно в MULTI).
 
-    Отказ Redis — fail-closed (503): лимит заменяет одноразовость ссылок (ADR 0012),
-    без него выдачу ограничить нечем.
+    Отказ Redis — fail-closed (503 с ``details.retry_after``): лимит заменяет
+    одноразовость ссылок (ADR 0012), без него выдачу ограничить нечем.
     """
 
-    def __init__(self, redis: Redis, prefix: str = "media:linkrl:") -> None:
+    def __init__(self, redis: Redis, *, retry_after_s: int, prefix: str = "media:linkrl:") -> None:
         self._redis = redis
         self._prefix = prefix
+        self._retry_after_s = retry_after_s
 
     async def hit(self, key: str, window_s: int) -> int:
         """Учесть выдачу и вернуть счётчик окна."""
@@ -87,7 +93,7 @@ class RedisLinkRateLimiter:
                 pipe.expire(full, window_s, nx=True)
                 count, _ = await pipe.execute()
         except RedisError as exc:
-            raise DependencyUnavailableError("лимитер ссылок недоступен") from exc
+            raise limiter_unavailable(self._retry_after_s, "лимитер ссылок недоступен") from exc
         return int(count)
 
 

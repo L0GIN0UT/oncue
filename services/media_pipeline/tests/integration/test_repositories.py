@@ -4,26 +4,30 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import pytest
+from media_pipeline_service.application.commands.generation import RegenerateAssetSet
 from media_pipeline_service.application.ports import AdminAction
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
 from media_pipeline_service.domain.clues import FrameProgressiveParams
-from media_pipeline_service.domain.links import asset_object_key
+from media_pipeline_service.domain.errors import MediaItemNotFoundError
+from media_pipeline_service.domain.links import LinkPolicy, asset_object_key
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfile
 from media_pipeline_service.domain.sources import SourceKind, SourceMedia, SourceOrigin
 from media_pipeline_service.infrastructure.db.repositories import SqlMediaUnitOfWork
-from media_pipeline_service.infrastructure.db.tables import TABLES
+from media_pipeline_service.infrastructure.db.tables import TABLES, admin_actions, link_issuance
 from media_pipeline_service.main import DEFINITION
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gv_core import uuid7
-from gv_core.errors import ConflictError
+from gv_core.errors import ConflictError, DependencyUnavailableError
 from gv_db import create_engine, create_session_factory
-from gv_testkit import FakeClock, apply_migrations, outbox_envelopes
+from gv_testkit import FakeClock, InMemoryTaskQueue, apply_migrations, outbox_envelopes
 
 pytestmark = pytest.mark.integration
 
@@ -113,7 +117,7 @@ async def test_asset_set_lifecycle_persists_levels_and_events(
         loaded = await u.asset_sets.get(aggregate.id, for_update=True)
         assert loaded is not None
         loaded.start_attempt(1, NOW)
-        loaded.complete(1, levels, NOW)
+        loaded.complete(1, levels, NOW, event_version=1)
         await u.asset_sets.save(loaded)
         u.track(loaded)
         await u.commit()
@@ -203,24 +207,26 @@ async def test_link_journal_purge_and_idempotency_and_audit(
     sessions: async_sessionmaker[AsyncSession],
 ) -> None:
     asset_set_id = uuid7()
+    subject_hash = LinkPolicy.subject_hash("game:42")
     async with uow(sessions) as u:
         for days in (10, 8, 1):
             at = NOW - timedelta(days=days)
             await u.links.record(
-                asset_set_id=asset_set_id, level=1, subject="s", issued_at=at, expires_at=at
+                asset_set_id=asset_set_id,
+                level=1,
+                subject_hash=subject_hash,
+                issued_at=at,
+                expires_at=at,
             )
         assert await u.links.purge_older_than(NOW - timedelta(days=7), limit=1) == 1
         assert await u.links.purge_older_than(NOW - timedelta(days=7), limit=10) == 1
         assert await u.links.purge_older_than(NOW - timedelta(days=7), limit=10) == 0
 
-        assert await u.idempotency.reserve("scope", "key-1", "h", NOW) is None
-        pending = await u.idempotency.reserve("scope", "key-1", "h", NOW)
-        assert pending is not None and not pending.completed
-        await u.idempotency.complete("scope", "key-1", 202, {"ok": True})
-        done = await u.idempotency.reserve("scope", "key-1", "other", NOW)
-        assert done is not None and done.completed and done.response == {"ok": True}
-        await u.idempotency.release("scope", "key-1")  # завершённый ключ не освобождается
-        assert await u.idempotency.reserve("scope", "key-1", "h", NOW) is not None
+        actor = uuid7()
+        assert await u.idempotency.find(actor, "key-00001") is None
+        await u.idempotency.save(actor, "key-00001", "h" * 64, {"ok": True}, status_code=202)
+        done = await u.idempotency.find(actor, "key-00001")
+        assert done is not None and (done.status_code, done.response) == (202, {"ok": True})
 
         await u.audit.record(
             AdminAction(
@@ -232,6 +238,123 @@ async def test_link_journal_purge_and_idempotency_and_audit(
             )
         )
         await u.commit()
+    async with sessions() as session:
+        query = select(link_issuance.c.subject_hash).where(
+            link_issuance.c.asset_set_id == asset_set_id
+        )
+        stored = (await session.execute(query)).scalars().all()
+    assert stored == [subject_hash]  # в журнале только хэш субъекта
+
+
+async def test_link_journal_rejects_raw_subject(sessions: async_sessionmaker[AsyncSession]) -> None:
+    async with uow(sessions) as u:
+        with pytest.raises(IntegrityError, match="subject_hash_sha256"):
+            await u.links.record(
+                asset_set_id=uuid7(), level=1, subject_hash="game:42", issued_at=NOW, expires_at=NOW
+            )
+
+
+async def test_next_event_version_is_per_item_and_rolls_back(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    item, _ = await seed(sessions)
+    other, _ = await seed(sessions)
+    async with uow(sessions) as u:
+        assert [await u.items.next_event_version(item) for _ in range(2)] == [1, 2]
+        assert await u.items.next_event_version(other) == 1
+        await u.commit()
+    async with uow(sessions) as u:  # откат транзакции откатывает и счётчик
+        assert await u.items.next_event_version(item) == 3
+    async with uow(sessions) as u:
+        assert await u.items.next_event_version(item) == 3
+        # upsert проекции событием catalog не сбрасывает счётчик
+        await u.items.upsert(
+            MediaItemState(
+                item,
+                domain="film",
+                kind="film",
+                status=ItemStatus.ACTIVE,
+                version=7,
+                updated_at=NOW,
+            )
+        )
+        await u.commit()
+    async with uow(sessions) as u:
+        assert await u.items.next_event_version(item) == 4
+        with pytest.raises(MediaItemNotFoundError):
+            await u.items.next_event_version(uuid7())
+
+
+class _FlakyQueue(InMemoryTaskQueue):
+    """Очередь, первая постановка в которую падает (после записи мутации в транзакции)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures = 1
+
+    async def enqueue(self, task_type: str, payload: dict[str, Any], *, task_id: str) -> None:
+        if self.failures:
+            self.failures -= 1
+            raise DependencyUnavailableError("RabbitMQ недоступен")
+        await super().enqueue(task_type, payload, task_id=task_id)
+
+
+async def test_regenerate_failure_after_mutation_does_not_stick_idempotency_key(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """Регресс: ключ резервировался отдельной транзакцией и оставался «в процессе» навсегда.
+
+    Теперь ключ пишется в транзакции мутации: сбой после изменения набора откатывает всё,
+    повтор с тем же ключом выполняет мутацию заново, следующий — получает сохранённый ответ.
+    """
+    item, source_id = await seed(sessions)
+    aggregate = AssetSet.plan(
+        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+    )
+    async with uow(sessions) as u:
+        await u.asset_sets.add(aggregate)
+        await u.commit()
+    queue = _FlakyQueue()
+    regenerate = RegenerateAssetSet(lambda: uow(sessions), FakeClock(NOW), queue, _NoStorage())
+    actor, key = uuid7(), f"regen-{uuid7().hex}"
+
+    with pytest.raises(DependencyUnavailableError):
+        await regenerate.execute(aggregate.id, actor_id=actor, reason="кадр", idempotency_key=key)
+    async with uow(sessions) as u:
+        assert await u.idempotency.find(actor, key) is None
+        unchanged = await u.asset_sets.get(aggregate.id)
+        assert unchanged is not None and unchanged.generation == 1
+
+    view = await regenerate.execute(
+        aggregate.id, actor_id=actor, reason="кадр", idempotency_key=key
+    )
+    replay = await regenerate.execute(
+        aggregate.id, actor_id=actor, reason="кадр", idempotency_key=key
+    )
+    assert view.generation == 2 and replay == view
+    assert len(queue.tasks) == 1
+    async with sessions() as session:
+        audit = (
+            (
+                await session.execute(
+                    select(admin_actions.c.action).where(admin_actions.c.target_id == aggregate.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert audit == ["asset_set.regenerate"]  # мутация выполнена ровно один раз
+
+
+class _NoStorage:
+    async def put(self, area: Any, key: str, data: bytes, content_type: str) -> None:
+        raise AssertionError("не используется")
+
+    async def get(self, area: Any, key: str, *, max_bytes: int) -> bytes:
+        raise AssertionError("не используется")
+
+    async def delete(self, area: Any, keys: Any) -> None:
+        return None
 
 
 async def test_external_session_uses_savepoint(sessions: async_sessionmaker[AsyncSession]) -> None:

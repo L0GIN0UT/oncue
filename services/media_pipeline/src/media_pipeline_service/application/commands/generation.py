@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 import structlog
 
 from gv_core.clock import Clock
 from gv_core.errors import AppError
+from gv_db.idempotency import request_fingerprint, run_idempotent
 from gv_messaging.ports import TaskQueue
 from media_pipeline_service.application.commands.catalog import schedule_generation
 from media_pipeline_service.application.dto import AssetSetView
@@ -16,6 +18,7 @@ from media_pipeline_service.application.errors import GenerationError, Generatio
 from media_pipeline_service.application.generators.base import GeneratorRegistry
 from media_pipeline_service.application.ports import (
     AdminAction,
+    MediaUnitOfWork,
     ObjectStorage,
     SourceFetcher,
     StorageArea,
@@ -39,6 +42,28 @@ class TaskNotVisibleError(Exception):
 class _Started:
     aggregate: AssetSet
     source: SourceMedia | None
+
+
+async def _lock_for_event(uow: MediaUnitOfWork, asset_set_id: UUID) -> tuple[AssetSet, int] | None:
+    """Заблокировать набор и взять следующую версию событий его единицы.
+
+    Версия ``AssetsReady``/``AssetsFailed`` монотонна по ``media_item_id`` (consumer catalog
+    сравнивает только ``version``), поэтому счётчик живёт в проекции единицы и растёт в той же
+    транзакции, где событие попадёт в outbox. Порядок блокировок как в consumer — сначала
+    строка единицы, затем набор — исключает взаимоблокировку с обработкой событий catalog.
+    ``media_item_id`` у набора не меняется, поэтому его можно прочитать без блокировки.
+
+    Returns:
+        Набор (под ``FOR UPDATE``) и версия события; ``None`` — набора нет.
+    """
+    peek = await uow.asset_sets.get(asset_set_id)
+    if peek is None:
+        return None
+    event_version = await uow.items.next_event_version(peek.media_item_id)
+    aggregate = await uow.asset_sets.get(asset_set_id, for_update=True)
+    if aggregate is None:
+        return None
+    return aggregate, event_version
 
 
 class GenerateAssetSet:
@@ -203,15 +228,17 @@ class GenerateAssetSet:
     ) -> None:
         await delete_quietly(self._storage, StorageArea.ASSETS, uploaded)
         async with self._uow() as uow:
-            aggregate = await uow.asset_sets.get(asset_set_id, for_update=True)
-            if aggregate is None or not aggregate.is_current(generation):
+            locked = await _lock_for_event(uow, asset_set_id)
+            if locked is None or not locked[0].is_current(generation):
                 return
+            aggregate, event_version = locked
             final = aggregate.fail(
                 generation,
                 code,
                 retryable=retryable,
                 max_attempts=self._max_attempts,
                 now=self._clock.now(),
+                event_version=event_version,
             )
             await uow.asset_sets.save(aggregate)
             uow.track(aggregate)
@@ -230,16 +257,17 @@ class GenerateAssetSet:
         self, asset_set_id: UUID, generation: int, levels: list[AssetLevel], uploaded: list[str]
     ) -> None:
         async with self._uow() as uow:
-            aggregate = await uow.asset_sets.get(asset_set_id, for_update=True)
+            locked = await _lock_for_event(uow, asset_set_id)
             if (
-                aggregate is None
-                or not aggregate.is_current(generation)
-                or aggregate.status is not AssetSetStatus.PROCESSING
+                locked is None
+                or not locked[0].is_current(generation)
+                or locked[0].status is not AssetSetStatus.PROCESSING
             ):
                 # Пока генерировали, набор выключили или перегенерировали — результат не нужен.
                 await delete_quietly(self._storage, StorageArea.ASSETS, uploaded)
                 return
-            aggregate.complete(generation, levels, self._clock.now())
+            aggregate, event_version = locked
+            aggregate.complete(generation, levels, self._clock.now(), event_version=event_version)
             await uow.asset_sets.save(aggregate)
             uow.track(aggregate)
             await uow.commit()
@@ -262,37 +290,55 @@ class RegenerateAssetSet:
         self._queue = queue
         self._storage = storage
 
-    async def execute(self, asset_set_id: UUID, *, actor_id: UUID, reason: str) -> AssetSetView:
-        """Перегенерировать.
+    async def execute(
+        self, asset_set_id: UUID, *, actor_id: UUID, reason: str, idempotency_key: str
+    ) -> AssetSetView:
+        """Перегенерировать (идемпотентно по ``(actor_id, idempotency_key)``).
+
+        Ключ и ответ сохраняются в транзакции самой мутации: ошибка до коммита не оставляет
+        ключа, повтор после коммита получает сохранённый ответ.
 
         Raises:
             AssetSetNotFoundError: нет набора.
             AssetBlockedError: единица заблокирована.
+            ConflictError: ``idempotency.key_reused`` / ``idempotency.in_progress``.
         """
+        fingerprint = request_fingerprint("asset_set.regenerate", asset_set_id, {"reason": reason})
+        old: list[AssetLevel] = []
         async with self._uow() as uow:
-            aggregate = await uow.asset_sets.get(asset_set_id, for_update=True)
-            if aggregate is None:
-                raise AssetSetNotFoundError("набор ассетов не найден")
-            now = self._clock.now()
-            old = aggregate.regenerate(now)
-            await uow.asset_sets.save(aggregate)
-            await uow.audit.record(
-                AdminAction(
-                    actor_id=actor_id,
-                    action="asset_set.regenerate",
-                    target_id=asset_set_id,
-                    reason=reason,
-                    at=now,
-                    details={"generation": aggregate.generation},
+
+            async def perform() -> dict[str, Any]:
+                nonlocal old
+                aggregate = await uow.asset_sets.get(asset_set_id, for_update=True)
+                if aggregate is None:
+                    raise AssetSetNotFoundError("набор ассетов не найден")
+                now = self._clock.now()
+                old = aggregate.regenerate(now)
+                await uow.asset_sets.save(aggregate)
+                await uow.audit.record(
+                    AdminAction(
+                        actor_id=actor_id,
+                        action="asset_set.regenerate",
+                        target_id=asset_set_id,
+                        reason=reason,
+                        at=now,
+                        details={"generation": aggregate.generation},
+                    )
                 )
+                await schedule_generation(self._queue, aggregate)
+                return AssetSetView.of(aggregate).to_json()
+
+            response, executed = await run_idempotent(
+                uow.idempotency, actor_id, idempotency_key, fingerprint, perform, status_code=202
             )
-            await schedule_generation(self._queue, aggregate)
             await uow.commit()
-        await delete_quietly(self._storage, StorageArea.ASSETS, [lvl.object_key for lvl in old])
-        log.info(
-            "asset_set.regenerate_requested",
-            asset_set_id=str(asset_set_id),
-            actor_id=str(actor_id),
-            generation=aggregate.generation,
-        )
-        return AssetSetView.of(aggregate)
+        view = AssetSetView.from_json(response)
+        if executed:
+            await delete_quietly(self._storage, StorageArea.ASSETS, [lvl.object_key for lvl in old])
+            log.info(
+                "asset_set.regenerate_requested",
+                asset_set_id=str(asset_set_id),
+                actor_id=str(actor_id),
+                generation=view.generation,
+            )
+        return view

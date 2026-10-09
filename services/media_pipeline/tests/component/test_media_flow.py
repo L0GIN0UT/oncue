@@ -28,6 +28,7 @@ from media_pipeline_service.application.ports import StorageArea
 from media_pipeline_service.infrastructure.container import MediaAdapters
 from media_pipeline_service.infrastructure.db.tables import TABLES
 from media_pipeline_service.infrastructure.fetcher import HttpSourceFetcher
+from media_pipeline_service.infrastructure.links import RedisLinkRateLimiter
 from media_pipeline_service.infrastructure.storage import S3Storage
 from media_pipeline_service.main import (
     DEFINITION,
@@ -38,6 +39,7 @@ from media_pipeline_service.main import (
 from media_pipeline_service.settings import MediaSettings, S3Settings, Settings
 from PIL import Image
 from pydantic import SecretStr
+from redis.asyncio import Redis
 
 from gv_core import uuid7
 from gv_messaging import EventEnvelope, EventProcessor, Inbox, Outcome
@@ -62,11 +64,6 @@ SECRET = "component-test-secret-0123456789abcdef"
 TMDB_IP = "93.184.216.34"
 POSTER_PATH = "/t/p/original/abc.jpg"
 ADMIN_PERMS = ("admin.access", "media.upload_source", "media.regenerate")
-
-
-def example(event_type: str) -> EventEnvelope:
-    """Пример из contracts с новым event_id (у всех примеров он одинаковый)."""
-    return load_example(event_type).model_copy(update={"event_id": uuid7()})
 
 
 def _jpeg(width: int = 600, height: int = 900) -> bytes:
@@ -117,8 +114,17 @@ class Service:
 
 @pytest.fixture
 async def service(
-    database_url: str, infra: InfraProvider, s3_endpoint: S3Endpoint, token_issuer: TestTokenIssuer
+    request: pytest.FixtureRequest,
+    database_url: str,
+    infra: InfraProvider,
+    s3_endpoint: S3Endpoint,
+    token_issuer: TestTokenIssuer,
 ) -> AsyncIterator[Service]:
+    """Сервис на реальной инфраструктуре.
+
+    ``indirect``-параметр ``{"redis_down": True}`` — лимитер ссылок смотрит в недоступный Redis.
+    """
+    options: dict[str, Any] = getattr(request, "param", {})
     assert DEFINITION.migrations_path is not None
     await apply_migrations(database_url, DEFINITION.migrations_path)
     suffix = uuid7().hex[-12:]
@@ -155,6 +161,14 @@ async def service(
             resolver=tmdb_resolver,
         ),
     )
+    if options.get("redis_down"):
+        dead = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.2)
+        adapters = dataclasses.replace(
+            adapters,
+            limiter=RedisLinkRateLimiter(
+                dead, retry_after_s=settings.media.link_limiter_retry_after_s
+            ),
+        )
     assert isinstance(adapters.storage, S3Storage)
     await adapters.storage.ensure_buckets()
     definition = dataclasses.replace(
@@ -281,12 +295,24 @@ async def test_link_errors_follow_contract(service: Service) -> None:
     )
 
 
+@pytest.mark.parametrize("service", [{"redis_down": True}], indirect=True)
+async def test_link_limiter_down_is_503_with_retry_after(service: Service) -> None:
+    asset_set = await _ready_poster(service)
+    response = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": asset_set["asset_set_id"], "level": 1, "subject": "s"},
+    )
+    body = assert_problem(response, 503, "dependency.unavailable")
+    assert body["details"] == {"retry_after": 5}
+    assert response.headers["Retry-After"] == "5"
+
+
 async def test_blocked_returns_410_and_unblock_regenerates(service: Service) -> None:
     asset_set = await _ready_poster(service)
     link = {"asset_set_id": asset_set["asset_set_id"], "level": 1, "subject": "s"}
     issued = (await service.client.post("/internal/v1/asset-links", json=link)).json()
     key = urlsplit(issued["url"]).path.removeprefix("/media/")
-    assert await service.deliver(example("catalog.MediaItemBlocked")) is Outcome.PROCESSED
+    assert await service.deliver(load_example("catalog.MediaItemBlocked")) is Outcome.PROCESSED
     assert_problem(
         await service.client.post("/internal/v1/asset-links", json=link), 410, "asset.blocked"
     )
@@ -294,12 +320,12 @@ async def test_blocked_returns_410_and_unblock_regenerates(service: Service) -> 
     with pytest.raises(GenerationError):
         await service.storage.get(StorageArea.ASSETS, key, max_bytes=10_000_000)
     # старое Updated (version 2 < 3) не разблокирует
-    await service.deliver(example("catalog.MediaItemUpdated"))
+    await service.deliver(load_example("catalog.MediaItemUpdated"))
     assert_problem(
         await service.client.post("/internal/v1/asset-links", json=link), 410, "asset.blocked"
     )
 
-    assert await service.deliver(example("catalog.MediaItemUnblocked")) is Outcome.PROCESSED
+    assert await service.deliver(load_example("catalog.MediaItemUnblocked")) is Outcome.PROCESSED
     assert await service.run_tasks() == 1
     assert (await service.client.post("/internal/v1/asset-links", json=link)).status_code == 200
     ready_events = [
@@ -410,10 +436,30 @@ async def test_admin_upload_validation(service: Service) -> None:
         403,
         "auth.forbidden",
     )
+    assert_problem(  # конкретное право без admin.access — тоже 403
+        await post(
+            "/admin/v1/sources",
+            data=form,
+            files=wav,
+            headers={**service.admin("media.upload_source"), **key()},
+        ),
+        403,
+        "auth.forbidden",
+    )
     assert_problem(
         await post("/admin/v1/sources", data=form, files=wav, headers=service.admin()),
         422,
         "idempotency.key_required",
+    )
+    assert_problem(
+        await post(
+            "/admin/v1/sources",
+            data=form,
+            files=wav,
+            headers={**service.admin(), "Idempotency-Key": "bad key!"},
+        ),
+        422,
+        "idempotency.key_invalid",
     )
     fake = {"file": ("evil.wav", b"<?php system($_GET['c']); ?>", "audio/wav")}
     assert_problem(
@@ -432,7 +478,7 @@ async def test_admin_upload_validation(service: Service) -> None:
     assert_problem(
         await post(
             "/admin/v1/sources",
-            data={**form, "reason": ""},
+            data={**form, "reason": "  a "},  # Reason: пробелы срезаются, затем длина 3..500
             files=wav,
             headers={**service.admin(), **key()},
         ),
@@ -487,7 +533,7 @@ async def test_admin_regenerate(service: Service) -> None:
         404,
         "asset.not_found",
     )
-    await service.deliver(example("catalog.MediaItemBlocked"))
+    await service.deliver(load_example("catalog.MediaItemBlocked"))
     assert_problem(
         await service.client.post(
             url,
@@ -497,13 +543,41 @@ async def test_admin_regenerate(service: Service) -> None:
         410,
         "asset.blocked",
     )
+    for perms in (("admin.access",), ("media.regenerate",)):
+        assert_problem(
+            await service.client.post(
+                url,
+                json={"reason": "без прав"},
+                headers={**service.admin(*perms), "Idempotency-Key": f"r-{uuid7().hex}"},
+            ),
+            403,
+            "auth.forbidden",
+        )
     assert_problem(
-        await service.client.post(
-            url, json={"reason": "без прав"}, headers=service.admin("admin.access")
+        await service.client.post(url, json={"reason": "без ключа"}, headers=service.admin()),
+        422,
+        "idempotency.key_required",
+    )
+
+
+async def test_admin_asset_sets_requires_admin_access(service: Service) -> None:
+    asset_set = await _ready_poster(service)
+    params = {"media_item_id": asset_set["media_item_id"]}
+    assert_problem(
+        await service.client.get("/admin/v1/asset-sets", params=params), 401, "auth.unauthenticated"
+    )
+    assert_problem(
+        await service.client.get(
+            "/admin/v1/asset-sets", params=params, headers=service.admin("media.regenerate")
         ),
         403,
         "auth.forbidden",
     )
+    listed = await service.client.get(
+        "/admin/v1/asset-sets", params=params, headers=service.admin("admin.access")
+    )
+    assert listed.status_code == 200
+    assert [s["asset_set_id"] for s in listed.json()] == [asset_set["asset_set_id"]]
 
 
 async def test_asset_sets_requires_media_item_id(service: Service) -> None:

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from uuid import UUID
 
 import structlog
@@ -77,6 +78,14 @@ class RegisterSourceFromCatalog:
             await uow.commit()
 
 
+@dataclass(frozen=True, slots=True)
+class PlannedSets:
+    """Результат планирования: поставленные наборы и объекты прошлых поколений к удалению."""
+
+    asset_set_ids: tuple[UUID, ...]
+    stale_keys: tuple[str, ...]
+
+
 class PlanAssetSets:
     """Создать недостающие наборы по профилям домена единицы и перегенерировать наборы,
     для которых появился лучший исходник."""
@@ -96,47 +105,56 @@ class PlanAssetSets:
         self._storage = storage
 
     async def execute(self, media_item_id: UUID) -> list[UUID]:
-        """Запланировать генерацию. Возвращает id наборов, поставленных в очередь."""
+        """Запланировать генерацию в своей транзакции. Возвращает id поставленных наборов."""
+        async with self._uow() as uow:
+            planned = await self.plan_in(uow, media_item_id)
+            await uow.commit()
+        await delete_quietly(self._storage, StorageArea.ASSETS, planned.stale_keys)
+        return list(planned.asset_set_ids)
+
+    async def plan_in(self, uow: MediaUnitOfWork, media_item_id: UUID) -> PlannedSets:
+        """Запланировать внутри открытого UoW вызывающего (коммит — его забота).
+
+        Задачи ставятся до коммита (см. докстринг модуля); объекты прошлых поколений
+        вызывающий удаляет после коммита (``PlannedSets.stale_keys``).
+        """
         stale_keys: list[str] = []
         scheduled: list[AssetSet] = []
-        async with self._uow() as uow:
-            state = await uow.items.get(media_item_id)
-            if state is None or state.is_blocked or state.domain is None:
-                return []
-            sources = await uow.sources.list_for_item(media_item_id)
-            existing = await uow.asset_sets.list_for_item(media_item_id, for_update=True)
-            by_key = {(s.clue_type, s.profile_key, s.params_hash): s for s in existing}
-            now = self._clock.now()
-            for profile in self._profiles.for_domain(state.domain):
-                source = best_source(sources, profile.source_kind)
-                if source is None:
-                    continue
-                current = by_key.get((profile.clue_type, profile.profile_key, profile.params_hash))
-                if current is None:
-                    created = AssetSet.plan(
-                        uuid7(),
-                        media_item_id=media_item_id,
-                        profile=profile,
-                        source_media_id=source.id,
-                        now=now,
-                    )
-                    await uow.asset_sets.add(created)
-                    scheduled.append(created)
-                elif (
-                    current.source_media_id != source.id
-                    and current.status is not AssetSetStatus.DISABLED
-                ):
-                    old = current.regenerate(now, source_media_id=source.id)
-                    stale_keys.extend(level.object_key for level in old)
-                    await uow.asset_sets.save(current)
-                    scheduled.append(current)
-            for aggregate in scheduled:
-                await schedule_generation(self._queue, aggregate)
-            await uow.commit()
-        await delete_quietly(self._storage, StorageArea.ASSETS, stale_keys)
+        state = await uow.items.get(media_item_id)
+        if state is None or state.is_blocked or state.domain is None:
+            return PlannedSets((), ())
+        sources = await uow.sources.list_for_item(media_item_id)
+        existing = await uow.asset_sets.list_for_item(media_item_id, for_update=True)
+        by_key = {(s.clue_type, s.profile_key, s.params_hash): s for s in existing}
+        now = self._clock.now()
+        for profile in self._profiles.for_domain(state.domain):
+            source = best_source(sources, profile.source_kind)
+            if source is None:
+                continue
+            current = by_key.get((profile.clue_type, profile.profile_key, profile.params_hash))
+            if current is None:
+                created = AssetSet.plan(
+                    uuid7(),
+                    media_item_id=media_item_id,
+                    profile=profile,
+                    source_media_id=source.id,
+                    now=now,
+                )
+                await uow.asset_sets.add(created)
+                scheduled.append(created)
+            elif (
+                current.source_media_id != source.id
+                and current.status is not AssetSetStatus.DISABLED
+            ):
+                old = current.regenerate(now, source_media_id=source.id)
+                stale_keys.extend(level.object_key for level in old)
+                await uow.asset_sets.save(current)
+                scheduled.append(current)
+        for aggregate in scheduled:
+            await schedule_generation(self._queue, aggregate)
         if scheduled:
             log.info("asset_sets.planned", media_item_id=str(media_item_id), count=len(scheduled))
-        return [a.id for a in scheduled]
+        return PlannedSets(tuple(a.id for a in scheduled), tuple(stale_keys))
 
 
 class DisableItemAssets:

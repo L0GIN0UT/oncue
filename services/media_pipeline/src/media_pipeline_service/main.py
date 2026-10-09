@@ -13,7 +13,7 @@ from media_pipeline_service.api.admin import build_admin_router
 from media_pipeline_service.api.internal import build_internal_router
 from media_pipeline_service.api.public import build_public_router
 from media_pipeline_service.infrastructure import messaging
-from media_pipeline_service.infrastructure.container import MediaAdapters, MediaContainer
+from media_pipeline_service.infrastructure.container import MediaAdapters, container_for
 from media_pipeline_service.infrastructure.db.tables import TABLES
 from media_pipeline_service.settings import Settings
 
@@ -22,32 +22,34 @@ _MB = 1024 * 1024
 
 def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) -> list[APIRouter]:
     """Все роутеры сервиса (DI через ``infra``; тесты подменяют ``adapters``)."""
-    c = MediaContainer(infra, adapters)
-    return [
+    c = container_for(infra, adapters)
+    routers = [
         build_public_router(infra),
         build_internal_router(c.issue_link, c.list_sets),
         build_admin_router(
             upload=c.upload,
             regenerate=c.regenerate,
             list_sets=c.list_sets,
-            idempotent=c.idempotent,
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,
         ),
     ]
+    # Ленивое соединение RabbitMQ (очередь задач) закрывается при остановке приложения.
+    routers[0].add_event_handler("shutdown", c.close)
+    return routers
 
 
 def build_event_handlers(
     infra: Infrastructure, adapters: MediaAdapters | None = None
 ) -> EventHandlerRegistry:
     """Обработчики событий catalog."""
-    return messaging.build_event_handlers(MediaContainer(infra, adapters))
+    return messaging.build_event_handlers(container_for(infra, adapters))
 
 
 def build_task_handlers(
     infra: Infrastructure, adapters: MediaAdapters | None = None
 ) -> dict[str, TaskHandler]:
     """Обработчики задач RabbitMQ."""
-    return messaging.build_task_handlers(MediaContainer(infra, adapters))
+    return messaging.build_task_handlers(container_for(infra, adapters))
 
 
 DEFINITION = ServiceDefinition(

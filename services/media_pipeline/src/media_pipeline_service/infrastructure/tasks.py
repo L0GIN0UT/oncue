@@ -22,6 +22,11 @@ class LazyRabbitTaskQueue:
         self._queue: RabbitTaskQueue | None = None
         self._lock = asyncio.Lock()
 
+    @property
+    def is_connected(self) -> bool:
+        """Соединение с брокером открыто."""
+        return self._queue is not None
+
     async def _get(self) -> RabbitTaskQueue:
         if self._url is None:
             raise DependencyUnavailableError("очередь задач не настроена (GV_RABBITMQ_URL)")

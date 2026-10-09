@@ -62,7 +62,11 @@ class LinkPolicy:
         return now.replace(microsecond=0) + timedelta(seconds=self.ttl_s)
 
     @staticmethod
+    def subject_hash(subject: str) -> str:
+        """sha256 hex субъекта: в журнале выдачи и в Redis идентификаторы не храним (ПДн)."""
+        return hashlib.sha256(subject.encode()).hexdigest()
+
+    @staticmethod
     def rate_key(subject: str, asset_set_id: UUID, level: int) -> str:
         """Ключ счётчика лимита. Субъект хэшируется: в Redis не должно быть идентификаторов."""
-        digest = hashlib.sha256(subject.encode()).hexdigest()[:32]
-        return f"{digest}:{asset_set_id.hex}:{level}"
+        return f"{LinkPolicy.subject_hash(subject)[:32]}:{asset_set_id.hex}:{level}"
