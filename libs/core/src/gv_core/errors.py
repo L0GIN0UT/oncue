@@ -64,6 +64,16 @@ class ConflictError(AppError):
     default_code = "resource.conflict"
 
 
+class GoneError(AppError):
+    """Ресурс существовал, но больше недоступен и не вернётся по этому адресу (410).
+
+    Например, ассет выключен модерацией: клиенту не нужно повторять запрос, в отличие
+    от 404 при гонке репликации.
+    """
+
+    default_code = "resource.gone"
+
+
 class UnauthenticatedError(AppError):
     """Нет валидных учётных данных."""
 

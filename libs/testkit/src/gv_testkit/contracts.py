@@ -15,6 +15,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from gv_core.ids import uuid7
 from gv_messaging.envelope import EventEnvelope
 
 ENV_CONTRACTS_DIR = "GV_CONTRACTS_DIR"
@@ -76,8 +77,19 @@ def assert_event_matches_schema(envelope: EventEnvelope) -> None:
     assert not errors, f"{envelope.event_type} v{envelope.event_version}: " + "; ".join(errors)
 
 
-def load_example(event_type: str, version: int = 1) -> EventEnvelope:
-    """Пример события из ``contracts/events/<service>/examples`` — вход для тестов потребителя."""
+def load_example(event_type: str, version: int = 1, *, fresh_id: bool = True) -> EventEnvelope:
+    """Пример события из ``contracts/events/<service>/examples`` — вход для тестов потребителя.
+
+    Args:
+        event_type: ``<service>.<Event>``.
+        version: Версия схемы события.
+        fresh_id: ``True`` — новый ``event_id`` (UUID v7) на каждый вызов: два загруженных
+            примера — разные события, и inbox не примет второй за дубль. ``False`` —
+            ``event_id`` из файла (для проверки дедупликации одного и того же события).
+    """
     producer, _, event = event_type.partition(".")
     path = contracts_dir() / "events" / producer / "examples" / f"{event}.v{version}.json"
-    return EventEnvelope.model_validate_json(path.read_text(encoding="utf-8"))
+    envelope = EventEnvelope.model_validate_json(path.read_text(encoding="utf-8"))
+    if fresh_id:
+        envelope = envelope.model_copy(update={"event_id": uuid7()})
+    return envelope

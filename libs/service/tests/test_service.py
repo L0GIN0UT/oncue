@@ -14,7 +14,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, SecretStr
 
 from gv_auth import Principal, require_perm
-from gv_core import ConflictError, NotFoundError
+from gv_core import (
+    ConflictError,
+    DependencyUnavailableError,
+    GoneError,
+    NotFoundError,
+    RateLimitedError,
+)
 from gv_core.context import current_context
 from gv_observability.metrics import render_metrics
 from gv_service import Infrastructure, ServiceDefinition, ServiceSettings, create_app
@@ -39,8 +45,23 @@ def build_routers(_: Infrastructure) -> list[APIRouter]:
             raise ConflictError("версия устарела", details={"expected": 3})
         if item_id == "boom":
             raise RuntimeError("секретная внутренняя деталь")
+        if item_id == "gone":
+            raise GoneError("ассет выключен", code="asset.blocked")
         ctx = current_context()
         return {"id": item_id, "user": str(ctx.user_id) if ctx and ctx.user_id else ""}
+
+    @router.get("/limited")
+    async def limited(retry_after: str | None = None) -> None:
+        # Числа — как int, остальное — строкой: обработчик должен пережить и мусор.
+        details: dict[str, object] = {}
+        if retry_after is not None:
+            numeric = retry_after.lstrip("-").isdigit()
+            details["retry_after"] = int(retry_after) if numeric else retry_after
+        raise RateLimitedError("слишком часто", details=details)
+
+    @router.get("/unavailable")
+    async def unavailable() -> None:
+        raise DependencyUnavailableError("tmdb недоступен", details={"retry_after": 30})
 
     @router.post("/items")
     async def create(body: Body) -> Body:
@@ -130,6 +151,37 @@ class TestProblems:
 
     async def test_unknown_route(self, client: httpx.AsyncClient) -> None:
         assert_problem(await client.get("/nope"), 404, "route.not_found")
+
+    async def test_gone_maps_to_410_with_code(self, client: httpx.AsyncClient) -> None:
+        assert_problem(await client.get("/v1/items/gone"), 410, "asset.blocked")
+
+    async def test_gone_default_code(self) -> None:
+        assert GoneError("нет").code == "resource.gone"
+
+    @pytest.mark.parametrize(
+        ("query", "expected"),
+        [
+            ("", "1"),
+            ("?retry_after=120", "120"),
+            ("?retry_after=0", "1"),
+            ("?retry_after=-5", "1"),
+            ("?retry_after=soon", "1"),
+        ],
+    )
+    async def test_retry_after_from_details(
+        self, client: httpx.AsyncClient, query: str, expected: str
+    ) -> None:
+        response = await client.get(f"/v1/limited{query}")
+        assert_problem(response, 429, "rate.limited")
+        assert response.headers["retry-after"] == expected
+
+    async def test_retry_after_on_503(self, client: httpx.AsyncClient) -> None:
+        response = await client.get("/v1/unavailable")
+        assert_problem(response, 503, "dependency.unavailable")
+        assert response.headers["retry-after"] == "30"
+
+    async def test_no_retry_after_on_other_statuses(self, client: httpx.AsyncClient) -> None:
+        assert "retry-after" not in (await client.get("/v1/items/conflict")).headers
 
 
 @pytest.mark.component

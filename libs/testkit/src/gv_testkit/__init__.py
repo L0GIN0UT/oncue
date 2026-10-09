@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         FakeDeadLetterSink,
         FakeEventPublisher,
         FakeUnitOfWork,
+        InMemoryIdempotencyStore,
         InMemoryTaskQueue,
     )
     from gv_testkit.infra import (
@@ -41,6 +42,7 @@ _EXPORTS = {
     "FakeDeadLetterSink": "gv_testkit.fakes",
     "FakeEventPublisher": "gv_testkit.fakes",
     "FakeUnitOfWork": "gv_testkit.fakes",
+    "InMemoryIdempotencyStore": "gv_testkit.fakes",
     "InMemoryTaskQueue": "gv_testkit.fakes",
     "InfraProvider": "gv_testkit.infra",
     "S3Endpoint": "gv_testkit.infra",
@@ -58,6 +60,7 @@ __all__ = [
     "FakeDeadLetterSink",
     "FakeEventPublisher",
     "FakeUnitOfWork",
+    "InMemoryIdempotencyStore",
     "InMemoryTaskQueue",
     "InfraProvider",
     "S3Endpoint",

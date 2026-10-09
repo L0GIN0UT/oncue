@@ -184,9 +184,11 @@ async def service(
 
 
 async def _ready_poster(service: Service) -> dict[str, Any]:
-    assert await service.deliver(load_example("catalog.MediaItemCreated")) is Outcome.PROCESSED
+    # event_id из файла: тесты ниже доставляют тот же пример повторно и ждут дубль.
+    created = load_example("catalog.MediaItemCreated", fresh_id=False)
+    assert await service.deliver(created) is Outcome.PROCESSED
     assert await service.run_tasks() == 1
-    item_id = load_example("catalog.MediaItemCreated").payload["media_item_id"]
+    item_id = created.payload["media_item_id"]
     response = await service.client.get(
         "/internal/v1/asset-sets", params={"media_item_id": item_id}
     )
@@ -199,7 +201,7 @@ async def _ready_poster(service: Service) -> dict[str, Any]:
 # ---------------------------------------------------------------- события → ассеты → ссылки
 async def test_created_event_to_assets_ready_and_signed_link(service: Service) -> None:
     asset_set = await _ready_poster(service)
-    created = load_example("catalog.MediaItemCreated")
+    created = load_example("catalog.MediaItemCreated", fresh_id=False)
     assert asset_set["clue_type"] == "poster_masked"
     assert asset_set["levels_count"] == 5  # встроенный профиль
 

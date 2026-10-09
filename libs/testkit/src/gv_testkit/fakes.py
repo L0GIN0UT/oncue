@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Self
+from uuid import UUID
 
 from gv_core.domain import AggregateRoot, DomainEvent
+from gv_core.errors import ConflictError
+from gv_db.idempotency import IdempotencyRecord
 
 
 class FakeClock:
@@ -127,3 +130,42 @@ class FakeUnitOfWork:
         for aggregate in self._tracked:
             aggregate.pull_events()
         self.rolled_back = True
+
+
+class InMemoryIdempotencyStore:
+    """``gv_db.idempotency.IdempotencyStore`` в памяти — для unit-тестов use-case.
+
+    Повторный ``save`` того же ``(actor_id, key)`` даёт ``idempotency.in_progress``,
+    как UNIQUE в PostgreSQL. Транзакций нет: откат мутации фейк не моделирует.
+    """
+
+    def __init__(self, clock: FakeClock | None = None) -> None:
+        self._clock = clock or FakeClock()
+        self.records: dict[tuple[UUID, str], IdempotencyRecord] = {}
+
+    async def find(self, actor_id: UUID, key: str) -> IdempotencyRecord | None:
+        """Сохранённый результат или ``None``."""
+        return self.records.get((actor_id, key))
+
+    async def save(
+        self,
+        actor_id: UUID,
+        key: str,
+        request_hash: str,
+        response: dict[str, Any],
+        *,
+        status_code: int = 200,
+    ) -> None:
+        """Сохранить результат; занятый ключ — ``ConflictError(idempotency.in_progress)``."""
+        if (actor_id, key) in self.records:
+            raise ConflictError(
+                "запрос с этим Idempotency-Key уже выполняется", code="idempotency.in_progress"
+            )
+        self.records[actor_id, key] = IdempotencyRecord(
+            actor_id=actor_id,
+            key=key,
+            request_hash=request_hash,
+            response=response,
+            status_code=status_code,
+            created_at=self._clock.now(),
+        )

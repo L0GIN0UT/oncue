@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -148,3 +149,88 @@ class TestStubs:
             assert response.json() == {"id": 42}
             with pytest.raises(AssertionError, match=r"нет в contracts/openapi/demo\.json"):
                 demo.route("POST", "/v1/items/42")
+
+
+_REPO_ROOT = next(
+    p for p in Path(__file__).resolve().parents if (p / "contracts" / "events").is_dir()
+)
+_EXAMPLES = sorted((_REPO_ROOT / "contracts" / "events").glob("*/examples/*.v*.json"))
+
+
+class TestContractExamples:
+    def test_examples_have_unique_event_ids(self) -> None:
+        import json
+
+        ids = [json.loads(p.read_text(encoding="utf-8"))["event_id"] for p in _EXAMPLES]
+        assert len(_EXAMPLES) > 1
+        duplicates = {i for i in ids if ids.count(i) > 1}
+        assert not duplicates, f"повторяются event_id в примерах: {sorted(duplicates)}"
+
+    def test_example_event_ids_are_uuid7(self) -> None:
+        import json
+
+        for path in _EXAMPLES:
+            event_id = UUID(json.loads(path.read_text(encoding="utf-8"))["event_id"])
+            assert event_id.version == 7, path
+
+    @pytest.fixture
+    def contracts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GV_CONTRACTS_DIR", str(_REPO_ROOT / "contracts"))
+
+    @pytest.mark.usefixtures("contracts")
+    def test_load_example_gives_fresh_uuid7_each_call(self) -> None:
+        from gv_testkit import assert_event_matches_schema, load_example
+
+        first = load_example("catalog.MediaItemCreated")
+        second = load_example("catalog.MediaItemCreated")
+        assert first.event_id != second.event_id
+        assert first.event_id.version == 7
+        assert first.payload == second.payload
+        assert_event_matches_schema(first)
+
+    @pytest.mark.usefixtures("contracts")
+    def test_load_example_can_keep_file_event_id(self) -> None:
+        import json
+
+        from gv_testkit import load_example
+
+        path = _REPO_ROOT / "contracts/events/catalog/examples/MediaItemCreated.v1.json"
+        stored = UUID(json.loads(path.read_text(encoding="utf-8"))["event_id"])
+        envelope = load_example("catalog.MediaItemCreated", fresh_id=False)
+        assert envelope.event_id == stored
+        assert load_example("catalog.MediaItemCreated", fresh_id=False) == envelope
+
+
+class TestInMemoryIdempotencyStore:
+    """Фейк ведёт себя как ``SqlIdempotencyStore`` для ``run_idempotent``."""
+
+    async def test_replay_and_conflicts(self) -> None:
+        from gv_core import ConflictError
+        from gv_db.idempotency import run_idempotent
+        from gv_testkit import InMemoryIdempotencyStore
+
+        store = InMemoryIdempotencyStore()
+        actor = uuid7()
+        calls: list[int] = []
+
+        async def perform() -> dict[str, Any]:
+            calls.append(1)
+            return {"n": len(calls)}
+
+        assert await run_idempotent(store, actor, "key-mem-01", "a" * 64, perform) == (
+            {"n": 1},
+            True,
+        )
+        assert await run_idempotent(store, actor, "key-mem-01", "a" * 64, perform) == (
+            {"n": 1},
+            False,
+        )
+        assert calls == [1]
+        with pytest.raises(ConflictError) as reused:
+            await run_idempotent(store, actor, "key-mem-01", "b" * 64, perform)
+        assert reused.value.code == "idempotency.key_reused"
+        with pytest.raises(ConflictError) as busy:
+            await store.save(actor, "key-mem-01", "a" * 64, {})
+        assert busy.value.code == "idempotency.in_progress"
+        # Другой актор — независимый ключ.
+        assert (await run_idempotent(store, uuid7(), "key-mem-01", "a" * 64, perform))[1]
