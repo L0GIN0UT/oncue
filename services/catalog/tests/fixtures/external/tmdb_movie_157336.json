@@ -1,0 +1,102 @@
+{
+ "id": 157336,
+ "title": "Интерстеллар",
+ "original_title": "Interstellar",
+ "original_language": "en",
+ "release_date": "2014-11-05",
+ "runtime": 169,
+ "revenue": 677471339,
+ "popularity": 120.5,
+ "vote_average": 8.4,
+ "vote_count": 35000,
+ "poster_path": "/ru_poster_with_text.jpg",
+ "genres": [
+  {
+   "id": 878,
+   "name": "фантастика"
+  },
+  {
+   "id": 18,
+   "name": "драма"
+  }
+ ],
+ "alternative_titles": {
+  "titles": [
+   {
+    "iso_3166_1": "US",
+    "title": "Interstellar: IMAX",
+    "type": ""
+   }
+  ]
+ },
+ "translations": {
+  "translations": [
+   {
+    "iso_639_1": "ru",
+    "iso_3166_1": "RU",
+    "data": {
+     "title": "Интерстеллар"
+    }
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "data": {
+     "title": "Interstellar"
+    }
+   }
+  ]
+ },
+ "credits": {
+  "cast": [
+   {
+    "id": 10297,
+    "name": "Мэттью Макконахи",
+    "order": 0
+   },
+   {
+    "id": 1813,
+    "name": "Энн Хэтэуэй",
+    "order": 1
+   }
+  ],
+  "crew": [
+   {
+    "id": 525,
+    "name": "Кристофер Нолан",
+    "job": "Director"
+   },
+   {
+    "id": 1,
+    "name": "Ханс Циммер",
+    "job": "Original Music Composer"
+   }
+  ]
+ },
+ "images": {
+  "posters": [
+   {
+    "file_path": "/clean_poster.jpg",
+    "iso_639_1": null,
+    "vote_average": 5.5
+   },
+   {
+    "file_path": "/en_poster.jpg",
+    "iso_639_1": "en",
+    "vote_average": 9.0
+   }
+  ],
+  "backdrops": [
+   {
+    "file_path": "/frame1.jpg",
+    "iso_639_1": null,
+    "vote_average": 5.0
+   },
+   {
+    "file_path": "/frame_text.jpg",
+    "iso_639_1": "en",
+    "vote_average": 6.0
+   }
+  ]
+ }
+}

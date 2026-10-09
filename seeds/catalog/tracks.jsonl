@@ -1,0 +1,22 @@
+{"key": "track:bohemian-rhapsody", "kind": "track", "title": "Bohemian Rhapsody", "year": 1975, "persons": [{"name": "Queen", "role": "artist"}], "genres": ["rock"], "metrics": {"duration_ms": 354000}}
+{"key": "track:we-will-rock-you", "kind": "track", "title": "We Will Rock You", "year": 1977, "persons": [{"name": "Queen", "role": "artist"}], "genres": ["rock"], "metrics": {"duration_ms": 122000}}
+{"key": "track:smells-like-teen-spirit", "kind": "track", "title": "Smells Like Teen Spirit", "year": 1991, "persons": [{"name": "Nirvana", "role": "artist"}], "genres": ["grunge"], "metrics": {"duration_ms": 301000}}
+{"key": "track:hotel-california", "kind": "track", "title": "Hotel California", "year": 1976, "persons": [{"name": "Eagles", "role": "artist"}], "genres": ["rock"], "metrics": {"duration_ms": 391000}}
+{"key": "track:billie-jean", "kind": "track", "title": "Billie Jean", "year": 1982, "persons": [{"name": "Michael Jackson", "role": "artist"}], "genres": ["pop"], "metrics": {"duration_ms": 294000}}
+{"key": "track:imagine", "kind": "track", "title": "Imagine", "year": 1971, "persons": [{"name": "John Lennon", "role": "artist"}], "genres": ["pop", "rock"], "metrics": {"duration_ms": 183000}}
+{"key": "track:yesterday", "kind": "track", "title": "Yesterday", "year": 1965, "persons": [{"name": "The Beatles", "role": "artist"}], "genres": ["pop", "rock"], "metrics": {"duration_ms": 125000}}
+{"key": "track:stairway-to-heaven", "kind": "track", "title": "Stairway to Heaven", "year": 1971, "persons": [{"name": "Led Zeppelin", "role": "artist"}], "genres": ["rock"], "metrics": {"duration_ms": 482000}}
+{"key": "track:back-in-black", "kind": "track", "title": "Back in Black", "year": 1980, "persons": [{"name": "AC/DC", "role": "artist"}], "genres": ["hard-rock"], "metrics": {"duration_ms": 255000}}
+{"key": "track:rolling-in-the-deep", "kind": "track", "title": "Rolling in the Deep", "year": 2010, "persons": [{"name": "Adele", "role": "artist"}], "genres": ["pop", "soul"], "metrics": {"duration_ms": 228000}}
+{"key": "track:shape-of-you", "kind": "track", "title": "Shape of You", "year": 2017, "persons": [{"name": "Ed Sheeran", "role": "artist"}], "genres": ["pop"], "metrics": {"duration_ms": 233000}}
+{"key": "track:blinding-lights", "kind": "track", "title": "Blinding Lights", "year": 2019, "persons": [{"name": "The Weeknd", "role": "artist"}], "genres": ["synth-pop"], "metrics": {"duration_ms": 200000}}
+{"key": "track:gruppa-krovi", "kind": "track", "title": "Группа крови", "year": 1988, "persons": [{"name": "Кино", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 286000}}
+{"key": "track:zvezda-po-imeni-solnce", "kind": "track", "title": "Звезда по имени Солнце", "year": 1989, "persons": [{"name": "Кино", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 225000}}
+{"key": "track:kukushka", "kind": "track", "title": "Кукушка", "year": 1990, "persons": [{"name": "Кино", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 398000}}
+{"key": "track:ya-svoboden", "kind": "track", "title": "Я свободен", "year": 1997, "persons": [{"name": "Кипелов", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 345000}}
+{"key": "track:vladimirsky-central", "kind": "track", "title": "Владимирский централ", "year": 1998, "persons": [{"name": "Михаил Круг", "role": "artist"}], "genres": ["шансон"], "metrics": {"duration_ms": 295000}}
+{"key": "track:pesenka-o-medvedyah", "kind": "track", "title": "Песенка о медведях", "year": 1967, "persons": [{"name": "Аида Ведищева", "role": "artist"}], "genres": ["эстрада"], "metrics": {"duration_ms": 190000}}
+{"key": "track:trava-u-doma", "kind": "track", "title": "Трава у дома", "year": 1983, "persons": [{"name": "Земляне", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 254000}}
+{"key": "track:kak-na-voine", "kind": "track", "title": "Как на войне", "year": 1993, "persons": [{"name": "Агата Кристи", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 225000}}
+{"key": "track:polkovniku-nikto", "kind": "track", "title": "Полковнику никто не пишет", "year": 2000, "persons": [{"name": "Би-2", "role": "artist"}], "genres": ["рок"], "metrics": {"duration_ms": 238000}}
+{"key": "track:despacito", "kind": "track", "title": "Despacito", "year": 2017, "persons": [{"name": "Luis Fonsi", "role": "artist"}, {"name": "Daddy Yankee", "role": "artist"}], "genres": ["latin", "pop"], "metrics": {"duration_ms": 229000}}

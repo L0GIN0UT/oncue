@@ -1,0 +1,24 @@
+{
+ "tracks": {
+  "items": [
+   {
+    "id": "4u7EnebtmKWzUH433cf5Qv",
+    "name": "Bohemian Rhapsody",
+    "duration_ms": 354320,
+    "popularity": 83,
+    "artists": [
+     {
+      "id": "1dfeR4HaWDbWqFHLkxsg1d",
+      "name": "Queen"
+     }
+    ],
+    "album": {
+     "release_date": "1975-11-21"
+    },
+    "external_ids": {
+     "isrc": "GBUM71029604"
+    }
+   }
+  ]
+ }
+}

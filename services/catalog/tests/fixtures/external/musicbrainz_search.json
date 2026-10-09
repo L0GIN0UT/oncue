@@ -1,0 +1,35 @@
+{
+ "recordings": [
+  {
+   "id": "b1a9c0e9-d987-4042-ae91-78d6a3267d69",
+   "title": "Bohemian Rhapsody",
+   "length": 354000,
+   "first-release-date": "1975-10-31",
+   "isrcs": [
+    "GBUM71029604"
+   ],
+   "artist-credit": [
+    {
+     "name": "Queen",
+     "artist": {
+      "id": "0383dadf-2a4e-4d10-a46a-e9e041da8eb3",
+      "name": "Queen"
+     }
+    }
+   ],
+   "releases": [
+    {
+     "date": "1975-10-31"
+    },
+    {
+     "date": "1991"
+    }
+   ],
+   "genres": [
+    {
+     "name": "rock"
+    }
+   ]
+  }
+ ]
+}
