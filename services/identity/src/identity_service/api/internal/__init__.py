@@ -4,10 +4,11 @@
 admin хранит их в своей серверной сессии.
 """
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, status
+from pydantic import BaseModel, Field, IPvAnyAddress
 
-from identity_service.api.common import ApiDeps, IdentityRoute, SessionUser, session_user
+from gv_service import problem_responses
+from identity_service.api.common import ApiDeps, SessionUser, session_user
 from identity_service.application.commands.auth import ADMIN_ACCESS_PERM
 from identity_service.application.sessions import IssuedSession
 from identity_service.domain import SessionKind
@@ -18,10 +19,18 @@ class AdminSessionRequest(BaseModel):
 
     login: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=1, max_length=256)
+    client_ip: IPvAnyAddress | None = Field(
+        default=None,
+        description=(
+            "IP браузера администратора (admin берёт его из своего доверенного прокси). "
+            "Лимит попыток по IP и по подсети аккаунта считается по нему, как у входа на "
+            "сайт. Без него действует только лимит по аккаунту."
+        ),
+    )
 
 
 class AdminRefreshRequest(BaseModel):
-    """Обновление admin-сессии."""
+    """Обновление или отзыв admin-сессии."""
 
     refresh_token: str = Field(min_length=1, max_length=256)
 
@@ -33,6 +42,12 @@ class AdminSessionResponse(BaseModel):
     refresh_token: str
     expires_in: int
     user: SessionUser
+    identity_version: int = Field(
+        description=(
+            "Версия агрегата пользователя на момент выдачи (та же, что ``version`` в событиях "
+            "UserRolesChanged): события с версией не больше этой уже учтены в ``user``."
+        )
+    )
 
 
 def _response(issued: IssuedSession) -> AdminSessionResponse:
@@ -41,29 +56,49 @@ def _response(issued: IssuedSession) -> AdminSessionResponse:
         refresh_token=issued.refresh_token,
         expires_in=issued.expires_in,
         user=session_user(issued),
+        identity_version=issued.identity_version,
     )
 
 
 def build_internal_router(deps: ApiDeps) -> APIRouter:
     """Внутренние ручки."""
     uc = deps.use_cases
-    router = APIRouter(prefix="/internal/v1", tags=["internal"], route_class=IdentityRoute)
+    router = APIRouter(prefix="/internal/v1", tags=["internal"])
 
-    @router.post("/admin-sessions", response_model=AdminSessionResponse, summary="Вход в админку")
+    @router.post(
+        "/admin-sessions",
+        response_model=AdminSessionResponse,
+        summary="Вход в админку",
+        responses=problem_responses(401, 403, 429),
+    )
     async def admin_session(body: AdminSessionRequest) -> AdminSessionResponse:
-        # IP не передаём: запрос приходит от сервиса admin, лимит по IP ограничил бы всех
-        # администраторов сразу. Действует лимит по аккаунту; IP-лимит — на стороне admin.
-        return _response(await uc.admin_login(body.login, body.password, ip=None))
+        # Запрос приходит от сервиса admin из доверенной сети: IP клиента — из тела, а не
+        # адрес соединения (иначе лимит по IP ограничил бы всех администраторов сразу).
+        ip = str(body.client_ip) if body.client_ip is not None else None
+        return _response(await uc.admin_login(body.login, body.password, ip=ip))
 
     @router.post(
         "/admin-sessions/refresh",
         response_model=AdminSessionResponse,
         summary="Обновить admin-сессию",
+        responses=problem_responses(401, 403),
     )
     async def admin_refresh(body: AdminRefreshRequest) -> AdminSessionResponse:
         issued = await uc.refresh(
             body.refresh_token, kind=SessionKind.ADMIN, required_perm=ADMIN_ACCESS_PERM
         )
         return _response(issued)
+
+    @router.post(
+        "/admin-sessions/revoke",
+        status_code=status.HTTP_204_NO_CONTENT,
+        summary="Завершить admin-сессию (выход из админки)",
+        description=(
+            "Идемпотентно: неизвестный, уже отозванный или не admin-токен — тоже 204. "
+            "access-токены сессии перестают приниматься (denylist sid)."
+        ),
+    )
+    async def admin_revoke(body: AdminRefreshRequest) -> None:
+        await uc.logout(refresh_token=body.refresh_token, kind=SessionKind.ADMIN)
 
     return router

@@ -115,11 +115,25 @@ def auth_config(settings: Settings) -> AuthConfig:
         reset_link=settings.email.reset_link,
         return_to_prefixes=settings.oauth.return_to_prefixes,
         password_policy=PasswordPolicy(banned=common_passwords()),
-        limits=LimitConfig(
-            login_per_ip_per_min=settings.login_limit.per_ip_per_min,
-            login_per_account_per_15min=settings.login_limit.per_account_per_15min,
-            register_per_ip_per_min=settings.login_limit.per_ip_per_min,
-        ),
+        limits=limit_config(settings),
+    )
+
+
+def limit_config(settings: Settings) -> LimitConfig:
+    """Лимиты частоты из настроек."""
+    login, mail = settings.login_limit, settings.email_limit
+    return LimitConfig(
+        login_per_ip=login.per_ip,
+        login_ip_window_s=login.ip_window_s,
+        login_per_account_subnet=login.per_account_subnet,
+        login_per_account=login.per_account,
+        login_account_window_s=login.account_window_s,
+        subnet_v4_bits=login.subnet_v4_bits,
+        subnet_v6_bits=login.subnet_v6_bits,
+        register_per_ip_per_min=login.register_per_ip_per_min,
+        reset_per_ip_per_min=login.reset_per_ip_per_min,
+        email_per_address=mail.per_address,
+        email_address_window_s=mail.window_s,
     )
 
 
@@ -144,7 +158,7 @@ class _Unavailable:
     async def _fail(self, *_args: object, **_kwargs: object) -> Any:
         raise DependencyUnavailableError("redis не настроен")
 
-    hit = peek = revoke = put = pop = _fail
+    hit = forgive = reset = revoke = put = pop = _fail
 
 
 def build_api_deps(infra: Infrastructure) -> ApiDeps:
@@ -164,8 +178,9 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
     prefix = settings.redis_key_prefix
     if infra.redis is not None:
         limiter: Any = RedisRateLimiter(infra.redis, prefix=prefix)
+        # Denylist должен пережить и access-токен, и допуск верификатора по exp.
         revocation: Any = RedisRevocationStore(
-            infra.redis, ttl_s=settings.jwt.access_ttl_s, prefix=prefix
+            infra.redis, ttl_s=settings.jwt.access_ttl_s + settings.jwt.leeway_s, prefix=prefix
         )
         states: Any = RedisOAuthStateStore(infra.redis, prefix=prefix)
     else:
@@ -175,6 +190,7 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         time_cost=settings.argon2.time_cost,
         memory_kib=settings.argon2.memory_kib,
         parallelism=settings.argon2.parallelism,
+        max_concurrency=settings.argon2.max_concurrency,
     )
     secrets = SystemSecrets()
     tokens = JwtIssuer(
@@ -209,16 +225,21 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         request_password_reset=RequestPasswordReset(
             uow, limiter=limiter, email=email, secrets=secrets, clock=clock, config=config
         ),
-        reset_password=ResetPassword(uow, hasher, revocation, clock, config),
-        start_oauth=StartOAuth(uow, providers, states, secrets, config),
+        reset_password=ResetPassword(uow, hasher, revocation, clock, config, email=email),
+        start_oauth=StartOAuth(uow, providers, states, secrets, config, authenticator=authn),
         complete_oauth=CompleteOAuth(
-            uow, providers, states, LinkExternalAccount(clock), LoginWithLinkedAccount(issuer)
+            uow,
+            providers,
+            states,
+            LinkExternalAccount(clock),
+            LoginWithLinkedAccount(issuer),
+            email=email,
         ),
-        unlink=UnlinkExternalAccount(uow),
+        unlink=UnlinkExternalAccount(uow, authn, email),
         grant_consents=GrantConsents(uow, clock, config),
-        delete_account=DeleteAccount(uow, hasher, revocation, clock),
-        assign_roles=AssignRoles(uow, clock),
-        update_role_matrix=UpdateRoleMatrix(uow, clock),
+        delete_account=DeleteAccount(uow, authn, revocation, clock),
+        assign_roles=AssignRoles(uow, clock, revocation),
+        update_role_matrix=UpdateRoleMatrix(uow, clock, revocation),
         get_user=GetUser(uow),
         list_users=ListUsers(uow),
         list_linked=ListLinkedAccounts(uow),
@@ -235,6 +256,7 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         audience=settings.jwt_audience,
         # Свои ключи меняются только рестартом — кэш можно обновлять часто.
         cache_ttl_s=60,
+        leeway_s=settings.jwt.leeway_s,
         revocation=(
             RedisRevocationChecker(infra.redis, prefix=prefix) if infra.redis is not None else None
         ),

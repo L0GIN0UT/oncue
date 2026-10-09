@@ -201,7 +201,9 @@ def _mock_yandex(service: Any, subject: str) -> None:
 
 async def _start_link(service: Any) -> str:
     response = await service.client.post(
-        "/v1/me/linked-accounts/yandex", json={"return_to": "/profile"}, headers=service.csrf()
+        "/v1/me/linked-accounts/yandex",
+        json={"return_to": "/profile", "password": PASSWORD},
+        headers=service.csrf(),
     )
     assert response.status_code == 200, response.text
     url = urlsplit(response.json()["authorize_url"])
@@ -336,13 +338,13 @@ async def test_assign_roles_publishes_valid_event(service: Any) -> None:
     no_reason = await service.client.put(
         f"/admin/v1/users/{user['id']}/roles",
         json={"roles": ["moderator"], "reason": ""},
-        headers=auth,
+        headers={**auth, "Idempotency-Key": "key-no-reason"},
     )
     assert no_reason.status_code == 422
     response = await service.client.put(
         f"/admin/v1/users/{user['id']}/roles",
         json={"roles": ["moderator"], "reason": "помогает с каталогом"},
-        headers={**auth, "Idempotency-Key": "k1"},
+        headers={**auth, "Idempotency-Key": "key-assign-1"},
     )
     assert response.status_code == 200, response.text
     assert "catalog.block_item" in response.json()["perms"]
@@ -360,8 +362,8 @@ async def test_assign_roles_publishes_valid_event(service: Any) -> None:
     assert_problem(
         await service.client.put(
             f"/admin/v1/users/{user['id']}/roles",
-            json={"roles": ["admin"], "reason": "x"},
-            headers=mod_auth,
+            json={"roles": ["admin"], "reason": "повышение"},
+            headers={**mod_auth, "Idempotency-Key": "key-mod-1"},
         ),
         403,
         "auth.forbidden",
@@ -375,7 +377,9 @@ async def test_role_matrix_endpoints(service: Any) -> None:
     assert set(matrix["roles"]) == {"user", "moderator", "admin"}
     roles = {**matrix["roles"], "helper": ["users.view"]}
     response = await service.client.put(
-        "/admin/v1/roles", json={"roles": roles, "reason": "новая роль"}, headers=auth
+        "/admin/v1/roles",
+        json={"roles": roles, "reason": "новая роль"},
+        headers={**auth, "Idempotency-Key": "key-matrix-1"},
     )
     assert response.status_code == 200, response.text
     assert response.json()["roles"]["helper"] == ["users.view"]

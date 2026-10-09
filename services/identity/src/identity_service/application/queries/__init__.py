@@ -17,7 +17,10 @@ from identity_service.application.ports import (
 from identity_service.domain import ConsentRequirement, RoleMatrix, User
 
 
-def _view(user: User, matrix: RoleMatrix, linked: tuple[LinkedAccountView, ...] = ()) -> UserView:
+def build_user_view(
+    user: User, matrix: RoleMatrix, linked: tuple[LinkedAccountView, ...] = ()
+) -> UserView:
+    """Представление пользователя с действующими правами."""
     return UserView(
         id=user.id,
         nickname=user.nickname.value,
@@ -33,7 +36,8 @@ def _view(user: User, matrix: RoleMatrix, linked: tuple[LinkedAccountView, ...] 
     )
 
 
-async def _linked(uow: IdentityUnitOfWork, user_id: UUID) -> tuple[LinkedAccountView, ...]:
+async def linked_accounts(uow: IdentityUnitOfWork, user_id: UUID) -> tuple[LinkedAccountView, ...]:
+    """Привязки пользователя (без внешних идентификаторов)."""
     return tuple(
         LinkedAccountView(provider=i.provider.value, display=i.display, linked_at=i.linked_at)
         for i in await uow.identities.list_for_user(user_id)
@@ -57,7 +61,7 @@ class GetUser:
             if user is None or (not user.is_active and not include_deleted):
                 raise NotFoundError("пользователь не найден", code="user.not_found")
             matrix = await uow.roles.get_matrix()
-            view = _view(user, matrix, await _linked(uow, user_id))
+            view = build_user_view(user, matrix, await linked_accounts(uow, user_id))
             consents = tuple(
                 sorted(
                     ConsentRequirement(c.kind, c.version)
@@ -76,7 +80,7 @@ class ListLinkedAccounts:
     async def __call__(self, user_id: UUID) -> tuple[LinkedAccountView, ...]:
         """Список привязок."""
         async with self._uow() as uow:
-            return await _linked(uow, user_id)
+            return await linked_accounts(uow, user_id)
 
 
 class ListUsers:
@@ -103,7 +107,7 @@ class ListUsers:
             matrix = await uow.roles.get_matrix()
         page = users[:size]
         next_cursor = encode_cursor({"id": str(page[-1].id)}) if len(users) > size else None
-        return Page([_view(u, matrix) for u in page], next_cursor)
+        return Page([build_user_view(u, matrix) for u in page], next_cursor)
 
 
 class GetRoleMatrix:

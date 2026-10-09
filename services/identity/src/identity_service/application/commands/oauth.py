@@ -8,6 +8,10 @@
    cookie, обменивает код и получает идентификатор у провайдера.
 3. Привязка — только к пользователю из ``state`` и только при живой сессии; вход — только
    если аккаунт провайдера уже привязан. Совпадение e-mail ничего не связывает.
+
+Привязка и отвязка требуют повторного ввода пароля (через ``PasswordAuthenticator`` с теми
+же лимитами, что у входа) и сопровождаются письмом владельцу: привязанный аккаунт — это
+способ входа, переживающий смену пароля, и укравший сессию не должен суметь его добавить.
 """
 
 from __future__ import annotations
@@ -26,9 +30,12 @@ from gv_core.errors import (
     NotFoundError,
     UnauthenticatedError,
 )
+from identity_service.application.commands.auth import PasswordAuthenticator, send_safely
 from identity_service.application.config import AuthConfig
 from identity_service.application.dto import Actor
 from identity_service.application.ports import (
+    EmailMessage,
+    EmailSender,
     ExternalProfile,
     IdentityUnitOfWork,
     OAuthProvider,
@@ -90,7 +97,7 @@ class _Providers:
 
 
 class StartOAuth:
-    """Начать привязку (нужен вход) или вход через привязанный аккаунт."""
+    """Начать привязку (нужен вход и пароль) или вход через привязанный аккаунт."""
 
     def __init__(
         self,
@@ -99,9 +106,11 @@ class StartOAuth:
         states: OAuthStateStore,
         secrets: SecretGenerator,
         config: AuthConfig,
+        *,
+        authenticator: PasswordAuthenticator,
     ) -> None:
         self._uow, self._providers, self._states = uow, _Providers(providers), states
-        self._secrets, self._config = secrets, config
+        self._secrets, self._config, self._auth = secrets, config, authenticator
 
     async def __call__(
         self,
@@ -110,11 +119,16 @@ class StartOAuth:
         purpose: str,
         actor: Actor | None,
         return_to: str | None,
+        password: str | None = None,
+        ip: str | None = None,
     ) -> StartedOAuth:
         """Подготовить редирект к провайдеру.
 
         Raises:
-            UnauthenticatedError: привязка без входа.
+            UnauthenticatedError: привязка без входа; ``auth.invalid_credentials`` —
+                неверный пароль при привязке.
+            InvalidInputError: ``auth.password_required`` — привязка без пароля.
+            RateLimitedError: превышен лимит проверки пароля.
             ConflictError: ``auth.provider_already_linked`` — у пользователя уже есть привязка.
             FeatureDisabledError: провайдер выключен.
         """
@@ -124,8 +138,13 @@ class StartOAuth:
             if actor is None or actor.session_id is None:
                 raise UnauthenticatedError("для привязки нужно войти")
             async with self._uow() as uow:
+                user = await uow.users.get(actor.user_id)
+                if user is None or not user.is_active:
+                    raise UnauthenticatedError("аккаунт недоступен")
+                await self._auth.confirm_password(uow, user, password, ip)
                 if await uow.identities.get_for_user(actor.user_id, provider) is not None:
                     raise ConflictError("сервис уже привязан", code="auth.provider_already_linked")
+                await uow.commit()  # rehash пароля, если понадобился
         elif purpose != PURPOSE_LOGIN:
             raise ValueError(f"неизвестная цель OAuth: {purpose}")
 
@@ -235,9 +254,11 @@ class CompleteOAuth:
         states: OAuthStateStore,
         link: LinkExternalAccount,
         login: LoginWithLinkedAccount,
+        *,
+        email: EmailSender,
     ) -> None:
         self._uow, self._providers, self._states = uow, _Providers(providers), states
-        self._link, self._login = link, login
+        self._link, self._login, self._email = link, login, email
 
     async def __call__(
         self,
@@ -269,14 +290,21 @@ class CompleteOAuth:
         access_token = await oauth.exchange_code(code=code, code_verifier=saved.code_verifier)
         profile = await oauth.fetch_profile(access_token)
 
-        async with self._uow() as uow:
-            if saved.purpose == PURPOSE_LINK:
+        if saved.purpose == PURPOSE_LINK:
+            async with self._uow() as uow:
                 await self._ensure_link_session(uow, saved)
                 assert saved.user_id is not None  # noqa: S101 — гарантирует _ensure_link_session
                 await self._link(uow, saved.user_id, provider, profile)
+                user = await uow.users.get(saved.user_id)
                 await uow.commit()
-                log.info("auth.provider_linked", user_id=str(saved.user_id), provider=provider)
-                return CompletedOAuth(PURPOSE_LINK, provider, saved.return_to)
+            log.info("auth.provider_linked", user_id=str(saved.user_id), provider=provider)
+            if user is not None:
+                await send_safely(
+                    self._email,
+                    EmailMessage(user.email, "provider_linked", None, (provider.value,)),
+                )
+            return CompletedOAuth(PURPOSE_LINK, provider, saved.return_to)
+        async with self._uow() as uow:
             issued = await self._login(uow, provider, profile, ip=ip)
             await uow.commit()
         log.info("auth.login", user_id=str(issued.user_id), method=provider.value)
@@ -292,22 +320,36 @@ class CompleteOAuth:
 
 
 class UnlinkExternalAccount:
-    """Отвязать внешний сервис."""
+    """Отвязать внешний сервис (с подтверждением паролем и письмом владельцу)."""
 
-    def __init__(self, uow: UnitOfWorkFactory) -> None:
-        self._uow = uow
+    def __init__(
+        self, uow: UnitOfWorkFactory, authenticator: PasswordAuthenticator, email: EmailSender
+    ) -> None:
+        self._uow, self._auth, self._email = uow, authenticator, email
 
-    async def __call__(self, user_id: UUID, provider: Provider) -> None:
+    async def __call__(
+        self, user_id: UUID, provider: Provider, *, password: str | None, ip: str | None
+    ) -> None:
         """Отвязать.
 
         Raises:
+            InvalidInputError: ``auth.password_required``.
+            UnauthenticatedError: ``auth.invalid_credentials`` — неверный пароль.
+            RateLimitedError: превышен лимит проверки пароля.
             NotFoundError: ``auth.provider_not_linked``.
         """
         async with self._uow() as uow:
             user = await uow.users.get(user_id)
-            if user is None or not await uow.identities.remove(user_id, provider):
+            if user is None or not user.is_active:
+                raise NotFoundError("сервис не привязан", code="auth.provider_not_linked")
+            await self._auth.confirm_password(uow, user, password, ip)
+            if not await uow.identities.remove(user_id, provider):
                 raise NotFoundError("сервис не привязан", code="auth.provider_not_linked")
             user.unlink_provider(provider)
             await uow.users.save(user)
             uow.track(user)
             await uow.commit()
+        log.info("auth.provider_unlinked", user_id=str(user_id), provider=provider)
+        await send_safely(
+            self._email, EmailMessage(user.email, "provider_unlinked", None, (provider.value,))
+        )

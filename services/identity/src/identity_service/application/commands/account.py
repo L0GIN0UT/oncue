@@ -7,17 +7,14 @@ from uuid import UUID
 import structlog
 
 from gv_core.clock import Clock
-from gv_core.errors import InvalidInputError, NotFoundError, UnauthenticatedError
+from gv_core.errors import InvalidInputError, NotFoundError
 from identity_service.application.commands.auth import (
+    PasswordAuthenticator,
     revoke_all_sessions,
     revoke_quietly,
 )
 from identity_service.application.config import AuthConfig
-from identity_service.application.ports import (
-    PasswordHasher,
-    RevocationStore,
-    UnitOfWorkFactory,
-)
+from identity_service.application.ports import RevocationStore, UnitOfWorkFactory
 from identity_service.domain import Consent, ConsentRequirement, Provider
 
 log = structlog.get_logger(__name__)
@@ -57,26 +54,28 @@ class DeleteAccount:
     def __init__(
         self,
         uow: UnitOfWorkFactory,
-        hasher: PasswordHasher,
+        authenticator: PasswordAuthenticator,
         revocation: RevocationStore,
         clock: Clock,
     ) -> None:
-        self._uow, self._hasher, self._revocation, self._clock = uow, hasher, revocation, clock
+        self._uow, self._auth, self._revocation, self._clock = uow, authenticator, revocation, clock
 
-    async def __call__(self, user_id: UUID, password: str) -> None:
+    async def __call__(self, user_id: UUID, password: str, *, ip: str | None) -> None:
         """Удалить.
+
+        Пароль проверяется тем же аутентификатором и с теми же лимитами, что вход: украденная
+        сессия не даёт подбирать пароль через эту ручку.
 
         Raises:
             UnauthenticatedError: ``auth.invalid_credentials`` — неверный пароль.
+            RateLimitedError: превышен лимит проверки пароля.
             NotFoundError: аккаунта нет или он уже удалён.
         """
         async with self._uow() as uow:
             user = await uow.users.get(user_id)
             if user is None or not user.is_active:
                 raise NotFoundError("аккаунт не найден", code="user.not_found")
-            password_hash = await uow.credentials.get_password_hash(user_id)
-            if password_hash is None or not await self._hasher.verify(password_hash, password):
-                raise UnauthenticatedError("неверный пароль", code="auth.invalid_credentials")
+            await self._auth.confirm_password(uow, user, password, ip)
             for identity in await uow.identities.list_for_user(user_id):
                 await uow.identities.remove(user_id, Provider(identity.provider))
             await uow.credentials.delete(user_id)

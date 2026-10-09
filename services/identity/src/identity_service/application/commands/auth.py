@@ -16,7 +16,7 @@ from gv_core.errors import (
     UnauthenticatedError,
 )
 from gv_core.ids import uuid7
-from identity_service.application.config import AuthConfig
+from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.dto import RegisterCommand
 from identity_service.application.ports import (
     EmailMessage,
@@ -31,7 +31,14 @@ from identity_service.application.ports import (
     SecretGenerator,
     UnitOfWorkFactory,
 )
-from identity_service.application.security import ensure_allowed, hash_secret, rate_key
+from identity_service.application.security import (
+    NO_IP,
+    canonical_login,
+    ensure_allowed,
+    hash_secret,
+    ip_subnet,
+    rate_key,
+)
 from identity_service.application.sessions import IssuedSession, SessionIssuer
 from identity_service.domain import (
     DEFAULT_ROLE,
@@ -76,9 +83,13 @@ async def _issue_email_token(
     user_id: UUID,
     purpose: EmailTokenPurpose,
     ttl_s: int,
+    invalidate_previous: bool = True,
 ) -> str:
+    """Выдать новый токен из письма; прежние непогашенные токены той же цели гасятся."""
     secret = secrets.token(EMAIL_TOKEN_BYTES)
     now = clock.now()
+    if invalidate_previous:
+        await uow.email_tokens.invalidate_for_user(user_id, purpose, now)
     await uow.email_tokens.add(
         EmailToken(
             id=uuid7(),
@@ -92,12 +103,36 @@ async def _issue_email_token(
     return secret
 
 
-async def _send_safely(sender: EmailSender, message: EmailMessage) -> None:
+async def send_safely(sender: EmailSender, message: EmailMessage) -> None:
     """Письмо после коммита: сбой отправки не откатывает операцию, но виден в логах."""
     try:
         await sender.send(message)
     except Exception as exc:
         log.warning("email.send_failed", purpose=message.purpose, error=type(exc).__name__)
+
+
+async def mail_allowed(limiter: RateLimiter, limits: LimitConfig, to: EmailAddress) -> bool:
+    """Засчитать письмо на адрес (ключ — хэш адреса) и решить, можно ли его отправить.
+
+    Лимит защищает владельца адреса от рассылки через register/forgot. Превышение не видно
+    HTTP-клиенту (иначе раскрылось бы существование аккаунта) — письмо просто не уходит.
+    """
+    decision = await limiter.hit(
+        rate_key("mail:addr", to.value),
+        limit=limits.email_per_address,
+        window_s=limits.email_address_window_s,
+    )
+    if not decision.allowed:
+        log.info("email.suppressed_rate_limited")
+    return decision.allowed
+
+
+async def send_limited(
+    sender: EmailSender, limiter: RateLimiter, limits: LimitConfig, message: EmailMessage
+) -> None:
+    """Письмо с лимитом на адрес (см. ``mail_allowed``)."""
+    if await mail_allowed(limiter, limits, message.to):
+        await send_safely(sender, message)
 
 
 async def revoke_quietly(store: RevocationStore, session_ids: list[UUID]) -> None:
@@ -196,11 +231,14 @@ class RegisterWithEmail:
                 uow.track(user)
                 await uow.commit()
 
+        limits = self._config.limits
         if taken:
-            await _send_safely(self._email, EmailMessage(email, "already_registered", None))
+            await send_limited(
+                self._email, self._limiter, limits, EmailMessage(email, "already_registered", None)
+            )
             return None
         link = self._config.verify_link.format(token=secret)
-        await _send_safely(self._email, EmailMessage(email, "verify", link))
+        await send_limited(self._email, self._limiter, limits, EmailMessage(email, "verify", link))
         log.info("auth.user_registered", user_id=str(user.id))
         return user.id
 
@@ -225,6 +263,7 @@ class VerifyEmail:
             user = await uow.users.get(user_id) if user_id else None
             if user is None or not user.is_active:
                 raise InvalidInputError("ссылка недействительна", code="auth.email_token_invalid")
+            await uow.email_tokens.invalidate_for_user(user.id, EmailTokenPurpose.VERIFY, now)
             user.verify_email(now)
             if user.email.value in self._config.bootstrap_admin_emails:
                 # Роль admin — только после подтверждения владения адресом (§4, настройки).
@@ -252,7 +291,21 @@ class VerifyEmail:
 
 
 class PasswordAuthenticator:
-    """Проверка логина (e-mail или никнейм) и пароля с лимитами и выравниванием времени."""
+    """Проверка пароля с лимитами и выравниванием времени: вход, admin-вход и повторная
+    аутентификация (привязка/отвязка сервисов, удаление аккаунта).
+
+    Лимиты (значения — ``LimitConfig``), каждая попытка засчитывается атомарно ДО проверки
+    пароля, поэтому параллельные запросы не проскакивают лимит:
+
+    * по IP клиента;
+    * по аккаунту из подсети клиента (/24, /64) — чужие неудачи из другой сети не
+      блокируют владельца;
+    * общий мягкий лимит по аккаунту — против распределённого перебора.
+
+    Аккаунт в ключе — ``user.id`` найденного пользователя (все варианты логина: e-mail,
+    ник, Unicode-двойники — один счётчик); для несуществующего — канонический логин.
+    Успешная проверка не наказывается: счётчик подсети обнуляется, общий — прощает попытку.
+    """
 
     def __init__(
         self,
@@ -274,22 +327,10 @@ class PasswordAuthenticator:
             UnauthenticatedError: ``auth.invalid_credentials``.
             ForbiddenError: ``auth.email_not_verified``.
         """
-        limits = self._config.limits
-        if ip:
-            ensure_allowed(
-                await self._limiter.hit(
-                    rate_key("login:ip", ip), limit=limits.login_per_ip_per_min, window_s=60
-                )
-            )
-        account_key = rate_key("login:acct", login.strip())
-        account_window = 15 * 60
-        ensure_allowed(
-            await self._limiter.peek(
-                account_key, limit=limits.login_per_account_per_15min, window_s=account_window
-            )
-        )
-
+        await self._limit_ip(ip)
         user = await self._find(uow, login)
+        account = f"user:{user.id}" if user is not None else f"login:{canonical_login(login)}"
+        keys = await self._limit_account(account, ip)
         password_hash = (
             await uow.credentials.get_password_hash(user.id)
             if user is not None and user.is_active
@@ -297,21 +338,82 @@ class PasswordAuthenticator:
         )
         if user is None or password_hash is None:
             await self._hasher.verify_dummy(password)
-            ok = False
-        else:
-            ok = await self._hasher.verify(password_hash, password)
-        if not ok or user is None or password_hash is None:
-            await self._limiter.hit(
-                account_key, limit=limits.login_per_account_per_15min, window_s=account_window
-            )
             raise _invalid_credentials()
+        if not await self._hasher.verify(password_hash, password):
+            raise _invalid_credentials()
+        await self._forgive(keys)
         if not user.email_verified:
             raise ForbiddenError("подтвердите e-mail", code="auth.email_not_verified")
+        await self._rehash(uow, user, password_hash, password)
+        return user
+
+    async def confirm_password(
+        self, uow: IdentityUnitOfWork, user: User, password: str | None, ip: str | None
+    ) -> None:
+        """Повторная аутентификация вошедшего пользователя перед чувствительным действием.
+
+        Те же лимиты и счётчики, что у входа: подбор пароля через эти ручки невозможен.
+
+        Raises:
+            InvalidInputError: ``auth.password_required`` — пароль не передан.
+            RateLimitedError: превышен лимит.
+            UnauthenticatedError: ``auth.invalid_credentials`` — неверный пароль.
+        """
+        if not password:
+            raise InvalidInputError("подтвердите действие паролем", code="auth.password_required")
+        await self._limit_ip(ip)
+        keys = await self._limit_account(f"user:{user.id}", ip)
+        password_hash = await uow.credentials.get_password_hash(user.id)
+        if password_hash is None:
+            await self._hasher.verify_dummy(password)
+            raise _invalid_credentials()
+        if not await self._hasher.verify(password_hash, password):
+            raise _invalid_credentials()
+        await self._forgive(keys)
+        await self._rehash(uow, user, password_hash, password)
+
+    async def _limit_ip(self, ip: str | None) -> None:
+        if not ip:
+            return
+        limits = self._config.limits
+        ensure_allowed(
+            await self._limiter.hit(
+                rate_key("login:ip", ip),
+                limit=limits.login_per_ip,
+                window_s=limits.login_ip_window_s,
+            )
+        )
+
+    async def _limit_account(self, account: str, ip: str | None) -> tuple[str, str]:
+        limits = self._config.limits
+        subnet = (
+            ip_subnet(ip, v4_bits=limits.subnet_v4_bits, v6_bits=limits.subnet_v6_bits) or NO_IP
+        )
+        subnet_key = rate_key("login:acct_net", f"{account}|{subnet}")
+        total_key = rate_key("login:acct", account)
+        window = limits.login_account_window_s
+        ensure_allowed(
+            await self._limiter.hit(
+                subnet_key, limit=limits.login_per_account_subnet, window_s=window
+            )
+        )
+        ensure_allowed(
+            await self._limiter.hit(total_key, limit=limits.login_per_account, window_s=window)
+        )
+        return subnet_key, total_key
+
+    async def _forgive(self, keys: tuple[str, str]) -> None:
+        subnet_key, total_key = keys
+        await self._limiter.reset(subnet_key)
+        await self._limiter.forgive(total_key)
+
+    async def _rehash(
+        self, uow: IdentityUnitOfWork, user: User, password_hash: str, password: str
+    ) -> None:
         if self._hasher.needs_rehash(password_hash):
             await uow.credentials.set_password_hash(
                 user.id, await self._hasher.hash(password), self._clock.now()
             )
-        return user
 
     @staticmethod
     async def _find(uow: IdentityUnitOfWork, login: str) -> User | None:
@@ -448,15 +550,25 @@ class Logout:
         self._uow, self._revocation, self._clock = uow, revocation, clock
 
     async def __call__(
-        self, *, session_id: UUID | None = None, refresh_token: str | None = None
+        self,
+        *,
+        session_id: UUID | None = None,
+        refresh_token: str | None = None,
+        kind: SessionKind | None = None,
     ) -> None:
-        """Отозвать сессию по ``sid`` (из access-токена) или по refresh-токену. Идемпотентно."""
+        """Отозвать сессию по ``sid`` (из access-токена) или по refresh-токену. Идемпотентно.
+
+        ``kind`` — отзывать только сессию этого вида (выход из админки не трогает
+        web-сессии, даже если ему передали чужой refresh-токен).
+        """
         async with self._uow() as uow:
             if session_id is None and refresh_token:
                 token = await uow.sessions.find_refresh_for_update(hash_secret(refresh_token))
                 session_id = token.session_id if token else None
             session = await uow.sessions.get(session_id) if session_id else None
-            if session is None or not session.revoke(self._clock.now(), "logout"):
+            if session is None or (kind is not None and session.kind is not kind):
+                return
+            if not session.revoke(self._clock.now(), "logout"):
                 return
             await uow.sessions.save(session)
             await uow.commit()
@@ -525,6 +637,10 @@ class RequestPasswordReset:
             user = await uow.users.find_by_email(address)
             if user is None or not user.is_active:
                 return
+            # Лимит — до выдачи токена: иначе поток запросов сброса гасил бы ссылку, уже
+            # полученную владельцем, не отправляя ему новую.
+            if not await mail_allowed(self._limiter, self._config.limits, address):
+                return
             secret = await _issue_email_token(
                 uow,
                 self._secrets,
@@ -535,11 +651,16 @@ class RequestPasswordReset:
             )
             await uow.commit()
         link = self._config.reset_link.format(token=secret)
-        await _send_safely(self._email, EmailMessage(address, "reset", link))
+        await send_safely(self._email, EmailMessage(address, "reset", link))
 
 
 class ResetPassword:
-    """Новый пароль по ссылке из письма; все сессии отзываются."""
+    """Новый пароль по ссылке из письма.
+
+    Все сессии отзываются, все прочие токены сброса гасятся. Привязанные внешние аккаунты
+    не удаляются (они могут быть единственным способом входа владельца), но письмо о смене
+    пароля перечисляет их — владелец увидит чужую привязку и отвяжет её.
+    """
 
     def __init__(
         self,
@@ -548,9 +669,11 @@ class ResetPassword:
         revocation: RevocationStore,
         clock: Clock,
         config: AuthConfig,
+        *,
+        email: EmailSender,
     ) -> None:
         self._uow, self._hasher, self._revocation = uow, hasher, revocation
-        self._clock, self._config = clock, config
+        self._clock, self._config, self._email = clock, config, email
 
     async def __call__(self, token: str, new_password: str) -> None:
         """Сменить пароль.
@@ -566,6 +689,7 @@ class ResetPassword:
             user = await uow.users.get(user_id) if user_id else None
             if user is None or not user.is_active:
                 raise InvalidInputError("ссылка недействительна", code="auth.email_token_invalid")
+            await uow.email_tokens.invalidate_for_user(user.id, EmailTokenPurpose.RESET, now)
             self._config.password_policy.check(
                 new_password, nickname=user.nickname.value, email=user.email.value
             )
@@ -576,6 +700,13 @@ class ResetPassword:
             if user.verify_email(now):
                 await uow.users.save(user)
             revoked = await revoke_all_sessions(uow, user.id, self._clock, "password_reset")
+            providers = tuple(
+                sorted(i.provider.value for i in await uow.identities.list_for_user(user.id))
+            )
             await uow.commit()
         await revoke_quietly(self._revocation, revoked)
-        log.info("auth.password_reset", user_id=str(user.id))
+        # Уведомление о безопасности — без лимита на адрес: его вызывает владелец ссылки.
+        await send_safely(
+            self._email, EmailMessage(user.email, "password_changed", None, providers)
+        )
+        log.info("auth.password_reset", user_id=str(user.id), sessions_revoked=len(revoked))

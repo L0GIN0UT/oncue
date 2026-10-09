@@ -26,21 +26,33 @@ from identity_service.application.ports import IssuedAccess
 
 
 class Argon2Hasher:
-    """argon2id (RFC 9106). Вычисление — в пуле потоков: не блокирует event loop."""
+    """argon2id (RFC 9106). Вычисление — в пуле потоков: не блокирует event loop.
 
-    def __init__(self, *, time_cost: int, memory_kib: int, parallelism: int = 1) -> None:
+    Одновременных вычислений не больше ``max_concurrency``: каждое берёт ``memory_kib``
+    памяти, и поток входов (или перебор) иначе исчерпал бы память и пул потоков процесса.
+    Лишние запросы ждут в очереди семафора.
+    """
+
+    def __init__(
+        self, *, time_cost: int, memory_kib: int, parallelism: int = 1, max_concurrency: int = 4
+    ) -> None:
+        if max_concurrency < 1:
+            raise ValueError("max_concurrency должен быть >= 1")
         self._ph = _Argon2(
             time_cost=time_cost, memory_cost=memory_kib, parallelism=parallelism, type=Type.ID
         )
         self._dummy: str | None = None
+        self._slots = asyncio.Semaphore(max_concurrency)
 
     async def hash(self, password: str) -> str:
         """Новый хэш с солью."""
-        return await asyncio.to_thread(self._ph.hash, password)
+        async with self._slots:
+            return await asyncio.to_thread(self._ph.hash, password)
 
     async def verify(self, password_hash: str, password: str) -> bool:
         """Проверка; битый хэш — ``False`` (не 500)."""
-        return await asyncio.to_thread(self._verify_sync, password_hash, password)
+        async with self._slots:
+            return await asyncio.to_thread(self._verify_sync, password_hash, password)
 
     def _verify_sync(self, password_hash: str, password: str) -> bool:
         try:

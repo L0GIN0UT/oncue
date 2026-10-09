@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from gv_core.clock import Clock
 from gv_core.domain import AggregateRoot
 from gv_core.errors import ConflictError
+from gv_db.idempotency import SqlIdempotencyStore
 from gv_db.uow import SqlAlchemyUnitOfWork
 from gv_messaging.outbox import OutboxWriter
 from identity_service.application.ports import EmailToken, EmailTokenPurpose, RoleChange
@@ -37,6 +38,7 @@ from identity_service.infrastructure.db.tables import (
     TABLES,
     auth_identities,
     email_tokens,
+    idempotency_keys,
     password_credentials,
     permissions,
     refresh_tokens,
@@ -507,6 +509,21 @@ class SqlEmailTokenRepository:
         )
         return user_id
 
+    async def invalidate_for_user(
+        self, user_id: UUID, purpose: EmailTokenPurpose, now: datetime
+    ) -> int:
+        """Погасить все непогашенные токены пользователя этой цели одним UPDATE."""
+        result = await self._s.execute(
+            update(email_tokens)
+            .where(
+                email_tokens.c.user_id == user_id,
+                email_tokens.c.purpose == purpose.value,
+                email_tokens.c.used_at.is_(None),
+            )
+            .values(used_at=now)
+        )
+        return int(result.rowcount or 0)  # type: ignore[attr-defined]  # CursorResult у UPDATE
+
 
 class SqlIdentityUnitOfWork:
     """Unit of Work identity: транзакция + outbox (gv_db) и репозитории сервиса."""
@@ -517,6 +534,7 @@ class SqlIdentityUnitOfWork:
         self._inner = SqlAlchemyUnitOfWork(
             sessions_factory, OutboxWriter(TABLES.outbox), producer=producer, clock=clock
         )
+        self._clock = clock
 
     async def __aenter__(self) -> Self:
         await self._inner.__aenter__()
@@ -528,6 +546,7 @@ class SqlIdentityUnitOfWork:
         self.roles = SqlRoleRepository(s)
         self.consents = SqlConsentRepository(s)
         self.email_tokens = SqlEmailTokenRepository(s)
+        self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         return self
 
     async def __aexit__(

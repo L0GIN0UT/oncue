@@ -24,6 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 
 from gv_db import create_metadata
+from gv_db.idempotency import idempotency_table
 
 TABLES = create_metadata()
 _md = TABLES.metadata
@@ -166,3 +167,6 @@ email_tokens = Table(
     CheckConstraint("purpose IN ('verify', 'reset')", name="purpose_known"),
     Index("ix_email_tokens_user_id", "user_id"),
 )
+
+# Ключи идемпотентности admin-мутаций (gv_db.idempotency; миграция 0004).
+idempotency_keys = idempotency_table(_md)

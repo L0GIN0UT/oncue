@@ -19,7 +19,6 @@ from identity_service.api.common import (
     REFRESH_COOKIE,
     ApiDeps,
     ConsentIn,
-    IdentityRoute,
     SessionUser,
     actor_of,
     clear_session_cookies,
@@ -128,9 +127,26 @@ class DeleteMeRequest(BaseModel):
 
 
 class LinkStartRequest(BaseModel):
-    """Начало привязки."""
+    """Начало привязки: нужен текущий пароль (повторная аутентификация)."""
 
     return_to: str | None = Field(default=None, max_length=512)
+    password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+        description="Обязателен: текущий пароль. Без него — 422 auth.password_required.",
+    )
+
+
+class UnlinkRequest(BaseModel):
+    """Отвязка сервиса: нужен текущий пароль (повторная аутентификация)."""
+
+    password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+        description="Обязателен: текущий пароль. Без него — 422 auth.password_required.",
+    )
 
 
 class AuthorizeResponse(BaseModel):
@@ -146,7 +162,7 @@ def _consents(items: list[ConsentIn]) -> tuple[ConsentRequirement, ...]:
 def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — плоский список ручек
     """Публичные ручки."""
     uc, auth, settings = deps.use_cases, deps.auth, deps.settings
-    router = APIRouter(prefix="/v1", tags=["identity"], route_class=IdentityRoute)
+    router = APIRouter(prefix="/v1", tags=["identity"])
     same_origin = [Depends(require_same_origin)]
     Current = Annotated[Principal, Depends(auth.current)]  # noqa: N806
 
@@ -311,9 +327,12 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
         "/me", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить аккаунт (нужен пароль)"
     )
     async def delete_me(
-        body: Annotated[DeleteMeRequest, Body()], principal: Current, response: Response
+        body: Annotated[DeleteMeRequest, Body()],
+        principal: Current,
+        request: Request,
+        response: Response,
     ) -> None:
-        await uc.delete_account(principal.user_id, body.password)
+        await uc.delete_account(principal.user_id, body.password, ip=client_ip(request))
         clear_session_cookies(response, settings)
 
     # --------------------------------------------------------------- привязанные аккаунты
@@ -330,16 +349,21 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     @router.post(
         "/me/linked-accounts/yandex",
         response_model=AuthorizeResponse,
-        summary="Начать привязку Яндекс ID (нужен вход)",
+        summary="Начать привязку Яндекс ID (нужен вход и пароль)",
     )
     async def start_link_yandex(
-        principal: Current, response: Response, body: LinkStartRequest | None = None
+        principal: Current,
+        request: Request,
+        response: Response,
+        body: LinkStartRequest | None = None,
     ) -> AuthorizeResponse:
         started = await uc.start_oauth(
             Provider.YANDEX,
             purpose=PURPOSE_LINK,
             actor=actor_of(principal),
             return_to=body.return_to if body else None,
+            password=body.password if body else None,
+            ip=client_ip(request),
         )
         _oauth_cookie(response, started.browser_nonce)
         return AuthorizeResponse(authorize_url=started.authorize_url)
@@ -347,10 +371,20 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     @router.delete(
         "/me/linked-accounts/{provider}",
         status_code=status.HTTP_204_NO_CONTENT,
-        summary="Отвязать сервис",
+        summary="Отвязать сервис (нужен пароль)",
     )
-    async def unlink(provider: str, principal: Current) -> None:
-        await uc.unlink(principal.user_id, _provider(provider))
+    async def unlink(
+        provider: str,
+        principal: Current,
+        request: Request,
+        body: Annotated[UnlinkRequest | None, Body()] = None,
+    ) -> None:
+        await uc.unlink(
+            principal.user_id,
+            _provider(provider),
+            password=body.password if body else None,
+            ip=client_ip(request),
+        )
 
     @router.get(
         "/oauth/yandex/login",
