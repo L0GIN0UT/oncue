@@ -53,8 +53,14 @@ class TestTokenIssuer:
         extra: Mapping[str, Any] | None = None,
         audience: str = TEST_AUDIENCE,
         issuer: str = TEST_ISSUER,
+        session_id: str | None = "",
     ) -> str:
-        """Выпустить подписанный access-токен."""
+        """Выпустить подписанный access-токен.
+
+        Args:
+            session_id: Claim ``sid``. По умолчанию — новый случайный (как у настоящих
+                токенов identity); ``None`` — без ``sid``.
+        """
         issued = now or datetime.now(UTC)
         claims: dict[str, Any] = {
             "sub": str(user_id or uuid7()),
@@ -67,8 +73,10 @@ class TestTokenIssuer:
             "perms": list(perms),
             "sanctions": sanctions,
             "plan": plan,
-            **(extra or {}),
         }
+        if session_id is not None:
+            claims["sid"] = session_id or str(uuid7())
+        claims.update(extra or {})
         return jwt.encode(claims, self._private, algorithm="EdDSA", headers={"kid": self.kid})
 
     def verifier(self) -> JwtVerifier:

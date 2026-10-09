@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
@@ -18,7 +19,12 @@ import jwt
 from jwt import PyJWK
 
 from gv_auth.principal import Principal, Sanction
+from gv_auth.revocation import RevocationChecker
 from gv_core.errors import DependencyUnavailableError, UnauthenticatedError
+
+# stdlib logging: gv_auth не зависит от structlog; записи всё равно проходят общий
+# конвейер gv_observability (маскировка, correlation_id).
+log = logging.getLogger(__name__)
 
 ALLOWED_ALGORITHMS = ("EdDSA", "ES256")
 """Только асимметричные алгоритмы. ``none`` и HS* запрещены: HS* позволил бы любому сервису,
@@ -53,7 +59,19 @@ class JwtVerifier:
         cache_ttl_s: float = 3600,
         min_refresh_interval_s: float = 30,
         clock: Callable[[], float] = time.monotonic,
+        revocation: RevocationChecker | None = None,
+        on_revocation_unavailable: Callable[[], None] | None = None,
     ) -> None:
+        """Создать верификатор.
+
+        Args:
+            revocation: Проверка отзыва сессии по claim ``sid``. Если хранилище недоступно,
+                токен принимается (fail-open): иначе отказ Redis выключил бы вход во всех
+                сервисах. Окно риска ограничено TTL access-токена (15 минут).
+            on_revocation_unavailable: Вызывается при каждом fail-open (метрика сервиса).
+        """
+        self._revocation = revocation
+        self._on_revocation_unavailable = on_revocation_unavailable
         self._loader = loader
         self._issuer = issuer
         self._audience = audience
@@ -103,7 +121,22 @@ class JwtVerifier:
             raise UnauthenticatedError(
                 "токен не прошёл проверку", code="auth.token_invalid"
             ) from exc
-        return _principal_from_claims(claims)
+        principal = _principal_from_claims(claims)
+        if principal.session_id is not None and await self._is_revoked(principal.session_id):
+            raise UnauthenticatedError("сессия завершена", code="auth.session_revoked")
+        return principal
+
+    async def _is_revoked(self, session_id: str) -> bool:
+        if self._revocation is None:
+            return False
+        try:
+            return await self._revocation.is_revoked(session_id)
+        except Exception as exc:
+            # Fail-open — осознанное решение (services/identity/CLAUDE.md, «Особенности»).
+            log.warning("auth.revocation_check_failed error=%s", type(exc).__name__)
+            if self._on_revocation_unavailable is not None:
+                self._on_revocation_unavailable()
+            return False
 
     async def _key(self, kid: str) -> PyJWK:
         now = self._clock()
@@ -165,6 +198,7 @@ def _principal_from_claims(claims: Mapping[str, Any]) -> Principal:
         sanctions=sanctions,
         plan=claims.get("plan") if isinstance(claims.get("plan"), str) else None,
         token_id=claims.get("jti") if isinstance(claims.get("jti"), str) else None,
+        session_id=claims.get("sid") if isinstance(claims.get("sid"), str) else None,
     )
 
 
