@@ -1,13 +1,5 @@
-"""HTTP API media_pipeline: публичный (/v1), внутренний (/internal/v1), админский (/admin/v1)."""
+"""HTTP API media_pipeline: публичный (/v1), внутренний (/internal/v1), админский (/admin/v1).
 
-from __future__ import annotations
-
-from fastapi import APIRouter
-
-from gv_service import Infrastructure
-from media_pipeline_service.api.public import build_public_router
-
-
-def build_routers(infra: Infrastructure) -> list[APIRouter]:
-    """Все роутеры сервиса (DI через ``infra``)."""
-    return [build_public_router(infra)]
+Роутеры получают готовые use-cases: сборка с адаптерами — в ``main.py`` (composition root),
+потому что api и infrastructure — независимые слои (import-linter).
+"""

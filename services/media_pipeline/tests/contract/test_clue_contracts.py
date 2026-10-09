@@ -1,0 +1,165 @@
+"""Совместимость с контрактами: профили и модели параметров ↔ ``contracts/clues``,
+потребление примеров ``catalog.*`` и публикация ``media_pipeline.*``."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import pytest
+from jsonschema import Draft202012Validator
+from media_pipeline_service.application.generators import GeneratorRegistry
+from media_pipeline_service.domain.clues import ClueParams
+from media_pipeline_service.infrastructure.config import read_profiles_document
+from media_pipeline_service.infrastructure.container import MediaContainer
+from media_pipeline_service.infrastructure.db.tables import TABLES
+from media_pipeline_service.infrastructure.messaging import (
+    CONSUMED_TOPICS,
+    ITEM_BLOCKED,
+    ITEM_CREATED,
+    ITEM_UNBLOCKED,
+    ITEM_UPDATED,
+    _SnapshotPayload,
+    _StatusPayload,
+)
+from media_pipeline_service.settings import Settings
+from pydantic import ValidationError
+
+from gv_service import Infrastructure
+from gv_testkit import load_example
+from gv_testkit.contracts import contracts_dir, load_event_schema
+
+pytestmark = pytest.mark.contract
+
+
+def registry() -> GeneratorRegistry:
+    return MediaContainer(Infrastructure(settings=Settings(), tables=TABLES)).registry
+
+
+def clue_schema(clue_type: str) -> Draft202012Validator:
+    path = contracts_dir() / "clues" / f"{clue_type}.params.v1.json"
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema)
+
+
+def test_every_generator_has_clue_contract() -> None:
+    for clue_type in registry().clue_types:
+        assert (contracts_dir() / "clues" / f"{clue_type}.params.v1.json").is_file(), clue_type
+
+
+def test_builtin_profiles_match_clue_contracts() -> None:
+    document = read_profiles_document()
+    catalog = registry().build_catalog(document)
+    assert len(catalog) == len(document["profiles"])
+    for entry in document["profiles"]:
+        errors = [e.message for e in clue_schema(entry["clue_type"]).iter_errors(entry["params"])]
+        assert not errors, (entry["clue_type"], errors)
+    for profile in catalog:  # нормализованные параметры тоже валидны по контракту
+        assert not list(clue_schema(profile.clue_type).iter_errors(profile.params_json()))
+
+
+# Одноуровневые примеры: монотонность (правило домена сверх контракта) не участвует.
+SAMPLES: dict[str, list[Any]] = {
+    "audio_intro": [
+        {"levels": [{"seconds": 1}]},
+        {"levels": [{"seconds": 0.5}], "start_s": 12.5},
+        {"levels": [{"seconds": 60}]},
+        {"levels": [{"seconds": 60.01}]},
+        {"levels": [{"seconds": 0}]},
+        {"levels": [{"seconds": "1"}]},
+        {"levels": [{"seconds": True}]},
+        {"levels": []},
+        {"levels": [{"seconds": 1}] * 21},
+        {"levels": [{"seconds": 1}], "start_s": -1},
+        {"levels": [{"seconds": 1, "x": 1}]},
+        {"levels": [{"seconds": 1}], "extra": 1},
+        {},
+    ],
+    "frame_progressive": [
+        {"levels": [{"blur_px": 0, "crop": 1, "max_width": 64}]},
+        {"levels": [{"blur_px": 200, "crop": 0.01, "max_width": 4096}]},
+        {"levels": [{"blur_px": 201, "crop": 1, "max_width": 640}]},
+        {"levels": [{"blur_px": 1, "crop": 0, "max_width": 640}]},
+        {"levels": [{"blur_px": 1, "crop": 1.5, "max_width": 640}]},
+        {"levels": [{"blur_px": 1, "crop": 1, "max_width": 640.5}]},
+        {"levels": [{"blur_px": 1, "crop": 1, "max_width": 63}]},
+        {"levels": [{"blur_px": 1, "crop": 1}]},
+    ],
+    "poster_masked": [
+        {"levels": [{"pixel_block": 1}]},
+        {"levels": [{"pixel_block": 256}], "mask_regions": [{"x": 0, "y": 0.8, "w": 1, "h": 0.2}]},
+        {"levels": [{"pixel_block": 0}]},
+        {"levels": [{"pixel_block": 2.5}]},
+        {"levels": [{"pixel_block": 8}], "mask_regions": [{"x": 0, "y": 0, "w": 0, "h": 1}]},
+        {"levels": [{"pixel_block": 8}], "mask_regions": [{"x": 1.1, "y": 0, "w": 1, "h": 1}]},
+        {"levels": [{"pixel_block": 8}], "mask_regions": [{"x": 0, "y": 0, "w": 1}]},
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("clue_type", "sample"),
+    [(clue, sample) for clue, samples in SAMPLES.items() for sample in samples],
+)
+def test_params_models_agree_with_json_schema(clue_type: str, sample: Any) -> None:
+    generator = registry().get(clue_type)
+    assert generator is not None
+    model: type[ClueParams] = generator.params_model
+    schema_ok = clue_schema(clue_type).is_valid(sample)
+    try:
+        model.from_mapping(sample)
+        model_ok = True
+    except (ValidationError, ValueError):
+        model_ok = False
+    assert model_ok == schema_ok, (sample, schema_ok, model_ok)
+
+
+# ---------------------------------------------------------------- события
+def test_consumes_catalog_topic_and_examples() -> None:
+    assert CONSUMED_TOPICS == ("catalog.media_item.v1",)
+    for event_type in (ITEM_CREATED, ITEM_UPDATED):
+        envelope = load_example(event_type)
+        assert envelope.topic in CONSUMED_TOPICS
+        parsed = _SnapshotPayload.model_validate(envelope.payload)
+        assert parsed.version == envelope.payload["version"]
+    for event_type in (ITEM_BLOCKED, ITEM_UNBLOCKED):
+        envelope = load_example(event_type)
+        assert envelope.topic in CONSUMED_TOPICS
+        _StatusPayload.model_validate(envelope.payload)
+
+
+def test_snapshot_parser_covers_schema_enums() -> None:
+    schema = load_event_schema(ITEM_CREATED)
+    props = schema["properties"]
+    source_props = props["source_media"]["items"]["properties"]
+    for kind in source_props["kind"]["enum"]:
+        for origin in source_props["origin"]["enum"]:
+            for status in props["status"]["enum"]:
+                payload = {
+                    **load_example(ITEM_CREATED).payload,
+                    "status": status,
+                    "source_media": [
+                        {
+                            "source_media_ref": "0192a3b4-c5d6-7e8f-9a0b-000000000300",
+                            "kind": kind,
+                            "origin": origin,
+                            "uri": "https://image.tmdb.org/x.jpg",
+                        }
+                    ],
+                }
+                _SnapshotPayload.model_validate(payload)
+    for domain in props["domain"]["enum"]:
+        _SnapshotPayload.model_validate({**load_example(ITEM_CREATED).payload, "domain": domain})
+
+
+def test_produced_event_fields_are_declared() -> None:
+    from dataclasses import fields
+
+    from media_pipeline_service.domain.asset_set import AssetsFailed, AssetsReady
+
+    for event_cls, name in ((AssetsReady, "AssetsReady"), (AssetsFailed, "AssetsFailed")):
+        schema = load_event_schema(f"media_pipeline.{name}")
+        declared = {f.name for f in fields(event_cls)} - {"aggregate_id"}
+        assert declared == set(schema["required"]) == set(schema["properties"])
+        assert event_cls.aggregate_type == schema["x-aggregate-type"]
