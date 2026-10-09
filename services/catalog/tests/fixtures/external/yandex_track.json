@@ -1,0 +1,22 @@
+{
+ "result": [
+  {
+   "id": "3758938",
+   "title": "Группа крови",
+   "durationMs": 286000,
+   "artists": [
+    {
+     "id": 7417,
+     "name": "Кино"
+    }
+   ],
+   "albums": [
+    {
+     "id": 1,
+     "year": 1988,
+     "genre": "rusrock"
+    }
+   ]
+  }
+ ]
+}

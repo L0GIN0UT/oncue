@@ -4,9 +4,20 @@
 
 - Пакет: `catalog_service`; запуск: `catalog api|relay|consumer|worker|all|migrate`
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
-- Публичный API: `/api/catalog/v1/...` на gateway
-- Зависимости: PostgreSQL, Redis, Redpanda
-- Статус: заглушка этапа 0 (health, метрики, outbox/inbox). Домен — по roadmap.
+- Публичный API: `/api/catalog/v1/...` на gateway; admin-API `/admin/v1/...` (план этапа 1, §2.5)
+- Зависимости: PostgreSQL (+`pg_trgm` из init-скрипта), Redis, Redpanda, RabbitMQ, OpenSearch (опционально)
+- Статус: этап 1 — домен, импорт (файл/TMDB/MusicBrainz/Spotify/Яндекс), поиск, admin-API.
 
 ## Особенности
-<!-- Дописывать сюда неочевидное: инварианты, подводные камни, решения. 10–15 строк максимум. -->
+- Нормализация — контракт: golden-таблица `tests/unit/test_normalization.py` (по ней же game/match будут сверять ответы). Транслит ru↔lat — отдельные алиасы `translit`.
+- Ручные алиасы (`source=manual`) импорт не трогает. `PUT .../aliases` делает весь список ручным; удалённые импортные алиасы вернёт следующий импорт.
+- Изменение агрегата = `version+1` + событие с этой версией; `save` — оптимистичная блокировка по `persisted_version`.
+- `source_media_ref` — uuid5 от (единица, kind, uri): стабилен между импортами (на него ссылается media-pipeline).
+- Импорт сопоставляет единицы по внешним id (`tmdb` → … → `seed`); `seed` (ключ строки файла) в события не публикуется.
+- Индексатор пишет в OpenSearch актуальную строку БД с её `version` (`version_type=external`): повторы и старые события отсекает индекс.
+- Без `GV_OPENSEARCH__URL` или при его отказе поиск идёт по pg_trgm (`TrgmSearch`) — штатная деградация.
+- Кэш автокомплита инвалидируется «поколением» (`INCR`), блокировка сбрасывает его сразу после коммита.
+- Admin-мутации: обязательны `Idempotency-Key` и `reason`; аудит и ответ для повтора — `admin_actions` (импорт — `import_jobs`).
+- `api` не импортирует `infrastructure`: роутеры зависят от `application.services.CatalogServices`, контейнер подставляет `main.py` (`container_for(infra)` — один на процесс).
+- Внешние источники выключены по умолчанию, у каждого свой rate-limit и circuit breaker; Яндекс Музыка — неофициальный клиент, только метаданные (ADR 0014).
+- Фейки портов catalog — `tests/support/catalog_fakes.py`: testkit не может их держать (библиотекам запрещено импортировать сервисы).

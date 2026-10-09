@@ -139,11 +139,31 @@ class ClueStatusRepository(Protocol):
 class CatalogUnitOfWork(UnitOfWork, Protocol):
     """Транзакция каталога с репозиториями, привязанными к ней."""
 
-    items: MediaItemRepository
-    persons: PersonRepository
-    imports: ImportJobRepository
-    actions: AdminActionLog
-    clue_status: ClueStatusRepository
+    # Свойства только для чтения: реализация может объявить более узкий тип атрибута.
+    @property
+    def items(self) -> MediaItemRepository:
+        """Единицы."""
+        ...
+
+    @property
+    def persons(self) -> PersonRepository:
+        """Персоны."""
+        ...
+
+    @property
+    def imports(self) -> ImportJobRepository:
+        """Задания импорта."""
+        ...
+
+    @property
+    def actions(self) -> AdminActionLog:
+        """Аудит админ-мутаций."""
+        ...
+
+    @property
+    def clue_status(self) -> ClueStatusRepository:
+        """Готовность ассетов."""
+        ...
 
 
 UnitOfWorkFactory = Callable[[], CatalogUnitOfWork]
