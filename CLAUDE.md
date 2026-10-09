@@ -30,5 +30,8 @@ Python 3.13, FastAPI, SQLAlchemy 2 async, Pydantic v2, Alembic, uv · PostgreSQL
 
 Состав сервисов — `infra/services.toml`; производные конфиги (compose, nginx, prometheus, .importlinter) только через `gv gen`, руками не править.
 
+## Работа с ассистентом
+`/plan` → `/tdd` → `/review` → `/verify pre-pr` → `/checkpoint` → `/compact`; красные проверки — `/build-fix`. Агенты, команды, правила и хуки — `.claude/` (см. `.claude/README.md`, `docs/10-ai-assistant.md` §0). Хуки блокируют правку сгенерированных файлов, `.env`, опасные git/docker-команды — не обходить.
+
 ## Язык
 Документация, докстринги и комментарии — русский. Идентификаторы — английский. Коммиты — Conventional Commits.

@@ -33,3 +33,7 @@ Thumbs.db
 node_modules/
 .next/
 .import_linter_cache/
+
+# Claude Code: личные настройки и заметки сессий
+.claude/settings.local.json
+.claude/sessions/

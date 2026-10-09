@@ -10,6 +10,7 @@ gv dev secrets                   сгенерировать .env со случа
 gv contracts export              снимок OpenAPI и схем событий в contracts/
 gv contracts check [--base REF]  актуальность снимка и отсутствие ломающих изменений
 gv ci matrix                     JSON-матрица изменённых модулей для GitHub Actions
+gv hook NAME                     хук Claude Code (событие в stdin), см. .claude/settings.json
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from typing import Annotated
 
 import typer
 
-from gv_cli import contracts, generate, scaffold, workspace
+from gv_cli import contracts, generate, hooks, scaffold, workspace
 from gv_cli.registry import NAME_RE, load_services, repo_root
 
 app = typer.Typer(help="CLI разработчика Guessverse", no_args_is_help=True)
@@ -313,3 +314,22 @@ def contracts_check(
     if failed:
         raise typer.Exit(1)
     typer.secho("Контракты в порядке", fg="green")
+
+
+# ----------------------------------------------------------------------------- hooks
+HOOK_NAMES = (
+    "guard-edit",
+    "guard-bash",
+    "format",
+    "stop",
+    "compact",
+    "session-start",
+    "session-end",
+    "pre-compact",
+)
+
+
+@app.command("hook", hidden=True)
+def hook(name: Annotated[str, typer.Argument(help=" | ".join(HOOK_NAMES))]) -> None:
+    """Хук Claude Code: событие — JSON в stdin, решение — код выхода (2 = блокировать)."""
+    raise typer.Exit(hooks.run(name, repo_root()))
