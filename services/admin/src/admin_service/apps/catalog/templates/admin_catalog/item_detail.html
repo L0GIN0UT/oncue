@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'catalog:items' %}">← к списку</a></p>
+{% if item %}
+<div class="module">
+  <table>
+    <tr><th>ID</th><td>{{ item_id }}</td></tr>
+    <tr><th>Название</th><td>{{ item.title }}</td></tr>
+    <tr><th>Оригинальное</th><td>{{ item.original_title|default:"—" }}</td></tr>
+    <tr><th>Год</th><td>{{ item.year|default:"—" }}</td></tr>
+    <tr><th>Домен / вид</th><td>{{ item.domain }} / {{ item.kind }}</td></tr>
+    <tr><th>Статус</th><td><strong>{{ item.status }}</strong></td></tr>
+  </table>
+</div>
+{% endif %}
+
+<h2>Статус</h2>
+<form method="post" action="{% if item.status == 'blocked' %}{% url 'catalog:unblock' item_id=item_id %}{% else %}{% url 'catalog:block' item_id=item_id %}{% endif %}">
+  {% csrf_token %}{{ status_form.as_p }}
+  <input type="submit" value="{% if item.status == 'blocked' %}Разблокировать{% else %}Заблокировать{% endif %}">
+</form>
+
+<h2>Алиасы</h2>
+<form method="post" action="{% url 'catalog:aliases' item_id=item_id %}">
+  {% csrf_token %}{{ aliases_form.as_p }}<input type="submit" value="Сохранить алиасы">
+</form>
+
+<h2>Ассеты</h2>
+{% if assets_error %}<ul class="messagelist"><li class="error">{{ assets_error }}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Тип загадки</th><th>Профиль</th><th>Статус</th><th>Уровней</th><th></th></tr></thead>
+  {% for s in asset_sets %}
+  <tr>
+    <td>{{ s.clue_type }}</td><td>{{ s.profile_key }}</td><td>{{ s.status }}</td><td>{{ s.levels_count }}</td>
+    <td>{% if s.regenerate_url %}
+      <form method="post" action="{{ s.regenerate_url }}">
+        {% csrf_token %}{{ regenerate_form.as_p }}<input type="submit" value="Перегенерировать">
+      </form>{% endif %}
+    </td>
+  </tr>
+  {% empty %}<tr><td colspan="5">Наборов ассетов нет</td></tr>
+  {% endfor %}
+</table>
+
+<h2>Загрузить исходник</h2>
+<form method="post" enctype="multipart/form-data" action="{% url 'catalog:upload' item_id=item_id %}">
+  {% csrf_token %}{{ upload_form.as_p }}<input type="submit" value="Загрузить">
+</form>
+{% endblock %}

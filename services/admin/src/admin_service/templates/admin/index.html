@@ -1,0 +1,12 @@
+{% extends "admin/index.html" %}
+{% block content %}
+<div class="module">
+  <table>
+    <caption>Разделы Guessverse</caption>
+    <tr><th scope="row"><a href="{% url 'catalog:items' %}">Каталог</a></th><td>поиск, блокировка, алиасы, ассеты</td></tr>
+    <tr><th scope="row"><a href="{% url 'catalog:import_new' %}">Импорт</a></th><td>TMDB, файл, MusicBrainz, Spotify, Яндекс Музыка</td></tr>
+    <tr><th scope="row"><a href="{% url 'users:users' %}">Пользователи</a></th><td>поиск, роли</td></tr>
+  </table>
+</div>
+{{ block.super }}
+{% endblock %}

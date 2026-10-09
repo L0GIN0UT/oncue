@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get">{{ form.q.label_tag }} {{ form.q }} <input type="submit" value="Найти"></form>
+<table id="result_list">
+  <thead><tr><th>Имя</th><th>Никнейм</th><th>Роли</th></tr></thead>
+  {% for u in users %}
+  <tr><td>{% if u.admin_url %}<a href="{{ u.admin_url }}">{{ u.display_name }}</a>{% else %}{{ u.display_name }}{% endif %}</td><td>{{ u.nickname }}</td><td>{{ u.roles|join:", " }}</td></tr>
+  {% empty %}<tr><td colspan="3">Ничего не найдено</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

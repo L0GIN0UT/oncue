@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'users:users' %}">← к списку</a></p>
+{% if subject %}
+<table>
+  <tr><th>ID</th><td>{{ user_id }}</td></tr>
+  <tr><th>Имя</th><td>{{ subject.display_name }}</td></tr>
+  <tr><th>Никнейм</th><td>{{ subject.nickname }}</td></tr>
+  <tr><th>Статус</th><td>{{ subject.status }}</td></tr>
+  <tr><th>Роли</th><td>{{ subject.roles|join:", " }}</td></tr>
+</table>
+{% endif %}
+{% if can_assign %}
+<h2>Роли</h2>
+<form method="post" action="{% url 'users:roles' user_id=user_id %}">{% csrf_token %}{{ roles_form.as_p }}<input type="submit" value="Сохранить роли"></form>
+{% endif %}
+{% endblock %}
