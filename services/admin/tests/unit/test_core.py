@@ -91,3 +91,16 @@ def test_aliases_limits() -> None:
     )
     assert not form.is_valid()
     assert "aliases" in form.errors
+
+
+@pytest.mark.parametrize(("length", "ok"), [(100, True), (101, False)])
+def test_import_file_id_limit_matches_catalog_contract(length: int, ok: bool) -> None:
+    form = ImportForm(
+        {
+            "source": "file",
+            "file_id": "f" * length,
+            "reason": "сиды",
+            "idempotency_key": "0192a3b4-c5d6-7e8f-9a0b-000000000001",
+        }
+    )
+    assert form.is_valid() is ok

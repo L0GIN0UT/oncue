@@ -43,27 +43,30 @@
 
 ### 1. identity
 - **Отвечает за:** аккаунты, регистрацию и вход (OAuth-провайдеры, e-mail), сессии, access/refresh-токены, привязку внешних аккаунтов для входа, слияние аккаунтов, удаление аккаунта, **роли и права** (user, moderator, admin), согласия (условия, 18+, cookie).
-- **Данные:** users, auth_identities (provider, subject), sessions, refresh_tokens, roles, permissions, consents, merge_operations.
-- **Публикует:** `UserRegistered`, `UserProfileBasicsChanged`, `UserRolesChanged`, `AccountsMerged`, `UserDeleted`.
+- **Данные:** users, password_credentials, auth_identities (provider, subject), sessions, refresh_tokens, roles, permissions, role_changes (аудит), consents, email_tokens, idempotency_keys; merge_operations — этап 6.
+- **Публикует:** `UserRegistered`, `UserProfileBasicsChanged`, `UserRolesChanged`, `UserDeleted`, `ExternalAccountLinked`/`Unlinked`; `AccountsMerged` — этап 6.
 - **Слушает:** —
+- **API (этап 1):** публичный `/v1/auth/*`, `/v1/me*`, OAuth Яндекса; internal `/internal/v1/admin-sessions[/refresh|/revoke]` (вход в админку только паролем + `admin.access`, ответ несёт `identity_version`); admin `/admin/v1/users`, `/admin/v1/roles`. Admin-мутации — по [ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md); понижение прав отзывает сессии пользователя.
 - **Масштаб:** stateless, лёгкая нагрузка. Ключи подписи JWT ротируются, публичные ключи раздаются по JWKS.
-- **Деградация:** критичный сервис, держим ≥2 реплики. Уже выданные access-токены валидируются без обращения к нему.
+- **Деградация:** критичный сервис, держим ≥2 реплики. Уже выданные access-токены валидируются без обращения к нему. Лимитеры и denylist `sid` при отказе Redis — fail-open ([security.md §7](security.md#7-реализация-этапа-1)).
 
 ### 2. catalog
 - **Отвечает за:** медиа-единицы (`MediaItem`: трек, фильм, сериал, аниме), персоны (артист, режиссёр, актёр), франшизы, релизы, жанры, алиасы и правила матчинга названий, метрики для «больше/меньше» (слушатели, рейтинг, сборы), поиск и автокомплит, импорт метаданных.
 - **Данные:** Postgres (источник истины) + OpenSearch (поиск, индексируется по событиям из outbox).
-- **Публикует:** `MediaItemCreated`, `MediaItemUpdated`, `MediaItemBlocked`, `PersonUpdated`.
-- **Слушает:** `ImportRequested` (от integrations / admin), `AssetsReady` (отметка о готовности загадок).
+- **Публикует:** `MediaItemCreated`, `MediaItemUpdated`, `MediaItemBlocked`, `MediaItemUnblocked`; `PersonUpdated` — этап 3+.
+- **Слушает:** свой `catalog.media_item.v1` (индексация в OpenSearch), `AssetsReady`/`AssetsFailed` (проекция готовности загадок по `(media_item_id, clue_type, profile_key)`, устаревшие по `version` отбрасываются — [ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)); `ImportRequested` от integrations — этап 6.
+- **API (этап 1):** публичный `/v1/autocomplete`, `/v1/search`, `/v1/items/{id}`; admin `/admin/v1/items` (блокировка, разблокировка, алиасы), `/admin/v1/imports` (импорт — задача RabbitMQ `catalog.import`). Источники импорта: файл, TMDB, MusicBrainz, Spotify, Яндекс Музыка (внешние выключены по умолчанию, [ADR 0014](../adr/0014-music-sources.md)).
 - **Масштаб:** интенсивное чтение — реплики, кэш Redis для карточек, кэш популярных префиксов автокомплита.
 - **Деградация:** если OpenSearch недоступен, автокомплит работает по кэшу префиксов, поиск — упрощённый по Postgres (trigram).
 
 ### 3. media-pipeline
-- **Отвечает за:** генерацию ассетов загадок по уровням (аудиосегменты fMP4, отрывки задом наперёд, размытие и пикселизация кадров, маскировка постеров), хранение в S3, выдачу **одноразовых подписанных ссылок** на конкретный уровень, загрузку UGC-изображений и их проверку.
-- **Данные:** Postgres (asset_sets, asset_levels, jobs), S3 (байты).
-- **Публикует:** `AssetsReady`, `AssetsFailed`.
-- **Слушает:** `MediaItemCreated` и `ClueAssetsRequested` → ставит задачи в RabbitMQ.
+- **Отвечает за:** генерацию ассетов загадок по уровням (аудиосегменты fMP4, отрывки задом наперёд, размытие и пикселизация кадров, маскировка постеров), хранение в S3, выдачу **подписанных ссылок с коротким TTL** на конкретный уровень ([ADR 0012](../adr/0012-signed-asset-links-nginx.md)), загрузку UGC-изображений и их проверку (этап 5).
+- **Данные:** Postgres (media_items_state, source_media, asset_sets, asset_levels, link_issuance, idempotency_keys), S3 (байты, случайные ключи `a/<hex>`).
+- **Публикует:** `AssetsReady`, `AssetsFailed` (`version` монотонна по `media_item_id`).
+- **Слушает:** `MediaItemCreated`/`Updated`/`Blocked`/`Unblocked` → ставит задачи `media.generate_asset_set` в RabbitMQ; `ClueAssetsRequested` — этап 2. Блокировка единицы сразу удаляет объекты ассетов из S3, разблокировка — новое поколение генерации ([ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
+- **API (этап 1):** internal `/internal/v1/asset-links`, `/internal/v1/asset-sets`; admin `/admin/v1/sources` (загрузка исходника), `/admin/v1/asset-sets[/{id}/regenerate]`. Публичного API нет.
 - **Масштаб:** API stateless. Воркеры (ffmpeg, Pillow/libvips) масштабируются по длине очереди.
-- **Деградация:** новые единицы контента не попадают в игру, пока нет ассетов. Уже готовые работают через CDN.
+- **Деградация:** новые единицы контента не попадают в игру, пока нет ассетов. Уже готовые отдаёт gateway (`/media/`, `proxy_cache`; внешний CDN — этап 7). Отказ Redis при выдаче ссылки → 503 с `Retry-After` (fail-closed).
 
 ### 4. game
 - **Отвечает за:** соло-движок: сессии, раунды, ответы, подсчёт очков. **Реестр плагинов** (ClueType, Source, Scorer, AnswerMatcher). **Конфиги режимов** (версионируемые), дейлик (генерация дня, лента, прогнозы, архив), больше/меньше, топ-32.
@@ -139,7 +142,13 @@
 ## Операционные сервисы
 
 ### admin (Django)
-См. [../05-admin-panel.md](../05-admin-panel.md). Не владеет доменными данными. Читает через read-реплики или admin-API, **все мутации идут только через admin-API сервисов**.
+См. [../05-admin-panel.md](../05-admin-panel.md). Не владеет доменными данными, **все мутации идут только через admin-API сервисов**.
+
+- **Этап 1:** Django 5.2. Вход через identity (`/internal/v1/admin-sessions`, только пароль + `admin.access`). Разделы «Каталог» (catalog и media_pipeline) и «Пользователи» (identity). Чтение тоже идёт через admin-API ([ADR 0013](../adr/0013-admin-catalog-via-admin-api.md)); реплики и unmanaged-модели — этап 5.
+- **Данные:** зеркало пользователей (права = снимок perms identity), `django_session` (токены identity только в зашифрованном виде), аудит `AuditEntry` (append-only), inbox.
+- **Слушает:** `UserRolesChanged`, `UserDeleted` — применяет только `version` больше `identity_version` ([ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
+- **Мутации:** форма с обязательной `reason` и `Idempotency-Key`; `AuditEntry` пишется и при успехе, и при отказе.
+- **Доступ:** gateway админку не публикует; IP allowlist обязателен вне local/ci.
 
 ## Отложенные
 

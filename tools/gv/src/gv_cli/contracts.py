@@ -168,11 +168,18 @@ def _git_ls(root: Path, base: str, rel_dir: str) -> list[str]:
     return result.stdout.split() if result.returncode == 0 else []
 
 
-def compare_with_base(root: Path, base: str) -> list[Breaking]:
-    """Сравнить текущие контракты с базовой ревизией git."""
+def compare_with_base(
+    root: Path, base: str, services: list[Service] | None = None
+) -> list[Breaking]:
+    """Сравнить текущие контракты с базовой ревизией git.
+
+    Снимки OpenAPI Django-сервисов не проверяются: они не публикуют API
+    (см. ``render_all``), а старый снимок заглушки можно удалить.
+    """
+    unpublished = {f"{OPENAPI_DIR.as_posix()}/{s.name}.json" for s in services or [] if s.is_django}
     problems: list[Breaking] = []
     for rel in _git_ls(root, base, str(CONTRACTS_DIR)):
-        if not rel.endswith(".json") or "/examples/" in rel:
+        if not rel.endswith(".json") or "/examples/" in rel or rel in unpublished:
             continue  # примеры событий — не схемы; их валидность проверяют тесты контрактов
         old_text = _git_show(root, base, rel)
         if old_text is None:

@@ -233,6 +233,8 @@ def run_local(
     env = {
         "GV_HTTP_PORT": port,
         "GV_HTTP_HOST": "127.0.0.1",
+        # Порт метрик тоже уникален на сервис: иначе два локальных сервиса делят 9100.
+        "GV_METRICS_PORT": os.environ.get("GV_METRICS_PORT", str(found.dev_port + 1000)),
         "GV_LOG_JSON": "false",
         "GV_ENVIRONMENT": os.environ.get("GV_ENVIRONMENT", "local"),
     }
@@ -245,16 +247,34 @@ def make_secrets() -> None:
     """Вывести содержимое .env со случайными паролями (сохранить в infra/compose/.env)."""
     root = repo_root()
     template = (root / COMPOSE_DIR / ".env.example").read_text(encoding="utf-8")
+    sys.stdout.write(fill_secrets(template))
+
+
+# Переменные, которые обязаны совпадать: одно значение читают разные процессы.
+_SHARED_SECRETS = {"GV_MEDIA__SIGNING_SECRET": "GV_MEDIA_SIGNING_SECRET"}
+
+
+def fill_secrets(template: str) -> str:
+    """Заполнить пустые секреты .env.example случайными значениями.
+
+    Секрет — пустая переменная, в имени которой есть PASSWORD/SECRET/TOKEN/KEY.
+    Переменные из ``_SHARED_SECRETS`` получают значение своей пары (секрет подписи
+    ссылок нужен и gateway, и media-pipeline — ADR 0012).
+    """
     secret_keys = ("PASSWORD", "SECRET", "TOKEN", "KEY")
+    generated: dict[str, str] = {}
     lines = []
     for line in template.splitlines():
         key, sep, value = line.partition("=")
         needs_secret = sep and not value and not key.startswith("#")
         if needs_secret and any(k in key for k in secret_keys):
-            lines.append(f"{key}={secrets.token_urlsafe(24)}")
+            twin = _SHARED_SECRETS.get(key)
+            shared = generated.get(twin) if twin else None
+            generated[key] = shared or secrets.token_urlsafe(32)
+            lines.append(f"{key}={generated[key]}")
         else:
             lines.append(line)
-    sys.stdout.write("\n".join(lines) + "\n")
+    return "\n".join(lines) + "\n"
 
 
 # ----------------------------------------------------------------------------- ci
@@ -303,7 +323,7 @@ def contracts_check(
             fg="red",
         )
     if base is not None:
-        problems = contracts.compare_with_base(root, base)
+        problems = contracts.compare_with_base(root, base, load_services(root))
         if problems:
             failed = True
             typer.secho(

@@ -15,12 +15,31 @@
 - **Проверено:** unit, integration на реальных Postgres/Redis/RabbitMQ, component, contract; ruff, mypy --strict, import-linter (33 контракта), `docker compose config`, `nginx -t` и живой прогон маршрутов gateway.
 - **Осталось проверить на машине разработчика / в первом прогоне CI:** `gv dev up services` целиком (сборка образов и запуск контейнеров) и интеграционный тест адаптера Redpanda — в облачной среде, где собирался этап 0, не было доступа к Docker Hub и Kafka.
 
-## Этап 1. Аккаунт и каталог
-- Перенесено из security-ревью этапа 0: CSRF/Origin-проверка для cookie-аутентификации (identity + `libs/auth`), `/metrics` на отдельный внутренний порт, HSTS и TLS на gateway.
-- identity: вход (e-mail + Яндекс ID), JWT/JWKS, роли user/moderator/admin, согласия.
-- catalog: модель MediaItem (music + film), импорт TMDB (фильмы) и музыкальных метаданных, OpenSearch, автокомплит, алиасы.
-- media-pipeline: `audio_intro`, `frame_progressive`, `poster_masked`. Подписанные ссылки, CDN.
-- admin: каркас, вход через identity, синхронизация прав, раздел каталога.
+## Этап 1. Аккаунт и каталог — ✅ backend выполнен (2026-10-10), живая демонстрация не проведена
+План: [plans/stage-1.md](plans/stage-1.md). Решения: ADR [0012](adr/0012-signed-asset-links-nginx.md)–[0015](adr/0015-admin-idempotency-and-asset-event-order.md).
+
+- **edge:** `/metrics` на отдельном порту 9100 у всех процессов; gateway с TLS (443, HSTS, 80 → 301), `/media/` через `secure_link` в приватный MinIO; CSRF/Origin для cookie-аутентификации в `libs/auth`.
+- **identity:** регистрация (никнейм + e-mail + пароль), вход по e-mail или никнейму, сессии с ротацией refresh, JWT/JWKS, роли и права, согласия, привязка Яндекс ID и вход через привязанный аккаунт, admin-сессии и admin-API пользователей и ролей.
+- **catalog:** MediaItem (music + film), импорт (файл, TMDB, MusicBrainz, Spotify, Яндекс Музыка — внешние выключены по умолчанию), нормализация и алиасы, OpenSearch с fallback на pg_trgm, автокомплит, admin-API.
+- **media-pipeline:** `audio_intro`, `frame_progressive`, `poster_masked`; подписанные ссылки (ADR 0012), admin-загрузка исходников и перегенерация. Вместо CDN — `proxy_cache` на gateway (CDN — этап 7).
+- **admin:** Django 5.2, вход через identity, синхронизация прав, разделы «Каталог» и «Пользователи», аудит (append-only).
+- Исправления по ревью: идемпотентность admin-мутаций в транзакции мутации и порядок событий ассетов ([ADR 0015](adr/0015-admin-idempotency-and-asset-event-order.md)), лимиты входа по аккаунту и подсети, повторная аутентификация привязок, отзыв сессий при понижении прав.
+- **Проверено:** unit, integration, component, contract по сервисам этапа; `gv lint`, `gv contracts check`, `gv gen --check`.
+- **Осталось (демонстрация [§0 плана](plans/stage-1.md#0-цель-и-критерии-готовности)):** живой сквозной прогон пунктов 1–6 на `gv dev up services` (регистрация → вход → импорт → `AssetsReady` → ссылка через gateway → блокировка) не выполнялся. Фронтенд и bff-web в этап 1 не входят — демонстрация идёт через API и админку.
+
+### Хвосты этапа 1 (перенесены в этап 2)
+| Пункт | Где | Когда |
+|---|---|---|
+| Периодическая очистка `idempotency_keys` (`gv_db.idempotency` `purge_older_than`) не запускается — таблица растёт | identity, catalog, media_pipeline | Этап 2 |
+| Хук остановки (shutdown) в `ServiceDefinition` для consumer/worker: закрывать `RabbitTaskQueue` и др. (сейчас закрываются вместе с процессом) | `libs/service` | Этап 2 |
+| Сервисные токены для internal API (D8): сейчас internal закрыт только сетью, `/internal/v1/asset-links` принимает любой `subject` | identity, media_pipeline, `libs/auth` | Этап 2, до первого вызова из game |
+| Живой прогон integration-тестов OpenSearch и `nginx -t` на образе nginx 1.28 в CI | `.github/workflows`, catalog, `infra/nginx` | Первый прогон CI |
+| `mypy_django_plugin` для admin | admin | Этап 2 |
+| Протокол вместо `EventProcessor` в `KafkaEventConsumer` (admin подключается через `cast`) | `libs/messaging` | Этап 2 |
+| Общий подключаемый inbox для Django (сейчас свой в admin) | `libs/messaging`, admin | Этап 5 (модерация в админке) |
+| Ручная security-проверка владельцем: identity, `libs/auth`, вход в admin | — | До публичного запуска |
+
+**Принятый риск:** лимитеры входа и denylist `sid` при отказе Redis работают **fail-open** (с метрикой и логом): перебор сдерживает argon2id с ограниченным параллелизмом, окно отозванного access-токена ≤ access TTL. Исключение — лимит выдачи ссылок media-pipeline: fail-closed (503). Подробнее — [architecture/security.md](architecture/security.md#7-реализация-этапа-1).
 
 ## Этап 2. Соло-игра
 - `libs/game_kernel`: интерфейсы, реестр, плагины Source (daily, collection, random), Scorer (by_level, by_speed), matcher.

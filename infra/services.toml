@@ -150,10 +150,10 @@ rabbitmq = false
 memory_mb = 256
 
 [services.admin]
-description = "Админ-панель (Django на этапе 1): модерация, контент, конфиги режимов; сейчас — заглушка"
+description = "Админ-панель (Django): модерация каталога и пользователей, загрузка исходников, аудит; мутации через admin-API сервисов"
 public = ""
 database = true
-redis = false
+redis = true
 kafka = true
 rabbitmq = false
 memory_mb = 256

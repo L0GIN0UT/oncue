@@ -16,7 +16,7 @@
 1. Один образ на сервис. Процессы (`api`, `consumer`, `worker`, `relay`) — разные команды запуска одного образа.
 2. Вся конфигурация — через env (pydantic-settings). Никаких конфиг-файлов, «вшитых» под конкретный хост.
 3. Процессы stateless. Локальная ФС только для временных файлов. Всё постоянное — в Postgres, Redis или S3.
-4. `/health/live`, `/health/ready`, `/metrics` у каждого процесса.
+4. `/health/live`, `/health/ready` у каждого процесса; `/metrics` — на отдельном внутреннем порту (§8).
 5. Корректная обработка SIGTERM (graceful shutdown ≤ 30 с).
 6. Логи — JSON в stdout.
 7. Миграции БД — отдельный job (`<service> migrate`) перед выкатом, только обратно совместимые.
@@ -95,3 +95,26 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 4. Ingress (Nginx/Envoy) вместо Nginx на VPS, cert-manager.
 5. NetworkPolicy: internal и admin API закрыты снаружи.
 6. Переключение трафика через DNS с параллельной работой VPS как fallback.
+
+## 8. Переменные, сертификаты и порты (этап 1)
+
+**`.env` для compose.** Файл `infra/compose/.env.example` генерирует `gv gen` (шаблон `env.example.j2`), руками его не правят. `gv dev secrets > infra/compose/.env` заполняет пустые секреты случайными значениями.
+
+| Переменная | Кто читает | Примечание |
+|---|---|---|
+| `GV_MEDIA_SIGNING_SECRET` | gateway (`secure_link`) | Без неё gateway не стартует |
+| `GV_MEDIA__SIGNING_SECRET` | media_pipeline | Должна совпадать с `GV_MEDIA_SIGNING_SECRET`: `gv dev secrets` подставляет в обе одно значение ([ADR 0012](adr/0012-signed-asset-links-nginx.md)) |
+| `GV_MEDIA_ASSETS_BUCKET` | gateway (`/media/` → MinIO) | По умолчанию `gv-assets`; должен совпадать с `GV_S3__BUCKET_ASSETS` media_pipeline |
+| `GV_ADMIN__SECRET_KEY` | admin | Ключ Django. Обязателен в production, локально — случайный на процесс |
+| `GV_ADMIN__IP_ALLOWLIST` | admin | CIDR, откуда доступна админка. Вне local/ci обязателен и не пуст — иначе процесс не стартует |
+
+Остальные настройки сервисов описаны в `settings.py` сервиса и в [плане этапа 1](plans/stage-1.md).
+
+**TLS на gateway.** Сертификаты лежат в `infra/nginx/certs/{fullchain,privkey}.pem`, каталог в `.gitignore`. Команды выпуска — в шапке `infra/compose/compose.gateway.yml`:
+
+- dev — самоподписанный сертификат (`openssl`);
+- prod — первичный выпуск через certbot (webroot), продление — сервис `certbot` (профиль `certbot`), затем `nginx -s reload`.
+
+Порт 80 только редиректит на 443 и отвечает на ACME-challenge.
+
+**Метрики.** Каждый процесс (api, consumer, worker, relay) отдаёт `/metrics` на отдельном порту `GV_METRICS_PORT` (по умолчанию 9100). На основном порту `/metrics` нет, gateway его не публикует, Prometheus собирает `:9100`. В `gv dev run <service>` порт метрик равен `dev_port + 1000`, чтобы локальные сервисы не конфликтовали.

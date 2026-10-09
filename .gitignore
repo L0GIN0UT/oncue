@@ -37,3 +37,10 @@ node_modules/
 # Claude Code: личные настройки и заметки сессий
 .claude/settings.local.json
 .claude/sessions/
+
+# Локальные снимки Redis
+dump.rdb
+
+# TLS-сертификаты gateway (выпускает certbot / `gv dev certs`)
+infra/nginx/certs/*
+!infra/nginx/certs/.gitkeep

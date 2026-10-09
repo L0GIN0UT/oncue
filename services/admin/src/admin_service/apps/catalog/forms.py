@@ -21,7 +21,7 @@ IMPORT_SOURCES = [
 ]
 SOURCE_KINDS = [("audio", "аудио"), ("frame", "кадр"), ("poster", "постер")]
 MAX_ALIASES = 100
-MAX_ALIAS_LEN = 200
+MAX_ALIAS_LEN = 300  # AliasIn.text в contracts/openapi/catalog.json
 MAX_LANG_LEN = 8
 _LANG, _KIND = 1, 2  # позиции полей в строке «текст | язык | вид»
 
@@ -32,7 +32,7 @@ class SearchForm(forms.Form):
     q = forms.CharField(label="Поиск", required=False, max_length=64)
     domain = forms.ChoiceField(label="Домен", choices=DOMAINS, required=False)
     status = forms.ChoiceField(label="Статус", choices=STATUSES, required=False)
-    cursor = forms.CharField(required=False, max_length=512, widget=forms.HiddenInput)
+    cursor = forms.CharField(required=False, max_length=1024, widget=forms.HiddenInput)
 
 
 class ReasonForm(MutationForm):
@@ -79,7 +79,8 @@ class ImportForm(MutationForm):
 
     source = forms.ChoiceField(label="Источник", choices=IMPORT_SOURCES)
     ref = forms.CharField(label="Идентификатор / ссылка", required=False, max_length=200)
-    file_id = forms.CharField(label="file_id (для импорта файлом)", required=False, max_length=200)
+    # Пределы — как в ImportRequest контракта catalog: длиннее сервис отвергнет 422.
+    file_id = forms.CharField(label="file_id (для импорта файлом)", required=False, max_length=100)
 
     def clean(self) -> dict[str, Any]:
         data = super().clean() or {}

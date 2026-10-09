@@ -1538,6 +1538,7 @@ name = "guessverse-admin"
 version = "0.1.0"
 source = { editable = "services/admin" }
 dependencies = [
+    { name = "cryptography" },
     { name = "django" },
     { name = "gv-auth" },
     { name = "gv-core" },
@@ -1546,11 +1547,13 @@ dependencies = [
     { name = "gv-service" },
     { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "redis" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=44" },
     { name = "django", specifier = ">=5.2,<5.3" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
@@ -1559,6 +1562,7 @@ requires-dist = [
     { name = "gv-service", editable = "libs/service" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "redis", specifier = ">=5.2" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]
 

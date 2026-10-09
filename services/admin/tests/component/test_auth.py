@@ -49,18 +49,18 @@ def test_admin_role_becomes_superuser(login: Any) -> None:
     assert AdminUser.objects.get(identity_user_id=user_id).is_superuser
 
 
-def test_wrong_password_shows_form_error(client: Any, identity: Any) -> None:
+def test_wrong_password_shows_form_error(client: Any, identity: Any, problem: Any) -> None:
     identity.route("POST", "/internal/v1/admin-sessions").respond(
-        401, json={"status": 401, "code": "auth.invalid_credentials", "title": "Unauthorized"}
+        401, json=problem(401, "auth.invalid_credentials")
     )
     response = client.post("/login/", {"username": "mod", "password": "bad-password"})
     assert response.status_code == 200
     assert not AdminUser.objects.exists()
 
 
-def test_identity_forbids_without_admin_access(client: Any, identity: Any) -> None:
+def test_identity_forbids_without_admin_access(client: Any, identity: Any, problem: Any) -> None:
     identity.route("POST", "/internal/v1/admin-sessions").respond(
-        403, json={"status": 403, "code": "auth.forbidden", "title": "Forbidden"}
+        403, json=problem(403, "auth.forbidden")
     )
     response = client.post("/login/", {"username": "player", "password": "pw-123456"})
     assert response.status_code == 200
@@ -143,7 +143,7 @@ def test_expired_access_is_refreshed(
 
 
 def test_rejected_refresh_logs_out(
-    client: Any, identity: Any, token_issuer: TestTokenIssuer, session_body: Any
+    client: Any, identity: Any, token_issuer: TestTokenIssuer, session_body: Any, problem: Any
 ) -> None:
     user_id = uuid7()
     token = token_issuer.issue(user_id=user_id, perms=["admin.access"])
@@ -152,7 +152,7 @@ def test_rejected_refresh_logs_out(
     )
     client.post("/login/", {"username": "m", "password": "pw-123456"})
     identity.route("POST", "/internal/v1/admin-sessions/refresh").respond(
-        401, json={"status": 401, "code": "auth.refresh_reused"}
+        401, json=problem(401, "auth.refresh_reused")
     )
     response = client.get("/catalog/")
     assert response.status_code == 302
@@ -289,11 +289,11 @@ class TestIdentityVersion:
 
 class TestLoginThrottle:
     def test_attempts_over_limit_are_rejected_without_identity(
-        self, client: Any, identity: Any, settings: Any
+        self, client: Any, identity: Any, settings: Any, problem: Any
     ) -> None:
         settings.GV_LOGIN_ATTEMPTS_LIMIT = 2
         route = identity.route("POST", "/internal/v1/admin-sessions").respond(
-            401, json={"status": 401, "code": "auth.invalid_credentials", "title": "Unauthorized"}
+            401, json=problem(401, "auth.invalid_credentials")
         )
         for _ in range(2):
             assert client.post("/login/", {"username": "m", "password": "bad"}).status_code == 200
@@ -302,11 +302,11 @@ class TestLoginThrottle:
         assert response["Retry-After"] == str(settings.GV_LOGIN_ATTEMPTS_WINDOW_S)
         assert route.call_count == 2
 
-    def test_limit_is_per_ip(self, client: Any, identity: Any, settings: Any) -> None:
+    def test_limit_is_per_ip(self, client: Any, identity: Any, settings: Any, problem: Any) -> None:
         settings.GV_LOGIN_ATTEMPTS_LIMIT = 1
         settings.GV_IP_ALLOWLIST = ["127.0.0.0/8"]
         identity.route("POST", "/internal/v1/admin-sessions").respond(
-            401, json={"status": 401, "code": "auth.invalid_credentials", "title": "Unauthorized"}
+            401, json=problem(401, "auth.invalid_credentials")
         )
         data = {"username": "m", "password": "bad"}
         assert client.post("/login/", data, REMOTE_ADDR="127.0.0.2").status_code == 200

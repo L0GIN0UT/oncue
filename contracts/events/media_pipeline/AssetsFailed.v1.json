@@ -2,7 +2,7 @@
   "$id": "urn:guessverse:contracts:events:media_pipeline:AssetsFailed:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Генерация набора ассетов не удалась.",
+  "description": "Генерация набора ассетов не удалась. version конверта монотонна по media_item_id (общий счётчик единицы, возможны пропуски): потребитель отбрасывает события с version не больше применённой.",
   "properties": {
     "asset_set_id": {
       "format": "uuid",

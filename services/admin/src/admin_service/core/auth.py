@@ -13,6 +13,7 @@ client_ip}`` → access-токен проверяется по JWKS (``gv_auth.J
 # ruff: noqa: ARG002 — сигнатуры переопределяемых методов Django и бэкенда аутентификации
 from __future__ import annotations
 
+import ipaddress
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -75,7 +76,7 @@ class IdentitySession:
         )
 
 
-def _identity_call(path: str, payload: dict[str, str], request_id: str) -> httpx.Response:
+def _identity_call(path: str, payload: dict[str, str | None], request_id: str) -> httpx.Response:
     url = f"{settings.GV_IDENTITY_URL.rstrip('/')}{path}"
     return httpx.post(
         url,
@@ -86,7 +87,7 @@ def _identity_call(path: str, payload: dict[str, str], request_id: str) -> httpx
     )
 
 
-def _identity_post(path: str, payload: dict[str, str], request_id: str) -> IdentitySession:
+def _identity_post(path: str, payload: dict[str, str | None], request_id: str) -> IdentitySession:
     try:
         response = _identity_call(path, payload, request_id)
     except httpx.HTTPError as exc:
@@ -190,9 +191,16 @@ def _mirror(principal: Principal, data: IdentitySession) -> AdminUser:
     return user
 
 
-def client_ip(request: HttpRequest) -> str:
-    """IP клиента админки: ``REMOTE_ADDR`` (``X-Forwarded-For`` уже учёл uvicorn)."""
-    return str(request.META.get("REMOTE_ADDR") or "")
+def client_ip(request: HttpRequest) -> str | None:
+    """IP клиента админки: ``REMOTE_ADDR`` (``X-Forwarded-For`` уже учёл uvicorn).
+
+    ``None`` — адреса нет или он не IP (контракт identity: ``client_ip`` — IP или null).
+    """
+    raw = str(request.META.get("REMOTE_ADDR") or "")
+    try:
+        return str(ipaddress.ip_address(raw))
+    except ValueError:
+        return None
 
 
 def _accept(data: IdentitySession) -> Principal | None:

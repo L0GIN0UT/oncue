@@ -18,3 +18,4 @@
 | [0012](0012-signed-asset-links-nginx.md) | Подписанные ссылки на ассеты: короткий TTL, проверка на Nginx |
 | [0013](0013-admin-catalog-via-admin-api.md) | Админка в этапе 1 читает и пишет через admin-API сервисов |
 | [0014](0014-music-sources.md) | Источники музыкальных метаданных и аудио |
+| [0015](0015-admin-idempotency-and-asset-event-order.md) | Идемпотентность admin-мутаций и порядок событий ассетов |

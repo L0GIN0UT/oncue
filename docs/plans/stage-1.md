@@ -1,7 +1,7 @@
 # План этапа 1: Аккаунт и каталог
 
-> Статус: **утверждён** владельцем (2026-10-09) с изменениями D2, D6 и новым D9. Составлен агентом `planner`, проверен оркестратором.
-> Решения зафиксированы в ADR 0012–0014.
+> Статус: **выполнен (backend)** 2026-10-10; живая демонстрация §0 не проведена — итог и хвосты в [roadmap](../09-roadmap.md). Утверждён владельцем 2026-10-09 с изменениями D2, D6 и новым D9.
+> Решения зафиксированы в ADR 0012–0015 ([0015](../adr/0015-admin-idempotency-and-asset-event-order.md) уточняет идемпотентность admin-мутаций и порядок событий ассетов).
 
 ## 0. Цель и критерии готовности
 
@@ -107,7 +107,7 @@
   - `POST /admin/v1/imports {source: "tmdb"|"file"|"musicbrainz"|"spotify"|"yandex_music", ref | file_id}` → 202 `{import_id}`, `GET /admin/v1/imports/{id}`.
 - media_pipeline admin-API: `POST /admin/v1/sources` (multipart: `media_item_id`, `kind`, файл); `POST /admin/v1/asset-sets/{id}/regenerate {reason}`.
 - identity admin-API: `GET /admin/v1/users?q=`, `GET /admin/v1/users/{id}`, `PUT /admin/v1/users/{id}/roles {roles[], reason}`, `GET|PUT /admin/v1/roles` (матрица).
-- Все admin-мутации принимают `Idempotency-Key` и обязательный `reason`.
+- Все admin-мутации требуют `Idempotency-Key` и `reason` (3–500 символов); правила — [ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md).
 
 **2.6. Права** (справочник `perms`, сид в миграции identity): `admin.access`, `users.view`, `roles.assign`, `roles.manage`, `catalog.import`, `catalog.block_item`, `catalog.edit_aliases`, `media.upload_source`, `media.regenerate`.
 - moderator = `admin.access`, `users.view`, `catalog.block_item`, `catalog.edit_aliases`;
@@ -150,7 +150,7 @@ Unit: ротация, повторное использование → отзы
 - `JwtIssuer` (EdDSA, ключи из `GV_JWT__SIGNING_KEYS`: JSON `[{kid, private_pem, active}]`, в JWKS — все неистёкшие);
 - `YandexOAuthProvider` (httpx; `oauth.yandex.ru/authorize`, `/token`, `login.yandex.ru/info`; PKCE S256; `state` в Redis, TTL 10 мин, одноразовый через GETDEL);
 - `SmtpEmailSender` и `LogEmailSender` (по умолчанию);
-- `RedisRateLimiter`, `RedisRevocationStore` (`auth:revoked_sid:<sid>`, TTL = access TTL).
+- `RedisRateLimiter`, `RedisRevocationStore` (`auth:revoked_sid:<sid>`, TTL = access TTL + `GV_JWT__LEEWAY_S`).
 
 **Таблицы** (`0002_identity_core.py`, expand-only; сид ролей и прав — `0003_seed_roles.py`): `users` (id uuid7, nickname citext unique not null, email citext unique not null, email_verified_at, display_name, status, roles_version, created_at, deleted_at); `password_credentials`; `auth_identities` — привязанные аккаунты (user_id, provider, subject, display, linked_at; unique(provider, subject): аккаунт провайдера привязан максимум к одному пользователю); `sessions` (revoked_at, revoke_reason, ip_prefix); `refresh_tokens` (token_hash sha256 unique, parent_id, used_at, revoked_at); `roles`, `permissions`, `role_permissions`, `user_roles`; `role_changes` (append-only аудит); `consents`; `email_tokens` (hash, purpose verify|reset).
 
@@ -164,7 +164,7 @@ Unit: ротация, повторное использование → отзы
 - Опциональный `RevocationChecker` в `JwtVerifier`: проверка `sid` в Redis; при недоступности Redis — fail-open с метрикой и логом (решение фиксируется в CLAUDE.md identity).
 - Claims access-токена: `iss`, `aud`, `sub`, `sid`, `jti`, `roles`, `perms`, `sanctions = 0`, `plan = "free_all"`, `iat`, `exp` (15 мин).
 
-**Настройки:** `GV_JWT__SIGNING_KEYS` (secret), `GV_JWT__ACCESS_TTL_S = 900`, `GV_JWT__REFRESH_TTL_S = 2592000`; `GV_COOKIES__SECURE = true`, `GV_COOKIES__DOMAIN`, `GV_PUBLIC_ORIGINS`; `GV_YANDEX__ENABLED = false`, `GV_YANDEX__CLIENT_ID|CLIENT_SECRET|REDIRECT_URI`; `GV_EMAIL__BACKEND = log`, `GV_SMTP__*`; `GV_LOGIN_LIMIT__PER_IP_PER_MIN = 10`, `GV_LOGIN_LIMIT__PER_ACCOUNT_PER_15MIN = 5`; `GV_ARGON2__TIME_COST`, `GV_ARGON2__MEMORY_KIB`; `GV_CONSENTS__REQUIRED = "terms:2026-10,privacy:2026-10,age_18:1"`; `GV_BOOTSTRAP_ADMIN_EMAILS` (роль admin — только после подтверждения e-mail).
+**Настройки:** `GV_JWT__SIGNING_KEYS` (secret), `GV_JWT__ACCESS_TTL_S = 900`, `GV_JWT__REFRESH_TTL_S = 2592000`; `GV_COOKIES__SECURE = true`, `GV_COOKIES__DOMAIN`, `GV_PUBLIC_ORIGINS`; `GV_YANDEX__ENABLED = false`, `GV_YANDEX__CLIENT_ID|CLIENT_SECRET|REDIRECT_URI`; `GV_EMAIL__BACKEND = log`, `GV_SMTP__*`; `GV_LOGIN_LIMIT__PER_IP = 10` за `__IP_WINDOW_S = 60`, `__PER_ACCOUNT_SUBNET = 5` и мягкий `__PER_ACCOUNT = 50` за `__ACCOUNT_WINDOW_S = 900` (подсеть `__SUBNET_V4_BITS = 24` / `__SUBNET_V6_BITS = 64`), `__REGISTER_PER_IP_PER_MIN = 10`, `__RESET_PER_IP_PER_MIN = 5`; `GV_EMAIL_LIMIT__PER_ADDRESS = 5` за `__WINDOW_S = 3600`; `GV_JWT__LEEWAY_S` (допуск по `exp`, denylist `sid` живёт access TTL + leeway); `GV_ARGON2__TIME_COST`, `GV_ARGON2__MEMORY_KIB`, `GV_ARGON2__MAX_CONCURRENCY = 4` (одновременных argon2 на процесс); `GV_CONSENTS__REQUIRED = "terms:2026-10,privacy:2026-10,age_18:1"`; `GV_BOOTSTRAP_ADMIN_EMAILS` (роль admin — только после подтверждения e-mail).
 
 **Component-тесты:** register → verify → login → refresh; повторное использование refresh → 401 и отзыв сессии; logout-all → старый access отвергается (через `sid`); CSRF (нет заголовка, чужой Origin, Bearer без CSRF проходит); привязка Яндекса на respx (неверный `state` → 400; аккаунт уже привязан к другому пользователю → 409); вход через непривязанный Яндекс → 409; вход по никнейму; смена ролей → `UserRolesChanged` в outbox валиден по схеме; после ротации в JWKS два ключа.
 
@@ -213,11 +213,11 @@ Unit: число уровней = профилю, длительность ≤ `
 - `S3Storage` (aioboto3; приватные бакеты `gv-sources`, `gv-assets`; ключ `a/<random 32 hex>.<ext>`);
 - `HttpSourceFetcher`: **allowlist хостов** (`image.tmdb.org`), только https, лимит размера и таймаут, без редиректов на другой хост (SSRF);
 - `FfmpegTranscoder` (subprocess без shell, таймаут); `PillowImageProcessor` (`Image.MAX_IMAGE_PIXELS`, тип по содержимому);
-- `NginxSecureLinkSigner` (`md5(expires + uri + secret)` в формате nginx `secure_link_md5`), `S3PresignSigner` (альтернатива), `RedisLinkRateLimiter`.
+- `NginxSecureLinkSigner` (`md5("<expires><uri> <secret>")` — пробел перед секретом, base64url без `=`, как `secure_link_md5 "$secure_link_expires$uri <secret>"` в nginx), `S3PresignSigner` (альтернатива), `RedisLinkRateLimiter`.
 
 **Таблицы** (`0002_media_core.py`): `media_items_state` (проекция: status, version); `source_media` (sha256, bytes, status); `asset_sets` (unique(media_item_id, clue_type, profile_key, params_hash); status, attempts, error_code, version); `asset_levels` (object_key unique, mime, bytes, duration_ms, width, height; PK(asset_set_id, level)); `link_issuance` (чистка старше 7 дней).
 
-**События и задачи:** слушает `catalog.MediaItemCreated/Updated/Blocked/Unblocked` (устаревшие отбрасывает по `version`); RabbitMQ-задача `media.generate_asset_set` с `task_id = asset_set_id:attempt` (повтор перезаписывает те же `asset_levels`); публикует `AssetsReady`, `AssetsFailed`.
+**События и задачи:** слушает `catalog.MediaItemCreated/Updated/Blocked/Unblocked` (устаревшие отбрасывает по `version`); RabbitMQ-задача `media.generate_asset_set` с `task_id = <asset_set_id>:<generation>` (повтор перезаписывает те же `asset_levels`, устаревшее поколение — no-op); публикует `AssetsReady`, `AssetsFailed`.
 
 **API:** internal и admin из §2.5. Загрузка: лимит размера, проверка сигнатуры, перекодирование.
 
@@ -231,7 +231,7 @@ Unit: число уровней = профилю, длительность ≤ `
 - `libs/service/runner.py`: отдельный метрик-сервер на `GV_METRICS_PORT` (9100) для **всех** команд, включая consumer и worker; из `app.py` убрать `/metrics` с основного порта. Тест: на основном порту `/metrics` → 404, на метрик-порту → 200.
 - `prometheus-services.yml.j2`: цель `:9100`; затем `gv gen`.
 - `infra/nginx/nginx.conf`: `listen 443 ssl`, `http2 on`, TLS 1.2/1.3, `ssl_session_tickets off`, OCSP stapling; на 80 — 301 на https (кроме `/.well-known/acme-challenge/`); `Strict-Transport-Security "max-age=31536000; includeSubDomains" always` только на 443; CSP для API (`default-src 'none'; frame-ancestors 'none'`); `location /media/` с `secure_link` → `proxy_pass` в MinIO (внутренняя сеть, read-only на префикс `a/`), `proxy_cache` без query в ключе; `limit_req` на `/api/identity/v1/auth/`.
-- Сертификаты: `infra/nginx/certs/` (в `.gitignore`); dev — `gv dev certs` (запрос оркестратору на правку `tools/gv`); prod — certbot webroot в `compose.gateway.yml`.
+- Сертификаты: `infra/nginx/certs/` (в `.gitignore`); dev — самоподписанный сертификат командой `openssl` из шапки `compose.gateway.yml` (`gv dev certs` не делали); prod — certbot webroot в `compose.gateway.yml`.
 
 **D2. Каркас admin** — `services/admin/src/admin_panel/` вместо заглушки:
 - `settings.py` из env (`GV_ADMIN__SECRET_KEY`, `__ALLOWED_HOSTS`, `__IP_ALLOWLIST`, `__SESSION_TTL_S = 28800`, `__IDENTITY_URL`, `__SERVICE_URLS__catalog|media_pipeline|identity`);

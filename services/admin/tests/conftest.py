@@ -16,8 +16,9 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 import django
+import httpx
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 # До импорта Django: pytest-django и django.setup() читают модуль настроек из окружения.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "admin_service.django_settings")
@@ -105,14 +106,6 @@ def gv_settings(settings: Any) -> Any:
     return settings
 
 
-# Ручки, которые добавляются параллельными потоками этапа fix1 и ещё не попали в снимок
-# contracts/openapi/ этой рабочей копии. Для них проверка «ручка есть в контракте»
-# пропускается точечно; тела проверяются, если схема уже есть.
-# TODO(fix1): убрать после слияния fix1/identity и `gv contracts export` (оркестратор):
-#   identity POST /internal/v1/admin-sessions/revoke {refresh_token} → 204.
-PENDING_OPERATIONS = frozenset({("identity", "POST", "/internal/v1/admin-sessions/revoke")})
-
-
 @cache
 def _spec(service: str) -> dict[str, Any]:
     from gv_testkit.contracts import contracts_dir
@@ -127,44 +120,115 @@ def _template_matches(template: str, path: str) -> bool:
     return re.match(pattern, path) is not None
 
 
-def _response_schema(service: str, method: str, path: str, status: int) -> dict[str, Any] | None:
-    """Схема JSON-ответа операции из OpenAPI-снимка (с ``components`` для ``$ref``)."""
-    spec = _spec(service)
-    for template, item in spec.get("paths", {}).items():
+_JSON_TYPES = ("application/json", "application/problem+json")
+_MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_FORMATS = FormatChecker()
+
+
+def _operation(service: str, method: str, path: str) -> tuple[dict[str, Any], str]:
+    """Операция OpenAPI-снимка по методу и фактическому пути (и её шаблон пути)."""
+    for template, item in _spec(service).get("paths", {}).items():
         op = item.get(method.lower())
-        if op is None or not _template_matches(template, path):
-            continue
-        response = op.get("responses", {}).get(str(status), {})
-        schema = response.get("content", {}).get("application/json", {}).get("schema")
-        if schema is None:
-            return None
-        return {**schema, "components": spec.get("components", {})}
+        if op is not None and _template_matches(template, path):
+            return op, template
+    raise AssertionError(f"{method} {path} нет в contracts/openapi/{service}.json")
+
+
+def _with_components(service: str, schema: dict[str, Any]) -> dict[str, Any]:
+    return {**schema, "components": _spec(service).get("components", {})}
+
+
+def _json_schema(content: dict[str, Any] | None) -> dict[str, Any] | None:
+    for media_type in _JSON_TYPES:
+        schema = (content or {}).get(media_type, {}).get("schema")
+        if schema is not None:
+            return dict(schema)
     return None
 
 
+def _assert_valid(where: str, schema: dict[str, Any], value: Any) -> None:
+    errors = sorted(
+        Draft202012Validator(schema, format_checker=_FORMATS).iter_errors(value), key=str
+    )
+    assert not errors, f"{where}: " + "; ".join(
+        f"{list(e.absolute_path)}: {e.message}" for e in errors[:5]
+    )
+
+
+def _check_response(service: str, method: str, path: str, status: int, body: Any) -> None:
+    """Тело ответа заглушки — по схеме контракта для этого статуса.
+
+    Статус, которого нет в контракте (503 от недоступного сервиса, сеть), не проверяется:
+    такой ответ формирует не сервис, а инфраструктура.
+    """
+    op, _ = _operation(service, method, path)
+    response = op.get("responses", {}).get(str(status))
+    if response is None:
+        assert not 200 <= status < 300, f"{service} {method} {path}: {status} нет в контракте"
+        return
+    schema = _json_schema(response.get("content"))
+    if schema is None:
+        assert body is None, f"{service} {method} {path} {status}: ответ без тела"
+        return
+    assert body is not None, f"{service} {method} {path} {status}: нужно тело ответа"
+    _assert_valid(f"{service} {method} {path} {status}", _with_components(service, schema), body)
+
+
+def _check_request(service: str, request: httpx.Request) -> None:
+    """Запрос админки к сервису — по контракту: тело JSON по схеме, мутация с Idempotency-Key.
+
+    ``Idempotency-Key`` в снимке необязателен (заголовок читает зависимость
+    ``gv_service.IdempotencyKey``, а не сигнатура ручки), но сервис без него отвечает 422 —
+    поэтому для admin-мутаций проверяется здесь.
+    """
+    method, path = request.method, request.url.path
+    op, template = _operation(service, method, path)
+    where = f"{service} {method} {path} (запрос)"
+    if method in _MUTATING and template.startswith("/admin/"):
+        assert request.headers.get("Idempotency-Key"), f"{where}: нет Idempotency-Key"
+    content = op.get("requestBody", {}).get("content")
+    schema = _json_schema(content)
+    if schema is not None:
+        _assert_valid(where, _with_components(service, schema), json.loads(request.content))
+    elif content and "multipart/form-data" in content:
+        assert request.headers["content-type"].startswith("multipart/form-data"), where
+        ref = content["multipart/form-data"]["schema"]["$ref"].rsplit("/", 1)[-1]
+        form = _spec(service)["components"]["schemas"][ref]
+        body = request.read()
+        missing = [f for f in form.get("required", []) if f'name="{f}"'.encode() not in body]
+        assert not missing, f"{where}: нет полей формы {missing}"
+
+
 class ContractRoute:
-    """Маршрут заглушки, чьи успешные JSON-ответы проверяются по схеме контракта."""
+    """Маршрут заглушки с проверкой по контракту: и ответа заглушки, и запроса админки."""
 
     def __init__(self, route: Any, service: str, method: str, path: str) -> None:
         self._route = route
         self._where = (service, method, path)
 
-    def respond(self, status_code: int = 200, *, json: Any = None, **kwargs: Any) -> ContractRoute:
-        """Ответ заглушки; 2xx с JSON обязан соответствовать контракту сервиса."""
-        if json is not None and 200 <= status_code < 300:
-            schema = _response_schema(*self._where, status_code)
-            assert schema is not None, f"{self._where} {status_code}: нет схемы ответа"
-            errors = sorted(Draft202012Validator(schema).iter_errors(json), key=str)
-            assert not errors, f"{self._where} {status_code}: " + "; ".join(
-                f"{list(e.absolute_path)}: {e.message}" for e in errors[:5]
-            )
-        self._route.respond(status_code, json=json, **kwargs)
+    def _reply(self, status_code: int, json_body: Any, kwargs: dict[str, Any]) -> ContractRoute:
+        service = self._where[0]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            _check_request(service, request)
+            if json_body is None:
+                return httpx.Response(status_code, **kwargs)
+            return httpx.Response(status_code, json=json_body, **kwargs)
+
+        self._route.mock(side_effect=handler)
         return self
 
+    def respond(self, status_code: int = 200, *, json: Any = None, **kwargs: Any) -> ContractRoute:
+        """Ответ заглушки; тело обязано соответствовать контракту для этого статуса."""
+        _check_response(*self._where, status_code, json)
+        return self._reply(status_code, json, kwargs)
+
     def respond_off_contract(self, status_code: int, *, json: Any) -> ContractRoute:
-        """Намеренно некорректный ответ — для тестов устойчивости к битым данным."""
-        self._route.respond(status_code, json=json)
-        return self
+        """Намеренно некорректный ответ — для тестов устойчивости к битым данным.
+
+        Запрос админки по-прежнему проверяется по контракту.
+        """
+        return self._reply(status_code, json, {})
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._route, name)
@@ -177,16 +241,8 @@ class ContractStub:
         self._stub = stub
 
     def route(self, method: str, path: str) -> ContractRoute:
-        service = self._stub.service
-        if (service, method.upper(), path) in PENDING_OPERATIONS:
-            self._stub.service = None  # точечный пропуск, см. PENDING_OPERATIONS
-            try:
-                route = self._stub.route(method, path)
-            finally:
-                self._stub.service = service
-        else:
-            route = self._stub.route(method, path)
-        return ContractRoute(route, service, method.upper(), path)
+        route = self._stub.route(method, path)
+        return ContractRoute(route, self._stub.service, method.upper(), path)
 
 
 def _contract_stub(base_url: str, service: str) -> Iterator[ContractStub]:
@@ -222,19 +278,25 @@ def _session_body(
     user_id: UUID,
     refresh: str = "r1",
     expires_in: int = 900,
-    identity_version: int | None = None,
+    identity_version: int = 1,
 ) -> dict[str, Any]:
-    body: dict[str, Any] = {
+    return {
         "access_token": token,
         "refresh_token": refresh,
         "expires_in": expires_in,
         "user": {"id": str(user_id), "display_name": "Модератор", "roles": [], "perms": []},
+        "identity_version": identity_version,
     }
-    # identity_version — поле из потока fix1/identity (в снимке контракта может ещё не быть;
-    # дополнительные поля схема ответа допускает).
-    if identity_version is not None:
-        body["identity_version"] = identity_version
-    return body
+
+
+def _problem(status: int, code: str, title: str = "Ошибка") -> dict[str, Any]:
+    return {"type": "about:blank", "title": title, "status": status, "code": code}
+
+
+@pytest.fixture
+def problem() -> Any:
+    """Фабрика тела RFC 9457 (схема ``Problem`` контрактов): ``problem(401, "auth.x")``."""
+    return _problem
 
 
 @pytest.fixture

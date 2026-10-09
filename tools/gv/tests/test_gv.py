@@ -117,3 +117,18 @@ class TestWorkspace:
     def test_leaf_change_affects_only_itself(self) -> None:
         members = workspace.load_members(ROOT)
         assert workspace.dependents(members, {"guessverse-game"}) == {"guessverse-game"}
+
+
+def test_fill_secrets_shares_media_signing_secret() -> None:
+    """gateway и media-pipeline должны получить один и тот же секрет подписи (ADR 0012)."""
+    from gv_cli.main import fill_secrets
+
+    template = "\n".join(
+        ["GV_MEDIA_SIGNING_SECRET=", "GV_MEDIA__SIGNING_SECRET=", "REDIS_PASSWORD=", "GV_TAG=local"]
+    )
+    out = fill_secrets(template)
+    values = dict(line.split("=", 1) for line in out.splitlines() if not line.startswith("#"))
+    assert values["GV_MEDIA_SIGNING_SECRET"] == values["GV_MEDIA__SIGNING_SECRET"]
+    assert len(values["GV_MEDIA_SIGNING_SECRET"]) >= 32
+    assert values["REDIS_PASSWORD"] not in ("", values["GV_MEDIA_SIGNING_SECRET"])
+    assert values["GV_TAG"] == "local"

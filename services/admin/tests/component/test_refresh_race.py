@@ -60,7 +60,7 @@ def _request(session_key: str, user: AdminUser) -> Any:
 
 @pytest.mark.django_db
 def test_tab_reuses_tokens_refreshed_by_another_tab(
-    identity: Any, token_issuer: TestTokenIssuer
+    identity: Any, token_issuer: TestTokenIssuer, problem: Any
 ) -> None:
     user = _user()
     key = _expired_session(token_issuer, user)
@@ -71,7 +71,7 @@ def test_tab_reuses_tokens_refreshed_by_another_tab(
     store_tokens(other, _session(fresh, "r2", expires_in=900))
     other.save()
     refresh = identity.route("POST", "/internal/v1/admin-sessions/refresh").respond(
-        401, json={"status": 401, "code": "auth.refresh_reused", "title": "Unauthorized"}
+        401, json=problem(401, "auth.refresh_reused")
     )
 
     assert access_token(request) == fresh
@@ -87,7 +87,7 @@ def close_thread_connections() -> Iterator[None]:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.usefixtures("close_thread_connections")
 def test_concurrent_refresh_sends_refresh_token_once(
-    identity: Any, token_issuer: TestTokenIssuer, session_body: Any
+    identity: Any, token_issuer: TestTokenIssuer, session_body: Any, problem: Any
 ) -> None:
     user = _user()
     key = _expired_session(token_issuer, user)
@@ -100,7 +100,7 @@ def test_concurrent_refresh_sends_refresh_token_once(
             calls.append(request.content.decode())
             first = len(calls) == 1
         if not first:  # повтор того же refresh-токена — как в identity: отзыв
-            return httpx.Response(401, json={"status": 401, "code": "auth.refresh_reused"})
+            return httpx.Response(401, json=problem(401, "auth.refresh_reused"))
         time.sleep(0.3)  # вторая вкладка успевает прийти, пока первая ждёт identity
         body = session_body(fresh, user_id=user.identity_user_id, refresh="r2")
         return httpx.Response(200, json=body)

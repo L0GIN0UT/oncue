@@ -80,6 +80,7 @@
 | 12 | Подписанные ссылки на ассеты (Nginx, TTL 60 с) | [0012](../adr/0012-signed-asset-links-nginx.md) |
 | 13 | Админка этапа 1 через admin-API | [0013](../adr/0013-admin-catalog-via-admin-api.md) |
 | 14 | Источники музыкальных метаданных и аудио | [0014](../adr/0014-music-sources.md) |
+| 15 | Идемпотентность admin-мутаций в транзакции мутации, порядок событий ассетов | [0015](../adr/0015-admin-idempotency-and-asset-event-order.md) |
 
 ## 6. Технологии
 

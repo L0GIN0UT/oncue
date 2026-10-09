@@ -128,3 +128,24 @@ class TestHandWrittenContracts:
             schema = json.loads(path.read_text(encoding="utf-8"))
             name = path.stem.split(".")[0]
             assert f":{name}:" in schema["$id"], path
+
+
+def test_compare_with_base_ignores_django_snapshot(tmp_path: Path) -> None:
+    """Снимок OpenAPI Django-сервиса можно удалить: он не публикуется (render_all)."""
+    from gv_cli.registry import Service
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    openapi = tmp_path / "contracts" / "openapi"
+    openapi.mkdir(parents=True)
+    (openapi / "admin.json").write_text(contracts.dump({"paths": {"/v1/meta": {"get": {}}}}))
+    git("init", "-q", "-b", "main")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "add", ".")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
+    (openapi / "admin.json").unlink()
+
+    django = [s for s in load_services(ROOT) if s.is_django]
+    assert django and all(isinstance(s, Service) for s in django)
+    assert len(contracts.compare_with_base(tmp_path, "main")) == 1
+    assert contracts.compare_with_base(tmp_path, "main", django) == []
