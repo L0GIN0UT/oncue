@@ -9,6 +9,9 @@
     <service> all        # всё в одном процессе (VPS, локально)
     <service> migrate    # миграции БД (отдельный job перед выкатом)
 
+Каждый процесс (кроме ``migrate``) поднимает сервер метрик на ``GV_METRICS_PORT``
+(по умолчанию 9100); на основном HTTP-порту ``/metrics`` нет.
+
 Graceful shutdown: по SIGTERM/SIGINT readiness сразу отвечает 503, HTTP-сервер дообрабатывает
 текущие запросы, фоновые циклы завершают текущее сообщение и выходят; весь процесс
 укладывается в ``shutdown_timeout_s``.
@@ -36,6 +39,7 @@ from gv_observability.logging import configure_logging
 from gv_observability.tracing import configure_tracing
 from gv_service.app import create_app
 from gv_service.definition import Infrastructure, ServiceDefinition
+from gv_service.metrics_server import MetricsServer
 from gv_service.settings import ServiceSettings
 
 log = structlog.get_logger(__name__)
@@ -75,6 +79,7 @@ class Runtime:
         self.stop = asyncio.Event()
         self.shutting_down = False
         self._server: _Server | None = None
+        self._metrics: MetricsServer | None = None
 
     def request_shutdown(self) -> None:
         """Начать graceful shutdown (идемпотентно)."""
@@ -85,6 +90,8 @@ class Runtime:
         self.stop.set()
         if self._server is not None:
             self._server.should_exit = True
+        if self._metrics is not None:
+            self._metrics.stop()
 
     async def run(self) -> None:
         """Запустить компоненты для выбранной команды и ждать их завершения."""
@@ -148,7 +155,17 @@ class Runtime:
                 raise SystemExit(
                     f"компонент {name!r} не сконфигурирован для {self.definition.name}"
                 )
+        metrics_port = self.settings.metrics_port
+        if metrics_port is not None:
+            # Метрики — у каждого процесса, включая consumer/worker/relay без HTTP API.
+            components["metrics"] = lambda: self._run_metrics(metrics_port)
         return components
+
+    async def _run_metrics(self, port: int) -> None:
+        self._metrics = MetricsServer(self.settings.http_host, port)
+        if self.shutting_down:  # сигнал пришёл раньше, чем сервер создан
+            return
+        await self._metrics.serve()
 
     async def _run_api(self, infra: Infrastructure, *, tracing: bool) -> None:
         app = create_app(

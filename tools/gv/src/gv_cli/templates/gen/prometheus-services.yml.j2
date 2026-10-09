@@ -1,6 +1,6 @@
 # СГЕНЕРИРОВАНО `gv gen` из infra/services.toml — не редактировать вручную.
-# file_sd для Prometheus: цели сбора метрик сервисов.
+# file_sd для Prometheus: цели сбора метрик сервисов (внутренний порт метрик GV_METRICS_PORT=9100).
 {% for s in services %}
-- targets: ["{{ s.dns }}:8000"]
+- targets: ["{{ s.dns }}:9100"]
   labels: {service: "{{ s.name }}"}
 {% endfor %}

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from fastapi import FastAPI
 
 from gv_auth.verifier import JwtVerifier, http_jwks_loader
-from gv_observability.metrics import MetricsMiddleware, metrics_endpoint
+from gv_observability.metrics import MetricsMiddleware
 from gv_observability.tracing import instrument_app
 from gv_service.definition import Infrastructure, ServiceDefinition
 from gv_service.health import health_router
@@ -23,7 +23,7 @@ def create_app(
     tracing_enabled: bool = False,
     jwt_verifier: JwtVerifier | None = None,
 ) -> FastAPI:
-    """Собрать приложение: роутеры сервиса, health, метрики, Problem Details, middleware.
+    """Собрать приложение: роутеры сервиса, health, сбор метрик, Problem Details, middleware.
 
     Жизненным циклом ``infra`` управляет вызывающий (runner или тест), а не приложение:
     так в режиме ``all`` одна инфраструктура разделяется между api и фоновыми процессами.
@@ -56,7 +56,8 @@ def create_app(
     for router in definition.build_routers(infra):
         app.include_router(router)
     app.include_router(health_router(infra.readiness_checks(), is_shutting_down))
-    app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
+    # /metrics здесь нет намеренно: метрики отдаёт отдельный сервер на GV_METRICS_PORT
+    # (gv_service.metrics_server), чтобы основной порт за gateway их не раскрывал.
 
     # Порядок: последний добавленный выполняется первым. Контекст запроса должен быть
     # установлен до метрик и обработки, чтобы correlation_id попал во все логи.

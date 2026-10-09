@@ -1,0 +1,14 @@
+# Шаблон официального образа nginx: при старте envsubst подставляет переменные окружения
+# GV_* (NGINX_ENVSUBST_FILTER) и пишет результат в /etc/nginx/conf.d/media.conf (уровень http).
+# Секрет задаётся только через окружение (.env / секрет платформы), в git его нет.
+# Требования к секрету: hex/base64url без кавычек и `$` (иначе сломается синтаксис конфига).
+
+# Общий с media-pipeline секрет подписи ссылок /media/ (GV_MEDIA__SIGNING_SECRET там).
+map "" $media_signing_secret {
+    default "${GV_MEDIA_SIGNING_SECRET}";
+}
+
+# Бакет ассетов в MinIO (GV_S3__BUCKET_ASSETS в media-pipeline).
+map "" $media_assets_bucket {
+    default "${GV_MEDIA_ASSETS_BUCKET}";
+}
