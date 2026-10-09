@@ -25,13 +25,14 @@ from gv_auth.revocation import (
     RevocationChecker,
     revoked_sid_key,
 )
-from gv_auth.verifier import ALLOWED_ALGORITHMS, JwtVerifier, http_jwks_loader
+from gv_auth.verifier import ALLOWED_ALGORITHMS, DEFAULT_LEEWAY_S, JwtVerifier, http_jwks_loader
 
 __all__ = [
     "ACCESS_COOKIE",
     "ALLOWED_ALGORITHMS",
     "CSRF_COOKIE",
     "CSRF_HEADER",
+    "DEFAULT_LEEWAY_S",
     "REVOKED_SID_PREFIX",
     "Authenticator",
     "CsrfError",

@@ -7,8 +7,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
-from collections.abc import Iterable
+import dataclasses
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Self
@@ -36,7 +38,7 @@ from identity_service.application.commands.oauth import (
     UnlinkExternalAccount,
 )
 from identity_service.application.commands.roles import AssignRoles, UpdateRoleMatrix
-from identity_service.application.config import AuthConfig
+from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.ports import (
     EmailMessage,
@@ -71,7 +73,7 @@ from identity_service.domain import (
 )
 
 from gv_core import ConflictError, DomainEvent
-from gv_testkit import FakeClock, FakeUnitOfWork
+from gv_testkit import FakeClock, FakeUnitOfWork, InMemoryIdempotencyStore
 
 ALL_PERMS = frozenset(
     {
@@ -278,6 +280,16 @@ class EmailTokens:
         self.d.email_tokens[token_hash] = (token, now)
         return token.user_id
 
+    async def invalidate_for_user(
+        self, user_id: UUID, purpose: EmailTokenPurpose, now: datetime
+    ) -> int:
+        count = 0
+        for key, (token, used) in list(self.d.email_tokens.items()):
+            if token.user_id == user_id and token.purpose is purpose and used is None:
+                self.d.email_tokens[key] = (token, now)
+                count += 1
+        return count
+
 
 class World:
     """Все фейки и собранные на них use-cases."""
@@ -293,6 +305,8 @@ class World:
         self.emails: list[EmailMessage] = []
         self.secrets = SeqSecrets()
         self.yandex = FakeOAuth()
+        # Не транзакционный: откат мутации не моделирует (см. gv_testkit).
+        self.idempotency = InMemoryIdempotencyStore(self.clock)
         self.config = config or AuthConfig(
             required_consents=CONSENTS,
             bootstrap_admin_emails=frozenset({"boss@example.com"}),
@@ -333,20 +347,23 @@ class World:
             request_password_reset=RequestPasswordReset(
                 uow, limiter=self.limiter, email=email, secrets=self.secrets, clock=clock, config=c
             ),
-            reset_password=ResetPassword(uow, self.hasher, revocation, clock, c),
-            start_oauth=StartOAuth(uow, providers, self.states, self.secrets, c),
+            reset_password=ResetPassword(uow, self.hasher, revocation, clock, c, email=email),
+            start_oauth=StartOAuth(
+                uow, providers, self.states, self.secrets, c, authenticator=authn
+            ),
             complete_oauth=CompleteOAuth(
                 uow,
                 providers,
                 self.states,
                 LinkExternalAccount(clock),
                 LoginWithLinkedAccount(issuer),
+                email=email,
             ),
-            unlink=UnlinkExternalAccount(uow),
+            unlink=UnlinkExternalAccount(uow, authn, email),
             grant_consents=GrantConsents(uow, clock, c),
-            delete_account=DeleteAccount(uow, self.hasher, revocation, clock),
-            assign_roles=AssignRoles(uow, clock),
-            update_role_matrix=UpdateRoleMatrix(uow, clock),
+            delete_account=DeleteAccount(uow, authn, revocation, clock),
+            assign_roles=AssignRoles(uow, clock, revocation),
+            update_role_matrix=UpdateRoleMatrix(uow, clock, revocation),
             get_user=GetUser(uow),
             list_users=ListUsers(uow),
             list_linked=ListLinkedAccounts(uow),
@@ -395,6 +412,7 @@ class WorldUoW(FakeUnitOfWork):
         self.roles = Roles(self._data)
         self.consents = Consents(self._data)
         self.email_tokens = EmailTokens(self._data)
+        self.idempotency = world.idempotency
 
     async def __aenter__(self) -> Self:
         await super().__aenter__()
@@ -416,6 +434,7 @@ class FakeHasher:
 
     async def verify(self, password_hash: str, password: str) -> bool:
         self.verify_calls += 1
+        await asyncio.sleep(0)  # как настоящий хэшер: управление уходит в event loop
         return password_hash.split("$", 1)[1] == password
 
     def needs_rehash(self, password_hash: str) -> bool:
@@ -454,8 +473,11 @@ class FakeLimiter:
         self.counts[key] = self.counts.get(key, 0) + 1
         return RateDecision(self.counts[key] <= limit, window_s)
 
-    async def peek(self, key: str, *, limit: int, window_s: int) -> RateDecision:
-        return RateDecision(self.counts.get(key, 0) < limit, window_s)
+    async def forgive(self, key: str) -> None:
+        self.counts[key] = max(self.counts.get(key, 0) - 1, 0)
+
+    async def reset(self, key: str) -> None:
+        self.counts.pop(key, None)
 
 
 class FakeRevocation:
@@ -511,3 +533,14 @@ class FakeEmail:
 @pytest.fixture
 def world() -> World:
     return World()
+
+
+@pytest.fixture
+def make_world() -> Callable[..., World]:
+    """Мир с переопределёнными лимитами: ``make_world(login_per_account=7)``."""
+
+    def factory(**limits: Any) -> World:
+        base = World().config
+        return World(dataclasses.replace(base, limits=LimitConfig(**limits)))
+
+    return factory

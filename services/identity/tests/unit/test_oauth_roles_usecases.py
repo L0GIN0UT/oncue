@@ -42,7 +42,9 @@ def _state(url: str) -> str:
 
 
 async def _link(world: Any, actor: Actor, code: str, subject: str) -> Any:
-    started = await world.uc.start_oauth(Y, purpose="link", actor=actor, return_to="/profile")
+    started = await world.uc.start_oauth(
+        Y, purpose="link", actor=actor, return_to="/profile", password=PASSWORD
+    )
     world.yandex.will_return(code, subject)
     return await world.uc.complete_oauth(
         Y,
@@ -76,7 +78,9 @@ async def test_link_requires_login(world: Any) -> None:
 
 async def test_state_is_single_use_and_bound_to_browser(world: Any) -> None:
     actor = await _actor(world)
-    started = await world.uc.start_oauth(Y, purpose="link", actor=actor, return_to=None)
+    started = await world.uc.start_oauth(
+        Y, purpose="link", actor=actor, return_to=None, password=PASSWORD
+    )
     state = _state(started.authorize_url)
     world.yandex.will_return("c1", "ya-1")
     with pytest.raises(OAuthStateError):  # другой браузер
@@ -95,7 +99,9 @@ async def test_state_is_single_use_and_bound_to_browser(world: Any) -> None:
 
 async def test_link_rejected_when_starting_session_revoked(world: Any) -> None:
     actor = await _actor(world)
-    started = await world.uc.start_oauth(Y, purpose="link", actor=actor, return_to=None)
+    started = await world.uc.start_oauth(
+        Y, purpose="link", actor=actor, return_to=None, password=PASSWORD
+    )
     await world.uc.logout(session_id=actor.session_id)
     world.yandex.will_return("c1", "ya-1")
     with pytest.raises(UnauthenticatedError) as info:
@@ -113,7 +119,9 @@ async def test_link_rejected_when_starting_session_revoked(world: Any) -> None:
 async def test_link_by_other_user_than_state_owner_rejected(world: Any) -> None:
     neo = await _actor(world)
     trinity = await _actor(world, "trinity", "trinity@example.com")
-    started = await world.uc.start_oauth(Y, purpose="link", actor=neo, return_to=None)
+    started = await world.uc.start_oauth(
+        Y, purpose="link", actor=neo, return_to=None, password=PASSWORD
+    )
     world.yandex.will_return("c1", "ya-1")
     with pytest.raises(OAuthStateError):
         await world.uc.complete_oauth(
@@ -139,7 +147,7 @@ async def test_second_yandex_for_same_user_is_conflict(world: Any) -> None:
     neo = await _actor(world)
     await _link(world, neo, "c1", "ya-1")
     with pytest.raises(ConflictError) as info:
-        await world.uc.start_oauth(Y, purpose="link", actor=neo, return_to=None)
+        await world.uc.start_oauth(Y, purpose="link", actor=neo, return_to=None, password=PASSWORD)
     assert info.value.code == "auth.provider_already_linked"
 
 
@@ -199,10 +207,10 @@ async def test_unlink(world: Any) -> None:
     neo = await _actor(world)
     await _link(world, neo, "c1", "ya-1")
     world.events.clear()
-    await world.uc.unlink(neo.user_id, Y)
+    await world.uc.unlink(neo.user_id, Y, password=PASSWORD, ip=None)
     assert isinstance(world.events[0], ExternalAccountUnlinked)
     with pytest.raises(NotFoundError):
-        await world.uc.unlink(neo.user_id, Y)
+        await world.uc.unlink(neo.user_id, Y, password=PASSWORD, ip=None)
 
 
 # ------------------------------------------------------------------------ роли
@@ -219,38 +227,40 @@ async def test_assign_roles_event_and_audit(world: Any) -> None:
     admin = await _admin(world)
     target = await world.make_user()
     world.events.clear()
-    perms = await world.uc.assign_roles(admin, target, frozenset({"moderator"}), "помощник")
-    assert "catalog.block_item" in perms
+    result = await world.uc.assign_roles(
+        admin, target, frozenset({"moderator"}), "помощник", "key-0001"
+    )
+    assert "catalog.block_item" in result["perms"]
     (event,) = world.events
     assert isinstance(event, UserRolesChanged)
     assert event.roles == ("moderator", "user")  # роль user сохраняется всегда
     assert event.actor_id == admin.user_id
     assert world.data.audit[-1].reason == "помощник"
     with pytest.raises(InvalidInputError):
-        await world.uc.assign_roles(admin, target, frozenset({"moderator"}), "  ")
+        await world.uc.assign_roles(admin, target, frozenset({"moderator"}), "  ", "key-0002")
 
 
 async def test_moderator_cannot_escalate_or_demote_admin(world: Any) -> None:
     admin = await _admin(world)
     mod_id = await world.make_user("mod_1", "mod@example.com")
-    await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "x")
+    await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "x", "key-0001")
     roles = world.data.users[mod_id].roles
     moderator = Actor(mod_id, roles, world.data.matrix.effective_perms(roles))
-    for target, roles in [(mod_id, {"admin"}), (admin.user_id, {"user"})]:
+    for n, (target, roles) in enumerate([(mod_id, {"admin"}), (admin.user_id, {"user"})]):
         with pytest.raises(ForbiddenError) as info:
-            await world.uc.assign_roles(moderator, target, frozenset(roles), "x")
+            await world.uc.assign_roles(moderator, target, frozenset(roles), "x", f"key-esc-{n}")
         assert info.value.code == "roles.escalation"
 
 
 async def test_matrix_update_publishes_snapshots_for_affected_users(world: Any) -> None:
     admin = await _admin(world)
     mod_id = await world.make_user("mod_1", "mod@example.com")
-    await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "x")
+    await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "x", "key-0001")
     world.events.clear()
     roles = {name: set(perms) for name, perms in world.data.matrix.roles.items()}
     roles["moderator"].add("catalog.import")
     await world.uc.update_role_matrix(
-        admin, {k: frozenset(v) for k, v in roles.items()}, "импорт модераторам"
+        admin, {k: frozenset(v) for k, v in roles.items()}, "импорт модераторам", "key-0002"
     )
     (event,) = world.events
     assert isinstance(event, UserRolesChanged)
@@ -263,22 +273,24 @@ async def test_matrix_guards(world: Any) -> None:
     base = dict(world.data.matrix.roles)
     with pytest.raises(ForbiddenError) as info:  # админ лишает себя управления ролями
         await world.uc.update_role_matrix(
-            admin, {**base, "admin": base["admin"] - {"roles.manage"}}, "x"
+            admin, {**base, "admin": base["admin"] - {"roles.manage"}}, "x", "key-g1"
         )
     assert info.value.code == "roles.lockout"
     mod_id = await world.make_user("mod_1", "mod@example.com")
-    await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "x")
+    await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "x", "key-0001")
     with pytest.raises(ConflictError) as info:  # удаление назначенной роли
         await world.uc.update_role_matrix(
-            admin, {k: v for k, v in base.items() if k != "moderator"}, "x"
+            admin, {k: v for k, v in base.items() if k != "moderator"}, "x", "key-g2"
         )
     assert info.value.code == "roles.in_use"
     with pytest.raises(InvalidInputError):
         await world.uc.update_role_matrix(
-            admin, {k: v for k, v in base.items() if k != "user"}, "x"
+            admin, {k: v for k, v in base.items() if k != "user"}, "x", "key-g3"
         )
     with pytest.raises(InvalidInputError):
-        await world.uc.update_role_matrix(admin, {**base, "x": frozenset({"no.such"})}, "x")
+        await world.uc.update_role_matrix(
+            admin, {**base, "x": frozenset({"no.such"})}, "x", "key-g4"
+        )
 
 
 # ------------------------------------------------------------------------ аккаунт
@@ -288,9 +300,9 @@ async def test_delete_account(world: Any) -> None:
     neo = await _actor(world)
     await _link(world, neo, "c1", "ya-1")
     with pytest.raises(UnauthenticatedError):
-        await world.uc.delete_account(neo.user_id, "wrong password!")
+        await world.uc.delete_account(neo.user_id, "wrong password!", ip=None)
     world.events.clear()
-    await world.uc.delete_account(neo.user_id, PASSWORD)
+    await world.uc.delete_account(neo.user_id, PASSWORD, ip=None)
     assert isinstance(world.events[-1], UserDeleted)
     assert neo.session_id in world.revoked
     assert world.data.identities == {}

@@ -21,7 +21,11 @@ REFRESH_TOKEN_BYTES = 32
 
 @dataclass(frozen=True, slots=True)
 class IssuedSession:
-    """Результат входа или refresh. Секреты отдаются клиенту и больше нигде не хранятся."""
+    """Результат входа или refresh. Секреты отдаются клиенту и больше нигде не хранятся.
+
+    ``identity_version`` — версия агрегата User на момент выдачи (та же, что в событиях
+    ``UserRolesChanged``): admin по ней отбрасывает события старше своего снимка прав.
+    """
 
     session_id: UUID
     user_id: UUID
@@ -31,6 +35,7 @@ class IssuedSession:
     roles: frozenset[str]
     perms: frozenset[str]
     display_name: str
+    identity_version: int
 
 
 class SessionIssuer:
@@ -109,4 +114,5 @@ class SessionIssuer:
             roles=user.roles,
             perms=perms,
             display_name=user.display_name.value,
+            identity_version=user.version,
         )

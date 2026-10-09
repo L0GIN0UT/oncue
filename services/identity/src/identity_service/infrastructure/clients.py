@@ -20,6 +20,9 @@ _SUBJECTS = {
     "verify": "Подтвердите e-mail в Guessverse",
     "reset": "Сброс пароля в Guessverse",
     "already_registered": "У вас уже есть аккаунт Guessverse",
+    "provider_linked": "К аккаунту Guessverse привязан внешний сервис",
+    "provider_unlinked": "От аккаунта Guessverse отвязан внешний сервис",
+    "password_changed": "Пароль в Guessverse изменён",
 }
 _BODIES = {
     "verify": "Чтобы подтвердить адрес, откройте ссылку:\n{link}\n",
@@ -27,6 +30,13 @@ _BODIES = {
     "Если вы не запрашивали сброс, просто проигнорируйте письмо.\n",
     "already_registered": "Кто-то пытался зарегистрироваться с вашим адресом. Если это вы — "
     "войдите или восстановите пароль.\n",
+    "provider_linked": "К вашему аккаунту привязан сервис: {providers}. Через него можно "
+    "входить в Guessverse. Если это были не вы — смените пароль и отвяжите сервис в профиле.\n",
+    "provider_unlinked": "От вашего аккаунта отвязан сервис: {providers}. Если это были не "
+    "вы — смените пароль.\n",
+    "password_changed": "Пароль вашего аккаунта изменён, все сеансы завершены.\n"
+    "Привязанные сервисы, через которые можно войти: {providers}. Если какой-то из них не ваш — "
+    "отвяжите его в профиле.\n",
 }
 
 
@@ -132,10 +142,11 @@ class LogEmailSender:
 
     async def send(self, message: EmailMessage) -> None:
         """«Отправить» письмо."""
+        extra = {"providers": list(message.providers)} if message.providers else {}
         if self._include_links and message.link:
-            log.info("email.logged", purpose=message.purpose, link=message.link)
+            log.info("email.logged", purpose=message.purpose, link=message.link, **extra)
         else:
-            log.info("email.logged", purpose=message.purpose)
+            log.info("email.logged", purpose=message.purpose, **extra)
 
 
 class SmtpEmailSender:
@@ -162,7 +173,11 @@ class SmtpEmailSender:
         mime["From"] = self._from
         mime["To"] = message.to.value
         mime["Subject"] = _SUBJECTS[message.purpose]
-        mime.set_content(_BODIES[message.purpose].format(link=message.link or ""))
+        mime.set_content(
+            _BODIES[message.purpose].format(
+                link=message.link or "", providers=", ".join(message.providers) or "нет"
+            )
+        )
         await aiosmtplib.send(
             mime,
             hostname=self._host,

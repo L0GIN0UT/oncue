@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from gv_core.uow import UnitOfWork
+from gv_db.idempotency import IdempotencyStore
 from identity_service.domain import (
     AuthIdentity,
     Consent,
@@ -109,11 +110,19 @@ class ExternalProfile:
 
 @dataclass(frozen=True, slots=True)
 class EmailMessage:
-    """Письмо. ``link`` содержит секрет — его нельзя логировать в production."""
+    """Письмо. ``link`` содержит секрет — его нельзя логировать в production.
+
+    Attributes:
+        purpose: ``verify`` | ``reset`` | ``already_registered`` | ``provider_linked`` |
+            ``provider_unlinked`` | ``password_changed``.
+        providers: Внешние сервисы, о которых сообщает письмо (привязка, отвязка, список
+            привязок при смене пароля).
+    """
 
     to: EmailAddress
-    purpose: str  # verify | reset | already_registered
+    purpose: str
     link: str | None
+    providers: tuple[str, ...] = ()
 
 
 # ----------------------------------------------------------------------------- репозитории
@@ -264,6 +273,16 @@ class EmailTokenRepository(Protocol):
         """Атомарно погасить действующий токен; вернуть ``user_id`` или ``None``."""
         ...
 
+    async def invalidate_for_user(
+        self, user_id: UUID, purpose: EmailTokenPurpose, now: datetime
+    ) -> int:
+        """Пометить использованными все непогашенные токены пользователя этой цели.
+
+        Returns:
+            Сколько токенов погашено.
+        """
+        ...
+
 
 class IdentityUnitOfWork(UnitOfWork, Protocol):
     """Транзакция identity с репозиториями, привязанными к ней."""
@@ -301,6 +320,11 @@ class IdentityUnitOfWork(UnitOfWork, Protocol):
     @property
     def email_tokens(self) -> EmailTokenRepository:
         """Репозиторий в транзакции."""
+        ...
+
+    @property
+    def idempotency(self) -> IdempotencyStore:
+        """Ключи идемпотентности admin-мутаций в этой же транзакции (gv_db.idempotency)."""
         ...
 
 
@@ -357,14 +381,23 @@ class SecretGenerator(Protocol):
 
 
 class RateLimiter(Protocol):
-    """Лимитер частоты (фиксированное окно)."""
+    """Лимитер частоты (фиксированное окно).
+
+    Попытка засчитывается атомарно (``hit``) ДО проверки — параллельные запросы не могут
+    проскочить между «проверить» и «засчитать». Успешную попытку вызывающий прощает
+    (``forgive``) или обнуляет счётчик (``reset``).
+    """
 
     async def hit(self, key: str, *, limit: int, window_s: int) -> RateDecision:
         """Засчитать попытку и решить, разрешена ли она."""
         ...
 
-    async def peek(self, key: str, *, limit: int, window_s: int) -> RateDecision:
-        """Решение без учёта новой попытки."""
+    async def forgive(self, key: str) -> None:
+        """Вернуть одну засчитанную попытку (счётчик не уходит ниже нуля)."""
+        ...
+
+    async def reset(self, key: str) -> None:
+        """Обнулить счётчик."""
         ...
 
 

@@ -9,12 +9,31 @@ from identity_service.domain import ConsentRequirement, PasswordPolicy
 
 @dataclass(frozen=True, slots=True)
 class LimitConfig:
-    """Лимиты частоты (docs/plans/stage-1.md §8 п.1)."""
+    """Лимиты частоты (docs/plans/stage-1.md §8 п.1). Значения — из настроек.
 
-    login_per_ip_per_min: int = 10
-    login_per_account_per_15min: int = 5
+    Attributes:
+        login_per_ip / login_ip_window_s: Попытки проверки пароля с одного IP.
+        login_per_account_subnet: Неудачи по аккаунту из одной подсети (/24 IPv4, /64 IPv6)
+            за ``login_account_window_s`` — чужие попытки не блокируют владельца из другой
+            сети.
+        login_per_account: Общий мягкий лимит по аккаунту из всех сетей (распределённый
+            перебор).
+        subnet_v4_bits / subnet_v6_bits: Размер подсети для счётчика аккаунта.
+        email_per_address / email_address_window_s: Писем на один адрес (защита жертвы от
+            рассылки через register/forgot).
+    """
+
+    login_per_ip: int = 10
+    login_ip_window_s: int = 60
+    login_per_account_subnet: int = 5
+    login_per_account: int = 50
+    login_account_window_s: int = 900
+    subnet_v4_bits: int = 24
+    subnet_v6_bits: int = 64
     register_per_ip_per_min: int = 10
     reset_per_ip_per_min: int = 5
+    email_per_address: int = 5
+    email_address_window_s: int = 3600
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,7 @@ from typing import Any
 import jwt
 import pytest
 
-from gv_auth import JwtVerifier, Sanction
+from gv_auth import DEFAULT_LEEWAY_S, JwtVerifier, Sanction
 from gv_core import DependencyUnavailableError, UnauthenticatedError
 from gv_testkit.auth import TEST_AUDIENCE, TEST_ISSUER, TestTokenIssuer
 
@@ -178,3 +178,14 @@ async def test_malformed_sanctions_claim_is_unauthenticated_not_500() -> None:
     verifier = _verifier(CountingLoader(issuer.jwks()))
     with pytest.raises(UnauthenticatedError):
         await verifier.verify(issuer.issue(extra={"sanctions": "много"}))
+
+
+async def test_leeway_is_exposed_for_denylist_ttl() -> None:
+    """identity держит denylist sid access TTL + leeway: значение должно быть доступно."""
+    issuer = TestTokenIssuer()
+    default = JwtVerifier(CountingLoader(issuer.jwks()), issuer=TEST_ISSUER, audience=TEST_AUDIENCE)
+    assert default.leeway_s == DEFAULT_LEEWAY_S
+    custom = JwtVerifier(
+        CountingLoader(issuer.jwks()), issuer=TEST_ISSUER, audience=TEST_AUDIENCE, leeway_s=5
+    )
+    assert custom.leeway_s == 5

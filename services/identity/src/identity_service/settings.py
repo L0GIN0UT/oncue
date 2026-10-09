@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, SecretStr
 
+from gv_auth import DEFAULT_LEEWAY_S
 from gv_service import ServiceSettings
 
 
@@ -20,6 +21,8 @@ class JwtSettings(BaseModel):
     """JSON ``[{"kid", "private_pem", "active", "not_after"?}]``; без него — только local/ci."""
     access_ttl_s: int = Field(default=900, ge=60, le=3600)
     refresh_ttl_s: int = Field(default=2_592_000, ge=3600)
+    leeway_s: int = Field(default=DEFAULT_LEEWAY_S, ge=0, le=300)
+    """Допуск верификатора по ``exp``; denylist ``sid`` живёт access TTL + leeway."""
 
 
 class CookieSettings(BaseModel):
@@ -63,10 +66,29 @@ class SmtpSettings(BaseModel):
 
 
 class LoginLimitSettings(BaseModel):
-    """Лимиты попыток."""
+    """Лимиты проверки пароля (вход, admin-вход, повторная аутентификация).
 
-    per_ip_per_min: int = Field(default=10, ge=1)
-    per_account_per_15min: int = Field(default=5, ge=1)
+    Счётчик аккаунта ведётся по паре (аккаунт, подсеть клиента): неудачи злоумышленника из
+    своей сети не блокируют владельца из другой. Общий мягкий лимит по аккаунту сдерживает
+    распределённый перебор.
+    """
+
+    per_ip: int = Field(default=10, ge=1)
+    ip_window_s: int = Field(default=60, ge=1)
+    per_account_subnet: int = Field(default=5, ge=1)
+    per_account: int = Field(default=50, ge=1)
+    account_window_s: int = Field(default=900, ge=1)
+    subnet_v4_bits: int = Field(default=24, ge=8, le=32)
+    subnet_v6_bits: int = Field(default=64, ge=16, le=128)
+    register_per_ip_per_min: int = Field(default=10, ge=1)
+    reset_per_ip_per_min: int = Field(default=5, ge=1)
+
+
+class EmailLimitSettings(BaseModel):
+    """Лимит писем на один адрес (register, forgot): защита владельца адреса от рассылки."""
+
+    per_address: int = Field(default=5, ge=1)
+    window_s: int = Field(default=3600, ge=60)
 
 
 class Argon2Settings(BaseModel):
@@ -75,6 +97,8 @@ class Argon2Settings(BaseModel):
     time_cost: int = Field(default=3, ge=1)
     memory_kib: int = Field(default=65_536, ge=8)
     parallelism: int = Field(default=1, ge=1)
+    max_concurrency: int = Field(default=4, ge=1)
+    """Одновременных вычислений argon2 на процесс (каждое — ``memory_kib`` памяти)."""
 
 
 class ConsentSettings(BaseModel):
@@ -100,6 +124,7 @@ class Settings(ServiceSettings):
     email: EmailSettings = EmailSettings()
     smtp: SmtpSettings = SmtpSettings()
     login_limit: LoginLimitSettings = LoginLimitSettings()
+    email_limit: EmailLimitSettings = EmailLimitSettings()
     argon2: Argon2Settings = Argon2Settings()
     consents: ConsentSettings = ConsentSettings()
     oauth: OAuthSettings = OAuthSettings()

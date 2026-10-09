@@ -8,11 +8,13 @@ import ipaddress
 import re
 import unicodedata
 
-from gv_core.errors import AppError, RateLimitedError
+from gv_core.errors import AppError, InvalidInputError, RateLimitedError
 from identity_service.application.ports import RateDecision
+from identity_service.domain import EmailAddress, Nickname
 
 _IPV4_PREFIX = 24
 _IPV6_PREFIX = 48
+NO_IP = "-"
 
 
 class OAuthStateError(AppError):
@@ -32,16 +34,36 @@ def pkce_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
-def ip_prefix(ip: str | None) -> str | None:
-    """Сеть клиента вместо точного адреса (/24 для IPv4, /48 для IPv6) — минимизация ПДн."""
+def ip_subnet(ip: str | None, *, v4_bits: int, v6_bits: int) -> str | None:
+    """Подсеть адреса (``None`` — адреса нет или он некорректен)."""
     if not ip:
         return None
     try:
         address = ipaddress.ip_address(ip)
     except ValueError:
         return None
-    bits = _IPV4_PREFIX if address.version == 4 else _IPV6_PREFIX  # noqa: PLR2004
+    bits = v4_bits if address.version == 4 else v6_bits  # noqa: PLR2004
     return str(ipaddress.ip_network(f"{address}/{bits}", strict=False))
+
+
+def ip_prefix(ip: str | None) -> str | None:
+    """Сеть клиента вместо точного адреса (/24 для IPv4, /48 для IPv6) — минимизация ПДн."""
+    return ip_subnet(ip, v4_bits=_IPV4_PREFIX, v6_bits=_IPV6_PREFIX)
+
+
+def canonical_login(raw: str) -> str:
+    """Каноническая форма логина для ключа лимитера.
+
+    Те же правила, что при поиске аккаунта (``EmailAddress``/``Nickname``: NFKC) плюс
+    casefold: «ａdmin», «𝐚dmin» и знак Кельвина дают тот же ключ, что и «admin».
+    Некорректный логин — NFKC + casefold исходной строки.
+    """
+    try:
+        if "@" in raw:
+            return EmailAddress.parse(raw).value.casefold()
+        return Nickname.parse(raw).value.casefold()
+    except InvalidInputError:
+        return unicodedata.normalize("NFKC", raw).strip().casefold()
 
 
 def rate_key(scope: str, value: str) -> str:

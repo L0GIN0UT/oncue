@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+import time
 import uuid
 from collections.abc import AsyncIterator
 from datetime import timedelta
@@ -189,6 +192,21 @@ async def test_sessions_tokens_identities(
         assert await uow.email_tokens.consume("b" * 64, EmailTokenPurpose.RESET, now) is None
         assert await uow.email_tokens.consume("b" * 64, EmailTokenPurpose.VERIFY, now) == user.id
         assert await uow.email_tokens.consume("b" * 64, EmailTokenPurpose.VERIFY, now) is None
+        # Погашение всех непогашенных токенов пользователя одной цели (M3).
+        for n, purpose in enumerate([EmailTokenPurpose.RESET, EmailTokenPurpose.RESET]):
+            await uow.email_tokens.add(
+                EmailToken(uuid7(), user.id, purpose, f"{n}" * 64, now, now + timedelta(hours=1))
+            )
+        await uow.email_tokens.add(
+            EmailToken(
+                uuid7(), other.id, EmailTokenPurpose.RESET, "9" * 64, now, now + timedelta(hours=1)
+            )
+        )
+        assert (
+            await uow.email_tokens.invalidate_for_user(user.id, EmailTokenPurpose.RESET, now) == 2
+        )
+        assert await uow.email_tokens.consume("0" * 64, EmailTokenPurpose.RESET, now) is None
+        assert await uow.email_tokens.consume("9" * 64, EmailTokenPurpose.RESET, now) == other.id
         await uow.commit()
 
     async with _uow(sessions, fake_clock) as uow:
@@ -224,6 +242,22 @@ async def test_search_and_matrix_save(
         assert (await uow.roles.get_matrix()).roles["helper"] == {"users.view"}
 
 
+async def test_idempotency_keys_in_identity_transaction(
+    sessions: async_sessionmaker[Any], fake_clock: FakeClock
+) -> None:
+    actor = uuid7()
+    async with _uow(sessions, fake_clock) as uow:
+        await uow.idempotency.save(actor, "key-0001", "a" * 64, {"ok": True})
+        await uow.rollback()
+    async with _uow(sessions, fake_clock) as uow:
+        assert await uow.idempotency.find(actor, "key-0001") is None  # откат — ключа нет
+        await uow.idempotency.save(actor, "key-0001", "a" * 64, {"ok": True})
+        await uow.commit()
+    async with _uow(sessions, fake_clock) as uow:
+        found = await uow.idempotency.find(actor, "key-0001")
+        assert found is not None and found.response == {"ok": True}
+
+
 # ----------------------------------------------------------------------------- Redis
 
 
@@ -241,19 +275,37 @@ async def redis(infra: InfraProvider) -> AsyncIterator[tuple[Redis, str]]:
 async def test_rate_limiter(redis: tuple[Redis, str]) -> None:
     client, prefix = redis
     limiter = RedisRateLimiter(client, prefix=prefix)
-    assert (await limiter.peek("k", limit=2, window_s=60)).allowed
     assert (await limiter.hit("k", limit=2, window_s=60)).allowed
     assert (await limiter.hit("k", limit=2, window_s=60)).allowed
     denied = await limiter.hit("k", limit=2, window_s=60)
     assert not denied.allowed
     assert 1 <= denied.retry_after_s <= 60
-    assert not (await limiter.peek("k", limit=2, window_s=60)).allowed
+    # forgive возвращает попытку и сохраняет окно (TTL).
+    await limiter.forgive("k")
+    assert int(await client.get(f"{prefix}k")) == 2  # type: ignore[arg-type]
+    assert 0 < await client.ttl(f"{prefix}k") <= 60
+    await limiter.reset("k")
+    assert await client.get(f"{prefix}k") is None
+    # Прощать нечего — ключ не создаётся и не уходит в минус.
+    await limiter.forgive("k")
+    assert await client.get(f"{prefix}k") is None
+
+
+async def test_rate_limiter_hit_is_atomic_under_concurrency(redis: tuple[Redis, str]) -> None:
+    client, prefix = redis
+    limiter = RedisRateLimiter(client, prefix=prefix)
+    decisions = await asyncio.gather(
+        *(limiter.hit("race", limit=5, window_s=60) for _ in range(30))
+    )
+    assert sum(d.allowed for d in decisions) == 5
 
 
 async def test_rate_limiter_fails_open() -> None:
     broken = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.2)
     limiter = RedisRateLimiter(broken)
     assert (await limiter.hit("k", limit=1, window_s=60)).allowed
+    await limiter.forgive("k")
+    await limiter.reset("k")
     await broken.aclose()
 
 
@@ -293,6 +345,30 @@ async def test_argon2id_parameters_and_rehash() -> None:
     assert not hasher.needs_rehash(digest)
     assert Argon2Hasher(time_cost=4, memory_kib=65_536).needs_rehash(digest)
     await hasher.verify_dummy("anything")
+
+
+async def test_argon2_concurrency_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    hasher = Argon2Hasher(time_cost=1, memory_kib=1024, max_concurrency=2)
+    digest = await hasher.hash("pw")
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0}
+    original = hasher._verify_sync
+
+    def tracked(password_hash: str, password: str) -> bool:
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.02)  # держим слот, чтобы параллельные вызовы пересеклись
+        try:
+            return original(password_hash, password)
+        finally:
+            with lock:
+                state["now"] -= 1
+
+    monkeypatch.setattr(hasher, "_verify_sync", tracked)
+    results = await asyncio.gather(*(hasher.verify(digest, "pw") for _ in range(8)))
+    assert all(results)
+    assert state["peak"] == 2
 
 
 def _pem(key: Any) -> str:

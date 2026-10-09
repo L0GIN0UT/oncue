@@ -46,6 +46,11 @@ def http_jwks_loader(url: str, *, timeout_s: float = 3.0) -> JwksLoader:
     return load
 
 
+DEFAULT_LEEWAY_S = 30
+"""Допуск по времени (``exp``/``iat``) по умолчанию. Denylist ``sid`` в identity живёт
+access TTL + этот допуск: токен принимается ещё ``leeway`` секунд после ``exp``."""
+
+
 class JwtVerifier:
     """Проверка подписи и claims access-токена."""
 
@@ -55,7 +60,7 @@ class JwtVerifier:
         *,
         issuer: str,
         audience: str,
-        leeway_s: int = 30,
+        leeway_s: int = DEFAULT_LEEWAY_S,
         cache_ttl_s: float = 3600,
         min_refresh_interval_s: float = 30,
         clock: Callable[[], float] = time.monotonic,
@@ -85,6 +90,11 @@ class JwtVerifier:
         # иначе при недоступном identity каждый запрос после истечения TTL ждал бы таймаут.
         self._last_attempt: float | None = None
         self._lock = asyncio.Lock()
+
+    @property
+    def leeway_s(self) -> int:
+        """Допуск по времени при проверке ``exp``/``iat``."""
+        return self._leeway
 
     async def verify(self, token: str) -> Principal:
         """Проверить токен и вернуть субъекта.

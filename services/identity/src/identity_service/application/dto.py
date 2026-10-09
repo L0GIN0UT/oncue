@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from identity_service.domain import ConsentRequirement
@@ -57,3 +58,46 @@ class UserView:
     created_at: datetime
     linked_accounts: tuple[LinkedAccountView, ...] = ()
     consents: tuple[ConsentRequirement, ...] = ()
+
+    def to_json(self) -> dict[str, Any]:
+        """JSON-объект (без согласий) — ответ admin-мутации, сохраняемый для идемпотентности."""
+        return {
+            "id": str(self.id),
+            "nickname": self.nickname,
+            "email": self.email,
+            "email_verified": self.email_verified,
+            "display_name": self.display_name,
+            "locale": self.locale,
+            "status": self.status,
+            "roles": list(self.roles),
+            "perms": list(self.perms),
+            "created_at": self.created_at.isoformat(),
+            "linked_accounts": [
+                {"provider": a.provider, "display": a.display, "linked_at": a.linked_at.isoformat()}
+                for a in self.linked_accounts
+            ],
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> UserView:
+        """Обратно из ``to_json``."""
+        return cls(
+            id=UUID(data["id"]),
+            nickname=data["nickname"],
+            email=data["email"],
+            email_verified=data["email_verified"],
+            display_name=data["display_name"],
+            locale=data["locale"],
+            status=data["status"],
+            roles=tuple(data["roles"]),
+            perms=tuple(data["perms"]),
+            created_at=datetime.fromisoformat(data["created_at"]),
+            linked_accounts=tuple(
+                LinkedAccountView(
+                    provider=a["provider"],
+                    display=a["display"],
+                    linked_at=datetime.fromisoformat(a["linked_at"]),
+                )
+                for a in data["linked_accounts"]
+            ),
+        )

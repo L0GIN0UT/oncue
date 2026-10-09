@@ -1,19 +1,15 @@
-"""Общие части HTTP API identity: зависимости, cookie сессии, ответ 429."""
+"""Общие части HTTP API identity: зависимости, cookie сессии."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 from fastapi import Request, Response
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from gv_auth import ACCESS_COOKIE, CSRF_COOKIE, Authenticator, Principal, new_csrf_token
-from gv_core.errors import RateLimitedError
-from gv_service.problems import problem
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.dto import Actor
 from identity_service.application.sessions import IssuedSession
@@ -30,29 +26,6 @@ class ApiDeps:
     use_cases: IdentityUseCases
     auth: Authenticator
     settings: Settings
-
-
-class IdentityRoute(APIRoute):
-    """Маршрут с точным ``Retry-After`` для 429.
-
-    Общий обработчик ``gv_service.problems`` ставит ``Retry-After: 1``; лимиты входа
-    измеряются минутами, поэтому берём значение из ``details.retry_after``.
-    """
-
-    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-        """Обёртка над стандартным обработчиком."""
-        handler = super().get_route_handler()
-
-        async def wrapped(request: Request) -> Response:
-            try:
-                return await handler(request)
-            except RateLimitedError as exc:
-                retry = int(exc.details.get("retry_after", 1))
-                response = problem(429, exc.code, exc.message, extra={"details": exc.details})
-                response.headers["Retry-After"] = str(max(retry, 1))
-                return response
-
-        return wrapped
 
 
 def client_ip(request: Request) -> str | None:

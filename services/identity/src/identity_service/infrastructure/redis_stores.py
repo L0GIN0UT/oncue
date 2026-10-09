@@ -27,6 +27,14 @@ REDIS_FAIL_OPEN = Counter(
 )
 
 
+# DECR без ухода в минус и без создания ключа: прощать нечего — ничего не делаем.
+_FORGIVE_LUA = """
+local v = tonumber(redis.call('GET', KEYS[1]) or '0')
+if v > 0 then return redis.call('DECR', KEYS[1]) end
+return 0
+"""
+
+
 class RedisRateLimiter:
     """Фиксированное окно: ``INCR`` + ``EXPIRE NX``.
 
@@ -36,6 +44,7 @@ class RedisRateLimiter:
 
     def __init__(self, client: Redis, *, prefix: str = "") -> None:
         self._r, self._prefix = client, prefix
+        self._forgive = client.register_script(_FORGIVE_LUA)
 
     async def hit(self, key: str, *, limit: int, window_s: int) -> RateDecision:
         """Засчитать попытку."""
@@ -50,18 +59,19 @@ class RedisRateLimiter:
             return self._fail_open(exc)
         return RateDecision(int(count) <= limit, max(int(ttl), 1))
 
-    async def peek(self, key: str, *, limit: int, window_s: int) -> RateDecision:  # noqa: ARG002
-        """Решение без новой попытки (окно задаёт ``hit``)."""
-        full = self._prefix + key
+    async def forgive(self, key: str) -> None:
+        """Вернуть одну попытку (атомарно, не ниже нуля); ошибки Redis — только в лог."""
         try:
-            async with self._r.pipeline(transaction=False) as pipe:
-                pipe.get(full)
-                pipe.ttl(full)
-                raw, ttl = await pipe.execute()
+            await self._forgive(keys=[self._prefix + key])
         except RedisError as exc:
-            return self._fail_open(exc)
-        count = int(raw or 0)
-        return RateDecision(count < limit, max(int(ttl), 1) if count else 0)
+            self._fail_open(exc)
+
+    async def reset(self, key: str) -> None:
+        """Обнулить счётчик; ошибки Redis — только в лог."""
+        try:
+            await self._r.delete(self._prefix + key)
+        except RedisError as exc:
+            self._fail_open(exc)
 
     @staticmethod
     def _fail_open(exc: Exception) -> RateDecision:
@@ -71,7 +81,11 @@ class RedisRateLimiter:
 
 
 class RedisRevocationStore:
-    """Запись ``auth:revoked_sid:<sid>`` (формат — gv_auth.revocation) с TTL access-токена."""
+    """Запись ``auth:revoked_sid:<sid>`` (формат — gv_auth.revocation).
+
+    ``ttl_s`` — время жизни access-токена ПЛЮС допуск (leeway) верификатора: токен
+    принимается ещё leeway секунд после ``exp``, и запись должна его пережить.
+    """
 
     def __init__(self, client: Redis, *, ttl_s: int, prefix: str = "") -> None:
         self._r, self._ttl, self._prefix = client, ttl_s, prefix
