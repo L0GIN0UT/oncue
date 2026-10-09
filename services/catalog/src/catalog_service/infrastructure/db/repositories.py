@@ -38,6 +38,7 @@ from catalog_service.infrastructure.db.tables import (
     aliases,
     external_refs,
     genres,
+    idempotency_keys,
     import_jobs,
     media_item_clue_status,
     media_item_genres,
@@ -51,6 +52,7 @@ from gv_core.clock import Clock
 from gv_core.errors import ConflictError, InvalidInputError
 from gv_core.ids import uuid7
 from gv_core.pagination import Page, decode_cursor, encode_cursor
+from gv_db.idempotency import SqlIdempotencyStore
 from gv_db.uow import SqlAlchemyUnitOfWork
 from gv_messaging.outbox import OutboxWriter
 
@@ -393,33 +395,10 @@ class SqlImportJobRepository:
 
 
 class SqlAdminActionLog:
-    """``AdminActionLog`` на PostgreSQL."""
+    """``AdminActionLog`` на PostgreSQL (аудит; повторы — ``SqlIdempotencyStore``)."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
-
-    async def find(self, actor_id: uuid.UUID, idempotency_key: str) -> RecordedAction | None:
-        """Ранее выполненное действие."""
-        row = (
-            await self._s.execute(
-                select(admin_actions).where(
-                    admin_actions.c.actor_id == actor_id,
-                    admin_actions.c.idempotency_key == idempotency_key,
-                )
-            )
-        ).first()
-        if row is None:
-            return None
-        return RecordedAction(
-            id=row.id,
-            actor_id=row.actor_id,
-            idempotency_key=row.idempotency_key,
-            action=row.action,
-            target_id=row.target_id,
-            reason=row.reason,
-            request_hash=row.request_hash,
-            response=dict(row.response),
-        )
 
     async def record(self, action: RecordedAction) -> None:
         """Записать действие; параллельный запрос с тем же ключом — конфликт."""
@@ -513,6 +492,7 @@ class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
     persons: SqlPersonRepository
     imports: SqlImportJobRepository
     actions: SqlAdminActionLog
+    idempotency: SqlIdempotencyStore
     clue_status: SqlClueStatusRepository
 
     def __init__(
@@ -532,5 +512,6 @@ class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
         self.persons = SqlPersonRepository(session)
         self.imports = SqlImportJobRepository(session)
         self.actions = SqlAdminActionLog(session)
+        self.idempotency = SqlIdempotencyStore(session, idempotency_keys, self._clock)
         self.clue_status = SqlClueStatusRepository(session)
         return self

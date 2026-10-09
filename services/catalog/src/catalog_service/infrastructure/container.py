@@ -14,12 +14,17 @@ import httpx
 import structlog
 
 from catalog_service.application.commands.admin import BlockItem, ReplaceAliases, UnblockItem
+from catalog_service.application.commands.import_sources import (
+    FileEntrySource,
+    FilmEntrySource,
+    MusicEntrySource,
+)
 from catalog_service.application.commands.imports import (
     RequestImport,
     RunImport,
     UpsertImportedItem,
 )
-from catalog_service.application.ports import MusicMetadataProvider
+from catalog_service.application.ports import ImportEntrySource, MusicMetadataProvider
 from catalog_service.application.queries.search import (
     Autocomplete,
     GetImport,
@@ -167,19 +172,6 @@ class CatalogContainer:
 
     # ------------------------------------------------------------------ источники
 
-    @property
-    def enabled_sources(self) -> frozenset[ImportSource]:
-        """Включённые источники импорта (файл — всегда)."""
-        s = self.settings
-        flags = {
-            ImportSource.FILE: True,
-            ImportSource.TMDB: s.tmdb.enabled,
-            ImportSource.MUSICBRAINZ: s.musicbrainz.enabled,
-            ImportSource.SPOTIFY: s.spotify.enabled,
-            ImportSource.YANDEX_MUSIC: s.yandex_music.enabled,
-        }
-        return frozenset(src for src, on in flags.items() if on)
-
     def _http(
         self, name: str, base_url: str, *, rps: float, timeout_s: float, headers: dict[str, str]
     ) -> ResilientHttp:
@@ -253,6 +245,27 @@ class CatalogContainer:
             )
         return providers
 
+    @cached_property
+    def import_sources(self) -> dict[ImportSource, ImportEntrySource]:
+        """Реестр источников импорта: файл — всегда, внешние — если включены и настроены.
+
+        Собирается при первом обращении: тесты успевают подменить провайдеры.
+        """
+        sources: dict[ImportSource, ImportEntrySource] = {
+            ImportSource.FILE: FileEntrySource(
+                FileImportProvider(
+                    self.settings.imports.files_dir,
+                    max_lines=self.settings.imports.max_file_lines,
+                )
+            )
+        }
+        if self.film_provider is not None:
+            sources[ImportSource.TMDB] = FilmEntrySource(self.film_provider)
+        search_limit = self.settings.imports.search_limit
+        for source, provider in self.music_providers.items():
+            sources[source] = MusicEntrySource(provider, search_limit)
+        return sources
+
     # ------------------------------------------------------------------ use-cases
 
     @cached_property
@@ -298,7 +311,7 @@ class CatalogContainer:
     @cached_property
     def request_import(self) -> RequestImport:
         """Постановка импорта."""
-        return RequestImport(self.uow, self.tasks, self.enabled_sources)
+        return RequestImport(self.uow, self.tasks, self.import_sources)
 
     @cached_property
     def run_import(self) -> RunImport:
@@ -306,12 +319,7 @@ class CatalogContainer:
         return RunImport(
             self.uow,
             UpsertImportedItem(self.uow, self.normalizer, self.infra.clock),
-            film_provider=self.film_provider,
-            music_providers=self.music_providers,
-            file_reader=FileImportProvider(
-                self.settings.imports.files_dir, max_lines=self.settings.imports.max_file_lines
-            ),
-            search_limit=self.settings.imports.search_limit,
+            self.import_sources,
         )
 
     async def close(self) -> None:

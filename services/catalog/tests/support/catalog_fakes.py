@@ -26,7 +26,7 @@ from catalog_service.domain.model import ExternalSource
 
 from gv_core.errors import ConflictError, DependencyUnavailableError, NotFoundError
 from gv_core.pagination import Page
-from gv_testkit import FakeUnitOfWork
+from gv_testkit import FakeUnitOfWork, InMemoryIdempotencyStore
 
 
 def clone_item(item: MediaItem) -> MediaItem:
@@ -73,6 +73,7 @@ class CatalogStore:
     jobs: dict[uuid.UUID, ImportJob] = field(default_factory=dict)
     actions: dict[tuple[uuid.UUID, str], RecordedAction] = field(default_factory=dict)
     clue: dict[tuple[uuid.UUID, str, str], ClueStatus] = field(default_factory=dict)
+    idempotency: InMemoryIdempotencyStore = field(default_factory=InMemoryIdempotencyStore)
     events: list[object] = field(default_factory=list)
 
 
@@ -155,9 +156,6 @@ class InMemoryActions:
     def __init__(self, store: CatalogStore) -> None:
         self._s = store
 
-    async def find(self, actor_id: uuid.UUID, idempotency_key: str) -> RecordedAction | None:
-        return self._s.actions.get((actor_id, idempotency_key))
-
     async def record(self, action: RecordedAction) -> None:
         self._s.actions[(action.actor_id, action.idempotency_key)] = action
 
@@ -185,6 +183,7 @@ class FakeCatalogUow(FakeUnitOfWork):
         self.persons = InMemoryPersons(store)
         self.imports = InMemoryJobs(store)
         self.actions = InMemoryActions(store)
+        self.idempotency = store.idempotency
         self.clue_status = InMemoryClueStatus(store)
 
     async def commit(self) -> None:

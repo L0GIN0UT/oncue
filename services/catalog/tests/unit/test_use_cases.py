@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
+from collections.abc import AsyncIterator
+from typing import TypedDict, Unpack
 
 import pytest
 from catalog_fakes import (
@@ -20,6 +23,11 @@ from catalog_service.application.commands.admin import (
     ReplaceAliases,
     UnblockItem,
 )
+from catalog_service.application.commands.import_sources import (
+    FileEntrySource,
+    FilmEntrySource,
+    MusicEntrySource,
+)
 from catalog_service.application.commands.imports import (
     IMPORT_TASK,
     ImportCommand,
@@ -33,6 +41,7 @@ from catalog_service.application.commands.projections import (
     MarkClueAssets,
 )
 from catalog_service.application.dto import ImportedItem, PersonRef, SearchDocument
+from catalog_service.application.ports import ImportEntrySource
 from catalog_service.application.queries.search import (
     Autocomplete,
     GetImport,
@@ -42,7 +51,7 @@ from catalog_service.application.queries.search import (
     SearchLimits,
 )
 from catalog_service.domain.events import MediaItemBlocked, MediaItemCreated, MediaItemUpdated
-from catalog_service.domain.import_job import ImportSource, ImportStatus
+from catalog_service.domain.import_job import ImportJob, ImportSource, ImportStatus
 from catalog_service.domain.model import (
     AliasDraft,
     AliasKind,
@@ -68,21 +77,26 @@ from gv_testkit import FakeClock, InMemoryTaskQueue
 pytestmark = pytest.mark.unit
 
 N = TitleNormalizer()
-ALL_SOURCES = frozenset(ImportSource)
 
 
-def film(tmdb: str = "157336", title: str = "Интерстеллар", **kw: object) -> ImportedItem:
-    base: dict[str, object] = {
-        "kind": MediaKind.FILM,
-        "title": title,
-        "original_title": "Interstellar",
-        "year": 2014,
-        "persons": (PersonRef("tmdb:525", "Кристофер Нолан", PersonRole.DIRECTOR),),
-        "external_refs": {ExternalSource.TMDB: tmdb},
-        "metrics": MediaMetrics(popularity=100.0),
-    }
-    base.update(kw)
-    return ImportedItem(**base)  # type: ignore[arg-type]
+class FilmOverrides(TypedDict, total=False):
+    year: int | None
+    original_title: str | None
+
+
+def film(
+    tmdb: str = "157336", title: str = "Интерстеллар", **kw: Unpack[FilmOverrides]
+) -> ImportedItem:
+    base = ImportedItem(
+        kind=MediaKind.FILM,
+        title=title,
+        original_title="Interstellar",
+        year=2014,
+        persons=(PersonRef("tmdb:525", "Кристофер Нолан", PersonRole.DIRECTOR),),
+        external_refs={ExternalSource.TMDB: tmdb},
+        metrics=MediaMetrics(popularity=100.0),
+    )
+    return dataclasses.replace(base, **kw)
 
 
 def track(ref: str, title: str) -> ImportedItem:
@@ -108,8 +122,8 @@ class Env:
     def ctx(self, key: str = "key-00000001", actor: uuid.UUID | None = None) -> AdminContext:
         return AdminContext(actor or ACTOR, key, "проверка модератором")
 
-    async def create_film(self, **kw: object) -> uuid.UUID:
-        await self.upsert(film(**kw))  # type: ignore[arg-type]
+    async def create_film(self) -> uuid.UUID:
+        await self.upsert(film())
         return next(reversed(self.store.items))
 
 
@@ -167,6 +181,14 @@ async def test_block_is_idempotent_by_key(env: Env) -> None:
     recorded = env.store.actions[(ACTOR, "key-00000001")]
     assert recorded.reason == "проверка модератором"
     assert recorded.action == "item.block"
+    assert (ACTOR, "key-00000001") in env.store.idempotency.records
+
+
+async def test_failed_mutation_leaves_no_key_or_audit(env: Env) -> None:
+    with pytest.raises(NotFoundError):
+        await BlockItem(env.uow, env.cache)(uuid7(), "moderation", env.ctx())
+    assert env.store.idempotency.records == {}
+    assert env.store.actions == {}
 
 
 async def test_same_key_other_request_is_conflict(env: Env) -> None:
@@ -203,17 +225,45 @@ async def test_replace_aliases_without_change_emits_nothing(env: Env) -> None:
 # ------------------------------------------------------------------ задания импорта
 
 
-def cmd(source: ImportSource = ImportSource.TMDB, **kw: object) -> ImportCommand:
-    base: dict[str, object] = {
-        "source": source,
-        "ref": "157336",
-        "file_id": None,
-        "reason": "наполнение",
-        "actor_id": ACTOR,
-        "idempotency_key": "imp-0000001",
+class CmdOverrides(TypedDict, total=False):
+    ref: str | None
+    file_id: str | None
+    idempotency_key: str
+
+
+def cmd(source: ImportSource = ImportSource.TMDB, **kw: Unpack[CmdOverrides]) -> ImportCommand:
+    base = ImportCommand(
+        source=source,
+        ref="157336",
+        file_id=None,
+        reason="наполнение",
+        actor_id=ACTOR,
+        idempotency_key="imp-0000001",
+    )
+    return dataclasses.replace(base, **kw)
+
+
+type Sources = dict[ImportSource, ImportEntrySource]
+
+
+def sources(
+    *,
+    films: FakeFilmProvider | None = None,
+    music: dict[ImportSource, FakeMusicProvider] | None = None,
+    files: FakeFileReader | None = None,
+) -> Sources:
+    """Реестр источников на фейках (как его собирает composition root)."""
+    registry: Sources = {
+        ImportSource.FILE: FileEntrySource(files or FakeFileReader()),
+        ImportSource.TMDB: FilmEntrySource(films or FakeFilmProvider({"157336": film()})),
     }
-    base.update(kw)
-    return ImportCommand(**base)  # type: ignore[arg-type]
+    for source in (ImportSource.MUSICBRAINZ, ImportSource.SPOTIFY, ImportSource.YANDEX_MUSIC):
+        provider = (music or {}).get(source, FakeMusicProvider())
+        registry[source] = MusicEntrySource(provider, search_limit=10)
+    return registry
+
+
+ALL_SOURCES = sources()
 
 
 async def test_request_import_creates_job_and_enqueues(env: Env) -> None:
@@ -239,7 +289,9 @@ async def test_request_import_is_idempotent(env: Env) -> None:
 
 async def test_request_import_disabled_source(env: Env) -> None:
     with pytest.raises(FeatureDisabledError) as exc:
-        await RequestImport(env.uow, env.tasks, frozenset({ImportSource.FILE}))(cmd())
+        await RequestImport(
+            env.uow, env.tasks, {ImportSource.FILE: ALL_SOURCES[ImportSource.FILE]}
+        )(cmd())
     assert exc.value.code == "catalog.source_disabled"
 
 
@@ -272,18 +324,12 @@ async def test_request_import_enqueue_failure_is_dependency_error(env: Env) -> N
             raise ConnectionError("rabbit down")
 
     with pytest.raises(DependencyUnavailableError):
-        await RequestImport(env.uow, Broken(), ALL_SOURCES)(cmd())  # type: ignore[arg-type]
+        await RequestImport(env.uow, Broken(), ALL_SOURCES)(cmd())
     assert len(env.store.jobs) == 1  # задание сохранено, повтор с тем же ключом переставит
 
 
-def run_import(env: Env, **kw: object) -> RunImport:
-    defaults: dict[str, object] = {
-        "film_provider": FakeFilmProvider({"157336": film()}),
-        "music_providers": {},
-        "file_reader": FakeFileReader(),
-    }
-    defaults.update(kw)
-    return RunImport(env.uow, env.upsert, **defaults)  # type: ignore[arg-type]
+def run_import(env: Env, registry: Sources | None = None) -> RunImport:
+    return RunImport(env.uow, env.upsert, ALL_SOURCES if registry is None else registry)
 
 
 async def test_run_tmdb_import(env: Env) -> None:
@@ -311,7 +357,7 @@ async def test_run_file_import_counts_bad_lines(env: Env) -> None:
     view = await RequestImport(env.uow, env.tasks, ALL_SOURCES)(
         cmd(source=ImportSource.FILE, ref=None, file_id="films.jsonl")
     )
-    await run_import(env, file_reader=reader)(uuid.UUID(view["import_id"]))
+    await run_import(env, sources(files=reader))(uuid.UUID(view["import_id"]))
     job = env.store.jobs[uuid.UUID(view["import_id"])]
     assert job.status is ImportStatus.DONE
     assert job.counters.as_dict() == {"created": 1, "updated": 0, "unchanged": 0, "failed": 2}
@@ -334,7 +380,7 @@ async def test_run_music_search_and_get(env: Env) -> None:
         cmd(source=ImportSource.SPOTIFY, ref="search:rock", idempotency_key="k-search-1")
     )
     get_view = await request(cmd(source=ImportSource.SPOTIFY, ref="a1", idempotency_key="k-get-1"))
-    runner = run_import(env, music_providers={ImportSource.SPOTIFY: provider})
+    runner = run_import(env, sources(music={ImportSource.SPOTIFY: provider}))
     await runner(uuid.UUID(search_view["import_id"]))
     await runner(uuid.UUID(get_view["import_id"]))
     assert {i.title for i in env.store.items.values()} == {"We Will Rock You", "Bohemian Rhapsody"}
@@ -344,7 +390,9 @@ async def test_run_music_unavailable_or_disabled_fails_job(env: Env) -> None:
     request = RequestImport(env.uow, env.tasks, ALL_SOURCES)
     v1 = await request(cmd(source=ImportSource.SPOTIFY, ref="a1", idempotency_key="k-down-01"))
     v2 = await request(cmd(source=ImportSource.YANDEX_MUSIC, ref="1", idempotency_key="k-off-001"))
-    runner = run_import(env, music_providers={ImportSource.SPOTIFY: FakeMusicProvider(down=True)})
+    registry = sources(music={ImportSource.SPOTIFY: FakeMusicProvider(down=True)})
+    del registry[ImportSource.YANDEX_MUSIC]  # выключен в конфигурации воркера
+    runner = run_import(env, registry)
     await runner(uuid.UUID(v1["import_id"]))
     await runner(uuid.UUID(v2["import_id"]))
     assert env.store.jobs[uuid.UUID(v1["import_id"])].error == "catalog.source_unavailable"
@@ -353,6 +401,43 @@ async def test_run_music_unavailable_or_disabled_fails_job(env: Env) -> None:
 
 async def test_run_unknown_job_is_noop(env: Env) -> None:
     await run_import(env)(uuid7())
+
+
+class RaisingSource:
+    """Источник, который отдаёт ``before`` и падает (задание не должно зависнуть в running)."""
+
+    def __init__(self, error: Exception, before: tuple[ImportedItem, ...] = ()) -> None:
+        self._error = error
+        self._before = before
+
+    def validate(self, ref: str | None, file_id: str | None) -> None:
+        return None
+
+    async def entries(self, job: ImportJob) -> AsyncIterator[ImportedItem | ValueError]:
+        for entry in self._before:
+            yield entry
+        raise self._error
+
+
+async def test_run_import_any_app_error_fails_job(env: Env) -> None:
+    view = await RequestImport(env.uow, env.tasks, ALL_SOURCES)(cmd())
+    job_id = uuid.UUID(view["import_id"])
+    error = ConflictError("источник отдал противоречивые данные", code="catalog.source_conflict")
+    await run_import(env, {ImportSource.TMDB: RaisingSource(error)})(job_id)
+    job = env.store.jobs[job_id]
+    assert job.status is ImportStatus.FAILED
+    assert job.error == "catalog.source_conflict"
+
+
+async def test_run_import_crash_fails_job_and_reraises(env: Env) -> None:
+    view = await RequestImport(env.uow, env.tasks, ALL_SOURCES)(cmd())
+    job_id = uuid.UUID(view["import_id"])
+    with pytest.raises(KeyError):
+        await run_import(env, {ImportSource.TMDB: RaisingSource(KeyError("x"), (film(),))})(job_id)
+    job = env.store.jobs[job_id]
+    assert job.status is ImportStatus.FAILED
+    assert job.error == "catalog.import_crashed"
+    assert job.counters.created == 1  # учтённое до падения сохранено
 
 
 # ------------------------------------------------------------------ поиск
@@ -463,22 +548,27 @@ async def test_index_item_disabled_or_missing(env: Env) -> None:
 
 async def test_index_item_db_behind_event_is_retryable_error(env: Env) -> None:
     item_id = await env.create_film()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(DependencyUnavailableError) as exc:
         await IndexItem(env.uow().items, FakeSearch(), None)(item_id, 5)
+    assert exc.value.code == "catalog.index_lag"
 
 
-def clue_event(item_id: uuid.UUID, version: int, **kw: object) -> ClueAssetsEvent:
-    base: dict[str, object] = {
-        "media_item_id": item_id,
-        "asset_set_id": uuid.UUID(int=1),
-        "clue_type": "poster_masked",
-        "profile_key": "default",
-        "status": "ready",
-        "version": version,
-        "levels_count": 5,
-    }
-    base.update(kw)
-    return ClueAssetsEvent(**base)  # type: ignore[arg-type]
+class ClueOverrides(TypedDict, total=False):
+    asset_set_id: uuid.UUID
+    status: str
+
+
+def clue_event(item_id: uuid.UUID, version: int, **kw: Unpack[ClueOverrides]) -> ClueAssetsEvent:
+    base = ClueAssetsEvent(
+        media_item_id=item_id,
+        asset_set_id=uuid.UUID(int=1),
+        clue_type="poster_masked",
+        profile_key="default",
+        status="ready",
+        version=version,
+        levels_count=5,
+    )
+    return dataclasses.replace(base, **kw)
 
 
 async def test_mark_clue_assets_drops_stale_versions(env: Env) -> None:
@@ -489,8 +579,22 @@ async def test_mark_clue_assets_drops_stale_versions(env: Env) -> None:
     assert not await mark(clue_event(item_id, 1, status="failed"))
     assert not await mark(clue_event(item_id, 2))
     assert env.store.clue[(item_id, "poster_masked", "default")].status == "ready"
-    # Новый набор ассетов (другой id) заменяет старый независимо от версии.
-    assert await mark(clue_event(item_id, 1, asset_set_id=uuid.UUID(int=2), status="failed"))
+
+
+async def test_late_regeneration_of_old_set_does_not_replace_newer_set(env: Env) -> None:
+    item_id = await env.create_film()
+    uow = env.uow()
+    mark = MarkClueAssets(uow.items, uow.clue_status)
+    old_set, new_set = uuid.UUID(int=1), uuid.UUID(int=2)
+    assert await mark(clue_event(item_id, 1, asset_set_id=old_set))
+    assert await mark(clue_event(item_id, 3, asset_set_id=new_set))
+    # Событие перегенерации старого набора старше (v2 < v3) — новый набор не вытесняется.
+    assert not await mark(clue_event(item_id, 2, asset_set_id=old_set, status="failed"))
+    current = env.store.clue[(item_id, "poster_masked", "default")]
+    assert (current.asset_set_id, current.version, current.status) == (new_set, 3, "ready")
+    # Более новое событие (любого набора) применяется.
+    assert await mark(clue_event(item_id, 4, asset_set_id=old_set))
+    assert env.store.clue[(item_id, "poster_masked", "default")].asset_set_id == old_set
 
 
 async def test_mark_clue_assets_unknown_item(env: Env) -> None:

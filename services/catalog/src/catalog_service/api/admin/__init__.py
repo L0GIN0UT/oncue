@@ -1,7 +1,8 @@
 """Admin API (/admin/v1): для админ-панели, только с правами модератора/администратора.
 
 Каждая ручка защищена ``require_perm`` (минимум ``admin.access``). Мутации требуют
-заголовок ``Idempotency-Key`` и причину ``reason`` (аудит в ``admin_actions``/``import_jobs``).
+заголовок ``Idempotency-Key`` (``gv_service.IdempotencyKey``) и причину ``reason``
+(``gv_service.Reason``); аудит — ``admin_actions``/``import_jobs``.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from catalog_service.application.commands.admin import AdminContext
@@ -18,18 +19,14 @@ from catalog_service.application.services import CatalogServices
 from catalog_service.domain.import_job import ImportSource
 from catalog_service.domain.model import AliasDraft, AliasKind, MediaDomain
 from gv_auth import Principal, require_perm
+from gv_service import IdempotencyKey, Reason, problem_responses
 
-IdempotencyKey = Annotated[
-    str,
-    Header(
-        alias="Idempotency-Key",
-        min_length=8,
-        max_length=128,
-        pattern=r"^[A-Za-z0-9_\-]+$",
-        description="Ключ идемпотентности мутации (повтор возвращает прежний результат)",
-    ),
-]
-Reason = Annotated[str, Field(min_length=3, max_length=500, description="Причина (аудит)")]
+# Ошибки, общие для всех ручек admin-API.
+_AUTH = (401, 403, 422)
+_READ = problem_responses(*_AUTH)
+_READ_ONE = problem_responses(*_AUTH, 404)
+_MUTATE = problem_responses(*_AUTH, 404, 409)
+_IMPORT = problem_responses(*_AUTH, 409, 503)
 
 
 class AliasOut(BaseModel):
@@ -152,7 +149,7 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
     """Админские ручки каталога."""
     router = APIRouter(prefix="/admin/v1", tags=["catalog-admin"])
 
-    @router.get("/items", response_model=AdminItemPage, summary="Список единиц")
+    @router.get("/items", response_model=AdminItemPage, summary="Список единиц", responses=_READ)
     async def list_items(
         _: Viewer,
         q: Annotated[str | None, Query(max_length=64)] = None,
@@ -167,25 +164,45 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
             next_cursor=page.next_cursor,
         )
 
-    @router.get("/items/{item_id}", response_model=AdminItem, summary="Карточка единицы")
+    @router.get(
+        "/items/{item_id}",
+        response_model=AdminItem,
+        summary="Карточка единицы",
+        responses=_READ_ONE,
+    )
     async def get_item(item_id: uuid.UUID, _: Viewer) -> AdminItem:
         return AdminItem.model_validate(await c.get_item.admin(item_id))
 
-    @router.post("/items/{item_id}/block", response_model=AdminItem, summary="Заблокировать")
+    @router.post(
+        "/items/{item_id}/block",
+        response_model=AdminItem,
+        summary="Заблокировать",
+        responses=_MUTATE,
+    )
     async def block(
         item_id: uuid.UUID, body: BlockRequest, principal: Blocker, key: IdempotencyKey
     ) -> AdminItem:
         ctx = AdminContext(principal.user_id, key, body.reason)
         return AdminItem.model_validate(await c.block_item(item_id, body.reason_code, ctx))
 
-    @router.post("/items/{item_id}/unblock", response_model=AdminItem, summary="Разблокировать")
+    @router.post(
+        "/items/{item_id}/unblock",
+        response_model=AdminItem,
+        summary="Разблокировать",
+        responses=_MUTATE,
+    )
     async def unblock(
         item_id: uuid.UUID, body: UnblockRequest, principal: Blocker, key: IdempotencyKey
     ) -> AdminItem:
         ctx = AdminContext(principal.user_id, key, body.reason)
         return AdminItem.model_validate(await c.unblock_item(item_id, ctx))
 
-    @router.put("/items/{item_id}/aliases", response_model=AdminItem, summary="Заменить алиасы")
+    @router.put(
+        "/items/{item_id}/aliases",
+        response_model=AdminItem,
+        summary="Заменить алиасы",
+        responses=_MUTATE,
+    )
     async def replace_aliases(
         item_id: uuid.UUID, body: ReplaceAliasesRequest, principal: Editor, key: IdempotencyKey
     ) -> AdminItem:
@@ -193,7 +210,13 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
         drafts = [AliasDraft(a.text, a.kind, a.lang) for a in body.aliases]
         return AdminItem.model_validate(await c.replace_aliases(item_id, drafts, ctx))
 
-    @router.post("/imports", response_model=ImportView, status_code=202, summary="Запустить импорт")
+    @router.post(
+        "/imports",
+        response_model=ImportView,
+        status_code=202,
+        summary="Запустить импорт",
+        responses=_IMPORT,
+    )
     async def request_import(
         body: ImportRequest, principal: Importer, key: IdempotencyKey
     ) -> ImportView:
@@ -209,7 +232,12 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
         )
         return ImportView.model_validate(view)
 
-    @router.get("/imports/{import_id}", response_model=ImportView, summary="Состояние импорта")
+    @router.get(
+        "/imports/{import_id}",
+        response_model=ImportView,
+        summary="Состояние импорта",
+        responses=_READ_ONE,
+    )
     async def get_import(import_id: uuid.UUID, _: Importer) -> ImportView:
         return ImportView.model_validate(await c.get_import(import_id))
 

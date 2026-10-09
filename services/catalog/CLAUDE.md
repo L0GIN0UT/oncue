@@ -14,10 +14,12 @@
 - Изменение агрегата = `version+1` + событие с этой версией; `save` — оптимистичная блокировка по `persisted_version`.
 - `source_media_ref` — uuid5 от (единица, kind, uri): стабилен между импортами (на него ссылается media-pipeline).
 - Импорт сопоставляет единицы по внешним id (`tmdb` → … → `seed`); `seed` (ключ строки файла) в события не публикуется.
-- Индексатор пишет в OpenSearch актуальную строку БД с её `version` (`version_type=external`): повторы и старые события отсекает индекс.
+- Индексатор пишет в OpenSearch актуальную строку БД с её `version` (`version_type=external`): повторы и старые события отсекает индекс; строка БД старше события → `DependencyUnavailableError(catalog.index_lag)` (ретрай).
 - Без `GV_OPENSEARCH__URL` или при его отказе поиск идёт по pg_trgm (`TrgmSearch`) — штатная деградация.
 - Кэш автокомплита инвалидируется «поколением» (`INCR`), блокировка сбрасывает его сразу после коммита.
-- Admin-мутации: обязательны `Idempotency-Key` и `reason`; аудит и ответ для повтора — `admin_actions` (импорт — `import_jobs`).
+- Admin-мутации: `gv_service.IdempotencyKey`/`Reason`; ключ и ответ — `gv_db.idempotency` (`idempotency_keys`, та же транзакция), `admin_actions` — только аудит; импорт идемпотентен по `import_jobs (actor_id, idempotency_key)`.
+- Импорт: реестр `Mapping[ImportSource, ImportEntrySource]` (файл, TMDB, музыка) собирает `container.import_sources`; нет в реестре — `catalog.source_disabled`. `RunImport` не оставляет `running`: `AppError` → `failed` с её кодом, прочее → `catalog.import_crashed` и проброс.
+- Проекция ассетов загадок: `version` media-pipeline монотонна по `media_item_id` — событие с `version` ≤ применённой отбрасывается независимо от `asset_set_id` (сравнение со строкой проекции `(media_item_id, clue_type, profile_key)`).
 - `api` не импортирует `infrastructure`: роутеры зависят от `application.services.CatalogServices`, контейнер подставляет `main.py` (`container_for(infra)` — один на процесс).
 - Внешние источники выключены по умолчанию, у каждого свой rate-limit и circuit breaker; Яндекс Музыка — неофициальный клиент, только метаданные (ADR 0014).
 - Фейки портов catalog — `tests/support/catalog_fakes.py`: testkit не может их держать (библиотекам запрещено импортировать сервисы).

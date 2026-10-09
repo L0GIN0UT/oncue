@@ -5,13 +5,15 @@ RabbitMQ-задачу ``catalog.import`` (``task_id = import_id``) → ворк�
 → каждая единица сохраняется ``UpsertImportedItem`` в своей транзакции вместе с событием
 в outbox. Повторная доставка задачи безопасна: завершённое задание не выполняется, а
 единицы сопоставляются по внешним идентификаторам (повторный импорт — ``unchanged``).
+
+Источники (TMDB, файл, музыкальные каталоги) — реестр ``Mapping[ImportSource,
+ImportEntrySource]`` из composition root; источник, которого нет в реестре, выключен.
 """
 
 from __future__ import annotations
 
-import re
 import uuid
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,9 +22,7 @@ import structlog
 from catalog_service.application.dto import EXTERNAL_MATCH_ORDER, ImportedItem
 from catalog_service.application.ports import (
     CatalogUnitOfWork,
-    FilmMetadataProvider,
-    ImportFileReader,
-    MusicMetadataProvider,
+    ImportEntrySource,
     TaskQueue,
     UnitOfWorkFactory,
 )
@@ -36,8 +36,6 @@ from gv_core.errors import (
     ConflictError,
     DependencyUnavailableError,
     FeatureDisabledError,
-    InvalidInputError,
-    NotFoundError,
 )
 from gv_core.ids import uuid7
 
@@ -46,10 +44,10 @@ log = structlog.get_logger(__name__)
 IMPORT_TASK = "import"
 """Тип RabbitMQ-задачи; очередь — ``catalog.import``."""
 
-SEARCH_PREFIX = "search:"
-FILE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,62}\.jsonl$")
-REF_RE = re.compile(r"^[A-Za-z0-9:_\-]{1,64}$")
-MAX_SEARCH_LEN = 100
+IMPORT_CRASHED = "catalog.import_crashed"
+"""Код ошибки задания, упавшего с неожиданным исключением."""
+
+type ImportSources = Mapping[ImportSource, ImportEntrySource]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,22 +75,8 @@ def import_job_view(job: ImportJob) -> dict[str, Any]:
     }
 
 
-def _validate(cmd: ImportCommand) -> None:
-    if cmd.source is ImportSource.FILE:
-        if cmd.ref is not None or not cmd.file_id or not FILE_ID_RE.match(cmd.file_id):
-            raise InvalidInputError(
-                "для source=file нужен file_id вида <имя>.jsonl", code="catalog.import_bad_ref"
-            )
-        return
-    if cmd.file_id is not None or not cmd.ref:
-        raise InvalidInputError("нужен ref", code="catalog.import_bad_ref")
-    if cmd.ref.startswith(SEARCH_PREFIX):
-        query = cmd.ref.removeprefix(SEARCH_PREFIX).strip()
-        if cmd.source is ImportSource.TMDB or not query or len(query) > MAX_SEARCH_LEN:
-            raise InvalidInputError("недопустимый поисковый ref", code="catalog.import_bad_ref")
-        return
-    if not REF_RE.match(cmd.ref):
-        raise InvalidInputError("недопустимый ref", code="catalog.import_bad_ref")
+def _source_disabled(source: ImportSource) -> FeatureDisabledError:
+    return FeatureDisabledError(f"источник {source.value} выключен", code="catalog.source_disabled")
 
 
 class RequestImport:
@@ -102,29 +86,28 @@ class RequestImport:
         self,
         uow_factory: UnitOfWorkFactory,
         tasks: TaskQueue,
-        enabled_sources: frozenset[ImportSource],
+        sources: ImportSources,
         new_id: Callable[[], uuid.UUID] = uuid7,
     ) -> None:
         self._uow = uow_factory
         self._tasks = tasks
-        self._enabled = enabled_sources
+        self._sources = sources
         self._new_id = new_id
 
     async def __call__(self, cmd: ImportCommand) -> dict[str, Any]:
         """Вернуть представление задания (новое или ранее созданное с этим ключом).
 
         Raises:
-            FeatureDisabledError: источник выключен в настройках.
+            FeatureDisabledError: источник выключен (нет в реестре источников).
             InvalidInputError: неверный ``ref``/``file_id``.
             ConflictError: ключ идемпотентности использован с другими параметрами.
             DependencyUnavailableError: не удалось поставить задачу (повторите запрос
                 с тем же ключом — задача будет поставлена снова).
         """
-        if cmd.source not in self._enabled:
-            raise FeatureDisabledError(
-                f"источник {cmd.source.value} выключен", code="catalog.source_disabled"
-            )
-        _validate(cmd)
+        source = self._sources.get(cmd.source)
+        if source is None:
+            raise _source_disabled(cmd.source)
+        source.validate(cmd.ref, cmd.file_id)
         async with self._uow() as uow:
             job = await uow.imports.find_by_key(cmd.actor_id, cmd.idempotency_key)
             if job is not None:
@@ -234,21 +217,21 @@ class RunImport:
         self,
         uow_factory: UnitOfWorkFactory,
         upsert: UpsertImportedItem,
-        *,
-        film_provider: FilmMetadataProvider | None,
-        music_providers: Mapping[ImportSource, MusicMetadataProvider],
-        file_reader: ImportFileReader,
-        search_limit: int = 10,
+        sources: ImportSources,
     ) -> None:
         self._uow = uow_factory
         self._upsert = upsert
-        self._film = film_provider
-        self._music = music_providers
-        self._files = file_reader
-        self._search_limit = search_limit
+        self._sources = sources
 
     async def __call__(self, import_id: uuid.UUID) -> None:
-        """Выполнить задание; ошибки источника фиксируются в задании, а не бросаются."""
+        """Выполнить задание.
+
+        Ошибка приложения (``AppError``: источник выключен, недоступен, нет объекта) —
+        задание ``failed`` с её ``code``, исключение не бросается. Неожиданное исключение —
+        задание ``failed`` с ``catalog.import_crashed`` (сохраняется отдельной
+        транзакцией), а исключение пробрасывается: так задание не остаётся вечно
+        ``running``, а ошибка видна воркеру и в логах.
+        """
         async with self._uow() as uow:
             job = await uow.imports.get(import_id)
             if job is None:
@@ -261,16 +244,14 @@ class RunImport:
             await uow.commit()
 
         try:
-            async for entry in self._entries(job):
-                if isinstance(entry, ValueError):
-                    log.warning("catalog.import_bad_line", import_id=str(job.id), error=str(entry))
-                    job.count(ItemOutcome.FAILED)
-                    continue
-                job.count(await self._upsert_one(job, entry))
-        except NotFoundError as exc:
+            await self._consume(job)
+        except AppError as exc:
             job.fail(exc.code)
-        except (DependencyUnavailableError, FeatureDisabledError) as exc:
-            job.fail(exc.code)
+        except Exception:
+            log.exception("catalog.import_crashed", import_id=str(job.id))
+            job.fail(IMPORT_CRASHED)
+            await self._save(job)
+            raise
         else:
             job.finish()
         log.info(
@@ -279,6 +260,20 @@ class RunImport:
             status=job.status,
             **job.counters.as_dict(),
         )
+        await self._save(job)
+
+    async def _consume(self, job: ImportJob) -> None:
+        source = self._sources.get(job.source)
+        if source is None:
+            raise _source_disabled(job.source)
+        async for entry in source.entries(job):
+            if isinstance(entry, ValueError):
+                log.warning("catalog.import_bad_line", import_id=str(job.id), error=str(entry))
+                job.count(ItemOutcome.FAILED)
+                continue
+            job.count(await self._upsert_one(job, entry))
+
+    async def _save(self, job: ImportJob) -> None:
         async with self._uow() as uow:
             await uow.imports.save(job)
             await uow.commit()
@@ -290,25 +285,3 @@ class RunImport:
             # Битая единица (год вне диапазона, конфликт внешнего id) не валит весь импорт.
             log.warning("catalog.import_item_failed", import_id=str(job.id), code=exc.code)
             return ItemOutcome.FAILED
-
-    async def _entries(self, job: ImportJob) -> AsyncIterator[ImportedItem | ValueError]:
-        if job.source is ImportSource.FILE:
-            assert job.file_id is not None  # noqa: S101 — гарантирует RequestImport
-            async for entry in self._files.read(job.file_id):
-                yield entry
-            return
-        assert job.ref is not None  # noqa: S101
-        if job.source is ImportSource.TMDB:
-            if self._film is None:
-                raise FeatureDisabledError("TMDB выключен", code="catalog.source_disabled")
-            yield await self._film.fetch_film(job.ref)
-            return
-        provider = self._music.get(job.source)
-        if provider is None:
-            raise FeatureDisabledError("источник выключен", code="catalog.source_disabled")
-        if job.ref.startswith(SEARCH_PREFIX):
-            query = job.ref.removeprefix(SEARCH_PREFIX).strip()
-            for item in await provider.search_tracks(query, self._search_limit):
-                yield item
-        else:
-            yield await provider.get_track(job.ref)

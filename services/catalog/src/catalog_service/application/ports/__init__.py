@@ -21,6 +21,7 @@ from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import ExternalSource
 from gv_core.pagination import Page
 from gv_core.uow import UnitOfWork
+from gv_db.idempotency import IdempotencyStore
 from gv_messaging.ports import TaskQueue
 
 __all__ = [
@@ -28,6 +29,8 @@ __all__ = [
     "CatalogUnitOfWork",
     "ClueStatusRepository",
     "FilmMetadataProvider",
+    "IdempotencyStore",
+    "ImportEntrySource",
     "ImportFileReader",
     "ImportJobRepository",
     "MediaItemRepository",
@@ -107,11 +110,10 @@ class ImportJobRepository(Protocol):
 
 
 class AdminActionLog(Protocol):
-    """Аудит админ-мутаций и их ответы для идемпотентных повторов."""
+    """Аудит админ-мутаций (кто, что, над чем и почему).
 
-    async def find(self, actor_id: uuid.UUID, idempotency_key: str) -> RecordedAction | None:
-        """Ранее выполненное действие с этим ключом."""
-        ...
+    Идемпотентность повторов — не здесь, а в ``CatalogUnitOfWork.idempotency``.
+    """
 
     async def record(self, action: RecordedAction) -> None:
         """Записать действие (в транзакции мутации).
@@ -158,6 +160,11 @@ class CatalogUnitOfWork(UnitOfWork, Protocol):
     @property
     def actions(self) -> AdminActionLog:
         """Аудит админ-мутаций."""
+        ...
+
+    @property
+    def idempotency(self) -> IdempotencyStore:
+        """Ключи идемпотентности admin-мутаций (в этой же транзакции)."""
         ...
 
     @property
@@ -254,5 +261,31 @@ class ImportFileReader(Protocol):
 
         Raises:
             NotFoundError: файла нет или ``file_id`` недопустим.
+        """
+        ...
+
+
+class ImportEntrySource(Protocol):
+    """Источник единиц для задания импорта (TMDB, файл, музыкальный каталог…).
+
+    Реестр ``Mapping[ImportSource, ImportEntrySource]`` собирается в composition root:
+    в нём только включённые и настроенные источники, use-cases импорта по типу источника
+    не ветвятся.
+    """
+
+    def validate(self, ref: str | None, file_id: str | None) -> None:
+        """Проверить параметры запроса импорта до создания задания.
+
+        Raises:
+            InvalidInputError: ``catalog.import_bad_ref`` — неверный ``ref``/``file_id``.
+        """
+        ...
+
+    def entries(self, job: ImportJob) -> AsyncIterator[ImportedItem | ValueError]:
+        """Единицы задания: распознанная единица или ошибка строки (не прерывает импорт).
+
+        Raises:
+            AppError: источник недоступен, нет такого объекта и т. п. — задание падает
+                с ``code`` ошибки.
         """
         ...

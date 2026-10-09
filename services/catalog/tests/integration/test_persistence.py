@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
+from typing import TypedDict, Unpack
 
 import pytest
 from catalog_fakes import FakeSearch
@@ -32,13 +33,15 @@ from catalog_service.domain.model import (
     SourceMediaOrigin,
 )
 from catalog_service.infrastructure.container import CatalogContainer
+from catalog_service.infrastructure.db.tables import admin_actions
 from catalog_service.infrastructure.messaging import build_event_handlers
 from catalog_service.infrastructure.search.redis_cache import RedisPrefixCache, RedisRateLimiter
 from catalog_service.infrastructure.search.trgm import TrgmSearch
-from sqlalchemy import select
+from sqlalchemy import Table, select
 
-from gv_core.errors import ConflictError
+from gv_core.errors import ConflictError, NotFoundError
 from gv_core.ids import uuid7
+from gv_db.idempotency import request_fingerprint
 from gv_messaging import EventProcessor, Inbox, Outcome
 from gv_service import Infrastructure
 from gv_testkit import (
@@ -52,22 +55,32 @@ from gv_testkit import (
 pytestmark = pytest.mark.integration
 
 
-def film(tmdb: str = "157336", title: str = "Интерстеллар", **kw: object) -> ImportedItem:
-    base: dict[str, object] = {
-        "kind": MediaKind.FILM,
-        "title": title,
-        "original_title": "Interstellar" if title == "Интерстеллар" else None,
-        "year": 2014,
-        "persons": (PersonRef("tmdb:525", "Кристофер Нолан", PersonRole.DIRECTOR),),
-        "genres": ("фантастика",),
-        "external_refs": {ExternalSource.TMDB: tmdb},
-        "metrics": MediaMetrics(popularity=100.0, vote_count=10),
-        "source_media": (
+class FilmOverrides(TypedDict, total=False):
+    year: int | None
+
+
+def film(
+    tmdb: str = "157336", title: str = "Интерстеллар", **kw: Unpack[FilmOverrides]
+) -> ImportedItem:
+    base = ImportedItem(
+        kind=MediaKind.FILM,
+        title=title,
+        original_title="Interstellar" if title == "Интерстеллар" else None,
+        year=2014,
+        persons=(PersonRef("tmdb:525", "Кристофер Нолан", PersonRole.DIRECTOR),),
+        genres=("фантастика",),
+        external_refs={ExternalSource.TMDB: tmdb},
+        metrics=MediaMetrics(popularity=100.0, vote_count=10),
+        source_media=(
             SourceMediaDraft(SourceMediaKind.POSTER, SourceMediaOrigin.TMDB, "https://i/p.jpg"),
         ),
-    }
-    base.update(kw)
-    return ImportedItem(**base)  # type: ignore[arg-type]
+    )
+    return dataclasses.replace(base, **kw)
+
+
+def outbox_table(c: CatalogContainer) -> Table:
+    assert c.infra.tables is not None
+    return c.infra.tables.outbox
 
 
 async def upsert(c: CatalogContainer, item: ImportedItem) -> ItemOutcome:
@@ -92,7 +105,7 @@ async def test_item_roundtrip_and_outbox_events_match_schema(container: CatalogC
 
     async with container.uow() as uow:
         item = await uow.items.get(item_id)
-        envelopes = await outbox_envelopes(uow.session, container.infra.tables.outbox)  # type: ignore[union-attr]
+        envelopes = await outbox_envelopes(uow.session, outbox_table(container))
     assert item is not None
     assert item.version == 2
     assert item.persons[0].name == "Кристофер Нолан"
@@ -202,9 +215,39 @@ async def test_import_jobs_and_actions(container: CatalogContainer) -> None:
         await uow.actions.record(action)
         await uow.commit()
     async with container.uow() as uow:
-        assert await uow.actions.find(actor, "act-key-01") == action
         with pytest.raises(ConflictError):
             await uow.actions.record(action)
+
+
+async def test_admin_mutation_key_and_audit_in_one_transaction(
+    container: CatalogContainer,
+) -> None:
+    await upsert(container, film())
+    item_id = await item_id_by_tmdb(container, "157336")
+    actor = uuid7()
+    ctx = AdminContext(actor, "k-tx-000001", "проверка")
+    first = await container.block_item(item_id, "moderation", ctx)
+    assert await container.block_item(item_id, "moderation", ctx) == first
+
+    async with container.uow() as uow:
+        record = await uow.idempotency.find(actor, "k-tx-000001")
+        audit = (
+            await uow.session.execute(
+                select(admin_actions).where(admin_actions.c.actor_id == actor)
+            )
+        ).all()
+    assert record is not None and record.response == first
+    assert record.request_hash == request_fingerprint(
+        "item.block", item_id, {"reason_code": "moderation", "reason": "проверка"}
+    )
+    assert len(audit) == 1 and audit[0].reason == "проверка"
+
+    # Мутация упала — ни ключа, ни аудита: повтор с тем же ключом выполнится заново.
+    missing = AdminContext(actor, "k-tx-000002", "проверка")
+    with pytest.raises(NotFoundError):
+        await container.block_item(uuid7(), "moderation", missing)
+    async with container.uow() as uow:
+        assert await uow.idempotency.find(actor, "k-tx-000002") is None
 
 
 async def test_clue_status_upsert(container: CatalogContainer) -> None:
@@ -236,7 +279,8 @@ async def test_trgm_autocomplete_and_search(container: CatalogContainer) -> None
             external_refs={ExternalSource.SPOTIFY: "s1"},
         ),
     )
-    trgm = TrgmSearch(container.infra.sessions)  # type: ignore[arg-type]
+    assert container.infra.sessions is not None
+    trgm = TrgmSearch(container.infra.sessions)
 
     hits = await trgm.autocomplete(SearchQuery("инте", None, 10))
     assert {h.title for h in hits} == {"Интерстеллар", "Интернационал"}
@@ -286,12 +330,13 @@ async def test_own_events_indexed_idempotently(
     catalog_infra: Infrastructure, container: CatalogContainer
 ) -> None:
     index = FakeSearch()
+    # Подмена cached_property фейком того же протокола: mypy ждёт OpenSearchIndex.
     container.search_index = index  # type: ignore[assignment]
     await upsert(container, film())
     item_id = await item_id_by_tmdb(container, "157336")
     await container.block_item(item_id, "moderation", AdminContext(uuid7(), "k-idx-0001", "т"))
     async with container.uow() as uow:
-        created, blocked = await outbox_envelopes(uow.session, catalog_infra.tables.outbox)  # type: ignore[union-attr]
+        created, blocked = await outbox_envelopes(uow.session, outbox_table(container))
 
     assert await _process(catalog_infra, blocked.to_bytes()) is Outcome.PROCESSED
     assert index.docs[item_id].status == "blocked"
@@ -313,18 +358,11 @@ async def test_assets_events_from_contract_examples(
     )
     stale = load_example("media_pipeline.AssetsReady")
     stale = stale.model_copy(
-        update={
-            "event_id": uuid7(),
-            "payload": {**stale.payload, "media_item_id": str(item_id), "version": 1},
-        }
+        update={"payload": {**stale.payload, "media_item_id": str(item_id), "version": 1}}
     )
     failed = load_example("media_pipeline.AssetsFailed")
     failed = failed.model_copy(
-        update={
-            # У примеров контракта общий event_id — иначе inbox счёл бы событие дублем.
-            "event_id": uuid7(),
-            "payload": {**failed.payload, "media_item_id": str(item_id)},
-        }
+        update={"payload": {**failed.payload, "media_item_id": str(item_id)}}
     )
 
     for envelope in (ready, stale, failed):
@@ -371,7 +409,7 @@ async def test_redis_rate_limiter(catalog_infra: Infrastructure) -> None:
 
 async def test_outbox_rows_use_own_topic(container: CatalogContainer) -> None:
     await upsert(container, film())
-    outbox = container.infra.tables.outbox  # type: ignore[union-attr]
+    outbox = outbox_table(container)
     async with container.uow() as uow:
         topics = (await uow.session.execute(select(outbox.c.topic))).scalars().all()
     assert set(topics) == {"catalog.media_item.v1"}

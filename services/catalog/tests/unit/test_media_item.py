@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
+from typing import TypedDict, Unpack
 
 import pytest
 from catalog_service.domain.events import (
@@ -41,28 +43,36 @@ YEAR = 2026
 NOLAN = PersonCredit(uuid7(), "Кристофер Нолан", PersonRole.DIRECTOR, 0)
 
 
-def film_data(**overrides: object) -> ItemData:
-    base: dict[str, object] = {
-        "kind": MediaKind.FILM,
-        "title": "Интерстеллар",
-        "original_title": "Interstellar",
-        "year": 2014,
-        "aliases": (AliasDraft("Interstellar", AliasKind.ALT, "en"),),
-        "persons": (NOLAN,),
-        "genres": ("Sci-Fi", "Drama", "drama"),
-        "external_refs": {ExternalSource.TMDB: "157336"},
-        "metrics": MediaMetrics(popularity=120.5, vote_average=8.4, vote_count=35000),
-        "source_media": (
+class ItemOverrides(TypedDict, total=False):
+    title: str
+    original_title: str | None
+    year: int | None
+    aliases: tuple[AliasDraft, ...]
+    external_refs: dict[ExternalSource, str]
+    metrics: MediaMetrics
+
+
+def film_data(**overrides: Unpack[ItemOverrides]) -> ItemData:
+    base = ItemData(
+        kind=MediaKind.FILM,
+        title="Интерстеллар",
+        original_title="Interstellar",
+        year=2014,
+        aliases=(AliasDraft("Interstellar", AliasKind.ALT, "en"),),
+        persons=(NOLAN,),
+        genres=("Sci-Fi", "Drama", "drama"),
+        external_refs={ExternalSource.TMDB: "157336"},
+        metrics=MediaMetrics(popularity=120.5, vote_average=8.4, vote_count=35000),
+        source_media=(
             SourceMediaDraft(
                 SourceMediaKind.POSTER, SourceMediaOrigin.TMDB, "https://image.tmdb.org/p.jpg"
             ),
         ),
-    }
-    base.update(overrides)
-    return ItemData(**base)  # type: ignore[arg-type]
+    )
+    return dataclasses.replace(base, **overrides)
 
 
-def new_item(**overrides: object) -> MediaItem:
+def new_item(**overrides: Unpack[ItemOverrides]) -> MediaItem:
     return MediaItem.create(uuid7(), film_data(**overrides), N, current_year=YEAR)
 
 
