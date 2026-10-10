@@ -140,6 +140,21 @@ class ServiceTokenLimitSettings(BaseModel):
     per_client_per_min: int = Field(default=60, ge=1)
 
 
+class GuestSettings(BaseModel):
+    """Гостевые сессии (D5 плана этапа 2): ``GV_GUEST__*``."""
+
+    per_ip_per_hour: int = Field(default=20, ge=1)
+    """Новых гостевых сессий с одного IP в час (лимитер fail-open, как у входа)."""
+    refresh_ttl_s: int = Field(default=2_592_000, ge=3600)
+    """Срок refresh-токена гостя; столько же живёт заброшенная гостевая сессия."""
+    revoked_retention_s: int = Field(default=86_400, ge=0)
+    """Сколько хранить отозванную гостевую сессию до удаления."""
+    purge_interval_s: float = Field(default=3600, gt=0)
+    purge_jitter_s: float = Field(default=300, ge=0)
+    purge_batch: int = Field(default=1000, ge=1, le=10_000)
+    purge_max_batches: int = Field(default=20, ge=1)
+
+
 class Settings(ServiceSettings):
     """Настройки сервиса. Новые поля добавлять здесь с безопасными значениями по умолчанию."""
 
@@ -158,6 +173,7 @@ class Settings(ServiceSettings):
     """``GV_SERVICE_CLIENTS`` — JSON-массив клиентов сервисных токенов; пусто — выдачи нет."""
     service_token: ServiceTokenSettings = ServiceTokenSettings()
     service_token_limit: ServiceTokenLimitSettings = ServiceTokenLimitSettings()
+    guest: GuestSettings = GuestSettings()
     bootstrap_admin_emails: tuple[str, ...] = ()
     redis_key_prefix: str = ""
     """Пространство имён ключей Redis (тесты и несколько стендов на одном Redis).

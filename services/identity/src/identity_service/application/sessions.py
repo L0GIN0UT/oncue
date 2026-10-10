@@ -36,6 +36,9 @@ class IssuedSession:
     perms: frozenset[str]
     display_name: str
     identity_version: int
+    is_guest: bool = False
+    refresh_ttl_s: int | None = None
+    """Срок refresh-токена этой сессии, если он отличается от общего (гость)."""
 
 
 class SessionIssuer:

@@ -26,16 +26,32 @@ class SessionKind(StrEnum):
 
 @dataclass(slots=True)
 class Session:
-    """Сессия пользователя; ``id`` попадает в access-токен как ``sid``."""
+    """Сессия пользователя или гостя; ``id`` попадает в access-токен как ``sid``.
+
+    Субъект — ровно один: ``user_id`` у пользователя, ``guest_id`` у гостя (D5 плана
+    этапа 2, ``domain/guest.py``). Гостевая сессия бывает только web.
+    """
 
     id: UUID
-    user_id: UUID
+    user_id: UUID | None
     kind: SessionKind
     created_at: datetime
     last_seen_at: datetime | None = None
     revoked_at: datetime | None = None
     revoke_reason: str | None = None
     ip_prefix: str | None = None
+    guest_id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        if (self.user_id is None) == (self.guest_id is None):
+            raise ValueError("у сессии ровно один субъект: user_id или guest_id")
+        if self.guest_id is not None and self.kind is not SessionKind.WEB:
+            raise ValueError("гостевая сессия бывает только web")
+
+    @property
+    def is_guest(self) -> bool:
+        """Сессия гостя (без аккаунта)."""
+        return self.guest_id is not None
 
     @property
     def is_active(self) -> bool:

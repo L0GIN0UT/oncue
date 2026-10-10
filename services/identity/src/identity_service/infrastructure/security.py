@@ -23,6 +23,7 @@ from gv_core.clock import Clock
 from gv_core.ids import uuid7
 from identity_service.application.ports import IssuedAccess
 from identity_service.application.ports.service_tokens import IssuedServiceToken
+from identity_service.domain.guest import GUEST_ROLE
 
 # ----------------------------------------------------------------------------- пароли
 
@@ -206,18 +207,37 @@ class JwtIssuer:
         self, *, user_id: UUID, session_id: UUID, roles: Iterable[str], perms: Iterable[str]
     ) -> IssuedAccess:
         """Подписать токен активным ключом."""
+        return self._sign(
+            {
+                "sub": str(user_id),
+                "sid": str(session_id),
+                "roles": list(roles),
+                "perms": list(perms),
+                "sanctions": 0,
+                "plan": "free_all",
+            }
+        )
+
+    def issue_guest_access(self, *, guest_id: UUID, session_id: UUID) -> IssuedAccess:
+        """Токен гостя (D5): без прав и плана, ``gst = true``; срок — как у пользователя."""
+        return self._sign(
+            {
+                "sub": str(guest_id),
+                "sid": str(session_id),
+                "roles": [GUEST_ROLE],
+                "perms": [],
+                "gst": True,
+            }
+        )
+
+    def _sign(self, subject_claims: dict[str, Any]) -> IssuedAccess:
         key = self._keys.active
         now = self._clock.now()
         claims = {
+            **subject_claims,
             "iss": self._issuer,
             "aud": self._audience,
-            "sub": str(user_id),
-            "sid": str(session_id),
             "jti": str(uuid7()),
-            "roles": list(roles),
-            "perms": list(perms),
-            "sanctions": 0,
-            "plan": "free_all",
             "iat": now,
             "exp": now + timedelta(seconds=self._ttl),
         }

@@ -74,15 +74,37 @@ sessions = Table(
     "sessions",
     _md,
     Column("id", Uuid, primary_key=True),
-    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    # NULL у гостевой сессии (миграция 0006, D5 плана этапа 2).
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=True),
     Column("kind", String(16), nullable=False),
     Column("created_at", _TS, nullable=False),
     Column("last_seen_at", _TS, nullable=True),
     Column("revoked_at", _TS, nullable=True),
     Column("revoke_reason", String(32), nullable=True),
     Column("ip_prefix", String(64), nullable=True),
+    Column("subject_kind", String(16), nullable=False, server_default=text("'user'")),
+    Column("guest_id", Uuid, nullable=True),
     CheckConstraint("kind IN ('web', 'admin')", name="kind_known"),
+    CheckConstraint("subject_kind IN ('user', 'guest')", name="subject_kind_known"),
+    CheckConstraint(
+        "(subject_kind = 'user' AND user_id IS NOT NULL AND guest_id IS NULL) OR "
+        "(subject_kind = 'guest' AND user_id IS NULL AND guest_id IS NOT NULL AND kind = 'web' "
+        "AND last_seen_at IS NOT NULL)",
+        name="subject_consistent",
+    ),
     Index("ix_sessions_user_active", "user_id", postgresql_where=text("revoked_at IS NULL")),
+    Index(
+        "ix_sessions_guest_id",
+        "guest_id",
+        unique=True,
+        postgresql_where=text("guest_id IS NOT NULL"),
+    ),
+    # Очистка заброшенных гостевых сессий (PurgeGuestSessions).
+    Index(
+        "ix_sessions_guest_last_seen",
+        "last_seen_at",
+        postgresql_where=text("subject_kind = 'guest'"),
+    ),
 )
 
 refresh_tokens = Table(

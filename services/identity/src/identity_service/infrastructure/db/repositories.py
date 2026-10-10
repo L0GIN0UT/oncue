@@ -34,6 +34,7 @@ from identity_service.domain import (
     User,
     UserStatus,
 )
+from identity_service.domain.guest import subject_kind
 from identity_service.infrastructure.db.tables import (
     TABLES,
     auth_identities,
@@ -303,6 +304,8 @@ class SqlSessionRepository:
             "revoked_at": s.revoked_at,
             "revoke_reason": s.revoke_reason,
             "ip_prefix": s.ip_prefix,
+            "subject_kind": subject_kind(s).value,
+            "guest_id": s.guest_id,
         }
 
     @staticmethod
@@ -316,6 +319,7 @@ class SqlSessionRepository:
             revoked_at=row.revoked_at,
             revoke_reason=row.revoke_reason,
             ip_prefix=row.ip_prefix,
+            guest_id=row.guest_id,
         )
 
     @staticmethod
