@@ -1,4 +1,3 @@
-# Черновик сида (шаг 0a плана этапа 2, §2.5); наполняет поток B.
 # clue.params совпадают с профилем audio_intro/default media-pipeline (D7: params_hash).
 key: music.daily.classic
 title_i18n: modes.music.daily.classic.title
