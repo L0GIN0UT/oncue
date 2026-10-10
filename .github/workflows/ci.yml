@@ -141,7 +141,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
       - name: Сканирование образа
         if: matrix.service != ''
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/guessverse-${{ matrix.service }}:${{ github.sha }}
           severity: CRITICAL,HIGH
