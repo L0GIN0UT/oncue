@@ -94,19 +94,26 @@ def test_scenario_guards(seed_body: SeedBody, track: Any) -> None:
 
 # ----------------------------------------------------------------------------- движок
 def test_engine_static_view(seed_body: SeedBody) -> None:
-    engine = build_engine(seed_body("music.random.classic"))
+    # Пул и пресеты сида подстраиваются под seeds/catalog, поэтому сверяемся с самим сидом,
+    # а неизменные свойства загадки (уровни, очки за раунд) проверяем явно.
+    body = seed_body("music.random.classic")
+    engine = build_engine(body)
     assert [lvl.hint["seconds"] for lvl in engine.levels()] == [0.5, 1, 2, 4, 8, 15]
     assert engine.levels_count == 6
     assert engine.playable_for.clue_type == "audio_intro"
     assert len(engine.clue_params_hash) == 64
-    assert [p.id for p in engine.presets()] == ["y2000s", "y2010s", "rock"]
-    assert engine.min_playable() == 20
-    assert engine.round_max_score() == 6 and engine.max_score() == 60 and engine.max_score(3) == 18
+    assert [p.id for p in engine.presets()] == [p["id"] for p in body["source"]["params"]["presets"]]
+    rounds = body["session"]["rounds"]
+    assert engine.min_playable() == body["source"]["params"]["pool"]["min_playable"]
+    assert engine.round_max_score() == 6
+    assert engine.max_score() == 6 * rounds and engine.max_score(3) == 18
     with pytest.raises(ValueError, match="отрицательным"):
         engine.max_score(-1)
+    rock = next(p for p in body["source"]["params"]["presets"] if p["id"] == "rock")
     query = engine.pool_query("rock")
     assert isinstance(query, PoolQuery)
-    assert query.genres_any == frozenset({"rock"}) and query.playable_for == engine.playable_for
+    assert query.genres_any == frozenset(rock["filters"]["genres_any"])
+    assert query.playable_for == engine.playable_for
     with pytest.raises(PresetNotFoundError):
         engine.pool_query("jazz")
 
