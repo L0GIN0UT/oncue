@@ -18,7 +18,6 @@ import signal
 import sys
 from collections.abc import Awaitable, Callable, Iterator
 from enum import StrEnum
-from typing import TYPE_CHECKING, cast
 
 import structlog
 import uvicorn
@@ -26,9 +25,6 @@ import uvicorn
 from admin_service.settings import Settings
 from gv_observability.logging import configure_logging
 from gv_service.metrics_server import MetricsServer
-
-if TYPE_CHECKING:
-    from gv_messaging.consumer import EventProcessor
 
 log = structlog.get_logger(__name__)
 
@@ -147,9 +143,9 @@ class Runtime:
                 bootstrap_servers=bootstrap,
                 group=GROUP,
                 topics=list(TOPICS),
-                # KafkaEventConsumer вызывает только process(raw, source=...): обработчик
-                # admin совместим по протоколу, но транзакция и inbox у него в Django ORM.
-                processor=cast("EventProcessor", processor),
+                # Транспорт зависит от EventProcessorPort: обработчик admin (транзакция и
+                # inbox в Django ORM) подходит по протоколу без приведения типов.
+                processor=processor,
             )
             await consumer.run(self.stop)
         finally:

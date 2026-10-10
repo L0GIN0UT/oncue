@@ -6,13 +6,16 @@ from django.contrib import admin
 from django.contrib.staticfiles.views import serve
 from django.urls import include, path, re_path
 
-from admin_service.core import auth_views
+from admin_service.core import auth_views, converters
 from admin_service.core.forms import IdentityLoginForm
 
 admin.site.site_header = "Guessverse — админка"
 admin.site.site_title = "Guessverse"
 admin.site.index_title = "Разделы"
 admin.site.login_form = IdentityLoginForm
+
+# До include(): маршруты разделов используют конвертеры modekey и isodate.
+converters.register()
 
 urlpatterns = [
     # Раньше admin.site.urls: те же пути (и имена admin:login/logout ведут сюда же),
@@ -21,6 +24,8 @@ urlpatterns = [
     path("logout/", auth_views.logout),
     path("catalog/", include("admin_service.apps.catalog.urls")),
     path("users/", include("admin_service.apps.users.urls")),
+    path("game/modes/", include("admin_service.apps.game_config.urls")),
+    path("game/daily/", include("admin_service.apps.game_daily.urls")),
     # Статика django-admin прямо из пакетов (без collectstatic и отдельного сервера):
     # админка внутренняя и малонагруженная, а общий Dockerfile не меняем (D7).
     re_path(r"^static/(?P<path>.*)$", serve, {"insecure": True}),

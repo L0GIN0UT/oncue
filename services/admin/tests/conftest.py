@@ -33,6 +33,7 @@ django.setup()
 IDENTITY = "http://identity.test:8000"
 CATALOG = "http://catalog.test:8000"
 MEDIA = "http://media.test:8000"
+GAME = "http://game.test:8000"
 JWKS = f"{IDENTITY}/.well-known/jwks.json"
 ADMIN_PERMS = (
     "admin.access",
@@ -44,8 +45,22 @@ ADMIN_PERMS = (
     "catalog.edit_aliases",
     "media.upload_source",
     "media.regenerate",
+    "config.modes.view",
+    "config.modes.edit",
+    "config.modes.publish",
+    "game.daily.view",
+    "game.daily.curate",
 )
-MODERATOR_PERMS = ("admin.access", "users.view", "catalog.block_item", "catalog.edit_aliases")
+# Модератор этапа 2 (docs/plans/stage-2.md §2.7): конфиги — только просмотр, наборы дня — курация.
+MODERATOR_PERMS = (
+    "admin.access",
+    "users.view",
+    "catalog.block_item",
+    "catalog.edit_aliases",
+    "config.modes.view",
+    "game.daily.view",
+    "game.daily.curate",
+)
 
 
 @pytest.fixture(scope="session")
@@ -97,7 +112,12 @@ def gv_settings(settings: Any) -> Any:
     settings.GV_JWKS_URL = JWKS
     settings.GV_JWT_ISSUER = TEST_ISSUER
     settings.GV_JWT_AUDIENCE = TEST_AUDIENCE
-    settings.GV_SERVICE_URLS = {"identity": IDENTITY, "catalog": CATALOG, "media_pipeline": MEDIA}
+    settings.GV_SERVICE_URLS = {
+        "identity": IDENTITY,
+        "catalog": CATALOG,
+        "media_pipeline": MEDIA,
+        "game": GAME,
+    }
     settings.GV_IP_ALLOWLIST = ["127.0.0.0/8"]
     # Счётчики лимита входа (кэш в памяти процесса) не должны переходить между тестами.
     from django.core.cache import cache
@@ -179,12 +199,14 @@ def _check_request(service: str, request: httpx.Request) -> None:
 
     ``Idempotency-Key`` в снимке необязателен (заголовок читает зависимость
     ``gv_service.IdempotencyKey``, а не сигнатура ручки), но сервис без него отвечает 422 —
-    поэтому для admin-мутаций проверяется здесь.
+    поэтому для admin-мутаций, где контракт объявляет заголовок, проверяется здесь
+    (POST без побочных эффектов — ``validate`` у game — его не объявляет).
     """
     method, path = request.method, request.url.path
     op, template = _operation(service, method, path)
     where = f"{service} {method} {path} (запрос)"
-    if method in _MUTATING and template.startswith("/admin/"):
+    declares_key = any(p.get("name") == "Idempotency-Key" for p in op.get("parameters", []))
+    if method in _MUTATING and template.startswith("/admin/") and declares_key:
         assert request.headers.get("Idempotency-Key"), f"{where}: нет Idempotency-Key"
     content = op.get("requestBody", {}).get("content")
     schema = _json_schema(content)
@@ -272,6 +294,12 @@ def media() -> Iterator[ContractStub]:
     yield from _contract_stub(MEDIA, "media_pipeline")
 
 
+@pytest.fixture
+def game() -> Iterator[ContractStub]:
+    """Заглушка game (по contracts/openapi/game.json, admin-API — docs/plans/stage-2.md §2.6)."""
+    yield from _contract_stub(GAME, "game")
+
+
 def _session_body(
     token: str,
     *,
@@ -291,6 +319,12 @@ def _session_body(
 
 def _problem(status: int, code: str, title: str = "Ошибка") -> dict[str, Any]:
     return {"type": "about:blank", "title": title, "status": status, "code": code}
+
+
+@pytest.fixture
+def moderator_perms() -> tuple[str, ...]:
+    """Права роли moderator (этап 2: конфиги режимов — только просмотр)."""
+    return MODERATOR_PERMS
 
 
 @pytest.fixture

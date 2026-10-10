@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'game_config:mode' key=key %}">← к режиму</a> ·
+   <a href="?fmt=yaml">YAML</a> / <a href="?fmt=json">JSON</a> (перечитать с сервера)</p>
+{% if is_new %}<p>Режима <code>{{ key }}</code> ещё нет: черновик появится после первого сохранения.</p>{% endif %}
+{% include "admin_game_config/_errors.html" %}
+{% if conflict_diff %}
+<h2>Черновик изменили, пока вы его правили</h2>
+<p>Ваш текст не сохранён и остался в поле ниже. Изменения относительно текущего черновика:</p>
+{% include "admin_game_config/_diff.html" with diff=conflict_diff %}
+{% endif %}
+{% if form %}
+<form method="post">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.fmt.errors }}<p>{{ form.fmt.label_tag }} {{ form.fmt }}</p>
+  {{ form.text.errors }}{{ form.text }}
+  {{ form.base_revision }}{{ form.idempotency_key }}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  <button type="submit" name="action" value="validate">Проверить</button>
+  <button type="submit" name="action" value="save">Сохранить черновик</button>
+</form>
+{% endif %}
+{% endblock %}

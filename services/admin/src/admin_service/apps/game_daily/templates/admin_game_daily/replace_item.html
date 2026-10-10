@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{{ back_url }}">← к календарю</a></p>
+{% if daily_set %}
+<div class="module">
+  <table>
+    <tr><th>Режим</th><td>{{ key }}</td></tr>
+    <tr><th>День</th><td>{{ day|date:"Y-m-d" }} — {{ daily_set.status }}</td></tr>
+    <tr><th>Раунд</th><td>{{ index|add:1 }}</td></tr>
+    <tr><th>Сейчас</th><td>{% if item %}{{ item.title }} ({{ item.year|default:"—" }}), играбельна: {% if item.playable %}да{% else %}нет{% endif %}{% else %}—{% endif %}</td></tr>
+  </table>
+</div>
+{% elif not error %}
+<p>Набора на этот день нет.</p>
+{% endif %}
+
+{% if locked %}
+<p><strong>Набор заблокирован (день начался) — менять его нельзя.</strong></p>
+{% elif daily_set %}
+<h2>Найти замену</h2>
+<form method="get">{{ search.as_p }}<input type="submit" value="Искать"></form>
+{% if search_error %}<ul class="messagelist"><li class="error">{{ search_error }}</li></ul>{% endif %}
+<form method="post">
+  {% csrf_token %}
+  {{ form.non_field_errors }}{{ form.media_item_id.errors }}
+  {% if candidates %}
+  <table>
+    <thead><tr><th></th><th>Название</th><th>Год</th><th>Вид</th><th>Статус</th><th>Играбельна</th></tr></thead>
+    {% for c in candidates %}
+    <tr>
+      <td><input type="radio" name="media_item_id" value="{{ c.media_item_id }}" id="cand-{{ forloop.counter }}"{% if not c.selectable %} disabled{% endif %}></td>
+      <td><label for="cand-{{ forloop.counter }}">{{ c.title }}</label></td>
+      <td>{{ c.year|default:"—" }}</td><td>{{ c.kind }}</td><td>{{ c.status }}</td>
+      <td>{% if c.playable %}да{% elif c.playable is None %}?{% else %}нет{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>{{ form.media_item_id.label_tag }} {{ form.media_item_id }}</p>
+  {% endif %}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  {{ form.idempotency_key }}
+  <input type="submit" value="Заменить">
+</form>
+{% endif %}
+{% endblock %}

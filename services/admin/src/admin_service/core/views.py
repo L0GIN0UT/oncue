@@ -36,16 +36,28 @@ def service_client(request: HttpRequest, service: str) -> ServiceClient:
     )
 
 
+def read(
+    request: HttpRequest, service: str, call: Callable[[ServiceClient], Any]
+) -> tuple[Any, ServiceError | None]:
+    """Чтение через клиент сервиса: ``(данные, None)`` или ``(None, ошибка)``.
+
+    Как ``fetch``, но отдаёт саму ``ServiceError``: странице иногда важен статус или код
+    (404 — «режима ещё нет, создаём», а не «сервис сломан»).
+    """
+    try:
+        with service_client(request, service) as client:
+            return call(client), None
+    except ServiceError as exc:
+        return None, exc
+
+
 def fetch(request: HttpRequest, service: str, path: str, **params: Any) -> tuple[Any, str | None]:
     """GET к сервису: ``(данные, None)`` или ``(None, сообщение об ошибке)``.
 
     Недоступность одного сервиса не роняет страницу: раздел показывает ошибку.
     """
-    try:
-        with service_client(request, service) as client:
-            return client.get(path, params=params), None
-    except ServiceError as exc:
-        return None, exc.message
+    data, error = read(request, service, lambda c: c.get(path, params=params))
+    return data, error.message if error is not None else None
 
 
 def mutate(

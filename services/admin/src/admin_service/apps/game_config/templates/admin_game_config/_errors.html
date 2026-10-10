@@ -1,0 +1,21 @@
+{% if validation %}
+  {% if validation.ok %}
+  <ul class="messagelist"><li class="success">Конфиг валиден{% if validation.playable_count is not None %} — играбельных единиц в пуле: {{ validation.playable_count }}{% endif %}</li></ul>
+  {% else %}
+  <ul class="messagelist"><li class="error">Ошибки проверки: {{ validation.errors|length }}</li></ul>
+  {% endif %}
+  {% if validation.errors %}
+  <table>
+    <thead><tr><th>Строка</th><th>Поле</th><th>Код</th><th>Текст</th></tr></thead>
+    {% for e in validation.errors %}
+    <tr><td>{{ e.line|default:"—" }}</td><td><code>{{ e.path }}</code></td><td>{{ e.code }}</td><td>{{ e.message_key }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  {% if validation.warnings %}
+  <ul class="messagelist">{% for w in validation.warnings %}<li class="warning">Предупреждение: {{ w }}{% if validation.playable_count is not None %} (играбельных в пуле: {{ validation.playable_count }}){% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if validation.errors %}
+  <div class="gv-lines">{% for l in validation.lines %}<div{% if l.error %} class="err"{% endif %}><span class="num">{{ l.number }}</span>{{ l.text }}</div>{% endfor %}</div>
+  {% endif %}
+{% endif %}
