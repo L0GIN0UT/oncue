@@ -44,3 +44,20 @@ dump.rdb
 # TLS-сертификаты gateway (выпускает certbot / `gv dev certs`)
 infra/nginx/certs/*
 !infra/nginx/certs/.gitkeep
+
+# Архивы и выгрузки (поставки проекта, бэкапы) — в репозиторий не попадают
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+
+# Windows / OneDrive
+desktop.ini
+~$*
+*.tmp
+
+# Локальные артефакты
+*.log
+*.sqlite3
