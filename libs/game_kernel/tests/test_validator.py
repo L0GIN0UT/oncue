@@ -1,0 +1,287 @@
+"""``EngineFactory.validate`` на сидах и на сломанных конфигах: код и путь на каждое правило."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from gv_game_kernel import (
+    ConfigError,
+    ConfigIssue,
+    EngineFactory,
+    PluginRegistry,
+    parse_mode_config,
+    register_builtin,
+    register_collection,
+)
+from gv_game_kernel.builtin import AudioIntroParams
+
+pytestmark = pytest.mark.unit
+
+SeedBody = Callable[[str], dict[str, Any]]
+SEEDS = sorted(
+    p.stem for p in (Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml")
+)
+FACTORY = EngineFactory(register_builtin(PluginRegistry()))
+
+
+def _issues(body: dict[str, Any], factory: EngineFactory = FACTORY) -> list[ConfigIssue]:
+    return factory.validate(parse_mode_config(body))
+
+
+@pytest.mark.parametrize("key", SEEDS)
+def test_seeds_are_valid_and_build(key: str, seed_body: SeedBody) -> None:
+    config = parse_mode_config(seed_body(key))
+    assert FACTORY.validate(config) == []
+    engine = FACTORY.build(config)
+    assert engine.levels_count == 6
+    assert engine.max_score() == 6 * config.session.rounds
+
+
+def _set(body: dict[str, Any], path: str, value: Any) -> dict[str, Any]:
+    node = body
+    *parents, last = path.split(".")
+    for part in parents:
+        node = node[part]
+    node[last] = value
+    return body
+
+
+# (сид, путь в теле, новое значение, ожидаемая проблема)
+BROKEN: list[tuple[str, str, Any, ConfigIssue]] = [
+    (
+        "music.daily.classic",
+        "source.type",
+        "marathon",
+        ConfigIssue("source.type", "config.unknown_plugin"),
+    ),
+    (
+        "music.daily.classic",
+        "clue.type",
+        "description",
+        ConfigIssue("clue.type", "config.unknown_plugin"),
+    ),
+    (
+        "music.daily.classic",
+        "answer.matcher.type",
+        "embeddings",
+        ConfigIssue("answer.matcher.type", "config.unknown_plugin"),
+    ),
+    (
+        "music.daily.classic",
+        "scoring.type",
+        "party_speed",
+        ConfigIssue("scoring.type", "config.unknown_plugin"),
+    ),
+    (
+        "music.daily.classic",
+        "answer.partial",
+        ["franchise"],
+        ConfigIssue("answer.partial[0]", "config.unknown_plugin"),
+    ),
+    (
+        "music.daily.classic",
+        "answer.partial",
+        ["artist", "artist"],
+        ConfigIssue("answer.partial[1]", "config.duplicate_partial"),
+    ),
+    (
+        "film.daily.frame",
+        "answer.partial",
+        ["artist"],
+        ConfigIssue("answer.partial[0]", "config.partial_domain_unsupported"),
+    ),
+    ("music.daily.classic", "domain", "film", ConfigIssue("domain", "config.domain_unsupported")),
+    (
+        "music.daily.classic",
+        "source.params.size",
+        4,
+        ConfigIssue("source.params.size", "config.rounds_mismatch"),
+    ),
+    (
+        "music.daily.classic",
+        "source.params.pool.min_playable",
+        3,
+        ConfigIssue("source.params.pool.min_playable", "config.min_playable_below_rounds"),
+    ),
+    (
+        "music.daily.classic",
+        "source.params.timezone",
+        "Mars/Base",
+        ConfigIssue("source.params.timezone", "schema.timezone_unknown"),
+    ),
+    (
+        "music.daily.classic",
+        "source.params.size",
+        "5",
+        ConfigIssue("source.params.size", "schema.int_type"),
+    ),
+    (
+        "music.daily.classic",
+        "source.params.extra",
+        1,
+        ConfigIssue("source.params.extra", "schema.extra_forbidden"),
+    ),
+    (
+        "music.daily.classic",
+        "source.params.pool.years",
+        {"from": 2010, "to": 2000},
+        ConfigIssue("source.params.pool.years", "schema.years_range"),
+    ),
+    (
+        "music.daily.classic",
+        "clue.params.levels",
+        [],
+        ConfigIssue("clue.params.levels", "schema.too_short"),
+    ),
+    (
+        "music.daily.classic",
+        "answer.matcher.params.typo",
+        [{"min_len": 5}],
+        ConfigIssue("answer.matcher.params.typo[0].max_distance", "schema.missing"),
+    ),
+    (
+        "music.daily.classic",
+        "scoring.params.points",
+        [6, 5, 4],
+        ConfigIssue("scoring.params.points", "config.levels_mismatch"),
+    ),
+    (
+        "music.daily.classic",
+        "scoring.params.points",
+        [6, 5, 4, 3, 2, 7],
+        ConfigIssue("scoring.params.points[5]", "config.points_increasing"),
+    ),
+    (
+        "music.daily.classic",
+        "scoring.params.partial_ratio",
+        1.5,
+        ConfigIssue("scoring.params.partial_ratio", "schema.less_than_equal"),
+    ),
+    (
+        "music.daily.classic",
+        "scoring",
+        {
+            "type": "by_speed",
+            "params": {"max_points": 10, "min_points": 50, "window_s": 20, "partial_ratio": 0.5},
+        },
+        ConfigIssue("scoring.params.min_points", "config.min_above_max"),
+    ),
+    (
+        "film.random.frame",
+        "source.params.presets",
+        [
+            {"id": "a", "title_i18n": "p.a", "filters": {}},
+            {"id": "a", "title_i18n": "p.b", "filters": {}},
+        ],
+        ConfigIssue("source.params.presets[1].id", "config.duplicate_preset"),
+    ),
+    (
+        "film.random.frame",
+        "source.params.presets",
+        [{"id": "a", "title_i18n": "p.a", "filters": {"kinds": ["track"]}}],
+        ConfigIssue("source.params.presets[0].filters.kinds", "config.preset_filter_empty"),
+    ),
+    (
+        "music.random.classic",
+        "source.params.pool.genres_any",
+        ["pop"],
+        ConfigIssue("source.params.presets[2].filters.genres_any", "config.preset_filter_empty"),
+    ),
+    (
+        "music.random.classic",
+        "source.params.pool.years",
+        {"from": 2015},
+        ConfigIssue("source.params.presets[0].filters.years", "config.preset_filter_empty"),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("seed", "path", "value", "issue"), BROKEN, ids=[f"{b[3].code}:{b[3].path}" for b in BROKEN]
+)
+def test_broken_config_reports_issue(
+    seed: str, path: str, value: Any, issue: ConfigIssue, seed_body: SeedBody
+) -> None:
+    issues = _issues(_set(seed_body(seed), path, value))
+    assert issue in issues, issues
+
+
+def test_every_rule_code_is_covered() -> None:
+    codes = {b[3].code for b in BROKEN}
+    assert codes >= {
+        "config.unknown_plugin",
+        "config.duplicate_partial",
+        "config.partial_domain_unsupported",
+        "config.domain_unsupported",
+        "config.rounds_mismatch",
+        "config.min_playable_below_rounds",
+        "config.levels_mismatch",
+        "config.points_increasing",
+        "config.min_above_max",
+        "config.duplicate_preset",
+        "config.preset_filter_empty",
+    }
+
+
+def test_session_kind_must_be_supported(seed_body: SeedBody) -> None:
+    factory = EngineFactory(
+        register_builtin(PluginRegistry()), supported_sessions=frozenset({"duel"})
+    )
+    assert _issues(seed_body("music.daily.classic"), factory) == [
+        ConfigIssue("session.kind", "config.session_unsupported")
+    ]
+
+
+def test_answer_format_must_be_supported(seed_body: SeedBody) -> None:
+    class LiteOnlyClue:
+        key = "lite_clue"
+        domains = frozenset({"music"})
+        params_schema = AudioIntroParams
+        supported_answer_formats = frozenset({"lite"})
+
+        def levels(self, params: Any) -> list[Any]:
+            return [object()] * 6
+
+    registry = register_builtin(PluginRegistry())
+    registry.register_clue(LiteOnlyClue())  # type: ignore[arg-type]  # неполный плагин для теста
+    body = _set(seed_body("music.daily.classic"), "clue.type", "lite_clue")
+    assert _issues(body, EngineFactory(registry)) == [
+        ConfigIssue("answer.format", "config.answer_format_unsupported")
+    ]
+
+
+def test_collection_source_is_not_registered_by_default(seed_body: SeedBody) -> None:
+    body = _set(
+        seed_body("music.random.classic"),
+        "source",
+        {"type": "collection", "params": {"collection_id": "00000000-0000-0000-0000-000000000001"}},
+    )
+    assert ConfigIssue("source.type", "config.unknown_plugin") in _issues(body)
+    with_collection = EngineFactory(register_collection(register_builtin(PluginRegistry())))
+    assert _issues(body, with_collection) == []
+
+
+def test_issues_are_collected_together(seed_body: SeedBody) -> None:
+    body = seed_body("music.daily.classic")
+    body["domain"] = "film"
+    body["source"]["params"]["size"] = 7
+    body["scoring"]["params"]["points"] = [1, 2]
+    body["clue"]["params"]["levels"] = [{"seconds": -1}]
+    issues = _issues(body)
+    paths = {i.path for i in issues}
+    # Ошибка схемы загадки: перекрёстные проверки (число уровней) не выполняются.
+    assert {"domain", "clue.params.levels[0].seconds", "answer.partial[0]"} <= paths
+    assert "scoring.params.points" not in paths
+
+
+def test_build_raises_config_error_with_all_issues(seed_body: SeedBody) -> None:
+    body = _set(seed_body("music.daily.classic"), "source.params.size", 9)
+    with pytest.raises(ConfigError) as info:
+        FACTORY.build(parse_mode_config(body))
+    assert info.value.details == {
+        "errors": [{"path": "source.params.size", "code": "config.rounds_mismatch"}]
+    }

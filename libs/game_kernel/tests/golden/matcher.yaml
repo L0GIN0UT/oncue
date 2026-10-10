@@ -1,0 +1,130 @@
+# Golden-таблица сверки ответов (matcher title_alias + частичный ответ artist).
+# Контракт семантики для game: менять только осознанно, вместе с планом/ADR.
+#
+# items — каталог для кейсов. aliases — нормализованные алиасы всех видов (как в
+# catalog.MediaItemCreated aliases[].normalized), title_aliases — виды title/alt
+# (по умолчанию = aliases), artists — исполнители (person с ролью artist).
+# params — параметры matcher по умолчанию (как в сидах), case.params переопределяет.
+# answer: text — свободный текст; item — выбор единицы из автокомплита (ключ в items);
+# item_unknown — id, которого нет в проекции game.
+# expect: exact | partial | miss; partial_kind — вид частичного ответа.
+
+params:
+  typo:
+    - { min_len: 5, max_distance: 1 }
+    - { min_len: 10, max_distance: 2 }
+  accept_same_title: true
+
+partial: [artist]
+
+items:
+  interstellar:
+    domain: film
+    title: Интерстеллар
+    aliases: [интерстеллар, interstellar]
+  hedgehog:
+    domain: film
+    title: Ёжик в тумане
+    aliases: [ежик в тумане, ezhik v tumane]
+  matrix:
+    domain: film
+    title: Матрица
+    aliases: [матрица, matrix, matritsa]
+  matrix_1999_remake:
+    domain: film
+    title: The Matrix
+    aliases: [matrix]
+  war_and_peace:
+    domain: film
+    title: Война и мир
+    aliases: [война и мир, voyna i mir, war and peace]
+  rock_and_roll:
+    domain: music
+    title: Rock and Roll
+    aliases: [rock and roll]
+    artists: [Led Zeppelin]
+  yesterday:
+    domain: music
+    title: Yesterday
+    aliases: [yesterday]
+    artists: [The Beatles]
+  yesterday_cover:
+    domain: music
+    title: Yesterday
+    aliases: [yesterday]
+    artists: [Ray Charles]
+  let_it_be:
+    domain: music
+    title: Let It Be
+    aliases: [let it be]
+    artists: [The Beatles]
+    artist_ids_from: yesterday
+  iskala:
+    domain: music
+    title: Искала
+    aliases: [искала, iskala]
+    artists: [Земфира]
+  lotr:
+    domain: film
+    title: Властелин колец
+    aliases: [властелин колец, lord of the rings, lotr]
+    title_aliases: [властелин колец, lord of the rings]
+  lotr_short_clash:
+    domain: film
+    title: LOTR
+    aliases: [lotr]
+
+cases:
+  # --- точное совпадение и нормализация
+  - { id: same_title, target: interstellar, answer: { text: Интерстеллар }, expect: exact }
+  - { id: latin_alias, target: interstellar, answer: { text: "  INTERSTELLAR!!! " }, expect: exact }
+  - { id: yo_e, target: hedgehog, answer: { text: ежик в тумане }, expect: exact }
+  - { id: yo_in_answer, target: hedgehog, answer: { text: "Ёжик, в тумане" }, expect: exact }
+  - { id: translit_alias, target: hedgehog, answer: { text: ezhik v tumane }, expect: exact }
+  - { id: article_dropped, target: matrix, answer: { text: The Matrix }, expect: exact }
+  - { id: conj_amp, target: rock_and_roll, answer: { text: "Rock & Roll" }, expect: exact }
+  - { id: conj_none, target: rock_and_roll, answer: { text: rock roll }, expect: exact }
+  - { id: conj_ru, target: war_and_peace, answer: { text: "Война & мир" }, expect: exact }
+  - { id: conj_en, target: war_and_peace, answer: { text: War & Peace }, expect: exact }
+  # --- опечатки
+  - { id: typo_missing_letter, target: interstellar, answer: { text: интерстелар }, expect: exact }
+  - { id: typo_transposition, target: interstellar, answer: { text: интерстеллра }, expect: exact }
+  - { id: typo_two_long, target: interstellar, answer: { text: интрстелар }, expect: exact }
+  - { id: typo_three_long, target: interstellar, answer: { text: инрстелар }, expect: miss }
+  - { id: typo_short_one, target: matrix, answer: { text: матрца }, expect: exact }
+  - { id: typo_short_two, target: matrix, answer: { text: мтрца }, expect: miss }
+  - { id: typo_yesterday, target: yesterday, answer: { text: yestrday }, expect: exact }
+  - { id: typo_len4_none, target: lotr, answer: { text: lotd }, expect: miss }
+  - id: typo_disabled
+    target: interstellar
+    answer: { text: интерстелар }
+    params: { typo: [], accept_same_title: true }
+    expect: miss
+  # --- выбор из автокомплита
+  - { id: item_same, target: matrix, answer: { item: matrix }, expect: exact }
+  - { id: item_dup_title, target: yesterday, answer: { item: yesterday_cover }, expect: exact }
+  - id: item_dup_title_off
+    target: yesterday
+    answer: { item: yesterday_cover }
+    params: { typo: [], accept_same_title: false }
+    expect: miss
+  - { id: item_remake_alias, target: matrix, answer: { item: matrix_1999_remake }, expect: exact }
+  - { id: item_short_alias_no, target: lotr, answer: { item: lotr_short_clash }, expect: miss }
+  - { id: item_other, target: interstellar, answer: { item: matrix }, expect: miss }
+  - { id: item_unknown, target: matrix, answer: { item_unknown: true }, expect: miss }
+  # --- частичный ответ по исполнителю (только music)
+  - { id: artist_text, target: yesterday, answer: { text: The Beatles }, expect: partial, partial_kind: artist }
+  - { id: artist_text_no_article, target: yesterday, answer: { text: beatles }, expect: partial, partial_kind: artist }
+  - { id: artist_translit, target: iskala, answer: { text: zemfira }, expect: partial, partial_kind: artist }
+  - { id: artist_cyr, target: iskala, answer: { text: ЗЕМФИРА }, expect: partial, partial_kind: artist }
+  - { id: artist_item, target: yesterday, answer: { item: let_it_be }, expect: partial, partial_kind: artist }
+  - { id: artist_other, target: yesterday, answer: { text: Ray Charles }, expect: miss }
+  - { id: artist_typo_no, target: yesterday, answer: { text: beatlez }, expect: miss }
+  - id: artist_disabled
+    target: yesterday
+    answer: { text: The Beatles }
+    partial: []
+    expect: miss
+  # --- пустое и мусор
+  - { id: punctuation_only, target: matrix, answer: { text: "?!" }, expect: miss }
+  - { id: long_garbage, target: matrix, answer: { text: "абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абвгд абв" }, expect: miss }

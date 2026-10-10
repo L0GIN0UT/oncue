@@ -5,13 +5,24 @@
 См. docs/02-game-engine.md и docs/plans/stage-2.md §2.3, §4.
 """
 
+from gv_game_kernel.builtin import daily_seed, register_builtin, register_collection
+from gv_game_kernel.engine import AnswerStep, ModeEngine, answer_normalizer
 from gv_game_kernel.errors import (
     CONFIG_INVALID,
+    GIVE_UP_NOT_ALLOWED,
     LEVEL_LOCKED,
+    POOL_TOO_SMALL,
+    PRESET_NOT_FOUND,
     ROUND_FINISHED,
+    ROUND_NOT_FINISHED,
+    SKIP_NOT_ALLOWED,
+    ActionNotAllowedError,
     ConfigError,
     LevelLockedError,
+    PoolTooSmallError,
+    PresetNotFoundError,
     RoundFinishedError,
+    RoundNotFinishedError,
     RuleViolation,
 )
 from gv_game_kernel.params import canonical_json, params_hash
@@ -24,7 +35,9 @@ from gv_game_kernel.plugins import (
     LevelSpec,
     MatchContext,
     MatchResult,
+    ParamIssue,
     PartialRule,
+    Preset,
     Scorer,
     Source,
 )
@@ -42,7 +55,6 @@ from gv_game_kernel.registry import (
     ConfigIssue,
     DuplicatePluginError,
     EngineFactory,
-    ModeEngine,
     PluginRegistry,
 )
 from gv_game_kernel.round import (
@@ -55,6 +67,8 @@ from gv_game_kernel.round import (
     apply_guess,
     apply_skip,
     give_up,
+    require_level_open,
+    round_outcome,
     void,
 )
 from gv_game_kernel.spec import (
@@ -71,12 +85,19 @@ from gv_game_kernel.spec import (
 
 __all__ = [
     "CONFIG_INVALID",
+    "GIVE_UP_NOT_ALLOWED",
     "LEVEL_LOCKED",
+    "POOL_TOO_SMALL",
+    "PRESET_NOT_FOUND",
     "ROUND_FINISHED",
+    "ROUND_NOT_FINISHED",
+    "SKIP_NOT_ALLOWED",
     "UNKNOWN_PLUGIN",
+    "ActionNotAllowedError",
     "AnswerInput",
     "AnswerMatcher",
     "AnswerSpec",
+    "AnswerStep",
     "AssetPort",
     "AssetRef",
     "CandidatePort",
@@ -101,13 +122,18 @@ __all__ = [
     "MediaItemRef",
     "ModeConfig",
     "ModeEngine",
+    "ParamIssue",
     "PartialRule",
     "PersonRef",
     "PlayableFor",
     "PluginRegistry",
     "PluginSpec",
     "PoolQuery",
+    "PoolTooSmallError",
+    "Preset",
+    "PresetNotFoundError",
     "RoundFinishedError",
+    "RoundNotFinishedError",
     "RoundOutcome",
     "RoundResult",
     "RoundState",
@@ -117,11 +143,17 @@ __all__ = [
     "SessionSpec",
     "Source",
     "SourceSpec",
+    "answer_normalizer",
     "apply_guess",
     "apply_skip",
     "canonical_json",
+    "daily_seed",
     "give_up",
     "params_hash",
     "parse_mode_config",
+    "register_builtin",
+    "register_collection",
+    "require_level_open",
+    "round_outcome",
     "void",
 ]

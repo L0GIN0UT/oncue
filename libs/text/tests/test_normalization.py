@@ -8,7 +8,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from gv_text import NormalizerConfig, TitleNormalizer
+from gv_text import CONJUNCTION_REPLACEMENTS, NormalizerConfig, TitleNormalizer
 
 pytestmark = pytest.mark.unit
 
@@ -103,3 +103,72 @@ def test_translit_of_cyrillic_is_latin_and_normalized(text: str) -> None:
     if result is not None:
         assert result == N.normalize(result)
         assert all(not ("а" <= ch <= "я") for ch in result)
+
+
+# ----------------------------------------------------------------------------- замены союзов
+# Сверка ответов (game_kernel) нормализует с заменами «&» / «и» / «and» → удаление.
+# Таблица — контракт: новые правила замен добавляются только через неё.
+M = TitleNormalizer(NormalizerConfig(replacements=CONJUNCTION_REPLACEMENTS))
+
+REPLACEMENTS_GOLDEN: list[tuple[str, str]] = [
+    ("Rock & Roll", "rock roll"),
+    ("Rock and Roll", "rock roll"),
+    ("rock&roll", "rock roll"),
+    ("Rock ＆ Roll", "rock roll"),  # полноширинный амперсанд (NFKC)
+    ("Война и мир", "война мир"),
+    ("Simon & Garfunkel", "simon garfunkel"),
+    ("The Good, the Bad and the Ugly", "good the bad the ugly"),
+    ("And the Band Played On", "band played on"),  # после союза снимается артикль
+    ("and", "and"),  # не удаляем единственное слово
+    ("&", "&"),
+    ("и", "и"),
+    ("Ёжик и туман", "ежик туман"),
+    ("Brandy", "brandy"),  # «and» внутри слова не трогаем
+    ("rock roll", "rock roll"),  # алиас каталога остаётся тем же
+]
+
+
+@pytest.mark.parametrize(("raw", "expected"), REPLACEMENTS_GOLDEN)
+def test_replacements_golden(raw: str, expected: str) -> None:
+    assert M.normalize(raw) == expected
+
+
+def test_default_config_has_no_replacements() -> None:
+    """catalog строит алиасы без замен: его поведение не меняется."""
+    assert NormalizerConfig().replacements == ()
+    assert N.normalize("Rock and Roll") == "rock and roll"
+
+
+def test_replacement_to_stable_token() -> None:
+    custom = TitleNormalizer(NormalizerConfig(replacements=(("&", "and"), ("и", "and"))))
+    assert custom.normalize("Rock & Roll") == "rock and roll"
+    assert custom.normalize("Рок и ролл") == "рок and ролл"
+
+
+@pytest.mark.parametrize(
+    "replacements",
+    [(("&", "and"), ("and", "&")), (("", "x"),), (("a b", ""),), ((" a", ""),)],
+)
+def test_unstable_or_bad_replacements_are_rejected(
+    replacements: tuple[tuple[str, str], ...],
+) -> None:
+    with pytest.raises(ValueError, match="замен"):
+        NormalizerConfig(replacements=replacements)
+
+
+@given(st.text(max_size=80))
+def test_normalize_with_replacements_is_idempotent(text: str) -> None:
+    once = M.normalize(text)
+    assert M.normalize(once) == once
+
+
+@given(st.text(alphabet="ab &иand", max_size=30))
+def test_replacements_idempotent_on_dense_conjunctions(text: str) -> None:
+    once = M.normalize(text)
+    assert M.normalize(once) == once
+
+
+@given(st.text(max_size=60))
+def test_replacements_apply_on_top_of_base_normalization(text: str) -> None:
+    """Алиас каталога (база) и ответ игрока (с заменами) сравнимы: M(N(x)) == M(x)."""
+    assert M.normalize(N.normalize(text)) == M.normalize(text)

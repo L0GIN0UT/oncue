@@ -5,32 +5,44 @@
 ``EngineFactory.validate`` собирает ВСЕ проблемы конфига с JSON-путями — их показывает
 редактор в админке; ``build`` отказывается собирать движок из невалидного конфига.
 
-Шаг 0a: реестр готов полностью; ``validate`` проверяет только наличие ключей в реестре,
-остальные правила (§4 плана, «EngineFactory.validate») и ``ModeEngine`` — поток A.
+Правила ``validate`` (план этапа 2, §4): ключи есть в реестре; ``params`` проходят
+``params_schema`` плагина; ``domain ∈ clue.domains``; ``answer.format`` поддерживается
+загадкой; ``session.kind`` оркеструется сервисом; правила ``partial`` применимы к домену и
+не повторяются; перекрёстные правила плагинов (``Source.cross_check``,
+``Scorer.cross_check``: ``len(points) == len(levels)``, ``size == rounds`` …).
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
+from pydantic import BaseModel, ValidationError
+
+from gv_game_kernel.engine import ModeEngine
 from gv_game_kernel.errors import ConfigError
-from gv_game_kernel.plugins import (
-    AnswerInput,
-    AnswerMatcher,
-    ClueType,
-    DrawContext,
-    LevelSpec,
-    MatchResult,
-    PartialRule,
-    Scorer,
-    Source,
-)
-from gv_game_kernel.refs import MediaItemRef
-from gv_game_kernel.round import RoundOutcome
-from gv_game_kernel.spec import ModeConfig
+from gv_game_kernel.plugins import AnswerMatcher, ClueType, PartialRule, Scorer, Source
+from gv_game_kernel.spec import ModeConfig, error_path
+from gv_text import TitleNormalizer
 
 UNKNOWN_PLUGIN = "config.unknown_plugin"
 """Код проблемы: ключа плагина нет в реестре."""
+
+DOMAIN_UNSUPPORTED = "config.domain_unsupported"
+"""Код проблемы: загадка не применима к домену режима."""
+
+ANSWER_FORMAT_UNSUPPORTED = "config.answer_format_unsupported"
+"""Код проблемы: загадка не поддерживает формат ответа."""
+
+SESSION_UNSUPPORTED = "config.session_unsupported"
+"""Код проблемы: сервис не оркестрирует такой вид сессии."""
+
+PARTIAL_DOMAIN_UNSUPPORTED = "config.partial_domain_unsupported"
+"""Код проблемы: правило частичного ответа не применимо к домену."""
+
+DUPLICATE_PARTIAL = "config.duplicate_partial"
+"""Код проблемы: правило частичного ответа указано дважды."""
 
 
 class DuplicatePluginError(ValueError):
@@ -108,89 +120,91 @@ class PluginRegistry:
         return self._scorers.get(key)
 
 
-class ModeEngine:
-    """Движок одного режима — фасад для game (и match в этапе 4).
-
-    Собирается только ``EngineFactory.build`` из валидного конфига. Методы — сигнатуры
-    шага 0a, реализация — поток A.
-    """
-
-    def __init__(
-        self,
-        config: ModeConfig,
-        *,
-        clue: ClueType,
-        source: Source,
-        matcher: AnswerMatcher,
-        partials: tuple[PartialRule, ...],
-        scorer: Scorer,
-    ) -> None:
-        self.config = config
-        self.clue = clue
-        self.source = source
-        self.matcher = matcher
-        self.partials = partials
-        self.scorer = scorer
-
-    def levels(self) -> list[LevelSpec]:
-        """Уровни загадки режима."""
-        raise NotImplementedError("TODO(stage2/A): ModeEngine.levels")
-
-    async def draw(self, ctx: DrawContext, n: int) -> list[MediaItemRef]:
-        """Разыграть ``n`` единиц через Source режима."""
-        raise NotImplementedError("TODO(stage2/A): ModeEngine.draw")
-
-    def check(self, answer: AnswerInput, item: MediaItemRef) -> MatchResult:
-        """Сверить ответ (matcher + правила частичного ответа)."""
-        raise NotImplementedError("TODO(stage2/A): ModeEngine.check")
-
-    def score(self, outcome: RoundOutcome) -> int:
-        """Очки за раунд."""
-        raise NotImplementedError("TODO(stage2/A): ModeEngine.score")
-
-    def max_score(self, rounds: int) -> int:
-        """Максимум очков за ``rounds`` не-``void`` раундов."""
-        raise NotImplementedError("TODO(stage2/A): ModeEngine.max_score")
-
-
 class EngineFactory:
     """Проверка конфигов и сборка ``ModeEngine``.
 
     Args:
         registry: Реестр плагинов процесса.
         supported_sessions: Виды сессий, которые оркестрирует сервис (game — ``solo``).
+        normalizer: Нормализатор ответов для собранных движков (по умолчанию —
+            ``engine.answer_normalizer()``).
     """
 
     def __init__(
-        self, registry: PluginRegistry, *, supported_sessions: frozenset[str] = frozenset({"solo"})
+        self,
+        registry: PluginRegistry,
+        *,
+        supported_sessions: frozenset[str] = frozenset({"solo"}),
+        normalizer: TitleNormalizer | None = None,
     ) -> None:
         self._registry = registry
         self._supported_sessions = supported_sessions
+        self._normalizer = normalizer
 
     def validate(self, config: ModeConfig) -> list[ConfigIssue]:
         """Все проблемы конфига (пустой список — конфиг валиден).
 
-        Шаг 0a проверяет наличие ключей плагинов в реестре.
-        TODO(stage2/A): params по ``params_schema``, ``domain ∈ clue.domains``,
-        ``answer.format``, ``session.kind``, ``len(scoring.points) == len(levels)``,
-        применимость ``partial`` к домену (§4 плана).
+        Проверки, зависящие от плагина, выполняются, только если он найден, а
+        перекрёстные — только если параметры всех участников прошли свои схемы: иначе
+        сравнивать не с чем, а ошибка схемы уже в списке.
         """
         r = self._registry
+        clue = r.clue(config.clue.type)
+        source = r.source(config.source.type)
+        matcher = r.matcher(config.answer.matcher.type)
+        scorer = r.scorer(config.scoring.type)
         issues = [
             ConfigIssue(path, UNKNOWN_PLUGIN)
             for path, found in (
-                ("source.type", r.source(config.source.type)),
-                ("clue.type", r.clue(config.clue.type)),
-                ("answer.matcher.type", r.matcher(config.answer.matcher.type)),
-                ("scoring.type", r.scorer(config.scoring.type)),
+                ("source.type", source),
+                ("clue.type", clue),
+                ("answer.matcher.type", matcher),
+                ("scoring.type", scorer),
             )
             if found is None
         ]
-        issues.extend(
-            ConfigIssue(f"answer.partial[{i}]", UNKNOWN_PLUGIN)
-            for i, kind in enumerate(config.answer.partial)
-            if r.partial(kind) is None
-        )
+        issues.extend(self._partial_issues(config))
+
+        clue_params = _parse(clue, config.clue.params, "clue.params", issues)
+        source_params = _parse(source, config.source.params, "source.params", issues)
+        _parse(matcher, config.answer.matcher.params, "answer.matcher.params", issues)
+        scorer_params = _parse(scorer, config.scoring.params, "scoring.params", issues)
+
+        if clue is not None:
+            if config.domain not in clue.domains:
+                issues.append(ConfigIssue("domain", DOMAIN_UNSUPPORTED))
+            if config.answer.format not in clue.supported_answer_formats:
+                issues.append(ConfigIssue("answer.format", ANSWER_FORMAT_UNSUPPORTED))
+        if config.session.kind not in self._supported_sessions:
+            issues.append(ConfigIssue("session.kind", SESSION_UNSUPPORTED))
+
+        if clue is not None and clue_params is not None:
+            levels_count = len(clue.levels(clue_params))
+            for plugin, params, prefix in (
+                (source, source_params, "source.params"),
+                (scorer, scorer_params, "scoring.params"),
+            ):
+                if plugin is None or params is None:
+                    continue
+                issues.extend(
+                    ConfigIssue(_join(prefix, i.path), i.code)
+                    for i in plugin.cross_check(params, config=config, levels_count=levels_count)
+                )
+        return issues
+
+    def _partial_issues(self, config: ModeConfig) -> list[ConfigIssue]:
+        issues: list[ConfigIssue] = []
+        seen: set[str] = set()
+        for i, kind in enumerate(config.answer.partial):
+            path = f"answer.partial[{i}]"
+            rule = self._registry.partial(kind)
+            if rule is None:
+                issues.append(ConfigIssue(path, UNKNOWN_PLUGIN))
+            elif config.domain not in rule.domains:
+                issues.append(ConfigIssue(path, PARTIAL_DOMAIN_UNSUPPORTED))
+            if kind in seen:
+                issues.append(ConfigIssue(path, DUPLICATE_PARTIAL))
+            seen.add(kind)
         return issues
 
     def build(self, config: ModeConfig) -> ModeEngine:
@@ -217,4 +231,46 @@ class EngineFactory:
             matcher=matcher,
             partials=tuple(p for p in partials if p is not None),
             scorer=scorer,
+            normalizer=self._normalizer,
         )
+
+
+def _parse(
+    plugin: ClueType | Source | AnswerMatcher | Scorer | None,
+    params: Mapping[str, Any],  # Any: params плагина — произвольный JSON-объект
+    prefix: str,
+    issues: list[ConfigIssue],
+) -> BaseModel | None:
+    """Разобрать ``params`` схемой плагина; ошибки — в ``issues`` с путём от корня."""
+    if plugin is None:
+        return None
+    try:
+        return plugin.params_schema.model_validate(dict(params))
+    except ValidationError as exc:
+        issues.extend(
+            ConfigIssue(_join(prefix, error_path(tuple(e["loc"]))), f"schema.{e['type']}")
+            for e in exc.errors(include_url=False, include_input=False)
+        )
+        return None
+
+
+def _join(prefix: str, path: str) -> str:
+    """``scoring.params`` + ``points`` → ``scoring.params.points``; ``$`` — сам префикс."""
+    if path == "$":
+        return prefix
+    return f"{prefix}{path}" if path.startswith("[") else f"{prefix}.{path}"
+
+
+__all__ = [
+    "ANSWER_FORMAT_UNSUPPORTED",
+    "DOMAIN_UNSUPPORTED",
+    "DUPLICATE_PARTIAL",
+    "PARTIAL_DOMAIN_UNSUPPORTED",
+    "SESSION_UNSUPPORTED",
+    "UNKNOWN_PLUGIN",
+    "ConfigIssue",
+    "DuplicatePluginError",
+    "EngineFactory",
+    "ModeEngine",
+    "PluginRegistry",
+]
