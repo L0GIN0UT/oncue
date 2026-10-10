@@ -1,10 +1,9 @@
 """Admin API (/admin/v1): конфиги режимов и наборы дня (план этапа 2, §2.6).
 
-Шаг 0a: схемы и заглушки (501 ``common.not_implemented``); реализация — поток B.
 Доступ — ``admin.access`` + конкретное право; мутации — ``Idempotency-Key`` и ``reason``.
 """
 
-# ruff: noqa: ARG001 — параметры заглушек объявлены ради контракта OpenAPI; снять в потоке B.
+# ruff: noqa: ARG001 — параметр principal нужен ради зависимости с проверкой права.
 
 from __future__ import annotations
 
@@ -30,10 +29,11 @@ from game_service.api.admin.schemas import (
     ValidateRequest,
     ValidationResult,
 )
-from game_service.api.common import not_implemented
+from game_service.api.common import ApiServices, NoStoreRoute
 from game_service.api.public.schemas import Domain
+from game_service.application.commands.modes import AdminContext
 from gv_auth import Principal, require_perm
-from gv_service import IdempotencyKey, Infrastructure, problem_responses
+from gv_service import IdempotencyKey, problem_responses
 
 ADMIN_ACCESS = "admin.access"
 ConfigViewer = Annotated[Principal, Depends(require_perm(ADMIN_ACCESS, "config.modes.view"))]
@@ -46,14 +46,18 @@ ModeKeyPath = Annotated[
     str,
     Path(pattern=r"^(music|film)\.[a-z0-9_]+\.[a-z0-9_]+$", max_length=100),
 ]
-_READ = problem_responses(401, 403, 422, 501)
-_READ_ONE = problem_responses(401, 403, 404, 422, 501)
-_MUTATE = problem_responses(401, 403, 404, 409, 422, 501)
+_READ = problem_responses(401, 403, 422)
+_READ_ONE = problem_responses(401, 403, 404, 422, 503)
+_MUTATE = problem_responses(401, 403, 404, 409, 422, 503)
 
 
-def build_admin_router(infra: Infrastructure) -> APIRouter:
+def _ctx(principal: Principal, reason: str, key: str) -> AdminContext:
+    return AdminContext(actor_id=principal.user_id, reason=reason, idempotency_key=key)
+
+
+def build_admin_router(c: ApiServices) -> APIRouter:
     """Админские ручки game."""
-    router = APIRouter(prefix="/admin/v1", tags=["admin"])
+    router = APIRouter(prefix="/admin/v1", tags=["admin"], route_class=NoStoreRoute)
 
     # ------------------------------------------------------------------ конфиги режимов
     @router.get(
@@ -67,7 +71,8 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         domain: Annotated[Domain | None, Query()] = None,
         status: Annotated[ConfigStatus | None, Query()] = None,
     ) -> list[ModeConfigSummary]:
-        not_implemented()
+        rows = await c.mode_queries.list_modes(domain=domain, status=status)
+        return [ModeConfigSummary.model_validate(r) for r in rows]
 
     # Объявлена раньше /mode-configs/{mode_key}: иначе «schema» попала бы в {mode_key}.
     # Параметр пути — mode_key, а не key: у зависимости Idempotency-Key свой параметр key,
@@ -79,19 +84,19 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         responses=_READ,
     )
     async def mode_config_schema(principal: ConfigViewer) -> dict[str, Any]:
-        not_implemented()
+        return c.editor_schema()
 
     @router.post(
         "/mode-configs/validate",
         response_model=ValidationResult,
         summary="Проверить тело конфига",
         description="Без сохранения; ошибки с JSON-путями и размер пула по проекции.",
-        responses=problem_responses(401, 403, 422, 501),
+        responses=problem_responses(401, 403, 422),
     )
     async def validate_mode_config(
         body: ValidateRequest, principal: ConfigViewer
     ) -> ValidationResult:
-        not_implemented()
+        return ValidationResult.model_validate(await c.mode_queries.validate(body.body))
 
     @router.get(
         "/mode-configs/{mode_key}",
@@ -100,7 +105,7 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         responses=_READ_ONE,
     )
     async def get_mode_config(mode_key: ModeKeyPath, principal: ConfigViewer) -> ModeConfigDetail:
-        not_implemented()
+        return ModeConfigDetail.model_validate(await c.mode_queries.detail(mode_key))
 
     @router.get(
         "/mode-configs/{mode_key}/versions/{version}",
@@ -111,7 +116,7 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
     async def get_mode_config_version(
         mode_key: ModeKeyPath, version: Annotated[int, Path(ge=1)], principal: ConfigViewer
     ) -> ModeConfigVersion:
-        not_implemented()
+        return ModeConfigVersion.model_validate(await c.mode_queries.version(mode_key, version))
 
     @router.put(
         "/mode-configs/{mode_key}/draft",
@@ -129,7 +134,13 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         principal: ConfigEditor,
         idempotency_key: IdempotencyKey,
     ) -> DraftOut:
-        not_implemented()
+        draft = await c.mode_commands.save_draft(
+            mode_key,
+            body.body,
+            base_revision=body.base_revision,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+        )
+        return DraftOut.model_validate(draft)
 
     @router.post(
         "/mode-configs/{mode_key}/publish",
@@ -148,7 +159,12 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         principal: ConfigPublisher,
         idempotency_key: IdempotencyKey,
     ) -> ModeConfigVersion:
-        not_implemented()
+        version = await c.mode_commands.publish(
+            mode_key,
+            draft_revision=body.draft_revision,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+        )
+        return ModeConfigVersion.model_validate(version)
 
     @router.post(
         "/mode-configs/{mode_key}/rollback",
@@ -162,7 +178,10 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         principal: ConfigPublisher,
         idempotency_key: IdempotencyKey,
     ) -> ModeConfigVersion:
-        not_implemented()
+        version = await c.mode_commands.rollback(
+            mode_key, to_version=body.to_version, ctx=_ctx(principal, body.reason, idempotency_key)
+        )
+        return ModeConfigVersion.model_validate(version)
 
     @router.post(
         "/mode-configs/{mode_key}/archive",
@@ -176,7 +195,10 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         principal: ConfigPublisher,
         idempotency_key: IdempotencyKey,
     ) -> ModeConfigSummary:
-        not_implemented()
+        summary = await c.mode_commands.archive(
+            mode_key, ctx=_ctx(principal, body.reason, idempotency_key)
+        )
+        return ModeConfigSummary.model_validate(summary)
 
     # ------------------------------------------------------------------ наборы дня
     @router.get(
@@ -191,7 +213,8 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         date_from: Annotated[date, Query(alias="from")],
         date_to: Annotated[date, Query(alias="to")],
     ) -> list[DailySet]:
-        not_implemented()
+        rows = await c.daily_admin.list_sets(mode_key, date_from, date_to)
+        return [DailySet.model_validate(r) for r in rows]
 
     @router.put(
         "/daily-sets/{mode_key}/{day}/items/{index}",
@@ -212,7 +235,14 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         principal: DailyCurator,
         idempotency_key: IdempotencyKey,
     ) -> DailySet:
-        not_implemented()
+        daily = await c.daily_admin.replace(
+            mode_key,
+            day,
+            index,
+            body.media_item_id,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+        )
+        return DailySet.model_validate(daily)
 
     @router.post(
         "/daily-sets/{mode_key}/{day}/regenerate",
@@ -227,7 +257,10 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         principal: DailyCurator,
         idempotency_key: IdempotencyKey,
     ) -> DailySet:
-        not_implemented()
+        daily = await c.daily_admin.regenerate(
+            mode_key, day, ctx=_ctx(principal, body.reason, idempotency_key)
+        )
+        return DailySet.model_validate(daily)
 
     @router.get(
         "/projection/items",
@@ -242,6 +275,9 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         playable_for_mode: Annotated[str | None, Query(max_length=100)] = None,
         limit: Annotated[int, Query(ge=1, le=50)] = 20,
     ) -> list[ProjectionItem]:
-        not_implemented()
+        rows = await c.daily_admin.search(
+            q=q, domain=domain, playable_for_mode=playable_for_mode, limit=limit
+        )
+        return [ProjectionItem.model_validate(r) for r in rows]
 
     return router

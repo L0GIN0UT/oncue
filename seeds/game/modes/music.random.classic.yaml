@@ -1,4 +1,3 @@
-# Черновик сида случайного режима (шаг 0a плана этапа 2, §2.5); наполняет поток B.
 # clue.params совпадают с профилем audio_intro/default media-pipeline (D7: params_hash).
 key: music.random.classic
 title_i18n: modes.music.random.classic.title
@@ -11,15 +10,15 @@ source:
       kinds: [track]
       min_playable: 20
     presets:
-      - id: y2000s
-        title_i18n: modes.presets.y2000s
-        filters: { years: { from: 2000, to: 2009 } }
-      - id: y2010s
-        title_i18n: modes.presets.y2010s
-        filters: { years: { from: 2010, to: 2019 } }
+      - id: oldies
+        title_i18n: modes.presets.oldies
+        filters: { years: { to: 1989 } }
+      - id: modern
+        title_i18n: modes.presets.modern
+        filters: { years: { from: 1990 } }
       - id: rock
         title_i18n: modes.presets.rock
-        filters: { genres_any: [rock] }
+        filters: { genres_any: [rock, рок, hard-rock] }
 clue:
   type: audio_intro
   params:
@@ -48,7 +47,7 @@ scoring:
     partial_ratio: 0.5
 session:
   kind: solo
-  rounds: 10
+  rounds: 5
   attempts_per_level: 1
   skip_allowed: true
   give_up_allowed: true
