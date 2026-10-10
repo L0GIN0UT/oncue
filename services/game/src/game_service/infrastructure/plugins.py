@@ -1,17 +1,14 @@
 """Реестр плагинов процесса game и сводная JSON Schema конфига для редактора админки.
 
-Встроенные плагины регистрирует ядро (``gv_game_kernel.builtin.register_builtin``, поток A).
+Встроенные плагины регистрирует ядро (``gv_game_kernel.builtin.register_builtin``).
 ``collection`` в game на этапе 2 не регистрируется (проекции сборников — этап 3), поэтому
 конфиг с ним не проходит валидацию.
 """
 
 from __future__ import annotations
 
-import importlib
-from collections.abc import Callable
 from typing import Any
 
-import structlog
 from pydantic import BaseModel
 
 from gv_game_kernel import (
@@ -23,8 +20,7 @@ from gv_game_kernel import (
     Scorer,
     Source,
 )
-
-log = structlog.get_logger(__name__)
+from gv_game_kernel.builtin import register_builtin
 
 EXCLUDED_SOURCES = frozenset({"collection"})
 
@@ -82,22 +78,8 @@ class CatalogRegistry(PluginRegistry):
         }
 
 
-def builtin_registrar() -> Callable[[PluginRegistry], None] | None:
-    """``register_builtin`` ядра, если встроенные плагины уже есть в установленном ядре."""
-    try:
-        module = importlib.import_module("gv_game_kernel.builtin")
-    except ModuleNotFoundError:
-        return None
-    registrar = getattr(module, "register_builtin", None)
-    return registrar if callable(registrar) else None
-
-
 def build_registry() -> CatalogRegistry:
     """Реестр процесса со встроенными плагинами ядра."""
     registry = CatalogRegistry()
-    registrar = builtin_registrar()
-    if registrar is None:
-        log.error("game.builtin_plugins_missing")
-    else:
-        registrar(registry)
+    register_builtin(registry)
     return registry

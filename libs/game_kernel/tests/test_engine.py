@@ -102,7 +102,9 @@ def test_engine_static_view(seed_body: SeedBody) -> None:
     assert engine.levels_count == 6
     assert engine.playable_for.clue_type == "audio_intro"
     assert len(engine.clue_params_hash) == 64
-    assert [p.id for p in engine.presets()] == [p["id"] for p in body["source"]["params"]["presets"]]
+    assert [p.id for p in engine.presets()] == [
+        p["id"] for p in body["source"]["params"]["presets"]
+    ]
     rounds = body["session"]["rounds"]
     assert engine.min_playable() == body["source"]["params"]["pool"]["min_playable"]
     assert engine.round_max_score() == 6

@@ -6,7 +6,7 @@
 ``TokenProvider`` (``aud = media_pipeline``); токен не логируется.
 
 Маппинг ответов: 404 и 410 → ``AssetUnavailableError`` (раунд ``void``), 429 → 429,
-401/403/409/503/сеть → 503 ``game.assets_unavailable``.
+401/403/409/503/сеть → 503 ``game.assets_unavailable``; после 401 кэш токена сбрасывается.
 """
 
 from __future__ import annotations
@@ -93,6 +93,9 @@ class UnconfiguredTokenProvider:
         """Всегда отказ (без учётных данных internal-ручки media-pipeline недоступны)."""
         raise AssetsUnavailableError("сервисная аутентификация game не настроена")
 
+    def invalidate(self) -> None:
+        """Кэша нет — нечего забывать."""
+
 
 class MediaPipelineAssetClient:
     """Клиент ссылок на ассеты (реализация ``AssetPort``)."""
@@ -171,6 +174,9 @@ class MediaPipelineAssetClient:
             )
         if status in _AUTH_FAILED:
             log.error("game.media_auth_failed", status=status)
+            if status == httpx.codes.UNAUTHORIZED:
+                # Токен отозван или подписан выведенным ключом: следующий вызов возьмёт новый.
+                self._tokens.invalidate()
         else:
             log.warning("game.media_unexpected_status", status=status)
         MEDIA_CALLS.labels("error").inc()

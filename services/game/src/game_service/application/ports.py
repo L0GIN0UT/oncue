@@ -255,6 +255,10 @@ class TokenProvider(Protocol):
         """Действующий access-токен."""
         ...
 
+    def invalidate(self) -> None:
+        """Забыть кэшированный токен (вызываемый сервис ответил 401)."""
+        ...
+
 
 # Any: тело ответа ручек — JSON по контракту §2.6 (собирают views, проверяет API-схема).
 type Json = dict[str, Any]

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import httpx
 import pytest
+import yaml
 
 from gv_core.ids import uuid7
 from gv_testkit import assert_event_matches_schema, assert_problem, assert_published
@@ -14,6 +16,9 @@ from gv_testkit import assert_event_matches_schema, assert_problem, assert_publi
 pytestmark = pytest.mark.component
 
 MUSIC_DAILY = "music.daily.classic"
+FILM_RANDOM_SEED = (
+    Path(__file__).resolve().parents[4] / "seeds" / "game" / "modes" / "film.random.frame.yaml"
+)
 FORBIDDEN_BEFORE_REVEAL = {"media_item_id", "title", "asset_set_id", "persons"}
 
 
@@ -113,6 +118,7 @@ async def test_guest_daily_full_cycle(game: Any) -> None:  # noqa: PLR0915 — �
     assert clue.status_code == 200, clue.text
     assert clue.json()["url"].startswith("/media/a/")
     assert clue.json()["kind"] == "audio"
+    assert clue.json()["meta"]["seconds"] == 0.5
     locked = await game.client.post(
         f"/v1/sessions/{sid}/rounds/0/clue", json={"level": 2}, headers=bearer(guest)
     )
@@ -272,7 +278,9 @@ async def test_desync_and_idempotent_replay(game: Any) -> None:
 
     stale = await move(game, token, sid, "skips", body)
     problem = assert_problem(stale, 409, "game.desync")
-    assert problem["details"]["snapshot"]["version"] == first.json()["session"]["version"]
+    # Контракт: details = {"session": SessionSnapshot} — тот же снимок, что в ответе хода.
+    assert set(problem["details"]) == {"session"}
+    assert problem["details"]["session"] == first.json()["session"]
     assert stale.headers["cache-control"] == "no-store"
 
     reused = await game.client.post(
@@ -351,3 +359,46 @@ async def test_abandon_job_and_user_deleted(game: Any) -> None:
     assert (await game.deliver(deleted)).value == "processed"
     r = await game.client.get(f"/v1/sessions/{sid}", headers=bearer(token))
     assert_problem(r, 404, "game.session_not_found")
+
+
+async def test_catalog_event_projects_title_aliases(game: Any) -> None:
+    from game_service.infrastructure.db.repositories import SqlProjectionRepository
+
+    from gv_messaging import Outcome
+    from gv_testkit import load_example
+
+    base = load_example("catalog.MediaItemCreated")
+    item_id = uuid7()
+    aliases = [
+        {"text": "Брат", "normalized": "брат", "lang": "ru", "kind": "title"},
+        {"text": "Brother", "normalized": "brother", "lang": "en", "kind": "alt"},
+        {"text": "Brat", "normalized": "brat", "lang": None, "kind": "translit"},
+        {"text": "Б", "normalized": "б", "lang": None, "kind": "short"},
+    ]
+    payload = {**base.payload, "media_item_id": str(item_id), "aliases": aliases}
+    envelope = base.model_copy(update={"aggregate_id": str(item_id), "payload": payload})
+    assert await game.deliver(envelope) is Outcome.PROCESSED
+
+    async with game.infra.sessions() as session:
+        item = await SqlProjectionRepository(session).get_item(item_id)
+    assert item is not None
+    assert item.aliases == ("брат", "brother", "brat", "б")
+    ref = item.to_ref()
+    assert ref.title_aliases == ("брат", "brother")
+
+
+async def test_frame_clue_meta_uses_kernel_hint_fields(game: Any) -> None:
+    assert (await game.run_job("game.modes.bootstrap")).value == "ok"
+    for _ in range(12):
+        await game.add_item(domain="film", genres=("drama",), ready_for="film.random.frame")
+    token = game.issuer.issue()
+    created = await start(game, token, "film.random.frame")
+    assert created.status_code == 201, created.text
+    sid = created.json()["id"]
+    clue = await game.client.post(
+        f"/v1/sessions/{sid}/rounds/0/clue", json={"level": 1}, headers=bearer(token)
+    )
+    assert clue.status_code == 200, clue.text
+    meta = {k: v for k, v in clue.json()["meta"].items() if v is not None}
+    first = yaml.safe_load(FILM_RANDOM_SEED.read_text("utf-8"))["clue"]["params"]["levels"][0]
+    assert meta == {"blur_px": first["blur_px"], "crop": first["crop"]}

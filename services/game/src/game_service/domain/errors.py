@@ -61,7 +61,11 @@ class RoundNotActiveError(ConflictError):
 
 
 class DesyncError(ConflictError):
-    """``expected_version`` устарела; в ``details.snapshot`` — актуальный снимок (409)."""
+    """``expected_version`` устарела (409).
+
+    Формат ``details`` зафиксирован контрактом: ``{"session": <SessionSnapshot>}`` —
+    клиент применяет снимок без повторного ``GET``.
+    """
 
     default_code = "game.desync"
 
@@ -172,5 +176,5 @@ class DailyIndexOutOfRangeError(InvalidInputError):
 
 
 def desync(snapshot: dict[str, Any]) -> DesyncError:
-    """Ошибка рассинхронизации с актуальным снимком в ``details``."""
-    return DesyncError("версия сессии устарела", details={"snapshot": snapshot})
+    """Ошибка рассинхронизации с актуальным снимком в ``details.session``."""
+    return DesyncError("версия сессии устарела", details={"session": snapshot})

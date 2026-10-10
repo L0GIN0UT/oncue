@@ -34,10 +34,14 @@ ASSET = AssetRef(asset_set_id=uuid7(), levels_count=6)
 class StaticTokens:
     def __init__(self) -> None:
         self.calls = 0
+        self.invalidated = 0
 
     async def token(self) -> str:
         self.calls += 1
         return "svc-token"
+
+    def invalidate(self) -> None:
+        self.invalidated += 1
 
 
 def client(
@@ -111,6 +115,19 @@ async def test_status_mapping_without_retry(status: int, error: type[Exception])
         with pytest.raises(error):
             await c.link(ASSET, 1, "sess:x")
         assert route.call_count == 1
+    await c.aclose()
+
+
+@pytest.mark.parametrize(("status", "invalidated"), [(401, 1), (403, 0), (409, 0)])
+async def test_401_invalidates_cached_service_token(status: int, invalidated: int) -> None:
+    tokens = StaticTokens()
+    c = client(tokens)
+    with stub_service(MEDIA, service="media_pipeline") as media:
+        media.route("POST", LINKS_PATH).respond(status)
+        with pytest.raises(AssetsUnavailableError):
+            await c.link(ASSET, 1, "sess:x")
+    # 403 — нет scope у клиента: новый токен не поможет, кэш не трогаем.
+    assert tokens.invalidated == invalidated
     await c.aclose()
 
 

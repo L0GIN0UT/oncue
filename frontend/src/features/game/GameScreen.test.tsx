@@ -22,7 +22,10 @@ describe("GameScreen", () => {
       expect.stringMatching(/^blob:/),
     );
     expect(screen.getByRole("heading", { name: "Раунд 1 из 5" })).toBeInTheDocument();
-    expect(screen.getByTestId("skip")).toHaveTextContent("Пропустить (+0,5 с)");
+    // Прибавка пропуска берётся из списка режимов — он грузится отдельно от снимка сессии.
+    await waitFor(() =>
+      expect(screen.getByTestId("skip")).toHaveTextContent("Пропустить (+0,5 с)"),
+    );
 
     const input = screen.getByRole("combobox");
     await user.type(input, "Группа");

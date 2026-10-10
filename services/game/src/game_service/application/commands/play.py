@@ -312,8 +312,8 @@ class PlayService:
         if r.asset is None:  # pragma: no cover — раунд без ассета аннулирован при старте
             raise AssetUnavailableError("ассет раунда недоступен")
         try:
-            view = await rules.reveal(
-                r.asset, level, assets=self._assets, subject=subject_of(session_id)
+            view = await rules.clue_view(
+                r.state, r.asset, level, assets=self._assets, subject=subject_of(session_id)
             )
         except GoneError as exc:
             await self._void(player, session_id, index)

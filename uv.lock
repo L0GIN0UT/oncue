@@ -1653,6 +1653,7 @@ dependencies = [
     { name = "gv-text" },
     { name = "httpx" },
     { name = "pyyaml" },
+    { name = "tzdata" },
 ]
 
 [package.metadata]
@@ -1666,6 +1667,7 @@ requires-dist = [
     { name = "gv-text", editable = "libs/text" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "pyyaml", specifier = ">=6" },
+    { name = "tzdata", specifier = ">=2024.1" },
 ]
 
 [[package]]
@@ -1981,6 +1983,7 @@ dependencies = [
     { name = "gv-core" },
     { name = "gv-text" },
     { name = "pydantic" },
+    { name = "tzdata" },
 ]
 
 [package.metadata]
@@ -1988,6 +1991,7 @@ requires-dist = [
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-text", editable = "libs/text" },
     { name = "pydantic", specifier = ">=2.9" },
+    { name = "tzdata", specifier = ">=2024.1" },
 ]
 
 [[package]]

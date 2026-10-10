@@ -127,7 +127,7 @@ def build_public_router(c: ApiServices) -> APIRouter:
         response_model=MoveResult,
         summary="Ответ",
         description=(
-            "Ошибки: 409 `game.desync` (в `details` — актуальный снимок), "
+            "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), "
             "409 `game.round_finished`, 429."
         ),
         responses=problem_responses(401, 404, 409, 422, 429, 503),
@@ -152,6 +152,10 @@ def build_public_router(c: ApiServices) -> APIRouter:
         "/sessions/{session_id}/skips",
         response_model=MoveResult,
         summary="Пропустить уровень",
+        description=(
+            "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), "
+            "409 `game.round_finished`, 429."
+        ),
         responses=problem_responses(401, 403, 404, 409, 422, 429, 503),
     )
     async def skip_level(
@@ -170,6 +174,10 @@ def build_public_router(c: ApiServices) -> APIRouter:
         "/sessions/{session_id}/rounds/{index}/give-up",
         response_model=MoveResult,
         summary="Сдаться в раунде",
+        description=(
+            "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), "
+            "409 `game.round_finished`, 429."
+        ),
         responses=problem_responses(401, 403, 404, 409, 422, 429, 503),
     )
     async def give_up(

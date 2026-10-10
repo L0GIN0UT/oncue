@@ -134,6 +134,9 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - if: steps.app.outputs.present == 'true'
         run: pnpm -C frontend install --frozen-lockfile
+      - name: Типы API совпадают с contracts/openapi
+        if: steps.app.outputs.present == 'true'
+        run: pnpm -C frontend gen:api:check
       - if: steps.app.outputs.present == 'true'
         run: pnpm -C frontend lint
       - if: steps.app.outputs.present == 'true'
@@ -153,9 +156,38 @@ jobs:
           pnpm -C frontend exec playwright install --with-deps chromium
           pnpm -C frontend exec playwright test
 
+  nginx:
+    # Конфиг gateway проверяется на том же образе, что в compose.gateway.yml: шаблоны
+    # (templates/*.template) рендерит entrypoint образа, как при запуске.
+    name: Конфиг gateway (nginx -t)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Временный сертификат (nginx -t читает ssl_certificate)
+        run: >-
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1
+          -subj /CN=localhost -keyout "$RUNNER_TEMP/privkey.pem" -out "$RUNNER_TEMP/fullchain.pem"
+      - name: nginx -t на nginx:1.28
+        # Своя сеть — встроенный DNS 127.0.0.11 (resolver в nginx.conf); имена upstream
+        # с `resolve` не обязаны резолвиться при проверке.
+        run: |
+          docker network create gv-nginx-check
+          docker run --rm --network gv-nginx-check --tmpfs /etc/nginx/conf.d \
+            -e NGINX_ENVSUBST_FILTER='^GV_' \
+            -e GV_MEDIA_SIGNING_SECRET=ci-nginx-check-not-a-secret-000000 \
+            -e GV_MEDIA_ASSETS_BUCKET=gv-assets \
+            -v "$PWD/infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/infra/nginx/generated:/etc/nginx/generated:ro" \
+            -v "$PWD/infra/nginx/snippets:/etc/nginx/snippets:ro" \
+            -v "$PWD/infra/nginx/templates:/etc/nginx/templates:ro" \
+            -v "$RUNNER_TEMP/fullchain.pem:/etc/nginx/certs/fullchain.pem:ro" \
+            -v "$RUNNER_TEMP/privkey.pem:/etc/nginx/certs/privkey.pem:ro" \
+            nginx:1.28-alpine nginx -t
+
   e2e-smoke:
-    # Полный стек на compose + сценарий «дейлик» (e2e/daily.spec.ts) — на main и по метке
-    # PR `e2e`. Пропускается, пока нет frontend/package.json и e2e/playwright.config.ts.
+    # Полный стек на compose + сценарий «дейлик» (e2e/daily.spec.ts, `pnpm test:e2e:stack`) —
+    # на main и по метке PR `e2e`. Пропускается, пока нет frontend/package.json и
+    # e2e/playwright.config.ts.
     name: E2E smoke (compose)
     needs: [lint]
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'e2e')
@@ -164,6 +196,10 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       E2E_BASE_URL: https://localhost
+      # Стек `gv dev up services` + веб-клиент (compose.web.yml), пути — от infra/compose.
+      E2E_COMPOSE_FILES: >-
+        -f compose.infra.yml -f compose.infra.dev.yml -f compose.services.yml
+        -f compose.services.dev.yml -f compose.web.yml -f compose.gateway.yml
     steps:
       - uses: actions/checkout@v4
       - id: app
@@ -180,14 +216,20 @@ jobs:
         with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
       - if: steps.app.outputs.present == 'true'
         run: uv sync --all-packages
-      - name: Стек на compose (секреты — случайные)
+      - name: Самоподписанный сертификат gateway
         if: steps.app.outputs.present == 'true'
+        # Каталог certs в git пуст (сертификаты не коммитятся) — создаём его сами.
         run: |
-          uv run gv dev secrets > infra/compose/.env
-          uv run gv dev up services
-          if [ -f infra/compose/compose.web.yml ]; then
-            docker compose --env-file infra/compose/.env -f infra/compose/compose.web.yml up -d --build --wait
-          fi
+          mkdir -p infra/nginx/certs
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 \
+            -subj /CN=localhost -keyout infra/nginx/certs/privkey.pem \
+            -out infra/nginx/certs/fullchain.pem
+      - name: Стек на compose + веб-клиент (секреты — случайные)
+        if: steps.app.outputs.present == 'true'
+        working-directory: infra/compose
+        run: |
+          uv run gv dev secrets > .env
+          docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} up -d --build --wait
       - uses: pnpm/action-setup@v4
         if: steps.app.outputs.present == 'true'
         with: { package_json_file: frontend/package.json }
@@ -202,14 +244,19 @@ jobs:
         run: |
           pnpm -C frontend install --frozen-lockfile
           pnpm -C frontend exec playwright install --with-deps chromium
-          pnpm -C frontend exec playwright test --config ../e2e/playwright.config.ts
+          pnpm -C frontend test:e2e:stack
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.app.outputs.present == 'true'
+        with:
+          name: e2e-smoke-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          if-no-files-found: ignore
       - name: Логи стека при падении
         if: failure() && steps.app.outputs.present == 'true'
         working-directory: infra/compose
-        run: >-
-          docker compose --env-file .env -f compose.infra.yml -f compose.infra.dev.yml
-          -f compose.services.yml -f compose.services.dev.yml -f compose.gateway.yml
-          logs --no-color --tail=300 || true
+        run: docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color --tail=300 || true
 
   build:
     name: Образ ${{ matrix.service }}

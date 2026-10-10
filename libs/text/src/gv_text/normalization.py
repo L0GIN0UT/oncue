@@ -204,12 +204,16 @@ class TitleNormalizer:
         return " " if _is_separator(ch) else ch
 
     def _replace_tokens(self, tokens: list[str]) -> list[str]:
-        """Замены токенов; если после удаления ничего не осталось — токены не трогаются."""
+        """Замены токенов; если после удаления ничего не осталось — токены не трогаются.
+
+        Исключение — символы-источники («&»): без букв и цифр строка нормализуется в пустую,
+        как и без замен (иначе «&» давал бы непустой ключ, а алиас каталога — пустой).
+        """
         if not self._replacements:
             return tokens
         replaced = [self._replacements.get(t, t) for t in tokens]
         kept = [t for t in replaced if t]
-        return kept or tokens
+        return kept or [t for t in tokens if t not in self._symbol_tokens]
 
     def translit(self, normalized: str) -> str | None:
         """Вариант нормализованной строки на другом алфавите.

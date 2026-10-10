@@ -6,7 +6,7 @@
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
 - Публичный API: `/api/identity/v1/...` на gateway; JWKS — `/.well-known/jwks.json`; internal — `/internal/v1/admin-sessions[/refresh|/revoke]` (сервисный токен, scope `admin_sessions`), `/internal/v1/service-tokens`; admin — `/admin/v1/users|roles`
 - Зависимости: PostgreSQL (citext), Redis, Redpanda
-- Статус: этап 1 — регистрация, вход по e-mail/никнейму, сессии, привязка Яндекс ID, роли (`docs/plans/stage-1.md` §4)
+- Статус: этап 1 — регистрация, вход по e-mail/никнейму, сессии, привязка Яндекс ID, роли (`docs/plans/stage-1.md` §4); этап 2 — гостевые сессии и сервисные токены (`docs/plans/stage-2.md` §2.8, §6)
 - Граф зависимостей собирает `wiring.py` (вне слоёв, как `main.py`): api и infrastructure друг друга не импортируют.
 
 ## Особенности
@@ -23,3 +23,4 @@
 - Admin-сессии: только пароль + `admin.access`; IP клиента приходит от admin в `client_ip` (без него — только лимит аккаунта). Ответ несёт `identity_version` (= `version` в `UserRolesChanged`). Admin-мутации: обязательный `Idempotency-Key` (таблица `idempotency_keys`, та же транзакция), `reason` 3–500. Понижение прав (роли или матрица) отзывает все сессии пользователя + denylist. Нельзя выдать/снять роль с правами шире своих; матрицу нельзя изменить с потерей своего `roles.manage`.
 - Удаление аккаунта: ник/e-mail → `~deleted~<hex>` / `<hex>@deleted.invalid`, согласия остаются.
 - Сервисные токены (D13): клиенты — `GV_SERVICE_CLIENTS` (JSON, только sha256 секретов; `aud = guessverse` запрещён), `IssueServiceToken`: лимит `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` по `client_id` (каждая попытка, fail-open) → `hmac.compare_digest` (и для неизвестного клиента) → allowlist `audience`. Claims: `iss, aud, sub=svc:<id>, scope, iat, exp, jti` (TTL `GV_SERVICE_TOKEN__TTL_S`), без `sid/roles/perms`. Internal-ручки проверяет отдельный `JwtVerifier` с `aud = internal_audience` (`identity`).
+- Гость — сессия без пользователя (`subject_kind=guest`, `guest_id`): токен без прав, `gst=true`; ручки профиля закрыты `auth.user`; вход отзывает гостевую сессию; очистка — `guest_sessions.purge`. Сервисные токены — `POST /internal/v1/service-tokens` (client credentials), internal-ручки — `require_service`.

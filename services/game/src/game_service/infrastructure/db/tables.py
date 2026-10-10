@@ -7,7 +7,6 @@ UNIQUE, единица не повторяется в наборе дня — UN
 from __future__ import annotations
 
 from sqlalchemy import (
-    ARRAY,
     CheckConstraint,
     Column,
     Date,
@@ -26,7 +25,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from gv_db import create_metadata
 from gv_db.idempotency import idempotency_table
@@ -79,6 +78,7 @@ catalog_items = Table(
     Column("title", Text, nullable=False),
     Column("year", Integer, nullable=True),
     Column("aliases", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("title_aliases", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("persons", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("genres", ARRAY(Text), nullable=False, server_default=text("'{}'::text[]")),
     Column("popularity", Float, nullable=True),

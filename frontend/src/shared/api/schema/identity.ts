@@ -179,7 +179,7 @@ export interface paths {
         put?: never;
         /**
          * Начать гостевую сессию
-         * @description Cookie `gv_access`, `gv_refresh`, `gv_csrf` как при входе. Лимит по IP. При уже действующей сессии — 409 `auth.already_authenticated`.
+         * @description Cookie `gv_access`, `gv_refresh`, `gv_csrf` как при входе. Лимит по IP (429 `rate.limited`). При уже действующей сессии — 409 `auth.already_authenticated`.
          */
         post: operations["start_guest_session_v1_auth_guest_post"];
         delete?: never;
@@ -809,7 +809,7 @@ export interface components {
         };
         /**
          * SessionUser
-         * @description Пользователь сессии.
+         * @description Субъект сессии: пользователь или гость (у гостя ``id`` — guest id, имени нет).
          */
         SessionUser: {
             /** Display Name */
@@ -819,6 +819,12 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Kind
+             * @default user
+             * @enum {string}
+             */
+            kind: "user" | "guest";
             /** Perms */
             perms: string[];
             /** Roles */
@@ -1273,6 +1279,26 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -1346,16 +1372,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     start_guest_session_v1_auth_guest_post: {
@@ -1396,16 +1412,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

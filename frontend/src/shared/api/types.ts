@@ -13,6 +13,7 @@ export type RoundOut = G["RoundOut"];
 export type GuessOut = G["GuessOut"];
 export type Reveal = G["Reveal"];
 export type ClueOut = G["ClueOut"];
+export type ClueMeta = G["ClueMeta"];
 export type ClueKind = ClueOut["kind"];
 export type MoveResult = G["MoveResult"];
 export type ModeOut = G["ModeOut"];

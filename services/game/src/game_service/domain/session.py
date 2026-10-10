@@ -327,6 +327,7 @@ class GameSession(AggregateRoot[UUID]):
         r = self.round_at(index)
         if r.finished:
             return None
+        # Тот же переход, что ``ModeEngine.void`` (статический фасад над ``round.void``).
         return self.apply(index, kernel_round.void(r.state), points=0, now=now)
 
     def abandon(self, now: datetime) -> bool:

@@ -17,6 +17,7 @@
 - Сессии — в Postgres (D12): ход = строка под `FOR UPDATE` + `expected_version` + `Idempotency-Key` + outbox в одной транзакции; вызов media-pipeline — вне транзакции.
 - game узнаёт о параметрах плагинов только возможности (`application/rules.py`): `ScheduledSource` (наборы дня), `presets`, общий фрагмент `pool`. Слой api получает use-cases через `ApiServices` (сборка — `main.py`).
 - Кэш конфигов: в процессе (TTL) + поколение `game:modes:gen` в Redis; версии неизменяемы. Ссылки ревила кэшируются в процессе до истечения.
-- Тесты: пока в ядре нет `gv_game_kernel.builtin`, `tests/conftest.py` регистрирует минимальные плагины под ключами сидов и подменяет нереализованные части скелета ядра; после слияния ядра подмена отключается сама.
+- Тесты идут на реальных плагинах ядра (`build_registry()` → `register_builtin`); фильтры SQL-адаптера `CandidatePort` обязаны совпадать с `gv_testkit.game.FakeCandidatePort.matches` (`tests/integration/test_candidates.py`).
+- 409 `game.desync`: `details = {"session": SessionSnapshot}`; после 401 от media-pipeline кэш сервисного токена сбрасывается (`TokenProvider.invalidate`).
 - Параметр пути admin-ручек — `{mode_key}`: имя `key` конфликтует с параметром зависимости `Idempotency-Key`.
 - Периодические задачи (наборы дня, брошенные сессии) — `ServiceDefinition.build_periodic_jobs`, выполняются в relay под advisory lock; должны быть идемпотентными.

@@ -15,7 +15,7 @@ class GameSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Адрес media-pipeline для выдачи ссылок на ассеты уровней.
-    media_url: str = "http://media_pipeline:8000"
+    media_url: str = "http://media-pipeline:8000"
     # aud сервисного токена для вызовов media-pipeline (D13); учётные данные клиента —
     # общие GV_SERVICE_AUTH__* (libs/service, шаг 0b).
     media_audience: str = "media_pipeline"

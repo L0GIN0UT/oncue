@@ -32,7 +32,10 @@ class LevelOut(BaseModel):
 
     index: int = Field(ge=1)
     hint: dict[str, float | int | str] = Field(
-        description="Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра"
+        description=(
+            "Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, "
+            "{pixel_block} для постера"
+        )
     )
 
 
@@ -143,10 +146,25 @@ class ClueRequest(_Request):
 
 
 class ClueMeta(BaseModel):
-    """Параметры уровня для UI."""
+    """Параметры уровня для UI — поля ``hint_fields`` плагина загадки ядра.
 
-    seconds: float | None = None
-    blur: float | None = None
+    Набор полей — объединение ``hint_fields`` встроенных загадок; у конкретной загадки
+    заполнены только её поля, остальные ``null``.
+    """
+
+    seconds: float | None = Field(default=None, description="audio_intro: длина отрывка, с")
+    blur_px: float | None = Field(default=None, description="frame_progressive: размытие, px")
+    crop: float | None = Field(
+        default=None, description="frame_progressive: видимая доля кадра (0..1]"
+    )
+    pixel_block: int | None = Field(
+        default=None, description="poster_masked: размер блока пикселизации, px"
+    )
+    blur: float | None = Field(
+        default=None,
+        deprecated=True,
+        description="Устарело, всегда null: размытие передаётся в blur_px",
+    )
 
 
 class ClueOut(BaseModel):

@@ -5,6 +5,9 @@ services:
     ports: ["127.0.0.1:8100:8000"]
     environment:
       GV_LOG_JSON: "false"
+      # Ссылки из писем ведут на веб-клиент за локальным gateway.
+      GV_EMAIL__VERIFY_LINK: https://localhost/verify-email?token={token}
+      GV_EMAIL__RESET_LINK: https://localhost/reset-password?token={token}
   catalog:
     ports: ["127.0.0.1:8101:8000"]
     environment:
@@ -17,6 +20,10 @@ services:
     ports: ["127.0.0.1:8103:8000"]
     environment:
       GV_LOG_JSON: "false"
+      # Сиды режимов публикуются при старте (game.modes.bootstrap).
+      GV_GAME__BOOTSTRAP_MODES_DIR: /seeds/game/modes
+    volumes:
+      - ../../seeds/game/modes:/seeds/game/modes:ro
   match:
     ports: ["127.0.0.1:8104:8000"]
     environment:

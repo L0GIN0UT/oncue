@@ -43,7 +43,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Экран результатов сессии */
+        /**
+         * Экран результатов сессии
+         * @description Только своя завершённая сессия. Чужая и несуществующая — одинаково 404; незавершённая — 409 (коды game).
+         */
         get: operations["results_page_v1_pages_results__session_id__get"];
         put?: never;
         post?: never;
@@ -463,16 +466,6 @@ export interface operations {
                     "application/json": components["schemas"]["HomePage"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     results_page_v1_pages_results__session_id__get: {
@@ -505,6 +498,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Не найдено */
             404: {
                 headers: {
@@ -515,8 +518,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Некорректные данные */
-            422: {
+            /** @description Конфликт состояния */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -525,8 +528,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Некорректные данные */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -567,16 +570,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     session_v1_session_get: {
@@ -595,16 +588,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionInfo"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

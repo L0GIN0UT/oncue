@@ -192,7 +192,11 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
           url: world.assetUrl(kind, seconds, blur, r.index + 1),
           expires_at: new Date(world.now().getTime() + 60_000).toISOString(),
           mime: kind === "audio" ? "audio/wav" : "image/svg+xml",
-          meta: kind === "audio" ? { seconds, blur: null } : { seconds: null, blur },
+          // Поля meta — hint_fields загадки ядра (как отдаёт game).
+          meta:
+            kind === "audio"
+              ? { seconds }
+              : { blur_px: blur, crop: hint.crop == null ? null : Number(hint.crop) },
         },
         { headers: { "Cache-Control": "no-store" } },
       );

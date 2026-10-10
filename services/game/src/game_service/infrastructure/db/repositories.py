@@ -450,6 +450,7 @@ def _to_item(row: RowMapping) -> CatalogItem:
         title=row["title"],
         year=row["year"],
         aliases=tuple(row["aliases"] or ()),
+        title_aliases=tuple(row["title_aliases"] or ()),
         persons=tuple(
             PersonRef(id=UUID(p["id"]), name=p["name"], role=p["role"])
             for p in row["persons"] or ()
@@ -536,6 +537,7 @@ class SqlProjectionRepository:
             "title": item.title,
             "year": item.year,
             "aliases": list(item.aliases),
+            "title_aliases": list(item.title_aliases),
             "persons": [{"id": str(p.id), "name": p.name, "role": p.role} for p in item.persons],
             "genres": list(item.genres),
             "popularity": item.popularity,

@@ -222,3 +222,52 @@ def test_generated_compose_passes_service_credentials() -> None:
     assert "GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}" in compose
     assert "GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_GAME:?" in compose
     assert "GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_ADMIN:?" in compose
+
+
+def test_fill_secrets_generates_loadable_jwt_key_and_daily_secret() -> None:
+    """GV_JWT__SIGNING_KEYS — настоящий Ed25519-ключ в формате identity, а не случайная строка."""
+    import json
+
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+    from gv_cli.main import fill_secrets
+
+    out = fill_secrets("GV_JWT__SIGNING_KEYS=\nGV_GAME__DAILY_SEED_SECRET=\n")
+    values = dict(line.split("=", 1) for line in out.splitlines())
+    keys = json.loads(values["GV_JWT__SIGNING_KEYS"])
+    assert len(keys) == 1 and keys[0]["active"] is True and keys[0]["kid"].startswith("local-")
+    private = load_pem_private_key(keys[0]["private_pem"].encode(), password=None)
+    assert isinstance(private, ed25519.Ed25519PrivateKey)
+    assert "\n" not in values["GV_JWT__SIGNING_KEYS"]  # одна строка .env
+    assert len(values["GV_GAME__DAILY_SEED_SECRET"]) >= 32
+
+
+def test_generated_compose_passes_stage2_settings() -> None:
+    from gv_cli.generate import render_all
+    from gv_cli.registry import load_services
+
+    rendered = render_all(load_services(ROOT))
+    env = rendered["infra/compose/.env.example"]
+    assert "GV_GAME__DAILY_SEED_SECRET=\n" in env
+    assert "GV_JWT__SIGNING_KEYS=\n" in env
+
+    services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
+    game = services["game"]["environment"]
+    assert game["GV_GAME__DAILY_SEED_SECRET"].startswith("${GV_GAME__DAILY_SEED_SECRET:?")
+    assert game["GV_GAME__MEDIA_URL"] == "http://media-pipeline:8000"
+    media = services["media-pipeline"]["environment"]
+    assert media["GV_MEDIA__SIGNING_SECRET"].startswith("${GV_MEDIA__SIGNING_SECRET:?")
+    identity = services["identity"]["environment"]
+    assert identity["GV_JWT__SIGNING_KEYS"] == "${GV_JWT__SIGNING_KEYS:-}"
+    assert services["bff-web"]["environment"]["GV_JWKS_URL"].endswith("/.well-known/jwks.json")
+    admin = services["admin"]["environment"]
+    assert admin["GV_SERVICE_AUTH__CLIENT_ID"] == "admin"
+
+    dev = yaml.safe_load(rendered["infra/compose/compose.services.dev.yml"])["services"]
+    assert dev["game"]["environment"]["GV_GAME__BOOTSTRAP_MODES_DIR"] == "/seeds/game/modes"
+    assert dev["game"]["volumes"] == ["../../seeds/game/modes:/seeds/game/modes:ro"]
+    assert (ROOT / "infra/compose" / "../../seeds/game/modes").resolve().is_dir()
+    links = dev["identity"]["environment"]
+    assert links["GV_EMAIL__VERIFY_LINK"] == "https://localhost/verify-email?token={token}"
+    assert links["GV_EMAIL__RESET_LINK"] == "https://localhost/reset-password?token={token}"

@@ -72,8 +72,12 @@ known-first-party = ["gv_*"]
 python_version = "3.13"
 strict = true
 warn_unreachable = true
-plugins = ["pydantic.mypy"]
+plugins = ["pydantic.mypy", "mypy_django_plugin.main"]
 exclude = ["tools/gv/src/gv_cli/templates/"]
+
+[tool.django-stubs]
+# Модуль настроек только для статической проверки (окружение ci по умолчанию).
+django_settings_module = "admin_service.django_settings_typecheck"
 
 [[tool.mypy.overrides]]
 module = ["aiokafka.*", "aio_pika.*", "UnleashClient.*", "testcontainers.*", "asgi_lifespan.*", "docker.*"]
@@ -90,6 +94,8 @@ xfail_strict = true
 [tool.coverage.run]
 # Источник покрытия задаётся при запуске: `--cov=<пакет модуля>` (gv test --cov, CI).
 branch = true
+# SQLAlchemy async работает через greenlet, Django-тесты admin — в потоках.
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 show_missing = true

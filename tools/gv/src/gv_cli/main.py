@@ -16,6 +16,7 @@ gv hook NAME                     хук Claude Code (событие в stdin), �
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -299,6 +300,22 @@ def make_secrets() -> None:
 # Переменные, которые обязаны совпадать: одно значение читают разные процессы.
 _SHARED_SECRETS = {"GV_MEDIA__SIGNING_SECRET": "GV_MEDIA_SIGNING_SECRET"}
 _SERVICE_CLIENTS_ENV = "GV_SERVICE_CLIENTS"
+_JWT_KEYS_ENV = "GV_JWT__SIGNING_KEYS"
+# PKCS#8-обёртка закрытого ключа Ed25519 (RFC 8410): фиксированный префикс + 32 байта seed.
+_ED25519_PKCS8_PREFIX = bytes.fromhex("302e020100300506032b657004220420")
+
+
+def jwt_signing_keys() -> str:
+    """``GV_JWT__SIGNING_KEYS`` с одним новым Ed25519-ключом (без зависимости от cryptography).
+
+    Ключ стабилен между перезапусками identity — в отличие от временного ключа local/ci,
+    после рестарта которого все выданные токены перестают проверяться.
+    """
+    der = _ED25519_PKCS8_PREFIX + secrets.token_bytes(32)
+    body = base64.b64encode(der).decode()
+    pem = f"-----BEGIN PRIVATE KEY-----\n{body}\n-----END PRIVATE KEY-----\n"
+    key = {"kid": f"local-{secrets.token_hex(4)}", "private_pem": pem, "active": True}
+    return json.dumps([key], separators=(",", ":"))
 
 
 def fill_secrets(template: str) -> str:
@@ -309,6 +326,7 @@ def fill_secrets(template: str) -> str:
     ссылок нужен и gateway, и media-pipeline — ADR 0012). В ``GV_SERVICE_CLIENTS``
     пустые ``secret_sha256`` заменяются на sha256 сгенерированных
     ``GV_SERVICE_SECRET_<CLIENT>`` (D13: identity хранит только хэши).
+    ``GV_JWT__SIGNING_KEYS`` получает настоящий Ed25519-ключ, а не случайную строку.
     """
     secret_keys = ("PASSWORD", "SECRET", "TOKEN", "KEY")
     generated: dict[str, str] = {}
@@ -316,7 +334,9 @@ def fill_secrets(template: str) -> str:
     for line in template.splitlines():
         key, sep, value = line.partition("=")
         needs_secret = sep and not value and not key.startswith("#")
-        if needs_secret and any(k in key for k in secret_keys):
+        if needs_secret and key == _JWT_KEYS_ENV:
+            lines.append(f"{key}={jwt_signing_keys()}")
+        elif needs_secret and any(k in key for k in secret_keys):
             twin = _SHARED_SECRETS.get(key)
             shared = generated.get(twin) if twin else None
             generated[key] = shared or secrets.token_urlsafe(32)

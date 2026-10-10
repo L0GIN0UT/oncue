@@ -245,13 +245,16 @@ class ModeRules:
         """Очки за раунд."""
         return self.engine.score(outcome)
 
-    async def reveal(
-        self, asset: AssetRef, level: int, *, assets: AssetPort, subject: str
+    async def clue_view(
+        self, state: RoundState, asset: AssetRef, level: int, *, assets: AssetPort, subject: str
     ) -> ClueView:
-        """Подача уровня (ссылка через ``AssetPort``)."""
-        return await self.engine.clue.reveal(
-            asset, level, self._clue_params, assets=assets, subject=subject
-        )
+        """Подача уровня (ссылка через ``AssetPort``); ядро ещё раз проверяет, что уровень открыт.
+
+        Raises:
+            LevelLockedError: уровень выше открытого.
+            GoneError: ассет выключен — раунд аннулируется (``ModeEngine.void``).
+        """
+        return await self.engine.clue_view(state, asset, level, assets=assets, subject=subject)
 
     async def final_view(self, asset: AssetRef, *, assets: AssetPort, subject: str) -> ClueView:
         """Подача для ревила завершённого раунда."""

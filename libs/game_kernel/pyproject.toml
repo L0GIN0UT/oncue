@@ -3,7 +3,7 @@ name = "gv-game-kernel"
 version = "0.1.0"
 description = "Ядро игрового движка: модели ModeConfig, реестр плагинов, порты, правила раунда (без IO)."
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-text", "pydantic>=2.9"]
+dependencies = ["gv-core", "gv-text", "pydantic>=2.9", "tzdata>=2024.1"]
 
 [build-system]
 requires = ["hatchling>=1.25"]

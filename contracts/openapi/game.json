@@ -19,7 +19,7 @@
         "type": "object"
       },
       "ClueMeta": {
-        "description": "Параметры уровня для UI.",
+        "description": "Параметры уровня для UI — поля ``hint_fields`` плагина загадки ядра.\n\nНабор полей — объединение ``hint_fields`` встроенных загадок; у конкретной загадки\nзаполнены только её поля, остальные ``null``.",
         "properties": {
           "blur": {
             "anyOf": [
@@ -30,7 +30,45 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
+            "description": "Устарело, всегда null: размытие передаётся в blur_px",
             "title": "Blur"
+          },
+          "blur_px": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "frame_progressive: размытие, px",
+            "title": "Blur Px"
+          },
+          "crop": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "frame_progressive: видимая доля кадра (0..1]",
+            "title": "Crop"
+          },
+          "pixel_block": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "poster_masked: размер блока пикселизации, px",
+            "title": "Pixel Block"
           },
           "seconds": {
             "anyOf": [
@@ -41,6 +79,7 @@
                 "type": "null"
               }
             ],
+            "description": "audio_intro: длина отрывка, с",
             "title": "Seconds"
           }
         },
@@ -496,7 +535,7 @@
                 }
               ]
             },
-            "description": "Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра",
+            "description": "Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, {pixel_block} для постера",
             "title": "Hint",
             "type": "object"
           },
@@ -3882,7 +3921,7 @@
     },
     "/v1/sessions/{session_id}/guesses": {
       "post": {
-        "description": "Ошибки: 409 `game.desync` (в `details` — актуальный снимок), 409 `game.round_finished`, 429.",
+        "description": "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.",
         "operationId": "submit_guess_v1_sessions__session_id__guesses_post",
         "parameters": [
           {
@@ -4320,6 +4359,7 @@
     },
     "/v1/sessions/{session_id}/rounds/{index}/give-up": {
       "post": {
+        "description": "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.",
         "operationId": "give_up_v1_sessions__session_id__rounds__index__give_up_post",
         "parameters": [
           {
@@ -4501,6 +4541,7 @@
     },
     "/v1/sessions/{session_id}/skips": {
       "post": {
+        "description": "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.",
         "operationId": "skip_level_v1_sessions__session_id__skips_post",
         "parameters": [
           {

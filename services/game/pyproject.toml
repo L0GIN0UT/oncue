@@ -3,7 +3,7 @@ name = "guessverse-game"
 version = "0.1.0"
 description = "Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-game-kernel", "gv-text", "httpx>=0.28", "pyyaml>=6"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-game-kernel", "gv-text", "httpx>=0.28", "pyyaml>=6", "tzdata>=2024.1"]
 
 [project.scripts]
 game = "game_service.main:run"

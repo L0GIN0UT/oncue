@@ -45,7 +45,9 @@ class CatalogItem:
         version: Последняя применённая версия события catalog.
         title: Основное название.
         year: Год.
-        aliases: Нормализованные алиасы.
+        aliases: Нормализованные алиасы всех видов.
+        title_aliases: Нормализованные алиасы видов ``title`` и ``alt`` (подмножество
+            ``aliases``; для ``accept_same_title`` ядра).
         persons: Персоны.
         genres: Жанры.
         popularity: Популярность.
@@ -59,6 +61,7 @@ class CatalogItem:
     title: str
     year: int | None = None
     aliases: tuple[str, ...] = ()
+    title_aliases: tuple[str, ...] = ()
     persons: tuple[PersonRef, ...] = ()
     genres: tuple[str, ...] = ()
     popularity: float | None = None
@@ -77,6 +80,7 @@ class CatalogItem:
             title=self.title,
             year=self.year,
             aliases=self.aliases,
+            title_aliases=self.title_aliases,
             persons=self.persons,
             genres=self.genres,
             popularity=self.popularity,

@@ -39,7 +39,7 @@ class NoStoreRoute(APIRoute):
 
     Ошибки рендерятся здесь же тем же ``gv_service.problems``: обработчик исключений
     приложения создаёт новый ответ, и заголовок роутера на него не попал бы — а в
-    ``details`` ошибки ``game.desync`` лежит снимок сессии.
+    ``details.session`` ошибки ``game.desync`` лежит снимок сессии.
     """
 
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:

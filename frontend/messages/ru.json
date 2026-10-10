@@ -73,6 +73,9 @@
       }
     },
     "presets": {
+      "oldies": "До 1990-х",
+      "modern": "С 1990-х",
+      "from2000": "С 2000-х",
       "y1980s": "1980-е",
       "y1990s": "1990-е",
       "y2000s": "2000-е",
@@ -129,6 +132,9 @@
     "listenPlain": "Слушать",
     "pause": "Пауза",
     "frameAlt": "Кадр из фильма, подсказка {level}",
+    "frameCrop": "Видно {percent}% кадра",
+    "frameBlur": "размытие {px} px",
+    "posterPixels": "Пиксели по {px} px",
     "historyLabel": "Попытки в этом раунде",
     "skipped": "Пропуск",
     "partialHint": "исполнитель верный",

@@ -54,7 +54,11 @@ from game_service.settings import Settings
 from gv_core.errors import DependencyUnavailableError
 from gv_core.random import Random, SystemRandom
 from gv_game_kernel import AssetPort
-from gv_service import Infrastructure
+from gv_service import (
+    Infrastructure,
+    ServiceAuthNotConfiguredError,
+    build_service_token_provider,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -62,20 +66,14 @@ log = structlog.get_logger(__name__)
 def default_token_provider(infra: Infrastructure, audience: str) -> TokenProvider:
     """Сервисный токен для media-pipeline (D13).
 
-    Провайдер собирает ``gv_service.build_service_token_provider`` (шаг 0b) по общим
+    Провайдер собирает ``gv_service.build_service_token_provider`` по общим
     ``GV_SERVICE_AUTH__*``; без учётных данных выдача ссылок отвечает 503.
     """
     try:
-        import gv_service
-
-        build = getattr(gv_service, "build_service_token_provider", None)
-        if build is None:
-            return UnconfiguredTokenProvider()
-        provider: TokenProvider = build(infra, audience=audience)
-    except RuntimeError:  # ServiceAuthNotConfiguredError — наследник RuntimeError
+        return build_service_token_provider(infra, audience)
+    except ServiceAuthNotConfiguredError:
         log.warning("game.service_auth_not_configured")
         return UnconfiguredTokenProvider()
-    return provider
 
 
 @dataclass

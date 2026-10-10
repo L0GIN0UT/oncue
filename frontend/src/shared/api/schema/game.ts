@@ -337,7 +337,7 @@ export interface paths {
         put?: never;
         /**
          * Ответ
-         * @description Ошибки: 409 `game.desync` (в `details` — актуальный снимок), 409 `game.round_finished`, 429.
+         * @description Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.
          */
         post: operations["submit_guess_v1_sessions__session_id__guesses_post"];
         delete?: never;
@@ -392,7 +392,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Сдаться в раунде */
+        /**
+         * Сдаться в раунде
+         * @description Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.
+         */
         post: operations["give_up_v1_sessions__session_id__rounds__index__give_up_post"];
         delete?: never;
         options?: never;
@@ -409,7 +412,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Пропустить уровень */
+        /**
+         * Пропустить уровень
+         * @description Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.
+         */
         post: operations["skip_level_v1_sessions__session_id__skips_post"];
         delete?: never;
         options?: never;
@@ -431,12 +437,37 @@ export interface components {
         };
         /**
          * ClueMeta
-         * @description Параметры уровня для UI.
+         * @description Параметры уровня для UI — поля ``hint_fields`` плагина загадки ядра.
+         *
+         *     Набор полей — объединение ``hint_fields`` встроенных загадок; у конкретной загадки
+         *     заполнены только её поля, остальные ``null``.
          */
         ClueMeta: {
-            /** Blur */
+            /**
+             * Blur
+             * @deprecated
+             * @description Устарело, всегда null: размытие передаётся в blur_px
+             */
             blur?: number | null;
-            /** Seconds */
+            /**
+             * Blur Px
+             * @description frame_progressive: размытие, px
+             */
+            blur_px?: number | null;
+            /**
+             * Crop
+             * @description frame_progressive: видимая доля кадра (0..1]
+             */
+            crop?: number | null;
+            /**
+             * Pixel Block
+             * @description poster_masked: размер блока пикселизации, px
+             */
+            pixel_block?: number | null;
+            /**
+             * Seconds
+             * @description audio_intro: длина отрывка, с
+             */
             seconds?: number | null;
         };
         /**
@@ -651,7 +682,7 @@ export interface components {
         LevelOut: {
             /**
              * Hint
-             * @description Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра
+             * @description Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, {pixel_block} для постера
              */
             hint: {
                 [key: string]: number | string;
@@ -1246,16 +1277,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     replace_daily_item_admin_v1_daily_sets__mode_key___day__items__index__put: {
@@ -1337,8 +1358,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1427,8 +1448,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1482,16 +1503,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1562,8 +1573,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1651,8 +1662,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1740,8 +1751,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1829,8 +1840,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1918,8 +1929,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1991,8 +2002,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2053,16 +2064,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     validate_mode_config_admin_v1_mode_configs_validate_post: {
@@ -2109,16 +2110,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2182,16 +2173,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     daily_status_v1_daily_get: {
@@ -2226,16 +2207,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2296,8 +2267,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2402,16 +2373,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Зависимость временно недоступна */
             503: {
                 headers: {
@@ -2474,8 +2435,8 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2564,8 +2525,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2636,8 +2597,8 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2705,6 +2666,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Ресурс больше недоступен */
             410: {
                 headers: {
@@ -2727,16 +2698,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2797,6 +2758,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Не найдено */
             404: {
                 headers: {
@@ -2837,8 +2808,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2887,6 +2858,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Не найдено */
             404: {
                 headers: {
@@ -2927,8 +2908,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

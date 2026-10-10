@@ -34,6 +34,8 @@ ITEM_UNBLOCKED = "catalog.MediaItemUnblocked"
 ASSETS_READY = "media_pipeline.AssetsReady"
 ASSETS_FAILED = "media_pipeline.AssetsFailed"
 USER_DELETED = "identity.UserDeleted"
+# Виды алиасов, которые считаются названием единицы (``MediaItemRef.title_aliases``).
+TITLE_ALIAS_KINDS = frozenset({"title", "alt"})
 
 
 class _Payload(BaseModel):
@@ -43,6 +45,7 @@ class _Payload(BaseModel):
 
 class _Alias(_Payload):
     normalized: str = Field(max_length=500)
+    kind: str = Field(max_length=16)
 
 
 class _Person(_Payload):
@@ -117,6 +120,9 @@ def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
             title=p.title,
             year=p.year,
             aliases=tuple(dict.fromkeys(a.normalized for a in p.aliases)),
+            title_aliases=tuple(
+                dict.fromkeys(a.normalized for a in p.aliases if a.kind in TITLE_ALIAS_KINDS)
+            ),
             persons=tuple(PersonRef(id=x.person_id, name=x.name, role=x.role) for x in p.persons),
             genres=tuple(p.genres),
             popularity=p.metrics.popularity if p.metrics else None,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unicodedata
 
 import pytest
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from gv_text import CONJUNCTION_REPLACEMENTS, NormalizerConfig, TitleNormalizer
@@ -120,7 +120,7 @@ REPLACEMENTS_GOLDEN: list[tuple[str, str]] = [
     ("The Good, the Bad and the Ugly", "good the bad the ugly"),
     ("And the Band Played On", "band played on"),  # после союза снимается артикль
     ("and", "and"),  # не удаляем единственное слово
-    ("&", "&"),
+    ("&", ""),  # без букв и цифр — пусто, как алиас каталога (M(N(x)) == M(x))
     ("и", "и"),
     ("Ёжик и туман", "ежик туман"),
     ("Brandy", "brandy"),  # «and» внутри слова не трогаем
@@ -169,6 +169,8 @@ def test_replacements_idempotent_on_dense_conjunctions(text: str) -> None:
 
 
 @given(st.text(max_size=60))
+@example("&")
+@example("& & and")
 def test_replacements_apply_on_top_of_base_normalization(text: str) -> None:
     """Алиас каталога (база) и ответ игрока (с заменами) сравнимы: M(N(x)) == M(x)."""
     assert M.normalize(N.normalize(text)) == M.normalize(text)
