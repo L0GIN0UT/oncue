@@ -6,7 +6,7 @@ requires-python = ">=3.13"
 dependencies = ["gv-core", "gv-auth", "gv-db", "gv-messaging", "gv-observability", "structlog>=24.4", "fastapi>=0.115", "uvicorn[standard]>=0.32", "pydantic>=2.9", "pydantic-settings>=2.6", "sqlalchemy[asyncio]>=2.0.36", "redis>=5.2"]
 
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
