@@ -19,10 +19,32 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from gv_game_kernel.ports import AssetPort, CandidatePort, ClueAsset, CollectionPort
+from gv_game_kernel.ports import (
+    AssetPort,
+    CandidatePort,
+    ClueAsset,
+    CollectionPort,
+    PlayableFor,
+    PoolQuery,
+)
 from gv_game_kernel.refs import AssetRef, MediaItemRef
 from gv_game_kernel.round import MatchVerdict, RoundOutcome
+from gv_game_kernel.spec import ModeConfig
 from gv_text import TitleNormalizer
+
+
+@dataclass(frozen=True, slots=True)
+class ParamIssue:
+    """Проблема параметров плагина, найденная перекрёстной проверкой с остальным конфигом.
+
+    Attributes:
+        path: Путь внутри ``params`` плагина (``points``, ``size``); ``EngineFactory``
+            добавляет префикс секции (``scoring.params.points``).
+        code: Машинный код (``config.levels_mismatch``, ``config.rounds_mismatch`` …).
+    """
+
+    path: str
+    code: str
 
 
 # ----------------------------------------------------------------------------- ClueType
@@ -103,9 +125,12 @@ class DrawContext:
         seed: Seed розыгрыша: для дейлика game передаёт ``hmac(secret, mode_key|day)``,
             для случайного режима — seed сессии.
         candidates: Порт кандидатов.
+        candidate_limit: Сколько кандидатов запросить у порта (на этапе 2 — весь пул;
+            game задаёт значение из настроек).
         day: День набора (дейлик).
         preset_id: Выбранный пресет (случайный режим).
-        exclude_ids: Единицы, которые нельзя выбирать (недавние наборы дня и т. п.).
+        exclude_ids: Единицы, которых следует избегать (недавние наборы дня): выбираются,
+            только если свежих единиц не хватает на ``n``.
         collections: Порт сборников (этап 3; в game на этапе 2 не передаётся).
     """
 
@@ -119,6 +144,20 @@ class DrawContext:
     preset_id: str | None = None
     exclude_ids: frozenset[UUID] = frozenset()
     collections: CollectionPort | None = None
+    candidate_limit: int = 5000
+
+
+@dataclass(frozen=True, slots=True)
+class Preset:
+    """Пресет-фильтр режима для выбора игроком (``presets[]`` в ``GET /v1/modes``).
+
+    Attributes:
+        id: Идентификатор пресета (``preset_id`` в ``POST /v1/sessions``).
+        title_key: Ключ i18n названия.
+    """
+
+    id: str
+    title_key: str
 
 
 class Source(Protocol):
@@ -133,7 +172,44 @@ class Source(Protocol):
     params_schema: ClassVar[type[BaseModel]]
 
     async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
-        """``n`` различных единиц; детерминированно при одинаковых ``ctx.seed`` и пуле."""
+        """``n`` различных единиц; детерминированно при одинаковых ``ctx.seed`` и пуле.
+
+        Raises:
+            PoolTooSmallError: единиц в пуле меньше ``n``.
+            PresetNotFoundError: неизвестный ``ctx.preset_id``.
+        """
+        ...
+
+    def presets(self, params: BaseModel) -> list[Preset]:
+        """Пресеты, из которых выбирает игрок (пусто — пресетов нет)."""
+        ...
+
+    def cross_check(
+        self, params: BaseModel, *, config: ModeConfig, levels_count: int
+    ) -> list[ParamIssue]:
+        """Согласованность параметров с остальным конфигом (например, ``size == rounds``)."""
+        ...
+
+    def pool_query(
+        self,
+        params: BaseModel,
+        *,
+        domain: str,
+        playable_for: PlayableFor | None,
+        preset_id: str | None = None,
+    ) -> PoolQuery | None:
+        """Запрос пула: по нему game считает играбельные единицы при публикации конфига.
+
+        Returns:
+            ``None``, если источник берёт единицы не из пула (сборник).
+
+        Raises:
+            PresetNotFoundError: неизвестный ``preset_id``.
+        """
+        ...
+
+    def min_playable(self, params: BaseModel, *, rounds: int) -> int:
+        """Сколько играбельных единиц должно быть в пуле, чтобы конфиг можно было опубликовать."""
         ...
 
 
@@ -156,6 +232,8 @@ class AnswerInput:
     def __post_init__(self) -> None:
         if (self.media_item_id is None) == (self.text is None):
             raise ValueError("ответ — либо media_item_id, либо text")
+        if self.selected is not None and self.selected.id != self.media_item_id:
+            raise ValueError("selected должен быть единицей media_item_id")
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,4 +316,10 @@ class Scorer(Protocol):
 
     def max_score(self, params: BaseModel, levels_count: int) -> int:
         """Максимум очков за ОДИН раунд; максимум сессии = сумма по не-``void`` раундам."""
+        ...
+
+    def cross_check(
+        self, params: BaseModel, *, config: ModeConfig, levels_count: int
+    ) -> list[ParamIssue]:
+        """Согласованность с загадкой (например, ``len(points) == levels_count``)."""
         ...

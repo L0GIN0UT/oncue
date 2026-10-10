@@ -35,7 +35,10 @@ class MediaItemRef:
         kind: ``track`` | ``film``.
         title: Основное название (для ревила).
         year: Год выхода.
-        aliases: Нормализованные алиасы (``aliases[].normalized`` каталога).
+        aliases: Нормализованные алиасы всех видов (``aliases[].normalized`` каталога).
+        title_aliases: Нормализованные алиасы видов ``title`` и ``alt`` (подмножество
+            ``aliases``): по ним ``accept_same_title`` узнаёт одноимённые единицы; пусто —
+            сравнивается только ``title``.
         persons: Персоны (исполнители, режиссёры, актёры).
         genres: Жанры.
         popularity: Популярность из метрик каталога.
@@ -47,6 +50,7 @@ class MediaItemRef:
     title: str
     year: int | None = None
     aliases: tuple[str, ...] = ()
+    title_aliases: tuple[str, ...] = ()
     persons: tuple[PersonRef, ...] = ()
     genres: tuple[str, ...] = ()
     popularity: float | None = None

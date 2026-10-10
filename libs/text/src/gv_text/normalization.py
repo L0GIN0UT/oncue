@@ -9,7 +9,9 @@
     3. «ё» → «е»;
     4. снятие диакритики у латиницы («é» → «e»); кириллица не трогается, иначе «й» → «и»;
     5. пунктуация и символы → пробел, схлопывание пробелов;
-    6. снятие ведущих артиклей из конфига («the», «a», «an»), если после них что-то есть.
+    6. замены токенов из конфига (``replacements``: «&» / «и» / «and» → общий токен или
+       удаление), если после них что-то остаётся; по умолчанию замен нет;
+    7. снятие ведущих артиклей из конфига («the», «a», «an»), если после них что-то есть.
 
 Результат идемпотентен: ``normalize(normalize(x)) == normalize(x)`` (проверяется
 property-based тестом).
@@ -25,6 +27,14 @@ import unicodedata
 from dataclasses import dataclass
 
 DEFAULT_ARTICLES: tuple[str, ...] = ("the", "a", "an")
+
+CONJUNCTION_REPLACEMENTS: tuple[tuple[str, str], ...] = (("&", ""), ("и", ""), ("and", ""))
+"""Союзы «&» / «и» / «and» убираются (docs/02-game-engine.md §7).
+
+Пустая цель — удаление: так «Rock & Roll», «Rock and Roll» и алиас каталога «rock roll»
+(каталог уже превращает «&» в пробел) совпадают. Набор подключает сверка ответов
+(``gv_game_kernel``); catalog строит алиасы без замен — поведение каталога не меняется.
+"""
 
 _RU_TO_LAT: dict[str, str] = {
     "а": "a",
@@ -139,16 +149,38 @@ class NormalizerConfig:
 
     Attributes:
         articles: Ведущие слова, которые отбрасываются («the beatles» → «beatles»).
+        replacements: Замены токенов ``(источник, цель)`` после разбиения на слова; пустая
+            цель — удалить токен. Источник из одного символа-разделителя («&») становится
+            отдельным токеном, а не пробелом. Цель обязана быть устойчивой (не источник или
+            заменяется сама на себя) — иначе нормализация не идемпотентна.
+
+    Raises:
+        ValueError: неустойчивая цель замены или пустой источник.
     """
 
     articles: tuple[str, ...] = DEFAULT_ARTICLES
+    replacements: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        table = dict(self.replacements)
+        for source, target in self.replacements:
+            if not source or source != source.strip() or " " in source:
+                raise ValueError(f"источник замены должен быть одним токеном: {source!r}")
+            if target and table.get(target, target) != target:
+                raise ValueError(f"цель замены {target!r} сама заменяется — не идемпотентно")
 
 
 class TitleNormalizer:
     """Нормализатор названий и алиасов (см. описание модуля)."""
 
     def __init__(self, config: NormalizerConfig | None = None) -> None:
-        self._articles = frozenset((config or NormalizerConfig()).articles)
+        cfg = config or NormalizerConfig()
+        self._articles = frozenset(cfg.articles)
+        self._replacements = dict(cfg.replacements)
+        # Символы-источники («&») сохраняются как отдельный токен, а не превращаются в пробел.
+        self._symbol_tokens = frozenset(
+            src for src in self._replacements if len(src) == 1 and _is_separator(src)
+        )
 
     def normalize(self, text: str) -> str:
         """Привести строку к канонической форме для сравнения и поиска.
@@ -160,11 +192,24 @@ class TitleNormalizer:
         # casefold может вернуть не-NFC последовательность — нормализуем повторно.
         value = unicodedata.normalize("NFKC", value).replace("ё", "е")
         value = _strip_latin_diacritics(value)
-        cleaned = "".join(" " if _is_separator(ch) else ch for ch in value)
-        tokens = cleaned.split()
+        cleaned = "".join(self._clean_char(ch) for ch in value)
+        tokens = self._replace_tokens(cleaned.split())
         while len(tokens) > 1 and tokens[0] in self._articles:
             tokens = tokens[1:]
         return " ".join(tokens)
+
+    def _clean_char(self, ch: str) -> str:
+        if ch in self._symbol_tokens:
+            return f" {ch} "
+        return " " if _is_separator(ch) else ch
+
+    def _replace_tokens(self, tokens: list[str]) -> list[str]:
+        """Замены токенов; если после удаления ничего не осталось — токены не трогаются."""
+        if not self._replacements:
+            return tokens
+        replaced = [self._replacements.get(t, t) for t in tokens]
+        kept = [t for t in replaced if t]
+        return kept or tokens
 
     def translit(self, normalized: str) -> str | None:
         """Вариант нормализованной строки на другом алфавите.

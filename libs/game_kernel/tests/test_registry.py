@@ -1,4 +1,4 @@
-"""Реестр плагинов и проверка ключей конфига (скелет шага 0a)."""
+"""Реестр плагинов, проверка ключей конфига и сборка движка на фейковых плагинах."""
 
 from __future__ import annotations
 
@@ -48,6 +48,18 @@ class FakeSource:
     async def draw(self, ctx: Any, params: BaseModel, n: int) -> list[Any]:
         return []
 
+    def presets(self, params: BaseModel) -> list[Any]:
+        return []
+
+    def cross_check(self, params: BaseModel, **kwargs: Any) -> list[Any]:
+        return []
+
+    def pool_query(self, params: BaseModel, **kwargs: Any) -> None:
+        return None
+
+    def min_playable(self, params: BaseModel, *, rounds: int) -> int:
+        return rounds
+
 
 class FakeMatcher:
     key: ClassVar[str] = "title_alias"
@@ -74,6 +86,9 @@ class FakeScorer:
 
     def max_score(self, params: BaseModel, levels_count: int) -> int:
         return 0
+
+    def cross_check(self, params: BaseModel, **kwargs: Any) -> list[Any]:
+        return []
 
 
 def _registry() -> PluginRegistry:
