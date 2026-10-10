@@ -21,7 +21,7 @@
 | [07-infrastructure.md](07-infrastructure.md) | VPS → Kubernetes, окружения, CI/CD, observability | DevOps |
 | [08-development-workflow.md](08-development-workflow.md) | Монорепо, локальная разработка, git, релизы | Всем разработчикам |
 | [09-roadmap.md](09-roadmap.md) | Этапы разработки | Всем |
-| [plans/](plans/stage-1.md) | Детальные планы этапов (потоки, контракты, критерии готовности) | Всем разработчикам |
+| plans/: [этап 1](plans/stage-1.md), [этап 2](plans/stage-2.md) | Детальные планы этапов (потоки, контракты, критерии готовности) | Всем разработчикам |
 | [10-ai-assistant.md](10-ai-assistant.md) | Скиллы и агенты: что и когда использовать, обязательные проверки безопасности, правила комментариев | Claude, все разработчики |
 | [adr/](adr/README.md) | Записи архитектурных решений (почему так, а не иначе) | Всем |
 | [reference/songless-reference.md](reference/songless-reference.md) | Разбор Songless: референс механик | Продукт, бэкенд |
