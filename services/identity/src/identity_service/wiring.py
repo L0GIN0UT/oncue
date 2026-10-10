@@ -13,7 +13,7 @@ from typing import Any
 import structlog
 from prometheus_client import Counter
 
-from gv_auth import Authenticator, JwtVerifier, RedisRevocationChecker
+from gv_auth import Authenticator, JwtVerifier, RedisRevocationChecker, ServiceAuthenticator
 from gv_core.errors import DependencyUnavailableError
 from gv_service import Environment, Infrastructure
 from identity_service.api.common import ApiDeps
@@ -38,6 +38,10 @@ from identity_service.application.commands.oauth import (
     UnlinkExternalAccount,
 )
 from identity_service.application.commands.roles import AssignRoles, UpdateRoleMatrix
+from identity_service.application.commands.service_tokens import (
+    IssueServiceToken,
+    ServiceTokenConfig,
+)
 from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.ports import (
@@ -59,6 +63,7 @@ from identity_service.domain import (
     Provider,
     parse_consent_requirements,
 )
+from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
 from identity_service.infrastructure.clients import (
     LogEmailSender,
     SmtpEmailSender,
@@ -245,6 +250,15 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         list_linked=ListLinkedAccounts(uow),
         get_role_matrix=GetRoleMatrix(uow),
         get_jwks=GetJwks(keys),
+        issue_service_token=IssueServiceToken(
+            service_clients(settings),
+            tokens,
+            limiter,
+            ServiceTokenConfig(
+                ttl_s=settings.service_token.ttl_s,
+                per_client_per_min=settings.service_token_limit.per_client_per_min,
+            ),
+        ),
     )
 
     async def load_jwks() -> Mapping[str, Any]:
@@ -262,7 +276,38 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         ),
         on_revocation_unavailable=REVOCATION_FAIL_OPEN.inc,
     )
-    return ApiDeps(use_cases=use_cases, auth=Authenticator(verifier), settings=settings)
+    # Сервисные токены internal-ручек: те же ключи, но свой aud (D13). Отзыва по sid нет —
+    # у сервисного токена нет сессии, его срок ограничен TTL.
+    service_verifier = JwtVerifier(
+        load_jwks,
+        issuer=settings.jwt_issuer,
+        audience=settings.internal_audience,
+        cache_ttl_s=60,
+        leeway_s=settings.jwt.leeway_s,
+    )
+    return ApiDeps(
+        use_cases=use_cases,
+        auth=Authenticator(verifier),
+        settings=settings,
+        service_auth=ServiceAuthenticator(service_verifier),
+    )
+
+
+def service_clients(settings: Settings) -> ServiceClientRegistry:
+    """Клиенты сервисных токенов из ``GV_SERVICE_CLIENTS``.
+
+    Raises:
+        InvalidInputError: некорректная конфигурация (процесс не стартует).
+    """
+    return ServiceClientRegistry(
+        ServiceClient.create(
+            c.client_id,
+            c.secret_sha256,
+            c.audiences,
+            forbidden_audiences=(settings.jwt_audience,),
+        )
+        for c in settings.service_clients
+    )
 
 
 def _email_sender(settings: Settings) -> EmailSender:

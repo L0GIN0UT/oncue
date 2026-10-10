@@ -23,7 +23,8 @@ _MB = 1024 * 1024
 def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) -> list[APIRouter]:
     """Все роутеры сервиса (DI через ``infra``; тесты подменяют ``adapters``)."""
     c = container_for(infra, adapters)
-    routers = [
+    # Ленивое соединение RabbitMQ закрывает Infrastructure.close (container_for → add_closer).
+    return [
         build_public_router(infra),
         build_internal_router(c.issue_link, c.list_sets),
         build_admin_router(
@@ -33,9 +34,6 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,
         ),
     ]
-    # Ленивое соединение RabbitMQ (очередь задач) закрывается при остановке приложения.
-    routers[0].add_event_handler("shutdown", c.close)
-    return routers
 
 
 def build_event_handlers(

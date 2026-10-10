@@ -179,3 +179,46 @@ class TestFrontend:
     def test_changed_detects_frontend_files(self) -> None:
         assert workspace.frontend_changed(["frontend/src/app/page.tsx"])
         assert not workspace.frontend_changed(["services/game/x.py", "frontend.md"])
+
+
+def test_fill_secrets_hashes_service_client_secrets() -> None:
+    """D13: секреты клиентов — случайные, в GV_SERVICE_CLIENTS identity — только их sha256."""
+    import hashlib
+    import json
+
+    from gv_cli.generate import SERVICE_CLIENTS, service_clients_json, service_secret_env
+    from gv_cli.main import fill_secrets
+
+    template = "\n".join(
+        [*(f"{service_secret_env(c)}=" for c in SERVICE_CLIENTS),
+         f"GV_SERVICE_CLIENTS={service_clients_json()}"]
+    )  # fmt: skip
+    out = fill_secrets(template)
+    values = dict(line.split("=", 1) for line in out.splitlines())
+    clients = {c["client_id"]: c for c in json.loads(values["GV_SERVICE_CLIENTS"])}
+    assert set(clients) == {"game", "admin"}
+    assert clients["game"]["audiences"] == {"media_pipeline": ["assets.link"]}
+    assert clients["admin"]["audiences"] == {"identity": ["admin_sessions"]}
+    secrets_seen = set()
+    for client_id, client in clients.items():
+        secret = values[service_secret_env(client_id)]
+        assert len(secret) >= 32
+        assert client["secret_sha256"] == hashlib.sha256(secret.encode()).hexdigest()
+        assert secret not in values["GV_SERVICE_CLIENTS"]
+        secrets_seen.add(secret)
+    assert len(secrets_seen) == 2
+
+
+def test_generated_compose_passes_service_credentials() -> None:
+    from gv_cli.generate import render_all
+    from gv_cli.registry import load_services
+
+    rendered = render_all(load_services(ROOT))
+    env = rendered["infra/compose/.env.example"]
+    assert "GV_SERVICE_SECRET_GAME=\n" in env
+    assert "GV_SERVICE_SECRET_ADMIN=\n" in env
+    assert 'GV_SERVICE_CLIENTS=[{"client_id":"game","secret_sha256":""' in env
+    compose = rendered["infra/compose/compose.services.yml"]
+    assert "GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}" in compose
+    assert "GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_GAME:?" in compose
+    assert "GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_ADMIN:?" in compose

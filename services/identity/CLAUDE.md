@@ -4,7 +4,7 @@
 
 - Пакет: `identity_service`; запуск: `identity api|relay|consumer|worker|all|migrate`
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
-- Публичный API: `/api/identity/v1/...` на gateway; JWKS — `/.well-known/jwks.json`; internal — `/internal/v1/admin-sessions[/refresh|/revoke]`; admin — `/admin/v1/users|roles`
+- Публичный API: `/api/identity/v1/...` на gateway; JWKS — `/.well-known/jwks.json`; internal — `/internal/v1/admin-sessions[/refresh|/revoke]` (сервисный токен, scope `admin_sessions`), `/internal/v1/service-tokens`; admin — `/admin/v1/users|roles`
 - Зависимости: PostgreSQL (citext), Redis, Redpanda
 - Статус: этап 1 — регистрация, вход по e-mail/никнейму, сессии, привязка Яндекс ID, роли (`docs/plans/stage-1.md` §4)
 - Граф зависимостей собирает `wiring.py` (вне слоёв, как `main.py`): api и infrastructure друг друга не импортируют.
@@ -22,3 +22,4 @@
 - Яндекс: только привязка из профиля и вход через уже привязанный аккаунт; e-mail провайдера не запрашивается и ни с чем не связывается. `state` одноразовый (GETDEL), привязан к браузеру (cookie `gv_oauth`) и, для привязки, к `sid`.
 - Admin-сессии: только пароль + `admin.access`; IP клиента приходит от admin в `client_ip` (без него — только лимит аккаунта). Ответ несёт `identity_version` (= `version` в `UserRolesChanged`). Admin-мутации: обязательный `Idempotency-Key` (таблица `idempotency_keys`, та же транзакция), `reason` 3–500. Понижение прав (роли или матрица) отзывает все сессии пользователя + denylist. Нельзя выдать/снять роль с правами шире своих; матрицу нельзя изменить с потерей своего `roles.manage`.
 - Удаление аккаунта: ник/e-mail → `~deleted~<hex>` / `<hex>@deleted.invalid`, согласия остаются.
+- Сервисные токены (D13): клиенты — `GV_SERVICE_CLIENTS` (JSON, только sha256 секретов; `aud = guessverse` запрещён), `IssueServiceToken`: лимит `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` по `client_id` (каждая попытка, fail-open) → `hmac.compare_digest` (и для неизвестного клиента) → allowlist `audience`. Claims: `iss, aud, sub=svc:<id>, scope, iat, exp, jti` (TTL `GV_SERVICE_TOKEN__TTL_S`), без `sid/roles/perms`. Internal-ручки проверяет отдельный `JwtVerifier` с `aud = internal_audience` (`identity`).

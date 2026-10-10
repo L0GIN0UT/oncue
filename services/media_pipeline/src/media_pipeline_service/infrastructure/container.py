@@ -274,16 +274,17 @@ _ATTR = "_media_container"
 
 def container_for(infra: Infrastructure, adapters: MediaAdapters | None = None) -> MediaContainer:
     """Один контейнер на процесс: api, consumer и worker в режиме ``all`` делят адаптеры
-    (и одно соединение RabbitMQ), а закрыть их можно в одном месте.
+    (и одно соединение RabbitMQ), а закрываются они в ``Infrastructure.close`` (``add_closer``).
 
-    Хранится атрибутом ``Infrastructure`` (у ``ServiceDefinition`` нет своего хука жизненного
-    цикла). Явные ``adapters`` (тесты) создают отдельный контейнер.
+    Хранится атрибутом ``Infrastructure``. Явные ``adapters`` (тесты) создают отдельный
+    контейнер (тоже закрывается в ``Infrastructure.close``).
     """
-    if adapters is not None:
-        return MediaContainer(infra, adapters)
     existing = getattr(infra, _ATTR, None)
-    if isinstance(existing, MediaContainer):
+    if adapters is None and isinstance(existing, MediaContainer):
         return existing
-    container = MediaContainer(infra)
-    setattr(infra, _ATTR, container)
+    container = MediaContainer(infra, adapters)
+    if adapters is None:
+        setattr(infra, _ATTR, container)
+    # Закрытие — вместе с процессом для любой команды (api, consumer, worker, relay).
+    infra.add_closer(container.close)
     return container

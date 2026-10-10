@@ -298,7 +298,9 @@ async def test_oauth_open_redirect_and_link_without_login(service: Any) -> None:
 async def _admin_token(service: Any) -> str:
     await service.register("boss", "boss@example.com")  # bootstrap admin
     response = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "boss@example.com", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "boss@example.com", "password": PASSWORD},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -309,7 +311,9 @@ async def _admin_token(service: Any) -> str:
 async def test_admin_session_requires_admin_access(service: Any) -> None:
     await service.register()
     response = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "neo_2026", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "neo_2026", "password": PASSWORD},
     )
     assert_problem(response, 403, "auth.forbidden")
 
@@ -317,10 +321,13 @@ async def test_admin_session_requires_admin_access(service: Any) -> None:
 async def test_admin_refresh(service: Any) -> None:
     await service.register("boss", "boss@example.com")
     first = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "boss", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "boss", "password": PASSWORD},
     )
     refreshed = await service.client.post(
         "/internal/v1/admin-sessions/refresh",
+        headers=service.admin_client,
         json={"refresh_token": first.json()["refresh_token"]},
     )
     assert refreshed.status_code == 200
@@ -356,7 +363,9 @@ async def test_assign_roles_publishes_valid_event(service: Any) -> None:
 
     # Модератору admin API ролей недоступен.
     mod = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "neo_2026", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "neo_2026", "password": PASSWORD},
     )
     mod_auth = {"Authorization": f"Bearer {mod.json()['access_token']}"}
     assert_problem(

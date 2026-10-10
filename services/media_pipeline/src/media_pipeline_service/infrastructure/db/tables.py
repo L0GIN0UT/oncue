@@ -139,7 +139,10 @@ link_issuance = Table(
     Column("subject_hash", String(64), nullable=False),
     Column("issued_at", DateTime(timezone=True), nullable=False),
     Column("expires_at", DateTime(timezone=True), nullable=False),
+    # Сервис-получатель ссылки (sub сервисного токена, D13); NULL — выдано до 0004.
+    Column("client_id", String(64)),
     CheckConstraint("subject_hash ~ '^[0-9a-f]{64}$'", name="subject_hash_sha256"),
+    CheckConstraint("client_id ~ '^[a-z][a-z0-9_]{0,63}$'", name="client_id_format"),
     Index("ix_link_issuance_issued_at", "issued_at"),
     Index("ix_link_issuance_asset_set_id", "asset_set_id"),
 )

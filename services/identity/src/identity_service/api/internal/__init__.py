@@ -1,18 +1,18 @@
 """Internal API (/internal/v1): только для других сервисов внутри сети (gateway отдаёт 404).
 
 Вход в админку (D2): только пароль и право ``admin.access``; токены — в теле ответа,
-admin хранит их в своей серверной сессии.
+admin хранит их в своей серверной сессии. Ручки admin-сессий требуют сервисный токен
+с областью ``admin_sessions`` (D13 плана этапа 2): сеть перестаёт быть единственной защитой.
 
-Сервисные токены (D13 плана этапа 2): ``POST /service-tokens`` — контракт шага 0a,
-реализация — шаг 0b (501 до неё).
+``POST /service-tokens`` — client credentials: аутентификация — сами учётные данные клиента.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
 
-from gv_core.errors import NotImplementedYetError
+from gv_auth import ServicePrincipal
 from gv_service import problem_responses
 from identity_service.api.common import ApiDeps, SessionUser, session_user
 from identity_service.application.commands.auth import ADMIN_ACCESS_PERM
@@ -88,6 +88,9 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
     """Внутренние ручки."""
     uc = deps.use_cases
     router = APIRouter(prefix="/internal/v1", tags=["internal"])
+    admin_client = Annotated[
+        ServicePrincipal, Depends(deps.service_auth.require_service("admin_sessions"))
+    ]
 
     @router.post(
         "/admin-sessions",
@@ -95,7 +98,7 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
         summary="Вход в админку",
         responses=problem_responses(401, 403, 429),
     )
-    async def admin_session(body: AdminSessionRequest) -> AdminSessionResponse:
+    async def admin_session(body: AdminSessionRequest, _: admin_client) -> AdminSessionResponse:
         # Запрос приходит от сервиса admin из доверенной сети: IP клиента — из тела, а не
         # адрес соединения (иначе лимит по IP ограничил бы всех администраторов сразу).
         ip = str(body.client_ip) if body.client_ip is not None else None
@@ -107,7 +110,7 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
         summary="Обновить admin-сессию",
         responses=problem_responses(401, 403),
     )
-    async def admin_refresh(body: AdminRefreshRequest) -> AdminSessionResponse:
+    async def admin_refresh(body: AdminRefreshRequest, _: admin_client) -> AdminSessionResponse:
         issued = await uc.refresh(
             body.refresh_token, kind=SessionKind.ADMIN, required_perm=ADMIN_ACCESS_PERM
         )
@@ -121,8 +124,9 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
             "Идемпотентно: неизвестный, уже отозванный или не admin-токен — тоже 204. "
             "access-токены сессии перестают приниматься (denylist sid)."
         ),
+        responses=problem_responses(401, 403),
     )
-    async def admin_revoke(body: AdminRefreshRequest) -> None:
+    async def admin_revoke(body: AdminRefreshRequest, _: admin_client) -> None:
         await uc.logout(refresh_token=body.refresh_token, kind=SessionKind.ADMIN)
 
     @router.post(
@@ -133,9 +137,18 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
             "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; "
             "лимит по `client_id` (429)."
         ),
-        responses=problem_responses(401, 403, 422, 429, 501),
+        responses=problem_responses(401, 403, 422, 429),
     )
-    async def service_token(body: ServiceTokenRequest) -> ServiceTokenResponse:  # noqa: ARG001
-        raise NotImplementedYetError("сервисные токены — шаг 0b плана этапа 2")
+    async def service_token(body: ServiceTokenRequest, response: Response) -> ServiceTokenResponse:
+        issued = await uc.issue_service_token.execute(
+            body.client_id, body.client_secret, body.audience
+        )
+        # Токен — учётные данные (RFC 6749 §5.1): промежуточные узлы его не кэшируют.
+        response.headers["Cache-Control"] = "no-store"
+        return ServiceTokenResponse(
+            access_token=issued.token,
+            token_type="Bearer",  # noqa: S106 — тип токена (RFC 6750), не секрет
+            expires_in=issued.expires_in,
+        )
 
     return router

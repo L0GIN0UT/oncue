@@ -4,7 +4,7 @@
 
 - Пакет: `media_pipeline_service`; запуск: `media_pipeline api|relay|consumer|worker|all|migrate`
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
-- Публичный API: нет (только internal)
+- Публичный API: нет (только internal: сервисный токен identity, `aud = GV_INTERNAL_AUTH__AUDIENCE` (по умолчанию `media_pipeline`), scope `assets.link`)
 - Зависимости: PostgreSQL, Redis (лимит выдачи ссылок), Redpanda, RabbitMQ, S3/MinIO, ffmpeg
 - Статус: этап 1 — генерация ассетов `audio_intro`/`frame_progressive`/`poster_masked`, подписанные ссылки (ADR 0012), admin-загрузка исходников.
 
@@ -20,6 +20,6 @@
 - `AssetBlockedError` — наследник `gv_core.GoneError`: 410 `asset.blocked` отдаёт общий обработчик `gv_service` (своих Problem/`problem_responses` в сервисе нет).
 - Версия `AssetsReady`/`AssetsFailed` монотонна по `media_item_id` (= `aggregate_id`), а не по набору: счётчик `media_items_state.events_version`, инкремент `items.next_event_version` в транзакции записи события в outbox (возможны пропуски). Порядок блокировок: строка единицы → набор (как в consumer).
 - Admin-мутации (upload, regenerate): `admin.access` + своё право, `gv_service.IdempotencyKey`, `gv_service.Reason`; ключ и ответ — `gv_db.idempotency.run_idempotent` в транзакции мутации (`uow.idempotency`, таблица `idempotency_keys`). Повтор upload отвечает до перекодирования файла. Чтение `GET /admin/v1/asset-sets` — `admin.access`.
-- Лимит выдачи ссылок в Redis — fail-closed: 503 с `details.retry_after` (`GV_MEDIA__LINK_LIMITER_RETRY_AFTER_S`) → заголовок `Retry-After`. Журнал `link_issuance` хранит только sha256 субъекта (`subject_hash`), чистится из `IssueAssetLink` не чаще раза в 10 мин.
-- Один `MediaContainer` на процесс (`container_for`); ленивое соединение RabbitMQ закрывается на shutdown приложения (api). В процессах consumer/worker без api хука остановки нет — соединение закрывается вместе с процессом.
+- Лимит выдачи ссылок в Redis — fail-closed: 503 с `details.retry_after` (`GV_MEDIA__LINK_LIMITER_RETRY_AFTER_S`) → заголовок `Retry-After`. Журнал `link_issuance` хранит только sha256 субъекта (`subject_hash`) и `client_id` вызывающего сервиса, чистится из `IssueAssetLink` не чаще раза в 10 мин.
+- Один `MediaContainer` на процесс (`container_for`); его `close` (ленивое соединение RabbitMQ) регистрируется в `Infrastructure.add_closer` — закрывается для любой команды.
 - Тестовые фейки портов сервиса — в `tests/conftest.py` (фикстура `media`, хуки сбоев `fail_commit`/`after_commit`), без правки `sys.path`. `load_example` по умолчанию даёт новый `event_id`; `fresh_id=False` — только для проверки дублей.

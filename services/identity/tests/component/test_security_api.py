@@ -20,6 +20,7 @@ async def _admin_session(service: Any, **extra: Any) -> dict[str, Any]:
     await service.register("boss", "boss@example.com")  # bootstrap admin
     response = await service.client.post(
         "/internal/v1/admin-sessions",
+        headers=service.admin_client,
         json={"login": "boss@example.com", "password": PASSWORD, **extra},
     )
     assert response.status_code == 200, response.text
@@ -37,7 +38,9 @@ async def test_admin_session_returns_identity_version_of_roles_event(service: An
     )
     assert body["identity_version"] == changed.payload["version"]
     refreshed = await service.client.post(
-        "/internal/v1/admin-sessions/refresh", json={"refresh_token": body["refresh_token"]}
+        "/internal/v1/admin-sessions/refresh",
+        headers=service.admin_client,
+        json={"refresh_token": body["refresh_token"]},
     )
     assert refreshed.json()["identity_version"] == body["identity_version"]
 
@@ -47,17 +50,20 @@ async def test_admin_session_limited_by_client_ip(service: Any) -> None:
     for n in range(10):
         bad = await service.client.post(
             "/internal/v1/admin-sessions",
+            headers=service.admin_client,
             json={"login": f"ghost_{n}", "password": "nope nope", "client_ip": "203.0.113.9"},
         )
         assert_problem(bad, 401, "auth.invalid_credentials")
     limited = await service.client.post(
         "/internal/v1/admin-sessions",
+        headers=service.admin_client,
         json={"login": "boss", "password": PASSWORD, "client_ip": "203.0.113.9"},
     )
     problem = assert_problem(limited, 429, "rate.limited")
     assert int(limited.headers["Retry-After"]) == problem["details"]["retry_after"]
     other = await service.client.post(
         "/internal/v1/admin-sessions",
+        headers=service.admin_client,
         json={"login": "boss", "password": PASSWORD, "client_ip": "198.51.100.1"},
     )
     assert other.status_code == 200, other.text
@@ -67,15 +73,21 @@ async def test_admin_session_revoke(service: Any) -> None:
     body = await _admin_session(service)
     for _ in range(2):  # идемпотентно
         revoked = await service.client.post(
-            "/internal/v1/admin-sessions/revoke", json={"refresh_token": body["refresh_token"]}
+            "/internal/v1/admin-sessions/revoke",
+            headers=service.admin_client,
+            json={"refresh_token": body["refresh_token"]},
         )
         assert revoked.status_code == 204
     unknown = await service.client.post(
-        "/internal/v1/admin-sessions/revoke", json={"refresh_token": "unknown"}
+        "/internal/v1/admin-sessions/revoke",
+        headers=service.admin_client,
+        json={"refresh_token": "unknown"},
     )
     assert unknown.status_code == 204
     refresh = await service.client.post(
-        "/internal/v1/admin-sessions/refresh", json={"refresh_token": body["refresh_token"]}
+        "/internal/v1/admin-sessions/refresh",
+        headers=service.admin_client,
+        json={"refresh_token": body["refresh_token"]},
     )
     assert refresh.status_code == 401
     users = await service.client.get(
@@ -159,7 +171,9 @@ async def test_demotion_revokes_sessions_and_access_tokens(service: Any) -> None
     )
     assert up.status_code == 200
     mod = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "neo_2026", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "neo_2026", "password": PASSWORD},
     )
     mod_auth = {"Authorization": f"Bearer {mod.json()['access_token']}"}
     assert (await service.client.get("/admin/v1/users", headers=mod_auth)).status_code == 200
@@ -176,7 +190,9 @@ async def test_demotion_revokes_sessions_and_access_tokens(service: Any) -> None
         "auth.session_revoked",
     )
     refresh = await service.client.post(
-        "/internal/v1/admin-sessions/refresh", json={"refresh_token": mod.json()["refresh_token"]}
+        "/internal/v1/admin-sessions/refresh",
+        headers=service.admin_client,
+        json={"refresh_token": mod.json()["refresh_token"]},
     )
     assert refresh.status_code == 401
 
