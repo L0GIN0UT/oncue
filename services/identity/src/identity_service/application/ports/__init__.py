@@ -364,6 +364,24 @@ class TokenIssuer(Protocol):
         ...
 
 
+class GuestTokenIssuer(Protocol):
+    """Выпуск access JWT гостя (D5 плана этапа 2)."""
+
+    def issue_guest_access(self, *, guest_id: UUID, session_id: UUID) -> IssuedAccess:
+        """Токен ``sub = guest_id``, ``roles = ["guest"]``, ``perms = []``, ``gst = true``."""
+        ...
+
+
+class GuestSessionPurger(Protocol):
+    """Удаление заброшенных гостевых сессий (вместе с их refresh-токенами)."""
+
+    async def purge(self, *, idle_before: datetime, revoked_before: datetime, limit: int) -> int:
+        """Удалить до ``limit`` гостевых сессий: ``last_seen_at <= idle_before`` или
+        ``revoked_at <= revoked_before`` (границы — как в ``domain.guest.is_abandoned``).
+        Возвращает число удалённых."""
+        ...
+
+
 class SigningKeyProvider(Protocol):
     """Публичные ключи подписи."""
 

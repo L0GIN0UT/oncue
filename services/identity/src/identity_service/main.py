@@ -11,7 +11,7 @@ from identity_service.api import build_routers
 from identity_service.infrastructure.db.tables import TABLES
 from identity_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from identity_service.settings import Settings
-from identity_service.wiring import build_api_deps
+from identity_service.wiring import build_api_deps, build_periodic_jobs
 
 
 def _routers(infra: Infrastructure) -> list[APIRouter]:
@@ -30,6 +30,7 @@ DEFINITION = ServiceDefinition(
     build_event_handlers=build_event_handlers,
     consumer_topics=CONSUMED_TOPICS,
     build_routers=_routers,
+    build_periodic_jobs=build_periodic_jobs,
 )
 
 

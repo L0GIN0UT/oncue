@@ -778,7 +778,7 @@
         "type": "object"
       },
       "SessionUser": {
-        "description": "Пользователь сессии.",
+        "description": "Субъект сессии: пользователь или гость (у гостя ``id`` — guest id, имени нет).",
         "properties": {
           "display_name": {
             "title": "Display Name",
@@ -787,6 +787,15 @@
           "id": {
             "format": "uuid",
             "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "user",
+            "enum": [
+              "user",
+              "guest"
+            ],
+            "title": "Kind",
             "type": "string"
           },
           "perms": {
@@ -1663,7 +1672,7 @@
     },
     "/v1/auth/guest": {
       "post": {
-        "description": "Cookie `gv_access`, `gv_refresh`, `gv_csrf` как при входе. Лимит по IP. При уже действующей сессии — 409 `auth.already_authenticated`.",
+        "description": "Cookie `gv_access`, `gv_refresh`, `gv_csrf` как при входе. Лимит по IP (429 `rate.limited`). При уже действующей сессии — 409 `auth.already_authenticated`.",
         "operationId": "start_guest_session_v1_auth_guest_post",
         "responses": {
           "204": {
@@ -1713,21 +1722,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Начать гостевую сессию",

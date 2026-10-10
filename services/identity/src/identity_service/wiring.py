@@ -15,7 +15,7 @@ from prometheus_client import Counter
 
 from gv_auth import Authenticator, JwtVerifier, RedisRevocationChecker
 from gv_core.errors import DependencyUnavailableError
-from gv_service import Environment, Infrastructure
+from gv_service import Environment, Infrastructure, PeriodicJob
 from identity_service.api.common import ApiDeps
 from identity_service.application.commands.account import DeleteAccount, GrantConsents
 from identity_service.application.commands.auth import (
@@ -30,6 +30,13 @@ from identity_service.application.commands.auth import (
     ResetPassword,
     VerifyEmail,
 )
+from identity_service.application.commands.guest import (
+    EndGuestSession,
+    GuestUseCases,
+    PurgeGuestSessions,
+    StartGuestSession,
+)
+from identity_service.application.commands.guest_issuer import GuestConfig, GuestSessionIssuer
 from identity_service.application.commands.oauth import (
     CompleteOAuth,
     LinkExternalAccount,
@@ -64,6 +71,7 @@ from identity_service.infrastructure.clients import (
     SmtpEmailSender,
     YandexOAuthProvider,
 )
+from identity_service.infrastructure.db.guest_sessions import SqlGuestSessionPurger
 from identity_service.infrastructure.db.repositories import SqlIdentityUnitOfWork
 from identity_service.infrastructure.redis_stores import (
     RedisOAuthStateStore,
@@ -87,6 +95,9 @@ log = structlog.get_logger(__name__)
 REVOCATION_FAIL_OPEN = Counter(
     "identity_revocation_fail_open_total",
     "Проверки отзыва sid, пропущенные из-за недоступного Redis",
+)
+GUEST_SESSIONS_STARTED = Counter(
+    "identity_guest_sessions_started_total", "Выданные гостевые сессии (D5 плана этапа 2)"
 )
 
 
@@ -134,6 +145,18 @@ def limit_config(settings: Settings) -> LimitConfig:
         reset_per_ip_per_min=login.reset_per_ip_per_min,
         email_per_address=mail.per_address,
         email_address_window_s=mail.window_s,
+    )
+
+
+def guest_config(settings: Settings) -> GuestConfig:
+    """Настройки гостевых сессий → параметры use-cases."""
+    g = settings.guest
+    return GuestConfig(
+        per_ip_per_hour=g.per_ip_per_hour,
+        refresh_ttl_s=g.refresh_ttl_s,
+        revoked_retention_s=g.revoked_retention_s,
+        purge_batch=g.purge_batch,
+        purge_max_batches=g.purge_max_batches,
     )
 
 
@@ -201,6 +224,8 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         access_ttl_s=settings.jwt.access_ttl_s,
     )
     issuer = SessionIssuer(tokens, secrets, clock, refresh_ttl_s=config.refresh_ttl_s)
+    guests = guest_config(settings)
+    guest_issuer = GuestSessionIssuer(tokens, issuer, clock, refresh_ttl_s=guests.refresh_ttl_s)
     authn = PasswordAuthenticator(hasher, limiter, clock, config)
     email = _email_sender(settings)
     providers = _providers(settings)
@@ -219,7 +244,7 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         verify_email=VerifyEmail(uow, clock, config),
         login=LoginWithPassword(uow, authn, issuer),
         admin_login=AdminLogin(uow, authn, issuer),
-        refresh=RefreshSession(uow, issuer, revocation, clock),
+        refresh=RefreshSession(uow, issuer, revocation, clock, guests=guest_issuer),
         logout=Logout(uow, revocation, clock),
         logout_all=LogoutAll(uow, revocation, clock),
         request_password_reset=RequestPasswordReset(
@@ -245,6 +270,13 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         list_linked=ListLinkedAccounts(uow),
         get_role_matrix=GetRoleMatrix(uow),
         get_jwks=GetJwks(keys),
+        guest=GuestUseCases(
+            config=guests,
+            start=StartGuestSession(
+                uow, guest_issuer, limiter, clock, guests, on_started=GUEST_SESSIONS_STARTED.inc
+            ),
+            end=EndGuestSession(uow, revocation, clock),
+        ),
     )
 
     async def load_jwks() -> Mapping[str, Any]:
@@ -262,7 +294,23 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
         ),
         on_revocation_unavailable=REVOCATION_FAIL_OPEN.inc,
     )
-    return ApiDeps(use_cases=use_cases, auth=Authenticator(verifier), settings=settings)
+    return ApiDeps(
+        use_cases=use_cases, auth=Authenticator(verifier), settings=settings, verifier=verifier
+    )
+
+
+def build_periodic_jobs(infra: Infrastructure) -> list[PeriodicJob]:
+    """Периодические задачи identity (кроме встроенных очисток ``gv_service``)."""
+    settings = infra.settings
+    if not isinstance(settings, Settings) or infra.sessions is None:
+        return []
+    guest = settings.guest
+    purge = PurgeGuestSessions(
+        SqlGuestSessionPurger(infra.sessions), infra.clock, guest_config(settings)
+    )
+    return [
+        PeriodicJob("guest_sessions.purge", guest.purge_interval_s, purge, guest.purge_jitter_s)
+    ]
 
 
 def _email_sender(settings: Settings) -> EmailSender:

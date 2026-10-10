@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import Request, Response
 from pydantic import BaseModel, Field
 
-from gv_auth import ACCESS_COOKIE, CSRF_COOKIE, Authenticator, Principal, new_csrf_token
+from gv_auth import (
+    ACCESS_COOKIE,
+    CSRF_COOKIE,
+    Authenticator,
+    JwtVerifier,
+    Principal,
+    new_csrf_token,
+)
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.dto import Actor
 from identity_service.application.sessions import IssuedSession
@@ -26,6 +33,9 @@ class ApiDeps:
     use_cases: IdentityUseCases
     auth: Authenticator
     settings: Settings
+    verifier: JwtVerifier | None = None
+    """Верификатор ``auth`` — для проверок без CSRF (``POST /v1/auth/guest`` только
+    отказывает действующей сессии и ничего не делает от её имени)."""
 
 
 def client_ip(request: Request) -> str | None:
@@ -43,21 +53,23 @@ def actor_of(principal: Principal) -> Actor:
 
 
 class SessionUser(BaseModel):
-    """Пользователь сессии."""
+    """Субъект сессии: пользователь или гость (у гостя ``id`` — guest id, имени нет)."""
 
     id: UUID
     display_name: str
     roles: list[str]
     perms: list[str]
+    kind: Literal["user", "guest"] = "user"
 
 
 def session_user(issued: IssuedSession) -> SessionUser:
-    """Пользователь из выданной сессии."""
+    """Субъект из выданной сессии."""
     return SessionUser(
         id=issued.user_id,
         display_name=issued.display_name,
         roles=sorted(issued.roles),
         perms=sorted(issued.perms),
+        kind="guest" if issued.is_guest else "user",
     )
 
 
@@ -79,6 +91,7 @@ def _cookie_kwargs(settings: Settings) -> dict[str, Any]:
 def set_session_cookies(response: Response, issued: IssuedSession, settings: Settings) -> None:
     """Access (Path=/), refresh (только ручки auth) и новый CSRF-токен (§8 п.2–3)."""
     kw = _cookie_kwargs(settings)
+    refresh_ttl_s = issued.refresh_ttl_s or settings.jwt.refresh_ttl_s
     response.set_cookie(
         ACCESS_COOKIE,
         issued.access_token,
@@ -90,7 +103,7 @@ def set_session_cookies(response: Response, issued: IssuedSession, settings: Set
     response.set_cookie(
         REFRESH_COOKIE,
         issued.refresh_token,
-        max_age=settings.jwt.refresh_ttl_s,
+        max_age=refresh_ttl_s,
         path=settings.cookies.refresh_path,
         httponly=True,
         **kw,
@@ -99,7 +112,7 @@ def set_session_cookies(response: Response, issued: IssuedSession, settings: Set
     response.set_cookie(
         CSRF_COOKIE,
         new_csrf_token(),
-        max_age=settings.jwt.refresh_ttl_s,
+        max_age=refresh_ttl_s,
         path="/",
         httponly=False,
         **kw,

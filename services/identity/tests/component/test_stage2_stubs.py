@@ -1,4 +1,7 @@
-"""Контракты шага 0a этапа 2: гостевая сессия и сервисные токены объявлены (501 до 0b/C)."""
+"""Контракты шага 0a этапа 2: сервисные токены объявлены (501 до 0b).
+
+Гостевая сессия реализована (поток C) — тесты в ``test_guest_api.py``.
+"""
 
 from __future__ import annotations
 
@@ -11,13 +14,6 @@ from gv_testkit import assert_problem
 pytestmark = pytest.mark.component
 
 ORIGIN = "https://gv.test"
-
-
-async def test_guest_session_requires_same_origin_then_stub(service: Any) -> None:
-    foreign = await service.client.post("/v1/auth/guest", headers={"Origin": "https://evil.test"})
-    assert foreign.status_code == 403
-    response = await service.client.post("/v1/auth/guest", headers={"Origin": ORIGIN})
-    assert_problem(response, 501, "common.not_implemented")
 
 
 async def test_service_tokens_contract(service: Any) -> None:

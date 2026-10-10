@@ -16,6 +16,7 @@ from identity_service.application.commands.auth import (
     ResetPassword,
     VerifyEmail,
 )
+from identity_service.application.commands.guest import GuestUseCases
 from identity_service.application.commands.oauth import (
     CompleteOAuth,
     StartOAuth,
@@ -58,3 +59,5 @@ class IdentityUseCases:
     list_linked: ListLinkedAccounts
     get_role_matrix: GetRoleMatrix
     get_jwks: GetJwks
+    guest: GuestUseCases | None = None
+    """Гостевые сессии (D5 плана этапа 2); ``None`` — выключены (тестовые сборки)."""

@@ -26,6 +26,7 @@ from identity_service.api.common import (
     session_user,
     set_session_cookies,
 )
+from identity_service.api.public.guest import end_guest_session
 from identity_service.application.commands.oauth import PURPOSE_LINK, PURPOSE_LOGIN
 from identity_service.application.dto import RegisterCommand
 from identity_service.application.security import OAuthStateError
@@ -164,7 +165,8 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     uc, auth, settings = deps.use_cases, deps.auth, deps.settings
     router = APIRouter(prefix="/v1", tags=["identity"])
     same_origin = [Depends(require_same_origin)]
-    Current = Annotated[Principal, Depends(auth.current)]  # noqa: N806
+    # Ручки профиля — только для аккаунта: гость получает 403 auth.guest_forbidden (D5).
+    Current = Annotated[Principal, Depends(auth.user)]  # noqa: N806
 
     def _oauth_cookie(response: Response, nonce: str) -> None:
         response.set_cookie(
@@ -231,6 +233,7 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     )
     async def login(body: LoginRequest, request: Request, response: Response) -> SessionResponse:
         issued = await uc.login(body.login, body.password, ip=client_ip(request))
+        await end_guest_session(deps, request)
         set_session_cookies(response, issued, settings)
         return SessionResponse(user=session_user(issued), expires_in=issued.expires_in)
 
@@ -437,6 +440,7 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
             OAUTH_COOKIE, path=settings.cookies.oauth_path, domain=settings.cookies.domain
         )
         if result.session is not None:
+            await end_guest_session(deps, request, principal)
             set_session_cookies(redirect, result.session, settings)
         return redirect
 
