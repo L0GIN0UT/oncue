@@ -30,6 +30,16 @@ _MESSAGES: Mapping[str, str] = {
     "rate.limited": "Слишком много запросов — повторите позже",
     "feature.disabled": "Функция выключена в настройках сервиса",
     "dependency.unavailable": "Сервис временно недоступен",
+    "idempotency.key_reused": "Форма уже отправлялась с другими данными — обновите страницу",
+    # game (docs/plans/stage-2.md §2.6)
+    "game.draft_conflict": (
+        "Черновик уже изменил кто-то другой — ваша правка не сохранена, сравните её с текущей"
+    ),
+    "game.config_invalid": "Конфиг не прошёл проверку — исправьте ошибки и повторите",
+    "game.mode_not_found": "Режим не найден",
+    "game.daily_locked": "Набор дня уже заблокирован (день начался) — менять его нельзя",
+    "game.item_not_playable": "У этой единицы нет готовых ассетов под режим",
+    "game.item_duplicate": "Эта единица уже есть в наборе дня",
 }
 
 
@@ -139,6 +149,14 @@ class ServiceClient:
             "POST", path, idempotency_key=idempotency_key, json=json, data=data, files=files
         )
 
+    def query(self, path: str, *, json: Any) -> Any:
+        """POST без побочных эффектов (проверка конфига): без ``Idempotency-Key``.
+
+        Отдельный метод, а не ``post`` с пустым ключом: так мутация без ключа по-прежнему
+        остаётся ошибкой программиста, а «безопасный» POST виден в коде явно.
+        """
+        return self._send("POST", path, safe=True, json=json)
+
     def put(self, path: str, *, idempotency_key: str, json: Any) -> Any:
         """PUT-мутация."""
         return self._send("PUT", path, idempotency_key=idempotency_key, json=json)
@@ -149,10 +167,11 @@ class ServiceClient:
         path: str,
         *,
         idempotency_key: str | None = None,
+        safe: bool = False,
         **kwargs: Any,
     ) -> Any:
         headers: dict[str, str] = {}
-        if method in MUTATING_METHODS:
+        if method in MUTATING_METHODS and not safe:
             if not idempotency_key:
                 raise ValueError("мутация без Idempotency-Key")
             headers["Idempotency-Key"] = idempotency_key

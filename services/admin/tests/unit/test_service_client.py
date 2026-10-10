@@ -106,3 +106,28 @@ def test_non_json_success_is_bad_response() -> None:
     transport = httpx.MockTransport(lambda _: httpx.Response(200, text="ok"))
     with _client(transport) as client, pytest.raises(ServiceError, match="bad_response"):
         client.get("/x")
+
+
+def test_query_is_post_without_idempotency_key() -> None:
+    """Проверка конфига (validate) — POST без побочных эффектов: ключ не нужен и не шлётся."""
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"ok": True})
+
+    with _client(httpx.MockTransport(handle)) as client:
+        assert client.query("/v", json={"body": {}}) == {"ok": True}
+    assert seen[0].method == "POST"
+    assert "Idempotency-Key" not in seen[0].headers
+
+
+def test_game_error_codes_have_human_messages() -> None:
+    response = httpx.Response(409, json={"status": 409, "code": "game.daily_locked", "title": "L"})
+    with (
+        _client(httpx.MockTransport(lambda _: response)) as client,
+        pytest.raises(ServiceError) as exc,
+    ):
+        client.put("/x", idempotency_key="k", json={})
+    assert exc.value.code == "game.daily_locked"
+    assert "заблокирован" in exc.value.message

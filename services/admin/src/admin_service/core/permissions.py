@@ -59,6 +59,12 @@ class PermissionSync:
         user.groups.clear()
 
 
+def has_perm(request: HttpRequest, perm: str) -> bool:
+    """Есть ли у вошедшего пользователя право identity ``perm`` (для показа кнопок и форм)."""
+    user = request.user
+    return isinstance(user, AdminUser) and user.is_active and user.has_perm(django_perm(perm))
+
+
 ViewFunc = Callable[..., HttpResponse]
 
 

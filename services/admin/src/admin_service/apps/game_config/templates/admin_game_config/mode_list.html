@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get">{{ form.as_p }}<input type="submit" value="Показать"></form>
+<table>
+  <thead><tr><th>Ключ</th><th>Домен</th><th>Статус</th><th>Опубликована</th><th>Черновик</th><th>Изменён</th></tr></thead>
+  {% for m in modes %}
+  <tr>
+    <td>{% if m.admin_url %}<a href="{{ m.admin_url }}">{{ m.key }}</a>{% else %}{{ m.key }}{% endif %}</td>
+    <td>{{ m.domain }}</td>
+    <td>{{ m.status }}</td>
+    <td>{% if m.published_version %}v{{ m.published_version }}{% else %}—{% endif %}</td>
+    <td>{% if m.has_draft %}есть{% else %}—{% endif %}</td>
+    <td>{{ m.updated_at|default:"" }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6">Режимов нет</td></tr>
+  {% endfor %}
+</table>
+{% if new_form %}
+<h2>Новый режим</h2>
+<form method="get" action="{% url 'game_config:new' %}">{{ new_form.as_p }}<input type="submit" value="Открыть редактор"></form>
+{% endif %}
+{% endblock %}

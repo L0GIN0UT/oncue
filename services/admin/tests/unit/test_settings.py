@@ -49,3 +49,12 @@ def test_derived_session_key_is_valid_and_not_the_secret() -> None:
     assert key == derive_key("django-secret")
     assert key != derive_key("other-secret")
     assert b"django-secret" not in key
+
+
+def test_unknown_daily_timezone_fails_at_startup() -> None:
+    with pytest.raises(ValidationError, match="часовой пояс"):
+        AdminConfig(daily_timezone="Europe/Mosсow")  # кириллическая «с» — частая опечатка
+
+
+def test_game_is_in_default_service_urls() -> None:
+    assert AdminConfig().service_urls["game"].startswith("http://game")

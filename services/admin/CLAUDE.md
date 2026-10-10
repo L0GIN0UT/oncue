@@ -1,10 +1,10 @@
 # admin
 
-Админ-панель на Django 5.2 (этап 1): вход через identity, разделы «Каталог» и «Пользователи», аудит.
+Админ-панель на Django 5.2: вход через identity, разделы «Каталог», «Пользователи» (этап 1), «Режимы» и «Наборы дня» (этап 2), аудит.
 
 - Пакет: `admin_service`; запуск: `admin api|consumer|migrate|all` (D7; `relay`/`worker` нет)
 - Django-настройки: `admin_service.django_settings` — строятся из `admin_service.settings.Settings` (env `GV_*`, `GV_ADMIN__*`)
-- Решения: ADR 0006, 0013; план — `docs/plans/stage-1.md` §7 D2. Карточка — `docs/architecture/services.md`
+- Решения: ADR 0006, 0013, 0015; планы — `docs/plans/stage-1.md` §7 D2, `docs/plans/stage-2.md` §8 (D6, D8). Карточка — `docs/architecture/services.md`
 - Публичного API нет, gateway админку не публикует. Метрики — `:9100`
 - Зависимости: PostgreSQL (зеркало пользователей, сессии, аудит, inbox), Redpanda (consumer)
 
@@ -15,7 +15,12 @@
 - `/login/`, `/logout/` — `core.auth_views` поверх `admin.site`: лимит попыток входа по IP (`GV_ADMIN__LOGIN_ATTEMPTS_*`, кэш Django: Redis при `GV_REDIS_URL`, иначе память процесса) — сверх лимита identity.
 - Данные сервисов — только через их admin-API (`core.views.fetch/mutate`; ассеты — `media_pipeline GET /admin/v1/asset-sets`); `ServiceModelAdmin`/`ReplicaRouter` — каркас до этапа 5 (D3).
 - Мутация = форма с обязательной `reason` и скрытым `idempotency_key` + `AuditEntry` и при успехе, и при отказе. В `after` — только изменённые поля (`audit_fields`), без e-mail. Просмотр пользователей (`users.view`) тоже аудируется (`audit_read`, поиск по e-mail — без адреса). Аудит append-only: ORM — `AppendOnlyError`, БД — триггеры `audit/0001` (UPDATE/DELETE) и `0002` (TRUNCATE).
-- Consumer — `core.events.UserEventsProcessor` (транзакция и inbox в Django ORM) поверх `KafkaEventConsumer` через `cast`.
+- Consumer — `core.events.UserEventsProcessor` (транзакция и inbox в Django ORM) поверх `KafkaEventConsumer`: подходит по протоколу `EventProcessorPort`, без `cast`.
+- Меню главной — реестр `AppConfig.gv_menu` (`core.menu.MenuEntry`: заголовок, маршрут, право): пункт без права скрыт, но представление всё равно проверяет право (`require_perm`), а сервис — ещё раз.
+- «Режимы» (`apps/game_config`, права `config.modes.view|edit|publish`): конфиги хранит game (D8), клиент — `core.game_client.GameAdminClient`. Редактор — YAML/JSON в `textarea`; `config_text` разбирает текст (дубли ключей, ссылки/якоря YAML и даты запрещены, вложенность ограничена), строит diff по каноничному YAML и номер строки по пути ошибки. «Проверить» — `POST validate` без `Idempotency-Key` (`ServiceClient.query`); сохранение — с `base_revision` (409 `game.draft_conflict` → текст остаётся в форме, показывается diff с текущим черновиком). Тело конфига в аудит не пишется — только ревизия/версия. Предел текста — `GV_ADMIN__MODE_CONFIG_MAX_BYTES` (как у game).
+- «Наборы дня» (`apps/game_daily`, права `game.daily.view|curate`): календарь за `from..to` (по умолчанию `GV_ADMIN__DAILY_DEFAULT_DAYS` с «сегодня» в `GV_ADMIN__DAILY_TIMEZONE`, не больше `GV_ADMIN__DAILY_RANGE_MAX_DAYS`), замена единицы через поиск в проекции game и перегенерация — только для `scheduled` (перегенерация — и `failed`); `locked` — только чтение, а запоздалая форма получает 409 `game.daily_locked` (сообщение + аудит отказа). Маршруты — конвертеры `modekey`, `isodate` (`core.converters`).
+- Сервисный токен для `/internal/v1/admin-sessions*` (D13): `core.service_auth.identity_headers()` добавляется в каждый вызов identity из `core.auth`; источник — `build_token_source()` (после шага 0b — `gv_auth.SyncServiceTokenProvider` из `GV_SERVICE_AUTH__*`, без настроек — `None`, вызов без токена). Отказ получения токена = «identity недоступен», пароль в identity не уходит.
+- mypy с `mypy_django_plugin`: модуль настроек для плагина — `admin_service.django_settings_typecheck` (окружение `ci` по умолчанию, иначе импорт настроек требует прод-секретов).
 - Health обслуживает первый middleware — до проверки `Host` и IP-allowlist. Allowlist — по `REMOTE_ADDR`; `X-Forwarded-For` — только от `GV_ADMIN__FORWARDED_ALLOW_IPS`. Вне local/ci `GV_ADMIN__IP_ALLOWLIST` обязателен и не пуст (иначе процесс не стартует); частные сети по умолчанию — только local/ci.
 - Статика django-admin отдаётся приложением (`/static/`, без collectstatic): общий Dockerfile не меняем. API админка не публикует (контракта в `contracts/openapi/` нет).
-- Тесты: conftest сам делает `django.setup()`; БД `test_admin_<хвост uuid7>`, триггер запрета TRUNCATE в ней выключен ради `flush`. Заглушки — `stub_service(service=...)` + проверка по контракту и ответа (статусы из контракта, Problem — фикстура `problem`), и запроса админки (JSON-тело, поля multipart, `Idempotency-Key` у admin-мутаций); `respond_off_contract` — только для тестов на битые данные.
+- Тесты: conftest сам делает `django.setup()`; БД `test_admin_<хвост uuid7>`, триггер запрета TRUNCATE в ней выключен ради `flush`. Заглушки (`identity`, `catalog`, `media`, `game`) — `stub_service(service=...)` + проверка по контракту и ответа (статусы из контракта, Problem — фикстура `problem`), и запроса админки (JSON-тело, поля multipart, `Idempotency-Key` у admin-мутаций, где контракт объявляет заголовок); `respond_off_contract` — только для тестов на битые данные. Роль модератора — фикстура `moderator_perms`; сервисный токен в тестах — фейковый `TokenSource` через `monkeypatch` `core.service_auth.token_source`.

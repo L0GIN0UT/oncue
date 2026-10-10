@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get">
+  {{ form.as_p }}
+  <datalist id="gv-mode-keys">{% for k in mode_keys %}<option value="{{ k }}">{% endfor %}</datalist>
+  <input type="submit" value="Показать">
+</form>
+<p>Сегодня: {{ today|date:"Y-m-d" }}. Набор блокируется в начале своего дня — после этого менять его нельзя.</p>
+{% for s in sets %}
+<div class="module">
+  <h2>{{ s.day }} — {{ s.status }}{% if s.locked %} (только чтение){% endif %} · версия режима v{{ s.mode_version }}</h2>
+  <table>
+    <thead><tr><th>Раунд</th><th>Единица</th><th>Год</th><th>Играбельна</th><th></th></tr></thead>
+    {% for i in s.items %}
+    <tr>
+      <td>{{ i.index|add:1 }}</td>
+      <td>{{ i.title }} <small><code>{{ i.media_item_id }}</code></small></td>
+      <td>{{ i.year|default:"—" }}</td>
+      <td>{% if i.playable %}да{% else %}<strong>нет</strong>{% endif %}</td>
+      <td>{% if i.replace_url %}<a href="{{ i.replace_url }}">Заменить</a>{% endif %}</td>
+    </tr>
+    {% empty %}<tr><td colspan="5">Набор пуст</td></tr>
+    {% endfor %}
+  </table>
+  {% if s.regenerate_url %}
+  <form method="post" action="{{ s.regenerate_url }}">
+    {% csrf_token %}{{ regenerate_form.as_p }}<input type="submit" value="Перегенерировать набор">
+  </form>
+  {% endif %}
+</div>
+{% empty %}
+{% if form.is_bound and not error %}<p>Наборов за этот период нет.</p>{% endif %}
+{% endfor %}
+{% endblock %}

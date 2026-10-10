@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'game_config:modes' %}">← к списку</a></p>
+{% if not_found %}
+<p>Режима <code>{{ key }}</code> нет.{% if can_edit %} <a href="{% url 'game_config:edit' key=key %}">Создать черновик</a>{% endif %}</p>
+{% elif detail %}
+<div class="module">
+  <table>
+    <tr><th>Ключ</th><td>{{ detail.key }}</td></tr>
+    <tr><th>Домен</th><td>{{ detail.domain }}</td></tr>
+    <tr><th>Статус</th><td><strong>{{ detail.status }}</strong></td></tr>
+    <tr><th>Опубликованная версия</th><td>{% if published %}v{{ published }}{% else %}—{% endif %}</td></tr>
+  </table>
+</div>
+
+<h2>Черновик</h2>
+{% if draft %}
+<p>Ревизия r{{ draft.revision }}, изменён {{ draft.updated_at }} —
+  {% if draft_valid %}<strong>валиден</strong>{% else %}<strong>не прошёл проверку</strong> (ошибок: {{ draft_errors|length }}){% endif %}.
+  {% if can_edit %}<a href="{% url 'game_config:edit' key=key %}">Редактировать</a>{% endif %}</p>
+  {% if diff %}
+  <h3>Отличия от опубликованной версии</h3>
+  {% include "admin_game_config/_diff.html" %}
+  {% elif published %}<p>Черновик совпадает с опубликованной версией.</p>
+  {% else %}<pre class="gv-lines">{{ draft_text }}</pre>
+  {% endif %}
+  {% if can_publish %}
+    {% if draft_valid %}
+    <form method="post" action="{% url 'game_config:publish' key=key %}">
+      {% csrf_token %}{{ publish_form.as_p }}<input type="submit" value="Опубликовать r{{ draft.revision }}">
+    </form>
+    {% else %}<p>Опубликовать можно только валидный черновик.</p>{% endif %}
+  {% endif %}
+{% else %}
+<p>Черновика нет.{% if can_edit %} <a href="{% url 'game_config:edit' key=key %}">Создать из опубликованной версии</a>{% endif %}</p>
+{% endif %}
+
+<h2>Версии</h2>
+<table>
+  <thead><tr><th>Версия</th><th>Статус</th><th>Опубликована</th><th>Причина</th><th>Откат с</th><th>Хэш</th></tr></thead>
+  {% for v in versions %}
+  <tr>
+    <td><a href="?version={{ v.version }}">v{{ v.version }}</a>{% if v.version == published %} (текущая){% endif %}</td>
+    <td>{{ v.status }}</td><td>{{ v.created_at }}</td><td>{{ v.reason|default:"" }}</td>
+    <td>{% if v.rolled_back_from %}v{{ v.rolled_back_from }}{% endif %}</td><td><code>{{ v.body_hash|truncatechars:15 }}</code></td>
+  </tr>
+  {% empty %}<tr><td colspan="6">Опубликованных версий нет</td></tr>
+  {% endfor %}
+</table>
+{% if body_error %}<ul class="messagelist"><li class="error">{{ body_error }}</li></ul>{% endif %}
+{% if shown_text %}
+<h3>Тело v{{ shown }}</h3>
+<pre class="gv-lines">{{ shown_text }}</pre>
+{% endif %}
+
+{% if can_publish and versions %}
+<h2>Откат</h2>
+<form method="post" action="{% url 'game_config:rollback' key=key %}">
+  {% csrf_token %}{{ rollback_form.as_p }}<input type="submit" value="Опубликовать выбранную версию заново">
+</form>
+{% endif %}
+{% if can_publish and detail.status != "archived" %}
+<h2>Архив</h2>
+<form method="post" action="{% url 'game_config:archive' key=key %}">
+  {% csrf_token %}{{ archive_form.as_p }}<input type="submit" value="В архив">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}
