@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import dataclasses
+import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -38,6 +39,10 @@ from identity_service.application.commands.oauth import (
     UnlinkExternalAccount,
 )
 from identity_service.application.commands.roles import AssignRoles, UpdateRoleMatrix
+from identity_service.application.commands.service_tokens import (
+    IssueServiceToken,
+    ServiceTokenConfig,
+)
 from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.ports import (
@@ -50,6 +55,7 @@ from identity_service.application.ports import (
     RateDecision,
     RoleChange,
 )
+from identity_service.application.ports.service_tokens import IssuedServiceToken
 from identity_service.application.queries import (
     GetJwks,
     GetRoleMatrix,
@@ -71,6 +77,7 @@ from identity_service.domain import (
     Session,
     User,
 )
+from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
 
 from gv_core import ConflictError, DomainEvent
 from gv_testkit import FakeClock, FakeUnitOfWork, InMemoryIdempotencyStore
@@ -315,6 +322,7 @@ class World:
             return_to_prefixes=("/", "/profile"),
             password_policy=PasswordPolicy(banned=frozenset({"qwertyuiop"})),
         )
+        self.tokens = FakeTokens()
         self.uc = self._build()
 
     def uow(self) -> WorldUoW:
@@ -322,7 +330,7 @@ class World:
 
     def _build(self) -> IdentityUseCases:
         c, uow, clock = self.config, self.uow, self.clock
-        issuer = SessionIssuer(FakeTokens(), self.secrets, clock, refresh_ttl_s=c.refresh_ttl_s)
+        issuer = SessionIssuer(self.tokens, self.secrets, clock, refresh_ttl_s=c.refresh_ttl_s)
         authn = PasswordAuthenticator(self.hasher, self.limiter, clock, c)
         revocation = FakeRevocation(self.revoked)
         providers = {Provider.YANDEX: self.yandex}
@@ -369,6 +377,9 @@ class World:
             list_linked=ListLinkedAccounts(uow),
             get_role_matrix=GetRoleMatrix(uow),
             get_jwks=GetJwks(FakeKeys()),
+            issue_service_token=IssueServiceToken(
+                SERVICE_CLIENTS, self.tokens, self.limiter, SERVICE_TOKEN_CONFIG
+            ),
         )
 
     async def make_user(
@@ -445,10 +456,33 @@ class FakeHasher:
 
 
 class FakeTokens:
+    def __init__(self) -> None:
+        self.service_issued: list[tuple[str, str, frozenset[str], int]] = []
+
     def issue_access(
         self, *, user_id: UUID, session_id: UUID, roles: Iterable[str], perms: Iterable[str]
     ) -> IssuedAccess:
         return IssuedAccess(f"access:{user_id}:{session_id}:{','.join(perms)}", 900)
+
+    def issue_service(
+        self, *, client_id: str, audience: str, scopes: Iterable[str], ttl_s: int
+    ) -> IssuedServiceToken:
+        self.service_issued.append((client_id, audience, frozenset(scopes), ttl_s))
+        n = len(self.service_issued)
+        return IssuedServiceToken(f"svc:{client_id}:{audience}:{n}", ttl_s, f"jti-{n}")
+
+
+GAME_SECRET = "game-secret-value"
+SERVICE_CLIENTS = ServiceClientRegistry(
+    [
+        ServiceClient.create(
+            "game",
+            hashlib.sha256(GAME_SECRET.encode()).hexdigest(),
+            {"media_pipeline": ["assets.link"]},
+        )
+    ]
+)
+SERVICE_TOKEN_CONFIG = ServiceTokenConfig(ttl_s=600, per_client_per_min=3)
 
 
 class FakeKeys:

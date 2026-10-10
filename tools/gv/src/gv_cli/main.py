@@ -16,6 +16,7 @@ gv hook NAME                     хук Claude Code (событие в stdin), �
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -27,6 +28,7 @@ from typing import Annotated
 import typer
 
 from gv_cli import contracts, generate, hooks, scaffold, workspace
+from gv_cli.generate import service_secret_env
 from gv_cli.registry import NAME_RE, load_services, repo_root
 
 app = typer.Typer(help="CLI разработчика Guessverse", no_args_is_help=True)
@@ -296,6 +298,7 @@ def make_secrets() -> None:
 
 # Переменные, которые обязаны совпадать: одно значение читают разные процессы.
 _SHARED_SECRETS = {"GV_MEDIA__SIGNING_SECRET": "GV_MEDIA_SIGNING_SECRET"}
+_SERVICE_CLIENTS_ENV = "GV_SERVICE_CLIENTS"
 
 
 def fill_secrets(template: str) -> str:
@@ -303,7 +306,9 @@ def fill_secrets(template: str) -> str:
 
     Секрет — пустая переменная, в имени которой есть PASSWORD/SECRET/TOKEN/KEY.
     Переменные из ``_SHARED_SECRETS`` получают значение своей пары (секрет подписи
-    ссылок нужен и gateway, и media-pipeline — ADR 0012).
+    ссылок нужен и gateway, и media-pipeline — ADR 0012). В ``GV_SERVICE_CLIENTS``
+    пустые ``secret_sha256`` заменяются на sha256 сгенерированных
+    ``GV_SERVICE_SECRET_<CLIENT>`` (D13: identity хранит только хэши).
     """
     secret_keys = ("PASSWORD", "SECRET", "TOKEN", "KEY")
     generated: dict[str, str] = {}
@@ -318,7 +323,24 @@ def fill_secrets(template: str) -> str:
             lines.append(f"{key}={generated[key]}")
         else:
             lines.append(line)
-    return "\n".join(lines) + "\n"
+    return "\n".join(_fill_service_clients(line, generated) for line in lines) + "\n"
+
+
+def _fill_service_clients(line: str, generated: dict[str, str]) -> str:
+    key, sep, value = line.partition("=")
+    if key != _SERVICE_CLIENTS_ENV or not sep or not value:
+        return line
+    clients = json.loads(value)
+    for client in clients:
+        if client.get("secret_sha256"):
+            continue
+        secret = generated.get(service_secret_env(client["client_id"]))
+        if secret is None:
+            raise typer.BadParameter(
+                f"нет {service_secret_env(client['client_id'])} для клиента {client['client_id']}"
+            )
+        client["secret_sha256"] = hashlib.sha256(secret.encode()).hexdigest()
+    return f"{key}={json.dumps(clients, separators=(',', ':'))}"
 
 
 # ----------------------------------------------------------------------------- ci

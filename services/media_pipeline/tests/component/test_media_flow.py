@@ -22,6 +22,7 @@ from uuid import UUID
 import httpx
 import pytest
 import respx
+import sqlalchemy as sa
 from media_pipeline_service.application.dto import GENERATE_TASK
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import StorageArea
@@ -183,12 +184,27 @@ async def service(
         dead_letters=FakeDeadLetterSink(),
         clock=runtime.clock,
     )
-    app = create_app(definition, runtime, jwt_verifier=token_issuer.verifier())
+    app = create_app(
+        definition,
+        runtime,
+        jwt_verifier=token_issuer.verifier(),
+        service_jwt_verifier=token_issuer.verifier(audience="media_pipeline"),
+    )
+    # internal-ручки вызывает game с сервисным токеном (D13): хук добавляет его в запросы к
+    # /internal/ без своего заголовка (кроме помеченных ``no_service_token``).
+    game = token_issuer.issue_service("game", "media_pipeline", ["assets.link"])
+
+    async def add_service_token(request: httpx.Request) -> None:
+        skip = request.extensions.get("no_service_token")
+        if request.url.path.startswith("/internal/") and not skip:
+            request.headers.setdefault("authorization", f"Bearer {game}")
+
     try:
         with respx.mock(assert_all_called=False) as router:
             router.get(f"https://{TMDB_IP}{POSTER_PATH}").respond(200, content=_jpeg())
             router.route(host="127.0.0.1").pass_through()  # S3 (moto/MinIO)
             async with service_client(app) as client:
+                client.event_hooks["request"].append(add_service_token)
                 yield Service(
                     client, runtime, queue, adapters.storage, processor,
                     build_task_handlers(runtime, adapters), token_issuer,
@@ -588,3 +604,56 @@ async def test_asset_sets_requires_media_item_id(service: Service) -> None:
         "/internal/v1/asset-sets", params={"media_item_id": str(UUID(int=1))}
     )
     assert response.json() == []
+
+
+# ---------------------------------------------------------------- сервисные токены (D13)
+async def test_internal_api_requires_service_token_with_scope(service: Service) -> None:
+    asset_set = await _ready_poster(service)
+    link = {"asset_set_id": asset_set["asset_set_id"], "level": 1, "subject": "sess:auth"}
+    media_item_id = asset_set["media_item_id"]
+
+    async def call(method: str, auth: str | None) -> httpx.Response:
+        if method == "POST":
+            request = service.client.build_request("POST", "/internal/v1/asset-links", json=link)
+        else:
+            request = service.client.build_request(
+                "GET", "/internal/v1/asset-sets", params={"media_item_id": media_item_id}
+            )
+        if auth is None:
+            request.extensions["no_service_token"] = True
+        else:
+            request.headers["authorization"] = f"Bearer {auth}"
+        return await service.client.send(request)
+
+    issuer = service.issuer
+    for method in ("POST", "GET"):
+        # без токена
+        assert_problem(await call(method, None), 401, "auth.unauthenticated")
+        # пользовательский JWT (даже админский) internal не проходит
+        user = issuer.issue(perms=ADMIN_PERMS)
+        assert_problem(await call(method, user), 401, "auth.token_invalid")
+        # сервисный токен другому адресату
+        to_identity = issuer.issue_service("game", "identity", ["assets.link"])
+        assert_problem(await call(method, to_identity), 401, "auth.token_invalid")
+        # сервисный токен без нужной области
+        no_scope = issuer.issue_service("admin", "media_pipeline", ["admin_sessions"])
+        assert_problem(await call(method, no_scope), 403, "auth.forbidden")
+        # токен game с assets.link
+        game = issuer.issue_service("game", "media_pipeline", ["assets.link"])
+        assert (await call(method, game)).status_code == 200
+
+
+async def test_link_issuance_journal_records_client_id(service: Service) -> None:
+    asset_set = await _ready_poster(service)
+    response = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": asset_set["asset_set_id"], "level": 1, "subject": "sess:journal"},
+    )
+    assert response.status_code == 200, response.text
+    journal = TABLES.metadata.tables["link_issuance"]
+    assert service.infra.sessions is not None
+    async with service.infra.sessions() as session:
+        rows = (await session.execute(sa.select(journal.c.client_id, journal.c.subject_hash))).all()
+    assert [(r.client_id, r.subject_hash) for r in rows] == [
+        ("game", hashlib.sha256(b"sess:journal").hexdigest())
+    ]

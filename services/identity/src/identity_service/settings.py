@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from gv_auth import DEFAULT_LEEWAY_S
 from gv_service import ServiceSettings
@@ -114,6 +114,32 @@ class OAuthSettings(BaseModel):
     state_ttl_s: int = Field(default=600, ge=60, le=1800)
 
 
+class ServiceClientSettings(BaseModel):
+    """Клиент сервисных токенов (элемент ``GV_SERVICE_CLIENTS``, D13 плана этапа 2).
+
+    Пример: ``{"client_id": "game", "secret_sha256": "<sha256 секрета, hex>",
+    "audiences": {"media_pipeline": ["assets.link"]}}``. Сам секрет identity не хранит.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    client_id: str
+    secret_sha256: str
+    audiences: dict[str, tuple[str, ...]]
+
+
+class ServiceTokenSettings(BaseModel):
+    """Сервисные токены: ``GV_SERVICE_TOKEN__*``."""
+
+    ttl_s: int = Field(default=600, ge=60, le=3600)
+
+
+class ServiceTokenLimitSettings(BaseModel):
+    """Лимит выдачи сервисных токенов: ``GV_SERVICE_TOKEN_LIMIT__*``."""
+
+    per_client_per_min: int = Field(default=60, ge=1)
+
+
 class Settings(ServiceSettings):
     """Настройки сервиса. Новые поля добавлять здесь с безопасными значениями по умолчанию."""
 
@@ -128,6 +154,10 @@ class Settings(ServiceSettings):
     argon2: Argon2Settings = Argon2Settings()
     consents: ConsentSettings = ConsentSettings()
     oauth: OAuthSettings = OAuthSettings()
+    service_clients: tuple[ServiceClientSettings, ...] = ()
+    """``GV_SERVICE_CLIENTS`` — JSON-массив клиентов сервисных токенов; пусто — выдачи нет."""
+    service_token: ServiceTokenSettings = ServiceTokenSettings()
+    service_token_limit: ServiceTokenLimitSettings = ServiceTokenLimitSettings()
     bootstrap_admin_emails: tuple[str, ...] = ()
     redis_key_prefix: str = ""
     """Пространство имён ключей Redis (тесты и несколько стендов на одном Redis).

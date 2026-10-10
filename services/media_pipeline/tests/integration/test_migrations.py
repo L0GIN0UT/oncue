@@ -12,6 +12,7 @@ from alembic.migration import MigrationContext
 from media_pipeline_service.infrastructure.db.tables import TABLES
 from media_pipeline_service.main import DEFINITION
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from gv_core import uuid7
@@ -58,6 +59,50 @@ async def test_0003_hashes_existing_subjects_and_downgrades(database_url: str) -
         assert stored == hashlib.sha256(b"game:42").hexdigest()
 
         await asyncio.to_thread(command.downgrade, config, "0002")
+        await asyncio.to_thread(run_migrations, path, database_url)
+    finally:
+        await engine.dispose()
+
+
+async def test_0004_adds_nullable_client_id_with_check(database_url: str) -> None:
+    """0004: старые строки журнала остаются с client_id = NULL, мусор отвергается CHECK."""
+    path = DEFINITION.migrations_path
+    assert path is not None
+    config = alembic_config(path, database_url)
+    await asyncio.to_thread(run_migrations, path, database_url, "0003")
+    insert = text(
+        "INSERT INTO link_issuance (id, asset_set_id, level, subject_hash, issued_at, expires_at"
+        "{col}) VALUES (:id, :set, 1, :hash, now(), now(){val})"
+    )
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(insert.text.format(col="", val="")),
+                {"id": uuid7(), "set": uuid7(), "hash": "0" * 64},
+            )
+        await asyncio.to_thread(run_migrations, path, database_url)
+        with_client = text(insert.text.format(col=", client_id", val=", :client"))
+        async with engine.begin() as conn:
+            await conn.execute(
+                with_client, {"id": uuid7(), "set": uuid7(), "hash": "1" * 64, "client": "game"}
+            )
+            rows = (
+                (
+                    await conn.execute(
+                        text("SELECT client_id FROM link_issuance ORDER BY subject_hash")
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert rows == [None, "game"]
+        with pytest.raises(IntegrityError):
+            async with engine.begin() as conn:
+                await conn.execute(
+                    with_client, {"id": uuid7(), "set": uuid7(), "hash": "2" * 64, "client": "Bad!"}
+                )
+        await asyncio.to_thread(command.downgrade, config, "0003")
         await asyncio.to_thread(run_migrations, path, database_url)
     finally:
         await engine.dispose()

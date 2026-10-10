@@ -9,7 +9,14 @@ from uuid import UUID
 from fastapi import Request, Response
 from pydantic import BaseModel, Field
 
-from gv_auth import ACCESS_COOKIE, CSRF_COOKIE, Authenticator, Principal, new_csrf_token
+from gv_auth import (
+    ACCESS_COOKIE,
+    CSRF_COOKIE,
+    Authenticator,
+    Principal,
+    ServiceAuthenticator,
+    new_csrf_token,
+)
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.dto import Actor
 from identity_service.application.sessions import IssuedSession
@@ -21,11 +28,15 @@ OAUTH_COOKIE = "gv_oauth"
 
 @dataclass(frozen=True)
 class ApiDeps:
-    """Что нужно роутерам: use-cases, аутентификация, настройки."""
+    """Что нужно роутерам: use-cases, аутентификация, настройки.
+
+    ``service_auth`` проверяет сервисные токены internal-ручек (``aud`` = identity).
+    """
 
     use_cases: IdentityUseCases
     auth: Authenticator
     settings: Settings
+    service_auth: ServiceAuthenticator
 
 
 def client_ip(request: Request) -> str | None:

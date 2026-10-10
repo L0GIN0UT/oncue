@@ -30,7 +30,7 @@ if TYPE_CHECKING:
         create_schema,
         temporary_database,
     )
-    from gv_testkit.periodic import run_periodic_job
+    from gv_testkit.periodic import assert_idempotency_purge, run_periodic_job
     from gv_testkit.stubs import stub_service
 
 _EXPORTS = {
@@ -52,6 +52,7 @@ _EXPORTS = {
     "assert_event_matches_schema": "gv_testkit.contracts",
     "load_example": "gv_testkit.contracts",
     "stub_service": "gv_testkit.stubs",
+    "assert_idempotency_purge": "gv_testkit.periodic",
     "run_periodic_job": "gv_testkit.periodic",
     "apply_migrations": "gv_testkit.infra",
     "create_schema": "gv_testkit.infra",
@@ -72,6 +73,7 @@ __all__ = [
     "TestTokenIssuer",
     "apply_migrations",
     "assert_event_matches_schema",
+    "assert_idempotency_purge",
     "assert_problem",
     "assert_published",
     "create_schema",

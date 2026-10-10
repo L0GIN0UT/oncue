@@ -28,17 +28,21 @@ async def test_meta_and_health() -> None:
         await infra.close()
 
 
-async def test_shutdown_closes_lazy_rabbit_connection(infra: InfraProvider) -> None:
-    """Ленивое соединение очереди задач закрывается при остановке приложения (lifespan)."""
+async def test_process_close_closes_lazy_rabbit_connection(infra: InfraProvider) -> None:
+    """Ленивое соединение очереди задач закрывается в ``Infrastructure.close`` — для любой
+    команды (api, consumer, worker), а не только на остановке приложения."""
     settings = Settings(rabbitmq_url=SecretStr(infra.rabbitmq_url()))
     runtime = await Infrastructure.open(settings, DEFINITION.tables)
+    closed = False
     try:
-        app = create_app(DEFINITION, runtime)
-        queue = container_for(runtime).adapters.queue  # тот же контейнер, что у роутеров
+        queue = container_for(runtime).adapters.queue  # как в consumer/worker: без api
         assert isinstance(queue, LazyRabbitTaskQueue)
-        async with service_client(app):
-            await queue.enqueue(f"media.shutdown_test_{uuid7().hex[-12:]}", {}, task_id="t-1")
-            assert queue.is_connected
+        assert container_for(runtime).adapters.queue is queue  # один контейнер на процесс
+        await queue.enqueue(f"media.shutdown_test_{uuid7().hex[-12:]}", {}, task_id="t-1")
+        assert queue.is_connected
+        await runtime.close()
+        closed = True
         assert not queue.is_connected
     finally:
-        await runtime.close()
+        if not closed:
+            await runtime.close()

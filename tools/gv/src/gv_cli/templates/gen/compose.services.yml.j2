@@ -75,6 +75,14 @@ services:
 {% if s.rabbitmq %}
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
 {% endif %}
+{% if s.name == "identity" %}
+      GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}
+{% endif %}
+{% if s.name in service_clients %}
+      GV_SERVICE_AUTH__TOKEN_URL: http://identity:8000/internal/v1/service-tokens
+      GV_SERVICE_AUTH__CLIENT_ID: {{ s.name }}
+      GV_SERVICE_AUTH__CLIENT_SECRET: ${ {{- service_secret_env(s.name) }}:?задайте {{ service_secret_env(s.name) }}}
+{% endif %}
     depends_on:
 {% if s.database %}
       {{ s.dns }}-migrate: {condition: service_completed_successfully}

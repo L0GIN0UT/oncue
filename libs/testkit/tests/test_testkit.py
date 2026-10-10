@@ -271,3 +271,24 @@ def test_fake_random_is_deterministic_and_scriptable() -> None:
     assert items_a == items_b
     scripted = FakeRandom(values=[0.0, 0.5])
     assert [scripted.random() for _ in range(3)] == [0.0, 0.5, 0.0]
+
+
+@pytest.mark.integration
+async def test_assert_idempotency_purge_on_demo_schema(database_url: str) -> None:
+    from gv_db.idempotency import idempotency_table
+    from gv_db.metadata import create_metadata
+    from gv_service import Infrastructure, ServiceDefinition, ServiceSettings
+    from gv_testkit import FakeClock, assert_idempotency_purge, create_schema
+
+    tables = create_metadata()
+    idempotency_table(tables.metadata)
+    await create_schema(database_url, tables.metadata)
+    from pydantic import SecretStr
+
+    settings = ServiceSettings(service_name="demo", database_url=SecretStr(database_url))
+    infra = await Infrastructure.open(settings, tables, clock=FakeClock())
+    try:
+        definition = ServiceDefinition(name="demo", settings_cls=ServiceSettings, tables=tables)
+        await assert_idempotency_purge(definition, infra)
+    finally:
+        await infra.close()

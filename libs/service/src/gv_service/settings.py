@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +48,44 @@ class IdempotencySettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     retention_h: float = Field(default=72, gt=0)
+
+
+class InternalAuthSettings(BaseModel):
+    """Проверка сервисных токенов на internal-ручках (D13 плана этапа 2).
+
+    Attributes:
+        audience: Ожидаемый ``aud`` сервисного токена (``GV_INTERNAL_AUTH__AUDIENCE``);
+            ``None`` — имя сервиса. Не может совпадать с ``jwt_audience`` пользовательских
+            токенов: иначе граница «пользователь/сервис» держалась бы только на форме ``sub``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    audience: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+
+
+class ServiceAuthSettings(BaseModel):
+    """Учётные данные сервиса для исходящих вызовов (client credentials, D13).
+
+    Attributes:
+        token_url: ``http://identity:8000/internal/v1/service-tokens``
+            (``GV_SERVICE_AUTH__TOKEN_URL``).
+        client_id: Идентификатор клиента в ``GV_SERVICE_CLIENTS`` identity; ``None`` —
+            имя сервиса.
+        client_secret: Секрет клиента (identity хранит только его sha256).
+        timeout_s: Таймаут запроса к identity.
+        refresh_ratio: Доля TTL, после которой токен обновляется.
+        retry_backoff_s: Пауза между попытками обновления при отказе identity.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    token_url: str | None = None
+    client_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+    client_secret: SecretStr | None = None
+    timeout_s: float = Field(default=2.0, gt=0, le=30)
+    refresh_ratio: float = Field(default=0.5, gt=0, lt=1)
+    retry_backoff_s: float = Field(default=5.0, ge=0, le=300)
 
 
 class ServiceSettings(BaseSettings):
@@ -94,6 +132,22 @@ class ServiceSettings(BaseSettings):
     jwks_url: str | None = None
     jwt_issuer: str = "https://identity.guessverse.local"
     jwt_audience: str = "guessverse"
+    internal_auth: InternalAuthSettings = InternalAuthSettings()
+    service_auth: ServiceAuthSettings = ServiceAuthSettings()
+
+    @property
+    def internal_audience(self) -> str:
+        """``aud`` сервисных токенов, адресованных этому сервису."""
+        return self.internal_auth.audience or self.service_name
+
+    @model_validator(mode="after")
+    def _audiences_differ(self) -> ServiceSettings:
+        if self.internal_audience == self.jwt_audience:
+            raise ValueError(
+                "GV_INTERNAL_AUTH__AUDIENCE не может совпадать с GV_JWT_AUDIENCE "
+                "(пользовательские токены прошли бы internal-ручки по aud)"
+            )
+        return self
 
     @property
     def is_production(self) -> bool:
