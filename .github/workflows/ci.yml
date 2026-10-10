@@ -56,7 +56,7 @@ jobs:
       - name: Совместимость контрактов с базой
         run: uv run gv contracts check --base "$BASE_REF"
       - name: Секреты в коде
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Уязвимости зависимостей
         run: uvx pip-audit --strict --progress-spinner off -r <(uv export --all-packages --no-dev --no-hashes --no-emit-workspace)
