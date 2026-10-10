@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/*
+ * Токены дизайна OnCue. Тёмная тема по умолчанию (D3): «ночной зал» — глубокий сливовый фон,
+ * два доменных акцента (латунь — музыка, плёнка — кино) и цвета исходов попытки.
+ * Компоненты используют только эти токены; светлая тема — этап 7.
+ */
+@theme {
+    --font-sans: "Onest Variable", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Unbounded Variable", "Onest Variable", ui-sans-serif, sans-serif;
+
+    --color-night: #16112a;
+    --color-stage: #201939;
+    --color-stage-raised: #2a2249;
+    --color-rule: #3b3263;
+    --color-ink: #f1ecfa;
+    --color-ink-muted: #b0a8cc;
+    --color-ink-faint: #958db6;
+
+    --color-music: #f4b942;
+    --color-music-deep: #8a5d10;
+    --color-film: #6fd6c9;
+    --color-film-deep: #1f6f66;
+
+    --color-exact: #8ee38b;
+    --color-partial: #f3d35c;
+    --color-miss: #ff8a7a;
+    --color-skip: #6d6591;
+
+    --radius-ticket: 1.25rem;
+    --radius-control: 0.75rem;
+
+    --ease-reveal: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@layer base {
+    :root {
+        color-scheme: dark;
+    }
+
+    html {
+        background-color: var(--color-night);
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        min-height: 100dvh;
+        background:
+            radial-gradient(60rem 30rem at 15% -10%, rgb(244 185 66 / 0.08), transparent 60%),
+            radial-gradient(50rem 30rem at 95% 0%, rgb(111 214 201 / 0.07), transparent 60%),
+            var(--color-night);
+        font-feature-settings: "ss01" on;
+        line-height: 1.5;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-ink);
+        outline-offset: 3px;
+        border-radius: 0.375rem;
+    }
+
+    ::selection {
+        background: var(--color-music);
+        color: var(--color-night);
+    }
+}
+
+@layer utilities {
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Доменный акцент: компонент задаёт data-domain, потомки берут --accent. */
+    [data-domain="music"] {
+        --accent: var(--color-music);
+        --accent-deep: var(--color-music-deep);
+    }
+    [data-domain="film"] {
+        --accent: var(--color-film);
+        --accent-deep: var(--color-film-deep);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
