@@ -1,0 +1,64 @@
+/**
+ * Полный стек: гость проходит «Трек дня», античит-инварианты видны снаружи (план §0 п. 2–3).
+ * Ответы неизвестны тесту, поэтому раунды завершаются через «Сдаться».
+ */
+import { expect, test, type Page } from "@playwright/test";
+
+const DAILY = "music.daily.classic";
+
+async function finishByGivingUp(page: Page): Promise<void> {
+  for (;;) {
+    const toResults = page.getByRole("button", { name: "К итогам" });
+    const next = page.getByRole("button", { name: "Следующий раунд" });
+    const giveUp = page.locator("[data-testid=give-up]:enabled");
+    await expect(toResults.or(next).or(giveUp).first()).toBeVisible();
+    if (await toResults.isVisible()) return toResults.click();
+    if (await next.isVisible()) {
+      await next.click();
+      continue;
+    }
+    await giveUp.click();
+  }
+}
+
+test("гость: дейлик музыки от главной до итога, повторный вход ведёт на итог", async ({ page }) => {
+  const snapshots: string[] = [];
+  const clueUrls: string[] = [];
+  page.on("response", async (r) => {
+    const url = r.url();
+    if (/\/api\/game\/v1\/sessions\/[^/]+$/.test(url) && r.request().method() === "GET") snapshots.push(await r.text());
+    if (/\/rounds\/\d+\/clue$/.test(url) && r.ok()) clueUrls.push(((await r.json()) as { url: string }).url);
+  });
+
+  await page.goto("/");
+  await expect(page.getByTestId(`daily-${DAILY}`)).toBeVisible();
+  await expect(page.getByTestId("daily-film.daily.frame")).toBeVisible();
+  await expect(page.getByTestId("countdown")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+
+  await page.getByTestId(`daily-${DAILY}`).getByRole("link", { name: /Играть|Продолжить/ }).click();
+  await expect(page).toHaveURL(/\/play\/s\//);
+  const sessionId = page.url().split("/").pop()!;
+  await expect(page.getByRole("button", { name: "Слушать 0,5 с" })).toBeVisible();
+
+  // Ссылка ассета — подписанная /media/a/<ключ>.<ext> конкретного уровня.
+  expect(clueUrls[0]).toMatch(/^\/media\/a\/[A-Za-z0-9_-]+\.[a-z0-9]{2,5}\?/);
+  // До ревила в снимке нет ответа.
+  expect(snapshots.join("")).not.toMatch(/media_item_id|"title"/);
+
+  // Ассет уровня выше текущего — 403 game.level_locked.
+  const csrf = (await page.context().cookies()).find((c) => c.name === "gv_csrf")?.value ?? "";
+  const locked = await page.request.post(`/api/game/v1/sessions/${sessionId}/rounds/0/clue`, {
+    data: { level: 3 },
+    headers: { "X-CSRF-Token": csrf },
+  });
+  expect(locked.status()).toBe(403);
+  expect(((await locked.json()) as { code: string }).code).toBe("game.level_locked");
+
+  await finishByGivingUp(page);
+  await expect(page).toHaveURL(new RegExp(`/results/${sessionId}`));
+  await expect(page.getByTestId("final-score")).toContainText("/ 30");
+  await expect(page.getByTestId("result-row")).toHaveCount(5);
+
+  await page.goto(`/play/${DAILY}`);
+  await expect(page).toHaveURL(new RegExp(`/results/${sessionId}`));
+});
