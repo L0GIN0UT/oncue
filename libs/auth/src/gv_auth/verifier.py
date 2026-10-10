@@ -209,6 +209,9 @@ def _principal_from_claims(claims: Mapping[str, Any]) -> Principal:
         plan=claims.get("plan") if isinstance(claims.get("plan"), str) else None,
         token_id=claims.get("jti") if isinstance(claims.get("jti"), str) else None,
         session_id=claims.get("sid") if isinstance(claims.get("sid"), str) else None,
+        # Гость только при явном true: любое другое значение — обычный пользователь без
+        # расширения прав (у гостя прав всё равно нет, identity выдаёт perms = []).
+        is_guest=claims.get("gst") is True,
     )
 
 

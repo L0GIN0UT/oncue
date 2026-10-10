@@ -92,14 +92,18 @@ def test_compare_with_base_detects_deleted_contract(tmp_path: Path) -> None:
 
 
 class TestHandWrittenContracts:
-    """Схемы событий и параметров загадок пишутся руками (contract-first) — проверяем их."""
+    """Схемы событий, параметров загадок и конфигов режимов пишутся руками (contract-first)."""
 
     @staticmethod
     def _schemas() -> list[Path]:
         root = ROOT / "contracts"
         return sorted(
             p
-            for p in [*root.glob("events/*/*.json"), *root.glob("clues/*.json")]
+            for p in [
+                *root.glob("events/*/*.json"),
+                *root.glob("clues/*.params.v*.json"),
+                *root.glob("modes/**/*.json"),
+            ]
             if "examples" not in p.parts
         )
 
@@ -126,8 +130,43 @@ class TestHandWrittenContracts:
     def test_schema_ids_match_paths(self) -> None:
         for path in self._schemas():
             schema = json.loads(path.read_text(encoding="utf-8"))
-            name = path.stem.split(".")[0]
+            # modes/params/source.daily.v1.json → «source.daily»; события и загадки — до точки.
+            is_mode = "modes" in path.parts
+            name = path.stem.rsplit(".v", 1)[0] if is_mode else path.stem.split(".")[0]
             assert f":{name}:" in schema["$id"], path
+
+    def test_mode_schemas_are_covered(self) -> None:
+        names = {p.name for p in self._schemas() if "modes" in p.parts}
+        assert {"mode_config.v1.json", "pool.v1.json", "source.daily.v1.json"} <= names
+
+    def test_params_hash_golden_is_consistent(self) -> None:
+        """Golden-векторы params_hash (D7): у каждого вектора есть вход, JSON и хэш."""
+        import hashlib
+
+        golden = json.loads((ROOT / "contracts/clues/params_hash.golden.json").read_text("utf-8"))
+        assert golden["vectors"]
+        for vector in golden["vectors"]:
+            digest = hashlib.sha256(vector["canonical_json"].encode()).hexdigest()
+            assert digest == vector["params_hash"], vector["name"]
+
+
+def test_compare_with_base_covers_nested_mode_contracts(tmp_path: Path) -> None:
+    """contracts/modes/** (в том числе params/) сверяется с базой, как события и загадки."""
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    params = tmp_path / "contracts" / "modes" / "params"
+    params.mkdir(parents=True)
+    schema = params / "scorer.by_level.v1.json"
+    schema.write_text(contracts.dump(_obj({"points": {"type": "array"}})))
+    git("init", "-q", "-b", "main")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "add", ".")
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
+
+    schema.write_text(contracts.dump(_obj({"points": {"type": "array"}}, ["points"])))
+    problems = contracts.compare_with_base(tmp_path, "main")
+    assert [p.file for p in problems] == ["contracts/modes/params/scorer.by_level.v1.json"]
 
 
 def test_compare_with_base_ignores_django_snapshot(tmp_path: Path) -> None:

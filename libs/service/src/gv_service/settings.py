@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,35 @@ class Environment(StrEnum):
     CI = "ci"
     STAGING = "staging"
     PRODUCTION = "production"
+
+
+class RetentionSettings(BaseModel):
+    """Сроки хранения служебных таблиц (docs/architecture/data.md §4).
+
+    Attributes:
+        outbox_days: Опубликованные события outbox и отметки inbox (``GV_RETENTION__OUTBOX_DAYS``).
+        purge_interval_s: Пауза между запусками очистки в одной реплике.
+        purge_jitter_s: Случайная добавка к паузе.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    outbox_days: float = Field(default=7, gt=0)
+    purge_interval_s: float = Field(default=3600, gt=0)
+    purge_jitter_s: float = Field(default=300, ge=0)
+
+
+class IdempotencySettings(BaseModel):
+    """Хранение ключей идемпотентности (``gv_db.idempotency``).
+
+    Attributes:
+        retention_h: Сколько часов хранить ключи (``GV_IDEMPOTENCY__RETENTION_H``); повтор
+            запроса позже вернёт не сохранённый ответ, а выполнится заново.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    retention_h: float = Field(default=72, gt=0)
 
 
 class ServiceSettings(BaseSettings):
@@ -55,6 +84,9 @@ class ServiceSettings(BaseSettings):
     redis_url: SecretStr | None = None
     kafka_bootstrap: str | None = None
     rabbitmq_url: SecretStr | None = None
+
+    retention: RetentionSettings = RetentionSettings()
+    idempotency: IdempotencySettings = IdempotencySettings()
 
     otlp_endpoint: str | None = None
     trace_sample_ratio: float = Field(default=1.0, ge=0, le=1)

@@ -53,6 +53,7 @@ nav:
   - Roadmap: 09-roadmap.md
   - Планы:
       - Этап 1: plans/stage-1.md
+      - Этап 2: plans/stage-2.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md

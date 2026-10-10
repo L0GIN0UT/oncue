@@ -28,6 +28,7 @@ from gv_core.errors import (
     GoneError,
     InvalidInputError,
     NotFoundError,
+    NotImplementedYetError,
     RateLimitedError,
     UnauthenticatedError,
 )
@@ -52,6 +53,7 @@ _STATUS_BY_ERROR: tuple[tuple[type[AppError], int], ...] = (
     (RateLimitedError, 429),
     (FeatureDisabledError, 403),
     (DependencyUnavailableError, 503),
+    (NotImplementedYetError, 501),
 )
 
 
@@ -90,6 +92,7 @@ _STATUS_TITLES: dict[int, str] = {
     410: "Ресурс больше недоступен",
     422: "Некорректные данные",
     429: "Слишком много запросов",
+    501: "Не реализовано",
     503: "Зависимость временно недоступна",
 }
 

@@ -4,6 +4,8 @@ name: ci
 
 on:
   pull_request:
+    # labeled — чтобы метка `e2e` запускала e2e-smoke на PR (план этапа 2, §2.1).
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
 
@@ -102,6 +104,112 @@ jobs:
           name: coverage-${{ matrix.name }}
           path: coverage.xml
           if-no-files-found: ignore
+
+  frontend:
+    # Фронтенд (Next.js, поток D этапа 2): свой lock и инструменты внутри frontend/.
+    # Пока frontend/package.json нет, job проходит без шагов (условие на каждом шаге).
+    name: Фронтенд
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+      - id: app
+        name: Есть ли frontend/
+        run: |
+          if [ -f frontend/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::frontend/package.json отсутствует — проверки фронтенда пропущены"
+          fi
+      - uses: pnpm/action-setup@v4
+        if: steps.app.outputs.present == 'true'
+        with: { package_json_file: frontend/package.json }  # версия — из поля packageManager
+      - uses: actions/setup-node@v4
+        if: steps.app.outputs.present == 'true'
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - if: steps.app.outputs.present == 'true'
+        run: pnpm -C frontend install --frozen-lockfile
+      - if: steps.app.outputs.present == 'true'
+        run: pnpm -C frontend lint
+      - if: steps.app.outputs.present == 'true'
+        run: pnpm -C frontend typecheck
+      - if: steps.app.outputs.present == 'true'
+        run: pnpm -C frontend test
+      - if: steps.app.outputs.present == 'true'
+        run: pnpm -C frontend build
+      - uses: actions/cache@v4
+        if: steps.app.outputs.present == 'true'
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+      - name: Playwright на моках API (Chromium)
+        if: steps.app.outputs.present == 'true'
+        run: |
+          pnpm -C frontend exec playwright install --with-deps chromium
+          pnpm -C frontend exec playwright test
+
+  e2e-smoke:
+    # Полный стек на compose + сценарий «дейлик» (e2e/daily.spec.ts) — на main и по метке
+    # PR `e2e`. Пропускается, пока нет frontend/package.json и e2e/playwright.config.ts.
+    name: E2E smoke (compose)
+    needs: [lint]
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
+      E2E_BASE_URL: https://localhost
+    steps:
+      - uses: actions/checkout@v4
+      - id: app
+        name: Есть ли фронтенд и e2e
+        run: |
+          if [ -f frontend/package.json ] && [ -f e2e/playwright.config.ts ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::нет frontend/package.json или e2e/playwright.config.ts — e2e пропущен"
+          fi
+      - uses: astral-sh/setup-uv@v6
+        if: steps.app.outputs.present == 'true'
+        with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
+      - if: steps.app.outputs.present == 'true'
+        run: uv sync --all-packages
+      - name: Стек на compose (секреты — случайные)
+        if: steps.app.outputs.present == 'true'
+        run: |
+          uv run gv dev secrets > infra/compose/.env
+          uv run gv dev up services
+          if [ -f infra/compose/compose.web.yml ]; then
+            docker compose --env-file infra/compose/.env -f infra/compose/compose.web.yml up -d --build --wait
+          fi
+      - uses: pnpm/action-setup@v4
+        if: steps.app.outputs.present == 'true'
+        with: { package_json_file: frontend/package.json }
+      - uses: actions/setup-node@v4
+        if: steps.app.outputs.present == 'true'
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Сценарий «дейлик»
+        if: steps.app.outputs.present == 'true'
+        run: |
+          pnpm -C frontend install --frozen-lockfile
+          pnpm -C frontend exec playwright install --with-deps chromium
+          pnpm -C frontend exec playwright test --config ../e2e/playwright.config.ts
+      - name: Логи стека при падении
+        if: failure() && steps.app.outputs.present == 'true'
+        working-directory: infra/compose
+        run: >-
+          docker compose --env-file .env -f compose.infra.yml -f compose.infra.dev.yml
+          -f compose.services.yml -f compose.services.dev.yml -f compose.gateway.yml
+          logs --no-color --tail=300 || true
 
   build:
     name: Образ ${{ matrix.service }}

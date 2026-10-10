@@ -3,7 +3,8 @@
 gv gen [--check]                 сгенерировать конфиги из infra/services.toml
 gv new-service NAME ...          создать сервис из шаблона и добавить в реестр
 gv test [TARGET] [--level L]     тесты модуля/сервиса/всего репо
-gv test --changed                тесты только затронутых изменениями модулей
+gv test frontend [--level e2e]   тесты фронтенда (pnpm; e2e — Playwright)
+gv test --changed                тесты только затронутых изменениями модулей (и frontend/)
 gv lint                          ruff, mypy, import-linter, gen --check
 gv dev up|down|ps|logs ...       локальное окружение (docker compose)
 gv dev secrets                   сгенерировать .env со случайными паролями
@@ -114,9 +115,67 @@ def _resolve_target(root: Path, target: str) -> Path:
     raise typer.BadParameter(f"не найден модуль {target!r} (services/, libs/ или путь)")
 
 
+FRONTEND = "frontend"
+FRONTEND_LEVELS = (None, "unit", "e2e")
+
+
+def frontend_test_command(root: Path, level: str | None) -> list[str] | None:
+    """Команда тестов фронтенда; ``None`` — фронтенда нет (``frontend/package.json``).
+
+    Unit (vitest) — ``pnpm -C frontend test``; ``e2e`` — Playwright из зависимостей
+    фронтенда (браузеры — ``PLAYWRIGHT_BROWSERS_PATH``).
+    """
+    if level not in FRONTEND_LEVELS:
+        raise typer.BadParameter("для frontend уровни: unit | e2e")
+    if not (root / FRONTEND / "package.json").is_file():
+        return None
+    if level == "e2e":
+        return ["pnpm", "-C", FRONTEND, "exec", "playwright", "test"]
+    return ["pnpm", "-C", FRONTEND, "test"]
+
+
+def _run_frontend(root: Path, level: str | None) -> int:
+    cmd = frontend_test_command(root, level)
+    if cmd is None:
+        typer.echo("frontend/ отсутствует (нет frontend/package.json) — тесты фронтенда пропущены")
+        return 0
+    return _run(cmd, root)
+
+
+def _pytest(root: Path, paths: list[str], level: str | None, *, cov: bool) -> int:
+    cmd = ["uv", "run", "pytest", *paths]
+    if level:
+        cmd += ["-m", level]
+    if cov:
+        cmd += ["--cov", "--cov-report=term-missing", "--cov-report=xml"]
+    return _run(cmd, root)
+
+
+def _test_changed(root: Path, base: str, level: str | None, *, cov: bool) -> int:
+    """Python-модули из diff (+ зависимые) и фронтенд, если затронут ``frontend/**``."""
+    files = workspace.changed_files(root, base)
+    members = workspace.load_members(root)
+    names = workspace.changed_members(root, base, files)
+    paths = [
+        str(members[n].path) for n in sorted(names) if (root / members[n].path / "tests").is_dir()
+    ]
+    codes: list[int] = []
+    # У фронтенда есть только unit (vitest) и e2e (Playwright).
+    if workspace.frontend_changed(files) and level in FRONTEND_LEVELS:
+        codes.append(_run_frontend(root, level))
+    # Python-e2e нет: сценарии на полном стеке — во frontend и CI (job e2e-smoke).
+    if paths and level != "e2e":
+        codes.append(_pytest(root, paths, level, cov=cov))
+    elif not paths:
+        typer.echo("Нет затронутых Python-модулей с тестами")
+    return next((c for c in codes if c), 0)
+
+
 @app.command()
 def test(
-    target: Annotated[str | None, typer.Argument(help="Сервис, библиотека или путь")] = None,
+    target: Annotated[
+        str | None, typer.Argument(help="Сервис, библиотека, путь или frontend")
+    ] = None,
     level: Annotated[str | None, typer.Option(help="|".join(LEVELS))] = None,
     changed: Annotated[bool, typer.Option(help="Только затронутые изменениями модули")] = False,
     base: Annotated[str, typer.Option(help="База сравнения для --changed")] = "origin/main",
@@ -127,26 +186,11 @@ def test(
     if level is not None and level not in LEVELS:
         raise typer.BadParameter(f"уровень: {', '.join(LEVELS)}")
     if changed:
-        members = workspace.load_members(root)
-        names = workspace.changed_members(root, base)
-        paths = [
-            str(members[n].path)
-            for n in sorted(names)
-            if (root / members[n].path / "tests").is_dir()
-        ]
-        if not paths:
-            typer.echo("Нет затронутых модулей с тестами")
-            return
-    elif target:
-        paths = [str(_resolve_target(root, target))]
-    else:
-        paths = ["libs", "services", "tools"]
-    cmd = ["uv", "run", "pytest", *paths]
-    if level:
-        cmd += ["-m", level]
-    if cov:
-        cmd += ["--cov", "--cov-report=term-missing", "--cov-report=xml"]
-    raise typer.Exit(_run(cmd, root))
+        raise typer.Exit(_test_changed(root, base, level, cov=cov))
+    if target == FRONTEND:
+        raise typer.Exit(_run_frontend(root, level))
+    paths = [str(_resolve_target(root, target))] if target else ["libs", "services", "tools"]
+    raise typer.Exit(_pytest(root, paths, level, cov=cov))
 
 
 # ----------------------------------------------------------------------------- lint

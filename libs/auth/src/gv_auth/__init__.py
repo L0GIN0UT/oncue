@@ -17,13 +17,20 @@ from gv_auth.fastapi import (
     extract_token,
     optional_principal,
     require_perm,
+    require_user,
 )
-from gv_auth.principal import Principal, Sanction
+from gv_auth.principal import Principal, Sanction, SubjectKind
 from gv_auth.revocation import (
     REVOKED_SID_PREFIX,
     RedisRevocationChecker,
     RevocationChecker,
     revoked_sid_key,
+)
+from gv_auth.service import (
+    SERVICE_SUBJECT_PREFIX,
+    ServiceAuthenticator,
+    ServicePrincipal,
+    ServiceTokenProvider,
 )
 from gv_auth.verifier import ALLOWED_ALGORITHMS, DEFAULT_LEEWAY_S, JwtVerifier, http_jwks_loader
 
@@ -34,6 +41,7 @@ __all__ = [
     "CSRF_HEADER",
     "DEFAULT_LEEWAY_S",
     "REVOKED_SID_PREFIX",
+    "SERVICE_SUBJECT_PREFIX",
     "Authenticator",
     "CsrfError",
     "JwtVerifier",
@@ -41,6 +49,10 @@ __all__ = [
     "RedisRevocationChecker",
     "RevocationChecker",
     "Sanction",
+    "ServiceAuthenticator",
+    "ServicePrincipal",
+    "ServiceTokenProvider",
+    "SubjectKind",
     "TokenSource",
     "current_principal",
     "enforce_csrf",
@@ -51,5 +63,6 @@ __all__ = [
     "require_csrf",
     "require_perm",
     "require_same_origin",
+    "require_user",
     "revoked_sid_key",
 ]

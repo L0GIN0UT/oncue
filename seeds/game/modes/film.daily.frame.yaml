@@ -1,0 +1,51 @@
+# Черновик сида «Кадр дня» (шаг 0a плана этапа 2, §2.5); наполняет поток B.
+# clue.params совпадают с профилем frame_progressive/default media-pipeline (D7).
+key: film.daily.frame
+title_i18n: modes.film.daily.frame.title
+description_i18n: modes.film.daily.frame.description
+domain: film
+source:
+  type: daily
+  params:
+    size: 5
+    timezone: Europe/Moscow
+    schedule_ahead_days: 2
+    exclude_recent_days: 7
+    pool:
+      kinds: [film]
+      min_playable: 10
+clue:
+  type: frame_progressive
+  params:
+    levels:
+      - { blur_px: 48, crop: 0.35, max_width: 960 }
+      - { blur_px: 32, crop: 0.5, max_width: 960 }
+      - { blur_px: 20, crop: 0.7, max_width: 960 }
+      - { blur_px: 12, crop: 1.0, max_width: 960 }
+      - { blur_px: 6, crop: 1.0, max_width: 960 }
+      - { blur_px: 0, crop: 1.0, max_width: 960 }
+answer:
+  format: classic
+  matcher:
+    type: title_alias
+    params:
+      typo:
+        - { min_len: 5, max_distance: 1 }
+        - { min_len: 10, max_distance: 2 }
+      accept_same_title: true
+  partial: []
+scoring:
+  type: by_level
+  params:
+    points: [6, 5, 4, 3, 2, 1]
+    partial_ratio: 0.5
+session:
+  kind: solo
+  rounds: 5
+  attempts_per_level: 1
+  skip_allowed: true
+  give_up_allowed: true
+  allow_guest: true
+  abandon_after_min: 1440
+features:
+  share: true

@@ -10,7 +10,16 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Column, DateTime, MetaData, PrimaryKeyConstraint, String, Table, Uuid
+from sqlalchemy import (
+    Column,
+    DateTime,
+    MetaData,
+    PrimaryKeyConstraint,
+    String,
+    Table,
+    Uuid,
+    delete,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,3 +61,16 @@ class Inbox:
             .returning(self._table.c.event_id)
         )
         return result.first() is not None
+
+
+async def purge_inbox(session: AsyncSession, table: Table, before: datetime) -> int:
+    """Удалить отметки ``processed_at < before`` в текущей транзакции.
+
+    Срок хранения должен превышать окно возможных повторов брокера (retention топика
+    и ретраи), иначе старый дубль пройдёт как новое событие.
+
+    Returns:
+        Число удалённых строк.
+    """
+    result = await session.execute(delete(table).where(table.c.processed_at < before))
+    return int(getattr(result, "rowcount", 0) or 0)

@@ -1,0 +1,209 @@
+{
+  "$id": "urn:guessverse:contracts:modes:mode_config:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Тело конфига режима, которое пишет автор. version и status задаёт сервис game (их в теле нет). params плагинов проверяются схемами contracts/modes/params/<kind>.<type>.v1.json и contracts/clues/<type>.params.v1.json.",
+  "properties": {
+    "answer": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "classic"
+          ],
+          "type": "string"
+        },
+        "matcher": {
+          "additionalProperties": false,
+          "description": "Сверка ответа (плагин AnswerMatcher)",
+          "properties": {
+            "params": {
+              "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+              "type": "object"
+            },
+            "type": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ],
+          "type": "object"
+        },
+        "partial": {
+          "description": "Виды частичного ответа (плагины PartialRule), например artist",
+          "items": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 10,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "format",
+        "matcher"
+      ],
+      "type": "object"
+    },
+    "clue": {
+      "additionalProperties": false,
+      "description": "Тип загадки и уровни (плагин ClueType); params совпадают с профилем media-pipeline (D7)",
+      "properties": {
+        "params": {
+          "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+          "type": "object"
+        },
+        "type": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "params"
+      ],
+      "type": "object"
+    },
+    "description_i18n": {
+      "description": "Ключ i18n (тексты для пользователя — ключи, а не строки)",
+      "maxLength": 200,
+      "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "features": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "description": "Продуктовые флаги режима",
+      "type": "object"
+    },
+    "key": {
+      "description": "Ключ режима domain.area.name",
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "rewards": {
+      "description": "Награды (используются с этапа 5, на этапе 2 не проверяются)",
+      "type": "object"
+    },
+    "scoring": {
+      "additionalProperties": false,
+      "description": "Подсчёт очков (плагин Scorer); очки уровней — здесь, а не в clue (D7)",
+      "properties": {
+        "params": {
+          "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+          "type": "object"
+        },
+        "type": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "params"
+      ],
+      "type": "object"
+    },
+    "session": {
+      "additionalProperties": false,
+      "properties": {
+        "abandon_after_min": {
+          "description": "Через сколько минут без ходов сессия считается брошенной",
+          "maximum": 10080,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "allow_guest": {
+          "type": "boolean"
+        },
+        "attempts_per_level": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "give_up_allowed": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "solo"
+          ],
+          "type": "string"
+        },
+        "rounds": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "skip_allowed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "rounds",
+        "attempts_per_level",
+        "skip_allowed",
+        "give_up_allowed",
+        "allow_guest",
+        "abandon_after_min"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": false,
+      "description": "Откуда берутся единицы раундов (плагин Source)",
+      "properties": {
+        "params": {
+          "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+          "type": "object"
+        },
+        "type": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "params"
+      ],
+      "type": "object"
+    },
+    "title_i18n": {
+      "description": "Ключ i18n (тексты для пользователя — ключи, а не строки)",
+      "maxLength": 200,
+      "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "title_i18n",
+    "domain",
+    "source",
+    "clue",
+    "answer",
+    "scoring",
+    "session"
+  ],
+  "title": "ModeConfig v1",
+  "type": "object"
+}

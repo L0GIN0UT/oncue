@@ -1,0 +1,77 @@
+{
+  "$id": "urn:guessverse:contracts:events:game:DailyCompleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Пользователь (не гость) завершил дейлик. aggregate_id — session_id; публикуется вместе с GameFinished той же сессии. Потребители — серии (rating) и награды (progression), этапы 4–5.",
+  "properties": {
+    "day": {
+      "description": "День в зоне режима (source.params.timezone), YYYY-MM-DD",
+      "format": "date",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "exact_count": {
+      "maximum": 50,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "max_score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "mode_version": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "rounds_count": {
+      "maximum": 50,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "session_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "version",
+    "user_id",
+    "mode_key",
+    "mode_version",
+    "domain",
+    "day",
+    "score",
+    "max_score",
+    "exact_count",
+    "rounds_count"
+  ],
+  "title": "game.DailyCompleted v1",
+  "type": "object",
+  "x-aggregate-type": "session",
+  "x-topic": "game.session.v1"
+}

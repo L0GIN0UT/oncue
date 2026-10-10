@@ -208,13 +208,9 @@ class OutboxRelay:
 
     async def purge_published(self) -> int:
         """Удалить опубликованные события старше ``retention``."""
-        t = self._table
         border = self._clock.now() - self._settings.retention
         async with self._sessions() as session, session.begin():
-            result = await session.execute(
-                delete(t).where(t.c.published_at.is_not(None), t.c.published_at < border)
-            )
-            return int(result.rowcount or 0)  # type: ignore[attr-defined]
+            return await purge_published_outbox(session, self._table, border)
 
     async def run_forever(self, stop: asyncio.Event) -> None:
         """Крутить relay до сигнала остановки. Ошибки не роняют процесс."""
@@ -233,6 +229,20 @@ class OutboxRelay:
             if published <= 0:
                 await _wait(stop, self._settings.idle_interval)
         log.info("outbox.relay_stopped")
+
+
+async def purge_published_outbox(session: AsyncSession, table: Table, before: datetime) -> int:
+    """Удалить опубликованные события с ``published_at < before`` в текущей транзакции.
+
+    Неопубликованные события не трогаются никогда: их удаление потеряло бы события.
+
+    Returns:
+        Число удалённых строк.
+    """
+    result = await session.execute(
+        delete(table).where(table.c.published_at.is_not(None), table.c.published_at < before)
+    )
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 class OutboxPublishError(Exception):

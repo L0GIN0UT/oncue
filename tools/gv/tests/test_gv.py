@@ -132,3 +132,50 @@ def test_fill_secrets_shares_media_signing_secret() -> None:
     assert len(values["GV_MEDIA_SIGNING_SECRET"]) >= 32
     assert values["REDIS_PASSWORD"] not in ("", values["GV_MEDIA_SIGNING_SECRET"])
     assert values["GV_TAG"] == "local"
+
+
+class TestFrontend:
+    """`gv test frontend` (план этапа 2, §2.1): pnpm внутри frontend/, без него — пропуск."""
+
+    def test_missing_frontend_is_reported_and_exits_zero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from typer.testing import CliRunner
+
+        from gv_cli import main
+
+        (tmp_path / "infra").mkdir()
+        (tmp_path / "infra" / "services.toml").write_text("", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)  # корень репо ищется от текущего каталога
+        result = CliRunner().invoke(main.app, ["test", "frontend"])
+        assert main.frontend_test_command(tmp_path, None) is None
+        assert result.exit_code == 0, result.output
+        assert "frontend/ отсутствует" in result.output
+
+    def test_commands_when_frontend_exists(self, tmp_path: Path) -> None:
+        from gv_cli import main
+
+        (tmp_path / "frontend").mkdir()
+        (tmp_path / "frontend" / "package.json").write_text("{}", encoding="utf-8")
+        assert main.frontend_test_command(tmp_path, None) == ["pnpm", "-C", "frontend", "test"]
+        assert main.frontend_test_command(tmp_path, "unit") == ["pnpm", "-C", "frontend", "test"]
+        assert main.frontend_test_command(tmp_path, "e2e") == [
+            "pnpm",
+            "-C",
+            "frontend",
+            "exec",
+            "playwright",
+            "test",
+        ]
+
+    def test_python_levels_are_rejected_for_frontend(self, tmp_path: Path) -> None:
+        import typer
+
+        from gv_cli import main
+
+        with pytest.raises(typer.BadParameter):
+            main.frontend_test_command(tmp_path, "integration")
+
+    def test_changed_detects_frontend_files(self) -> None:
+        assert workspace.frontend_changed(["frontend/src/app/page.tsx"])
+        assert not workspace.frontend_changed(["services/game/x.py", "frontend.md"])

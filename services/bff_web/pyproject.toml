@@ -3,7 +3,7 @@ name = "guessverse-bff-web"
 version = "0.1.0"
 description = "Backend-for-frontend: агрегация данных под экраны веб-клиента"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "httpx>=0.28"]
 
 [project.scripts]
 bff_web = "bff_web_service.main:run"

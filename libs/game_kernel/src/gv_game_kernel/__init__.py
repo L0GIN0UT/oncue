@@ -1,0 +1,127 @@
+"""gv_game_kernel — ядро игрового движка (чистый Python, без IO).
+
+Правила игры описаны один раз и используются game (соло) и match (онлайн, этап 4):
+модели ``ModeConfig``, порты, интерфейсы плагинов, реестр, правила раунда, ``params_hash``.
+См. docs/02-game-engine.md и docs/plans/stage-2.md §2.3, §4.
+"""
+
+from gv_game_kernel.errors import (
+    CONFIG_INVALID,
+    LEVEL_LOCKED,
+    ROUND_FINISHED,
+    ConfigError,
+    LevelLockedError,
+    RoundFinishedError,
+    RuleViolation,
+)
+from gv_game_kernel.params import canonical_json, params_hash
+from gv_game_kernel.plugins import (
+    AnswerInput,
+    AnswerMatcher,
+    ClueType,
+    ClueView,
+    DrawContext,
+    LevelSpec,
+    MatchContext,
+    MatchResult,
+    PartialRule,
+    Scorer,
+    Source,
+)
+from gv_game_kernel.ports import (
+    AssetPort,
+    CandidatePort,
+    ClueAsset,
+    CollectionPort,
+    PlayableFor,
+    PoolQuery,
+)
+from gv_game_kernel.refs import AssetRef, MediaItemRef, PersonRef
+from gv_game_kernel.registry import (
+    UNKNOWN_PLUGIN,
+    ConfigIssue,
+    DuplicatePluginError,
+    EngineFactory,
+    ModeEngine,
+    PluginRegistry,
+)
+from gv_game_kernel.round import (
+    Guess,
+    GuessKind,
+    MatchVerdict,
+    RoundOutcome,
+    RoundResult,
+    RoundState,
+    apply_guess,
+    apply_skip,
+    give_up,
+    void,
+)
+from gv_game_kernel.spec import (
+    AnswerSpec,
+    ClueSpec,
+    MatcherSpec,
+    ModeConfig,
+    PluginSpec,
+    ScoringSpec,
+    SessionSpec,
+    SourceSpec,
+    parse_mode_config,
+)
+
+__all__ = [
+    "CONFIG_INVALID",
+    "LEVEL_LOCKED",
+    "ROUND_FINISHED",
+    "UNKNOWN_PLUGIN",
+    "AnswerInput",
+    "AnswerMatcher",
+    "AnswerSpec",
+    "AssetPort",
+    "AssetRef",
+    "CandidatePort",
+    "ClueAsset",
+    "ClueSpec",
+    "ClueType",
+    "ClueView",
+    "CollectionPort",
+    "ConfigError",
+    "ConfigIssue",
+    "DrawContext",
+    "DuplicatePluginError",
+    "EngineFactory",
+    "Guess",
+    "GuessKind",
+    "LevelLockedError",
+    "LevelSpec",
+    "MatchContext",
+    "MatchResult",
+    "MatchVerdict",
+    "MatcherSpec",
+    "MediaItemRef",
+    "ModeConfig",
+    "ModeEngine",
+    "PartialRule",
+    "PersonRef",
+    "PlayableFor",
+    "PluginRegistry",
+    "PluginSpec",
+    "PoolQuery",
+    "RoundFinishedError",
+    "RoundOutcome",
+    "RoundResult",
+    "RoundState",
+    "RuleViolation",
+    "Scorer",
+    "ScoringSpec",
+    "SessionSpec",
+    "Source",
+    "SourceSpec",
+    "apply_guess",
+    "apply_skip",
+    "canonical_json",
+    "give_up",
+    "params_hash",
+    "parse_mode_config",
+    "void",
+]

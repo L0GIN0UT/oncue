@@ -89,12 +89,15 @@ async def test_seeded_matrix(sessions: async_sessionmaker[Any], fake_clock: Fake
         matrix = await uow.roles.get_matrix()
     assert set(matrix.roles) == {"user", "moderator", "admin"}
     assert matrix.roles["admin"] == matrix.permissions
-    assert len(matrix.permissions) == 9
+    assert len(matrix.permissions) == 14  # 9 этапа 1 + 5 прав game (0005, этап 2 §2.7)
     assert matrix.roles["moderator"] == {
         "admin.access",
         "users.view",
         "catalog.block_item",
         "catalog.edit_aliases",
+        "config.modes.view",
+        "game.daily.view",
+        "game.daily.curate",
     }
 
 

@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from typing import TYPE_CHECKING
 
 import pytest
@@ -93,3 +93,18 @@ def token_issuer() -> TestTokenIssuer:
     from gv_testkit.auth import TestTokenIssuer
 
     return TestTokenIssuer()
+
+
+@pytest.fixture
+def service_token(token_issuer: TestTokenIssuer) -> Callable[..., str]:
+    """Фабрика сервисных токенов (D13).
+
+    Пример: ``service_token("game", "media_pipeline", ["assets.link"])``.
+
+    Верификатор вызываемого сервиса — ``token_issuer.verifier(audience="media_pipeline")``.
+    """
+
+    def issue(client_id: str, audience: str, scopes: Iterable[str] = ()) -> str:
+        return token_issuer.issue_service(client_id, audience, scopes)
+
+    return issue

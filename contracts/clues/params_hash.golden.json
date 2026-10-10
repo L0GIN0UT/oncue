@@ -1,0 +1,138 @@
+{
+  "algorithm": "sha256(hex) от JSON: ключи отсортированы, separators (',', ':'), ensure_ascii=false, целые float без .0, NaN/Infinity запрещены",
+  "description": "Golden-векторы canonical_json/params_hash (D7 плана этапа 2). Алгоритм реализован в media_pipeline_service.domain.params и gv_game_kernel.params; оба теста сверяются с этим файлом. Менять только вместе с алгоритмом в обоих местах (изменение инвалидирует связь ModeConfig ↔ ассеты).",
+  "vectors": [
+    {
+      "canonical_json": "{\"levels\":[{\"seconds\":0.5},{\"seconds\":1},{\"seconds\":2},{\"seconds\":4},{\"seconds\":8},{\"seconds\":15}],\"start_s\":0}",
+      "name": "profile:audio_intro:default",
+      "params": {
+        "levels": [
+          {
+            "seconds": 0.5
+          },
+          {
+            "seconds": 1
+          },
+          {
+            "seconds": 2
+          },
+          {
+            "seconds": 4
+          },
+          {
+            "seconds": 8
+          },
+          {
+            "seconds": 15
+          }
+        ],
+        "start_s": 0
+      },
+      "params_hash": "971d8f584d635057cd6a077acde170e9fabba40467dac78803651b249b213d60"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"blur_px\":48,\"crop\":0.35,\"max_width\":960},{\"blur_px\":32,\"crop\":0.5,\"max_width\":960},{\"blur_px\":20,\"crop\":0.7,\"max_width\":960},{\"blur_px\":12,\"crop\":1,\"max_width\":960},{\"blur_px\":6,\"crop\":1,\"max_width\":960},{\"blur_px\":0,\"crop\":1,\"max_width\":960}]}",
+      "name": "profile:frame_progressive:default",
+      "params": {
+        "levels": [
+          {
+            "blur_px": 48,
+            "crop": 0.35,
+            "max_width": 960
+          },
+          {
+            "blur_px": 32,
+            "crop": 0.5,
+            "max_width": 960
+          },
+          {
+            "blur_px": 20,
+            "crop": 0.7,
+            "max_width": 960
+          },
+          {
+            "blur_px": 12,
+            "crop": 1.0,
+            "max_width": 960
+          },
+          {
+            "blur_px": 6,
+            "crop": 1.0,
+            "max_width": 960
+          },
+          {
+            "blur_px": 0,
+            "crop": 1.0,
+            "max_width": 960
+          }
+        ]
+      },
+      "params_hash": "9a4e41897de9dc5d592ef2e4b42f6456054a961a48fe8d2a14cd94d8e85322dc"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"pixel_block\":48},{\"pixel_block\":24},{\"pixel_block\":12},{\"pixel_block\":6},{\"pixel_block\":1}]}",
+      "name": "profile:poster_masked:default",
+      "params": {
+        "levels": [
+          {
+            "pixel_block": 48
+          },
+          {
+            "pixel_block": 24
+          },
+          {
+            "pixel_block": 12
+          },
+          {
+            "pixel_block": 6
+          },
+          {
+            "pixel_block": 1
+          }
+        ]
+      },
+      "params_hash": "23eb750af2263ec6f913761b485005c4fb6952f20b350bed0530037164144ba9"
+    },
+    {
+      "canonical_json": "{}",
+      "name": "empty",
+      "params": {},
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "canonical_json": "{\"a\":[0.5,\"я\"],\"b\":1}",
+      "name": "key_order_and_integral_float",
+      "params": {
+        "a": [
+          0.5,
+          "я"
+        ],
+        "b": 1.0
+      },
+      "params_hash": "b06c5c0d95fe9db4c33c6576512761e2b71fdc7ed779bb99ae5a52ff1a1be91b"
+    },
+    {
+      "canonical_json": "{\"n\":-3,\"name\":\"Ёжик «в тумане»\",\"z\":{\"x\":null,\"y\":true}}",
+      "name": "nested_unicode_bool_null",
+      "params": {
+        "n": -3,
+        "name": "Ёжик «в тумане»",
+        "z": {
+          "x": null,
+          "y": true
+        }
+      },
+      "params_hash": "d34988d78f01bb956e34b35228270f6ee9a0c4487af0cf90c93b334ebce688c9"
+    },
+    {
+      "canonical_json": "{\"big\":1000000000000000000000,\"crop\":0.35,\"seconds\":0.1}",
+      "name": "float_precision",
+      "params": {
+        "big": 1e+21,
+        "crop": 0.35,
+        "seconds": 0.1
+      },
+      "params_hash": "403efe45b35278f4cc183dc6cc19144e7acb44a9c96c6dde2e58f6c0ec611641"
+    }
+  ]
+}

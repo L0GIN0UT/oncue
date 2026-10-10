@@ -2,11 +2,17 @@
 
 Вход в админку (D2): только пароль и право ``admin.access``; токены — в теле ответа,
 admin хранит их в своей серверной сессии.
+
+Сервисные токены (D13 плана этапа 2): ``POST /service-tokens`` — контракт шага 0a,
+реализация — шаг 0b (501 до неё).
 """
 
-from fastapi import APIRouter, status
-from pydantic import BaseModel, Field, IPvAnyAddress
+from typing import Literal
 
+from fastapi import APIRouter, status
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
+
+from gv_core.errors import NotImplementedYetError
 from gv_service import problem_responses
 from identity_service.api.common import ApiDeps, SessionUser, session_user
 from identity_service.application.commands.auth import ADMIN_ACCESS_PERM
@@ -48,6 +54,24 @@ class AdminSessionResponse(BaseModel):
             "UserRolesChanged): события с версией не больше этой уже учтены в ``user``."
         )
     )
+
+
+class ServiceTokenRequest(BaseModel):
+    """Client credentials сервиса; ``audience`` — вызываемый сервис."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+    client_secret: str = Field(min_length=1, max_length=256)
+    audience: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+
+
+class ServiceTokenResponse(BaseModel):
+    """Сервисный JWT (``sub = svc:<client_id>``, ``aud``, ``scope``, TTL 600 с)."""
+
+    access_token: str
+    token_type: Literal["Bearer"]
+    expires_in: int
 
 
 def _response(issued: IssuedSession) -> AdminSessionResponse:
@@ -100,5 +124,18 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
     )
     async def admin_revoke(body: AdminRefreshRequest) -> None:
         await uc.logout(refresh_token=body.refresh_token, kind=SessionKind.ADMIN)
+
+    @router.post(
+        "/service-tokens",
+        response_model=ServiceTokenResponse,
+        summary="Сервисный токен (client credentials)",
+        description=(
+            "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; "
+            "лимит по `client_id` (429)."
+        ),
+        responses=problem_responses(401, 403, 422, 429, 501),
+    )
+    async def service_token(body: ServiceTokenRequest) -> ServiceTokenResponse:  # noqa: ARG001
+        raise NotImplementedYetError("сервисные токены — шаг 0b плана этапа 2")
 
     return router

@@ -93,6 +93,13 @@ class Authenticator:
             raise UnauthenticatedError("требуется вход")
         return principal
 
+    async def user(self, request: Request) -> Principal:
+        """Субъект-пользователь: 401 без токена, 403 ``auth.guest_forbidden`` для гостя."""
+        principal = await self.current(request)
+        if principal.is_guest:
+            raise ForbiddenError("нужен аккаунт", code="auth.guest_forbidden")
+        return principal
+
     def require_perm(self, *perms: str) -> Callable[[Request], Awaitable[Principal]]:
         """Зависимость: субъект с ВСЕМИ указанными правами, иначе 403."""
         if not perms:
@@ -100,7 +107,8 @@ class Authenticator:
 
         async def dependency(request: Request) -> Principal:
             principal = await self.current(request)
-            if not principal.has_all(*perms):
+            # Гость не проходит ни одну проверку прав, даже если токен несёт perms.
+            if principal.is_guest or not principal.has_all(*perms):
                 raise ForbiddenError("недостаточно прав", code="auth.forbidden")
             return principal
 
@@ -118,6 +126,11 @@ async def optional_principal(request: Request) -> Principal | None:
 async def current_principal(request: Request) -> Principal:
     """Субъект запроса; 401, если токена нет."""
     return await _DEFAULT.current(request)
+
+
+async def require_user(request: Request) -> Principal:
+    """Зависимость: пользователь с аккаунтом; гость — 403 ``auth.guest_forbidden``."""
+    return await _DEFAULT.user(request)
 
 
 def require_perm(*perms: str) -> Callable[[Request], Awaitable[Principal]]:

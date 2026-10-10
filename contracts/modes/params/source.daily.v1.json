@@ -1,0 +1,41 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:source.daily:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Дейлик: набор дня по правилам пула (D6)",
+  "properties": {
+    "exclude_recent_days": {
+      "maximum": 365,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "pool": {
+      "$ref": "urn:guessverse:contracts:modes:params:pool:v1"
+    },
+    "schedule_ahead_days": {
+      "maximum": 30,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "size": {
+      "maximum": 50,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "timezone": {
+      "description": "IANA-зона смены дня, например Europe/Moscow",
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "size",
+    "timezone",
+    "schedule_ahead_days",
+    "exclude_recent_days",
+    "pool"
+  ],
+  "title": "source.daily params v1",
+  "type": "object"
+}

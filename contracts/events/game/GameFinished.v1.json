@@ -1,0 +1,176 @@
+{
+  "$id": "urn:guessverse:contracts:events:game:GameFinished:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Соло-сессия завершена (все игроки, включая гостей). aggregate_id — session_id. Без e-mail и ника (ПДн).",
+  "properties": {
+    "clue_type": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "day": {
+      "anyOf": [
+        {
+          "description": "День в зоне режима (source.params.timezone), YYYY-MM-DD",
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "День дейлика; null — не дейлик"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "is_guest": {
+      "type": "boolean"
+    },
+    "max_score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "mode_version": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "rounds": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed_ms": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "От выдачи первого ассета раунда до итога; null — ассет не выдавался"
+          },
+          "index": {
+            "description": "Номер раунда с 0",
+            "maximum": 49,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "maximum": 20,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень точного (или частичного) ответа; null — не угадан"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "exact",
+              "partial",
+              "miss",
+              "gave_up",
+              "void"
+            ],
+            "type": "string"
+          },
+          "points": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "media_item_id",
+          "outcome",
+          "level",
+          "points",
+          "elapsed_ms"
+        ],
+        "type": "object"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "type": "array"
+    },
+    "score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "session_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "source_type": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "user_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null у гостя"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "version",
+    "user_id",
+    "is_guest",
+    "mode_key",
+    "mode_version",
+    "domain",
+    "source_type",
+    "clue_type",
+    "day",
+    "score",
+    "max_score",
+    "started_at",
+    "finished_at",
+    "rounds"
+  ],
+  "title": "game.GameFinished v1",
+  "type": "object",
+  "x-aggregate-type": "session",
+  "x-topic": "game.session.v1"
+}

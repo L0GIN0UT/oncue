@@ -102,3 +102,13 @@ class FeatureDisabledError(AppError):
     """Функция выключена фича-флагом или недоступна по плану пользователя."""
 
     default_code = "feature.disabled"
+
+
+class NotImplementedYetError(AppError):
+    """Ручка объявлена в контракте, но ещё не реализована (501).
+
+    Используется для заглушек contract-first: схема API уже зафиксирована и экспортирована,
+    реализация придёт в следующем шаге плана.
+    """
+
+    default_code = "common.not_implemented"

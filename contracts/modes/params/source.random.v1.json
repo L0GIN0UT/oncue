@@ -1,0 +1,92 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:source.random:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Случайный режим: пул и пресеты-фильтры",
+  "properties": {
+    "pool": {
+      "$ref": "urn:guessverse:contracts:modes:params:pool:v1"
+    },
+    "presets": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "additionalProperties": false,
+            "properties": {
+              "genres_any": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "kinds": {
+                "items": {
+                  "enum": [
+                    "track",
+                    "film"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "min_popularity": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "years": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "maximum": 2100,
+                    "minimum": 1800,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "maximum": 2100,
+                    "minimum": 1800,
+                    "type": "integer"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "id": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "title_i18n": {
+            "description": "Ключ i18n (тексты для пользователя — ключи, а не строки)",
+            "maxLength": 200,
+            "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title_i18n",
+          "filters"
+        ],
+        "type": "object"
+      },
+      "maxItems": 50,
+      "type": "array"
+    }
+  },
+  "required": [
+    "pool"
+  ],
+  "title": "source.random params v1",
+  "type": "object"
+}

@@ -29,10 +29,12 @@ members = [
     "gv-core",
     "gv-db",
     "gv-flags",
+    "gv-game-kernel",
     "gv-messaging",
     "gv-observability",
     "gv-service",
     "gv-testkit",
+    "gv-text",
 ]
 
 [manifest.dependency-groups]
@@ -1576,6 +1578,7 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
@@ -1585,6 +1588,7 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "httpx", specifier = ">=0.28" },
 ]
 
 [[package]]
@@ -1597,6 +1601,7 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "gv-text" },
     { name = "httpx" },
     { name = "opensearch-py", extra = ["async"] },
 ]
@@ -1608,6 +1613,7 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "gv-text", editable = "libs/text" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "opensearch-py", extras = ["async"], specifier = ">=2.7" },
 ]
@@ -1641,8 +1647,12 @@ dependencies = [
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
+    { name = "gv-game-kernel" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "gv-text" },
+    { name = "httpx" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1650,8 +1660,12 @@ requires-dist = [
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
+    { name = "gv-game-kernel", editable = "libs/game_kernel" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "gv-text", editable = "libs/text" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
@@ -1960,6 +1974,23 @@ requires-dist = [
 ]
 
 [[package]]
+name = "gv-game-kernel"
+version = "0.1.0"
+source = { editable = "libs/game_kernel" }
+dependencies = [
+    { name = "gv-core" },
+    { name = "gv-text" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gv-core", editable = "libs/core" },
+    { name = "gv-text", editable = "libs/text" },
+    { name = "pydantic", specifier = ">=2.9" },
+]
+
+[[package]]
 name = "gv-messaging"
 version = "0.1.0"
 source = { editable = "libs/messaging" }
@@ -2022,6 +2053,7 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-observability" },
+    { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "redis" },
@@ -2038,6 +2070,7 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-observability", editable = "libs/observability" },
+    { name = "prometheus-client", specifier = ">=0.21" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "redis", specifier = ">=5.2" },
@@ -2056,6 +2089,7 @@ dependencies = [
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
+    { name = "gv-game-kernel" },
     { name = "gv-messaging" },
     { name = "gv-service" },
     { name = "httpx" },
@@ -2075,6 +2109,7 @@ requires-dist = [
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
+    { name = "gv-game-kernel", editable = "libs/game_kernel" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
     { name = "httpx", specifier = ">=0.28" },
@@ -2086,6 +2121,11 @@ requires-dist = [
     { name = "respx", specifier = ">=0.21" },
     { name = "testcontainers", extras = ["postgres", "redis", "kafka", "rabbitmq", "opensearch", "minio"], specifier = ">=4.8" },
 ]
+
+[[package]]
+name = "gv-text"
+version = "0.1.0"
+source = { editable = "libs/text" }
 
 [[package]]
 name = "h11"

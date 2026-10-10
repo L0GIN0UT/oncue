@@ -703,6 +703,62 @@
         "title": "ServiceMeta",
         "type": "object"
       },
+      "ServiceTokenRequest": {
+        "additionalProperties": false,
+        "description": "Client credentials сервиса; ``audience`` — вызываемый сервис.",
+        "properties": {
+          "audience": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Audience",
+            "type": "string"
+          },
+          "client_id": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "client_secret": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Client Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "client_secret",
+          "audience"
+        ],
+        "title": "ServiceTokenRequest",
+        "type": "object"
+      },
+      "ServiceTokenResponse": {
+        "description": "Сервисный JWT (``sub = svc:<client_id>``, ``aud``, ``scope``, TTL 600 с).",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token_type": {
+            "const": "Bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in"
+        ],
+        "title": "ServiceTokenResponse",
+        "type": "object"
+      },
       "SessionResponse": {
         "description": "Сессия открыта; токены — в HttpOnly-cookie.",
         "properties": {
@@ -1495,6 +1551,188 @@
         "summary": "Завершить admin-сессию (выход из админки)",
         "tags": [
           "internal"
+        ]
+      }
+    },
+    "/internal/v1/service-tokens": {
+      "post": {
+        "description": "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; лимит по `client_id` (429).",
+        "operationId": "service_token_internal_v1_service_tokens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Сервисный токен (client credentials)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/v1/auth/guest": {
+      "post": {
+        "description": "Cookie `gv_access`, `gv_refresh`, `gv_csrf` как при входе. Лимит по IP. При уже действующей сессии — 409 `auth.already_authenticated`.",
+        "operationId": "start_guest_session_v1_auth_guest_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Начать гостевую сессию",
+        "tags": [
+          "identity"
         ]
       }
     },

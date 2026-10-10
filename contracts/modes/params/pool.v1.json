@@ -1,0 +1,60 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:pool:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Общий фрагмент: правила пула единиц для Source",
+  "properties": {
+    "genres_any": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 50,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "kinds": {
+      "items": {
+        "enum": [
+          "track",
+          "film"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "min_playable": {
+      "description": "Минимум играбельных единиц для публикации конфига",
+      "maximum": 100000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "min_popularity": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "years": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "maximum": 2100,
+          "minimum": 1800,
+          "type": "integer"
+        },
+        "to": {
+          "maximum": 2100,
+          "minimum": 1800,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    }
+  },
+  "required": [],
+  "title": "pool v1",
+  "type": "object"
+}
