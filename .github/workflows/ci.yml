@@ -85,7 +85,7 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       # CI=true: недоступная инфраструктура роняет тест, а не пропускает его (gv_testkit.infra).
-      # Kafka, RabbitMQ, OpenSearch и MinIO поднимает testcontainers (Docker на раннере).
+      # Kafka, RabbitMQ и OpenSearch поднимает testcontainers (Docker на раннере), S3 — moto_server.
       CI: "true"
       GV_TEST_POSTGRES_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
       GV_TEST_REDIS_URL: redis://localhost:6379/0

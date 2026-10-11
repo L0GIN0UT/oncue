@@ -150,9 +150,10 @@ services:
 
   # S3-совместимое хранилище ассетов. Код работает через S3 API, поэтому MinIO можно
   # заменить (Garage, SeaweedFS, облачный S3) без изменений в сервисах.
-  # ВНИМАНИЕ: проверить политику распространения образов MinIO перед продом.
+  # MinIO снял образы с Docker Hub (сентябрь 2026) и больше не выпускает community-сборки:
+  # тот же тег из quay.io — временная мера до замены хранилища (см. docs/09-roadmap.md).
   s3:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     restart: unless-stopped
     networks: [backend]
     logging: *logging

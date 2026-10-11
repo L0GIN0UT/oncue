@@ -292,3 +292,36 @@ async def test_assert_idempotency_purge_on_demo_schema(database_url: str) -> Non
         await assert_idempotency_purge(definition, infra)
     finally:
         await infra.close()
+
+
+class TestS3WithoutDocker:
+    """Без ``GV_TEST_S3_ENDPOINT`` S3 поднимается из ``moto_server`` — реестр образов не нужен."""
+
+    pytestmark = pytest.mark.integration
+
+    def test_starts_moto_and_stops_it_on_close(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import boto3
+
+        from gv_testkit import InfraProvider
+
+        monkeypatch.delenv("GV_TEST_S3_ENDPOINT", raising=False)
+        provider = InfraProvider()
+        try:
+            endpoint = provider.s3_endpoint()
+            assert provider.s3_endpoint() == endpoint  # один процесс на сессию
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=endpoint.url,
+                aws_access_key_id=endpoint.access_key,
+                aws_secret_access_key=endpoint.secret_key,
+                region_name="us-east-1",
+            )
+            s3.create_bucket(Bucket="probe")
+            s3.put_object(Bucket="probe", Key="k", Body=b"v")
+            assert s3.get_object(Bucket="probe", Key="k")["Body"].read() == b"v"
+        finally:
+            provider.close()
+        import urllib.request
+
+        with pytest.raises(OSError):
+            urllib.request.urlopen(endpoint.url, timeout=1)  # noqa: S310 — локальный адрес

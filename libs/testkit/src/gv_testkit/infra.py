@@ -87,6 +87,7 @@ class InfraProvider:
 
     def __init__(self) -> None:
         self._containers: list[Any] = []
+        self._processes: list[Any] = []
         self._cache: dict[str, str] = {}
 
     def _resolve(self, key: str, env: str, start: Callable[[], str]) -> str:
@@ -166,24 +167,58 @@ class InfraProvider:
         return self._resolve("opensearch", ENV_OPENSEARCH, start)
 
     def s3_endpoint(self) -> S3Endpoint:
-        """S3-совместимое хранилище: MinIO в контейнере или любой endpoint из env.
+        """S3-совместимое хранилище: endpoint из env или локальный ``moto_server``.
 
-        Формат ``GV_TEST_S3_ENDPOINT``: ``http://key:secret@host:port`` (локально подойдёт
-        ``moto_server`` из зависимостей testkit).
+        Формат ``GV_TEST_S3_ENDPOINT``: ``http://key:secret@host:port``. Без переменной
+        поднимается ``moto_server`` (зависимость testkit) отдельным процессом — Docker не
+        нужен. Образы MinIO сняты с Docker Hub (сентябрь 2026), поэтому тесты не должны
+        зависеть от реестра образов: сервисы работают через S3 API, эмулятора достаточно.
         """
+        if "s3" not in self._cache:
+            value = os.environ.get(ENV_S3)
+            if not value:
+                try:
+                    value = self._start_moto()
+                except Exception as exc:
+                    _unavailable(f"не удалось запустить moto_server для s3: {exc!r}")
+            self._cache["s3"] = value
+        return S3Endpoint.parse(self._cache["s3"])
 
-        def start() -> str:
-            from testcontainers.minio import MinioContainer
+    def _start_moto(self, timeout_s: float = 20.0) -> str:
+        """Запустить ``moto_server`` на свободном порту и дождаться готовности."""
+        import socket
+        import subprocess
+        import sys
+        import time
+        import urllib.request
 
-            c = MinioContainer("minio/minio:RELEASE.2024-10-13T13-34-11Z").start()
-            self._containers.append(c)
-            cfg = c.get_config()
-            return f"http://{cfg['access_key']}:{cfg['secret_key']}@{cfg['endpoint']}"
-
-        return S3Endpoint.parse(self._resolve("s3", ENV_S3, start))
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        proc = subprocess.Popen(  # noqa: S603 — фиксированная команда, без shell
+            [sys.executable, "-m", "moto.server", "-H", "127.0.0.1", "-p", str(port)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self._processes.append(proc)
+        deadline = time.monotonic() + timeout_s
+        url = f"http://127.0.0.1:{port}"
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                raise RuntimeError(f"moto_server завершился с кодом {proc.returncode}")
+            with suppress(OSError):
+                urllib.request.urlopen(url, timeout=1).close()
+                return f"http://test:test@127.0.0.1:{port}"
+            time.sleep(0.1)
+        raise TimeoutError(f"moto_server не ответил за {timeout_s} с")
 
     def close(self) -> None:
         """Остановить запущенные контейнеры."""
+        for proc in self._processes:
+            proc.terminate()
+            with suppress(Exception):
+                proc.wait(timeout=5)
+        self._processes.clear()
         for container in reversed(self._containers):
             with suppress(Exception):
                 container.stop()
