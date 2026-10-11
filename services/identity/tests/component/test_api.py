@@ -103,6 +103,26 @@ async def test_logout_all_rejects_old_access(service: Any) -> None:
     assert_problem(me, 401, "auth.session_revoked")
 
 
+def _max_age(set_cookie: str) -> int:
+    attrs = dict(part.strip().split("=", 1) for part in set_cookie.split(";")[1:] if "=" in part)
+    return int(attrs["Max-Age"])
+
+
+@pytest.mark.parametrize("path", ["/v1/auth/login", "/v1/auth/refresh"])
+async def test_access_cookie_lives_as_long_as_refresh_session(service: Any, path: str) -> None:
+    """Регресс: cookie gv_access с max_age = access TTL исчезала через 15 мин, запрос шёл без
+    токена (auth.unauthenticated) вместо auth.token_expired — и клиент не делал refresh."""
+    await service.register()
+    response = await service.login()
+    if path.endswith("refresh"):
+        response = await service.client.post(path, headers=service.csrf())
+    assert response.status_code == 200, response.text
+    cookies = _set_cookies(response)
+    access_ttl = response.json()["expires_in"]
+    assert _max_age(cookies["gv_access"]) == _max_age(cookies["gv_refresh"])
+    assert _max_age(cookies["gv_access"]) > access_ttl
+
+
 async def test_logout_clears_cookies(service: Any) -> None:
     await service.register()
     await service.login()

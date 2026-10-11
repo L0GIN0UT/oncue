@@ -306,6 +306,10 @@ export class MockWorld {
     },
   ];
   scenario: Scenario = {};
+  /** Субъекты, чья refresh-сессия отозвана (refresh отвечает 401). */
+  revokedRefresh = new Set<string>();
+  /** Сколько раз сессия обновлялась через refresh. */
+  refreshCalls = 0;
   /** Журнал выданных ссылок на ассеты: путь → параметры (для отдачи «файла»). */
   assets = new Map<
     string,
@@ -319,6 +323,8 @@ export class MockWorld {
     this.idempotency.clear();
     this.assets.clear();
     this.scenario = {};
+    this.revokedRefresh.clear();
+    this.refreshCalls = 0;
     this.users = this.users.slice(0, 1);
     this.seq = 0;
   }

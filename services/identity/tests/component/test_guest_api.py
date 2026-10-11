@@ -47,6 +47,8 @@ async def test_guest_session_issued_with_cookies_and_rightless_token(service: An
         assert "samesite=lax" in cookies[name].lower()
     assert "Path=/v1/auth" in cookies["gv_refresh"]
     assert f"Max-Age={GUEST_REFRESH_TTL}" in cookies["gv_refresh"]
+    # Access-cookie живёт как сессия: истечение токена — по exp (auth.token_expired → refresh).
+    assert f"Max-Age={GUEST_REFRESH_TTL}" in cookies["gv_access"]
     assert "HttpOnly" not in cookies["gv_csrf"]
 
     claims = _claims(service.client.cookies.get(ACCESS_COOKIE))

@@ -75,6 +75,9 @@ services:
 {% if s.rabbitmq %}
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
 {% endif %}
+{% if s.name in cookie_mutation_services %}
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
+{% endif %}
 {% if s.name == "identity" %}
       GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}
       # Пусто — временный ключ (только local/ci); вне них identity не стартует без ключей.

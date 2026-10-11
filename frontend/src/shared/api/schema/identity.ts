@@ -159,7 +159,7 @@ export interface paths {
         put?: never;
         /**
          * Сервисный токен (client credentials)
-         * @description Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; лимит по `client_id` (429).
+         * @description Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; 429 — лимит неудач по (`client_id`, IP) или успешных выдач по `client_id`.
          */
         post: operations["service_token_internal_v1_service_tokens_post"];
         delete?: never;

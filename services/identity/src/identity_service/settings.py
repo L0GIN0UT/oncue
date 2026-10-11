@@ -135,9 +135,14 @@ class ServiceTokenSettings(BaseModel):
 
 
 class ServiceTokenLimitSettings(BaseModel):
-    """Лимит выдачи сервисных токенов: ``GV_SERVICE_TOKEN_LIMIT__*``."""
+    """Лимиты выдачи сервисных токенов: ``GV_SERVICE_TOKEN_LIMIT__*``.
 
-    per_client_per_min: int = Field(default=60, ge=1)
+    Неудачи считаются по паре (``client_id``, IP), успешные выдачи — по ``client_id``:
+    неверные секреты с чужого адреса не блокируют честного клиента.
+    """
+
+    failures_per_client_ip_per_min: int = Field(default=30, ge=1)
+    success_per_client_per_min: int = Field(default=600, ge=1)
 
 
 class GuestSettings(BaseModel):

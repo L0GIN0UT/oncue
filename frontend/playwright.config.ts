@@ -38,6 +38,8 @@ export default defineConfig({
       command: `next start -p ${WEB_PORT}`,
       url: `http://localhost:${WEB_PORT}/healthz`,
       env: {
+        // Обход gateway разрешён только с GV_E2E=1 (src/shared/lib/dev-api.ts).
+        GV_E2E: "1",
         GV_DEV_API_ORIGIN: MOCK_URL,
         GV_BFF_INTERNAL_URL: MOCK_URL,
         NEXT_TELEMETRY_DISABLED: "1",

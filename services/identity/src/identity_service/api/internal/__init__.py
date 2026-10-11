@@ -9,12 +9,12 @@ admin хранит их в своей серверной сессии. Ручк�
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
 
 from gv_auth import ServicePrincipal
 from gv_service import problem_responses
-from identity_service.api.common import ApiDeps, SessionUser, session_user
+from identity_service.api.common import ApiDeps, SessionUser, client_ip, session_user
 from identity_service.application.commands.auth import ADMIN_ACCESS_PERM
 from identity_service.application.sessions import IssuedSession
 from identity_service.domain import SessionKind
@@ -134,14 +134,16 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
         response_model=ServiceTokenResponse,
         summary="Сервисный токен (client credentials)",
         description=(
-            "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; "
-            "лимит по `client_id` (429)."
+            "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; 429 — лимит "
+            "неудач по (`client_id`, IP) или успешных выдач по `client_id`."
         ),
         responses=problem_responses(401, 403, 422, 429),
     )
-    async def service_token(body: ServiceTokenRequest, response: Response) -> ServiceTokenResponse:
+    async def service_token(
+        body: ServiceTokenRequest, request: Request, response: Response
+    ) -> ServiceTokenResponse:
         issued = await uc.issue_service_token.execute(
-            body.client_id, body.client_secret, body.audience
+            body.client_id, body.client_secret, body.audience, source_ip=client_ip(request)
         )
         # Токен — учётные данные (RFC 6749 §5.1): промежуточные узлы его не кэшируют.
         response.headers["Cache-Control"] = "no-store"

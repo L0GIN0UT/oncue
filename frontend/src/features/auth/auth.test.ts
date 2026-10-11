@@ -27,14 +27,30 @@ describe("safeNext", () => {
     expect(safeNext("/play/music.daily.classic")).toBe("/play/music.daily.classic");
     for (const bad of [
       "https://evil.example",
+      "https://evil.example/",
       "//evil.example",
       "/\\evil.example",
+      "/\\evil.com",
+      "/%09/evil.com",
+      "/%0a/evil.com",
+      "/%0d/evil.com",
+      "/%5C/evil.com",
+      "/\t/evil.com",
+      "/\n/evil.com",
+      "/%E0%A4%A",
       "javascript:alert(1)",
       null,
       "",
     ]) {
-      expect(safeNext(bad)).toBe("/");
+      expect(safeNext(bad, "https://oncue.test"), String(bad)).toBe("/");
     }
+  });
+
+  it("возвращает путь, query и fragment своего origin", () => {
+    expect(safeNext("/results/s1?share=1#top", "https://oncue.test")).toBe(
+      "/results/s1?share=1#top",
+    );
+    expect(safeNext("/a/../solo", "https://oncue.test")).toBe("/solo");
   });
 });
 

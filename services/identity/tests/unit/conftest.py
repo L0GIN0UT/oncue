@@ -482,7 +482,9 @@ SERVICE_CLIENTS = ServiceClientRegistry(
         )
     ]
 )
-SERVICE_TOKEN_CONFIG = ServiceTokenConfig(ttl_s=600, per_client_per_min=3)
+SERVICE_TOKEN_CONFIG = ServiceTokenConfig(
+    ttl_s=600, failures_per_client_ip_per_min=3, success_per_client_per_min=5
+)
 
 
 class FakeKeys:

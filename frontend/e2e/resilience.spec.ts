@@ -44,3 +44,26 @@ test("ответ страницы несёт CSP с nonce", async ({ page }) => 
   await expect(page.getByTestId("countdown")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
   expect(errors).toEqual([]);
 });
+
+test("cookie access истекла раньше сессии: refresh и та же игра, без гостевой сессии", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/play/music.daily.classic");
+  await expect(page.getByTestId("clue-audio")).toHaveAttribute("src", /^blob:/);
+  const sessionUrl = page.url();
+  const authCalls: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/identity/v1/auth/")) authCalls.push(new URL(r.url()).pathname);
+  });
+  // Браузер удалил gv_access (истёк Max-Age), gv_refresh и gv_csrf остались.
+  const cookies = await context.cookies();
+  await context.clearCookies({ name: "gv_access" });
+  expect(cookies.some((c) => c.name === "gv_refresh")).toBe(true);
+
+  await page.getByTestId("skip").click();
+  await expect(page.getByTestId("skip")).toHaveText(/\+1 с/);
+  expect(page.url()).toBe(sessionUrl);
+  expect(authCalls).toEqual(["/api/identity/v1/auth/refresh"]);
+  expect((await context.cookies()).some((c) => c.name === "gv_access")).toBe(true);
+});

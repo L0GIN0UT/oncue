@@ -32,5 +32,7 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=6 \
     CMD wget -qO- http://127.0.0.1:3000/healthz >/dev/null || exit 1
-# server.js сам обрабатывает SIGTERM (graceful shutdown Next).
-CMD ["node", "server.js"]
+# server.js сам обрабатывает SIGTERM (graceful shutdown Next); exec — чтобы сигнал дошёл до него.
+# GV_DEV_API_ORIGIN (обход gateway) допустим только в e2e на моках с GV_E2E=1 — иначе отказ
+# запуска (то же проверяет src/instrumentation.ts).
+CMD ["sh", "-c", "if [ -n \"$GV_DEV_API_ORIGIN\" ] && [ \"$GV_E2E\" != 1 ]; then echo 'GV_DEV_API_ORIGIN задан без GV_E2E=1: обход gateway разрешён только в e2e на моках' >&2; exit 64; fi; exec node server.js"]

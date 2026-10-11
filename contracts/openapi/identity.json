@@ -1595,7 +1595,7 @@
     },
     "/internal/v1/service-tokens": {
       "post": {
-        "description": "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; лимит по `client_id` (429).",
+        "description": "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; 429 — лимит неудач по (`client_id`, IP) или успешных выдач по `client_id`.",
         "operationId": "service_token_internal_v1_service_tokens_post",
         "requestBody": {
           "content": {

@@ -97,10 +97,14 @@ def set_session_cookies(response: Response, issued: IssuedSession, settings: Set
     """Access (Path=/), refresh (только ручки auth) и новый CSRF-токен (§8 п.2–3)."""
     kw = _cookie_kwargs(settings)
     refresh_ttl_s = issued.refresh_ttl_s or settings.jwt.refresh_ttl_s
+    # Cookie живёт столько же, сколько refresh-сессия: истечение access проверяется по exp
+    # токена (401 auth.token_expired → refresh). С max_age = access TTL браузер удалял бы
+    # cookie, следующий запрос шёл бы без токена (auth.unauthenticated), и клиент не узнал
+    # бы, что сессию можно обновить.
     response.set_cookie(
         ACCESS_COOKIE,
         issued.access_token,
-        max_age=issued.expires_in,
+        max_age=refresh_ttl_s,
         path="/",
         httponly=True,
         **kw,

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
 import type { SessionInfo } from "@/shared/api/types";
+import { refreshSession } from "@/shared/api/refresh";
 import { csrfToken } from "@/shared/lib/cookies";
 
 export const sessionQueryKey = ["session"] as const;
@@ -19,10 +20,16 @@ export function useSessionInfo() {
   });
 }
 
-/** Начать гостевую сессию; уже действующая сессия (409) — тоже успех. */
+/**
+ * Начать гостевую сессию.
+ *
+ * 409 `auth.already_authenticated` — у identity есть живая сессия, но браузер, раз уж дошёл
+ * сюда, не смог ею воспользоваться (например, исчезла cookie access). Это успех только после
+ * успешного refresh; иначе ошибка уходит вызывающему (без бесконечного цикла 401 → 409).
+ */
 export async function startGuestSession(): Promise<void> {
   const result = await api().identity.POST("/v1/auth/guest");
-  if (result.response.status === 409) return;
+  if (result.response.status === 409 && (await refreshSession(csrfToken()))) return;
   unwrap(result);
 }
 

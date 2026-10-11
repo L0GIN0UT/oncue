@@ -40,6 +40,13 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
 """
 
 
+COOKIE_MUTATION_SERVICES: frozenset[str] = frozenset({"identity", "game"})
+"""Сервисы с мутациями по cookie (CSRF-проверка Origin по ``GV_PUBLIC_ORIGINS``).
+
+bff_web только читает (GET), admin — Django со своей CSRF-защитой.
+"""
+
+
 def service_clients_json() -> str:
     """``GV_SERVICE_CLIENTS`` с пустыми ``secret_sha256`` (их заполняет ``gv dev secrets``)."""
     return json.dumps(
@@ -76,6 +83,7 @@ def _render(template: str, services: list[Service]) -> str:
         service_clients=SERVICE_CLIENTS,
         service_clients_json=service_clients_json(),
         service_secret_env=service_secret_env,
+        cookie_mutation_services=COOKIE_MUTATION_SERVICES,
     )
 
 

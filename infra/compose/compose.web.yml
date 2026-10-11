@@ -18,6 +18,8 @@ services:
       GV_BFF_INTERNAL_URL: http://bff-web:8000
       # Обязательные согласия регистрации — та же настройка, что у identity.
       GV_CONSENTS__REQUIRED: ${GV_CONSENTS__REQUIRED:-terms:2026-10,privacy:2026-10,age_18:1}
+      # Обход gateway (GV_DEV_API_ORIGIN) здесь не задаётся: вне e2e на моках (GV_E2E=1)
+      # контейнер с ним не стартует (infra/docker/web.Dockerfile, src/instrumentation.ts).
     logging:
       driver: json-file
       options: {max-size: "20m", max-file: "5"}

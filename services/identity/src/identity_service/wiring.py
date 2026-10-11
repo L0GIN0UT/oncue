@@ -281,7 +281,10 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
             limiter,
             ServiceTokenConfig(
                 ttl_s=settings.service_token.ttl_s,
-                per_client_per_min=settings.service_token_limit.per_client_per_min,
+                failures_per_client_ip_per_min=(
+                    settings.service_token_limit.failures_per_client_ip_per_min
+                ),
+                success_per_client_per_min=settings.service_token_limit.success_per_client_per_min,
             ),
         ),
         guest=GuestUseCases(

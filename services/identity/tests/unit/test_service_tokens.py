@@ -49,18 +49,29 @@ async def test_foreign_audience_is_forbidden(world: World) -> None:
     assert world.tokens.service_issued == []
 
 
-async def test_limit_per_client_counts_every_attempt(world: World) -> None:
+async def test_failed_attempts_from_one_ip_do_not_block_other_ip(world: World) -> None:
+    """Регресс DoS: неверные секреты (лимит неудач в conftest — 3) с одного IP не мешают
+    честному клиенту с другого адреса."""
     uc = world.uc.issue_service_token
-    with pytest.raises(UnauthenticatedError):
-        await uc.execute("game", "wrong", "media_pipeline")
-    for _ in range(2):  # лимит в conftest — 3 в минуту
-        await uc.execute("game", GAME_SECRET, "media_pipeline")
+    for _ in range(3):
+        with pytest.raises(UnauthenticatedError):
+            await uc.execute("game", "wrong", "media_pipeline", source_ip="203.0.113.9")
     with pytest.raises(RateLimitedError) as exc:
-        await uc.execute("game", GAME_SECRET, "media_pipeline")
+        await uc.execute("game", "wrong", "media_pipeline", source_ip="203.0.113.9")
     assert exc.value.details["retry_after"] >= 1
-    # лимит считается по client_id: другой клиент не затронут
+    issued = await uc.execute("game", GAME_SECRET, "media_pipeline", source_ip="10.0.0.5")
+    assert issued.expires_in == 600
+
+
+async def test_successful_issues_have_separate_limit(world: World) -> None:
+    uc = world.uc.issue_service_token
+    for _ in range(5):  # лимит успешных выдач в conftest — 5 в минуту
+        await uc.execute("game", GAME_SECRET, "media_pipeline", source_ip="10.0.0.5")
+    with pytest.raises(RateLimitedError):
+        await uc.execute("game", GAME_SECRET, "media_pipeline", source_ip="10.0.0.6")
+    # лимит по client_id: другой клиент упирается в проверку секрета, а не в лимит
     with pytest.raises(UnauthenticatedError):
-        await uc.execute("admin", "x", "identity")
+        await uc.execute("admin", "x", "identity", source_ip="10.0.0.5")
 
 
 # ----------------------------------------------------------------------------- конфигурация
@@ -97,9 +108,10 @@ def test_clients_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
         f'[{{"client_id":"game","secret_sha256":"{SHA}",'
         '"audiences":{"media_pipeline":["assets.link"]}}]',
     )
-    monkeypatch.setenv("GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN", "7")
+    monkeypatch.setenv("GV_SERVICE_TOKEN_LIMIT__FAILURES_PER_CLIENT_IP_PER_MIN", "7")
     settings = Settings()
-    assert settings.service_token_limit.per_client_per_min == 7
+    assert settings.service_token_limit.failures_per_client_ip_per_min == 7
+    assert settings.service_token_limit.success_per_client_per_min == 600
     registry = service_clients(settings)
     game = registry.get("game")
     assert game is not None

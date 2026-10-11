@@ -75,6 +75,15 @@ class Service:
     prefix: str
     admin_client: dict[str, str] = field(default_factory=dict)
     """Заголовок с сервисным токеном admin (internal-ручки admin-сессий)."""
+    app: Any = None
+    """ASGI-приложение (для клиентов с другим IP источника)."""
+
+    def client_from(self, ip: str) -> httpx.AsyncClient:
+        """Клиент к тому же приложению, запросы которого приходят с адреса ``ip``."""
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app, client=(ip, 40000)),
+            base_url=str(self.client.base_url),
+        )
 
     def csrf(self) -> dict[str, str]:
         """Заголовки браузерной мутации с cookie-аутентификацией."""
@@ -183,8 +192,9 @@ async def service(migrated_db: str, infra: InfraProvider) -> AsyncIterator[Servi
             capture_logs() as logs,
             respx.mock(assert_all_called=False) as yandex,
         ):
-            async with service_client(create_app(DEFINITION, runtime)) as client:
-                service = Service(client, runtime, logs, yandex, prefix)
+            app = create_app(DEFINITION, runtime)
+            async with service_client(app) as client:
+                service = Service(client, runtime, logs, yandex, prefix, app=app)
                 service.admin_client = await service_token_headers(client, "admin", ADMIN_SECRET)
                 yield service
     finally:

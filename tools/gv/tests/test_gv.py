@@ -271,3 +271,28 @@ def test_generated_compose_passes_stage2_settings() -> None:
     links = dev["identity"]["environment"]
     assert links["GV_EMAIL__VERIFY_LINK"] == "https://localhost/verify-email?token={token}"
     assert links["GV_EMAIL__RESET_LINK"] == "https://localhost/reset-password?token={token}"
+
+
+def test_public_origins_for_cookie_mutation_services() -> None:
+    import json
+
+    from gv_cli.generate import render_all
+    from gv_cli.main import fill_secrets
+    from gv_cli.registry import load_services
+
+    rendered = render_all(load_services(ROOT))
+    services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
+    for name in ("identity", "game"):
+        value = services[name]["environment"]["GV_PUBLIC_ORIGINS"]
+        assert value.startswith("${GV_PUBLIC_ORIGINS:?"), name
+    assert "GV_PUBLIC_ORIGINS" not in services["bff-web"]["environment"]  # только GET
+
+    # `gv dev secrets` по настоящему .env.example: origin остаётся, секрет дейлика генерируется.
+    values = dict(
+        line.split("=", 1)
+        for line in fill_secrets(rendered["infra/compose/.env.example"]).splitlines()
+        if line and not line.startswith("#")
+    )
+    assert json.loads(values["GV_PUBLIC_ORIGINS"]) == ["https://localhost"]
+    assert len(values["GV_GAME__DAILY_SEED_SECRET"]) >= 32
+    assert json.loads(values["GV_JWT__SIGNING_KEYS"])[0]["active"] is True

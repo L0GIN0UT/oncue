@@ -22,7 +22,10 @@ function clearCookies(): void {
 
 function withCookieJar(inner: typeof fetch): typeof fetch {
   return async (input, init) => {
-    const request = new Request(input instanceof URL ? input.href : input, init);
+    // Относительные пути (как `fetch("/api/...")` в браузере) — от origin страницы.
+    const target =
+      typeof input === "string" ? new URL(input, globalThis.location.origin).href : input;
+    const request = new Request(target instanceof URL ? target.href : target, init);
     const sameOrigin = new URL(request.url).origin === globalThis.location.origin;
     if (sameOrigin && document.cookie) request.headers.set("cookie", document.cookie);
     const response = await inner(request);
@@ -55,10 +58,16 @@ export function setupMockBackend(): void {
   });
 }
 
-/** Войти в мок как гость: cookie `gv_access` и `gv_csrf`. */
+/** Войти в мок как гость: cookie `gv_access`, `gv_refresh` и `gv_csrf`. */
 export function signInAsGuest(id = "test"): string {
   const subject = `guest.${id}`;
   document.cookie = `gv_access=${subject}; Path=/`;
+  document.cookie = `gv_refresh=r-${subject}; Path=/`;
   document.cookie = `gv_csrf=csrf-${id}; Path=/`;
   return subject;
+}
+
+/** Браузер удалил cookie access (истёк её Max-Age), refresh-сессия жива. */
+export function dropAccessCookie(): void {
+  document.cookie = "gv_access=; Max-Age=0; Path=/";
 }

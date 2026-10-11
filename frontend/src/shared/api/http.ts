@@ -9,7 +9,17 @@ import { NetworkError } from "./errors";
 import { refreshSession } from "./refresh";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const REFRESHABLE_CODES = new Set(["auth.token_expired"]);
+/**
+ * Когда 401 стоит попробовать вылечить refresh-ом.
+ *
+ * `auth.token_expired` — всегда. `auth.unauthenticated` (запрос ушёл без access-токена) — только
+ * если в браузере есть признак сессии (`gv_csrf`): cookie access могла исчезнуть раньше
+ * refresh-сессии, и без refresh клиент ушёл бы в гостевую сессию, а она ответила бы 409.
+ */
+function shouldRefresh(code: string | null, csrfAtRequest: string | null): boolean {
+  if (code === "auth.token_expired") return true;
+  return code === "auth.unauthenticated" && csrfAtRequest !== null;
+}
 
 function prepare(request: Request): Request {
   const headers = new Headers(request.headers);
@@ -43,8 +53,7 @@ export async function apiFetch(request: Request): Promise<Response> {
   const csrfAtRequest = csrfToken();
   const res = await send(request);
   if (res.status !== 401 || request.url.includes("/api/identity/v1/auth/")) return res;
-  const code = await problemCode(res);
-  if (!code || !REFRESHABLE_CODES.has(code)) return res;
+  if (!shouldRefresh(await problemCode(res), csrfAtRequest)) return res;
   const ok = await refreshSession(csrfAtRequest);
   return ok ? send(retry) : res;
 }

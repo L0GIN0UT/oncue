@@ -21,11 +21,30 @@ function errorText(dt: DynT, generic: string, e: unknown): string {
   return dt(`auth.error.${code.replace(/^auth\./, "").replace(/\./g, "_")}`, generic);
 }
 
-/** Только относительный путь этого же сайта: защита от открытого редиректа через `?next=`. */
-export function safeNext(next: string | null | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
-    ? next
-    : "/";
+// Управляющие символы и обратная косая черта: парсер URL выбрасывает \t\n\r и читает «\»
+// как «/», поэтому «/\t/evil.com» или «/\\evil.com» превращаются в «//evil.com».
+const UNSAFE_CHARS = /[\u0000-\u001f\u007f\\]/;
+
+/**
+ * Куда вернуть после входа (`?next=`): только путь этого же сайта — защита от открытого
+ * редиректа. Путь разбирается как URL относительно своего origin; результат —
+ * `pathname + search + hash`, иначе `/`.
+ */
+export function safeNext(
+  next: string | null | undefined,
+  origin: string = globalThis.location?.origin ?? "http://localhost",
+): string {
+  if (!next || !next.startsWith("/") || UNSAFE_CHARS.test(next)) return "/";
+  let decoded: string;
+  let url: URL;
+  try {
+    decoded = decodeURIComponent(next);
+    url = new URL(next, origin);
+  } catch {
+    return "/";
+  }
+  if (UNSAFE_CHARS.test(decoded) || url.origin !== origin) return "/";
+  return url.pathname + url.search + url.hash;
 }
 
 export function LoginForm({ next }: { next: string | null }) {

@@ -33,6 +33,14 @@ export function problem(status: number, code: string, details?: Record<string, u
   );
 }
 
+/** Субъект живой refresh-сессии из cookie `gv_refresh` (`r-<субъект>`), как у identity. */
+function refreshSubjectOf(request: Request, world: MockWorld): string | null {
+  const raw = cookiesOf(request).gv_refresh;
+  const subject = raw?.startsWith("r-") ? raw.slice(2) : null;
+  if (!subject || !/^(guest|user)\.[\w-]+$/.test(subject)) return null;
+  return world.revokedRefresh.has(subject) ? null : subject;
+}
+
 const csrfOk = (request: Request) => {
   const cookie = cookiesOf(request)[CSRF];
   return Boolean(cookie) && request.headers.get("x-csrf-token") === cookie;
@@ -74,7 +82,7 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       params: Record<string, string | readonly string[] | undefined>;
     }) => {
       const subject = subjectOf(request);
-      if (!subject) return problem(401, "auth.not_authenticated");
+      if (!subject) return problem(401, "auth.unauthenticated");
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       const key = request.headers.get("idempotency-key");
       if (!key) return problem(422, "idempotency.key_required");
@@ -120,7 +128,7 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     http.get(`${g}/daily`, ({ request }) => {
       const subject = subjectOf(request);
-      if (!subject) return problem(401, "auth.not_authenticated");
+      if (!subject) return problem(401, "auth.unauthenticated");
       const domain = new URL(request.url).searchParams.get("domain");
       return HttpResponse.json(
         MODES.filter((m) => m.source_type === "daily" && (!domain || m.domain === domain)).map(
@@ -131,7 +139,7 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     http.post(`${g}/sessions`, async ({ request }) => {
       const subject = subjectOf(request);
-      if (!subject) return problem(401, "auth.not_authenticated");
+      if (!subject) return problem(401, "auth.unauthenticated");
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       if (!request.headers.get("idempotency-key")) return problem(422, "idempotency.key_required");
       const body = (await request.json()) as { mode_key: string; preset_id?: string | null };
@@ -152,7 +160,7 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     http.get(`${g}/sessions/:session_id`, ({ request, params }) => {
       const subject = subjectOf(request);
-      if (!subject) return problem(401, "auth.not_authenticated");
+      if (!subject) return problem(401, "auth.unauthenticated");
       const s = world.sessions.get(String(params.session_id));
       if (!s || s.subject !== subject) return problem(404, "game.session_not_found");
       return HttpResponse.json(world.snapshot(s), { headers: { "Cache-Control": "no-store" } });
@@ -168,7 +176,7 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     http.post(`${g}/sessions/:session_id/rounds/:index/clue`, async ({ request, params }) => {
       const subject = subjectOf(request);
-      if (!subject) return problem(401, "auth.not_authenticated");
+      if (!subject) return problem(401, "auth.unauthenticated");
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       const s = world.sessions.get(String(params.session_id));
       if (!s || s.subject !== subject) return problem(404, "game.session_not_found");
@@ -312,12 +320,20 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     // ---------------------------------------------------------------- identity
     http.post("*/api/identity/v1/auth/guest", ({ request }) => {
-      if (subjectOf(request)) return problem(409, "auth.already_authenticated");
+      // Как identity: 409 и при действующем access, и при живой refresh-сессии.
+      if (subjectOf(request) || refreshSubjectOf(request, world))
+        return problem(409, "auth.already_authenticated");
       const id = world.nextId(9);
       return withCookies(new HttpResponse(null, { status: 204 }), sessionCookies(`guest.${id}`));
     }),
 
-    http.post("*/api/identity/v1/auth/refresh", () => problem(401, "auth.refresh_invalid")),
+    http.post("*/api/identity/v1/auth/refresh", ({ request }) => {
+      const subject = refreshSubjectOf(request, world);
+      if (!subject) return problem(401, "auth.refresh_invalid");
+      if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
+      world.refreshCalls += 1;
+      return withCookies(HttpResponse.json({ expires_in: 900 }), sessionCookies(subject));
+    }),
 
     http.post("*/api/identity/v1/auth/login", async ({ request }) => {
       const body = (await request.json()) as { login: string; password: string };
@@ -374,11 +390,14 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       return new HttpResponse(null, { status: 204 });
     }),
 
-    http.post("*/api/identity/v1/auth/logout", () =>
-      withCookies(new HttpResponse(null, { status: 204 }), [
+    http.post("*/api/identity/v1/auth/logout", ({ request }) => {
+      const subject = refreshSubjectOf(request, world) ?? subjectOf(request);
+      if (subject) world.revokedRefresh.add(subject);
+      return withCookies(new HttpResponse(null, { status: 204 }), [
         `${ACCESS}=; Path=/; Max-Age=0`,
+        `gv_refresh=; Path=/api/identity/v1/auth; Max-Age=0`,
         `${CSRF}=; Path=/; Max-Age=0`,
-      ]),
-    ),
+      ]);
+    }),
   ];
 }

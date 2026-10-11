@@ -76,18 +76,22 @@ async def test_request_schema_is_strict(service: Any) -> None:
         assert response.status_code == 422
 
 
-async def test_rate_limit_per_client(service: Any) -> None:
-    # лимит по умолчанию — 60 в минуту на client_id, засчитываются и неудачные попытки
-    for _ in range(59):
-        assert_problem(
-            await _issue(service, "game", "wrong", "media_pipeline"), 401, "auth.client_invalid"
-        )
-    assert (await _issue(service, "game", GAME_SECRET, "media_pipeline")).status_code == 200
-    limited = await _issue(service, "game", GAME_SECRET, "media_pipeline")
+async def test_wrong_secrets_from_one_ip_do_not_block_other_ip(service: Any) -> None:
+    """Регресс DoS: шквал неверных секретов с одного IP не мешает выдаче с другого IP."""
+    body = {"client_id": "game", "client_secret": "wrong", "audience": "media_pipeline"}
+    async with service.client_from("203.0.113.9") as attacker:
+        for _ in range(30):  # лимит неудач по умолчанию — 30 в минуту на (client_id, IP)
+            response = await attacker.post("/internal/v1/service-tokens", json=body)
+            assert_problem(response, 401, "auth.client_invalid")
+        limited = await attacker.post("/internal/v1/service-tokens", json=body)
     problem = assert_problem(limited, 429, "rate.limited")
     assert int(limited.headers["Retry-After"]) == problem["details"]["retry_after"]
-    # другой клиент не затронут (admin получил токен в фикстуре и получает снова)
-    assert (await _issue(service, "admin", ADMIN_SECRET, "identity")).status_code == 200
+
+    async with service.client_from("10.0.0.5") as honest:
+        response = await honest.post(
+            "/internal/v1/service-tokens", json={**body, "client_secret": GAME_SECRET}
+        )
+    assert response.status_code == 200, response.text
 
 
 async def test_admin_sessions_require_service_token_with_scope(service: Any) -> None:

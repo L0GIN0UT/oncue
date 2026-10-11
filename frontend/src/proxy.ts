@@ -2,10 +2,11 @@
  * Proxy Next (бывший middleware): CSP с nonce на каждый ответ-страницу (план §7, §9 п. 7).
  *
  * Остальные заголовки безопасности ставит gateway (infra/nginx/snippets/web-headers.conf).
- * В разработке и e2e без gateway (`GV_DEV_API_ORIGIN`) `/api/*` и `/media/*` переписываются
- * на указанный адрес; в проде переменная не задана и эти пути обслуживает nginx.
+ * В e2e на моках (`GV_E2E=1` + `GV_DEV_API_ORIGIN`) `/api/*` и `/media/*` переписываются на
+ * мок-бэкенд; в проде эти пути обслуживает nginx (см. shared/lib/dev-api.ts).
  */
 import { NextResponse, type NextRequest } from "next/server";
+import { devApiOrigin } from "@/shared/lib/dev-api";
 
 /** Политика для страниц. `style-src-attr 'unsafe-inline'` — только атрибуты `style` (React SSR). */
 export function buildCsp(nonce: string, dev: boolean): string {
@@ -27,7 +28,7 @@ export function buildCsp(nonce: string, dev: boolean): string {
 }
 
 function devRewrite(request: NextRequest): NextResponse | null {
-  const origin = process.env.GV_DEV_API_ORIGIN;
+  const origin = devApiOrigin();
   const { pathname, search } = request.nextUrl;
   if (!origin || !(pathname.startsWith("/api/") || pathname.startsWith("/media/"))) return null;
   return NextResponse.rewrite(new URL(pathname + search, origin));
