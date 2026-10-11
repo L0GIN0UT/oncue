@@ -61,6 +61,7 @@
 | Засев стека для e2e «дейлик»: каталог, исходники медиа и ассеты, наборы дня. Пока его нет, в CI идёт только смоук стека (`e2e/stack.spec.ts`), а `e2e/daily.spec.ts` пропускается с причиной до `E2E_SEEDED=1` | `tools/gv`, `.github/workflows`, `seeds/` | Следующая задача |
 | Integration-тесты Kafka и OpenSearch и `nginx -t` на образе nginx 1.28 — только в CI, локально не прогонялись | `.github/workflows`, `infra/nginx`, catalog, `libs/messaging` | ✅ прогон CI #18: зелёные |
 | Зеркало образов под своим контролем: внешние реестры удаляют образы (MinIO, сентябрь 2026 — [ADR 0021](adr/0021-s3-storage-seaweedfs.md)) | `infra/` | Этап 7 |
+| Скан образов trivy: вернуть блокировку по CRITICAL и выгрузку SARIF в GitHub Security после digest-пиннинга базового образа и Dependabot на него ([ADR 0022](adr/0022-image-scan-reporting-not-gating.md)) | `.github/workflows` | Этап 7 |
 | Ручная проверка владельцем: identity (гостевые сессии, сервисные токены), `libs/auth` | — | До слияния в `main` |
 | Подтвердить правку эталона `libs/text`: союз «&» теперь удаляется (`("&", "")`) при сверке ответов | `libs/text`, `libs/game_kernel` | До слияния в `main` |
 | Журнал `link_issuance` чистится внутри `IssueAssetLink` (не чаще раза в 10 мин), а не периодической задачей | media_pipeline | Этап 3 |

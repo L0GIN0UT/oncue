@@ -85,18 +85,20 @@ services:
     restart: unless-stopped
     networks: [backend]
     logging: *logging
+    # --mode dev-container — официальный режим Redpanda для контейнеров (v24.3):
+    #   сам включает overprovisioned, reserve-memory=0, отключает fsync и проверки
+    #   окружения, разрешает авто-создание топиков. Отдельные флаги --overprovisioned
+    #   и --reserve-memory в v24.3 убраны (свёрнуты в этот режим) — передача их по
+    #   отдельности роняет брокер на старте. См. docs.redpanda.com rpk redpanda start.
     command:
       - redpanda
       - start
-      - --overprovisioned
+      - --mode=dev-container
       - --smp=1
-      - --memory=1G
-      - --reserve-memory=0M
-      - --node-id=0
-      - --check=false
       - --kafka-addr=PLAINTEXT://0.0.0.0:9092
       - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
-      - --set=redpanda.auto_create_topics_enabled=true
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
       - --default-log-level=warn
     volumes:
       - redpandadata:/var/lib/redpanda/data

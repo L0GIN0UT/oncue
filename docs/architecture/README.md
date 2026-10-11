@@ -87,6 +87,7 @@
 | 19 | Соло-сессии в Postgres, Redis — лимиты и кэш | [0019](../adr/0019-solo-sessions-in-postgres.md) |
 | 20 | ModeConfig ↔ ассеты по `params_hash`, очки уровней в Scorer | [0020](../adr/0020-mode-config-assets-by-params-hash.md) |
 | 21 | S3-хранилище на VPS: SeaweedFS вместо MinIO | [0021](../adr/0021-s3-storage-seaweedfs.md) |
+| 22 | Скан образов (trivy) — отчётный, не блокирующий пайплайн | [0022](../adr/0022-image-scan-reporting-not-gating.md) |
 
 ## 6. Технологии
 

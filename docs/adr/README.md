@@ -25,3 +25,4 @@
 | [0019](0019-solo-sessions-in-postgres.md) | Соло-сессии в Postgres |
 | [0020](0020-mode-config-assets-by-params-hash.md) | ModeConfig ↔ ассеты по `params_hash`, очки в Scorer |
 | [0021](0021-s3-storage-seaweedfs.md) | S3-хранилище на VPS: SeaweedFS вместо MinIO |
+| [0022](0022-image-scan-reporting-not-gating.md) | Скан образов (trivy) — отчётный, не блокирующий |
