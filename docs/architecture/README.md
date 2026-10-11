@@ -49,7 +49,7 @@
  │ Redpanda (доменные события)│   │ RabbitMQ (очереди задач) │
  └────────────────────────────┘   └──────────────────────────┘
 
- Хранилища: PostgreSQL (по БД на сервис) · Redis · OpenSearch · S3/MinIO + CDN · ClickHouse (позже)
+ Хранилища: PostgreSQL (по БД на сервис) · Redis · OpenSearch · S3 (SeaweedFS) + CDN · ClickHouse (позже)
  Наблюдаемость: OpenTelemetry → трейсы · Prometheus/Grafana · ELK · Sentry
 ```
 
@@ -86,6 +86,7 @@
 | 18 | Гостевые сессии выдаёт identity (`gst = true`, без прав) | [0018](../adr/0018-guest-sessions-in-identity.md) |
 | 19 | Соло-сессии в Postgres, Redis — лимиты и кэш | [0019](../adr/0019-solo-sessions-in-postgres.md) |
 | 20 | ModeConfig ↔ ассеты по `params_hash`, очки уровней в Scorer | [0020](../adr/0020-mode-config-assets-by-params-hash.md) |
+| 21 | S3-хранилище на VPS: SeaweedFS вместо MinIO | [0021](../adr/0021-s3-storage-seaweedfs.md) |
 
 ## 6. Технологии
 
@@ -100,6 +101,6 @@
 | События / задачи | Redpanda (Kafka API) / RabbitMQ (quorum queues) |
 | Realtime | Centrifugo |
 | Фича-флаги | Unleash (self-hosted), SDK в `libs/flags` |
-| Объекты | S3-совместимое хранилище (MinIO на VPS) + CDN |
+| Объекты | S3-совместимое хранилище (SeaweedFS на VPS, [ADR 0021](../adr/0021-s3-storage-seaweedfs.md)) + CDN |
 | Наблюдаемость | OpenTelemetry, Prometheus, Grafana, ELK, Sentry |
 | Инфраструктура | Docker, docker-compose (VPS) → Kubernetes + Helm, Terraform, GitHub Actions |

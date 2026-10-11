@@ -1,6 +1,6 @@
 """Сервис целиком: события catalog → задача → AssetsReady → ссылки; admin API.
 
-Реальные Postgres, Redis, S3 (moto/MinIO), ffmpeg и Pillow; очередь задач — фейк из testkit
+Реальные Postgres, Redis, S3 (moto или SeaweedFS), ffmpeg и Pillow; очередь задач — фейк из testkit
 (задачи выполняются вызовом обработчика воркера), TMDB — respx-заглушка.
 """
 
@@ -202,7 +202,7 @@ async def service(
     try:
         with respx.mock(assert_all_called=False) as router:
             router.get(f"https://{TMDB_IP}{POSTER_PATH}").respond(200, content=_jpeg())
-            router.route(host="127.0.0.1").pass_through()  # S3 (moto/MinIO)
+            router.route(host="127.0.0.1").pass_through()  # S3 (moto или SeaweedFS)
             async with service_client(app) as client:
                 client.event_hooks["request"].append(add_service_token)
                 yield Service(

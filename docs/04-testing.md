@@ -27,7 +27,7 @@
 
 ```
 libs/testkit/src/testkit/
-  containers/        # фикстуры testcontainers: postgres, redis, redpanda, rabbitmq, minio, opensearch
+  containers/        # фикстуры testcontainers: postgres, redis, redpanda, rabbitmq, opensearch; S3 — moto_server процессом
                      # поднимаются один раз на сессию, БД очищается между тестами (транзакция/truncate)
   fakes/             # in-memory реализации портов: InMemoryRepository, FakeClock, FakeRandom(seed),
                      # FakePublisher (собирает события), FakeAssetPort, FakeUnitOfWork

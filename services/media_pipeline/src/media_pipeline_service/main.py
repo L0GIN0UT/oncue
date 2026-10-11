@@ -8,13 +8,14 @@ from fastapi import APIRouter
 
 from gv_messaging import EventHandlerRegistry
 from gv_messaging.ports import TaskHandler
-from gv_service import Infrastructure, ServiceDefinition, main
+from gv_service import Infrastructure, ServiceDefinition, ServiceSettings, main
 from media_pipeline_service.api.admin import build_admin_router
 from media_pipeline_service.api.internal import build_internal_router
 from media_pipeline_service.api.public import build_public_router
 from media_pipeline_service.infrastructure import messaging
 from media_pipeline_service.infrastructure.container import MediaAdapters, container_for
 from media_pipeline_service.infrastructure.db.tables import TABLES
+from media_pipeline_service.infrastructure.storage import prepare_storage
 from media_pipeline_service.settings import Settings
 
 _MB = 1024 * 1024
@@ -50,6 +51,13 @@ def build_task_handlers(
     return messaging.build_task_handlers(container_for(infra, adapters))
 
 
+async def prepare_resources(settings: ServiceSettings) -> None:
+    """Бакеты и политика бакета ассетов — в job ``migrate`` до старта процессов сервиса."""
+    if not isinstance(settings, Settings):  # runner создаёт настройки из settings_cls
+        raise TypeError(f"ожидались настройки media_pipeline, получено {type(settings)!r}")
+    await prepare_storage(settings.s3)
+
+
 DEFINITION = ServiceDefinition(
     name="media_pipeline",
     settings_cls=Settings,
@@ -63,6 +71,7 @@ DEFINITION = ServiceDefinition(
     consumer_topics=messaging.CONSUMED_TOPICS,
     build_routers=build_routers,
     build_task_handlers=build_task_handlers,
+    prepare_resources=prepare_resources,
 )
 
 

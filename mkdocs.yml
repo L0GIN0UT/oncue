@@ -77,6 +77,7 @@ nav:
       - adr/0018-guest-sessions-in-identity.md
       - adr/0019-solo-sessions-in-postgres.md
       - adr/0020-mode-config-assets-by-params-hash.md
+      - adr/0021-s3-storage-seaweedfs.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

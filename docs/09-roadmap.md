@@ -18,7 +18,7 @@
 ## Этап 1. Аккаунт и каталог — ✅ backend выполнен (2026-10-10), живая демонстрация не проведена
 План: [plans/stage-1.md](plans/stage-1.md). Решения: ADR [0012](adr/0012-signed-asset-links-nginx.md)–[0015](adr/0015-admin-idempotency-and-asset-event-order.md).
 
-- **edge:** `/metrics` на отдельном порту 9100 у всех процессов; gateway с TLS (443, HSTS, 80 → 301), `/media/` через `secure_link` в приватный MinIO; CSRF/Origin для cookie-аутентификации в `libs/auth`.
+- **edge:** `/metrics` на отдельном порту 9100 у всех процессов; gateway с TLS (443, HSTS, 80 → 301), `/media/` через `secure_link` в приватное S3-хранилище (MinIO заменён на SeaweedFS — [ADR 0021](adr/0021-s3-storage-seaweedfs.md)); CSRF/Origin для cookie-аутентификации в `libs/auth`.
 - **identity:** регистрация (никнейм + e-mail + пароль), вход по e-mail или никнейму, сессии с ротацией refresh, JWT/JWKS, роли и права, согласия, привязка Яндекс ID и вход через привязанный аккаунт, admin-сессии и admin-API пользователей и ролей.
 - **catalog:** MediaItem (music + film), импорт (файл, TMDB, MusicBrainz, Spotify, Яндекс Музыка — внешние выключены по умолчанию), нормализация и алиасы, OpenSearch с fallback на pg_trgm, автокомплит, admin-API.
 - **media-pipeline:** `audio_intro`, `frame_progressive`, `poster_masked`; подписанные ссылки (ADR 0012), admin-загрузка исходников и перегенерация. Вместо CDN — `proxy_cache` на gateway (CDN — этап 7).
@@ -58,8 +58,9 @@
 | Пункт | Где | Когда |
 |---|---|---|
 | Живая демонстрация [§0 плана](plans/stage-2.md#0-цель-и-критерии-готовности) на compose не проводилась (в среде разработки нет Docker) | весь стек | До слияния в `main` |
-| e2e-smoke в CI не пройдёт без контента: нужен скрипт засева каталога и ассетов в стек (сейчас вручную по `seeds/media/README.md`) | `tools/gv`, `.github/workflows`, `seeds/` | До слияния в `main` |
-| Integration-тесты Kafka и OpenSearch и `nginx -t` на образе nginx 1.28 — только в CI, локально не прогонялись | `.github/workflows`, `infra/nginx`, catalog, `libs/messaging` | Первый прогон CI |
+| Засев стека для e2e «дейлик»: каталог, исходники медиа и ассеты, наборы дня. Пока его нет, в CI идёт только смоук стека (`e2e/stack.spec.ts`), а `e2e/daily.spec.ts` пропускается с причиной до `E2E_SEEDED=1` | `tools/gv`, `.github/workflows`, `seeds/` | Следующая задача |
+| Integration-тесты Kafka и OpenSearch и `nginx -t` на образе nginx 1.28 — только в CI, локально не прогонялись | `.github/workflows`, `infra/nginx`, catalog, `libs/messaging` | ✅ прогон CI #18: зелёные |
+| Зеркало образов под своим контролем: внешние реестры удаляют образы (MinIO, сентябрь 2026 — [ADR 0021](adr/0021-s3-storage-seaweedfs.md)) | `infra/` | Этап 7 |
 | Ручная проверка владельцем: identity (гостевые сессии, сервисные токены), `libs/auth` | — | До слияния в `main` |
 | Подтвердить правку эталона `libs/text`: союз «&» теперь удаляется (`("&", "")`) при сверке ответов | `libs/text`, `libs/game_kernel` | До слияния в `main` |
 | Журнал `link_issuance` чистится внутри `IssueAssetLink` (не чаще раза в 10 мин), а не периодической задачей | media_pipeline | Этап 3 |

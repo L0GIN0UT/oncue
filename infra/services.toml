@@ -18,6 +18,7 @@
 #   redis        — использует Redis
 #   kafka        — публикует/читает доменные события (relay + consumer)
 #   rabbitmq     — фоновые задачи
+#   s3           — объектное хранилище (S3 API): GV_S3__* и бакеты в job migrate
 #   memory_mb    — лимит памяти контейнера
 #   framework    — fastapi (по умолчанию) | django (admin)
 #   apt          — системные пакеты образа (например ffmpeg), ставятся при сборке
@@ -47,6 +48,7 @@ database = true
 redis = true
 kafka = true
 rabbitmq = true
+s3 = true
 memory_mb = 512
 apt = ["ffmpeg"]
 

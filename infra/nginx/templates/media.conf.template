@@ -8,7 +8,7 @@ map "" $media_signing_secret {
     default "${GV_MEDIA_SIGNING_SECRET}";
 }
 
-# Бакет ассетов в MinIO (GV_S3__BUCKET_ASSETS в media-pipeline).
+# Бакет ассетов в S3-хранилище (GV_S3__BUCKET_ASSETS в media-pipeline).
 map "" $media_assets_bucket {
     default "${GV_MEDIA_ASSETS_BUCKET}";
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import shutil
 import subprocess
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 import respx
+from botocore.exceptions import ClientError
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import StorageArea
 from media_pipeline_service.infrastructure.fetcher import HttpSourceFetcher, is_public_ip
@@ -21,7 +23,11 @@ from media_pipeline_service.infrastructure.links import (
     UnconfiguredSigner,
     md5_b64url,
 )
-from media_pipeline_service.infrastructure.storage import S3Storage
+from media_pipeline_service.infrastructure.storage import (
+    S3Storage,
+    assets_read_policy,
+    prepare_storage,
+)
 from media_pipeline_service.settings import S3Settings
 from pydantic import SecretStr
 from redis.asyncio import Redis
@@ -283,3 +289,30 @@ async def test_s3_roundtrip_private_objects(s3_endpoint: S3Endpoint) -> None:
 async def test_s3_without_endpoint_is_unavailable() -> None:
     with pytest.raises(DependencyUnavailableError):
         await S3Storage(S3Settings()).put(StorageArea.ASSETS, "a/x", b"", "image/webp")
+
+
+async def test_prepare_storage_creates_buckets_and_assets_policy(s3_endpoint: S3Endpoint) -> None:
+    """``migrate`` готовит хранилище: бакеты и политику чтения только ``a/*`` (идемпотентно)."""
+    settings = s3_settings(s3_endpoint)
+    await prepare_storage(settings)
+    await prepare_storage(settings)  # повторный выкат не падает и не меняет политику
+
+    storage = S3Storage(settings)
+    async with storage._client() as s3:
+        for area in (StorageArea.SOURCES, StorageArea.ASSETS):
+            await s3.head_bucket(Bucket=storage.bucket(area))
+        raw = await s3.get_bucket_policy(Bucket=storage.bucket(StorageArea.ASSETS))
+        with pytest.raises(ClientError):  # у бакета исходников политики нет — он закрыт
+            await s3.get_bucket_policy(Bucket=storage.bucket(StorageArea.SOURCES))
+    expected = assets_read_policy(storage.bucket(StorageArea.ASSETS))
+    assert _canonical_policy(raw["Policy"]) == _canonical_policy(expected)
+
+
+def _canonical_policy(text: str) -> list[dict[str, object]]:
+    """Сравнение по смыслу IAM: хранилища вправе вернуть список из одного элемента строкой."""
+    statements = json.loads(text)["Statement"]
+    as_list = lambda v: sorted(v) if isinstance(v, list) else [v]  # noqa: E731
+    return [
+        {k: as_list(st[k]) for k in ("Effect", "Principal", "Action", "Resource")}
+        for st in statements
+    ]

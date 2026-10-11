@@ -11,7 +11,7 @@ from gv_service import ServiceSettings
 
 
 class S3Settings(BaseModel):
-    """Приватное S3-хранилище (MinIO): ``GV_S3__*``."""
+    """Приватное S3-совместимое хранилище (SeaweedFS на VPS, ADR 0021): ``GV_S3__*``."""
 
     model_config = ConfigDict(frozen=True)
 

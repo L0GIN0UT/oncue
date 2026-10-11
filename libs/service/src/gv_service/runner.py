@@ -288,6 +288,29 @@ class Runtime:
         return run
 
 
+def migrate(definition: ServiceDefinition, settings: ServiceSettings) -> None:
+    """Команда ``migrate``: миграции БД, затем подготовка внешних ресурсов сервиса.
+
+    Ресурсы готовятся после схемы: job выката выполняется один раз до старта процессов
+    сервиса, поэтому сами процессы не создают бакеты и не меняют политики хранилища.
+    """
+    if definition.migrations_path is not None:
+        if settings.database_url is None:
+            sys.exit("миграции не настроены: нужен GV_DATABASE_URL")
+        run_migrations(definition.migrations_path, settings.database_url.get_secret_value())
+        log.info("migrations.applied")
+    elif definition.prepare_resources is None:
+        sys.exit("migrate: у сервиса нет ни миграций, ни ресурсов для подготовки")
+    prepare = definition.prepare_resources
+    if prepare is not None:
+
+        async def run_prepare() -> None:
+            await prepare(settings)
+
+        asyncio.run(run_prepare())
+        log.info("resources.prepared")
+
+
 def main(definition: ServiceDefinition, argv: list[str] | None = None) -> None:
     """Консольная точка входа сервиса."""
     args = sys.argv[1:] if argv is None else argv
@@ -307,10 +330,7 @@ def main(definition: ServiceDefinition, argv: list[str] | None = None) -> None:
     )
 
     if command is Command.MIGRATE:
-        if definition.migrations_path is None or settings.database_url is None:
-            sys.exit("миграции не настроены: нужны migrations_path и GV_DATABASE_URL")
-        run_migrations(definition.migrations_path, settings.database_url.get_secret_value())
-        log.info("migrations.applied")
+        migrate(definition, settings)
         return
 
     asyncio.run(Runtime(definition, command, settings).run())

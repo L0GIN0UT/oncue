@@ -129,7 +129,7 @@ _BASH_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(r"\bdocker\s+compose\b.*\bdown\b.*(\s-v\b|--volumes\b)"),
-        "`down -v` удаляет тома с данными (Postgres, Redis, MinIO). Остановите без -v "
+        "`down -v` удаляет тома с данными (Postgres, Redis, S3). Остановите без -v "
         "или попросите пользователя подтвердить удаление данных.",
     ),
     (

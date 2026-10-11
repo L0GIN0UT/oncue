@@ -14,6 +14,12 @@ volumes:
   opensearchdata:
   s3data:
 
+# Ключи доступа к S3 (SeaweedFS читает их из файла; значения — из .env, `gv dev secrets`).
+configs:
+  s3_identities:
+    content: |
+      {"identities": [{"name": "app", "credentials": [{"accessKey": "${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}", "secretKey": "${S3_SECRET_KEY:?задайте S3_SECRET_KEY}"}], "actions": ["Admin", "Read", "List", "Tagging", "Write"]}]}
+
 x-logging: &logging
   driver: json-file
   options: {max-size: "20m", max-file: "5"}
@@ -148,26 +154,50 @@ services:
       resources:
         limits: {memory: 2G}
 
-  # S3-совместимое хранилище ассетов. Код работает через S3 API, поэтому MinIO можно
-  # заменить (Garage, SeaweedFS, облачный S3) без изменений в сервисах.
-  # MinIO снял образы с Docker Hub (сентябрь 2026) и больше не выпускает community-сборки:
-  # тот же тег из quay.io — временная мера до замены хранилища (см. docs/09-roadmap.md).
+  # S3-совместимое хранилище исходников и ассетов — SeaweedFS (ADR 0021): MinIO снял
+  # образы из публичных реестров и прекратил community-сборки. Сервисы работают через
+  # стандартный S3 API, поэтому хранилище заменяемо (облачный S3, Garage) без правки кода.
+  # Бакеты и политику бакета ассетов создаёт `media-pipeline-migrate` (prepare_resources).
   s3:
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: chrislusf/seaweedfs:4.48
     restart: unless-stopped
     networks: [backend]
     logging: *logging
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-guessverse}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?задайте MINIO_ROOT_PASSWORD}
+    # Официальный entrypoint понижает права до пользователя seaweed и добавляет
+    # -dir=/data -volume.max=0; ниже — только наши параметры:
+    #   -ip.bind=127.0.0.1 — master/filer/volume слушают только loopback внутри
+    #     контейнера: по сети backend к ним не подключиться в обход ключей S3 и
+    #     политики бакета (их HTTP/gRPC не требуют аутентификации). Наружу открыт
+    #     только S3 (-s3.ip.bind=0.0.0.0), и то лишь порт 9000 — см. ADR 0021;
+    #   -s3.port.iceberg=0 -s3.port.lance=0 — REST-каталоги Iceberg/Lance не нужны;
+    #   -master.volumeSizeLimitMB — небольшие тома (ассеты мелкие, диск VPS ограничен);
+    #   -s3.iam=false — ключи только из конфига ниже (встроенный STS-IAM не нужен).
+    command:
+      - server
+      - -ip=127.0.0.1
+      - -ip.bind=127.0.0.1
+      - -s3.ip.bind=0.0.0.0
+      - -master.volumeSizeLimitMB=256
+      - -master.telemetry=false
+      - -filer
+      - -s3
+      - -s3.port=9000
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -s3.iam=false
+      - -s3.config=/etc/seaweedfs/s3.json
+    configs:
+      - source: s3_identities
+        target: /etc/seaweedfs/s3.json
+        mode: 0444
     volumes:
       - s3data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9000/healthz"]
       interval: 10s
       timeout: 5s
       retries: 20
+      start_period: 20s
     deploy:
       resources:
         limits: {memory: 512M}

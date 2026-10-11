@@ -1,7 +1,12 @@
-"""S3-совместимое хранилище (MinIO) на aioboto3: приватные бакеты исходников и ассетов."""
+"""S3-совместимое хранилище на aioboto3: приватные бакеты исходников и ассетов.
+
+Код работает через стандартный S3 API: на VPS — SeaweedFS (ADR 0021), в тестах —
+``moto_server``, в облаке — любой S3-совместимый сервис.
+"""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from typing import Any
 
@@ -12,9 +17,34 @@ from botocore.exceptions import ClientError
 from gv_core.errors import DependencyUnavailableError
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import StorageArea
+from media_pipeline_service.domain.links import ASSET_PREFIX
 from media_pipeline_service.settings import S3Settings
 
 _DELETE_BATCH = 1000  # предел DeleteObjects в S3
+
+
+def assets_read_policy(bucket: str) -> str:
+    """Политика бакета ассетов: анонимное чтение только объектов ``a/*`` (ADR 0012).
+
+    Хранилище доступно лишь во внутренней сети: читает его gateway, который сам проверяет
+    подпись ссылки (``secure_link``) и не передаёт хранилищу query и заголовки клиента.
+    Запись, удаление, листинг и любые объекты вне префикса остаются только по ключам.
+    """
+    return json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "GatewayReadsAssetsPrefix",
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket}/{ASSET_PREFIX}*"],
+                }
+            ],
+        },
+        sort_keys=True,
+    )
 
 
 class S3Storage:
@@ -56,13 +86,19 @@ class S3Storage:
         return self._buckets[area]
 
     async def ensure_buckets(self) -> None:
-        """Создать бакеты, если их нет (локальная разработка и тесты; на проде — infra)."""
+        """Создать бакеты, если их нет (идемпотентно)."""
         async with self._client() as s3:
             for name in self._buckets.values():
                 try:
                     await s3.head_bucket(Bucket=name)
                 except ClientError:
                     await s3.create_bucket(Bucket=name)
+
+    async def ensure_assets_read_policy(self) -> None:
+        """Выставить политику бакета ассетов (идемпотентно: каждый раз та же политика)."""
+        bucket = self.bucket(StorageArea.ASSETS)
+        async with self._client() as s3:
+            await s3.put_bucket_policy(Bucket=bucket, Policy=assets_read_policy(bucket))
 
     async def put(self, area: StorageArea, key: str, data: bytes, content_type: str) -> None:
         """Записать объект."""
@@ -100,3 +136,10 @@ class S3Storage:
                     Bucket=self.bucket(area),
                     Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
                 )
+
+
+async def prepare_storage(settings: S3Settings) -> None:
+    """Подготовка хранилища командой ``migrate``: бакеты и политика бакета ассетов."""
+    storage = S3Storage(settings)
+    await storage.ensure_buckets()
+    await storage.ensure_assets_read_policy()

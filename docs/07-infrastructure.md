@@ -28,7 +28,7 @@
 
 - **Все 13 доменных сервисов + edge + admin** разворачиваются сразу. Разработка идёт поэтапно ([09-roadmap.md](09-roadmap.md)). Ещё не реализованный сервис разворачивается как заглушка (`/health` + пустые API), чтобы инфраструктура и сеть были финальными с самого начала.
 - `infra/compose/`:
-  - `compose.infra.yml` — Postgres, PgBouncer, Redis, Redpanda, RabbitMQ, OpenSearch, MinIO, Centrifugo, Unleash;
+  - `compose.infra.yml` — Postgres, PgBouncer, Redis, Redpanda, RabbitMQ, OpenSearch, S3 (SeaweedFS, [ADR 0021](adr/0021-s3-storage-seaweedfs.md)), Centrifugo, Unleash;
   - `compose.services.yml` — сервисы;
   - `compose.observability.yml` — Prometheus, Grafana, Elasticsearch + Kibana + Filebeat, Jaeger/Tempo;
   - `compose.dev.yml` — оверрайды для локальной разработки (hot-reload, открытые порты).
@@ -46,7 +46,7 @@
 | Redpanda (`--smp 1 --memory 1G`) | 1–1,5 ГБ |
 | RabbitMQ | 0,5 ГБ |
 | OpenSearch | 1,5–2 ГБ |
-| MinIO, Centrifugo, Unleash, Nginx | ~1 ГБ |
+| SeaweedFS (S3), Centrifugo, Unleash, Nginx | ~1 ГБ |
 | **Итого приложение** | **~12–16 ГБ** |
 | Observability (Elasticsearch, Kibana, Prometheus, Grafana, Tempo) | 4–6 ГБ |
 
@@ -104,7 +104,7 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 |---|---|---|
 | `GV_MEDIA_SIGNING_SECRET` | gateway (`secure_link`) | Без неё gateway не стартует |
 | `GV_MEDIA__SIGNING_SECRET` | media_pipeline | Должна совпадать с `GV_MEDIA_SIGNING_SECRET`: `gv dev secrets` подставляет в обе одно значение ([ADR 0012](adr/0012-signed-asset-links-nginx.md)) |
-| `GV_MEDIA_ASSETS_BUCKET` | gateway (`/media/` → MinIO) | По умолчанию `gv-assets`; должен совпадать с `GV_S3__BUCKET_ASSETS` media_pipeline |
+| `GV_MEDIA_ASSETS_BUCKET` | gateway (`/media/` → S3) | По умолчанию `gv-assets`; должен совпадать с `GV_S3__BUCKET_ASSETS` media_pipeline |
 | `GV_ADMIN__SECRET_KEY` | admin | Ключ Django. Обязателен в production, локально — случайный на процесс |
 | `GV_ADMIN__IP_ALLOWLIST` | admin | CIDR, откуда доступна админка. Вне local/ci обязателен и не пуст — иначе процесс не стартует |
 | `GV_PUBLIC_ORIGINS` | identity, game | JSON-массив Origin веб-клиента (dev — `["https://localhost"]`): только с них принимаются мутации по cookie (CSRF) |

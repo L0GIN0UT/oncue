@@ -135,6 +135,9 @@ class ServiceDefinition:
         build_periodic_jobs: Фабрика периодических задач сервиса; выполняются в процессе
             relay под advisory lock вместе со встроенными (очистка outbox, inbox,
             ключей идемпотентности — ``gv_service.builtin_jobs``).
+        prepare_resources: Подготовка внешних ресурсов сервиса (бакеты S3, их политики и
+            т.п.), выполняется командой ``migrate`` после миграций БД — тем же job, что и
+            выкат схемы, до старта процессов сервиса. Обязана быть идемпотентной.
     """
 
     name: str
@@ -147,3 +150,4 @@ class ServiceDefinition:
     consumer_topics: tuple[str, ...] = ()
     build_task_handlers: Callable[[Infrastructure], dict[str, TaskHandler]] | None = None
     build_periodic_jobs: Callable[[Infrastructure], list[PeriodicJob]] | None = None
+    prepare_resources: Callable[[ServiceSettings], Awaitable[None]] | None = None

@@ -35,6 +35,7 @@ class Service:
     index: int
     framework: str = "fastapi"
     apt: tuple[str, ...] = ()
+    s3: bool = False
 
     @property
     def is_django(self) -> bool:
@@ -121,6 +122,7 @@ def load_services(root: Path) -> list[Service]:
                 index=index,
                 framework=_framework(name, raw),
                 apt=_apt(name, raw),
+                s3=bool(raw.get("s3", False)),
             )
         )
     return services

@@ -16,7 +16,7 @@
 | PostgreSQL 16 | Все доменные сервисы | Источник истины, outbox/inbox |
 | Redis 7 | game, match, rating, gateway, catalog | Горячие сессии (TTL), комнаты и lease, лидерборды (ZSET), rate-limit, кэш |
 | OpenSearch | catalog | Поиск, автокомплит (edge n-gram, морфология ru/en) |
-| S3 / MinIO | media-pipeline, progression (UGC-изображения) | Ассеты загадок по уровням, аватары, баннеры |
+| S3 (SeaweedFS на VPS) | media-pipeline, progression (UGC-изображения) | Ассеты загадок по уровням, аватары, баннеры |
 | CDN | Клиенты | Раздача ассетов по подписанным ссылкам |
 | Redpanda | Все | Лог доменных событий (retention: 30 дней; compacted-топики для проекций) |
 | ClickHouse (позже) | analytics | Продуктовая аналитика |

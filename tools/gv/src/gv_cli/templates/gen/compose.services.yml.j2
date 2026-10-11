@@ -44,8 +44,16 @@ services:
       <<: *common-env
       GV_SERVICE_NAME: {{ s.name }}
       GV_DATABASE_URL: postgresql+asyncpg://{{ s.name }}:${ {{- s.db_password_env }}:?задайте {{ s.db_password_env }}}@postgres:5432/{{ s.name }}
+{% if s.s3 %}
+      GV_S3__ENDPOINT: http://s3:9000
+      GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
+      GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
+{% endif %}
     depends_on:
       postgres: {condition: service_healthy}
+{% if s.s3 %}
+      s3: {condition: service_healthy}
+{% endif %}
     deploy:
       resources:
         limits: {memory: 256M}
@@ -74,6 +82,11 @@ services:
 {% endif %}
 {% if s.rabbitmq %}
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+{% endif %}
+{% if s.s3 %}
+      GV_S3__ENDPOINT: http://s3:9000
+      GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
+      GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
 {% endif %}
 {% if s.name in cookie_mutation_services %}
       GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
@@ -110,7 +123,10 @@ services:
 {% if s.rabbitmq %}
       rabbitmq: {condition: service_healthy}
 {% endif %}
-{% if not (s.database or s.redis or s.kafka or s.rabbitmq) %}
+{% if s.s3 %}
+      s3: {condition: service_healthy}
+{% endif %}
+{% if not (s.database or s.redis or s.kafka or s.rabbitmq or s.s3) %}
       {}
 {% endif %}
     deploy:

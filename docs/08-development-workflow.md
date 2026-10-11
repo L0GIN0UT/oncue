@@ -43,7 +43,7 @@ guessverse/
 
 ```bash
 gv dev secrets > infra/compose/.env   # один раз: .env со случайными паролями (в git не попадает)
-gv dev up infra                       # Postgres, Redis, Redpanda, RabbitMQ, MinIO, OpenSearch, Centrifugo, Unleash
+gv dev up infra                       # Postgres, Redis, Redpanda, RabbitMQ, S3 (SeaweedFS), OpenSearch, Centrifugo, Unleash
 gv dev up services identity catalog   # нужные сервисы в контейнерах (без имён — все + gateway)
 gv dev run game                       # разрабатываемый сервис из исходников с hot-reload
 gv dev up observability               # Prometheus, Grafana, Tempo, Elasticsearch/Kibana
