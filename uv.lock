@@ -1615,7 +1615,7 @@ requires-dist = [
     { name = "gv-service", editable = "libs/service" },
     { name = "gv-text", editable = "libs/text" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "opensearch-py", extras = ["async"], specifier = ">=2.7" },
+    { name = "opensearch-py", extras = ["async"], specifier = ">=3.2.0" },
 ]
 
 [[package]]

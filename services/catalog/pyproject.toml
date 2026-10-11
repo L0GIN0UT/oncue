@@ -3,7 +3,7 @@ name = "guessverse-catalog"
 version = "0.1.0"
 description = "Медиа-единицы (треки, фильмы, сериалы, аниме), персоны, франшизы, алиасы, поиск и автокомплит"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-text", "opensearch-py[async]>=2.7", "httpx>=0.28"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-text", "opensearch-py[async]>=3.2.0", "httpx>=0.28"]
 
 [project.scripts]
 catalog = "catalog_service.main:run"
