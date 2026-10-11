@@ -2118,7 +2118,7 @@ requires-dist = [
     { name = "gv-service", editable = "libs/service" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "jsonschema", specifier = ">=4.23" },
-    { name = "moto", extras = ["server"], specifier = ">=5.0" },
+    { name = "moto", extras = ["server"], specifier = ">=5.2.3" },
     { name = "polyfactory", specifier = ">=2.18" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
