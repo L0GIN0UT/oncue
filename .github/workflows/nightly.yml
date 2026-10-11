@@ -31,7 +31,7 @@ jobs:
       GV_TEST_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with: { enable-cache: true, python-version: "3.13" }
       - run: uv sync --all-packages
       - name: Системные пакеты для тестов media-pipeline
