@@ -2123,7 +2123,7 @@ requires-dist = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "respx", specifier = ">=0.21" },
-    { name = "testcontainers", extras = ["postgres", "redis", "kafka", "rabbitmq", "opensearch", "minio"], specifier = ">=4.8" },
+    { name = "testcontainers", extras = ["postgres", "redis", "kafka", "rabbitmq", "opensearch", "minio"], specifier = ">=4.15.0" },
 ]
 
 [[package]]
