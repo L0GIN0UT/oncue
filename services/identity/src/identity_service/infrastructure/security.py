@@ -18,9 +18,12 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
+from gv_auth import SERVICE_SUBJECT_PREFIX
 from gv_core.clock import Clock
 from gv_core.ids import uuid7
 from identity_service.application.ports import IssuedAccess
+from identity_service.application.ports.service_tokens import IssuedServiceToken
+from identity_service.domain.guest import GUEST_ROLE
 
 # ----------------------------------------------------------------------------- пароли
 
@@ -204,18 +207,37 @@ class JwtIssuer:
         self, *, user_id: UUID, session_id: UUID, roles: Iterable[str], perms: Iterable[str]
     ) -> IssuedAccess:
         """Подписать токен активным ключом."""
+        return self._sign(
+            {
+                "sub": str(user_id),
+                "sid": str(session_id),
+                "roles": list(roles),
+                "perms": list(perms),
+                "sanctions": 0,
+                "plan": "free_all",
+            }
+        )
+
+    def issue_guest_access(self, *, guest_id: UUID, session_id: UUID) -> IssuedAccess:
+        """Токен гостя (D5): без прав и плана, ``gst = true``; срок — как у пользователя."""
+        return self._sign(
+            {
+                "sub": str(guest_id),
+                "sid": str(session_id),
+                "roles": [GUEST_ROLE],
+                "perms": [],
+                "gst": True,
+            }
+        )
+
+    def _sign(self, subject_claims: dict[str, Any]) -> IssuedAccess:
         key = self._keys.active
         now = self._clock.now()
         claims = {
+            **subject_claims,
             "iss": self._issuer,
             "aud": self._audience,
-            "sub": str(user_id),
-            "sid": str(session_id),
             "jti": str(uuid7()),
-            "roles": list(roles),
-            "perms": list(perms),
-            "sanctions": 0,
-            "plan": "free_all",
             "iat": now,
             "exp": now + timedelta(seconds=self._ttl),
         }
@@ -223,3 +245,31 @@ class JwtIssuer:
             claims, key.private_key, algorithm=key.algorithm, headers={"kid": key.kid}
         )
         return IssuedAccess(token=token, expires_in=self._ttl)
+
+    def issue_service(
+        self, *, client_id: str, audience: str, scopes: Iterable[str], ttl_s: int
+    ) -> IssuedServiceToken:
+        """Сервисный токен (D13): ``sub = svc:<client_id>``, ``aud`` — вызываемый сервис.
+
+        Только ``iss``, ``aud``, ``sub``, ``scope``, ``iat``, ``exp``, ``jti``: без ``sid``,
+        ``roles``, ``perms`` — потребители отвергают сервисный токен с ними.
+        """
+        if audience == self._audience:
+            # Защита в глубину: конфиг клиентов это уже запрещает.
+            raise ValueError("сервисный токен не выдаётся на aud пользовательских токенов")
+        key = self._keys.active
+        now = self._clock.now()
+        jti = str(uuid7())
+        claims = {
+            "iss": self._issuer,
+            "aud": audience,
+            "sub": f"{SERVICE_SUBJECT_PREFIX}{client_id}",
+            "scope": " ".join(sorted(scopes)),
+            "jti": jti,
+            "iat": now,
+            "exp": now + timedelta(seconds=ttl_s),
+        }
+        token = jwt.encode(
+            claims, key.private_key, algorithm=key.algorithm, headers={"kid": key.kid}
+        )
+        return IssuedServiceToken(token=token, expires_in=ttl_s, token_id=jti)

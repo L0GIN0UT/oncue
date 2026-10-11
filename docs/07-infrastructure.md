@@ -107,6 +107,12 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 | `GV_MEDIA_ASSETS_BUCKET` | gateway (`/media/` → MinIO) | По умолчанию `gv-assets`; должен совпадать с `GV_S3__BUCKET_ASSETS` media_pipeline |
 | `GV_ADMIN__SECRET_KEY` | admin | Ключ Django. Обязателен в production, локально — случайный на процесс |
 | `GV_ADMIN__IP_ALLOWLIST` | admin | CIDR, откуда доступна админка. Вне local/ci обязателен и не пуст — иначе процесс не стартует |
+| `GV_PUBLIC_ORIGINS` | identity, game | JSON-массив Origin веб-клиента (dev — `["https://localhost"]`): только с них принимаются мутации по cookie (CSRF) |
+| `GV_JWT__SIGNING_KEYS` | identity | JSON `[{kid, private_pem, active}]`; `gv dev secrets` генерирует Ed25519-ключ. Пусто — временный ключ (только local/ci) |
+| `GV_GAME__DAILY_SEED_SECRET` | game | Секрет розыгрыша наборов дня; без него compose не стартует |
+| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
+
+Dev-оверлей (`compose.services.dev.yml`) монтирует `seeds/game/modes` в game (`GV_GAME__BOOTSTRAP_MODES_DIR`) и направляет ссылки из писем identity на `https://localhost/verify-email|reset-password`.
 
 Остальные настройки сервисов описаны в `settings.py` сервиса и в [плане этапа 1](plans/stage-1.md).
 

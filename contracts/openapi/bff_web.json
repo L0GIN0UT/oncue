@@ -1,6 +1,661 @@
 {
   "components": {
     "schemas": {
+      "Block_ResultSummary_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[ResultSummary]",
+        "type": "object"
+      },
+      "Block_list_DailyCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DailyCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[DailyCard]]",
+        "type": "object"
+      },
+      "Block_list_ItemCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ItemCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[ItemCard]]",
+        "type": "object"
+      },
+      "Block_list_ModeCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModeCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[ModeCard]]",
+        "type": "object"
+      },
+      "DailyCard": {
+        "description": "Карточка дейлика: режим + статус субъекта (``game /v1/modes`` + ``/v1/daily``).",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "max_score": {
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "next_reset_at": {
+            "format": "date-time",
+            "title": "Next Reset At",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "enum": [
+              "not_started",
+              "in_progress",
+              "finished"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode_key",
+          "domain",
+          "title_key",
+          "day",
+          "status",
+          "max_score",
+          "next_reset_at"
+        ],
+        "title": "DailyCard",
+        "type": "object"
+      },
+      "ExternalLink": {
+        "description": "Ссылка на внешний сервис (TMDB, MusicBrainz …).",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "url"
+        ],
+        "title": "ExternalLink",
+        "type": "object"
+      },
+      "HomeBlocks": {
+        "description": "Блоки главной.",
+        "properties": {
+          "dailies": {
+            "$ref": "#/components/schemas/Block_list_DailyCard__"
+          },
+          "modes": {
+            "$ref": "#/components/schemas/Block_list_ModeCard__"
+          }
+        },
+        "required": [
+          "dailies",
+          "modes"
+        ],
+        "title": "HomeBlocks",
+        "type": "object"
+      },
+      "HomePage": {
+        "description": "``GET /v1/pages/home``.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/HomeBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "HomePage",
+        "type": "object"
+      },
+      "ItemCard": {
+        "description": "Карточка единицы из ``catalog /v1/items/{id}``.",
+        "properties": {
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "external_links": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalLink"
+            },
+            "title": "External Links",
+            "type": "array"
+          },
+          "genres": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Genres",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
+          },
+          "persons": {
+            "items": {
+              "$ref": "#/components/schemas/PersonCard"
+            },
+            "title": "Persons",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "domain",
+          "kind",
+          "title",
+          "genres",
+          "persons"
+        ],
+        "title": "ItemCard",
+        "type": "object"
+      },
+      "ModeCard": {
+        "description": "Карточка режима (из ``game /v1/modes``).",
+        "properties": {
+          "allow_guest": {
+            "title": "Allow Guest",
+            "type": "boolean"
+          },
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "presets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PresetCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presets"
+          },
+          "rounds": {
+            "title": "Rounds",
+            "type": "integer"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "domain",
+          "title_key",
+          "source_type",
+          "clue_type",
+          "rounds",
+          "allow_guest"
+        ],
+        "title": "ModeCard",
+        "type": "object"
+      },
+      "PersonCard": {
+        "description": "Персона в карточке единицы.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role"
+        ],
+        "title": "PersonCard",
+        "type": "object"
+      },
+      "PresetCard": {
+        "description": "Пресет случайного режима.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title_key"
+        ],
+        "title": "PresetCard",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).\n\nAttributes:\n    type: URN проблемы ``urn:guessverse:problem:<code>``.\n    title: Человекочитаемый заголовок.\n    status: HTTP-статус.\n    code: Машинный код ошибки — на него опираются клиенты.\n    detail: Пояснение.\n    correlation_id: Идентификатор цепочки запроса (для поиска в логах).\n    details: Безопасные для клиента подробности (``AppError.details``).\n    errors: Ошибки валидации полей запроса.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ошибки валидации: loc, msg, type",
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "ResultRoundCard": {
+        "description": "Раунд итога (из ``game /v1/sessions/{id}/result``).",
+        "properties": {
+          "exact_pct": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Доля угадавших (только дейлик)",
+            "title": "Exact Pct"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "media_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null у раунда void",
+            "title": "Media Item Id"
+          },
+          "outcome": {
+            "enum": [
+              "exact",
+              "partial",
+              "miss",
+              "gave_up",
+              "void"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "outcome",
+          "level",
+          "points",
+          "media_item_id"
+        ],
+        "title": "ResultRoundCard",
+        "type": "object"
+      },
+      "ResultSummary": {
+        "description": "Итог сессии для экрана результатов.",
+        "properties": {
+          "max_score": {
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "mode_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Key"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/ResultRoundCard"
+            },
+            "title": "Rounds",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "share_text": {
+            "title": "Share Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "score",
+          "max_score",
+          "share_text",
+          "rounds"
+        ],
+        "title": "ResultSummary",
+        "type": "object"
+      },
+      "ResultsBlocks": {
+        "description": "Блоки экрана результатов.",
+        "properties": {
+          "items": {
+            "$ref": "#/components/schemas/Block_list_ItemCard__"
+          },
+          "result": {
+            "$ref": "#/components/schemas/Block_ResultSummary_"
+          }
+        },
+        "required": [
+          "result",
+          "items"
+        ],
+        "title": "ResultsBlocks",
+        "type": "object"
+      },
+      "ResultsPage": {
+        "description": "``GET /v1/pages/results/{session_id}``.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/ResultsBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "ResultsPage",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -18,6 +673,85 @@
           "status"
         ],
         "title": "ServiceMeta",
+        "type": "object"
+      },
+      "SessionInfo": {
+        "description": "``GET /v1/session``: ``subject = null`` — нет токена или он недействителен.",
+        "properties": {
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Subject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "SessionInfo",
+        "type": "object"
+      },
+      "SoloBlocks": {
+        "description": "Блоки хаба соло-режимов.",
+        "properties": {
+          "daily": {
+            "$ref": "#/components/schemas/Block_list_DailyCard__"
+          },
+          "random": {
+            "$ref": "#/components/schemas/Block_list_ModeCard__"
+          }
+        },
+        "required": [
+          "daily",
+          "random"
+        ],
+        "title": "SoloBlocks",
+        "type": "object"
+      },
+      "SoloPage": {
+        "description": "``GET /v1/pages/solo``.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/SoloBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "SoloPage",
+        "type": "object"
+      },
+      "Subject": {
+        "description": "Кто смотрит страницу.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "kind": {
+            "enum": [
+              "user",
+              "guest"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "Subject",
         "type": "object"
       }
     }
@@ -45,6 +779,216 @@
           }
         },
         "summary": "Сведения о сервисе",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/home": {
+      "get": {
+        "operationId": "home_page_v1_pages_home_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Главная: дейлики и режимы",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/results/{session_id}": {
+      "get": {
+        "description": "Только своя завершённая сессия. Чужая и несуществующая — одинаково 404; незавершённая — 409 (коды game).",
+        "operationId": "results_page_v1_pages_results__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Экран результатов сессии",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/solo": {
+      "get": {
+        "operationId": "solo_page_v1_pages_solo_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "music",
+                    "film"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoloPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Хаб соло-режимов",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/session": {
+      "get": {
+        "description": "Недействительный или истёкший токен — `subject: null`, а не ошибка.",
+        "operationId": "session_v1_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Кто смотрит страницу",
         "tags": [
           "bff_web"
         ]

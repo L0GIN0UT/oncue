@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -28,6 +29,27 @@ ORIGIN = "https://gv.test"
 PASSWORD = "correct horse battery"
 YA_TOKEN = "https://ya.test/token"
 YA_INFO = "https://ya.test/info"
+# Клиенты сервисных токенов (D13); в настройках identity — только sha256 секретов.
+ADMIN_SECRET = "admin-client-secret-0123456789abcdef"
+GAME_SECRET = "game-client-secret-0123456789abcdef"
+
+
+def sha256_hex(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+SERVICE_CLIENTS = (
+    {
+        "client_id": "admin",
+        "secret_sha256": sha256_hex(ADMIN_SECRET),
+        "audiences": {"identity": ["admin_sessions"]},
+    },
+    {
+        "client_id": "game",
+        "secret_sha256": sha256_hex(GAME_SECRET),
+        "audiences": {"media_pipeline": ["assets.link"]},
+    },
+)
 
 
 def pem() -> str:
@@ -51,6 +73,17 @@ class Service:
     logs: list[dict[str, Any]]
     yandex: respx.MockRouter
     prefix: str
+    admin_client: dict[str, str] = field(default_factory=dict)
+    """Заголовок с сервисным токеном admin (internal-ручки admin-сессий)."""
+    app: Any = None
+    """ASGI-приложение (для клиентов с другим IP источника)."""
+
+    def client_from(self, ip: str) -> httpx.AsyncClient:
+        """Клиент к тому же приложению, запросы которого приходят с адреса ``ip``."""
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app, client=(ip, 40000)),
+            base_url=str(self.client.base_url),
+        )
 
     def csrf(self) -> dict[str, str]:
         """Заголовки браузерной мутации с cookie-аутентификацией."""
@@ -96,6 +129,18 @@ class Service:
         )
 
 
+async def service_token_headers(
+    client: httpx.AsyncClient, client_id: str, secret: str, audience: str = "identity"
+) -> dict[str, str]:
+    """Получить сервисный токен у identity и вернуть заголовок Authorization."""
+    response = await client.post(
+        "/internal/v1/service-tokens",
+        json={"client_id": client_id, "client_secret": secret, "audience": audience},
+    )
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
 def make_settings(database_url: str, redis_url: str, prefix: str, **overrides: Any) -> Settings:
     keys = [
         {"kid": "k-old", "private_pem": pem(), "active": False},
@@ -124,6 +169,7 @@ def make_settings(database_url: str, redis_url: str, prefix: str, **overrides: A
         "oauth": {"return_to_prefixes": ("/profile", "/play", "/")},
         "bootstrap_admin_emails": ("boss@example.com",),
         "redis_key_prefix": prefix,
+        "service_clients": SERVICE_CLIENTS,
     }
     values.update(overrides)
     return Settings(**values)
@@ -146,8 +192,11 @@ async def service(migrated_db: str, infra: InfraProvider) -> AsyncIterator[Servi
             capture_logs() as logs,
             respx.mock(assert_all_called=False) as yandex,
         ):
-            async with service_client(create_app(DEFINITION, runtime)) as client:
-                yield Service(client, runtime, logs, yandex, prefix)
+            app = create_app(DEFINITION, runtime)
+            async with service_client(app) as client:
+                service = Service(client, runtime, logs, yandex, prefix, app=app)
+                service.admin_client = await service_token_headers(client, "admin", ADMIN_SECRET)
+                yield service
     finally:
         redis = Redis.from_url(infra.redis_url())
         keys = [k async for k in redis.scan_iter(match=f"{prefix}*")]

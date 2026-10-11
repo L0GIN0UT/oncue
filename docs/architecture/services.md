@@ -1,6 +1,6 @@
 # Сервисы
 
-> Статус: принято (v1). Имена событий здесь — для навигации. Источник истины по схемам — `contracts/events/`.
+> Статус: принято (v1; карточки game, bff-web, identity и матрица вызовов обновлены по итогам этапа 2). Имена событий здесь — для навигации. Источник истины по схемам — `contracts/events/`.
 
 ## Критерии выделения сервиса
 
@@ -33,9 +33,11 @@
 - **Реализация:** Nginx (на VPS) → Envoy/Ingress (в Kubernetes). Конфиг декларативный и лежит в `infra/`.
 
 ### bff-web
-- **Отвечает за:** агрегацию данных под экраны фронта (главная, профиль, хабы), SSR-friendly ответы, кэширование публичных страниц.
-- **Не отвечает за:** доменную логику и хранение данных. Только читает и проксирует команды.
-- **Масштаб:** stateless. **Деградация:** отдаёт блоки страницы частично; блок недоступного сервиса скрывается.
+- **Отвечает за:** агрегацию данных под экраны веб-клиента — `GET /api/web/v1/session`, `/pages/home`, `/pages/solo`, `/pages/results/{session_id}`; источник данных для SSR Next.js.
+- **Не отвечает за:** доменную логику, хранение данных и **команды**: bff только читает ([ADR 0017](../adr/0017-frontend-nextjs-bff-read-only.md)). Ходы игры браузер шлёт прямо в game, автокомплит — в catalog.
+- **Данные:** нет БД; Redis — кэш публичных данных (`game /v1/modes` 30 с, карточки catalog 5 мин). Личные блоки не кэшируются.
+- **Вызывает:** game (`/v1/modes`, `/v1/daily`, `/v1/sessions/{id}/result`), identity (`/v1/me`), catalog (`/v1/items/{id}`) — с токеном пользователя как `Bearer`; токен проверяется локально по JWKS.
+- **Масштаб:** stateless. **Деградация:** таймаут 1,5 с и circuit breaker на источник; блок упавшего источника — `{"status": "unavailable"}`, страница всё равно 200.
 
 ---
 
@@ -43,10 +45,11 @@
 
 ### 1. identity
 - **Отвечает за:** аккаунты, регистрацию и вход (OAuth-провайдеры, e-mail), сессии, access/refresh-токены, привязку внешних аккаунтов для входа, слияние аккаунтов, удаление аккаунта, **роли и права** (user, moderator, admin), согласия (условия, 18+, cookie).
-- **Данные:** users, password_credentials, auth_identities (provider, subject), sessions, refresh_tokens, roles, permissions, role_changes (аудит), consents, email_tokens, idempotency_keys; merge_operations — этап 6.
+- **Данные:** users, password_credentials, auth_identities (provider, subject), sessions (`subject_kind = user | guest`), refresh_tokens, roles, permissions, role_changes (аудит), consents, email_tokens, idempotency_keys; merge_operations — этап 6.
 - **Публикует:** `UserRegistered`, `UserProfileBasicsChanged`, `UserRolesChanged`, `UserDeleted`, `ExternalAccountLinked`/`Unlinked`; `AccountsMerged` — этап 6.
 - **Слушает:** —
 - **API (этап 1):** публичный `/v1/auth/*`, `/v1/me*`, OAuth Яндекса; internal `/internal/v1/admin-sessions[/refresh|/revoke]` (вход в админку только паролем + `admin.access`, ответ несёт `identity_version`); admin `/admin/v1/users`, `/admin/v1/roles`. Admin-мутации — по [ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md); понижение прав отзывает сессии пользователя.
+- **Этап 2:** гостевые сессии — `POST /v1/auth/guest` (токен `gst = true` без прав, `require_user` гостя не пускает, очистка `guest_sessions.purge`; [ADR 0018](../adr/0018-guest-sessions-in-identity.md)); сервисные токены — `POST /internal/v1/service-tokens` (client credentials, `aud` = вызываемый сервис, scope; [ADR 0016](../adr/0016-service-tokens-client-credentials.md)). `/internal/v1/admin-sessions*` требует сервисный токен admin со scope `admin_sessions`.
 - **Масштаб:** stateless, лёгкая нагрузка. Ключи подписи JWT ротируются, публичные ключи раздаются по JWKS.
 - **Деградация:** критичный сервис, держим ≥2 реплики. Уже выданные access-токены валидируются без обращения к нему. Лимитеры и denylist `sid` при отказе Redis — fail-open ([security.md §7](security.md#7-реализация-этапа-1)).
 
@@ -63,18 +66,21 @@
 - **Отвечает за:** генерацию ассетов загадок по уровням (аудиосегменты fMP4, отрывки задом наперёд, размытие и пикселизация кадров, маскировка постеров), хранение в S3, выдачу **подписанных ссылок с коротким TTL** на конкретный уровень ([ADR 0012](../adr/0012-signed-asset-links-nginx.md)), загрузку UGC-изображений и их проверку (этап 5).
 - **Данные:** Postgres (media_items_state, source_media, asset_sets, asset_levels, link_issuance, idempotency_keys), S3 (байты, случайные ключи `a/<hex>`).
 - **Публикует:** `AssetsReady`, `AssetsFailed` (`version` монотонна по `media_item_id`).
-- **Слушает:** `MediaItemCreated`/`Updated`/`Blocked`/`Unblocked` → ставит задачи `media.generate_asset_set` в RabbitMQ; `ClueAssetsRequested` — этап 2. Блокировка единицы сразу удаляет объекты ассетов из S3, разблокировка — новое поколение генерации ([ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
-- **API (этап 1):** internal `/internal/v1/asset-links`, `/internal/v1/asset-sets`; admin `/admin/v1/sources` (загрузка исходника), `/admin/v1/asset-sets[/{id}/regenerate]`. Публичного API нет.
+- **Слушает:** `MediaItemCreated`/`Updated`/`Blocked`/`Unblocked` → ставит задачи `media.generate_asset_set` в RabbitMQ; `ClueAssetsRequested` — этап 3. Блокировка единицы сразу удаляет объекты ассетов из S3, разблокировка — новое поколение генерации ([ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
+- **API (этап 1):** internal `/internal/v1/asset-links`, `/internal/v1/asset-sets` (с этапа 2 — только сервисный токен со scope `assets.link`, [ADR 0016](../adr/0016-service-tokens-client-credentials.md)); admin `/admin/v1/sources` (загрузка исходника), `/admin/v1/asset-sets[/{id}/regenerate]`. Публичного API нет.
 - **Масштаб:** API stateless. Воркеры (ffmpeg, Pillow/libvips) масштабируются по длине очереди.
 - **Деградация:** новые единицы контента не попадают в игру, пока нет ассетов. Уже готовые отдаёт gateway (`/media/`, `proxy_cache`; внешний CDN — этап 7). Отказ Redis при выдаче ссылки → 503 с `Retry-After` (fail-closed).
 
 ### 4. game
-- **Отвечает за:** соло-движок: сессии, раунды, ответы, подсчёт очков. **Реестр плагинов** (ClueType, Source, Scorer, AnswerMatcher). **Конфиги режимов** (версионируемые), дейлик (генерация дня, лента, прогнозы, архив), больше/меньше, топ-32.
-- **Данные:** Redis (горячие сессии с TTL), Postgres (mode_configs, daily_sets, game_results, predictions, brackets). Локальная проекция каталога (id, названия, алиасы, ссылки на ассеты).
-- **Публикует:** `GameFinished`, `DailyCompleted`, `PredictionWinnerSelected`, `BracketCompleted`, `HigherLowerRecord`.
-- **Слушает:** `MediaItem*` (обновление проекции), `AssetsReady`, `CollectionPublished/Updated` (проекция состава сборников).
-- **Масштаб:** stateless-поды (состояние сессии в Redis), горизонтально.
-- **Деградация:** работает автономно на проекциях, даже если catalog недоступен.
+- **Отвечает за:** соло-движок: сессии, раунды, ответы, подсчёт очков (правила — `libs/game_kernel`, [02-game-engine.md](../02-game-engine.md)). **Реестр плагинов** (ClueType, Source, AnswerMatcher, PartialRule, Scorer). **Конфиги режимов** (версионируемые, черновик + публикация), дейлик (наборы дня, статистика угадавших), случайный режим с пресетами; позже — лента, прогнозы, архив, больше/меньше, топ-32.
+- **Данные (этап 2):** Postgres — `mode_configs`, `mode_config_drafts`, `daily_sets`, `daily_set_items`, `game_sessions` (источник истины сессии, [ADR 0019](../adr/0019-solo-sessions-in-postgres.md)), `daily_round_stats`, `admin_actions`, `idempotency_keys`; проекции `catalog_items` (названия, алиасы, жанры, популярность, статус) и `clue_assets` (готовые наборы по `params_hash`, [ADR 0020](../adr/0020-mode-config-assets-by-params-hash.md)). Redis — только лимиты частоты и поколение кэша конфигов.
+- **Публикует:** `GameFinished` (и для гостя, `is_guest = true`), `DailyCompleted` (только пользователи), `ModeConfigPublished`, `ModeConfigArchived`; позже — `PredictionWinnerSelected`, `BracketCompleted`, `HigherLowerRecord`.
+- **Слушает:** `MediaItemCreated/Updated/Blocked/Unblocked` (проекция каталога), `AssetsReady`/`AssetsFailed` (проекция ассетов), `UserDeleted` (обнуляет `player_id`); `CollectionPublished/Updated` — этап 3.
+- **API (этап 2):** публичный `/api/game/v1` — `modes`, `sessions` (старт, снимок, ход, пропуск, сдача, ассет уровня, итог), `daily`; мутации — cookie + CSRF или Bearer, `Idempotency-Key`, `expected_version`, ответы `no-store`. Admin `/admin/v1/mode-configs`, `/admin/v1/daily-sets`, `/admin/v1/projection/items` (права `config.modes.*`, `game.daily.*`, [ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
+- **Вызывает:** media-pipeline `/internal/v1/asset-links` с сервисным токеном `svc:game` (scope `assets.link`) — ссылка на ассет уровня и на финальный кадр ревила.
+- **Периодические задачи:** наборы дня вперёд и блокировка дня, брошенные сессии, сиды режимов в local/ci ([02-game-engine.md §5.2](../02-game-engine.md#52-периодические-задачи-game)).
+- **Масштаб:** stateless-поды, состояние сессии — строка в Postgres (ход = одна транзакция с `FOR UPDATE`), горизонтально.
+- **Деградация:** проверка ответов и розыгрыш работают на проекциях, без catalog. Без media-pipeline новые уровни не выдаются (503 `game.assets_unavailable`), ход и итог работают. Без Redis лимиты пропускают запросы (fail-open с метрикой).
 
 ### 5. match
 - **Отвечает за:** лобби и комнаты, матчмейкинг (очереди по фильтрам), конечный автомат матча (countdown → playing → reveal → summary), таймеры, ответы в реальном времени, реконнект, сдачу, тех. победу, чат и эмоции в комнате, наблюдение за матчем. Использует **те же плагины**, что и game (общая библиотека `libs/game-kernel`).
@@ -163,10 +169,13 @@
 
 | Вызывающий | Вызываемый | Зачем | Если недоступен |
 |---|---|---|---|
-| bff-web | любые | Агрегация экранов | Частичный ответ |
-| game | media-pipeline | Подписанная ссылка на ассет уровня | Ретрай; раунд не стартует |
-| match | media-pipeline | То же | То же |
+| bff-web | game, identity, catalog | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
+| game | media-pipeline (internal, сервисный токен) | Подписанная ссылка на ассет уровня и ревила | Ретрай; 503 `game.assets_unavailable` |
+| game, admin | identity (internal) | Сервисный токен (client credentials) | Старый токен до `exp`, затем вызов не выполняется |
+| match | media-pipeline | То же, что у game (этап 4) | То же |
 | progression | payments (internal) | Проверка entitlement при покупке | Кэш entitlements (TTL) |
-| admin | admin-API всех сервисов | Модерация, конфиги | Раздел админки недоступен |
+| admin | identity `/internal/v1/admin-sessions*` (сервисный токен), admin-API сервисов | Вход в админку, модерация, конфиги | Раздел админки недоступен |
 
-Автокомплит ответа клиент запрашивает напрямую у catalog (`/v1/autocomplete`) через gateway. Проверка ответа в game и match идёт по локальной проекции (названия и алиасы), без сетевого вызова.
+Браузер (через gateway) ходит напрямую: в **game** — команды игры (старт, ход, пропуск, сдача, ассет уровня); в **catalog** — автокомплит ответа (`/v1/autocomplete`); в **identity** — вход, гостевая сессия, refresh; в **bff-web** — только GET-экраны ([ADR 0017](../adr/0017-frontend-nextjs-bff-read-only.md)).
+
+Проверка ответа в game и match идёт по локальной проекции (названия и алиасы), без сетевого вызова.

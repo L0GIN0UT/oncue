@@ -11,6 +11,8 @@ root_packages =
     gv_auth
     gv_flags
     gv_testkit
+    gv_text
+    gv_game_kernel
     identity_service
     catalog_service
     media_pipeline_service
@@ -40,10 +42,55 @@ forbidden_modules =
     gv_auth
     gv_flags
     gv_testkit
+    gv_text
+    gv_game_kernel
     sqlalchemy
     fastapi
     pydantic
     redis
+
+[importlinter:contract:game_kernel-pure]
+name = gv_game_kernel без IO и инфраструктуры (план этапа 2, §2.1)
+type = forbidden
+source_modules = gv_game_kernel
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    httpx
+    aiokafka
+    aio_pika
+    pydantic_settings
+    gv_db
+    gv_messaging
+    gv_service
+    gv_auth
+    gv_observability
+    gv_flags
+    gv_testkit
+
+[importlinter:contract:text-pure]
+name = gv_text — чистый Python (только stdlib)
+type = forbidden
+source_modules = gv_text
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    redis
+    httpx
+    aiokafka
+    aio_pika
+    pydantic
+    pydantic_settings
+    gv_core
+    gv_db
+    gv_messaging
+    gv_service
+    gv_auth
+    gv_observability
+    gv_flags
+    gv_testkit
+    gv_game_kernel
 
 [importlinter:contract:libs-do-not-import-services]
 name = Библиотеки не импортируют сервисы
@@ -57,6 +104,8 @@ source_modules =
     gv_auth
     gv_flags
     gv_testkit
+    gv_text
+    gv_game_kernel
 forbidden_modules =
     identity_service
     catalog_service

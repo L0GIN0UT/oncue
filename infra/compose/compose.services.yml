@@ -63,6 +63,10 @@ services:
       GV_DATABASE_POOL_SIZE: "5"
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
+      GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}
+      # Пусто — временный ключ (только local/ci); вне них identity не стартует без ключей.
+      GV_JWT__SIGNING_KEYS: ${GV_JWT__SIGNING_KEYS:-}
     depends_on:
       identity-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -154,6 +158,7 @@ services:
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+      GV_MEDIA__SIGNING_SECRET: ${GV_MEDIA__SIGNING_SECRET:?задайте GV_MEDIA__SIGNING_SECRET}
     depends_on:
       media-pipeline-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -199,6 +204,12 @@ services:
       GV_DATABASE_POOL_SIZE: "5"
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
+      GV_GAME__DAILY_SEED_SECRET: ${GV_GAME__DAILY_SEED_SECRET:?задайте GV_GAME__DAILY_SEED_SECRET}
+      GV_GAME__MEDIA_URL: http://media-pipeline:8000
+      GV_SERVICE_AUTH__TOKEN_URL: http://identity:8000/internal/v1/service-tokens
+      GV_SERVICE_AUTH__CLIENT_ID: game
+      GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_GAME:?задайте GV_SERVICE_SECRET_GAME}
     depends_on:
       game-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -649,6 +660,9 @@ services:
       GV_DATABASE_POOL_SIZE: "5"
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_SERVICE_AUTH__TOKEN_URL: http://identity:8000/internal/v1/service-tokens
+      GV_SERVICE_AUTH__CLIENT_ID: admin
+      GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_ADMIN:?задайте GV_SERVICE_SECRET_ADMIN}
     depends_on:
       admin-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

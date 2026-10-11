@@ -7,10 +7,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import structlog
 from fastapi import APIRouter
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -23,7 +24,12 @@ from gv_messaging.consumer import EventHandlerRegistry
 from gv_messaging.outbox import OutboxWriter
 from gv_messaging.ports import TaskHandler
 from gv_service.health import ReadinessCheck, postgres_check, redis_check
+from gv_service.periodic import PeriodicJob
 from gv_service.settings import ServiceSettings
+
+log = structlog.get_logger(__name__)
+
+Closer = Callable[[], Awaitable[object]]
 
 
 @dataclass
@@ -31,6 +37,9 @@ class Infrastructure:
     """Ресурсы процесса, общие для всех компонентов сервиса.
 
     Создаётся один раз на процесс (``open``) и закрывается при остановке (``close``).
+    Ресурсы, которые сервис создаёт сам (клиенты брокеров, HTTP-клиенты), регистрируются
+    через ``add_closer`` и закрываются в ``close`` в обратном порядке — для любой команды
+    (api, consumer, worker, relay).
     """
 
     settings: ServiceSettings
@@ -39,6 +48,11 @@ class Infrastructure:
     engine: AsyncEngine | None = None
     sessions: async_sessionmaker[AsyncSession] | None = None
     redis: Redis | None = None
+    _closers: list[Closer] = field(default_factory=list, init=False, repr=False)
+
+    def add_closer(self, close: Closer) -> None:
+        """Зарегистрировать закрытие ресурса процесса (вызывается в ``close``, LIFO)."""
+        self._closers.append(close)
 
     @classmethod
     async def open(
@@ -64,7 +78,16 @@ class Infrastructure:
         return infra
 
     async def close(self) -> None:
-        """Закрыть подключения."""
+        """Закрыть ресурсы сервиса (в обратном порядке регистрации), затем подключения.
+
+        Ошибка одного закрытия логируется и не мешает закрыть остальные.
+        """
+        while self._closers:
+            close = self._closers.pop()
+            try:
+                await close()
+            except Exception:
+                log.exception("process.closer_failed", closer=getattr(close, "__qualname__", "?"))
         if self.redis is not None:
             await self.redis.aclose()
         if self.engine is not None:
@@ -109,6 +132,9 @@ class ServiceDefinition:
         build_event_handlers: Фабрика обработчиков доменных событий.
         consumer_topics: Топики, которые читает consumer.
         build_task_handlers: Фабрика обработчиков фоновых задач ``task_type → handler``.
+        build_periodic_jobs: Фабрика периодических задач сервиса; выполняются в процессе
+            relay под advisory lock вместе со встроенными (очистка outbox, inbox,
+            ключей идемпотентности — ``gv_service.builtin_jobs``).
     """
 
     name: str
@@ -120,3 +146,4 @@ class ServiceDefinition:
     build_event_handlers: Callable[[Infrastructure], EventHandlerRegistry] | None = None
     consumer_topics: tuple[str, ...] = ()
     build_task_handlers: Callable[[Infrastructure], dict[str, TaskHandler]] | None = None
+    build_periodic_jobs: Callable[[Infrastructure], list[PeriodicJob]] | None = None

@@ -1,0 +1,30 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:scorer.by_level:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Очки по уровню угадывания (D10)",
+  "properties": {
+    "partial_ratio": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "points": {
+      "description": "Очки за уровень угадывания; длина равна числу уровней загадки",
+      "items": {
+        "maximum": 1000,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "points",
+    "partial_ratio"
+  ],
+  "title": "scorer.by_level params v1",
+  "type": "object"
+}

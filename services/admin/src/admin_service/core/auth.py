@@ -30,6 +30,7 @@ from django.http import HttpRequest
 
 from admin_service.core.models import AdminUser
 from admin_service.core.permissions import STAFF_PERM, PermissionSync, django_perm
+from admin_service.core.service_auth import identity_headers
 from admin_service.core.service_client import (
     ServiceError,
     SessionExpiredError,
@@ -77,12 +78,18 @@ class IdentitySession:
 
 
 def _identity_call(path: str, payload: dict[str, str | None], request_id: str) -> httpx.Response:
+    """POST в internal-ручку identity с сервисным токеном admin (``core.service_auth``).
+
+    Raises:
+        ServiceError: сервисный токен получить не удалось (identity недоступен).
+        httpx.HTTPError: сетевой отказ самого вызова.
+    """
     url = f"{settings.GV_IDENTITY_URL.rstrip('/')}{path}"
     return httpx.post(
         url,
         json=payload,
         timeout=settings.GV_SERVICE_TIMEOUT_S,
-        headers={"X-Request-Id": request_id},
+        headers={"X-Request-Id": request_id, **identity_headers()},
         follow_redirects=False,
     )
 
@@ -351,7 +358,7 @@ def revoke_session(request: HttpRequest) -> None:
             {"refresh_token": tokens.refresh},
             request_id(request),
         )
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ServiceError) as exc:
         log.warning("admin.revoke_failed", error=type(exc).__name__)
         return
     if response.is_error:

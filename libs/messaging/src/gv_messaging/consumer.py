@@ -50,6 +50,18 @@ class DeadLetterSink(Protocol):
         ...
 
 
+class EventProcessorPort(Protocol):
+    """Обработчик сырых сообщений для транспорта (``KafkaEventConsumer``).
+
+    Транспорт зависит от протокола, а не от ``EventProcessor``: сервис со своей обработкой
+    (admin на Django) подставляет реализацию без ``cast``.
+    """
+
+    async def process(self, raw: bytes, *, source: str) -> Outcome:
+        """Обработать сообщение; возврат означает, что offset можно коммитить."""
+        ...
+
+
 class EventHandlerRegistry:
     """Соответствие ``event_type`` → обработчик."""
 

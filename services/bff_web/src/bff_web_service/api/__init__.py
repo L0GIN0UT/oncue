@@ -1,13 +1,13 @@
-"""HTTP API bff_web: публичный (/v1), внутренний (/internal/v1), админский (/admin/v1)."""
+"""HTTP API bff_web: только публичный (/v1), без мутаций (D4)."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter
 
+from bff_web_service.api.deps import BffDeps
 from bff_web_service.api.public import build_public_router
-from gv_service import Infrastructure
 
 
-def build_routers(infra: Infrastructure) -> list[APIRouter]:
-    """Все роутеры сервиса (DI через ``infra``)."""
-    return [build_public_router(infra)]
+def build_routers(deps: BffDeps) -> list[APIRouter]:
+    """Все роутеры сервиса. Зависимости собирает composition root (``wiring``)."""
+    return [build_public_router(deps)]

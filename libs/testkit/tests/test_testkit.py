@@ -234,3 +234,61 @@ class TestInMemoryIdempotencyStore:
         assert busy.value.code == "idempotency.in_progress"
         # Другой актор — независимый ключ.
         assert (await run_idempotent(store, uuid7(), "key-mem-01", "a" * 64, perform))[1]
+
+
+async def test_issue_service_token_claims(token_issuer: TestTokenIssuer) -> None:
+    import jwt as pyjwt
+
+    token = token_issuer.issue_service("game", "media_pipeline", ["assets.link", "x"])
+    claims = pyjwt.decode(token, options={"verify_signature": False})
+    assert claims["sub"] == "svc:game"
+    assert claims["aud"] == "media_pipeline"
+    assert claims["scope"] == "assets.link x"
+    assert claims["exp"] - claims["iat"] == 600
+    assert not {"sid", "roles", "perms"} & claims.keys()
+
+
+async def test_issue_guest_token(token_issuer: TestTokenIssuer) -> None:
+    principal = await token_issuer.verifier().verify(token_issuer.issue_guest())
+    assert principal.is_guest
+    assert principal.perms == frozenset()
+    assert principal.session_id
+
+
+def test_service_token_fixture(service_token: Any) -> None:
+    assert service_token("admin", "identity", ["admin_sessions"]).count(".") == 2
+
+
+def test_fake_random_is_deterministic_and_scriptable() -> None:
+    from gv_testkit import FakeRandom
+
+    a, b = FakeRandom(seed=7), FakeRandom(seed=7)
+    assert a.sample(range(50), 5) == b.sample(range(50), 5)
+    assert a.randrange(10) == b.randrange(10)
+    items_a, items_b = list(range(10)), list(range(10))
+    a.shuffle(items_a)
+    b.shuffle(items_b)
+    assert items_a == items_b
+    scripted = FakeRandom(values=[0.0, 0.5])
+    assert [scripted.random() for _ in range(3)] == [0.0, 0.5, 0.0]
+
+
+@pytest.mark.integration
+async def test_assert_idempotency_purge_on_demo_schema(database_url: str) -> None:
+    from gv_db.idempotency import idempotency_table
+    from gv_db.metadata import create_metadata
+    from gv_service import Infrastructure, ServiceDefinition, ServiceSettings
+    from gv_testkit import FakeClock, assert_idempotency_purge, create_schema
+
+    tables = create_metadata()
+    idempotency_table(tables.metadata)
+    await create_schema(database_url, tables.metadata)
+    from pydantic import SecretStr
+
+    settings = ServiceSettings(service_name="demo", database_url=SecretStr(database_url))
+    infra = await Infrastructure.open(settings, tables, clock=FakeClock())
+    try:
+        definition = ServiceDefinition(name="demo", settings_cls=ServiceSettings, tables=tables)
+        await assert_idempotency_purge(definition, infra)
+    finally:
+        await infra.close()

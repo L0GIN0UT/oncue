@@ -1,0 +1,17 @@
+{
+  "aggregate_id": "music.random.classic",
+  "aggregate_type": "mode_config",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0204",
+  "event_type": "game.ModeConfigArchived",
+  "event_version": 1,
+  "occurred_at": "2026-10-10T12:00:00Z",
+  "payload": {
+    "actor_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
+    "archived_at": "2026-10-11T12:00:00Z",
+    "mode_key": "music.random.classic",
+    "version": 2
+  },
+  "producer": "game"
+}

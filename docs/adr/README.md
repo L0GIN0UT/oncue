@@ -19,3 +19,8 @@
 | [0013](0013-admin-catalog-via-admin-api.md) | Админка в этапе 1 читает и пишет через admin-API сервисов |
 | [0014](0014-music-sources.md) | Источники музыкальных метаданных и аудио |
 | [0015](0015-admin-idempotency-and-asset-event-order.md) | Идемпотентность admin-мутаций и порядок событий ассетов |
+| [0016](0016-service-tokens-client-credentials.md) | Сервисные токены через client credentials |
+| [0017](0017-frontend-nextjs-bff-read-only.md) | Фронтенд: Next.js в `frontend/`, bff только чтение |
+| [0018](0018-guest-sessions-in-identity.md) | Гостевые сессии в identity |
+| [0019](0019-solo-sessions-in-postgres.md) | Соло-сессии в Postgres |
+| [0020](0020-mode-config-assets-by-params-hash.md) | ModeConfig ↔ ассеты по `params_hash`, очки в Scorer |

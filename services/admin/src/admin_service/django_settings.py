@@ -90,6 +90,8 @@ INSTALLED_APPS = [
     "admin_service.audit",
     "admin_service.apps.catalog",
     "admin_service.apps.users",
+    "admin_service.apps.game_config",
+    "admin_service.apps.game_daily",
 ]
 
 MIDDLEWARE = [
@@ -119,6 +121,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "admin_service.core.menu.menu",
             ],
         },
     },
@@ -177,6 +180,10 @@ GV_SERVICE_URLS = dict(GV.admin.service_urls)
 GV_SERVICE_TIMEOUT_S = GV.admin.service_timeout_s
 GV_IP_ALLOWLIST = list(GV.effective_ip_allowlist)
 GV_MAX_UPLOAD_MB = GV.admin.max_upload_mb
+GV_MODE_CONFIG_MAX_BYTES = GV.admin.mode_config_max_bytes
+GV_DAILY_TIMEZONE = GV.admin.daily_timezone
+GV_DAILY_DEFAULT_DAYS = GV.admin.daily_default_days
+GV_DAILY_RANGE_MAX_DAYS = GV.admin.daily_range_max_days
 GV_SESSION_ENC_KEY = (
     GV.admin.session_enc_key.get_secret_value() if GV.admin.session_enc_key is not None else None
 )

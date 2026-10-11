@@ -350,6 +350,7 @@ class SqlLinkIssuanceJournal:
         subject_hash: str,
         issued_at: datetime,
         expires_at: datetime,
+        client_id: str | None = None,
     ) -> None:
         """Записать выдачу (субъект — только хэшем)."""
         await self._s.execute(
@@ -360,6 +361,7 @@ class SqlLinkIssuanceJournal:
                 subject_hash=subject_hash,
                 issued_at=issued_at,
                 expires_at=expires_at,
+                client_id=client_id,
             )
         )
 

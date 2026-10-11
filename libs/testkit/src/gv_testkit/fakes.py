@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import random as _stdlib_random
+from collections.abc import Mapping, MutableSequence, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
@@ -30,6 +31,41 @@ class FakeClock:
         """Сдвинуть время вперёд: ``advance(seconds=5)``."""
         self._now += delta or timedelta(**kwargs)
         return self._now
+
+
+class FakeRandom:
+    """Детерминированный ``gv_core.random.Random`` для тестов: тот же seed — те же числа.
+
+    Args:
+        seed: Целый seed.
+        values: Если задан — ``random()`` возвращает эти значения по кругу (например,
+            ``[0.0]`` убирает джиттер, ``[0.999]`` даёт максимальный).
+    """
+
+    def __init__(self, seed: int = 0, values: Sequence[float] | None = None) -> None:
+        self._rng = _stdlib_random.Random(seed)  # noqa: S311 — детерминизм тестов
+        self._values = list(values or [])
+        self._i = 0
+
+    def randrange(self, start: int, stop: int | None = None, step: int = 1) -> int:
+        """Целое из ``range(start, stop, step)``."""
+        return self._rng.randrange(start, stop, step)
+
+    def sample[T](self, population: Sequence[T], k: int) -> list[T]:
+        """``k`` различных элементов."""
+        return self._rng.sample(population, k)
+
+    def shuffle[T](self, items: MutableSequence[T]) -> None:
+        """Перемешать на месте."""
+        self._rng.shuffle(items)
+
+    def random(self) -> float:
+        """Следующее значение из ``values`` или из генератора."""
+        if not self._values:
+            return self._rng.random()
+        value = self._values[self._i % len(self._values)]
+        self._i += 1
+        return value
 
 
 @dataclass(frozen=True, slots=True)

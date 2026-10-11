@@ -103,6 +103,26 @@ async def test_logout_all_rejects_old_access(service: Any) -> None:
     assert_problem(me, 401, "auth.session_revoked")
 
 
+def _max_age(set_cookie: str) -> int:
+    attrs = dict(part.strip().split("=", 1) for part in set_cookie.split(";")[1:] if "=" in part)
+    return int(attrs["Max-Age"])
+
+
+@pytest.mark.parametrize("path", ["/v1/auth/login", "/v1/auth/refresh"])
+async def test_access_cookie_lives_as_long_as_refresh_session(service: Any, path: str) -> None:
+    """Регресс: cookie gv_access с max_age = access TTL исчезала через 15 мин, запрос шёл без
+    токена (auth.unauthenticated) вместо auth.token_expired — и клиент не делал refresh."""
+    await service.register()
+    response = await service.login()
+    if path.endswith("refresh"):
+        response = await service.client.post(path, headers=service.csrf())
+    assert response.status_code == 200, response.text
+    cookies = _set_cookies(response)
+    access_ttl = response.json()["expires_in"]
+    assert _max_age(cookies["gv_access"]) == _max_age(cookies["gv_refresh"])
+    assert _max_age(cookies["gv_access"]) > access_ttl
+
+
 async def test_logout_clears_cookies(service: Any) -> None:
     await service.register()
     await service.login()
@@ -298,7 +318,9 @@ async def test_oauth_open_redirect_and_link_without_login(service: Any) -> None:
 async def _admin_token(service: Any) -> str:
     await service.register("boss", "boss@example.com")  # bootstrap admin
     response = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "boss@example.com", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "boss@example.com", "password": PASSWORD},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -309,7 +331,9 @@ async def _admin_token(service: Any) -> str:
 async def test_admin_session_requires_admin_access(service: Any) -> None:
     await service.register()
     response = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "neo_2026", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "neo_2026", "password": PASSWORD},
     )
     assert_problem(response, 403, "auth.forbidden")
 
@@ -317,10 +341,13 @@ async def test_admin_session_requires_admin_access(service: Any) -> None:
 async def test_admin_refresh(service: Any) -> None:
     await service.register("boss", "boss@example.com")
     first = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "boss", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "boss", "password": PASSWORD},
     )
     refreshed = await service.client.post(
         "/internal/v1/admin-sessions/refresh",
+        headers=service.admin_client,
         json={"refresh_token": first.json()["refresh_token"]},
     )
     assert refreshed.status_code == 200
@@ -356,7 +383,9 @@ async def test_assign_roles_publishes_valid_event(service: Any) -> None:
 
     # Модератору admin API ролей недоступен.
     mod = await service.client.post(
-        "/internal/v1/admin-sessions", json={"login": "neo_2026", "password": PASSWORD}
+        "/internal/v1/admin-sessions",
+        headers=service.admin_client,
+        json={"login": "neo_2026", "password": PASSWORD},
     )
     mod_auth = {"Authorization": f"Bearer {mod.json()['access_token']}"}
     assert_problem(

@@ -97,10 +97,28 @@ class JwtVerifier:
         return self._leeway
 
     async def verify(self, token: str) -> Principal:
-        """Проверить токен и вернуть субъекта.
+        """Проверить пользовательский токен и вернуть субъекта.
+
+        Сервисный токен (``sub = svc:<client_id>``) здесь не проходит: ``sub`` не UUID.
 
         Raises:
             UnauthenticatedError: токен отсутствует, подделан, просрочен или не для нас.
+            DependencyUnavailableError: ключи нельзя получить, а кэша нет.
+        """
+        claims = await self.decode(token)
+        principal = _principal_from_claims(claims)
+        if principal.session_id is not None and await self._is_revoked(principal.session_id):
+            raise UnauthenticatedError("сессия завершена", code="auth.session_revoked")
+        return principal
+
+    async def decode(self, token: str) -> dict[str, Any]:
+        """Проверить подпись, алгоритм, ``iss``, ``aud``, ``exp``/``iat`` и вернуть claims.
+
+        Смысл claims (пользователь или сервис) не интерпретируется — это делает вызывающий
+        (``verify`` или ``gv_auth.service.ServiceAuthenticator``).
+
+        Raises:
+            UnauthenticatedError: токен подделан, просрочен или выпущен не для нас.
             DependencyUnavailableError: ключи нельзя получить, а кэша нет.
         """
         try:
@@ -131,10 +149,7 @@ class JwtVerifier:
             raise UnauthenticatedError(
                 "токен не прошёл проверку", code="auth.token_invalid"
             ) from exc
-        principal = _principal_from_claims(claims)
-        if principal.session_id is not None and await self._is_revoked(principal.session_id):
-            raise UnauthenticatedError("сессия завершена", code="auth.session_revoked")
-        return principal
+        return dict(claims)
 
     async def _is_revoked(self, session_id: str) -> bool:
         if self._revocation is None:
@@ -209,6 +224,9 @@ def _principal_from_claims(claims: Mapping[str, Any]) -> Principal:
         plan=claims.get("plan") if isinstance(claims.get("plan"), str) else None,
         token_id=claims.get("jti") if isinstance(claims.get("jti"), str) else None,
         session_id=claims.get("sid") if isinstance(claims.get("sid"), str) else None,
+        # Гость только при явном true: любое другое значение — обычный пользователь без
+        # расширения прав (у гостя прав всё равно нет, identity выдаёт perms = []).
+        is_guest=claims.get("gst") is True,
     )
 
 

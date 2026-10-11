@@ -235,8 +235,12 @@ class LinkIssuanceJournal(Protocol):
         subject_hash: str,
         issued_at: datetime,
         expires_at: datetime,
+        client_id: str | None = None,
     ) -> None:
-        """Записать выдачу. Субъект — только sha256-хэшем (ПДн не храним)."""
+        """Записать выдачу. Субъект — только sha256-хэшем (ПДн не храним).
+
+        ``client_id`` — вызывающий сервис из сервисного токена (D13 плана этапа 2).
+        """
         ...
 
     async def purge_older_than(self, cutoff: datetime, *, limit: int) -> int:

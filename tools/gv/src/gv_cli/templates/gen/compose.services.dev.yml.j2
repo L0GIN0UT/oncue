@@ -6,4 +6,15 @@ services:
     ports: ["127.0.0.1:{{ s.dev_port }}:8000"]
     environment:
       GV_LOG_JSON: "false"
+{% if s.name == "identity" %}
+      # Ссылки из писем ведут на веб-клиент за локальным gateway.
+      GV_EMAIL__VERIFY_LINK: https://localhost/verify-email?token={token}
+      GV_EMAIL__RESET_LINK: https://localhost/reset-password?token={token}
+{% endif %}
+{% if s.name == "game" %}
+      # Сиды режимов публикуются при старте (game.modes.bootstrap).
+      GV_GAME__BOOTSTRAP_MODES_DIR: /seeds/game/modes
+    volumes:
+      - ../../seeds/game/modes:/seeds/game/modes:ro
+{% endif %}
 {% endfor %}

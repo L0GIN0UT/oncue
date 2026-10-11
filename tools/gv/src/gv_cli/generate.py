@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +29,40 @@ class Target:
     executable: bool = False
 
 
+SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
+    "game": {"media_pipeline": ["assets.link"]},
+    "admin": {"identity": ["admin_sessions"]},
+}
+"""Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
+
+Попадает в ``GV_SERVICE_CLIENTS`` identity (``.env.example``) и в окружение клиента
+(``GV_SERVICE_AUTH__*`` в ``compose.services.yml``). Секреты генерирует ``gv dev secrets``.
+"""
+
+
+COOKIE_MUTATION_SERVICES: frozenset[str] = frozenset({"identity", "game"})
+"""Сервисы с мутациями по cookie (CSRF-проверка Origin по ``GV_PUBLIC_ORIGINS``).
+
+bff_web только читает (GET), admin — Django со своей CSRF-защитой.
+"""
+
+
+def service_clients_json() -> str:
+    """``GV_SERVICE_CLIENTS`` с пустыми ``secret_sha256`` (их заполняет ``gv dev secrets``)."""
+    return json.dumps(
+        [
+            {"client_id": client_id, "secret_sha256": "", "audiences": audiences}
+            for client_id, audiences in SERVICE_CLIENTS.items()
+        ],
+        separators=(",", ":"),
+    )
+
+
+def service_secret_env(client_id: str) -> str:
+    """Переменная ``.env`` с секретом клиента: ``GV_SERVICE_SECRET_<CLIENT>``."""
+    return f"GV_SERVICE_SECRET_{client_id.upper()}"
+
+
 TARGETS: tuple[Target, ...] = (
     Target("infra/compose/compose.services.yml", "compose.services.yml.j2"),
     Target("infra/compose/compose.services.dev.yml", "compose.services.dev.yml.j2"),
@@ -42,16 +77,26 @@ TARGETS: tuple[Target, ...] = (
 )
 
 
+def _render(template: str, services: list[Service]) -> str:
+    return _env.get_template(template).render(
+        services=services,
+        service_clients=SERVICE_CLIENTS,
+        service_clients_json=service_clients_json(),
+        service_secret_env=service_secret_env,
+        cookie_mutation_services=COOKIE_MUTATION_SERVICES,
+    )
+
+
 def render_all(services: list[Service]) -> dict[str, str]:
     """Отрисовать все цели: путь → содержимое."""
-    return {t.path: _env.get_template(t.template).render(services=services) for t in TARGETS}
+    return {t.path: _render(t.template, services) for t in TARGETS}
 
 
 def write_all(root: Path, services: list[Service]) -> list[str]:
     """Записать изменившиеся файлы. Возвращает список изменённых путей."""
     changed: list[str] = []
     for target in TARGETS:
-        content = _env.get_template(target.template).render(services=services)
+        content = _render(target.template, services)
         path = root / target.path
         if path.exists() and path.read_text(encoding="utf-8") == content:
             continue

@@ -1,0 +1,36 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:scorer.by_speed:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Очки по скорости ответа (D10)",
+  "properties": {
+    "max_points": {
+      "maximum": 10000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "min_points": {
+      "maximum": 10000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "partial_ratio": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "window_s": {
+      "exclusiveMinimum": 0,
+      "maximum": 3600,
+      "type": "number"
+    }
+  },
+  "required": [
+    "max_points",
+    "min_points",
+    "window_s",
+    "partial_ratio"
+  ],
+  "title": "scorer.by_speed params v1",
+  "type": "object"
+}

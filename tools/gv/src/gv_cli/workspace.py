@@ -58,11 +58,11 @@ def dependents(members: dict[str, Member], changed: set[str]) -> set[str]:
     return result
 
 
-def changed_members(root: Path, base: str) -> set[str]:
-    """Участники, затронутые diff относительно ``base`` (+ их зависимые).
+FRONTEND_DIR = Path("frontend")
 
-    Изменение корневых файлов (lock, общие настройки) затрагивает всех.
-    """
+
+def changed_files(root: Path, base: str) -> list[str]:
+    """Файлы, изменённые относительно ``base`` (коммиты ветки + незакоммиченное)."""
     out = subprocess.run(
         ["git", "diff", "--name-only", f"{base}...HEAD"],
         cwd=root,
@@ -73,6 +73,20 @@ def changed_members(root: Path, base: str) -> set[str]:
     out += subprocess.run(
         ["git", "diff", "--name-only", "HEAD"], cwd=root, capture_output=True, text=True, check=True
     ).stdout.splitlines()
+    return out
+
+
+def frontend_changed(files: list[str]) -> bool:
+    """Затронут ли фронтенд (``frontend/**``) — он не участник uv workspace."""
+    return any(Path(f).is_relative_to(FRONTEND_DIR) for f in files)
+
+
+def changed_members(root: Path, base: str, files: list[str] | None = None) -> set[str]:
+    """Участники, затронутые diff относительно ``base`` (+ их зависимые).
+
+    Изменение корневых файлов (lock, общие настройки) затрагивает всех.
+    """
+    out = files if files is not None else changed_files(root, base)
     members = load_members(root)
     global_files = {"pyproject.toml", "uv.lock", ".importlinter"}
     if any(f in global_files for f in out):

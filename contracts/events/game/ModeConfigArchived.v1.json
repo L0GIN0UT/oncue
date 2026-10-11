@@ -1,0 +1,42 @@
+{
+  "$id": "urn:guessverse:contracts:events:game:ModeConfigArchived:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Режим убран из каталога режимов; начатые сессии доигрываются. aggregate_id — mode_key. version — последняя опубликованная версия конфига на момент архивации.",
+  "properties": {
+    "actor_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "archived_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "mode_key",
+    "version",
+    "actor_id",
+    "archived_at"
+  ],
+  "title": "game.ModeConfigArchived v1",
+  "type": "object",
+  "x-aggregate-type": "mode_config",
+  "x-topic": "game.mode_config.v1"
+}

@@ -13,7 +13,7 @@ from collections.abc import Mapping
 import structlog
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
 
-from gv_messaging.consumer import EventProcessor
+from gv_messaging.consumer import EventProcessorPort
 from gv_messaging.envelope import dlq_topic
 
 log = structlog.get_logger(__name__)
@@ -75,7 +75,7 @@ class KafkaEventConsumer:
         bootstrap_servers: str,
         group: str,
         topics: list[str],
-        processor: EventProcessor,
+        processor: EventProcessorPort,
         max_batch: int = 100,
     ) -> None:
         self._consumer = AIOKafkaConsumer(

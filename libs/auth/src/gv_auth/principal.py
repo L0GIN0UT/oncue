@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import IntFlag
+from enum import IntFlag, StrEnum
 from uuid import UUID
 
 
@@ -18,12 +18,22 @@ class Sanction(IntFlag):
     COMMENTS = 16  # комментарии выключены
 
 
+class SubjectKind(StrEnum):
+    """Вид субъекта пользовательского токена."""
+
+    USER = "user"
+    GUEST = "guest"
+
+
 @dataclass(frozen=True, slots=True)
 class Principal:
-    """Аутентифицированный пользователь.
+    """Аутентифицированный субъект: пользователь или гость (D5 плана этапа 2).
 
     Решения о доступе принимаются по правам (``perms``), а не по ролям: добавление роли
     не требует правок кода. Роли — только для отображения и аудита.
+
+    У гостя ``user_id`` — идентификатор гостевой сессии identity (uuid7 из ``sub``), прав
+    нет; ручки, которым нужен аккаунт, закрываются ``require_user``.
     """
 
     user_id: UUID
@@ -34,6 +44,13 @@ class Principal:
     token_id: str | None = None
     session_id: str | None = None
     """Сессия identity (claim ``sid``): по ней отзываются выданные access-токены."""
+    is_guest: bool = False
+    """Гостевой токен (claim ``gst = true``)."""
+
+    @property
+    def subject_kind(self) -> SubjectKind:
+        """``user`` или ``guest``."""
+        return SubjectKind.GUEST if self.is_guest else SubjectKind.USER
 
     def has_perm(self, perm: str) -> bool:
         """Есть ли право ``perm``."""

@@ -49,8 +49,14 @@ class IssueAssetLink:
         self._purge_interval = purge_interval
         self._next_purge_at: datetime | None = None
 
-    async def execute(self, asset_set_id: UUID, level: int, subject: str) -> IssuedLink:
-        """Выдать ссылку на уровень ``level`` для субъекта ``subject``."""
+    async def execute(
+        self, asset_set_id: UUID, level: int, subject: str, *, client_id: str | None = None
+    ) -> IssuedLink:
+        """Выдать ссылку на уровень ``level`` для субъекта ``subject``.
+
+        Args:
+            client_id: Сервис-получатель (из сервисного токена) — пишется в журнал выдачи.
+        """
         async with self._uow() as uow:
             aggregate = await uow.asset_sets.get(asset_set_id)
             if aggregate is None:
@@ -76,6 +82,7 @@ class IssueAssetLink:
                 subject_hash=LinkPolicy.subject_hash(subject),
                 issued_at=now,
                 expires_at=expires_at,
+                client_id=client_id,
             )
             if self._next_purge_at is None or now >= self._next_purge_at:
                 self._next_purge_at = now + self._purge_interval

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import random
+from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
@@ -16,6 +18,8 @@ from media_pipeline_service.domain.params import canonical_json, params_hash
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
+
+GOLDEN = Path(__file__).resolve().parents[4] / "contracts" / "clues" / "params_hash.golden.json"
 
 _json_scalars = st.none() | st.booleans() | st.integers(-(10**6), 10**6) | st.text(max_size=8)
 _json = st.recursive(
@@ -126,3 +130,14 @@ def test_params_hash_is_stable_across_model_roundtrip(n: int) -> None:
     first = PosterMaskedParams.from_mapping(raw)
     second = PosterMaskedParams.from_mapping(first.model_dump(mode="json"))
     assert params_hash(first.model_dump(mode="json")) == params_hash(second.model_dump(mode="json"))
+
+
+@pytest.mark.parametrize(
+    "vector", json.loads(GOLDEN.read_text(encoding="utf-8"))["vectors"], ids=lambda v: v["name"]
+)
+def test_params_hash_matches_golden(vector: dict[str, object]) -> None:
+    """Тот же файл проверяет gv_game_kernel.params: game и media-pipeline считают одинаково."""
+    params = vector["params"]
+    assert isinstance(params, dict)
+    assert canonical_json(params) == vector["canonical_json"]
+    assert params_hash(params) == vector["params_hash"]

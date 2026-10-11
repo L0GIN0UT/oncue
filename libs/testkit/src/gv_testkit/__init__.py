@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         FakeClock,
         FakeDeadLetterSink,
         FakeEventPublisher,
+        FakeRandom,
         FakeUnitOfWork,
         InMemoryIdempotencyStore,
         InMemoryTaskQueue,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         create_schema,
         temporary_database,
     )
+    from gv_testkit.periodic import assert_idempotency_purge, run_periodic_job
     from gv_testkit.stubs import stub_service
 
 _EXPORTS = {
@@ -41,6 +43,7 @@ _EXPORTS = {
     "FakeClock": "gv_testkit.fakes",
     "FakeDeadLetterSink": "gv_testkit.fakes",
     "FakeEventPublisher": "gv_testkit.fakes",
+    "FakeRandom": "gv_testkit.fakes",
     "FakeUnitOfWork": "gv_testkit.fakes",
     "InMemoryIdempotencyStore": "gv_testkit.fakes",
     "InMemoryTaskQueue": "gv_testkit.fakes",
@@ -49,6 +52,8 @@ _EXPORTS = {
     "assert_event_matches_schema": "gv_testkit.contracts",
     "load_example": "gv_testkit.contracts",
     "stub_service": "gv_testkit.stubs",
+    "assert_idempotency_purge": "gv_testkit.periodic",
+    "run_periodic_job": "gv_testkit.periodic",
     "apply_migrations": "gv_testkit.infra",
     "create_schema": "gv_testkit.infra",
     "temporary_database": "gv_testkit.infra",
@@ -59,6 +64,7 @@ __all__ = [
     "FakeClock",
     "FakeDeadLetterSink",
     "FakeEventPublisher",
+    "FakeRandom",
     "FakeUnitOfWork",
     "InMemoryIdempotencyStore",
     "InMemoryTaskQueue",
@@ -67,12 +73,14 @@ __all__ = [
     "TestTokenIssuer",
     "apply_migrations",
     "assert_event_matches_schema",
+    "assert_idempotency_purge",
     "assert_problem",
     "assert_published",
     "create_schema",
     "load_example",
     "outbox_envelopes",
     "published_envelopes",
+    "run_periodic_job",
     "service_client",
     "stub_service",
     "temporary_database",

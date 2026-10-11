@@ -102,3 +102,11 @@ def test_translit_of_cyrillic_is_latin_and_normalized(text: str) -> None:
     if result is not None:
         assert result == N.normalize(result)
         assert all(not ("а" <= ch <= "я") for ch in result)
+
+
+def test_catalog_reexports_gv_text() -> None:
+    """Реализация одна (libs/text): catalog и game_kernel нормализуют одинаково."""
+    import gv_text
+
+    assert TitleNormalizer is gv_text.TitleNormalizer
+    assert NormalizerConfig is gv_text.NormalizerConfig

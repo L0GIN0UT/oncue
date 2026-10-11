@@ -16,6 +16,7 @@ from gv_core.errors import (
     UnauthenticatedError,
 )
 from gv_core.ids import uuid7
+from identity_service.application.commands.guest_issuer import GuestSessionIssuer
 from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.dto import RegisterCommand
 from identity_service.application.ports import (
@@ -476,7 +477,11 @@ class AdminLogin:
 
 
 class RefreshSession:
-    """Ротация refresh-токена; повторное использование отзывает всю сессию."""
+    """Ротация refresh-токена; повторное использование отзывает всю сессию.
+
+    Гостевая сессия ротируется так же, но новый access-токен выпускает ``guests`` (без
+    прав, ``gst = true``); без ``guests`` гостевой refresh-токен недействителен.
+    """
 
     def __init__(
         self,
@@ -484,9 +489,12 @@ class RefreshSession:
         sessions: SessionIssuer,
         revocation: RevocationStore,
         clock: Clock,
+        *,
+        guests: GuestSessionIssuer | None = None,
     ) -> None:
         self._uow, self._sessions = uow, sessions
         self._revocation, self._clock = revocation, clock
+        self._guests = guests
 
     async def __call__(
         self, refresh_token: str, *, kind: SessionKind, required_perm: str | None = None
@@ -508,6 +516,9 @@ class RefreshSession:
             session = await uow.sessions.get(token.session_id) if token else None
             if token is None or session is None or session.kind is not kind:
                 raise invalid
+            guests = self._guests
+            if session.is_guest and (guests is None or required_perm):
+                raise invalid  # у гостя нет прав и admin-сессий
             secret, new_hash = self._sessions.new_refresh_secret()
             result = rotate_refresh_token(
                 session,
@@ -515,15 +526,23 @@ class RefreshSession:
                 now=now,
                 new_id=uuid7(),
                 new_hash=new_hash,
-                ttl=self._sessions.refresh_ttl,
+                ttl=guests.refresh_ttl
+                if session.is_guest and guests is not None
+                else self._sessions.refresh_ttl,
             )
             if isinstance(result, ReuseDetected):
                 await uow.sessions.save(session)
                 await uow.sessions.save_refresh(token)
                 await uow.commit()
                 reused = session.id
+            elif session.is_guest and guests is not None:
+                await uow.sessions.save_refresh(token)
+                await uow.sessions.add_refresh(result.token)
+                await uow.sessions.save(session)
+                issued = guests.access(session, refresh_secret=secret)
+                await uow.commit()
             else:
-                user = await uow.users.get(session.user_id)
+                user = await uow.users.get(session.user_id) if session.user_id else None
                 matrix = await uow.roles.get_matrix()
                 if user is None or not user.is_active:
                     raise invalid

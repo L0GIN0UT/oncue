@@ -3,7 +3,7 @@
 Использование (консольный скрипт сервиса)::
 
     <service> api        # HTTP API
-    <service> relay      # публикация outbox → Redpanda
+    <service> relay      # публикация outbox → Redpanda + периодические задачи
     <service> consumer   # обработка доменных событий
     <service> worker     # фоновые задачи RabbitMQ
     <service> all        # всё в одном процессе (VPS, локально)
@@ -38,8 +38,10 @@ from gv_messaging.rabbit import RabbitTaskQueue
 from gv_observability.logging import configure_logging
 from gv_observability.tracing import configure_tracing
 from gv_service.app import create_app
+from gv_service.builtin_jobs import collect_periodic_jobs
 from gv_service.definition import Infrastructure, ServiceDefinition
 from gv_service.metrics_server import MetricsServer
+from gv_service.periodic import PeriodicJobRunner
 from gv_service.settings import ServiceSettings
 
 log = structlog.get_logger(__name__)
@@ -188,13 +190,22 @@ class Runtime:
         await self._server.serve()
 
     def _relay_factory(self, infra: Infrastructure) -> Callable[[], Awaitable[None]] | None:
+        """Процесс relay: публикация outbox (если есть Kafka) и периодические задачи.
+
+        Периодические задачи живут здесь, потому что relay есть у каждого сервиса с БД и
+        запускается в ``all`` (план этапа 2, §2.3): отдельный процесс потребовал бы правок
+        compose и ``gv gen``.
+        """
         s, tables = self.settings, self.definition.tables
-        if tables is None or infra.sessions is None or not s.kafka_bootstrap:
+        if tables is None or infra.sessions is None:
             return None
         sessions, bootstrap = infra.sessions, s.kafka_bootstrap
+        jobs = collect_periodic_jobs(self.definition, infra)
+        if not bootstrap and not jobs:
+            return None
 
-        async def run() -> None:
-            publisher = KafkaEventPublisher(bootstrap, client_id=f"{s.service_name}-relay")
+        async def publish(kafka: str) -> None:
+            publisher = KafkaEventPublisher(kafka, client_id=f"{s.service_name}-relay")
             await publisher.start()
             try:
                 relay = OutboxRelay(
@@ -207,6 +218,13 @@ class Runtime:
                 await relay.run_forever(self.stop)
             finally:
                 await publisher.stop()
+
+        async def run() -> None:
+            runner = PeriodicJobRunner(s.service_name, jobs, sessions)
+            async with asyncio.TaskGroup() as group:
+                if bootstrap:
+                    group.create_task(publish(bootstrap), name="outbox-relay")
+                group.create_task(runner.run_forever(self.stop), name="periodic-jobs")
 
         return run
 

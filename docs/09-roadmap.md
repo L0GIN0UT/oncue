@@ -27,25 +27,45 @@
 - **Проверено:** unit, integration, component, contract по сервисам этапа; `gv lint`, `gv contracts check`, `gv gen --check`.
 - **Осталось (демонстрация [§0 плана](plans/stage-1.md#0-цель-и-критерии-готовности)):** живой сквозной прогон пунктов 1–6 на `gv dev up services` (регистрация → вход → импорт → `AssetsReady` → ссылка через gateway → блокировка) не выполнялся. Фронтенд и bff-web в этап 1 не входят — демонстрация идёт через API и админку.
 
-### Хвосты этапа 1 (перенесены в этап 2)
-| Пункт | Где | Когда |
+### Хвосты этапа 1
+| Пункт | Где | Статус |
 |---|---|---|
-| Периодическая очистка `idempotency_keys` (`gv_db.idempotency` `purge_older_than`) не запускается — таблица растёт | identity, catalog, media_pipeline | Этап 2 |
-| Хук остановки (shutdown) в `ServiceDefinition` для consumer/worker: закрывать `RabbitTaskQueue` и др. (сейчас закрываются вместе с процессом) | `libs/service` | Этап 2 |
-| Сервисные токены для internal API (D8): сейчас internal закрыт только сетью, `/internal/v1/asset-links` принимает любой `subject` | identity, media_pipeline, `libs/auth` | Этап 2, до первого вызова из game |
-| Живой прогон integration-тестов OpenSearch и `nginx -t` на образе nginx 1.28 в CI | `.github/workflows`, catalog, `infra/nginx` | Первый прогон CI |
-| `mypy_django_plugin` для admin | admin | Этап 2 |
-| Протокол вместо `EventProcessor` в `KafkaEventConsumer` (admin подключается через `cast`) | `libs/messaging` | Этап 2 |
+| Периодическая очистка `idempotency_keys` | identity, catalog, media_pipeline | ✅ этап 2: встроенная задача `idempotency.purge` в `libs/service` |
+| Закрытие ресурсов процесса для consumer/worker | `libs/service` | ✅ этап 2: `Infrastructure.add_closer` |
+| Сервисные токены для internal API (D8) | identity, media_pipeline, `libs/auth` | ✅ этап 2: [ADR 0016](adr/0016-service-tokens-client-credentials.md) |
+| Живой прогон integration-тестов OpenSearch и `nginx -t` на образе nginx 1.28 в CI | `.github/workflows`, catalog, `infra/nginx` | Открыт — перенесён в хвосты этапа 2 |
+| `mypy_django_plugin` для admin | admin | ✅ этап 2 |
+| Протокол вместо `EventProcessor` в `KafkaEventConsumer` | `libs/messaging` | ✅ этап 2: `EventProcessorPort`, admin без `cast` |
 | Общий подключаемый inbox для Django (сейчас свой в admin) | `libs/messaging`, admin | Этап 5 (модерация в админке) |
-| Ручная security-проверка владельцем: identity, `libs/auth`, вход в admin | — | До публичного запуска |
+| Ручная security-проверка владельцем: identity, `libs/auth`, вход в admin | — | Открыт, до публичного запуска |
 
 **Принятый риск:** лимитеры входа и denylist `sid` при отказе Redis работают **fail-open** (с метрикой и логом): перебор сдерживает argon2id с ограниченным параллелизмом, окно отозванного access-токена ≤ access TTL. Исключение — лимит выдачи ссылок media-pipeline: fail-closed (503). Подробнее — [architecture/security.md](architecture/security.md#7-реализация-этапа-1).
 
-## Этап 2. Соло-игра
-- `libs/game_kernel`: интерфейсы, реестр, плагины Source (daily, collection, random), Scorer (by_level, by_speed), matcher.
-- game: сессии, дейлик (музыка + «Кадр дня»), случайный, ревил. Конфиги режимов и их редактор в админке.
-- bff-web + frontend: главная, соло-хаб, игровой экран, результаты.
-- **Результат:** можно пройти дейлик в обоих доменах.
+## Этап 2. Соло-игра — ✅ реализован в ветке `stage2/integration` (2026-10-11), на проверке владельцем; живая демонстрация не проведена
+План: [plans/stage-2.md](plans/stage-2.md). Решения: ADR [0016](adr/0016-service-tokens-client-credentials.md)–[0020](adr/0020-mode-config-assets-by-params-hash.md).
+
+- **platform:** сервисные токены client credentials (identity, `libs/auth`, `libs/service`) — game → media_pipeline, admin → identity; `PeriodicJob` в relay под advisory lock, встроенная очистка outbox/inbox и `idempotency_keys`; `add_closer`; порт `Random` в `libs/core`.
+- **`libs/game_kernel`:** модели `ModeConfig` по `contracts/modes`, реестр и валидатор конфига (ошибки с JSON-путём), правила раунда, фасад `ModeEngine`; плагины `audio_intro`, `frame_progressive`, `poster_masked`, `daily`, `random`, `title_alias`, `artist`, `by_level`, `by_speed` ([02-game-engine §5.1](02-game-engine.md#51-плагины-ядра-этапа-2)); `params_hash` с golden-векторами. **`libs/text`:** нормализация названий вынесена из catalog, замены союзов и Дамерау-Левенштейн.
+- **game:** конфиги режимов (черновик, публикация, откат, архив, проверка пула), наборы дня с курацией, соло-сессии в Postgres, дейлик и случайный режим с пресетами, ревил, итог и шэр, статистика угадавших, проекции каталога и ассетов, античит, admin-API, периодические задачи; сиды четырёх режимов.
+- **identity:** гостевые сессии ([ADR 0018](adr/0018-guest-sessions-in-identity.md)), права `config.modes.*` и `game.daily.*`.
+- **bff-web:** экраны session, home, solo, results — только чтение, деградация по блокам ([ADR 0017](adr/0017-frontend-nextjs-bff-read-only.md)).
+- **frontend:** Next.js — главная, соло-хаб, игровой экран, ревил, итог и шэр, вход и регистрация; CSP с nonce, безопасный `next`, single-flight refresh; Playwright на моках.
+- **admin:** редактор конфигов режимов (JSON/YAML, ошибки с путём, diff, публикация, откат) и календарь наборов дня; сервисный токен для входа.
+- **CI:** job `frontend`, job `e2e-smoke` (compose + `e2e/daily.spec.ts`), `nginx -t`.
+- **Проверено:** unit, integration, component, contract по затронутым модулям; `gv lint`, `gv contracts check`, `gv gen --check`; во `frontend/` — lint, typecheck, test, build, Playwright на моках.
+
+### Хвосты этапа 2
+| Пункт | Где | Когда |
+|---|---|---|
+| Живая демонстрация [§0 плана](plans/stage-2.md#0-цель-и-критерии-готовности) на compose не проводилась (в среде разработки нет Docker) | весь стек | До слияния в `main` |
+| e2e-smoke в CI не пройдёт без контента: нужен скрипт засева каталога и ассетов в стек (сейчас вручную по `seeds/media/README.md`) | `tools/gv`, `.github/workflows`, `seeds/` | До слияния в `main` |
+| Integration-тесты Kafka и OpenSearch и `nginx -t` на образе nginx 1.28 — только в CI, локально не прогонялись | `.github/workflows`, `infra/nginx`, catalog, `libs/messaging` | Первый прогон CI |
+| Ручная проверка владельцем: identity (гостевые сессии, сервисные токены), `libs/auth` | — | До слияния в `main` |
+| Подтвердить правку эталона `libs/text`: союз «&» теперь удаляется (`("&", "")`) при сверке ответов | `libs/text`, `libs/game_kernel` | До слияния в `main` |
+| Журнал `link_issuance` чистится внутри `IssueAssetLink` (не чаще раза в 10 мин), а не периодической задачей | media_pipeline | Этап 3 |
+| Поиск кандидатов по проекции game (`/admin/v1/projection/items`) — `ILIKE` без trigram-индекса | game | При росте каталога |
+| Ссылка финального кадра ревила живёт 60 с и может истечь, если ревил открыт поздно | game, frontend | Этап 3 |
+| Лимит сервисных токенов разделён: `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` из плана заменён на `FAILURES_PER_CLIENT_IP_PER_MIN` и `SUCCESS_PER_CLIENT_PER_MIN` — обновить env окружений | identity, `infra/` | При выкладке |
 
 ## Этап 3. Сборники и медиатека
 - collections: конструктор, черновики, каталог, лайки, игра по сборнику.

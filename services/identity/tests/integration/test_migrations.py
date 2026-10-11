@@ -27,3 +27,55 @@ async def test_migrations_apply_and_match_metadata(database_url: str) -> None:
     finally:
         await engine.dispose()
     assert diff == [], f"миграции расходятся с метаданными: {diff}"
+
+
+GAME_PERMS = {
+    "config.modes.view",
+    "config.modes.edit",
+    "config.modes.publish",
+    "game.daily.view",
+    "game.daily.curate",
+}
+
+
+async def _grants(database_url: str) -> dict[str, set[str]]:
+    from sqlalchemy import text
+
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = (await conn.execute(text("SELECT role, perm FROM role_permissions"))).all()
+            perms = set((await conn.execute(text("SELECT name FROM permissions"))).scalars())
+    finally:
+        await engine.dispose()
+    grants: dict[str, set[str]] = {"*": perms}
+    for role, perm in rows:
+        grants.setdefault(role, set()).add(perm)
+    return grants
+
+
+async def test_0005_seeds_game_perms_and_is_reversible(database_url: str) -> None:
+    """План этапа 2, §2.7: admin — все права, moderator — просмотр и курация."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= GAME_PERMS
+    assert grants["admin"] >= GAME_PERMS
+    assert grants["moderator"] & GAME_PERMS == {
+        "config.modes.view",
+        "game.daily.view",
+        "game.daily.curate",
+    }
+    assert not grants.get("user", set()) & GAME_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0004")
+    assert not (await _grants(database_url))["*"] & GAME_PERMS
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= GAME_PERMS

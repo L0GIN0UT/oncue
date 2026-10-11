@@ -1,14 +1,20 @@
 """Internal API (/internal/v1): только для других сервисов внутри сети (gateway отдаёт 404).
 
 Вход в админку (D2): только пароль и право ``admin.access``; токены — в теле ответа,
-admin хранит их в своей серверной сессии.
+admin хранит их в своей серверной сессии. Ручки admin-сессий требуют сервисный токен
+с областью ``admin_sessions`` (D13 плана этапа 2): сеть перестаёт быть единственной защитой.
+
+``POST /service-tokens`` — client credentials: аутентификация — сами учётные данные клиента.
 """
 
-from fastapi import APIRouter, status
-from pydantic import BaseModel, Field, IPvAnyAddress
+from typing import Annotated, Literal
 
+from fastapi import APIRouter, Depends, Request, Response, status
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
+
+from gv_auth import ServicePrincipal
 from gv_service import problem_responses
-from identity_service.api.common import ApiDeps, SessionUser, session_user
+from identity_service.api.common import ApiDeps, SessionUser, client_ip, session_user
 from identity_service.application.commands.auth import ADMIN_ACCESS_PERM
 from identity_service.application.sessions import IssuedSession
 from identity_service.domain import SessionKind
@@ -50,6 +56,24 @@ class AdminSessionResponse(BaseModel):
     )
 
 
+class ServiceTokenRequest(BaseModel):
+    """Client credentials сервиса; ``audience`` — вызываемый сервис."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+    client_secret: str = Field(min_length=1, max_length=256)
+    audience: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+
+
+class ServiceTokenResponse(BaseModel):
+    """Сервисный JWT (``sub = svc:<client_id>``, ``aud``, ``scope``, TTL 600 с)."""
+
+    access_token: str
+    token_type: Literal["Bearer"]
+    expires_in: int
+
+
 def _response(issued: IssuedSession) -> AdminSessionResponse:
     return AdminSessionResponse(
         access_token=issued.access_token,
@@ -64,6 +88,9 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
     """Внутренние ручки."""
     uc = deps.use_cases
     router = APIRouter(prefix="/internal/v1", tags=["internal"])
+    admin_client = Annotated[
+        ServicePrincipal, Depends(deps.service_auth.require_service("admin_sessions"))
+    ]
 
     @router.post(
         "/admin-sessions",
@@ -71,7 +98,7 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
         summary="Вход в админку",
         responses=problem_responses(401, 403, 429),
     )
-    async def admin_session(body: AdminSessionRequest) -> AdminSessionResponse:
+    async def admin_session(body: AdminSessionRequest, _: admin_client) -> AdminSessionResponse:
         # Запрос приходит от сервиса admin из доверенной сети: IP клиента — из тела, а не
         # адрес соединения (иначе лимит по IP ограничил бы всех администраторов сразу).
         ip = str(body.client_ip) if body.client_ip is not None else None
@@ -83,7 +110,7 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
         summary="Обновить admin-сессию",
         responses=problem_responses(401, 403),
     )
-    async def admin_refresh(body: AdminRefreshRequest) -> AdminSessionResponse:
+    async def admin_refresh(body: AdminRefreshRequest, _: admin_client) -> AdminSessionResponse:
         issued = await uc.refresh(
             body.refresh_token, kind=SessionKind.ADMIN, required_perm=ADMIN_ACCESS_PERM
         )
@@ -97,8 +124,33 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
             "Идемпотентно: неизвестный, уже отозванный или не admin-токен — тоже 204. "
             "access-токены сессии перестают приниматься (denylist sid)."
         ),
+        responses=problem_responses(401, 403),
     )
-    async def admin_revoke(body: AdminRefreshRequest) -> None:
+    async def admin_revoke(body: AdminRefreshRequest, _: admin_client) -> None:
         await uc.logout(refresh_token=body.refresh_token, kind=SessionKind.ADMIN)
+
+    @router.post(
+        "/service-tokens",
+        response_model=ServiceTokenResponse,
+        summary="Сервисный токен (client credentials)",
+        description=(
+            "Ошибки: 401 `auth.client_invalid`, 403 `auth.audience_forbidden`; 429 — лимит "
+            "неудач по (`client_id`, IP) или успешных выдач по `client_id`."
+        ),
+        responses=problem_responses(401, 403, 422, 429),
+    )
+    async def service_token(
+        body: ServiceTokenRequest, request: Request, response: Response
+    ) -> ServiceTokenResponse:
+        issued = await uc.issue_service_token.execute(
+            body.client_id, body.client_secret, body.audience, source_ip=client_ip(request)
+        )
+        # Токен — учётные данные (RFC 6749 §5.1): промежуточные узлы его не кэшируют.
+        response.headers["Cache-Control"] = "no-store"
+        return ServiceTokenResponse(
+            access_token=issued.token,
+            token_type="Bearer",  # noqa: S106 — тип токена (RFC 6750), не секрет
+            expires_in=issued.expires_in,
+        )
 
     return router

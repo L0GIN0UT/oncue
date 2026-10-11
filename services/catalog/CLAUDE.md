@@ -9,7 +9,7 @@
 - Статус: этап 1 — домен, импорт (файл/TMDB/MusicBrainz/Spotify/Яндекс), поиск, admin-API.
 
 ## Особенности
-- Нормализация — контракт: golden-таблица `tests/unit/test_normalization.py` (по ней же game/match будут сверять ответы). Транслит ru↔lat — отдельные алиасы `translit`.
+- Нормализация живёт в `libs/text` (`gv_text`), `domain/normalization.py` — реэкспорт; своя golden-таблица `tests/unit/test_normalization.py` — регресс. Транслит ru↔lat — отдельные алиасы `translit`.
 - Ручные алиасы (`source=manual`) импорт не трогает. `PUT .../aliases` делает весь список ручным; удалённые импортные алиасы вернёт следующий импорт.
 - Изменение агрегата = `version+1` + событие с этой версией; `save` — оптимистичная блокировка по `persisted_version`.
 - `source_media_ref` — uuid5 от (единица, kind, uri): стабилен между импортами (на него ссылается media-pipeline).

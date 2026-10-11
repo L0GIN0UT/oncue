@@ -1,0 +1,24 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000700",
+  "aggregate_type": "session",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0202",
+  "event_type": "game.DailyCompleted",
+  "event_version": 1,
+  "occurred_at": "2026-10-10T12:00:00Z",
+  "payload": {
+    "day": "2026-10-10",
+    "domain": "music",
+    "exact_count": 3,
+    "max_score": 24,
+    "mode_key": "music.daily.classic",
+    "mode_version": 1,
+    "rounds_count": 5,
+    "score": 17,
+    "session_id": "0192a3b4-c5d6-7e8f-9a0b-000000000700",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000001",
+    "version": 12
+  },
+  "producer": "game"
+}

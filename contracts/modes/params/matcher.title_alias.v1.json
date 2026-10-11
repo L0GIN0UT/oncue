@@ -1,0 +1,43 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:matcher.title_alias:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сверка по названию и алиасам",
+  "properties": {
+    "accept_same_title": {
+      "description": "Единица с тем же нормализованным названием засчитывается как верная",
+      "type": "boolean"
+    },
+    "typo": {
+      "description": "Допуск опечаток (Дамерау-Левенштейн) по длине нормализованного ответа",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "max_distance": {
+            "maximum": 3,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "min_len": {
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min_len",
+          "max_distance"
+        ],
+        "type": "object"
+      },
+      "maxItems": 10,
+      "type": "array"
+    }
+  },
+  "required": [
+    "typo",
+    "accept_same_title"
+  ],
+  "title": "matcher.title_alias params v1",
+  "type": "object"
+}

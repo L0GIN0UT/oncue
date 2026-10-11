@@ -22,6 +22,7 @@ def create_app(
     is_shutting_down: Callable[[], bool] = lambda: False,
     tracing_enabled: bool = False,
     jwt_verifier: JwtVerifier | None = None,
+    service_jwt_verifier: JwtVerifier | None = None,
 ) -> FastAPI:
     """Собрать приложение: роутеры сервиса, health, сбор метрик, Problem Details, middleware.
 
@@ -31,6 +32,9 @@ def create_app(
     Args:
         jwt_verifier: Явный верификатор (тесты). По умолчанию создаётся по ``GV_JWKS_URL``;
             без него ручки с ``require_perm`` отвечают 500 — это ошибка конфигурации.
+        service_jwt_verifier: Верификатор сервисных токенов для internal-ручек
+            (``gv_auth.ServiceAuthenticator``). По умолчанию — по ``GV_JWKS_URL`` с
+            ``aud = settings.internal_audience`` (D13 плана этапа 2).
     """
     settings = infra.settings
     docs_enabled = not settings.is_production
@@ -49,7 +53,14 @@ def create_app(
             issuer=settings.jwt_issuer,
             audience=settings.jwt_audience,
         )
+    if service_jwt_verifier is None and settings.jwks_url:
+        service_jwt_verifier = JwtVerifier(
+            http_jwks_loader(settings.jwks_url),
+            issuer=settings.jwt_issuer,
+            audience=settings.internal_audience,
+        )
     app.state.jwt_verifier = jwt_verifier
+    app.state.service_jwt_verifier = service_jwt_verifier
     app.state.csrf_origins = frozenset(settings.public_origins)
 
     register_problem_handlers(app)

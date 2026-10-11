@@ -95,3 +95,19 @@ class TestTaskRetrySteps:
         assert TaskMessage.from_bytes(msg.to_bytes()) == msg
         with pytest.raises(PermanentError):
             TaskMessage.from_bytes(b"{not json")
+
+
+async def test_kafka_consumer_accepts_any_processor_port() -> None:
+    """KafkaEventConsumer зависит от EventProcessorPort, а не от EventProcessor."""
+    from gv_messaging import EventProcessorPort, Outcome
+    from gv_messaging.kafka import KafkaEventConsumer
+
+    class CustomProcessor:
+        async def process(self, raw: bytes, *, source: str) -> Outcome:
+            return Outcome.PROCESSED
+
+    processor: EventProcessorPort = CustomProcessor()
+    consumer = KafkaEventConsumer(
+        bootstrap_servers="localhost:9092", group="g", topics=["t"], processor=processor
+    )
+    assert consumer._processor is processor

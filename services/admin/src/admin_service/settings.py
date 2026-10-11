@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ipaddress
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
@@ -44,6 +45,12 @@ class AdminConfig(BaseModel):
         service_timeout_s: Таймаут вызова сервиса.
         max_upload_mb: Предел размера загружаемого исходника (аудио, кадр, постер).
         forwarded_allow_ips: Кому uvicorn доверяет ``X-Forwarded-For`` (IP для allowlist).
+        mode_config_max_bytes: Предел размера текста конфига режима в редакторе (как
+            ``GV_GAME__MODE_CONFIG_MAX_BYTES`` у game: больше сервис всё равно не примет).
+        daily_timezone: Часовой пояс «сегодня» в разделе «Наборы дня» (по умолчанию — как
+            смена дня в ``source.params.timezone`` сидов game).
+        daily_default_days: Сколько дней показывать в календаре наборов по умолчанию.
+        daily_range_max_days: Самый длинный диапазон календаря наборов за один запрос.
     """
 
     secret_key: SecretStr | None = None
@@ -60,11 +67,16 @@ class AdminConfig(BaseModel):
             "identity": "http://identity:8000",
             "catalog": "http://catalog:8000",
             "media_pipeline": "http://media-pipeline:8000",
+            "game": "http://game:8000",
         }
     )
     service_timeout_s: float = Field(default=10.0, gt=0)
     max_upload_mb: int = Field(default=50, ge=1)
     forwarded_allow_ips: str = "127.0.0.1"
+    mode_config_max_bytes: int = Field(default=65536, ge=1024)
+    daily_timezone: str = "Europe/Moscow"
+    daily_default_days: int = Field(default=7, ge=1)
+    daily_range_max_days: int = Field(default=62, ge=1)
 
     @field_validator("ip_allowlist")
     @classmethod
@@ -76,6 +88,16 @@ class AdminConfig(BaseModel):
             raise ValueError("GV_ADMIN__IP_ALLOWLIST пуст: админка была бы недоступна")
         for network in value:
             ipaddress.ip_network(network, strict=False)
+        return value
+
+    @field_validator("daily_timezone")
+    @classmethod
+    def _valid_timezone(cls, value: str) -> str:
+        """Опечатка в часовом поясе — ошибка запуска, а не 500 на странице наборов."""
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"неизвестный часовой пояс {value!r}") from exc
         return value
 
     @field_validator("session_enc_key")

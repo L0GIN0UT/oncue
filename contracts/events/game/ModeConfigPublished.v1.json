@@ -1,0 +1,71 @@
+{
+  "$id": "urn:guessverse:contracts:events:game:ModeConfigPublished:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Опубликована новая неизменяемая версия конфига режима (в том числе откат — копия старой версии как новая). aggregate_id — mode_key.",
+  "properties": {
+    "actor_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Кто опубликовал; null — bootstrap сидов при старте (local/ci)"
+    },
+    "body_hash": {
+      "description": "sha256 канонического JSON тела",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "published_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "rolled_back_from": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Версия, копией которой является эта (откат); null — обычная публикация"
+    },
+    "version": {
+      "description": "Версия конфига (монотонна по mode_key)",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "mode_key",
+    "version",
+    "domain",
+    "body_hash",
+    "actor_id",
+    "published_at",
+    "rolled_back_from"
+  ],
+  "title": "game.ModeConfigPublished v1",
+  "type": "object",
+  "x-aggregate-type": "mode_config",
+  "x-topic": "game.mode_config.v1"
+}

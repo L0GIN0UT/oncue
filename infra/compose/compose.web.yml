@@ -1,0 +1,34 @@
+# Веб-клиент (Next.js) за gateway: nginx проксирует `location /` на web:3000 (upstream gv_web).
+# Не входит в infra/services.toml (не Python-сервис): файл пишется руками.
+# Запуск вместе с остальным стеком:
+#   docker compose -f compose.infra.yml -f compose.services.yml -f compose.web.yml -f compose.gateway.yml up -d
+name: guessverse
+
+services:
+  web:
+    build:
+      context: ../../frontend
+      dockerfile: ../infra/docker/web.Dockerfile
+    image: ${GV_REGISTRY:-guessverse}/web:${GV_TAG:-local}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks: [backend]
+    environment:
+      # SSR читает публичные экраны у bff по внутреннему адресу (D2); браузер ходит через gateway.
+      GV_BFF_INTERNAL_URL: http://bff-web:8000
+      # Обязательные согласия регистрации — та же настройка, что у identity.
+      GV_CONSENTS__REQUIRED: ${GV_CONSENTS__REQUIRED:-terms:2026-10,privacy:2026-10,age_18:1}
+      # Обход gateway (GV_DEV_API_ORIGIN) здесь не задаётся: вне e2e на моках (GV_E2E=1)
+      # контейнер с ним не стартует (infra/docker/web.Dockerfile, src/instrumentation.ts).
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "5"}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
+    deploy:
+      resources:
+        limits: {memory: 384M}
