@@ -72,6 +72,11 @@ nav:
       - adr/0013-admin-catalog-via-admin-api.md
       - adr/0014-music-sources.md
       - adr/0015-admin-idempotency-and-asset-event-order.md
+      - adr/0016-service-tokens-client-credentials.md
+      - adr/0017-frontend-nextjs-bff-read-only.md
+      - adr/0018-guest-sessions-in-identity.md
+      - adr/0019-solo-sessions-in-postgres.md
+      - adr/0020-mode-config-assets-by-params-hash.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

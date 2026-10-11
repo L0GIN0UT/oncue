@@ -81,6 +81,11 @@
 | 13 | Админка этапа 1 через admin-API | [0013](../adr/0013-admin-catalog-via-admin-api.md) |
 | 14 | Источники музыкальных метаданных и аудио | [0014](../adr/0014-music-sources.md) |
 | 15 | Идемпотентность admin-мутаций в транзакции мутации, порядок событий ассетов | [0015](../adr/0015-admin-idempotency-and-asset-event-order.md) |
+| 16 | Сервисные токены через client credentials (identity, `aud`/scope) | [0016](../adr/0016-service-tokens-client-credentials.md) |
+| 17 | Фронтенд Next.js в `frontend/`, bff-web только чтение, команды игры — напрямую в game | [0017](../adr/0017-frontend-nextjs-bff-read-only.md) |
+| 18 | Гостевые сессии выдаёт identity (`gst = true`, без прав) | [0018](../adr/0018-guest-sessions-in-identity.md) |
+| 19 | Соло-сессии в Postgres, Redis — лимиты и кэш | [0019](../adr/0019-solo-sessions-in-postgres.md) |
+| 20 | ModeConfig ↔ ассеты по `params_hash`, очки уровней в Scorer | [0020](../adr/0020-mode-config-assets-by-params-hash.md) |
 
 ## 6. Технологии
 
