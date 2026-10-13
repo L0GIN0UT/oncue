@@ -368,6 +368,38 @@ class Seeder:
             )
             # 409 — набор уже создан периодической задачей/заблокирован: для сидера это успех.
             self._check(resp, {200, 409}, f"набор дня {mode_key}")
+            self._verify_daily_playable(mode_key, day, resp)
+
+    def _verify_daily_playable(self, mode_key: str, day: date, resp: httpx.Response) -> None:
+        """Убедиться, что набор дня непуст и не ``failed``, иначе падать здесь с внятной причиной.
+
+        Игровая сессия дейлика стартует только на «играбельном» наборе (``status != failed`` и
+        ``items``); иначе ``POST /v1/sessions`` отвечает ``503 game.daily_not_ready``. Если бы
+        сидер молча проглотил пустой/проваленный набор, e2e ``daily`` падал бы уже на старте
+        сессии с непрозрачной 503 — а настоящая причина (пул не готов) осталась бы скрытой.
+        Поэтому состояние набора проверяем сразу после перегенерации: при 200 — из тела ответа,
+        при 409 (набор создан планировщиком) — отдельным чтением списка наборов дня.
+        """
+        day_iso = day.isoformat()
+        if resp.status_code == httpx.codes.OK:
+            daily = resp.json()
+        else:
+            got = self._game.get(
+                "/admin/v1/daily-sets",
+                params={"mode_key": mode_key, "from": day_iso, "to": day_iso},
+            )
+            self._check(got, {200}, f"состояние набора дня {mode_key}")
+            daily = next((s for s in got.json() if s.get("day") == day_iso), None)
+            if daily is None:
+                raise SeedError(f"набор дня {mode_key} на {day_iso} не найден после 409")
+        status = daily.get("status")
+        items = daily.get("items") or []
+        if status == "failed" or not items:
+            raise SeedError(
+                f"набор дня {mode_key} на {day_iso} непригоден "
+                f"(status={status!r}, единиц={len(items)}): пул игры не готов — "
+                "e2e-дейлик упал бы с 503 game.daily_not_ready"
+            )
 
     def _wait_playable(self, mode_key: str, min_playable: int) -> None:
         """Дождаться, пока проекция game покажет ≥ ``min_playable`` играбельных единиц режима."""

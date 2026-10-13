@@ -36,6 +36,8 @@ class FakeStack:
     import_status: str = "done"  # статус задания импорта в ответе GET
     item_detail_status: int = 200  # для проверки неожиданного ответа каталога
     daily_status: int = 200  # 409 — набор уже есть
+    daily_items: int = 5  # сколько единиц в наборе дня (0 → набор пуст/непригоден)
+    daily_set_status: str = "scheduled"  # статус набора дня в ответе/списке
     playable_count: int = 10  # сколько играбельных единиц отдаёт проекция game
     requests: list[httpx.Request] = field(default_factory=list)
     _asset_polls: dict[str, int] = field(default_factory=dict)
@@ -60,7 +62,31 @@ class FakeStack:
             ("GET", r"/admin/v1/asset-sets", self._asset_sets),
             ("GET", r"/admin/v1/projection/items", self._projection),
             ("POST", r"/admin/v1/daily-sets/.+/regenerate", self._daily_post),
+            ("GET", r"/admin/v1/daily-sets", self._daily_list),
         ]
+
+    def _daily_set_body(self, mode_key: str) -> dict[str, object]:
+        return {
+            "mode_key": mode_key,
+            "day": DAY,
+            "mode_version": 1,
+            "status": self.daily_set_status,
+            "items": [
+                {
+                    "index": i,
+                    "media_item_id": f"01a0000000007000900000000000000{i:1x}",
+                    "title": f"set item {i}",
+                    "year": None,
+                    "playable": True,
+                }
+                for i in range(self.daily_items)
+            ],
+        }
+
+    def _daily_list(self, request: httpx.Request) -> httpx.Response:
+        # Список наборов дня: сидер читает его после 409, чтобы проверить пригодность набора.
+        mode_key = request.url.params["mode_key"]
+        return httpx.Response(200, json=[self._daily_set_body(mode_key)])
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -247,16 +273,7 @@ class FakeStack:
         mode_key = request.url.path.split("/")[4]
         if self.daily_status != 200:
             return httpx.Response(self.daily_status, json={"code": "game.daily_locked"})
-        return httpx.Response(
-            200,
-            json={
-                "mode_key": mode_key,
-                "day": DAY,
-                "mode_version": 1,
-                "status": "scheduled",
-                "items": [],
-            },
-        )
+        return httpx.Response(200, json=self._daily_set_body(mode_key))
 
 
 _DAILY_YAML = """\
@@ -410,6 +427,26 @@ class TestSeedHappyPath:
     def test_daily_409_treated_as_success(self, workspace: Path) -> None:
         stack = FakeStack(daily_status=409)
         _run(stack, workspace)  # 409 — набор уже есть, это успех
+        # После 409 сидер читает список наборов дня, чтобы убедиться в пригодности набора.
+        assert stack._recorded("GET", "/admin/v1/daily-sets")
+
+    def test_empty_daily_set_raises(self, workspace: Path) -> None:
+        # Набор без единиц → сессия дейлика упала бы с 503; сидер обязан упасть здесь.
+        stack = FakeStack(daily_items=0)
+        with pytest.raises(SeedError, match="непригоден"):
+            _run(stack, workspace)
+
+    def test_failed_daily_set_raises(self, workspace: Path) -> None:
+        # Статус failed (пул меньше нужного) обязан падать на этапе сидирования.
+        stack = FakeStack(daily_set_status="failed")
+        with pytest.raises(SeedError, match="непригоден"):
+            _run(stack, workspace)
+
+    def test_daily_409_with_failed_set_raises(self, workspace: Path) -> None:
+        # 409 не должен маскировать непригодный набор, созданный планировщиком.
+        stack = FakeStack(daily_status=409, daily_items=0)
+        with pytest.raises(SeedError, match="непригоден"):
+            _run(stack, workspace)
 
 
 class TestSeedPolling:
