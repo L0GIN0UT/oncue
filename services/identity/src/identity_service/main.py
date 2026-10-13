@@ -6,12 +6,23 @@ from pathlib import Path
 
 from fastapi import APIRouter
 
-from gv_service import Infrastructure, ServiceDefinition, main
+from gv_service import Infrastructure, ServiceDefinition, ServiceSettings, main
 from identity_service.api import build_routers
 from identity_service.infrastructure.db.tables import TABLES
 from identity_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from identity_service.settings import Settings
-from identity_service.wiring import build_api_deps, build_periodic_jobs
+from identity_service.wiring import build_api_deps, build_periodic_jobs, ensure_bootstrap_admin
+
+
+async def prepare_resources(settings: ServiceSettings) -> None:
+    """Подготовка ресурсов командой ``migrate`` (после миграций): bootstrap-админ (local/ci).
+
+    Идемпотентно и безопасно для каждого запуска ``migrate``; вне local/ci с заданными
+    учётными данными — ошибка старта (``wiring.bootstrap_admin_credentials``).
+    """
+    if not isinstance(settings, Settings):  # runner создаёт настройки из settings_cls
+        raise TypeError(f"ожидались настройки identity, получено {type(settings)!r}")
+    await ensure_bootstrap_admin(settings)
 
 
 def _routers(infra: Infrastructure) -> list[APIRouter]:
@@ -31,6 +42,7 @@ DEFINITION = ServiceDefinition(
     consumer_topics=CONSUMED_TOPICS,
     build_routers=_routers,
     build_periodic_jobs=build_periodic_jobs,
+    prepare_resources=prepare_resources,
 )
 
 

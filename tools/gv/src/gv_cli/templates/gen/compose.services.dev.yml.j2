@@ -18,3 +18,9 @@ services:
       - ../../seeds/game/modes:/seeds/game/modes:ro
 {% endif %}
 {% endfor %}
+  # Bootstrap-админ автосидинга создаётся в job `migrate` identity (только local/ci).
+  # Пусто (переменные не заданы) — функция выключена; значения берутся из .env.
+  identity-migrate:
+    environment:
+      GV_BOOTSTRAP_ADMIN__LOGIN: ${GV_BOOTSTRAP_ADMIN__LOGIN:-}
+      GV_BOOTSTRAP_ADMIN__PASSWORD: ${GV_BOOTSTRAP_ADMIN__PASSWORD:-}

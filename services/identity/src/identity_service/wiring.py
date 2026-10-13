@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import cache
 from importlib import resources
 from typing import Any
@@ -30,6 +31,7 @@ from identity_service.application.commands.auth import (
     ResetPassword,
     VerifyEmail,
 )
+from identity_service.application.commands.bootstrap import EnsureBootstrapAdmin
 from identity_service.application.commands.guest import (
     EndGuestSession,
     GuestUseCases,
@@ -78,6 +80,7 @@ from identity_service.infrastructure.clients import (
 )
 from identity_service.infrastructure.db.guest_sessions import SqlGuestSessionPurger
 from identity_service.infrastructure.db.repositories import SqlIdentityUnitOfWork
+from identity_service.infrastructure.db.tables import TABLES
 from identity_service.infrastructure.redis_stores import (
     RedisOAuthStateStore,
     RedisRateLimiter,
@@ -180,6 +183,76 @@ def signing_keys(settings: Settings, *, serving: bool) -> list[SigningKey]:
     return [generate_dev_key()]
 
 
+@dataclass(frozen=True, slots=True)
+class BootstrapAdminCredentials:
+    """Учётные данные bootstrap-админа (разобранные настройки)."""
+
+    login: str
+    password: str
+    nickname: str | None
+
+
+def bootstrap_admin_credentials(settings: Settings) -> BootstrapAdminCredentials | None:
+    """Учётные данные bootstrap-админа, если функция включена, иначе ``None``.
+
+    Функция допустима только в local/ci. Заданные ``GV_BOOTSTRAP_ADMIN__*`` вне этих
+    окружений — ошибка конфигурации: админ с известным паролем не должен появляться в
+    staging/production (ср. ``GV_JWT__SIGNING_KEYS`` в ``signing_keys``).
+
+    Raises:
+        KeyConfigError: учётные данные заданы в staging/production.
+    """
+    b = settings.bootstrap_admin
+    # Хоть что-то задано — функция «тронута»: проверяем окружение даже при половинной
+    # настройке, чтобы одинокий login или password в проде не прошёл молча (fail-closed).
+    if not (b.login or b.password.get_secret_value()):
+        return None
+    if settings.environment not in (Environment.LOCAL, Environment.CI):
+        raise KeyConfigError("GV_BOOTSTRAP_ADMIN__* допустим только в local/ci")
+    if not b.enabled:
+        raise KeyConfigError("GV_BOOTSTRAP_ADMIN__*: нужны оба поля — login и password")
+    return BootstrapAdminCredentials(
+        login=b.login, password=b.password.get_secret_value(), nickname=b.nickname or None
+    )
+
+
+async def ensure_bootstrap_admin(settings: Settings) -> None:
+    """Идемпотентно создать bootstrap-админа (команда ``migrate``, после миграций).
+
+    Строит собственную короткоживущую инфраструктуру и закрывает её: job ``migrate``
+    выполняется один раз до старта процессов сервиса. Вне local/ci с заданными учётными
+    данными — ``KeyConfigError`` (см. ``bootstrap_admin_credentials``); выключено — no-op.
+    """
+    creds = bootstrap_admin_credentials(settings)
+    if creds is None:
+        return
+    infra = await Infrastructure.open(settings, TABLES)
+    try:
+        sessions = infra.sessions
+        if sessions is None:
+            raise DependencyUnavailableError("bootstrap-админ требует GV_DATABASE_URL")
+        clock = infra.clock
+        hasher = Argon2Hasher(
+            time_cost=settings.argon2.time_cost,
+            memory_kib=settings.argon2.memory_kib,
+            parallelism=settings.argon2.parallelism,
+            max_concurrency=settings.argon2.max_concurrency,
+        )
+
+        def uow() -> IdentityUnitOfWork:
+            return SqlIdentityUnitOfWork(sessions, producer=settings.service_name, clock=clock)
+
+        ensure = EnsureBootstrapAdmin(
+            uow,
+            hasher=hasher,
+            clock=clock,
+            password_policy=PasswordPolicy(banned=common_passwords()),
+        )
+        await ensure(login=creds.login, password=creds.password, nickname=creds.nickname)
+    finally:
+        await infra.close()
+
+
 class _Unavailable:
     """Заглушка Redis-портов, когда Redis не сконфигурирован (экспорт OpenAPI)."""
 
@@ -195,6 +268,9 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
     if not isinstance(settings, Settings):
         raise TypeError("identity ожидает identity_service.settings.Settings")
     serving = infra.sessions is not None
+    # Защита в глубину: заданные bootstrap-creds вне local/ci валят старт любого процесса
+    # (сам bootstrap выполняется в migrate — см. ensure_bootstrap_admin).
+    bootstrap_admin_credentials(settings)
     clock, config = infra.clock, auth_config(settings)
     keys = StaticKeyProvider(signing_keys(settings, serving=serving), clock)
 

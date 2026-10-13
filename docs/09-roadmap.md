@@ -58,7 +58,7 @@
 | Пункт | Где | Когда |
 |---|---|---|
 | Живая демонстрация [§0 плана](plans/stage-2.md#0-цель-и-критерии-готовности) на compose не проводилась (в среде разработки нет Docker) | весь стек | До слияния в `main` |
-| Засев стека для e2e «дейлик»: каталог, исходники медиа и ассеты, наборы дня. Пока его нет, в CI идёт только смоук стека (`e2e/stack.spec.ts`), а `e2e/daily.spec.ts` пропускается с причиной до `E2E_SEEDED=1` | `tools/gv`, `.github/workflows`, `seeds/` | Следующая задача |
+| Засев стека для e2e «дейлик»: `gv dev seed` грузит каталог, исходники медиа и ассеты, наборы дня через admin-API (admin-токен — через bootstrap-админа identity, только local/ci). В CI шаг засева поднимает `E2E_SEEDED=1`, `e2e/daily.spec.ts` раскрывается | `tools/gv`, `.github/workflows`, `seeds/`, identity | ✅ реализовано (проверка — прогон CI) |
 | Integration-тесты Kafka и OpenSearch и `nginx -t` на образе nginx 1.28 — только в CI, локально не прогонялись | `.github/workflows`, `infra/nginx`, catalog, `libs/messaging` | ✅ прогон CI #18: зелёные |
 | Зеркало образов под своим контролем: внешние реестры удаляют образы (MinIO, сентябрь 2026 — [ADR 0021](adr/0021-s3-storage-seaweedfs.md)) | `infra/` | Этап 7 |
 | Скан образов trivy: вернуть блокировку по CRITICAL и выгрузку SARIF в GitHub Security после digest-пиннинга базового образа и Dependabot на него ([ADR 0022](adr/0022-image-scan-reporting-not-gating.md)) | `.github/workflows` | Этап 7 |

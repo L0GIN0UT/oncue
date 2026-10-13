@@ -145,6 +145,28 @@ class ServiceTokenLimitSettings(BaseModel):
     success_per_client_per_min: int = Field(default=600, ge=1)
 
 
+class BootstrapAdminSettings(BaseModel):
+    """Bootstrap-админ для автосидинга (``GV_BOOTSTRAP_ADMIN__*``), только local/ci.
+
+    Команда ``migrate`` идемпотентно создаёт (или дополняет ролью ``admin``) пользователя с
+    этим e-mail, чтобы автосидинг получил admin-токен через ``POST /internal/v1/admin-sessions``.
+    Пусто (по умолчанию) — функция выключена. Непустые ``login``/``password`` вне local/ci —
+    ошибка старта (``wiring.bootstrap_admin_credentials``): админ не создаётся в staging/production.
+    """
+
+    login: str = ""
+    """E-mail администратора (он же логин admin-входа); пусто — функция выключена."""
+    password: SecretStr = SecretStr("")
+    """Пароль; должен проходить обычную политику паролей (может быть сгенерирован в env)."""
+    nickname: str = ""
+    """Никнейм создаваемого пользователя; пусто — ``admin``."""
+
+    @property
+    def enabled(self) -> bool:
+        """Заданы и логин, и пароль."""
+        return bool(self.login and self.password.get_secret_value())
+
+
 class GuestSettings(BaseModel):
     """Гостевые сессии (D5 плана этапа 2): ``GV_GUEST__*``."""
 
@@ -179,6 +201,8 @@ class Settings(ServiceSettings):
     service_token: ServiceTokenSettings = ServiceTokenSettings()
     service_token_limit: ServiceTokenLimitSettings = ServiceTokenLimitSettings()
     guest: GuestSettings = GuestSettings()
+    bootstrap_admin: BootstrapAdminSettings = BootstrapAdminSettings()
+    """``GV_BOOTSTRAP_ADMIN__*`` — bootstrap-админ автосидинга (только local/ci); пусто — выкл."""
     bootstrap_admin_emails: tuple[str, ...] = ()
     redis_key_prefix: str = ""
     """Пространство имён ключей Redis (тесты и несколько стендов на одном Redis).

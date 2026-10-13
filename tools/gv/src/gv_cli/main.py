@@ -289,6 +289,74 @@ def run_local(
     raise typer.Exit(_run(cmd, root, env))
 
 
+@dev.command("seed")
+def dev_seed(
+    *,
+    identity_url: Annotated[
+        str, typer.Option(envvar="GV_SEED__IDENTITY_URL", help="Базовый адрес identity")
+    ] = "http://127.0.0.1:8100",
+    catalog_url: Annotated[
+        str, typer.Option(envvar="GV_SEED__CATALOG_URL", help="Базовый адрес catalog")
+    ] = "http://127.0.0.1:8101",
+    media_url: Annotated[
+        str, typer.Option(envvar="GV_SEED__MEDIA_URL", help="Базовый адрес media-pipeline")
+    ] = "http://127.0.0.1:8102",
+    game_url: Annotated[
+        str, typer.Option(envvar="GV_SEED__GAME_URL", help="Базовый адрес game")
+    ] = "http://127.0.0.1:8103",
+    service_client_id: Annotated[
+        str, typer.Option(envvar="GV_SEED__SERVICE_CLIENT_ID", help="Сервисный клиент")
+    ] = "admin",
+    date_: Annotated[
+        str | None,
+        typer.Option("--date", help="День дейликов YYYY-MM-DD (по умолчанию — сегодня)"),
+    ] = None,
+) -> None:
+    """Наполнить запущенный стек для e2e-сценария daily (только local/ci, идемпотентно).
+
+    Учётные данные администратора — из окружения ``GV_BOOTSTRAP_ADMIN__LOGIN`` и
+    ``GV_BOOTSTRAP_ADMIN__PASSWORD``; секрет сервисного клиента — из
+    ``GV_SERVICE_SECRET_<CLIENT>`` (для ``admin`` — ``GV_SERVICE_SECRET_ADMIN``).
+    """
+    from datetime import date as date_type
+
+    from gv_cli import seed as seed_module
+
+    root = repo_root()
+    login = os.environ.get("GV_BOOTSTRAP_ADMIN__LOGIN")
+    password = os.environ.get("GV_BOOTSTRAP_ADMIN__PASSWORD")
+    secret_env = service_secret_env(service_client_id)
+    secret = os.environ.get(secret_env)
+    missing = [
+        name
+        for name, value in (
+            ("GV_BOOTSTRAP_ADMIN__LOGIN", login),
+            ("GV_BOOTSTRAP_ADMIN__PASSWORD", password),
+            (secret_env, secret),
+        )
+        if not value
+    ]
+    if missing:
+        raise typer.BadParameter(f"нет переменных окружения: {', '.join(missing)}")
+    config = seed_module.SeedConfig(
+        identity_url=identity_url,
+        catalog_url=catalog_url,
+        media_url=media_url,
+        game_url=game_url,
+        admin_login=login or "",
+        admin_password=password or "",
+        service_client_id=service_client_id,
+        service_secret=secret or "",
+        repo_root=root,
+        day=date_type.fromisoformat(date_) if date_ else None,
+    )
+    try:
+        seed_module.run_seed(config, echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN))
+    except seed_module.SeedError as exc:
+        typer.secho(str(exc), fg="red")
+        raise typer.Exit(1) from exc
+
+
 @dev.command("secrets")
 def make_secrets() -> None:
     """Вывести содержимое .env со случайными паролями (сохранить в infra/compose/.env)."""

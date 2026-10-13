@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -180,6 +181,46 @@ async def migrated_db(database_url: str) -> str:
     assert DEFINITION.migrations_path is not None
     await apply_migrations(database_url, DEFINITION.migrations_path)
     return database_url
+
+
+@dataclass
+class Seeding:
+    """Хелпер тестов bootstrap-админа: сборка настроек, прогон bootstrap, admin-вход по HTTP."""
+
+    database_url: str
+    _infra: InfraProvider
+
+    def settings(self, **overrides: Any) -> tuple[Settings, str]:
+        """Настройки identity (окружение ci по умолчанию) и префикс ключей Redis."""
+        prefix = f"test:{uuid7().hex[-12:]}:"
+        return make_settings(
+            self.database_url, self._infra.redis_url(), prefix, **overrides
+        ), prefix
+
+    @asynccontextmanager
+    async def app(
+        self, settings: Settings, prefix: str
+    ) -> AsyncIterator[tuple[httpx.AsyncClient, dict[str, str]]]:
+        """Поднять сервис на этих настройках: клиент и заголовок сервисного токена admin."""
+        runtime = await Infrastructure.open(settings, DEFINITION.tables)
+        try:
+            app = create_app(DEFINITION, runtime)
+            async with service_client(app) as client:
+                headers = await service_token_headers(client, "admin", ADMIN_SECRET)
+                yield client, headers
+        finally:
+            redis = Redis.from_url(self._infra.redis_url())
+            keys = [k async for k in redis.scan_iter(match=f"{prefix}*")]
+            if keys:
+                await redis.delete(*keys)
+            await redis.aclose()
+            await runtime.close()
+
+
+@pytest.fixture
+def seeding(migrated_db: str, infra: InfraProvider) -> Seeding:
+    """Фикстура для тестов bootstrap-админа (миграции применены, адреса из ``infra``)."""
+    return Seeding(migrated_db, infra)
 
 
 @pytest.fixture

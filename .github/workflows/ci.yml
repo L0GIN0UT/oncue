@@ -231,6 +231,22 @@ jobs:
         run: |
           uv run gv dev secrets > .env
           docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} up -d --build --wait --wait-timeout 600
+      - name: Засев стека для дейлика (gv dev seed)
+        if: steps.app.outputs.present == 'true'
+        # Стек поднят с --wait (миграции завершены → bootstrap-админ создан). Сидер ходит
+        # напрямую на опубликованные порты сервисов (compose.services.dev.yml) и грузит
+        # каталог/медиа/наборы дня. Успех → E2E_SEEDED=1 раскрывает e2e/daily.spec.ts.
+        # ffmpeg есть на раннере; Pillow — в окружении uv (генератор запускается `uv run`).
+        run: |
+          env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
+          export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
+          export GV_BOOTSTRAP_ADMIN__PASSWORD="$(env_val GV_BOOTSTRAP_ADMIN__PASSWORD)"
+          export GV_SERVICE_SECRET_ADMIN="$(env_val GV_SERVICE_SECRET_ADMIN)"
+          # Секреты из .env не должны попасть в лог прогона.
+          echo "::add-mask::${GV_BOOTSTRAP_ADMIN__PASSWORD}"
+          echo "::add-mask::${GV_SERVICE_SECRET_ADMIN}"
+          uv run gv dev seed
+          echo "E2E_SEEDED=1" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
         if: steps.app.outputs.present == 'true'
         with: { package_json_file: frontend/package.json }
