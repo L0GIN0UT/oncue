@@ -398,8 +398,35 @@ class Seeder:
             raise SeedError(
                 f"набор дня {mode_key} на {day_iso} непригоден "
                 f"(status={status!r}, единиц={len(items)}): пул игры не готов — "
-                "e2e-дейлик упал бы с 503 game.daily_not_ready"
+                "e2e-дейлик упал бы с 503 game.daily_not_ready. "
+                + self._projection_diagnostic(mode_key)
             )
+
+    def _projection_diagnostic(self, mode_key: str) -> str:
+        """Снимок проекции game для режима: что считается играбельным и с какими domain/kind.
+
+        Набор дня рисуется из пула ``CandidatePort`` (``domain`` + ``pool.kinds`` + готовые
+        ассеты), а признак ``playable`` в проекции — только по готовым ассетам, без фильтра
+        ``kind``. Если набор получился пустым при наличии «играбельных» единиц, расхождение
+        видно прямо здесь: сколько единиц проекция отдала, сколько из них playable и какие у
+        них domain/kind — чтобы не лезть в логи контейнера game за причиной пустого пула.
+        """
+        try:
+            resp = self._game.get(
+                "/admin/v1/projection/items",
+                params={"playable_for_mode": mode_key, "limit": 50},
+            )
+            if resp.status_code != httpx.codes.OK:
+                return f"проекция: HTTP {resp.status_code}"
+            rows = resp.json()
+        except (httpx.HTTPError, ValueError) as exc:  # pragma: no cover — диагностика не падает
+            return f"проекцию прочитать не удалось: {exc!r}"
+        playable = [r for r in rows if r.get("playable")]
+        combos = sorted({f"{r.get('domain')}/{r.get('kind')}" for r in playable})
+        return (
+            f"проекция: {len(rows)} единиц, из них играбельных {len(playable)}; "
+            f"domain/kind играбельных: {combos or '—'}"
+        )
 
     def _wait_playable(self, mode_key: str, min_playable: int) -> None:
         """Дождаться, пока проекция game покажет ≥ ``min_playable`` играбельных единиц режима."""

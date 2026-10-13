@@ -274,10 +274,21 @@ jobs:
             e2e/playwright-report
             e2e/test-results
           if-no-files-found: ignore
+      - name: Диагностика наборов дня (game) при падении
+        if: failure() && steps.app.outputs.present == 'true'
+        working-directory: infra/compose
+        # Причина пустого набора дня (пул меньше нужного) логируется в контейнере game;
+        # выводим её отдельно, чтобы не искать в общем хвосте логов всех сервисов.
+        run: |
+          echo "::group::game — наборы дня и проекция"
+          docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color game \
+            | grep -E "daily_pool_too_small|daily_set_ready|daily_items_replaced|assets_ready|game\.daily" \
+            || echo "(в логах game нет записей о наборах дня/ассетах)"
+          echo "::endgroup::"
       - name: Логи стека при падении
         if: failure() && steps.app.outputs.present == 'true'
         working-directory: infra/compose
-        run: docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color --tail=300 || true
+        run: docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color --tail=400 || true
 
   build:
     name: Образ ${{ matrix.service }}
