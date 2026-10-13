@@ -231,12 +231,16 @@ jobs:
         run: |
           uv run gv dev secrets > .env
           docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} up -d --build --wait --wait-timeout 600
+      - name: ffmpeg для генератора исходников засева
+        if: steps.app.outputs.present == 'true'
+        # seeds/media/generate.py делает синтетические аудио-тоны через ffmpeg; на
+        # ubuntu-раннере его нет из коробки. Pillow (кадры) уже в окружении uv.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Засев стека для дейлика (gv dev seed)
         if: steps.app.outputs.present == 'true'
         # Стек поднят с --wait (миграции завершены → bootstrap-админ создан). Сидер ходит
         # напрямую на опубликованные порты сервисов (compose.services.dev.yml) и грузит
         # каталог/медиа/наборы дня. Успех → E2E_SEEDED=1 раскрывает e2e/daily.spec.ts.
-        # ffmpeg есть на раннере; Pillow — в окружении uv (генератор запускается `uv run`).
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
           export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
