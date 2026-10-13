@@ -36,6 +36,7 @@ class FakeStack:
     import_status: str = "done"  # статус задания импорта в ответе GET
     item_detail_status: int = 200  # для проверки неожиданного ответа каталога
     daily_status: int = 200  # 409 — набор уже есть
+    playable_count: int = 10  # сколько играбельных единиц отдаёт проекция game
     requests: list[httpx.Request] = field(default_factory=list)
     _asset_polls: dict[str, int] = field(default_factory=dict)
 
@@ -57,6 +58,7 @@ class FakeStack:
             ("GET", r"/admin/v1/items/[0-9a-f-]+", self._item_detail),
             ("POST", r"/admin/v1/sources", self._sources_post),
             ("GET", r"/admin/v1/asset-sets", self._asset_sets),
+            ("GET", r"/admin/v1/projection/items", self._projection),
             ("POST", r"/admin/v1/daily-sets/.+/regenerate", self._daily_post),
         ]
 
@@ -219,6 +221,25 @@ class FakeStack:
             ],
         )
 
+    def _projection(self, request: httpx.Request) -> httpx.Response:
+        # Проекция game с играбельными единицами под режим (сидер ждёт пул перед набором дня).
+        assert request.url.params.get("playable_for_mode")
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "media_item_id": f"01a0000000007000800000000000000{i:1x}",
+                    "domain": "film",
+                    "kind": "film",
+                    "title": f"item {i}",
+                    "year": None,
+                    "status": "active",
+                    "playable": True,
+                }
+                for i in range(self.playable_count)
+            ],
+        )
+
     def _daily_post(self, request: httpx.Request) -> httpx.Response:
         assert request.headers["Idempotency-Key"].startswith("seed-daily-")
         body = json.loads(request.content)
@@ -358,6 +379,16 @@ class TestSeedHappyPath:
             f"/admin/v1/daily-sets/film.daily.frame/{DAY}/regenerate",
             f"/admin/v1/daily-sets/music.daily.classic/{DAY}/regenerate",
         }
+
+        # Проекцию game опрашивают ДО перегенерации (ждём играбельный пул, а не media-готовность).
+        seq = [
+            r
+            for r in stack.requests
+            if r.url.path == "/admin/v1/projection/items"
+            or re.search(r"/daily-sets/.+/regenerate", r.url.path)
+        ]
+        first_regen = next(i for i, r in enumerate(seq) if "regenerate" in r.url.path)
+        assert seq[first_regen - 1].url.path == "/admin/v1/projection/items"
 
     def test_kind_matches_domain(self, workspace: Path) -> None:
         stack = FakeStack()

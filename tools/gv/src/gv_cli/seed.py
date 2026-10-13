@@ -348,8 +348,16 @@ class Seeder:
 
     # ------------------------------------------------------------------ шаг 4: дейлики
     def regenerate_daily_sets(self) -> None:
-        """Перегенерировать набор дня для каждого дейлик-режима на нужный день."""
-        for mode_key, timezone in self._daily_modes():
+        """Перегенерировать набор дня для каждого дейлик-режима на нужный день.
+
+        Ассеты готовит media-pipeline, а «играбельность» единицы появляется только после
+        того, как **консьюмер game** обработает событие ``AssetsReady`` и обновит свою
+        проекцию. Поэтому перед перегенерацией ждём, пока проекция game покажет достаточно
+        играбельных единиц, — иначе пул пуст (``game.daily_pool_too_small``) и набор дня
+        получается пустым, несмотря на готовые в media-pipeline ассеты.
+        """
+        for mode_key, timezone, min_playable in self._daily_modes():
+            self._wait_playable(mode_key, min_playable)
             day = self._cfg.day or datetime.now(ZoneInfo(timezone)).date()
             day_iso = day.isoformat()
             self._echo(f"seed: набор дня {mode_key} на {day_iso}")
@@ -361,16 +369,37 @@ class Seeder:
             # 409 — набор уже создан периодической задачей/заблокирован: для сидера это успех.
             self._check(resp, {200, 409}, f"набор дня {mode_key}")
 
-    def _daily_modes(self) -> list[tuple[str, str]]:
-        """Ключ режима и часовой пояс для сидов с ``source.type: daily``."""
-        modes: list[tuple[str, str]] = []
+    def _wait_playable(self, mode_key: str, min_playable: int) -> None:
+        """Дождаться, пока проекция game покажет ≥ ``min_playable`` играбельных единиц режима."""
+
+        def enough() -> bool:
+            resp = self._game.get(
+                "/admin/v1/projection/items",
+                params={"playable_for_mode": mode_key, "limit": 50},
+            )
+            self._check(resp, {200}, f"проекция game для {mode_key}")
+            return sum(1 for it in resp.json() if it.get("playable")) >= min_playable
+
+        self._echo(f"seed: ожидание {min_playable} играбельных единиц для {mode_key}")
+        self._poll(
+            enough,
+            timeout_s=self._cfg.assets_timeout_s,
+            what=f"играбельный пул {mode_key}",
+        )
+
+    def _daily_modes(self) -> list[tuple[str, str, int]]:
+        """Ключ режима, часовой пояс и минимальный играбельный пул для ``source.type: daily``."""
+        modes: list[tuple[str, str, int]] = []
         for path in sorted(self._cfg.modes_path().glob("*.yaml")):
             spec = yaml.safe_load(path.read_text(encoding="utf-8"))
             source = spec.get("source", {})
             if source.get("type") != "daily":
                 continue
-            timezone = source.get("params", {}).get("timezone", DEFAULT_TIMEZONE)
-            modes.append((str(spec["key"]), str(timezone)))
+            params = source.get("params", {})
+            timezone = params.get("timezone", DEFAULT_TIMEZONE)
+            # min_playable из пула; запасной вариант — размер набора (нужно хотя бы на set).
+            min_playable = int(params.get("pool", {}).get("min_playable", params.get("size", 1)))
+            modes.append((str(spec["key"]), str(timezone), min_playable))
         if not modes:
             raise SeedError(f"не найдены дейлик-режимы в {self._cfg.modes_path()}")
         return modes
