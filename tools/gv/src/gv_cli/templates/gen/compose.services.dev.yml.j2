@@ -17,6 +17,12 @@ services:
     volumes:
       - ../../seeds/game/modes:/seeds/game/modes:ro
 {% endif %}
+{% if s.name == "catalog" %}
+      # Файлы импорта каталога (`gv dev seed`): воркер читает их из этого каталога.
+      GV_IMPORTS__FILES_DIR: /seeds/catalog
+    volumes:
+      - ../../seeds/catalog:/seeds/catalog:ro
+{% endif %}
 {% endfor %}
   # Bootstrap-админ автосидинга создаётся в job `migrate` identity (только local/ci).
   # Пусто (переменные не заданы) — функция выключена; значения берутся из .env.

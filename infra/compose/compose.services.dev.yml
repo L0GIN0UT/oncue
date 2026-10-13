@@ -12,6 +12,10 @@ services:
     ports: ["127.0.0.1:8101:8000"]
     environment:
       GV_LOG_JSON: "false"
+      # Файлы импорта каталога (`gv dev seed`): воркер читает их из этого каталога.
+      GV_IMPORTS__FILES_DIR: /seeds/catalog
+    volumes:
+      - ../../seeds/catalog:/seeds/catalog:ro
   media-pipeline:
     ports: ["127.0.0.1:8102:8000"]
     environment:
