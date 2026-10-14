@@ -167,12 +167,18 @@ class DailySet(AggregateRoot[tuple[str, date]]):
     def regenerate(
         self, items: list[UUID], *, mode_version: int, generated_by: GeneratedBy, today: date
     ) -> None:
-        """Новый розыгрыш набора (``scheduled`` или ``failed``, до начала дня).
+        """Новый розыгрыш набора.
+
+        ``scheduled`` замораживается в начале дня (нельзя менять «боевой» паззл дня). А вот
+        ``failed`` — это пустой, неиграбельный набор: его перерисовывают и в уже начавшийся
+        день (так же поступает планировщик через :meth:`reroll`), иначе день, засеянный без
+        готовых ассетов, остался бы без дейлика навсегда. ``locked`` неизменяем всегда.
 
         Raises:
-            DailyLockedError: день начался или набор заблокирован.
+            DailyLockedError: набор заблокирован, либо ``scheduled`` и день уже начался.
         """
-        self._require_editable(today)
+        if self.status is not DailySetStatus.FAILED:
+            self._require_editable(today)
         self.reroll(items, mode_version=mode_version, generated_by=generated_by)
 
     def reroll(self, items: list[UUID], *, mode_version: int, generated_by: GeneratedBy) -> None:
