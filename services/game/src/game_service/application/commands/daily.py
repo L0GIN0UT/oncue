@@ -372,7 +372,9 @@ class DailySetAdmin:
                 daily = await uow.daily_sets.get(key, day, for_update=True)
                 if daily is None:
                     raise DailySetNotFoundError("набора дня нет")
-                if daily.is_locked_on(today):
+                # Проваленный (пустой) набор можно перегенерировать и в начавшийся день —
+                # «боевого» паззла там нет; запланированный замораживается в начале дня.
+                if daily.is_locked_on(today) and daily.status is not DailySetStatus.FAILED:
                     raise DailyLockedError("день начался — набор только для чтения")
                 items = await self._generator.draw(uow, rules, day, generation=daily.generation + 1)
                 daily.regenerate(

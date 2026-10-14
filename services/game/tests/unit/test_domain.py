@@ -247,6 +247,32 @@ def test_lock_and_failed_set() -> None:
     assert failed.status is DailySetStatus.FAILED and not failed.is_playable
 
 
+def test_regenerate_failed_set_allowed_on_started_day() -> None:
+    """Проваленный набор перегенерируется и в начавшийся день (его день = сегодня).
+
+    Регресс: засев e2e падал — набор дня «сегодня» создавался ``failed`` до готовности
+    ассетов, а админская перегенерация отвечала 409 (``is_locked_on`` истинна, т.к.
+    ``day <= today``), и набор навсегда оставался пустым.
+    """
+    failed = DailySet.generated(
+        "music.daily.classic", TODAY, mode_version=1, items=[], generated_by=GeneratedBy.SCHEDULE
+    )
+    assert failed.is_locked_on(TODAY)  # день набора уже наступил
+    items = [uuid7() for _ in range(3)]
+    failed.regenerate(items, mode_version=2, generated_by=GeneratedBy.ADMIN, today=TODAY)
+    assert failed.status is DailySetStatus.SCHEDULED and failed.items == items
+
+
+def test_regenerate_scheduled_set_frozen_on_started_day() -> None:
+    """Запланированный набор в начавшийся день остаётся «только для чтения» (инвариант дня)."""
+    scheduled = daily(TODAY)  # scheduled, день = сегодня
+    assert scheduled.status is DailySetStatus.SCHEDULED
+    with pytest.raises(DailyLockedError):
+        scheduled.regenerate(
+            [uuid7()], mode_version=2, generated_by=GeneratedBy.ADMIN, today=TODAY
+        )
+
+
 def test_seed_and_day_boundaries() -> None:
     secret = b"s"
     assert daily_seed(secret, "k", TODAY) == daily_seed(secret, "k", TODAY)
