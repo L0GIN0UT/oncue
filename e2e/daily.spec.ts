@@ -51,10 +51,14 @@ test("гость: дейлик музыки от главной до итога,
   expect(snapshots.join("")).not.toMatch(/media_item_id|"title"/);
 
   // Ассет уровня выше текущего — 403 game.level_locked.
+  // Запрос собираем руками, поэтому Origin ставим сами: cookie-мутации требуют Origin из
+  // GV_PUBLIC_ORIGINS вместе с X-CSRF-Token (иначе 403 auth.csrf_failed ещё до game). У
+  // запросов из браузера Origin проставляется автоматически — здесь берём его из адреса.
   const csrf = (await page.context().cookies()).find((c) => c.name === "gv_csrf")?.value ?? "";
+  const origin = new URL(page.url()).origin;
   const locked = await page.request.post(`/api/game/v1/sessions/${sessionId}/rounds/0/clue`, {
     data: { level: 3 },
-    headers: { "X-CSRF-Token": csrf },
+    headers: { "X-CSRF-Token": csrf, Origin: origin },
   });
   expect(locked.status()).toBe(403);
   expect(((await locked.json()) as { code: string }).code).toBe("game.level_locked");
