@@ -268,9 +268,7 @@ def test_regenerate_scheduled_set_frozen_on_started_day() -> None:
     scheduled = daily(TODAY)  # scheduled, день = сегодня
     assert scheduled.status is DailySetStatus.SCHEDULED
     with pytest.raises(DailyLockedError):
-        scheduled.regenerate(
-            [uuid7()], mode_version=2, generated_by=GeneratedBy.ADMIN, today=TODAY
-        )
+        scheduled.regenerate([uuid7()], mode_version=2, generated_by=GeneratedBy.ADMIN, today=TODAY)
 
 
 def test_seed_and_day_boundaries() -> None:
