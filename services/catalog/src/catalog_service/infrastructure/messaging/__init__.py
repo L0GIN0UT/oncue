@@ -4,7 +4,8 @@
   ``EventProcessor``) отсекает дубли, ``version_type=external`` — устаревшие события.
 * ``media_pipeline.asset_set.v1`` → проекция готовности ассетов загадок (``MarkClueAssets``),
   устаревшие по ``version`` события отбрасываются.
-* RabbitMQ-задача ``catalog.import`` → ``RunImport`` (идемпотентна по ``import_id``).
+* RabbitMQ-задача ``catalog.import`` → ``RunImport`` (идемпотентна по ``import_id``);
+* RabbitMQ-задача ``republish`` → ``RunRepublishBatch`` (порция; повтор — no-op по курсору).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from catalog_service.application.commands.projections import (
     IndexItem,
     MarkClueAssets,
 )
+from catalog_service.application.commands.republish import REPUBLISH_TASK
 from catalog_service.infrastructure.container import container_for
 from catalog_service.infrastructure.db.repositories import (
     SqlClueStatusRepository,
@@ -110,10 +112,14 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
 
 
 def build_task_handlers(infra: Infrastructure) -> dict[str, TaskHandler]:
-    """Обработчики RabbitMQ-задач: ``import`` (очередь ``catalog.import``)."""
+    """Обработчики RabbitMQ-задач: ``import`` и ``republish``."""
     c = container_for(infra)
 
     async def run_import(payload: dict[str, Any]) -> None:
         await c.run_import(_uuid(payload, "import_id"))
 
-    return {IMPORT_TASK: run_import}
+    async def run_republish(payload: dict[str, Any]) -> None:
+        after = _uuid(payload, "after") if payload.get("after") is not None else None
+        await c.run_republish(_uuid(payload, "job_id"), after)
+
+    return {IMPORT_TASK: run_import, REPUBLISH_TASK: run_republish}

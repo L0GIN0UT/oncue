@@ -1,4 +1,4 @@
-"""Админ-мутации единиц: блокировка, разблокировка, замена алиасов.
+"""Админ-мутации единиц: блокировка, разблокировка, замена алиасов, тексты загадок.
 
 Все мутации идемпотентны по ``(actor_id, Idempotency-Key)`` через ``gv_db.idempotency``:
 ключ и ответ сохраняются в той же транзакции, что и изменение; повтор с тем же ключом и
@@ -16,8 +16,9 @@ from typing import Any
 
 import structlog
 
-from catalog_service.application.dto import RecordedAction, admin_item_view
+from catalog_service.application.dto import RecordedAction, admin_item_view, clue_texts_view
 from catalog_service.application.ports import CatalogUnitOfWork, PrefixCache, UnitOfWorkFactory
+from catalog_service.domain.clue_texts import ClueTexts
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import AliasDraft
 from catalog_service.domain.normalization import TitleNormalizer
@@ -37,7 +38,7 @@ class AdminContext:
     reason: str
 
 
-async def _idempotent(
+async def run_admin_mutation(
     uow: CatalogUnitOfWork,
     ctx: AdminContext,
     *,
@@ -109,7 +110,7 @@ class BlockItem(_AdminCommand):
                 uow.track(item)
                 return admin_item_view(item)
 
-            response, done = await _idempotent(
+            response, done = await run_admin_mutation(
                 uow,
                 ctx,
                 action="item.block",
@@ -138,7 +139,7 @@ class UnblockItem(_AdminCommand):
                 uow.track(item)
                 return admin_item_view(item)
 
-            response, done = await _idempotent(
+            response, done = await run_admin_mutation(
                 uow,
                 ctx,
                 action="item.unblock",
@@ -178,7 +179,7 @@ class ReplaceAliases(_AdminCommand):
                     uow.track(item)
                 return admin_item_view(item)
 
-            response, done = await _idempotent(
+            response, done = await run_admin_mutation(
                 uow,
                 ctx,
                 action="item.replace_aliases",
@@ -191,4 +192,111 @@ class ReplaceAliases(_AdminCommand):
             )
             await uow.commit()
         await self._after_commit(changed=done)
+        return response
+
+
+@dataclass(frozen=True, slots=True)
+class ClueTextsEdit:
+    """Правка текстов загадок модератором (все три поля целиком; ``None`` — очистить)."""
+
+    plot_masked: str | None
+    tagline: str | None
+    emoji: str | None
+    base_revision: int
+
+
+class GetClueTexts:
+    """Тексты загадок единицы для редактора (право ``admin.access``)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._uow = uow_factory
+
+    async def __call__(self, item_id: uuid.UUID) -> dict[str, Any]:
+        """Тексты (у единицы без текстов — пустой черновик ревизии 0)."""
+        async with self._uow() as uow:
+            await _load(uow, item_id)
+            texts = await uow.clue_texts.get(item_id) or ClueTexts(item_id)
+        return clue_texts_view(texts)
+
+
+class EditClueTexts(_AdminCommand):
+    """Изменить тексты загадок (право ``catalog.edit_aliases``).
+
+    Правка — новая ревизия в статусе ``draft``: в событиях остаётся прошлый одобренный
+    снимок, пока модератор не одобрит новую ревизию (ADR 0024).
+    """
+
+    async def __call__(
+        self, item_id: uuid.UUID, edit: ClueTextsEdit, ctx: AdminContext
+    ) -> dict[str, Any]:
+        """Сохранить и вернуть тексты."""
+        async with self._uow() as uow:
+
+            async def perform() -> dict[str, Any]:
+                await _load(uow, item_id)
+                texts = await uow.clue_texts.get(item_id) or ClueTexts(item_id)
+                if texts.edit(
+                    plot_masked=edit.plot_masked,
+                    tagline=edit.tagline,
+                    emoji=edit.emoji,
+                    base_revision=edit.base_revision,
+                ):
+                    await uow.clue_texts.save(texts)
+                return clue_texts_view(texts)
+
+            response, done = await run_admin_mutation(
+                uow,
+                ctx,
+                action="item.clue_texts_edit",
+                target_id=item_id,
+                body={
+                    "plot_masked": edit.plot_masked,
+                    "tagline": edit.tagline,
+                    "emoji": edit.emoji,
+                    "base_revision": edit.base_revision,
+                    "reason": ctx.reason,
+                },
+                perform=perform,
+            )
+            await uow.commit()
+        if done:
+            log.info(
+                "catalog.clue_texts_edited",
+                media_item_id=str(item_id),
+                revision=response["revision"],
+            )
+        return response
+
+
+class ApproveClueTexts(_AdminCommand):
+    """Одобрить ревизию текстов (право ``catalog.edit_aliases``): одобренный снимок уходит в
+    ``catalog.MediaItemUpdated.clue_texts`` (``version+1``) в той же транзакции."""
+
+    async def __call__(
+        self, item_id: uuid.UUID, revision: int, ctx: AdminContext
+    ) -> dict[str, Any]:
+        """Одобрить и вернуть тексты."""
+        async with self._uow() as uow:
+
+            async def perform() -> dict[str, Any]:
+                item = await _load(uow, item_id)
+                texts = await uow.clue_texts.get(item_id) or ClueTexts(item_id)
+                approved = texts.approve(revision)
+                await uow.clue_texts.save(texts)
+                if item.set_clue_texts(approved):
+                    await uow.items.save(item)
+                    uow.track(item)
+                return clue_texts_view(texts)
+
+            response, done = await run_admin_mutation(
+                uow,
+                ctx,
+                action="item.clue_texts_approve",
+                target_id=item_id,
+                body={"revision": revision, "reason": ctx.reason},
+                perform=perform,
+            )
+            await uow.commit()
+        if done:
+            log.info("catalog.clue_texts_approved", media_item_id=str(item_id), revision=revision)
         return response
