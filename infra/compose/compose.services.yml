@@ -112,6 +112,10 @@ services:
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+      GV_CATALOG__TMDB_FRAMES_MAX: ${GV_CATALOG__TMDB_FRAMES_MAX:-6}
+      GV_CATALOG__REPUBLISH_BATCH: ${GV_CATALOG__REPUBLISH_BATCH:-200}
+      # Только local/ci: вне них catalog отказывается стартовать с true.
+      GV_CATALOG__SEED_TEXTS_APPROVED: ${GV_CATALOG__SEED_TEXTS_APPROVED:-false}
     depends_on:
       catalog-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -166,6 +170,9 @@ services:
       GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
       GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
       GV_MEDIA__SIGNING_SECRET: ${GV_MEDIA__SIGNING_SECRET:?задайте GV_MEDIA__SIGNING_SECRET}
+      GV_MEDIA__MAX_DYNAMIC_PROFILES: ${GV_MEDIA__MAX_DYNAMIC_PROFILES:-50}
+      GV_MEDIA__BACKFILL_BATCH: ${GV_MEDIA__BACKFILL_BATCH:-200}
+      GV_MEDIA__LINK_PURGE_INTERVAL_S: ${GV_MEDIA__LINK_PURGE_INTERVAL_S:-600}
     depends_on:
       media-pipeline-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

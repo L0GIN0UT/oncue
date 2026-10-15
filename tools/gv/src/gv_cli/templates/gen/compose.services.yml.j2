@@ -98,6 +98,15 @@ services:
 {% endif %}
 {% if s.name == "media_pipeline" %}
       GV_MEDIA__SIGNING_SECRET: ${GV_MEDIA__SIGNING_SECRET:?задайте GV_MEDIA__SIGNING_SECRET}
+      GV_MEDIA__MAX_DYNAMIC_PROFILES: ${GV_MEDIA__MAX_DYNAMIC_PROFILES:-50}
+      GV_MEDIA__BACKFILL_BATCH: ${GV_MEDIA__BACKFILL_BATCH:-200}
+      GV_MEDIA__LINK_PURGE_INTERVAL_S: ${GV_MEDIA__LINK_PURGE_INTERVAL_S:-600}
+{% endif %}
+{% if s.name == "catalog" %}
+      GV_CATALOG__TMDB_FRAMES_MAX: ${GV_CATALOG__TMDB_FRAMES_MAX:-6}
+      GV_CATALOG__REPUBLISH_BATCH: ${GV_CATALOG__REPUBLISH_BATCH:-200}
+      # Только local/ci: вне них catalog отказывается стартовать с true.
+      GV_CATALOG__SEED_TEXTS_APPROVED: ${GV_CATALOG__SEED_TEXTS_APPROVED:-false}
 {% endif %}
 {% if s.name == "game" %}
       GV_GAME__DAILY_SEED_SECRET: ${GV_GAME__DAILY_SEED_SECRET:?задайте GV_GAME__DAILY_SEED_SECRET}
