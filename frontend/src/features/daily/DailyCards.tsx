@@ -9,8 +9,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { api, unwrap } from "@/shared/api/client";
 import type { DailyCard, HomePage } from "@/shared/api/types";
-import { ensureSession } from "@/features/auth/session";
-import { csrfToken } from "@/shared/lib/cookies";
+import { recoverSession } from "@/features/auth/session";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
@@ -38,16 +37,16 @@ export function DailyBoard({ initial }: { initial: HomePage | null }) {
     void client.invalidateQueries({ queryKey: homeQueryKey });
   }, [client]);
 
-  // Личный блок дейликов bff отдаёт только субъекту; анониму — `unavailable` (game отвечает
-  // 401 без сессии). По контракту bff фронтенд сам заводит гостевую сессию и перезапрашивает
-  // блок — иначе на главной у гостя не было бы ни одной карточки дейлика. Делаем это один раз
-  // и только при реально отсутствующей сессии (нет cookie `gv_csrf`), чтобы не зациклиться на
-  // недоступности из-за ошибки апстрима.
-  const bootstrapped = useRef(false);
+  // Личный блок дейликов bff отдаёт только субъекту; анониму или с просроченным access —
+  // `unavailable` (game отвечает 401, а bff прячет его в блоке, и общий refresh на 401 не
+  // срабатывает). Поэтому фронтенд сам восстанавливает сессию — refresh при живой cookie
+  // `gv_csrf`, иначе гостевая — и перезапрашивает блок. Только один раз: недоступность из-за
+  // сбоя апстрима так не лечится, и цикла запросов быть не должно.
+  const recovered = useRef(false);
   useEffect(() => {
-    if (bootstrapped.current || block?.status !== "unavailable" || csrfToken()) return;
-    bootstrapped.current = true;
-    void ensureSession()
+    if (recovered.current || block?.status !== "unavailable") return;
+    recovered.current = true;
+    void recoverSession()
       .then(refresh)
       .catch(() => undefined);
   }, [block?.status, refresh]);

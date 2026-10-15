@@ -39,6 +39,19 @@ export async function ensureSession(): Promise<void> {
 }
 
 /**
+ * Восстановить сессию, которую сервер не принял: просроченный access при живой cookie
+ * `gv_csrf` лечится refresh-ом, без cookie или при неудачном refresh выдаётся гостевая.
+ *
+ * Нужна там, где 401 до браузера не доходит: bff отвечает 200 и прячет отказ game в блоке
+ * страницы (`unavailable`), поэтому общий refresh на 401 в `apiFetch` не срабатывает.
+ */
+export async function recoverSession(): Promise<void> {
+  const csrf = csrfToken();
+  if (csrf && (await refreshSession(csrf))) return;
+  await startGuestSession();
+}
+
+/**
  * Выполнить действие, требующее сессии. Если сессия оказалась недействительной (401 после
  * неудачного refresh), выдаётся гостевая и действие повторяется один раз.
  */
