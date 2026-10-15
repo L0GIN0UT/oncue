@@ -64,7 +64,7 @@ def test_static_compatibility() -> None:
     assert AudioIntroClue.domains == frozenset({"music"})
     assert FrameProgressiveClue.domains == PosterMaskedClue.domains == frozenset({"film"})
     for clue in (AudioIntroClue, FrameProgressiveClue, PosterMaskedClue):
-        assert clue.supported_answer_formats == frozenset({"classic"})
+        assert clue.supported_answer_formats == frozenset({"classic", "pick"})
 
 
 async def test_reveal_links_requested_level() -> None:

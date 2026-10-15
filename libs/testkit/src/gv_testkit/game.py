@@ -2,7 +2,8 @@
 
 * ``FakeAssetPort`` — журнал выдач ссылок и управляемые сбои (410 ``GoneError``,
   503 ``DependencyUnavailableError``, 429 ``RateLimitedError``);
-* ``FakeCandidatePort`` — пул в памяти с фильтрацией по ``PoolQuery`` и журналом запросов;
+* ``FakeCandidatePort`` — пул в памяти с фильтрацией по ``PoolQuery`` (включая персоны и
+  метрику) и журналом запросов; ``subjects`` — поиск персон для марафона и темы сетки;
 * ``FakeCollectionPort`` — сборники в памяти;
 * ``media_item(...)`` — единица каталога с разумными значениями по умолчанию;
 * ``given_mode(cfg)`` — DSL сценария игры поверх настоящих плагинов::
@@ -10,6 +11,13 @@
     (given_mode(cfg).with_items(track)
         .when_guess(text="неверно").when_skip().when_guess(item=track)
         .then_round(outcome="exact", level=3).then_score(4))
+
+    (given_mode(pair_cfg).with_draws(*draws)
+        .when_pick("higher").when_pick("lower")
+        .then_round(outcome="miss").then_session_ended())
+
+  Сценарий ведёт сессию как game: после каждого раунда спрашивает у движка ``followups``
+  (сетка дописывает туры) и ``should_end`` (правило ``session.end``).
 """
 
 from __future__ import annotations
@@ -35,8 +43,11 @@ from gv_game_kernel import (
     PersonRef,
     PluginRegistry,
     PoolQuery,
+    RoundDraw,
     RoundOutcome,
+    RoundPick,
     RoundState,
+    SubjectQuery,
     parse_mode_config,
     register_builtin,
 )
@@ -77,6 +88,7 @@ def media_item(
     artists: Iterable[str] = (),
     genres: Iterable[str] = (),
     popularity: float | None = 0.5,
+    metrics: Mapping[str, float] | None = None,
 ) -> MediaItemRef:
     """Единица каталога для тестов.
 
@@ -88,6 +100,7 @@ def media_item(
         title_aliases: Алиасы видов ``title``/``alt`` (по умолчанию — ``aliases``).
         persons: Персоны.
         artists: Имена исполнителей — короткая запись для ``persons`` с ролью ``artist``.
+        metrics: Метрики каталога (``{"vote_average": 7.5}``) для «больше/меньше».
     """
     alias_list = tuple(aliases)
     return MediaItemRef(
@@ -101,6 +114,7 @@ def media_item(
         persons=(*persons, *(person(name) for name in artists)),
         genres=tuple(genres),
         popularity=popularity,
+        metrics=tuple(sorted((metrics or {}).items())),
     )
 
 
@@ -208,6 +222,8 @@ class FakeCandidatePort:
             q.playable_for is None
             or self._playable is None
             or (item.id, q.playable_for.clue_type, q.playable_for.params_hash) in self._playable,
+            not q.person_ids_any or any(p.id in q.person_ids_any for p in item.persons),
+            q.has_metric is None or item.metric(q.has_metric) is not None,
         )
         return all(checks)
 
@@ -216,6 +232,36 @@ class FakeCandidatePort:
         self.queries.append((query, limit))
         found = sorted((i for i in self.items if self.matches(i, query)), key=lambda i: i.id)
         return found[:limit]
+
+    def subjects(self, query: SubjectQuery, text: str = "", limit: int = 20) -> list[SubjectHit]:
+        """Персоны для выбора в марафоне (и темы сетки) — семантика ``ListSubjects`` game.
+
+        Персона подходит, если у неё роль из ``query.roles``, имя содержит ``text`` (без
+        учёта регистра) и у неё не меньше ``query.min_items`` играбельных единиц домена
+        именно в этой роли. Порядок — по числу единиц (убывание), затем по имени и id.
+        """
+        pool = PoolQuery(domain=query.domain, playable_for=query.playable_for)
+        counts: dict[tuple[UUID, str], int] = {}
+        people: dict[tuple[UUID, str], PersonRef] = {}
+        needle = text.casefold()
+        for item in self.items:
+            if not self.matches(item, pool):
+                continue
+            for p in item.persons:
+                if p.role in query.roles and needle in p.name.casefold():
+                    counts[(p.id, p.role)] = counts.get((p.id, p.role), 0) + 1
+                    people[(p.id, p.role)] = p
+        hits = [SubjectHit(people[k], n) for k, n in counts.items() if n >= query.min_items]
+        hits.sort(key=lambda h: (-h.items, h.person.name, h.person.id))
+        return hits[:limit]
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectHit:
+    """Персона, найденная ``FakeCandidatePort.subjects``: сколько у неё играбельных единиц."""
+
+    person: PersonRef
+    items: int
 
 
 class FakeCollectionPort:
@@ -231,7 +277,7 @@ class FakeCollectionPort:
 
 # ----------------------------------------------------------------------------- движок
 def builtin_registry() -> PluginRegistry:
-    """Реестр со встроенными плагинами этапа 2."""
+    """Реестр со встроенными плагинами (``register_builtin``)."""
     return register_builtin(PluginRegistry())
 
 
@@ -243,23 +289,35 @@ def build_engine(config: ModeConfig | Mapping[str, Any]) -> ModeEngine:
 
 @dataclass
 class PlayedRound:
-    """Раунд сценария: загаданная единица, состояние, ответы и очки."""
+    """Раунд сценария: состав раунда, состояние, ответы и очки."""
 
-    item: MediaItemRef
+    draw: RoundDraw
     state: RoundState = field(default_factory=RoundState)
     matches: list[MatchResult] = field(default_factory=list)
     elapsed_ms: int | None = None
+    option_id: str | None = None
+
+    @property
+    def item(self) -> MediaItemRef:
+        """Загаданная единица (``draw.target``)."""
+        return self.draw.target
 
     def outcome(self) -> RoundOutcome:
         """Итог завершённого раунда."""
         return ModeEngine.outcome(self.state, elapsed_ms=self.elapsed_ms)
 
+    def pick(self) -> RoundPick:
+        """Завершённый раунд для ``followups`` источника с продолжением."""
+        return RoundPick(draw=self.draw, outcome=self.outcome(), option_id=self.option_id)
+
 
 class GameScenario:
     """Сценарий соло-игры поверх ``ModeEngine`` (без IO, синхронный).
 
-    Раунды идут по порядку ``with_items``; ход после завершения раунда относится к
-    следующему. ``then_*`` проверяют последний тронутый раунд (или раунд ``index``).
+    Раунды идут по порядку ``with_items``/``with_draws``; ход после завершения раунда
+    относится к следующему. После каждого завершённого раунда сценарий, как game,
+    дописывает раунды ``engine.followups`` (сетка) и проверяет ``engine.should_end``.
+    ``then_*`` проверяют последний тронутый раунд (или раунд ``index``).
     """
 
     def __init__(self, engine: ModeEngine) -> None:
@@ -269,18 +327,66 @@ class GameScenario:
         self._last: PlayedRound | None = None
 
     def with_items(self, *items: MediaItemRef) -> GameScenario:
-        """Загаданные единицы раундов по порядку."""
-        self.rounds = [PlayedRound(item) for item in items]
+        """Загаданные единицы раундов по порядку (классические раунды ``RoundDraw(target)``)."""
+        return self.with_draws(*(RoundDraw(target=item) for item in items))
+
+    def with_draws(self, *draws: RoundDraw) -> GameScenario:
+        """Составы раундов по порядку (например, ``engine.draw_rounds(ctx)``)."""
+        self.rounds = [PlayedRound(draw) for draw in draws]
         self._current = 0
         return self
 
+    # ------------------------------------------------------------------------- сессия
+    def outcomes(self) -> list[RoundOutcome]:
+        """Итоги завершённых раундов по порядку."""
+        return [r.outcome() for r in self.rounds if r.state.finished]
+
+    @property
+    def ended_by_rule(self) -> bool:
+        """Сессию закончило правило ``session.end`` (кончились «жизни»)."""
+        return self.engine.should_end(self.outcomes())
+
+    @property
+    def session_ended(self) -> bool:
+        """Сессия окончена: по правилу или сыграны все раунды (и новых не открылось)."""
+        played_all = bool(self.rounds) and all(r.state.finished for r in self.rounds)
+        return self.ended_by_rule or played_all
+
+    def _after(self, rnd: PlayedRound) -> None:
+        """Ход сделан: запомнить раунд и, если он завершён, дописать продолжение."""
+        self._last = rnd
+        if rnd.state.finished and not self.ended_by_rule:
+            picks = [r.pick() for r in self.rounds if r.state.finished]
+            self.rounds.extend(PlayedRound(d) for d in self.engine.followups(picks))
+
     # ------------------------------------------------------------------------- ходы
     def _round(self) -> PlayedRound:
+        if self.ended_by_rule:
+            raise AssertionError("сессия завершена правилом session.end — ходов больше нет")
         while self._current < len(self.rounds) and self.rounds[self._current].state.finished:
             self._current += 1
         if self._current >= len(self.rounds):
             raise AssertionError("в сценарии не осталось раундов — добавьте with_items(...)")
         return self.rounds[self._current]
+
+    def current(self) -> PlayedRound:
+        """Текущий (первый незавершённый) раунд."""
+        return self._round()
+
+    def when_pick(self, option_id: str, *, elapsed_ms: int | None = None) -> GameScenario:
+        """Выбрать вариант раунда (формат ``pick``)."""
+        rnd = self._round()
+        step = self.engine.answer(
+            rnd.state,
+            AnswerInput(option_id=option_id),
+            rnd.item,
+            display=option_id,
+            draw=rnd.draw,
+        )
+        rnd.state, rnd.elapsed_ms, rnd.option_id = step.state, elapsed_ms, option_id
+        rnd.matches.append(step.match)
+        self._after(rnd)
+        return self
 
     def when_guess(
         self,
@@ -302,28 +408,28 @@ class GameScenario:
         step = self.engine.answer(rnd.state, answer, rnd.item, display=display)
         rnd.state, rnd.elapsed_ms = step.state, elapsed_ms
         rnd.matches.append(step.match)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     def when_skip(self) -> GameScenario:
         """Пропустить уровень."""
         rnd = self._round()
         rnd.state = self.engine.skip(rnd.state)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     def when_give_up(self) -> GameScenario:
         """Сдаться в текущем раунде."""
         rnd = self._round()
         rnd.state = self.engine.give_up(rnd.state)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     def when_void(self) -> GameScenario:
         """Аннулировать текущий раунд (ассет недоступен)."""
         rnd = self._round()
         rnd.state = self.engine.void(rnd.state)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     # ------------------------------------------------------------------------- проверки
@@ -378,6 +484,25 @@ class GameScenario:
         assert self.score() == expected, f"очки {self.score()}, ожидалось {expected}"
         if max_score is not None:
             assert self.max_score() == max_score, f"максимум {self.max_score()}"
+        return self
+
+    def then_session_ended(self, *, ended: bool = True) -> GameScenario:
+        """Проверить, что сессия окончена (правилом ``session.end`` или сыграны все раунды)."""
+        assert self.session_ended == ended, (
+            f"сессия {'не ' if not self.session_ended else ''}окончена, ожидалось обратное"
+        )
+        return self
+
+    def then_lives(self, expected: int | None) -> GameScenario:
+        """Проверить оставшиеся «жизни» (``None`` — правило их не считает)."""
+        got = self.engine.lives_left(self.outcomes())
+        assert got == expected, f"жизней {got}, ожидалось {expected}"
+        return self
+
+    def then_streak(self, expected: int) -> GameScenario:
+        """Проверить текущую серию точных ответов."""
+        got = self.engine.streak(self.outcomes())
+        assert got == expected, f"серия {got}, ожидалась {expected}"
         return self
 
 

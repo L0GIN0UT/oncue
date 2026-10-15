@@ -46,6 +46,7 @@ class FakeClue:
 class FakeSource:
     key: ClassVar[str] = "daily"
     params_schema: ClassVar[type[BaseModel]] = _Params
+    answer_formats: ClassVar[frozenset[str]] = frozenset({"classic"})
 
     async def draw(self, ctx: Any, params: BaseModel, n: int) -> list[Any]:
         return []
@@ -66,6 +67,8 @@ class FakeSource:
 class FakeMatcher:
     key: ClassVar[str] = "title_alias"
     params_schema: ClassVar[type[BaseModel]] = _Params
+    answer_formats: ClassVar[frozenset[str]] = frozenset({"classic"})
+    requires_comparison: ClassVar[bool] = False
 
     def match(self, answer: Any, item: Any, params: BaseModel, ctx: Any) -> Any:
         raise NotImplementedError
@@ -83,6 +86,7 @@ class FakeScorer:
     key: ClassVar[str] = "by_level"
     params_schema: ClassVar[type[BaseModel]] = _Params
     presentation: ClassVar[str] = "score"
+    requires_early_end: ClassVar[bool] = False
 
     def score(self, outcome: Any, params: BaseModel) -> int:
         return 0

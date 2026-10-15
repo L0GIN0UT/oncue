@@ -1,0 +1,51 @@
+# Тестовый конфиг ядра: марафон по артисту (D14). Сиды game (§10 плана) — поток B.
+key: music.marathon.artist
+title_i18n: modes.music.marathon.artist.title
+domain: music
+source:
+  type: marathon
+  params:
+    roles: [artist]
+    max_subjects: 3
+    min_items: 5
+    order: shuffle
+    pool:
+      kinds: [track]
+clue:
+  type: audio_intro
+  params:
+    start_s: 0
+    levels:
+      - { seconds: 0.5 }
+      - { seconds: 1 }
+      - { seconds: 2 }
+      - { seconds: 4 }
+      - { seconds: 8 }
+      - { seconds: 15 }
+answer:
+  format: classic
+  matcher:
+    type: title_alias
+    params:
+      typo:
+        - { min_len: 5, max_distance: 1 }
+      accept_same_title: true
+  partial: [artist]
+scoring:
+  type: by_level
+  params:
+    points: [6, 5, 4, 3, 2, 1]
+    partial_ratio: 0.5
+session:
+  kind: solo
+  rounds: 200
+  attempts_per_level: 1
+  skip_allowed: true
+  give_up_allowed: true
+  allow_guest: true
+  abandon_after_min: 120
+  end:
+    type: lives
+    params: { count: 3 }
+features:
+  records: true

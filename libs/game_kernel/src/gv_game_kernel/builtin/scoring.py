@@ -65,6 +65,7 @@ class ByLevelScorer:
     key: ClassVar[str] = "by_level"
     params_schema: ClassVar[type[BaseModel]] = ByLevelParams
     presentation: ClassVar[str] = SCORE_PRESENTATION
+    requires_early_end: ClassVar[bool] = False
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void``, ``miss`` и ``gave_up`` без частичного — 0).
@@ -131,6 +132,7 @@ class BySpeedScorer:
     key: ClassVar[str] = "by_speed"
     presentation: ClassVar[str] = SCORE_PRESENTATION
     params_schema: ClassVar[type[BaseModel]] = BySpeedParams
+    requires_early_end: ClassVar[bool] = False
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void``, ``miss`` и ``gave_up`` без частичного — 0)."""
@@ -162,4 +164,78 @@ class BySpeedScorer:
         p = typed(params, BySpeedParams)
         if p.min_points > p.max_points:
             return [ParamIssue("min_points", MIN_ABOVE_MAX)]
+        return []
+
+
+# ----------------------------------------------------------------------------- streak
+STREAK_PRESENTATION = "streak"
+"""Подача итога серией верных раундов."""
+
+BRACKET_PRESENTATION = "bracket"
+"""Подача итога сеткой выборов (очков нет)."""
+
+
+class StreakParams(PluginParams):
+    """Параметры ``streak`` (``contracts/modes/params/scorer.streak.v1.json``)."""
+
+    points_per_round: Annotated[StrictInt, Field(ge=1, le=1000)]
+
+
+class StreakScorer:
+    """Серия: ``points_per_round`` за каждый точный ответ, остальное — 0.
+
+    Серия заканчивается на промахе, поэтому Scorer требует правило досрочного завершения
+    (``lives``): без него «серия» — просто число верных раундов из ``session.rounds``.
+    """
+
+    key: ClassVar[str] = "streak"
+    params_schema: ClassVar[type[BaseModel]] = StreakParams
+    presentation: ClassVar[str] = STREAK_PRESENTATION
+    requires_early_end: ClassVar[bool] = True
+
+    def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
+        """``points_per_round`` за ``exact``."""
+        p = typed(params, StreakParams)
+        return p.points_per_round if outcome.result is RoundResult.EXACT else 0
+
+    def max_score(self, params: BaseModel, levels_count: int) -> int:
+        """Максимум за раунд — ``points_per_round``."""
+        return typed(params, StreakParams).points_per_round
+
+    def cross_check(
+        self, params: BaseModel, *, config: ModeConfig, levels_count: int
+    ) -> list[ParamIssue]:
+        """Перекрёстных правил параметров нет (совместимость с ``end`` — в валидаторе)."""
+        typed(params, StreakParams)
+        return []
+
+
+# ----------------------------------------------------------------------------- none
+class NoneParams(PluginParams):
+    """Параметры ``none`` (``contracts/modes/params/scorer.none.v1.json``): нет."""
+
+
+class NoneScorer:
+    """Без очков: режим предпочтений (сетка), итог — выбранные победители."""
+
+    key: ClassVar[str] = "none"
+    params_schema: ClassVar[type[BaseModel]] = NoneParams
+    presentation: ClassVar[str] = BRACKET_PRESENTATION
+    requires_early_end: ClassVar[bool] = False
+
+    def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
+        """Всегда 0."""
+        typed(params, NoneParams)
+        return 0
+
+    def max_score(self, params: BaseModel, levels_count: int) -> int:
+        """Всегда 0."""
+        typed(params, NoneParams)
+        return 0
+
+    def cross_check(
+        self, params: BaseModel, *, config: ModeConfig, levels_count: int
+    ) -> list[ParamIssue]:
+        """Перекрёстных правил нет."""
+        typed(params, NoneParams)
         return []

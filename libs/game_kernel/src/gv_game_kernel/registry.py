@@ -10,6 +10,13 @@
 загадкой; ``session.kind`` оркеструется сервисом; правила ``partial`` применимы к домену и
 не повторяются; перекрёстные правила плагинов (``Source.cross_check``,
 ``Scorer.cross_check``: ``len(points) == len(levels)``, ``size == rounds`` …).
+
+Правила этапа 3a (ADR 0023, 0026) — по возможностям, которые объявляют сами плагины:
+``answer.format`` поддерживают загадка, источник (``Source.answer_formats``) и matcher
+(``AnswerMatcher.answer_formats``); matcher сравнения требует ``ComparisonSource``;
+формат с одним ответом (``AnswerFormat.single_answer``) — один уровень, одна попытка и
+без ``partial``; Scorer с ``requires_early_end`` (серия) — правило ``EndRule.ends_early``;
+``clue.reveal`` — известная загадка того же домена.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from gv_game_kernel.plugins import (
     AnswerFormat,
     AnswerMatcher,
     ClueType,
+    ComparisonSource,
     EndRule,
     PartialRule,
     Scorer,
@@ -51,6 +59,18 @@ PARTIAL_DOMAIN_UNSUPPORTED = "config.partial_domain_unsupported"
 
 DUPLICATE_PARTIAL = "config.duplicate_partial"
 """Код проблемы: правило частичного ответа указано дважды."""
+
+COMPARISON_REQUIRED = "config.comparison_required"
+"""Код проблемы: matcher сравнивает по метрике, а источник не объявляет сравнения."""
+
+END_RULE_REQUIRED = "config.end_rule_required"
+"""Код проблемы: Scorer (серия) требует правила досрочного завершения (``lives``)."""
+
+SINGLE_ANSWER_LEVELS = "config.single_answer_levels"
+"""Код проблемы: формат с одним ответом (``pick``) требует один уровень и одну попытку."""
+
+PARTIAL_UNSUPPORTED = "config.partial_unsupported"
+"""Код проблемы: частичный ответ при формате с одним ответом не имеет смысла."""
 
 DEFAULT_END_RULE = "all_rounds"
 """Правило завершения, если ``session.end`` не задан (ADR 0023)."""
@@ -215,16 +235,24 @@ class EngineFactory:
             if reveal is not None and config.domain not in reveal.domains:
                 issues.append(ConfigIssue("clue.reveal.type", DOMAIN_UNSUPPORTED))
 
-        if clue is not None:
-            if config.domain not in clue.domains:
-                issues.append(ConfigIssue("domain", DOMAIN_UNSUPPORTED))
-            if config.answer.format not in clue.supported_answer_formats:
-                issues.append(ConfigIssue("answer.format", ANSWER_FORMAT_UNSUPPORTED))
         if config.session.kind not in self._supported_sessions:
             issues.append(ConfigIssue("session.kind", SESSION_UNSUPPORTED))
+        issues.extend(
+            _compatibility_issues(
+                config,
+                clue=clue,
+                source=source,
+                matcher=matcher,
+                scorer=scorer,
+                answer_format=answer_format,
+                end_rule=end_rule if end_spec is not None else r.end_rule(DEFAULT_END_RULE),
+            )
+        )
 
         if clue is not None and clue_params is not None:
             levels_count = len(clue.levels(clue_params))
+            if answer_format is not None and answer_format.single_answer:
+                issues.extend(_single_answer_issues(config, levels_count))
             for plugin, params, prefix in (
                 (source, source_params, "source.params"),
                 (scorer, scorer_params, "scoring.params"),
@@ -293,6 +321,57 @@ class EngineFactory:
         )
 
 
+def _compatibility_issues(
+    config: ModeConfig,
+    *,
+    clue: ClueType | None,
+    source: Source | None,
+    matcher: AnswerMatcher | None,
+    scorer: Scorer | None,
+    answer_format: AnswerFormat | None,
+    end_rule: EndRule | None,
+) -> list[ConfigIssue]:
+    """Совместимость плагинов по объявленным ими возможностям (не по ключам)."""
+    issues: list[ConfigIssue] = []
+    fmt = config.answer.format
+    if clue is not None:
+        if config.domain not in clue.domains:
+            issues.append(ConfigIssue("domain", DOMAIN_UNSUPPORTED))
+        if fmt not in clue.supported_answer_formats:
+            issues.append(ConfigIssue("answer.format", ANSWER_FORMAT_UNSUPPORTED))
+    if (
+        scorer is not None
+        and scorer.requires_early_end
+        and (end_rule is None or not end_rule.ends_early)
+    ):
+        issues.append(ConfigIssue("session.end", END_RULE_REQUIRED))
+    if answer_format is not None:
+        if source is not None and fmt not in source.answer_formats:
+            issues.append(ConfigIssue("source.type", ANSWER_FORMAT_UNSUPPORTED))
+        if matcher is not None and fmt not in matcher.answer_formats:
+            issues.append(ConfigIssue("answer.matcher.type", ANSWER_FORMAT_UNSUPPORTED))
+    if (
+        matcher is not None
+        and source is not None
+        and matcher.requires_comparison
+        and not isinstance(source, ComparisonSource)
+    ):
+        issues.append(ConfigIssue("answer.matcher.type", COMPARISON_REQUIRED))
+    if answer_format is not None and answer_format.single_answer and config.answer.partial:
+        issues.append(ConfigIssue("answer.partial", PARTIAL_UNSUPPORTED))
+    return issues
+
+
+def _single_answer_issues(config: ModeConfig, levels_count: int) -> list[ConfigIssue]:
+    """Формат с одним ответом на раунд: один уровень загадки и одна попытка."""
+    issues: list[ConfigIssue] = []
+    if levels_count != 1:
+        issues.append(ConfigIssue("clue.params.levels", SINGLE_ANSWER_LEVELS))
+    if config.session.attempts_per_level != 1:
+        issues.append(ConfigIssue("session.attempts_per_level", SINGLE_ANSWER_LEVELS))
+    return issues
+
+
 def _parse(
     plugin: ClueType | Source | AnswerMatcher | Scorer | EndRule | None,
     params: Mapping[str, Any],  # Any: params плагина — произвольный JSON-объект
@@ -321,11 +400,15 @@ def _join(prefix: str, path: str) -> str:
 
 __all__ = [
     "ANSWER_FORMAT_UNSUPPORTED",
+    "COMPARISON_REQUIRED",
     "DEFAULT_END_RULE",
     "DOMAIN_UNSUPPORTED",
     "DUPLICATE_PARTIAL",
+    "END_RULE_REQUIRED",
     "PARTIAL_DOMAIN_UNSUPPORTED",
+    "PARTIAL_UNSUPPORTED",
     "SESSION_UNSUPPORTED",
+    "SINGLE_ANSWER_LEVELS",
     "UNKNOWN_PLUGIN",
     "ConfigIssue",
     "DuplicatePluginError",

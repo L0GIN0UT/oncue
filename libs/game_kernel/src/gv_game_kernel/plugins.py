@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Any, ClassVar, Protocol
+from datetime import date, datetime
+from typing import Any, ClassVar, Protocol, runtime_checkable
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -134,6 +134,7 @@ class DrawContext:
         exclude_ids: Единицы, которых следует избегать (недавние наборы дня): выбираются,
             только если свежих единиц не хватает на ``n``.
         collections: Порт сборников (этап 3; в game на этапе 2 не передаётся).
+        subject_ids: Персоны, выбранные игроком (марафон) или темой периода (сетка).
     """
 
     mode_key: str
@@ -147,6 +148,7 @@ class DrawContext:
     exclude_ids: frozenset[UUID] = frozenset()
     collections: CollectionPort | None = None
     candidate_limit: int = 5000
+    subject_ids: frozenset[UUID] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,15 +212,18 @@ class RoundPick:
 
 
 class Source(Protocol):
-    """Источник единиц раундов (``daily``, ``random``, ``collection``).
+    """Источник единиц раундов (``daily``, ``random``, ``marathon``, ``pair``, ``bracket`` …).
 
     Attributes:
         key: Ключ в реестре.
         params_schema: Модель параметров (``contracts/modes/params/source.<key>.v1.json``).
+        answer_formats: Форматы ответа, для которых источник строит раунды
+            (классические — ``classic``; пара и сетка — ``pick``: им нужны варианты).
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    answer_formats: ClassVar[frozenset[str]]
 
     async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
         """``n`` различных единиц; детерминированно при одинаковых ``ctx.seed`` и пуле.
@@ -262,6 +267,28 @@ class Source(Protocol):
         ...
 
 
+@runtime_checkable
+class RoundSource(Protocol):
+    """Источник, который сам составляет раунды (``RoundDraw`` с ``shown``/``options``).
+
+    Классические источники этого не умеют: ``ModeEngine`` оборачивает их единицы в
+    ``RoundDraw(target)`` (ADR 0023).
+    """
+
+    async def draw_rounds(self, ctx: DrawContext, params: BaseModel, n: int) -> list[RoundDraw]:
+        """Начальные раунды сессии (не больше ``n``), детерминированно по ``ctx.seed``.
+
+        Raises:
+            PoolTooSmallError: в пуле не хватает единиц даже на один раунд.
+        """
+        ...
+
+    def compose_rounds(self, params: BaseModel, items: Sequence[MediaItemRef]) -> list[RoundDraw]:
+        """Начальные раунды из уже разыгранных единиц (плановый набор периода)."""
+        ...
+
+
+@runtime_checkable
 class ProgressiveSource(Protocol):
     """Источник, чьи раунды зависят от прошлых (сетка: пары победителей тура, ADR 0023).
 
@@ -273,20 +300,69 @@ class ProgressiveSource(Protocol):
         """Сколько раундов будет в сессии всего (сетка 32 — 31 выбор)."""
         ...
 
+    def items_needed(self, params: BaseModel) -> int:
+        """Сколько единиц разыгрывается на всю сессию (сетка 32 — 32 единицы)."""
+        ...
+
     def followups(self, params: BaseModel, history: Sequence[RoundPick]) -> list[RoundDraw]:
         """Раунды, которые открываются после ``history`` (пусто — пока ничего нового)."""
         ...
 
+    def stage(self, params: BaseModel, index: int) -> int:
+        """Этап раунда ``index`` (с 0) для UI — у сетки размер тура: 32, 16 … 2."""
+        ...
 
+
+@runtime_checkable
 class SubjectSource(Protocol):
     """Источник по персонам, выбранным игроком (марафон, D14 плана этапа 3a)."""
 
-    def subject_query(self, params: BaseModel, *, domain: str) -> SubjectQuery:
+    def subject_query(
+        self, params: BaseModel, *, domain: str, playable_for: PlayableFor | None = None
+    ) -> SubjectQuery:
         """Какие персоны можно предложить игроку (роли, минимум играбельных единиц)."""
         ...
 
     def max_subjects(self, params: BaseModel) -> int:
         """Сколько персон игрок может выбрать за сессию."""
+        ...
+
+
+@runtime_checkable
+class PeriodSource(Protocol):
+    """Источник плановых наборов периода (дейлик — день, сетка — неделя; ADR 0027)."""
+
+    def period_start(self, params: BaseModel, at: datetime) -> date:
+        """Начало периода, в который попадает момент ``at`` (``day`` набора в game)."""
+        ...
+
+    def theme_query(
+        self, params: BaseModel, *, domain: str, playable_for: PlayableFor | None
+    ) -> SubjectQuery | None:
+        """Из каких персон генератор набора выбирает тему периода (``None`` — темы нет)."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class Comparison:
+    """Правило сравнения раунда «больше/меньше» (объявляет источник пары).
+
+    Attributes:
+        metric: Метрика каталога (``vote_average`` …): у опорной единицы видна сразу, у
+            загаданной — только на ревиле.
+        ties: Как судить ничью (``both_correct`` — верен любой вариант).
+    """
+
+    metric: str
+    ties: str
+
+
+@runtime_checkable
+class ComparisonSource(Protocol):
+    """Источник, раунды которого сравнивают единицы по метрике (``pair``)."""
+
+    def comparison(self, params: BaseModel) -> Comparison:
+        """Метрика и правило ничьей."""
         ...
 
 
@@ -360,23 +436,31 @@ class MatchContext:
         domain: Домен режима.
         normalizer: Нормализатор ``gv_text`` (тот же, что строит алиасы каталога).
         partial_rules: Правила частичного ответа из ``answer.partial`` (в порядке конфига).
+        draw: Состав текущего раунда (нужен matcher-ам формата ``pick``).
+        comparison: Правило сравнения источника (``metric_compare``) или ``None``.
     """
 
     domain: str
     normalizer: TitleNormalizer
     partial_rules: tuple[PartialRule, ...] = ()
+    draw: RoundDraw | None = None
+    comparison: Comparison | None = None
 
 
 class AnswerMatcher(Protocol):
-    """Сверка ответа с загаданной единицей (``title_alias``).
+    """Сверка ответа с загаданной единицей (``title_alias``, ``metric_compare``, ``preference``).
 
     Attributes:
         key: Ключ в реестре.
         params_schema: Модель параметров (``contracts/modes/params/matcher.<key>.v1.json``).
+        answer_formats: Форматы ответа, которые matcher умеет сверять.
+        requires_comparison: Нужен источник с правилом сравнения (``ComparisonSource``).
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    answer_formats: ClassVar[frozenset[str]]
+    requires_comparison: ClassVar[bool]
 
     def match(
         self, answer: AnswerInput, item: MediaItemRef, params: BaseModel, ctx: MatchContext
@@ -392,11 +476,15 @@ class AnswerFormat(Protocol):
         key: Ключ в реестре и значение ``answer.format``.
         input_kinds: Допустимые виды ``AnswerInput.input_kind``.
         needs_options: Нужны ли раунду варианты ответа от источника.
+        single_answer: В раунде ровно один ответ (варианты не меняются от уровня к уровню,
+            поэтому второй попытки быть не может): загадке нужен один уровень и
+            ``attempts_per_level = 1``.
     """
 
     key: ClassVar[str]
     input_kinds: ClassVar[frozenset[str]]
     needs_options: ClassVar[bool]
+    single_answer: ClassVar[bool]
 
 
 # ----------------------------------------------------------------------------- Scorer
@@ -408,11 +496,14 @@ class Scorer(Protocol):
         params_schema: Модель параметров (``contracts/modes/params/scorer.<key>.v1.json``).
         presentation: Как показывать итог: ``score`` | ``streak`` | ``bracket`` (D12 плана
             этапа 3a; клиент выбирает экран итога по нему).
+        requires_early_end: Нужно правило досрочного завершения (``EndRule.ends_early``):
+            серия без «жизней» не заканчивается на промахе.
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
     presentation: ClassVar[str]
+    requires_early_end: ClassVar[bool]
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void`` и ``gave_up`` без частичного — 0)."""
@@ -436,10 +527,12 @@ class EndRule(Protocol):
     Attributes:
         key: Ключ в реестре и значение ``session.end.type``.
         params_schema: Модель параметров (``contracts/modes/params/end.<key>.v1.json``).
+        ends_early: Может закончить сессию раньше ``session.rounds`` (по промахам).
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    ends_early: ClassVar[bool]
 
     def should_end(self, history: Sequence[RoundOutcome], params: BaseModel) -> bool:
         """Закончить ли сессию после ``history`` завершённых раундов."""

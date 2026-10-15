@@ -1,0 +1,40 @@
+# Тестовый конфиг ядра: «больше/меньше» по рейтингу (D9). Сиды game (§10 плана) — поток B.
+key: film.pair.rating
+title_i18n: modes.film.pair.rating.title
+domain: film
+source:
+  type: pair
+  params:
+    metric: vote_average
+    min_gap: 0.3
+    ties: both_correct
+    pool:
+      kinds: [film]
+      min_playable: 10
+clue:
+  type: frame_progressive
+  params:
+    levels:
+      - { blur_px: 0, crop: 1, max_width: 960 }
+answer:
+  format: pick
+  matcher:
+    type: metric_compare
+    params: {}
+scoring:
+  type: streak
+  params:
+    points_per_round: 1
+session:
+  kind: solo
+  rounds: 50
+  attempts_per_level: 1
+  skip_allowed: false
+  give_up_allowed: false
+  allow_guest: true
+  abandon_after_min: 120
+  end:
+    type: lives
+    params: { count: 1 }
+features:
+  records: true
