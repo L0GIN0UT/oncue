@@ -320,6 +320,7 @@ class FakeTranscoder:
 
     duration_ms: int | None = None
     cuts: list[tuple[float, float]] = field(default_factory=list)
+    reversed_cuts: list[tuple[float, float]] = field(default_factory=list)
 
     async def normalize(self, data: bytes) -> NormalizedMedia:
         if b"broken" in data:
@@ -329,10 +330,16 @@ class FakeTranscoder:
     async def probe_duration_ms(self, data: bytes) -> int:
         return self.duration_ms if self.duration_ms is not None else len(data) * 10
 
-    async def cut_audio(self, data: bytes, *, start_s: float, duration_s: float) -> bytes:
+    async def cut_audio(
+        self, data: bytes, *, start_s: float, duration_s: float, reverse: bool = False
+    ) -> bytes:
         self.cuts.append((start_s, duration_s))
         start = round(start_s * 100)
-        return data[start : start + round(duration_s * 100)]
+        cut = data[start : start + round(duration_s * 100)]
+        if reverse:
+            self.reversed_cuts.append((start_s, duration_s))
+            return cut[::-1]
+        return cut
 
 
 @dataclass
@@ -496,7 +503,9 @@ class MediaHarness:
             self.tokens,
             max_bytes=10_000,
         )
-        self.plan = PlanAssetSets(uow, self.clock, self.profiles, self.queue, self.storage)
+        self.plan = PlanAssetSets(
+            uow, self.clock, self.profiles, self.queue, self.storage, registry=self.registry
+        )
         self.disable = DisableItemAssets(uow, self.clock, self.storage)
         self.restore = RestoreItemAssets(uow, self.clock, self.queue)
         self.register = RegisterSourceFromCatalog(uow, self.clock)

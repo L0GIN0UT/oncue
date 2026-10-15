@@ -23,6 +23,7 @@ from media_pipeline_service.application.dto import (
     CatalogSource,
     MediaItemSnapshot,
 )
+from media_pipeline_service.application.generators.base import GeneratorRegistry
 from media_pipeline_service.application.ports import (
     MediaUnitOfWork,
     ObjectStorage,
@@ -33,7 +34,7 @@ from media_pipeline_service.application.sources import delete_quietly
 from media_pipeline_service.domain.asset_set import AssetSet, AssetSetStatus
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
-from media_pipeline_service.domain.sources import SourceMedia, SourceStatus, best_source
+from media_pipeline_service.domain.sources import SourceMedia, SourceStatus
 
 log = structlog.get_logger(__name__)
 
@@ -102,7 +103,12 @@ class PlannedSets:
 
 class PlanAssetSets:
     """Создать недостающие наборы по профилям домена единицы и перегенерировать наборы,
-    для которых появился лучший исходник."""
+    у которых сменился состав исходников.
+
+    Какие исходники нужны набору, решает генератор типа загадки (``sources_for``): кадр,
+    N кадров по позициям или текст — use-case по типу не ветвится. Нет нужных исходников —
+    набор не планируется.
+    """
 
     def __init__(
         self,
@@ -111,12 +117,15 @@ class PlanAssetSets:
         profiles: AssetProfileCatalog,
         queue: TaskQueue,
         storage: ObjectStorage,
+        *,
+        registry: GeneratorRegistry,
     ) -> None:
         self._uow = uow
         self._clock = clock
         self._profiles = profiles
         self._queue = queue
         self._storage = storage
+        self._registry = registry
 
     async def execute(self, media_item_id: UUID) -> list[UUID]:
         """Запланировать генерацию в своей транзакции. Возвращает id поставленных наборов."""
@@ -142,25 +151,29 @@ class PlanAssetSets:
         by_key = {(s.clue_type, s.profile_key, s.params_hash): s for s in existing}
         now = self._clock.now()
         for profile in self._profiles.for_domain(state.domain):
-            source = best_source(sources, profile.source_kind)
-            if source is None:
+            generator = self._registry.get(profile.clue_type)
+            if generator is None:  # профиль без генератора отсекается при загрузке конфига
                 continue
+            chosen = generator.sources_for(profile.params, sources)
+            if not chosen:
+                continue
+            source_ids = tuple(s.id for s in chosen)
             current = by_key.get((profile.clue_type, profile.profile_key, profile.params_hash))
             if current is None:
                 created = AssetSet.plan(
                     uuid7(),
                     media_item_id=media_item_id,
                     profile=profile,
-                    source_media_ids=(source.id,),
+                    source_media_ids=source_ids,
                     now=now,
                 )
                 await uow.asset_sets.add(created)
                 scheduled.append(created)
             elif (
-                current.source_media_id != source.id
+                current.source_media_ids != source_ids
                 and current.status is not AssetSetStatus.DISABLED
             ):
-                old = current.regenerate(now, source_media_ids=(source.id,))
+                old = current.regenerate(now, source_media_ids=source_ids)
                 stale_keys.extend(level.object_key for level in old)
                 await uow.asset_sets.save(current)
                 scheduled.append(current)

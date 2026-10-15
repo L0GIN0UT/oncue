@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
@@ -17,9 +17,10 @@ from media_pipeline_service.domain.errors import InvalidProfileError
 from media_pipeline_service.domain.profiles import (
     AssetProfile,
     AssetProfileCatalog,
+    ProfileOrigin,
     profile_entries,
 )
-from media_pipeline_service.domain.sources import SourceKind
+from media_pipeline_service.domain.sources import SourceKind, SourceMedia, best_source
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,9 +47,12 @@ class GeneratedAsset:
 class AssetGenerator(Protocol):
     """Генератор ассетов одного ClueType.
 
+    Генератор сам объявляет, какие исходники ему нужны (``source_kind``, ``source_count``,
+    ``sources_for``): use-cases планирования и генерации не ветвятся по типу загадки.
+
     Attributes:
         clue_type: Ключ типа загадки.
-        source_kind: Какой исходник нужен.
+        source_kind: Вид исходников.
         params_model: Модель параметров уровней (повторяет ``contracts/clues``).
     """
 
@@ -56,9 +60,51 @@ class AssetGenerator(Protocol):
     source_kind: ClassVar[SourceKind]
     params_model: ClassVar[type[ClueParams]]
 
-    async def generate(self, source: bytes, params: ClueParams) -> list[GeneratedAsset]:
-        """Сгенерировать объекты уровней 1..N (индекс списка + 1 = номер уровня)."""
+    def source_count(self, params: ClueParams) -> int:
+        """Сколько исходников вида ``source_kind`` нужно набору с такими параметрами."""
         ...
+
+    def sources_for(
+        self, params: ClueParams, sources: Sequence[SourceMedia]
+    ) -> list[SourceMedia] | None:
+        """Исходники набора в порядке, в котором их ждёт ``generate``.
+
+        Returns:
+            Ровно ``source_count(params)`` исходников или ``None`` — у единицы нет нужных
+            (набор не планируется: единица не играбельна в этом профиле).
+        """
+        ...
+
+    async def generate(self, sources: Sequence[bytes], params: ClueParams) -> list[GeneratedAsset]:
+        """Сгенерировать объекты уровней 1..N (индекс списка + 1 = номер уровня).
+
+        Args:
+            sources: Содержимое исходников в порядке ``sources_for``.
+        """
+        ...
+
+
+class SingleSourceGenerator:
+    """Основа генераторов с одним исходником: лучший исходник вида ``source_kind``."""
+
+    source_kind: ClassVar[SourceKind]
+
+    def source_count(self, params: ClueParams) -> int:  # noqa: ARG002 — сигнатура протокола
+        """Один исходник."""
+        return 1
+
+    def sources_for(
+        self, params: ClueParams, sources: Sequence[SourceMedia]
+    ) -> list[SourceMedia] | None:
+        """Лучший исходник вида (загруженный админом, затем свежий)."""
+        source = best_source(sources, self.source_kind)
+        if source is None or not self.accepts(params, source):
+            return None
+        return [source]
+
+    def accepts(self, params: ClueParams, source: SourceMedia) -> bool:  # noqa: ARG002
+        """Подходит ли исходник под параметры (по умолчанию — любой своего вида)."""
+        return True
 
 
 class GeneratorRegistry:
@@ -107,11 +153,42 @@ class GeneratorRegistry:
             domains=frozenset(str(d) for d in domains),
             source_kind=generator.source_kind,
             params=parsed,
+            # Хэш — от параметров в том виде, как они записаны (как его считает game по
+            # конфигу режима): поля по умолчанию, добавленные моделью, его не меняют.
+            raw_params=dict(params),
         )
 
     def build_catalog(self, document: Mapping[str, Any]) -> AssetProfileCatalog:
         """Каталог профилей из документа ``asset_profiles.yaml``."""
         return AssetProfileCatalog(self.build_profile(e) for e in profile_entries(document))
+
+    def build_dynamic(
+        self, *, clue_type: str, profile_key: str, domain: str, params: Mapping[str, Any]
+    ) -> AssetProfile:
+        """Динамический профиль (ADR 0025): параметры проверяет модель генератора, но хранятся
+        и хэшируются они в присланном виде.
+
+        Raises:
+            InvalidProfileError: неизвестный ``clue_type`` или параметры не проходят модель.
+        """
+        generator = self.get(clue_type)
+        if generator is None:
+            raise InvalidProfileError(
+                f"неизвестный clue_type: {clue_type!r}", code="profile.unknown_clue_type"
+            )
+        try:
+            parsed = generator.params_model.from_mapping(params)
+        except (ValidationError, ValueError) as exc:
+            raise InvalidProfileError(f"{clue_type}: неверные параметры уровней: {exc}") from exc
+        return AssetProfile(
+            clue_type=clue_type,
+            profile_key=profile_key,
+            domains=frozenset({domain}),
+            source_kind=generator.source_kind,
+            params=parsed,
+            origin=ProfileOrigin.DYNAMIC,
+            raw_params=dict(params),
+        )
 
     def params_for(self, clue_type: str, params: Mapping[str, Any]) -> ClueParams:
         """Разобрать сохранённые параметры набора (при генерации)."""

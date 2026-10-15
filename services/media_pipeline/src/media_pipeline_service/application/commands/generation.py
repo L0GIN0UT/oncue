@@ -29,6 +29,7 @@ from media_pipeline_service.application.sources import SourceIngestor, delete_qu
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
 from media_pipeline_service.domain.errors import AssetSetNotFoundError
 from media_pipeline_service.domain.links import asset_object_key
+from media_pipeline_service.domain.params import canonical_json
 from media_pipeline_service.domain.sources import SourceMedia, SourceStatus
 
 log = structlog.get_logger(__name__)
@@ -41,7 +42,8 @@ class TaskNotVisibleError(Exception):
 @dataclass(frozen=True, slots=True)
 class _Started:
     aggregate: AssetSet
-    source: SourceMedia | None
+    # ``None`` на месте исходника — его удалили (набор перепланируется событием catalog).
+    sources: tuple[SourceMedia | None, ...]
 
 
 async def _lock_for_event(uow: MediaUnitOfWork, asset_set_id: UUID) -> tuple[AssetSet, int] | None:
@@ -140,13 +142,9 @@ class GenerateAssetSet:
                 return None
             aggregate.start_attempt(generation, self._clock.now())
             await uow.asset_sets.save(aggregate)
-            source = (
-                await uow.sources.get(aggregate.source_media_id)
-                if aggregate.source_media_id is not None
-                else None
-            )
+            sources = tuple([await uow.sources.get(i) for i in aggregate.source_media_ids])
             await uow.commit()
-        return _Started(aggregate, source)
+        return _Started(aggregate, sources)
 
     async def _produce(self, started: _Started, uploaded: list[str]) -> list[AssetLevel]:
         aggregate = started.aggregate
@@ -157,10 +155,12 @@ class GenerateAssetSet:
             params = self._registry.params_for(aggregate.clue_type, aggregate.params)
         except (ValueError, AppError) as exc:
             raise GenerationError("profile.invalid", str(exc), retryable=False) from exc
-        if started.source is None:
+        if not started.sources or any(s is None for s in started.sources):
             raise GenerationError("source.missing", retryable=False)
-        data = await self._load_source(started.source)
+        data = [await self._load_source(s) for s in started.sources if s is not None]
         generated = await generator.generate(data, params)
+        if len(generated) != aggregate.levels_count:
+            raise GenerationError("asset_set.levels_mismatch", retryable=False)
         levels: list[AssetLevel] = []
         for number, asset in enumerate(generated, start=1):
             key = asset_object_key(self._tokens.token_hex(), asset.ext)
@@ -180,6 +180,9 @@ class GenerateAssetSet:
         return levels
 
     async def _load_source(self, source: SourceMedia) -> bytes:
+        if source.text_content is not None:
+            # Текст загадок живёт в строке исходника (ADR 0024), а не в хранилище.
+            return canonical_json(source.text_content).encode()
         if source.is_stored and source.object_key is not None:
             return await self._storage.get(
                 StorageArea.SOURCES, source.object_key, max_bytes=self._max_source_bytes

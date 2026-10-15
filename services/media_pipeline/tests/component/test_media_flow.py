@@ -409,35 +409,43 @@ async def test_admin_upload_audio_generates_audio_levels(service: Service) -> No
         "reason": "лицензированный превью",
         **PROVENANCE,
     }
-    files = {"file": ("track.wav", _wav(), "audio/wav")}
+    # 50 с: хватает на audio_reverse/default (start_s = 30, до 15 с).
+    files = {"file": ("track.wav", _wav(50), "audio/wav")}
     headers = {**service.admin(), "Idempotency-Key": f"upload-{uuid7().hex}"}
     response = await service.client.post(
         "/admin/v1/sources", data=form, files=files, headers=headers
     )
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["mime"] == "audio/flac" and len(body["scheduled_asset_set_ids"]) == 1
+    # audio_intro/default, audio_intro/preview, audio_reverse/default — все от одного аудио
+    assert body["mime"] == "audio/flac" and len(body["scheduled_asset_set_ids"]) == 3
+    assert (body["position"], body["origin"]) == (1, "upload")
     # повтор с тем же ключом — тот же ответ, без новой загрузки
     again = await service.client.post("/admin/v1/sources", data=form, files=files, headers=headers)
     assert (again.status_code, again.json()) == (201, body)
-    assert len(service.queue.tasks) == 1
+    assert len(service.queue.tasks) == 3
 
     await service.run_tasks()
-    (asset_set,) = (
+    sets = (
         await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
     ).json()
-    assert (asset_set["clue_type"], asset_set["status"], asset_set["levels_count"]) == (
-        "audio_intro",
-        "ready",
-        6,
-    )
-    link = await service.client.post(
-        "/internal/v1/asset-links",
-        json={"asset_set_id": asset_set["asset_set_id"], "level": 6, "subject": "s"},
-    )
-    assert link.json()["mime"] == "audio/mp4"
-    (event_out,) = await service.outbox()
-    assert_event_matches_schema(event_out)
+    assert sorted(
+        (s["clue_type"], s["profile_key"], s["status"], s["levels_count"]) for s in sets
+    ) == [
+        ("audio_intro", "default", "ready", 6),
+        ("audio_intro", "preview", "ready", 1),
+        ("audio_reverse", "default", "ready", 6),
+    ]
+    for asset_set in sets:
+        link = await service.client.post(
+            "/internal/v1/asset-links",
+            json={"asset_set_id": asset_set["asset_set_id"], "level": 1, "subject": "s"},
+        )
+        assert link.json()["mime"] == "audio/mp4"
+    events = await service.outbox()
+    assert len(events) == 3
+    for event_out in events:
+        assert_event_matches_schema(event_out)
 
 
 async def test_admin_upload_validation(service: Service) -> None:

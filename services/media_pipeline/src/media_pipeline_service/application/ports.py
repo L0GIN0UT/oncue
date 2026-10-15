@@ -85,11 +85,14 @@ class Transcoder(SourceNormalizer, Protocol):
         """Длительность аудио, мс."""
         ...
 
-    async def cut_audio(self, data: bytes, *, start_s: float, duration_s: float) -> bytes:
+    async def cut_audio(
+        self, data: bytes, *, start_s: float, duration_s: float, reverse: bool = False
+    ) -> bytes:
         """Отрывок ``[start_s, start_s + duration_s)`` — AAC в fMP4 без метаданных.
 
         Декодер читает только этот интервал: результат физически не содержит более
-        позднего аудио.
+        позднего аудио. ``reverse`` — отрывок проигрывается задом наперёд (реверс уже
+        ограниченного отрывка).
         """
         ...
 

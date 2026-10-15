@@ -59,8 +59,74 @@ def test_builtin_profiles_match_clue_contracts() -> None:
         assert not list(clue_schema(profile.clue_type).iter_errors(profile.params_json()))
 
 
+def test_builtin_profiles_match_golden_params_hash() -> None:
+    """Профили ``profile:<clue>:<profile>`` из golden-файла есть в конфиге с тем же хэшем:
+    по этим хэшам game (сиды режимов) находит ассеты."""
+    golden = json.loads((contracts_dir() / "clues" / "params_hash.golden.json").read_text())
+    expected = {
+        v["name"].removeprefix("profile:"): v["params_hash"]
+        for v in golden["vectors"]
+        if v["name"].startswith("profile:")
+    }
+    catalog = registry().build_catalog(read_profiles_document())
+    actual = {f"{p.clue_type}:{p.profile_key}": p.params_hash for p in catalog}
+    assert actual == expected
+
+
+def test_every_new_clue_type_has_default_profile() -> None:
+    catalog = registry().build_catalog(read_profiles_document())
+    with_default = {p.clue_type for p in catalog if p.profile_key == "default"}
+    assert with_default == registry().clue_types
+
+
 # Одноуровневые примеры: монотонность (правило домена сверх контракта) не участвует.
+_AUDIO_SAMPLES: list[Any] = [
+    {"levels": [{"seconds": 1}]},
+    {"levels": [{"seconds": 0.5}], "start_s": 30},
+    {"levels": [{"seconds": 60.01}]},
+    {"levels": [{"seconds": 0}]},
+    {"levels": [{"seconds": 1}], "start_s": -1},
+    {"levels": [{"seconds": 1}] * 21},
+    {"levels": [], "start_s": 0},
+    {"levels": [{"seconds": 1}], "x": 1},
+]
 SAMPLES: dict[str, list[Any]] = {
+    "audio_reverse": _AUDIO_SAMPLES,
+    "soundtrack": _AUDIO_SAMPLES,
+    "audio_blackout": _AUDIO_SAMPLES,
+    "frame_sequence": [
+        {"levels": [{"frame": 1, "max_width": 960}]},
+        {"levels": [{"frame": 6, "max_width": 64}]},
+        {"levels": [{"frame": 0, "max_width": 960}]},
+        {"levels": [{"frame": 7, "max_width": 960}]},
+        {"levels": [{"frame": 1, "max_width": 63}]},
+        {"levels": [{"frame": 1}]},
+        {"levels": [{"frame": 1.5, "max_width": 960}]},
+        {"levels": [{"frame": 1, "max_width": 960, "blur_px": 1}]},
+        {"levels": []},
+    ],
+    "description": [
+        {"levels": [{"fields": ["plot_masked"]}]},
+        {"levels": [{"fields": ["year", "genres", "country", "director", "cast_top3"]}]},
+        {"levels": [{"fields": ["tagline"]}]},
+        {"levels": [{"fields": []}]},
+        {"levels": [{"fields": ["title"]}]},
+        {"levels": [{"fields": ["year", "year"]}]},
+        {"levels": [{"fields": "year"}]},
+        {"levels": [{"fields": ["year"]}] * 11},
+        {"levels": [{"fields": ["year"], "x": 1}]},
+    ],
+    "emoji": [
+        {"levels": [{"count": 1}]},
+        {"levels": [{"count": 12}]},
+        {"levels": [{"count": None}]},
+        {"levels": [{"count": 0}]},
+        {"levels": [{"count": 13}]},
+        {"levels": [{"count": 1.5}]},
+        {"levels": [{}]},
+        {"levels": [{"count": "2"}]},
+        {"levels": []},
+    ],
     "audio_intro": [
         {"levels": [{"seconds": 1}]},
         {"levels": [{"seconds": 0.5}], "start_s": 12.5},
@@ -193,3 +259,33 @@ def test_produced_event_fields_are_declared() -> None:
         declared = {f.name for f in fields(event_cls)} - {"aggregate_id"}
         assert declared == set(schema["required"]) == set(schema["properties"])
         assert event_cls.aggregate_type == schema["x-aggregate-type"]
+
+
+# ---------------------------------------------------------------- JSON-ассеты текстов (ADR 0024)
+async def test_text_assets_match_text_asset_contract() -> None:
+    from media_pipeline_service.application.generators import DescriptionGenerator, EmojiGenerator
+    from media_pipeline_service.domain.texts import text_content
+
+    schema = json.loads((contracts_dir() / "clues" / "text_asset.v1.json").read_text())
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+    content = text_content(
+        clue_texts={"plot_masked": "Сюжет " * 500, "tagline": "Слоган", "emoji": "🚀🌌⏳🇷🇺🎬🧑‍🚀🕳️"},
+        year=2014,
+        genres=["фантастика"] * 200,
+        countries=["US"],
+        directors=["Режиссёр"],
+        cast=["А", "Б", "В"],
+    )
+    source = [json.dumps(content).encode()]
+    catalog = registry().build_catalog(read_profiles_document())
+    for generator, clue_type in (
+        (DescriptionGenerator(), "description"),
+        (EmojiGenerator(), "emoji"),
+    ):
+        for profile in catalog:
+            if profile.clue_type != clue_type:
+                continue
+            for asset in await generator.generate(source, profile.params):
+                errors = [e.message for e in validator.iter_errors(json.loads(asset.data))]
+                assert not errors, (clue_type, profile.profile_key, errors)

@@ -30,10 +30,16 @@ from media_pipeline_service.application.commands.generation import (
 from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.generators import (
+    AudioBlackoutGenerator,
     AudioIntroGenerator,
+    AudioReverseGenerator,
+    DescriptionGenerator,
+    EmojiGenerator,
     FrameProgressiveGenerator,
+    FrameSequenceGenerator,
     GeneratorRegistry,
     PosterMaskedGenerator,
+    SoundtrackGenerator,
 )
 from media_pipeline_service.application.ports import (
     ImageProcessor,
@@ -152,8 +158,14 @@ class MediaContainer:
         return GeneratorRegistry(
             [
                 AudioIntroGenerator(a.transcoder),
+                AudioReverseGenerator(a.transcoder),
+                SoundtrackGenerator(a.transcoder),
+                AudioBlackoutGenerator(a.transcoder),
                 FrameProgressiveGenerator(a.images),
+                FrameSequenceGenerator(a.images),
                 PosterMaskedGenerator(a.images, max_width=self.settings.media.poster_max_width),
+                DescriptionGenerator(),
+                EmojiGenerator(),
             ]
         )
 
@@ -198,7 +210,12 @@ class MediaContainer:
         """Планирование наборов."""
         a = self.adapters
         return PlanAssetSets(
-            uow or self.uow_factory(), self.clock, self.profiles, a.queue, a.storage
+            uow or self.uow_factory(),
+            self.clock,
+            self.profiles,
+            a.queue,
+            a.storage,
+            registry=self.registry,
         )
 
     def sync_media_item(self, uow: UnitOfWorkFactory) -> SyncMediaItem:
