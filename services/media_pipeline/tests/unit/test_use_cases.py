@@ -270,12 +270,24 @@ async def test_issue_link_error_contract(media: Any) -> None:
     await media.issue_link.execute(view.asset_set_id, 1, "other")
 
 
-async def test_link_journal_is_purged_after_retention(media: Any) -> None:
+async def test_issue_link_does_not_purge_journal(media: Any) -> None:
+    """Очистка журнала ушла в периодическую задачу: выдача ссылки старое не трогает."""
     asset_set_id = await ready_poster(media)
     await media.issue_link.execute(asset_set_id, 1, "a")
     media.clock.advance(days=8)
     await media.issue_link.execute(asset_set_id, 1, "b")
-    assert [r["subject_hash"] for r in media.db.links] == [hashlib.sha256(b"b").hexdigest()]
+    assert len(media.db.links) == 2
+
+
+async def test_link_journal_is_purged_in_batches_after_retention(media: Any) -> None:
+    asset_set_id = await ready_poster(media)
+    for subject in ("a", "b", "c", "d", "e"):  # порция в harness — 2 строки
+        await media.issue_link.execute(asset_set_id, 1, subject)
+    media.clock.advance(days=8)
+    await media.issue_link.execute(asset_set_id, 2, "fresh")
+    assert await media.purge_links.execute() == 5
+    assert [r["subject_hash"] for r in media.db.links] == [hashlib.sha256(b"fresh").hexdigest()]
+    assert await media.purge_links.execute() == 0
 
 
 # ---------------------------------------------------------------- admin

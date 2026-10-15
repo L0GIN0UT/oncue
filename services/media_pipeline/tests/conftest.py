@@ -429,7 +429,10 @@ class MediaHarness:
             GenerateAssetSet,
             RegenerateAssetSet,
         )
-        from media_pipeline_service.application.commands.links import IssueAssetLink
+        from media_pipeline_service.application.commands.links import (
+            IssueAssetLink,
+            PurgeLinkJournal,
+        )
         from media_pipeline_service.application.commands.sources import UploadSource
         from media_pipeline_service.application.generators import (
             AudioIntroGenerator,
@@ -516,8 +519,8 @@ class MediaHarness:
             FakeSigner(),
             self.limiter,
             self.policy,
-            retention=timedelta(days=7),
         )
+        self.purge_links = PurgeLinkJournal(uow, self.clock, retention=timedelta(days=7), batch=2)
         self.list_sets = ListAssetSets(uow)
 
     async def run_tasks(self) -> int:

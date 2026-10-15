@@ -36,6 +36,10 @@ class MediaSettings(BaseModel):
     link_max_per_window: int = Field(default=10, ge=1)
     link_window_s: int = Field(default=60, ge=1)
     link_issuance_retention_days: int = Field(default=7, ge=1)
+    # Задача relay ``media.link_issuance.purge``: пауза между запусками, джиттер, порция.
+    link_purge_interval_s: float = Field(default=600, gt=0)
+    link_purge_jitter_s: float = Field(default=60, ge=0)
+    link_purge_batch: int = Field(default=1000, ge=1, le=100_000)
     # Через сколько секунд повторить выдачу ссылки, если лимитер (Redis) недоступен (503).
     link_limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
     # Пусто — относительные ссылки (тот же origin, что у сайта).

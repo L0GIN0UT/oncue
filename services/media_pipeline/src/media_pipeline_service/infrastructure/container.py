@@ -27,7 +27,7 @@ from media_pipeline_service.application.commands.generation import (
     GenerateAssetSet,
     RegenerateAssetSet,
 )
-from media_pipeline_service.application.commands.links import IssueAssetLink
+from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
 from media_pipeline_service.application.commands.sources import UploadSource
 from media_pipeline_service.application.generators import (
     AudioIntroGenerator,
@@ -245,7 +245,7 @@ class MediaContainer:
 
     @cached_property
     def issue_link(self) -> IssueAssetLink:
-        """Выдача ссылок (один экземпляр на процесс: в нём таймер чистки журнала)."""
+        """Выдача ссылок."""
         m = self.settings.media
         return IssueAssetLink(
             self.uow_factory(),
@@ -255,7 +255,17 @@ class MediaContainer:
             LinkPolicy(
                 ttl_s=m.link_ttl_s, max_per_window=m.link_max_per_window, window_s=m.link_window_s
             ),
+        )
+
+    @cached_property
+    def purge_links(self) -> PurgeLinkJournal:
+        """Очистка журнала выдачи ссылок (периодическая задача relay)."""
+        m = self.settings.media
+        return PurgeLinkJournal(
+            self.uow_factory(),
+            self.clock,
             retention=timedelta(days=m.link_issuance_retention_days),
+            batch=m.link_purge_batch,
         )
 
     @cached_property
