@@ -1,0 +1,36 @@
+{
+  "aggregate_id": "film.random.description",
+  "aggregate_type": "mode_config",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0210",
+  "event_type": "game.ClueAssetsRequested",
+  "event_version": 1,
+  "occurred_at": "2026-10-10T12:00:00Z",
+  "payload": {
+    "actor_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
+    "clue_type": "description",
+    "domain": "film",
+    "draft_revision": 3,
+    "mode_key": "film.random.description",
+    "params": {
+      "levels": [
+        {
+          "fields": [
+            "plot_masked"
+          ]
+        },
+        {
+          "fields": [
+            "year",
+            "genres"
+          ]
+        }
+      ]
+    },
+    "params_hash": "137d08fa7f55ebdb9850d072a68af06dddac90c3c273bdbb9951ffaa97672027",
+    "request_id": "0192a3b4-c5d6-7e8f-9a0b-000000000a01",
+    "requested_at": "2026-10-10T12:00:00Z"
+  },
+  "producer": "game"
+}

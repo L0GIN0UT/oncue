@@ -53,6 +53,41 @@
       "minItems": 1,
       "type": "array"
     },
+    "clue_texts": {
+      "additionalProperties": false,
+      "description": "Одобренные модератором тексты загадок (ADR 0024); неодобренные в событие не попадают",
+      "properties": {
+        "emoji": {
+          "description": "Эмодзи-описание, до 12 графем",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "plot_masked": {
+          "description": "Сюжет с замаскированными названием и именами",
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "tagline": {
+          "maxLength": 300,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "countries": {
+      "description": "Страны производства (ISO 3166-1 alpha-2)",
+      "items": {
+        "pattern": "^[A-Z]{2}$",
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array",
+      "uniqueItems": true
+    },
     "domain": {
       "enum": [
         "music",
@@ -183,9 +218,19 @@
             "enum": [
               "audio",
               "frame",
-              "poster"
+              "poster",
+              "soundtrack",
+              "audio_clip"
             ],
             "type": "string"
+          },
+          "license_note": {
+            "description": "Основание использования исходника (D6 плана этапа 3a)",
+            "maxLength": 500,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "origin": {
             "enum": [
@@ -194,9 +239,23 @@
             ],
             "type": "string"
           },
+          "position": {
+            "description": "Порядок исходника своего вида (frame_sequence: 1 — самый сложный кадр); нет — 1",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
           "source_media_ref": {
             "format": "uuid",
             "type": "string"
+          },
+          "source_url": {
+            "description": "Откуда взят исходник (D6 плана этапа 3a)",
+            "maxLength": 2000,
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "uri": {
             "maxLength": 2000,

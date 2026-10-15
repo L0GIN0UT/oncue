@@ -1,0 +1,10 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:matcher.metric_compare:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Выбор «больше/меньше»: верно, если метрика выбранного варианта не меньше другой (ничья — по source.pair.ties)",
+  "properties": {},
+  "required": [],
+  "title": "matcher.metric_compare params v1",
+  "type": "object"
+}

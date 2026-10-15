@@ -1,0 +1,18 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:end.lives:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сессия заканчивается после count промахов",
+  "properties": {
+    "count": {
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "count"
+  ],
+  "title": "end.lives params v1",
+  "type": "object"
+}

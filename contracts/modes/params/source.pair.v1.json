@@ -1,0 +1,40 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:source.pair:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Больше/меньше: цепочка пар, сравнение по метрике каталога (D9)",
+  "properties": {
+    "metric": {
+      "enum": [
+        "vote_average",
+        "revenue_usd",
+        "runtime_min",
+        "year",
+        "popularity"
+      ],
+      "type": "string"
+    },
+    "min_gap": {
+      "description": "Минимальная разница метрик соседних единиц цепочки",
+      "minimum": 0,
+      "type": "number"
+    },
+    "pool": {
+      "$ref": "urn:guessverse:contracts:modes:params:pool:v1"
+    },
+    "ties": {
+      "enum": [
+        "both_correct"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "metric",
+    "min_gap",
+    "ties",
+    "pool"
+  ],
+  "title": "source.pair params v1",
+  "type": "object"
+}

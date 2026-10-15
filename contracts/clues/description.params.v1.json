@@ -1,0 +1,45 @@
+{
+  "$id": "urn:guessverse:contracts:clues:description:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Текстовое описание: каждый уровень добавляет поля к уже открытым (text_asset.v1).",
+  "properties": {
+    "levels": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "fields": {
+            "items": {
+              "enum": [
+                "plot_masked",
+                "tagline",
+                "year",
+                "genres",
+                "country",
+                "director",
+                "cast_top3"
+              ],
+              "type": "string"
+            },
+            "maxItems": 7,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "type": "object"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "levels"
+  ],
+  "title": "description params v1",
+  "type": "object"
+}

@@ -1,0 +1,96 @@
+{
+  "$id": "urn:guessverse:contracts:events:game:BracketCompleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок прошёл сетку предпочтений (топ-N) периода до чемпиона (ADR 0027). aggregate_id — session_id.",
+  "properties": {
+    "champion_id": {
+      "description": "media_item_id чемпиона",
+      "format": "uuid",
+      "type": "string"
+    },
+    "is_guest": {
+      "type": "boolean"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "mode_version": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "period_start": {
+      "description": "Начало периода сетки (дата в зоне режима)",
+      "format": "date",
+      "type": "string"
+    },
+    "picks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "loser_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "stage": {
+            "description": "Размер тура: 32, 16, 8, 4, 2",
+            "maximum": 32,
+            "minimum": 2,
+            "type": "integer"
+          },
+          "winner_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "winner_id",
+          "loser_id"
+        ],
+        "type": "object"
+      },
+      "maxItems": 31,
+      "minItems": 1,
+      "type": "array"
+    },
+    "session_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null — гость"
+    },
+    "version": {
+      "description": "Версия сессии на момент завершения",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "version",
+    "user_id",
+    "is_guest",
+    "mode_key",
+    "mode_version",
+    "period_start",
+    "champion_id",
+    "picks"
+  ],
+  "title": "game.BracketCompleted v1",
+  "type": "object",
+  "x-aggregate-type": "session",
+  "x-topic": "game.session.v1"
+}

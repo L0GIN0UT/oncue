@@ -1,0 +1,66 @@
+{
+  "$id": "urn:guessverse:contracts:events:game:ClueAssetsRequested:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Админ запросил генерацию ассетов под параметры загадки черновика конфига, для которых ещё нет профиля (ADR 0025). media-pipeline заводит динамический профиль и досоздаёт наборы. aggregate_id — mode_key.",
+  "properties": {
+    "actor_id": {
+      "description": "Кто запросил",
+      "format": "uuid",
+      "type": "string"
+    },
+    "clue_type": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "draft_revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "params": {
+      "description": "Параметры загадки (contracts/clues/<clue_type>.params.v1.json)",
+      "type": "object"
+    },
+    "params_hash": {
+      "description": "params_hash(params) — contracts/clues/params_hash.golden.json",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "mode_key",
+    "draft_revision",
+    "domain",
+    "clue_type",
+    "params",
+    "params_hash",
+    "actor_id",
+    "requested_at"
+  ],
+  "title": "game.ClueAssetsRequested v1",
+  "type": "object",
+  "x-aggregate-type": "mode_config",
+  "x-topic": "game.mode_config.v1"
+}

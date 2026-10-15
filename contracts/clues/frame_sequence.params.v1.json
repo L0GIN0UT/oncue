@@ -1,0 +1,39 @@
+{
+  "$id": "urn:guessverse:contracts:clues:frame_sequence:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Разные кадры фильма: от сложного к простому, по одному на уровень.",
+  "properties": {
+    "levels": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "frame": {
+            "description": "Позиция исходника кадра (1 — самый сложный)",
+            "maximum": 6,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "max_width": {
+            "maximum": 4096,
+            "minimum": 64,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "frame",
+          "max_width"
+        ],
+        "type": "object"
+      },
+      "maxItems": 6,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "levels"
+  ],
+  "title": "frame_sequence params v1",
+  "type": "object"
+}

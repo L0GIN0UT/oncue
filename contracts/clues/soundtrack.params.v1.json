@@ -1,0 +1,36 @@
+{
+  "$id": "urn:guessverse:contracts:clues:soundtrack:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Отрывок саундтрека фильма; длина растёт по уровням.",
+  "properties": {
+    "levels": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "seconds": {
+            "exclusiveMinimum": 0,
+            "maximum": 60,
+            "type": "number"
+          }
+        },
+        "required": [
+          "seconds"
+        ],
+        "type": "object"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "type": "array"
+    },
+    "start_s": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "levels"
+  ],
+  "title": "soundtrack params v1",
+  "type": "object"
+}

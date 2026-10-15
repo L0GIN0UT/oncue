@@ -1,0 +1,10 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:matcher.preference:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Выбор предпочтения: любой вариант верен",
+  "properties": {},
+  "required": [],
+  "title": "matcher.preference params v1",
+  "type": "object"
+}

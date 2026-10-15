@@ -8,9 +8,9 @@
       "additionalProperties": false,
       "properties": {
         "format": {
-          "enum": [
-            "classic"
-          ],
+          "description": "Формат ответа (плагин AnswerFormat): classic — ввод названия, pick — выбор варианта раунда",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
           "type": "string"
         },
         "matcher": {
@@ -57,6 +57,26 @@
       "properties": {
         "params": {
           "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+          "type": "object"
+        },
+        "reveal": {
+          "additionalProperties": false,
+          "description": "Подача ревила другим типом загадки того же домена (ADR 0026); нет — последний уровень clue",
+          "properties": {
+            "params": {
+              "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+              "type": "object"
+            },
+            "type": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ],
           "type": "object"
         },
         "type": {
@@ -138,6 +158,26 @@
           "minimum": 1,
           "type": "integer"
         },
+        "end": {
+          "additionalProperties": false,
+          "description": "Правило досрочного завершения сессии (плагин EndRule); нет — all_rounds",
+          "properties": {
+            "params": {
+              "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+              "type": "object"
+            },
+            "type": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ],
+          "type": "object"
+        },
         "give_up_allowed": {
           "type": "boolean"
         },
@@ -148,7 +188,8 @@
           "type": "string"
         },
         "rounds": {
-          "maximum": 50,
+          "description": "Число раундов; с правилом завершения session.end — максимум раундов",
+          "maximum": 200,
           "minimum": 1,
           "type": "integer"
         },

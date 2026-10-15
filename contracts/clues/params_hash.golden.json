@@ -94,6 +94,217 @@
       "params_hash": "23eb750af2263ec6f913761b485005c4fb6952f20b350bed0530037164144ba9"
     },
     {
+      "canonical_json": "{\"levels\":[{\"seconds\":0.5},{\"seconds\":1},{\"seconds\":2},{\"seconds\":4},{\"seconds\":8},{\"seconds\":15}],\"start_s\":30}",
+      "name": "profile:audio_reverse:default",
+      "params": {
+        "levels": [
+          {
+            "seconds": 0.5
+          },
+          {
+            "seconds": 1
+          },
+          {
+            "seconds": 2
+          },
+          {
+            "seconds": 4
+          },
+          {
+            "seconds": 8
+          },
+          {
+            "seconds": 15
+          }
+        ],
+        "start_s": 30
+      },
+      "params_hash": "fd6d224825182715969a2f4291b62c2da0127863a314543065ea31fa8cf4eb74"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"seconds\":0.5},{\"seconds\":1},{\"seconds\":2},{\"seconds\":4},{\"seconds\":8},{\"seconds\":15}],\"start_s\":0}",
+      "name": "profile:soundtrack:default",
+      "params": {
+        "levels": [
+          {
+            "seconds": 0.5
+          },
+          {
+            "seconds": 1
+          },
+          {
+            "seconds": 2
+          },
+          {
+            "seconds": 4
+          },
+          {
+            "seconds": 8
+          },
+          {
+            "seconds": 15
+          }
+        ],
+        "start_s": 0
+      },
+      "params_hash": "971d8f584d635057cd6a077acde170e9fabba40467dac78803651b249b213d60"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"seconds\":0.5},{\"seconds\":1},{\"seconds\":2},{\"seconds\":4},{\"seconds\":8},{\"seconds\":15}],\"start_s\":0}",
+      "name": "profile:audio_blackout:default",
+      "params": {
+        "levels": [
+          {
+            "seconds": 0.5
+          },
+          {
+            "seconds": 1
+          },
+          {
+            "seconds": 2
+          },
+          {
+            "seconds": 4
+          },
+          {
+            "seconds": 8
+          },
+          {
+            "seconds": 15
+          }
+        ],
+        "start_s": 0
+      },
+      "params_hash": "971d8f584d635057cd6a077acde170e9fabba40467dac78803651b249b213d60"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"frame\":1,\"max_width\":960},{\"frame\":2,\"max_width\":960},{\"frame\":3,\"max_width\":960},{\"frame\":4,\"max_width\":960},{\"frame\":5,\"max_width\":960},{\"frame\":6,\"max_width\":960}]}",
+      "name": "profile:frame_sequence:default",
+      "params": {
+        "levels": [
+          {
+            "frame": 1,
+            "max_width": 960
+          },
+          {
+            "frame": 2,
+            "max_width": 960
+          },
+          {
+            "frame": 3,
+            "max_width": 960
+          },
+          {
+            "frame": 4,
+            "max_width": 960
+          },
+          {
+            "frame": 5,
+            "max_width": 960
+          },
+          {
+            "frame": 6,
+            "max_width": 960
+          }
+        ]
+      },
+      "params_hash": "a649e4e2b608c922fb4c9b2467c8f3e46ae9c9d0c14bbe1003c272e6e598affe"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"fields\":[\"tagline\"]},{\"fields\":[\"plot_masked\"]},{\"fields\":[\"year\",\"genres\"]},{\"fields\":[\"country\"]},{\"fields\":[\"director\"]},{\"fields\":[\"cast_top3\"]}]}",
+      "name": "profile:description:default",
+      "params": {
+        "levels": [
+          {
+            "fields": [
+              "tagline"
+            ]
+          },
+          {
+            "fields": [
+              "plot_masked"
+            ]
+          },
+          {
+            "fields": [
+              "year",
+              "genres"
+            ]
+          },
+          {
+            "fields": [
+              "country"
+            ]
+          },
+          {
+            "fields": [
+              "director"
+            ]
+          },
+          {
+            "fields": [
+              "cast_top3"
+            ]
+          }
+        ]
+      },
+      "params_hash": "f88db3d62c0eb021f7d525ce0c0f7b78dc27f7b8ea21d3cb1ac652cb5700af72"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"count\":1},{\"count\":2},{\"count\":3},{\"count\":4},{\"count\":6},{\"count\":null}]}",
+      "name": "profile:emoji:default",
+      "params": {
+        "levels": [
+          {
+            "count": 1
+          },
+          {
+            "count": 2
+          },
+          {
+            "count": 3
+          },
+          {
+            "count": 4
+          },
+          {
+            "count": 6
+          },
+          {
+            "count": null
+          }
+        ]
+      },
+      "params_hash": "40279435b63f440bd3cc36985cf160c0088b0b4ddd9c7a9da338487c277216d8"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"blur_px\":0,\"crop\":1,\"max_width\":960}]}",
+      "name": "profile:frame_progressive:still",
+      "params": {
+        "levels": [
+          {
+            "blur_px": 0,
+            "crop": 1,
+            "max_width": 960
+          }
+        ]
+      },
+      "params_hash": "afb118d7123af4378193b979ca93d04fa3d34f5b9bd2a3dc290cba7cdfeaf691"
+    },
+    {
+      "canonical_json": "{\"levels\":[{\"seconds\":15}],\"start_s\":0}",
+      "name": "profile:audio_intro:preview",
+      "params": {
+        "levels": [
+          {
+            "seconds": 15
+          }
+        ],
+        "start_s": 0
+      },
+      "params_hash": "d2f76337c3613cfcb3bd4147f746a8c289c7c49f0245a3a4b6b7620f231495d2"
+    },
+    {
       "canonical_json": "{}",
       "name": "empty",
       "params": {},

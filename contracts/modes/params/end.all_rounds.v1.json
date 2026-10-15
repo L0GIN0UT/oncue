@@ -1,0 +1,10 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:end.all_rounds:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сессия идёт все session.rounds раундов",
+  "properties": {},
+  "required": [],
+  "title": "end.all_rounds params v1",
+  "type": "object"
+}
