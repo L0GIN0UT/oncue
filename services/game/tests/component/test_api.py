@@ -102,6 +102,12 @@ async def test_answer_is_item_or_text(
             {"media_item_id": SESSION, "reason": "надпись на кадре"},
         ),
         ("GET", "/admin/v1/projection/items?q=инте&domain=film", None),
+        (
+            "POST",
+            "/admin/v1/mode-configs/film.random.description/asset-requests",
+            {"draft_revision": 1, "reason": "новые уровни"},
+        ),
+        ("GET", "/admin/v1/mode-configs/film.random.description/asset-requests", None),
     ],
 )
 async def test_admin_requires_specific_perm(
@@ -127,3 +133,41 @@ async def test_schema_endpoint_lists_mode_config(
     )
     assert response.status_code == 200
     assert "properties" in response.json()["mode_config"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/v1/modes/film.marathon.director/subjects?q=нолан", None),
+        ("POST", f"/v1/sessions/{SESSION}/rounds/0/final-clue", None),
+        ("GET", "/v1/me/records", None),
+        ("POST", "/v1/sessions", {"mode_key": "film.marathon.director", "subject_ids": [SESSION]}),
+        (
+            "POST",
+            f"/v1/sessions/{SESSION}/guesses",
+            {"round_index": 0, "expected_version": 1, "answer": {"option_id": "higher"}},
+        ),
+    ],
+)
+async def test_stage3a_public_routes_are_declared_but_not_implemented(
+    *,
+    client: httpx.AsyncClient,
+    token_issuer: TestTokenIssuer,
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> None:
+    """Шаг 0a этапа 3a: контракт объявлен, реализация — в потоке B (501)."""
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    response = await client.request(method, path, json=body, headers=headers)
+    assert_problem(response, 501, "common.not_implemented")
+
+
+async def test_round_index_accepts_long_sessions(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer
+) -> None:
+    """``session.rounds`` ≤ 200: номер раунда до 199 проходит схему, 200 — нет."""
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    body = {"round_index": 200, "expected_version": 1}
+    response = await client.post(f"/v1/sessions/{SESSION}/skips", json=body, headers=headers)
+    assert response.status_code == 422

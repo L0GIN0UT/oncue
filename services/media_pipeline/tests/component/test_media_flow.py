@@ -657,3 +657,15 @@ async def test_link_issuance_journal_records_client_id(service: Service) -> None
     assert [(r.client_id, r.subject_hash) for r in rows] == [
         ("game", hashlib.sha256(b"sess:journal").hexdigest())
     ]
+
+
+async def test_stage3a_admin_routes_are_declared_but_not_implemented(service: Service) -> None:
+    """Шаг 0a этапа 3a: контракт объявлен, реализация — в потоке M (501)."""
+    profiles = await service.client.get("/admin/v1/profiles", headers=service.admin())
+    assert_problem(profiles, 501, "common.not_implemented")
+    position = await service.client.put(
+        f"/admin/v1/sources/{uuid7()}/position",
+        json={"position": 2, "reason": "порядок кадров"},
+        headers={**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"},
+    )
+    assert_problem(position, 501, "common.not_implemented")

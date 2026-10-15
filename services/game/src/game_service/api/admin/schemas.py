@@ -144,6 +144,27 @@ class ArchiveRequest(_Request):
     reason: Reason
 
 
+class AssetRequestCreate(_Request):
+    """Запросить генерацию ассетов под параметры загадки черновика (ADR 0025)."""
+
+    draft_revision: int = Field(ge=1)
+    reason: Reason
+
+
+class AssetRequestOut(BaseModel):
+    """Запрос ассетов: статус профиля смотрится в media-pipeline (``/admin/v1/profiles``)."""
+
+    request_id: UUID
+    mode_key: str
+    draft_revision: int
+    clue_type: str
+    params_hash: str
+    status: Literal["pending", "sent"]
+    actor_id: UUID | None
+    reason: str
+    requested_at: datetime
+
+
 # ----------------------------------------------------------------------------- наборы дня
 class DailySetItem(BaseModel):
     """Единица набора дня."""

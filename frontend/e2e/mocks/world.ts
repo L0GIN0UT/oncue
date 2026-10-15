@@ -187,6 +187,8 @@ export const MODES: ModeOut[] = [
     rounds: 5,
     levels: AUDIO_LEVELS,
     allow_guest: true,
+    answer_format: "classic",
+    presentation: "score",
     presets: null,
   },
   {
@@ -199,6 +201,8 @@ export const MODES: ModeOut[] = [
     rounds: 5,
     levels: FRAME_LEVELS,
     allow_guest: true,
+    answer_format: "classic",
+    presentation: "score",
     presets: null,
   },
   {
@@ -211,6 +215,8 @@ export const MODES: ModeOut[] = [
     rounds: 10,
     levels: AUDIO_LEVELS,
     allow_guest: true,
+    answer_format: "classic",
+    presentation: "score",
     presets: [
       { id: "y2000s", title_key: "modes.presets.y2000s" },
       { id: "y2010s", title_key: "modes.presets.y2010s" },
@@ -227,6 +233,8 @@ export const MODES: ModeOut[] = [
     rounds: 10,
     levels: FRAME_LEVELS,
     allow_guest: true,
+    answer_format: "classic",
+    presentation: "score",
     presets: [
       { id: "y1990s", title_key: "modes.presets.y1990s" },
       { id: "y2000s", title_key: "modes.presets.y2000s" },
@@ -542,6 +550,7 @@ export class MockWorld {
 
   result(s: MockSession): SessionResult {
     return {
+      presentation: "score",
       score: this.score(s),
       max_score: this.maxScore(s),
       rounds: s.rounds.map((r) => ({

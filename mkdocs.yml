@@ -54,6 +54,7 @@ nav:
   - Планы:
       - Этап 1: plans/stage-1.md
       - Этап 2: plans/stage-2.md
+      - Этап 3a: plans/stage-3a.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md

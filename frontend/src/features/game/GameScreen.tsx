@@ -112,7 +112,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   const weights = tapeWeights(levels, round.levels_count);
   const gain = skipGainSeconds(levels, round.level);
   const lastLevel = round.level >= round.levels_count;
-  const Clue = clue.data ? clueRegistry[clue.data.kind] : null;
+  const Clue = clue.data ? (clueRegistry[clue.data.kind] ?? null) : null;
   const isLastRound = round.index === snapshot.rounds.length - 1 || snapshot.status === "finished";
   const tapeProgress =
     progress === null || !weights.length

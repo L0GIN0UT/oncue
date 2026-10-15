@@ -5,6 +5,8 @@
 Чужая или несуществующая сессия — 404 ``game.session_not_found`` (не 403).
 """
 
+# ruff: noqa: ARG001 — заглушки этапа 3a (501) объявляют параметры контракта до реализации.
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -15,6 +17,7 @@ from pydantic import BaseModel
 
 from game_service.api.common import ApiServices, NoStoreRoute, player_of
 from game_service.api.public.schemas import (
+    MAX_ROUND_INDEX,
     ClueOut,
     ClueRequest,
     DailyStatus,
@@ -22,19 +25,26 @@ from game_service.api.public.schemas import (
     GiveUpRequest,
     GuessRequest,
     ItemAnswer,
+    ModeKey,
     ModeOut,
     MoveResult,
+    OptionAnswer,
+    RecordOut,
     SessionResult,
     SessionSnapshot,
     SkipRequest,
     StartSessionRequest,
+    SubjectOut,
 )
 from gv_auth import Principal, current_principal
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 Subject = Annotated[Principal, Depends(current_principal)]
 SessionId = Annotated[UUID, Path(description="Идентификатор сессии")]
-RoundIndex = Annotated[int, Path(ge=0, le=49, description="Номер раунда с 0")]
+RoundIndex = Annotated[int, Path(ge=0, le=MAX_ROUND_INDEX, description="Номер раунда с 0")]
+PathModeKey = Annotated[ModeKey, Path(description="Ключ режима")]
+STAGE_3A = "этап 3a: реализуется в потоке B (docs/plans/stage-3a.md)"
 MODES_CACHE = "public, max-age=30"
 
 
@@ -89,6 +99,8 @@ def build_public_router(c: ApiServices) -> APIRouter:
         request: Request,
         response: Response,
     ) -> SessionSnapshot:
+        if body.subject_ids is not None:
+            raise NotImplementedYetError(STAGE_3A)
         snapshot, created = await c.play.start(
             player_of(subject, request), body.mode_key, body.preset_id, key
         )
@@ -135,6 +147,8 @@ def build_public_router(c: ApiServices) -> APIRouter:
     async def submit_guess(
         session_id: SessionId, body: GuessRequest, subject: Subject, key: IdempotencyKey
     ) -> MoveResult:
+        if isinstance(body.answer, OptionAnswer):
+            raise NotImplementedYetError(STAGE_3A)
         item = body.answer.media_item_id if isinstance(body.answer, ItemAnswer) else None
         text = None if isinstance(body.answer, ItemAnswer) else body.answer.text
         result = await c.play.guess(
@@ -204,6 +218,46 @@ def build_public_router(c: ApiServices) -> APIRouter:
     )
     async def get_result(session_id: SessionId, subject: Subject) -> SessionResult:
         return SessionResult.model_validate(await c.queries.result(player_of(subject), session_id))
+
+    @router.get(
+        "/modes/{mode_key}/subjects",
+        response_model=list[SubjectOut],
+        summary="Персоны для марафона",
+        description="Поиск по имени среди персон с достаточным числом играбельных единиц.",
+        responses=problem_responses(401, 404, 422, 429, 501),
+    )
+    async def list_subjects(
+        mode_key: PathModeKey,
+        subject: Subject,
+        q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+        limit: Annotated[int, Query(ge=1, le=20)] = 20,
+    ) -> list[SubjectOut]:
+        raise NotImplementedYetError(STAGE_3A)
+
+    @router.post(
+        "/sessions/{session_id}/rounds/{index}/final-clue",
+        response_model=ClueOut,
+        summary="Свежая ссылка на ассет ревила",
+        description=(
+            "Только для завершённого не-void раунда своей сессии; ограничена лимитом. "
+            "Ошибки: 409 `game.round_not_finished`, 410 `game.asset_unavailable`, 429."
+        ),
+        responses=problem_responses(401, 404, 409, 410, 422, 429, 501, 503),
+    )
+    async def final_clue(session_id: SessionId, index: RoundIndex, subject: Subject) -> ClueOut:
+        raise NotImplementedYetError(STAGE_3A)
+
+    @router.get(
+        "/me/records",
+        response_model=list[RecordOut],
+        summary="Личные рекорды",
+        description="Только для пользователей; гостю — пустой список.",
+        responses=problem_responses(401, 422, 501),
+    )
+    async def my_records(
+        subject: Subject, mode_key: Annotated[ModeKey | None, Query()] = None
+    ) -> list[RecordOut]:
+        raise NotImplementedYetError(STAGE_3A)
 
     @router.get(
         "/daily",

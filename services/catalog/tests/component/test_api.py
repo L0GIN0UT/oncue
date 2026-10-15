@@ -361,3 +361,27 @@ async def test_autocomplete_rate_limited(
         assert limited.headers["Retry-After"] == "1"
     finally:
         await infra.close()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/admin/v1/items/{item}/clue-texts", None),
+        ("PUT", "/admin/v1/items/{item}/clue-texts", {"base_revision": 0, "reason": "текст"}),
+        ("POST", "/admin/v1/items/{item}/clue-texts/approve", {"revision": 1, "reason": "годно"}),
+        ("POST", "/admin/v1/items/republish", {"reason": "новые поля"}),
+    ],
+)
+async def test_stage3a_admin_routes_are_declared_but_not_implemented(
+    *,
+    client: httpx.AsyncClient,
+    token_issuer: TestTokenIssuer,
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> None:
+    """Шаг 0a этапа 3a: контракт объявлен, реализация — в потоке M (501)."""
+    url = path.format(item=uuid7())
+    headers = auth(token_issuer, *ADMIN_PERMS) | key()
+    response = await client.request(method, url, json=body, headers=headers)
+    assert_problem(response, 501, "common.not_implemented")

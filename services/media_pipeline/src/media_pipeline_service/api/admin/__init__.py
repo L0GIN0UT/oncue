@@ -6,15 +6,18 @@
 транзакции (``gv_db.idempotency``).
 """
 
+# ruff: noqa: ARG001 — заглушки этапа 3a (501) объявляют параметры контракта до реализации.
+
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from gv_auth import Principal, require_perm
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
 from media_pipeline_service.api.common import AssetSetItem
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
@@ -46,6 +49,35 @@ class UploadResponse(BaseModel):
     bytes: int
     mime: str
     scheduled_asset_set_ids: list[UUID]
+
+
+class ProfileSets(BaseModel):
+    """Сколько наборов профиля в каком состоянии."""
+
+    ready: int = Field(ge=0)
+    pending: int = Field(ge=0)
+    failed: int = Field(ge=0)
+
+
+class ProfileOut(BaseModel):
+    """Профиль ассетов: статический (``asset_profiles.yaml``) или динамический (ADR 0025)."""
+
+    clue_type: str
+    profile_key: str | None = Field(description="null у динамического профиля")
+    params_hash: str
+    origin: Literal["static", "dynamic"]
+    status: Literal["active", "backfilling", "rejected"]
+    sets: ProfileSets
+
+
+class SourcePositionRequest(BaseModel):
+    """Порядок исходника своего вида (кадры ``frame_sequence``: 1 — самый сложный)."""
+
+    position: int = Field(ge=1, le=100)
+    reason: Reason
+
+
+STAGE_3A = "этап 3a: поток M (docs/plans/stage-3a.md)"
 
 
 async def _read_limited(file: UploadFile, max_bytes: int) -> bytes:
@@ -122,6 +154,31 @@ def build_admin_router(
             asset_set_id, actor_id=principal.user_id, reason=body.reason, idempotency_key=key
         )
         return AssetSetItem.of(view)
+
+    @router.get(
+        "/profiles",
+        response_model=list[ProfileOut],
+        summary="Профили ассетов и готовность их наборов",
+        responses=problem_responses(401, 403, 422, 501),
+    )
+    async def admin_profiles(
+        _: Viewer, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[ProfileOut]:
+        raise NotImplementedYetError(STAGE_3A)
+
+    @router.put(
+        "/sources/{source_media_id}/position",
+        response_model=UploadResponse,
+        summary="Изменить порядок исходника",
+        responses=problem_responses(401, 403, 404, 409, 422, 501),
+    )
+    async def set_source_position(
+        source_media_id: UUID,
+        body: SourcePositionRequest,
+        principal: Uploader,
+        key: IdempotencyKey,
+    ) -> UploadResponse:
+        raise NotImplementedYetError(STAGE_3A)
 
     @router.get(
         "/asset-sets",

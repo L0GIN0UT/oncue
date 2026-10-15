@@ -107,6 +107,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/mode-configs/{mode_key}/asset-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Запросы ассетов режима */
+        get: operations["list_asset_requests_admin_v1_mode_configs__mode_key__asset_requests_get"];
+        put?: never;
+        /**
+         * Запросить ассеты под загадку черновика
+         * @description Если под `params_hash(clue.params)` черновика нет профиля ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ.
+         */
+        post: operations["request_assets_admin_v1_mode_configs__mode_key__asset_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/mode-configs/{mode_key}/draft": {
         parameters: {
             query?: never;
@@ -252,6 +273,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Личные рекорды
+         * @description Только для пользователей; гостю — пустой список.
+         */
+        get: operations["my_records_v1_me_records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta": {
         parameters: {
             query?: never;
@@ -281,6 +322,26 @@ export interface paths {
          * @description Публичный, `Cache-Control: public, max-age=30`.
          */
         get: operations["list_modes_v1_modes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/modes/{mode_key}/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Персоны для марафона
+         * @description Поиск по имени среди персон с достаточным числом играбельных единиц.
+         */
+        get: operations["list_subjects_v1_modes__mode_key__subjects_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -383,6 +444,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions/{session_id}/rounds/{index}/final-clue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Свежая ссылка на ассет ревила
+         * @description Только для завершённого не-void раунда своей сессии; ограничена лимитом. Ошибки: 409 `game.round_not_finished`, 410 `game.asset_unavailable`, 429.
+         */
+        post: operations["final_clue_v1_sessions__session_id__rounds__index__final_clue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions/{session_id}/rounds/{index}/give-up": {
         parameters: {
             query?: never;
@@ -436,6 +517,71 @@ export interface components {
             reason: string;
         };
         /**
+         * AssetRequestCreate
+         * @description Запросить генерацию ассетов под параметры загадки черновика (ADR 0025).
+         */
+        AssetRequestCreate: {
+            /** Draft Revision */
+            draft_revision: number;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * AssetRequestOut
+         * @description Запрос ассетов: статус профиля смотрится в media-pipeline (``/admin/v1/profiles``).
+         */
+        AssetRequestOut: {
+            /** Actor Id */
+            actor_id: string | null;
+            /** Clue Type */
+            clue_type: string;
+            /** Draft Revision */
+            draft_revision: number;
+            /** Mode Key */
+            mode_key: string;
+            /** Params Hash */
+            params_hash: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "sent";
+        };
+        /**
+         * BracketOut
+         * @description Итог сетки: чемпион и выборы по турам.
+         */
+        BracketOut: {
+            /** Champion */
+            champion: string;
+            /** Picks */
+            picks: components["schemas"]["BracketPick"][];
+        };
+        /**
+         * BracketPick
+         * @description Выбор в сетке.
+         */
+        BracketPick: {
+            /** Loser */
+            loser: string;
+            /** Stage */
+            stage: number;
+            /** Winner */
+            winner: string;
+        };
+        /**
          * ClueMeta
          * @description Параметры уровня для UI — поля ``hint_fields`` плагина загадки ядра.
          *
@@ -455,10 +601,25 @@ export interface components {
              */
             blur_px?: number | null;
             /**
+             * Count
+             * @description emoji: сколько эмодзи открыто (null у meta — все)
+             */
+            count?: number | null;
+            /**
              * Crop
              * @description frame_progressive: видимая доля кадра (0..1]
              */
             crop?: number | null;
+            /**
+             * Fields
+             * @description description: поля, открытые на уровне
+             */
+            fields?: string[] | null;
+            /**
+             * Frame
+             * @description frame_sequence: позиция кадра
+             */
+            frame?: number | null;
             /**
              * Pixel Block
              * @description poster_masked: размер блока пикселизации, px
@@ -484,7 +645,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "audio" | "image";
+            kind: "audio" | "image" | "text";
             /** Level */
             level: number;
             meta: components["schemas"]["ClueMeta"];
@@ -615,7 +776,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "audio" | "image";
+            kind: "audio" | "image" | "text";
             /** Mime */
             mime: string;
             /** Url */
@@ -640,7 +801,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "item" | "text" | "skip";
+            kind: "item" | "text" | "option" | "skip";
             /**
              * Result
              * @description null у пропуска
@@ -653,7 +814,7 @@ export interface components {
          */
         GuessRequest: {
             /** Answer */
-            answer: components["schemas"]["ItemAnswer"] | components["schemas"]["TextAnswer"];
+            answer: components["schemas"]["ItemAnswer"] | components["schemas"]["TextAnswer"] | components["schemas"]["OptionAnswer"];
             /** Expected Version */
             expected_version: number;
             /** Round Index */
@@ -803,6 +964,12 @@ export interface components {
         ModeOut: {
             /** Allow Guest */
             allow_guest: boolean;
+            /**
+             * Answer Format
+             * @default classic
+             * @enum {string}
+             */
+            answer_format: "classic" | "pick";
             /** Clue Type */
             clue_type: string;
             /**
@@ -814,12 +981,20 @@ export interface components {
             key: string;
             /** Levels */
             levels: components["schemas"]["LevelOut"][];
+            /**
+             * Presentation
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
             /** Presets */
             presets?: components["schemas"]["PresetOut"][] | null;
             /** Rounds */
             rounds: number;
             /** Source Type */
             source_type: string;
+            /** @description null — выбирать нечего */
+            start?: components["schemas"]["ModeStart"] | null;
             /** Title Key */
             title_key: string;
             /** Version */
@@ -843,6 +1018,13 @@ export interface components {
             version: number;
         };
         /**
+         * ModeStart
+         * @description Что игрок выбирает перед стартом режима.
+         */
+        ModeStart: {
+            subject?: components["schemas"]["SubjectPick"] | null;
+        };
+        /**
          * MoveResult
          * @description Итог хода.
          */
@@ -854,6 +1036,35 @@ export interface components {
             result: ("exact" | "partial" | "miss") | null;
             round: components["schemas"]["RoundOut"];
             session: components["schemas"]["SessionSnapshot"];
+            stats?: components["schemas"]["MoveStats"] | null;
+        };
+        /**
+         * MoveStats
+         * @description Статистика выбора (сетка): сколько игроков выбрали так же.
+         */
+        MoveStats: {
+            /** Agree Pct */
+            agree_pct: number;
+        };
+        /**
+         * OptionAnswer
+         * @description Ответ выбором варианта раунда (формат ``pick``).
+         */
+        OptionAnswer: {
+            /** Option Id */
+            option_id: string;
+        };
+        /**
+         * OptionOut
+         * @description Вариант ответа формата ``pick``.
+         */
+        OptionOut: {
+            /** Label Key */
+            label_key?: string | null;
+            /** Option Id */
+            option_id: string;
+            /** Title */
+            title?: string | null;
         };
         /**
          * PersonOut
@@ -965,6 +1176,23 @@ export interface components {
             reason: string;
         };
         /**
+         * RecordOut
+         * @description Личный рекорд режима.
+         */
+        RecordOut: {
+            /**
+             * Achieved At
+             * Format: date-time
+             */
+            achieved_at: string;
+            /** Best */
+            best: number;
+            /** Mode Key */
+            mode_key: string;
+            /** Percentile */
+            percentile?: number | null;
+        };
+        /**
          * RegenerateRequest
          * @description Перегенерировать набор (только ``scheduled`` / ``failed``).
          */
@@ -984,6 +1212,18 @@ export interface components {
             media_item_id: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * ResultRecord
+         * @description Рекорд в итоге сессии (только пользователи).
+         */
+        ResultRecord: {
+            /** Best */
+            best: number;
+            /** Is New */
+            is_new: boolean;
+            /** Percentile */
+            percentile?: number | null;
         };
         /**
          * ResultRound
@@ -1048,15 +1288,35 @@ export interface components {
             level: number;
             /** Levels Count */
             levels_count: number;
+            /** Options */
+            options?: components["schemas"]["OptionOut"][];
             /** Points */
             points?: number | null;
+            progress?: components["schemas"]["RoundProgress"] | null;
             /** @description Только у завершённого раунда */
             reveal?: components["schemas"]["Reveal"] | null;
+            /** Shown */
+            shown?: components["schemas"]["ShownItem"][];
             /**
              * Status
              * @enum {string}
              */
             status: "pending" | "active" | "finished" | "void";
+        };
+        /**
+         * RoundProgress
+         * @description Прогресс сессии для UI: жизни, серия, тур сетки.
+         */
+        RoundProgress: {
+            /** Lives Left */
+            lives_left?: number | null;
+            /**
+             * Stage
+             * @description Размер тура сетки: 32, 16 … 2
+             */
+            stage?: number | null;
+            /** Streak */
+            streak?: number | null;
         };
         /**
          * SaveDraftRequest
@@ -1087,10 +1347,18 @@ export interface components {
          * @description Итог завершённой сессии.
          */
         SessionResult: {
+            bracket?: components["schemas"]["BracketOut"] | null;
             /** Daily Stats */
             daily_stats?: components["schemas"]["DailyRoundStat"][] | null;
             /** Max Score */
             max_score: number;
+            /**
+             * Presentation
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            record?: components["schemas"]["ResultRecord"] | null;
             /** Rounds */
             rounds: components["schemas"]["ResultRound"][];
             /** Score */
@@ -1135,6 +1403,25 @@ export interface components {
             text: string;
         };
         /**
+         * ShownItem
+         * @description Единица, которую игрок видит открыто (опорная единица пары, вариант сетки).
+         */
+        ShownItem: {
+            /** @description Кадр или отрывок варианта */
+            clue?: components["schemas"]["FinalClue"] | null;
+            /**
+             * Metric
+             * @description Только у опорной единицы пары
+             */
+            metric?: number | null;
+            /** Option Id */
+            option_id?: string | null;
+            /** Title */
+            title: string;
+            /** Year */
+            year?: number | null;
+        };
+        /**
          * SkipRequest
          * @description Пропуск уровня.
          */
@@ -1153,6 +1440,47 @@ export interface components {
             mode_key: string;
             /** Preset Id */
             preset_id?: string | null;
+            /**
+             * Subject Ids
+             * @description Персоны марафона
+             */
+            subject_ids?: string[] | null;
+        };
+        /**
+         * SubjectOut
+         * @description Персона для марафона (``GET /v1/modes/{key}/subjects``).
+         */
+        SubjectOut: {
+            /**
+             * Items
+             * @description Сколько играбельных единиц у персоны
+             */
+            items: number;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "artist" | "director" | "actor";
+            /**
+             * Subject Id
+             * Format: uuid
+             */
+            subject_id: string;
+        };
+        /**
+         * SubjectPick
+         * @description Выбор персон игроком перед стартом (марафон).
+         */
+        SubjectPick: {
+            /**
+             * Max
+             * @description Сколько персон можно выбрать
+             */
+            max: number;
+            /** Roles */
+            roles: ("artist" | "director" | "actor")[];
         };
         /**
          * TextAnswer
@@ -1654,6 +1982,177 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_asset_requests_admin_v1_mode_configs__mode_key__asset_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mode_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRequestOut"][];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    request_assets_admin_v1_mode_configs__mode_key__asset_requests_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                mode_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetRequestOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2217,6 +2716,58 @@ export interface operations {
             };
         };
     };
+    my_records_v1_me_records_get: {
+        parameters: {
+            query?: {
+                mode_key?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordOut"][];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     meta_v1_meta_get: {
         parameters: {
             query?: never;
@@ -2269,6 +2820,82 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_subjects_v1_modes__mode_key__subjects_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description Ключ режима */
+                mode_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectOut"][];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2698,6 +3325,111 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    final_clue_v1_sessions__session_id__rounds__index__final_clue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Номер раунда с 0 */
+                index: number;
+                /** @description Идентификатор сессии */
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClueOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Ресурс больше недоступен */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

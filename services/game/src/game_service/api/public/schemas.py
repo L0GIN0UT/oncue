@@ -1,7 +1,9 @@
 """Схемы публичного API game (план этапа 2, §2.6) — контракт для фронтенда и bff.
 
 Античит (D11): до ревила в снимке сессии нет ``media_item_id``, названия и
-``asset_set_id``; ``reveal`` есть только у завершённого раунда.
+``asset_set_id``; ``reveal`` есть только у завершённого раунда. Этап 3a (план, §2.5):
+варианты ответа — непрозрачные ``option_id``, метрика скрытой единицы пары до ответа не
+отдаётся.
 """
 
 from __future__ import annotations
@@ -19,7 +21,12 @@ ModeKey = Annotated[
 PresetId = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
 RoundOutcomeLiteral = Literal["exact", "partial", "miss", "gave_up", "void"]
 GuessResultLiteral = Literal["exact", "partial", "miss"]
-ClueKind = Literal["audio", "image"]
+ClueKind = Literal["audio", "image", "text"]
+AnswerFormatLiteral = Literal["classic", "pick"]
+Presentation = Literal["score", "streak", "bracket"]
+OptionId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,32}$")]
+MAX_ROUND_INDEX = 199
+"""Последний допустимый номер раунда (``session.rounds`` ≤ 200, план этапа 3a)."""
 
 
 class _Request(BaseModel):
@@ -46,6 +53,19 @@ class PresetOut(BaseModel):
     title_key: str
 
 
+class SubjectPick(BaseModel):
+    """Выбор персон игроком перед стартом (марафон)."""
+
+    roles: list[Literal["artist", "director", "actor"]]
+    max: int = Field(ge=1, le=10, description="Сколько персон можно выбрать")
+
+
+class ModeStart(BaseModel):
+    """Что игрок выбирает перед стартом режима."""
+
+    subject: SubjectPick | None = None
+
+
 class ModeOut(BaseModel):
     """Опубликованный режим (``GET /v1/modes``)."""
 
@@ -59,6 +79,18 @@ class ModeOut(BaseModel):
     levels: list[LevelOut]
     allow_guest: bool
     presets: list[PresetOut] | None = None
+    answer_format: AnswerFormatLiteral = "classic"
+    presentation: Presentation = "score"
+    start: ModeStart | None = Field(default=None, description="null — выбирать нечего")
+
+
+class SubjectOut(BaseModel):
+    """Персона для марафона (``GET /v1/modes/{key}/subjects``)."""
+
+    subject_id: UUID
+    name: str
+    role: Literal["artist", "director", "actor"]
+    items: int = Field(ge=0, description="Сколько играбельных единиц у персоны")
 
 
 # ----------------------------------------------------------------------------- сессия
@@ -67,6 +99,9 @@ class StartSessionRequest(_Request):
 
     mode_key: ModeKey
     preset_id: PresetId | None = None
+    subject_ids: list[UUID] | None = Field(
+        default=None, min_length=1, max_length=10, description="Персоны марафона"
+    )
 
 
 class ModeRef(BaseModel):
@@ -81,7 +116,7 @@ class ModeRef(BaseModel):
 class GuessOut(BaseModel):
     """Ход в истории раунда."""
 
-    kind: Literal["item", "text", "skip"]
+    kind: Literal["item", "text", "option", "skip"]
     display: str
     result: GuessResultLiteral | None = Field(description="null у пропуска")
 
@@ -112,6 +147,32 @@ class Reveal(BaseModel):
     final_clue: FinalClue
 
 
+class ShownItem(BaseModel):
+    """Единица, которую игрок видит открыто (опорная единица пары, вариант сетки)."""
+
+    option_id: OptionId | None = None
+    title: str
+    year: int | None = None
+    metric: float | None = Field(default=None, description="Только у опорной единицы пары")
+    clue: FinalClue | None = Field(default=None, description="Кадр или отрывок варианта")
+
+
+class OptionOut(BaseModel):
+    """Вариант ответа формата ``pick``."""
+
+    option_id: OptionId
+    label_key: str | None = None
+    title: str | None = None
+
+
+class RoundProgress(BaseModel):
+    """Прогресс сессии для UI: жизни, серия, тур сетки."""
+
+    lives_left: int | None = None
+    streak: int | None = None
+    stage: int | None = Field(default=None, description="Размер тура сетки: 32, 16 … 2")
+
+
 class RoundOut(BaseModel):
     """Раунд в снимке сессии."""
 
@@ -122,6 +183,9 @@ class RoundOut(BaseModel):
     guesses: list[GuessOut]
     points: int | None = None
     reveal: Reveal | None = Field(default=None, description="Только у завершённого раунда")
+    shown: list[ShownItem] = Field(default_factory=list)
+    options: list[OptionOut] = Field(default_factory=list)
+    progress: RoundProgress | None = None
 
 
 class SessionSnapshot(BaseModel):
@@ -160,6 +224,13 @@ class ClueMeta(BaseModel):
     pixel_block: int | None = Field(
         default=None, description="poster_masked: размер блока пикселизации, px"
     )
+    frame: int | None = Field(default=None, description="frame_sequence: позиция кадра")
+    fields: list[str] | None = Field(
+        default=None, description="description: поля, открытые на уровне"
+    )
+    count: int | None = Field(
+        default=None, description="emoji: сколько эмодзи открыто (null у meta — все)"
+    )
     blur: float | None = Field(
         default=None,
         deprecated=True,
@@ -191,18 +262,24 @@ class TextAnswer(_Request):
     text: str = Field(min_length=1, max_length=120)
 
 
+class OptionAnswer(_Request):
+    """Ответ выбором варианта раунда (формат ``pick``)."""
+
+    option_id: OptionId
+
+
 class GuessRequest(_Request):
     """Ответ на текущем уровне раунда."""
 
-    round_index: int = Field(ge=0, le=49)
+    round_index: int = Field(ge=0, le=MAX_ROUND_INDEX)
     expected_version: int = Field(ge=0)
-    answer: ItemAnswer | TextAnswer
+    answer: ItemAnswer | TextAnswer | OptionAnswer
 
 
 class SkipRequest(_Request):
     """Пропуск уровня."""
 
-    round_index: int = Field(ge=0, le=49)
+    round_index: int = Field(ge=0, le=MAX_ROUND_INDEX)
     expected_version: int = Field(ge=0)
 
 
@@ -210,6 +287,12 @@ class GiveUpRequest(_Request):
     """Сдаться в раунде."""
 
     expected_version: int = Field(ge=0)
+
+
+class MoveStats(BaseModel):
+    """Статистика выбора (сетка): сколько игроков выбрали так же."""
+
+    agree_pct: float = Field(ge=0, le=100)
 
 
 class MoveResult(BaseModel):
@@ -220,6 +303,7 @@ class MoveResult(BaseModel):
     )
     round: RoundOut
     session: SessionSnapshot
+    stats: MoveStats | None = None
 
 
 # ----------------------------------------------------------------------------- итог
@@ -246,6 +330,38 @@ class DailyRoundStat(BaseModel):
     exact_pct: float = Field(ge=0, le=100)
 
 
+class RecordOut(BaseModel):
+    """Личный рекорд режима."""
+
+    mode_key: str
+    best: int
+    percentile: float | None = Field(default=None, ge=0, le=100)
+    achieved_at: datetime
+
+
+class ResultRecord(BaseModel):
+    """Рекорд в итоге сессии (только пользователи)."""
+
+    best: int
+    is_new: bool
+    percentile: float | None = Field(default=None, ge=0, le=100)
+
+
+class BracketPick(BaseModel):
+    """Выбор в сетке."""
+
+    stage: int
+    winner: str
+    loser: str
+
+
+class BracketOut(BaseModel):
+    """Итог сетки: чемпион и выборы по турам."""
+
+    champion: str
+    picks: list[BracketPick]
+
+
 class SessionResult(BaseModel):
     """Итог завершённой сессии."""
 
@@ -254,6 +370,9 @@ class SessionResult(BaseModel):
     rounds: list[ResultRound]
     share: ShareOut
     daily_stats: list[DailyRoundStat] | None = None
+    presentation: Presentation = "score"
+    record: ResultRecord | None = None
+    bracket: BracketOut | None = None
 
 
 class DailyStatus(BaseModel):

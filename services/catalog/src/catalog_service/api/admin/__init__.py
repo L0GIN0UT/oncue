@@ -5,6 +5,8 @@
 (``gv_service.Reason``); аудит — ``admin_actions``/``import_jobs``.
 """
 
+# ruff: noqa: ARG001 — заглушки этапа 3a (501) объявляют параметры контракта до реализации.
+
 from __future__ import annotations
 
 import uuid
@@ -19,6 +21,7 @@ from catalog_service.application.services import CatalogServices
 from catalog_service.domain.import_job import ImportSource
 from catalog_service.domain.model import AliasDraft, AliasKind, MediaDomain
 from gv_auth import Principal, require_perm
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
 
 # Ошибки, общие для всех ручек admin-API.
@@ -137,6 +140,49 @@ class ImportView(BaseModel):
     error: str | None
 
 
+class ClueTextsOut(BaseModel):
+    """Тексты загадок единицы (ADR 0024): в событие уходят только одобренные."""
+
+    plot_raw: str | None = Field(description="Исходный сюжет (TMDB или ввод модератора)")
+    plot_masked: str | None
+    tagline: str | None
+    emoji: str | None
+    status: Literal["draft", "approved"]
+    revision: int = Field(ge=0)
+
+
+class ClueTextsIn(BaseModel):
+    """Правка текстов загадок: после правки тексты снова требуют одобрения."""
+
+    plot_masked: str | None = Field(default=None, min_length=1, max_length=2000)
+    tagline: str | None = Field(default=None, min_length=1, max_length=300)
+    emoji: str | None = Field(default=None, min_length=1, max_length=64)
+    base_revision: int = Field(ge=0)
+    reason: Reason
+
+
+class ApproveClueTextsRequest(BaseModel):
+    """Одобрить тексты ревизии ``revision``."""
+
+    revision: int = Field(ge=1)
+    reason: Reason
+
+
+class RepublishRequest(BaseModel):
+    """Переопубликовать единицы (заполнить новые поля у потребителей)."""
+
+    domain: MediaDomain | None = None
+    reason: Reason
+
+
+class RepublishOut(BaseModel):
+    """Задача переопубликации поставлена."""
+
+    job_id: uuid.UUID
+
+
+STAGE_3A = "этап 3a: поток M (docs/plans/stage-3a.md)"
+
 # Права проверяются на каждой ручке; aliases на уровне модуля — FastAPI разрешает
 # отложенные аннотации (from __future__ import annotations) только по глобальным именам.
 Viewer = Annotated[Principal, Depends(require_perm("admin.access"))]
@@ -209,6 +255,51 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
         ctx = AdminContext(principal.user_id, key, body.reason)
         drafts = [AliasDraft(a.text, a.kind, a.lang) for a in body.aliases]
         return AdminItem.model_validate(await c.replace_aliases(item_id, drafts, ctx))
+
+    @router.get(
+        "/items/{item_id}/clue-texts",
+        response_model=ClueTextsOut,
+        summary="Тексты загадок единицы",
+        responses=problem_responses(*_AUTH, 404, 501),
+    )
+    async def get_clue_texts(item_id: uuid.UUID, _: Viewer) -> ClueTextsOut:
+        raise NotImplementedYetError(STAGE_3A)
+
+    @router.put(
+        "/items/{item_id}/clue-texts",
+        response_model=ClueTextsOut,
+        summary="Изменить тексты загадок",
+        responses=problem_responses(*_AUTH, 404, 409, 501),
+    )
+    async def put_clue_texts(
+        item_id: uuid.UUID, body: ClueTextsIn, principal: Editor, key: IdempotencyKey
+    ) -> ClueTextsOut:
+        raise NotImplementedYetError(STAGE_3A)
+
+    @router.post(
+        "/items/{item_id}/clue-texts/approve",
+        response_model=ClueTextsOut,
+        summary="Одобрить тексты загадок",
+        description="Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts`.",
+        responses=problem_responses(*_AUTH, 404, 409, 501),
+    )
+    async def approve_clue_texts(
+        item_id: uuid.UUID, body: ApproveClueTextsRequest, principal: Editor, key: IdempotencyKey
+    ) -> ClueTextsOut:
+        raise NotImplementedYetError(STAGE_3A)
+
+    @router.post(
+        "/items/republish",
+        response_model=RepublishOut,
+        status_code=202,
+        summary="Переопубликовать единицы",
+        description="Фоновая задача: `MediaItemUpdated` с `version+1` для всех единиц домена.",
+        responses=problem_responses(*_AUTH, 409, 501),
+    )
+    async def republish_items(
+        body: RepublishRequest, principal: Importer, key: IdempotencyKey
+    ) -> RepublishOut:
+        raise NotImplementedYetError(STAGE_3A)
 
     @router.post(
         "/imports",

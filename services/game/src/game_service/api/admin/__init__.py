@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from game_service.api.admin.schemas import (
     ArchiveRequest,
+    AssetRequestCreate,
+    AssetRequestOut,
     ConfigStatus,
     DailySet,
     DraftOut,
@@ -33,6 +35,7 @@ from game_service.api.common import ApiServices, NoStoreRoute
 from game_service.api.public.schemas import Domain
 from game_service.application.commands.modes import AdminContext
 from gv_auth import Principal, require_perm
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 ADMIN_ACCESS = "admin.access"
@@ -165,6 +168,36 @@ def build_admin_router(c: ApiServices) -> APIRouter:
             ctx=_ctx(principal, body.reason, idempotency_key),
         )
         return ModeConfigVersion.model_validate(version)
+
+    @router.post(
+        "/mode-configs/{mode_key}/asset-requests",
+        response_model=AssetRequestOut,
+        status_code=201,
+        summary="Запросить ассеты под загадку черновика",
+        description=(
+            "Если под `params_hash(clue.params)` черновика нет профиля ассетов — событие "
+            "`game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ."
+        ),
+        responses=problem_responses(401, 403, 404, 409, 422, 501, 503),
+    )
+    async def request_assets(
+        mode_key: ModeKeyPath,
+        body: AssetRequestCreate,
+        principal: ConfigPublisher,
+        idempotency_key: IdempotencyKey,
+    ) -> AssetRequestOut:
+        raise NotImplementedYetError("этап 3a: поток B (docs/plans/stage-3a.md)")
+
+    @router.get(
+        "/mode-configs/{mode_key}/asset-requests",
+        response_model=list[AssetRequestOut],
+        summary="Запросы ассетов режима",
+        responses=problem_responses(401, 403, 404, 422, 501),
+    )
+    async def list_asset_requests(
+        mode_key: ModeKeyPath, principal: ConfigViewer
+    ) -> list[AssetRequestOut]:
+        raise NotImplementedYetError("этап 3a: поток B (docs/plans/stage-3a.md)")
 
     @router.post(
         "/mode-configs/{mode_key}/rollback",

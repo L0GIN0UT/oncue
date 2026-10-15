@@ -236,6 +236,88 @@
         "title": "Problem",
         "type": "object"
       },
+      "ProfileOut": {
+        "description": "Профиль ассетов: статический (``asset_profiles.yaml``) или динамический (ADR 0025).",
+        "properties": {
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "static",
+              "dynamic"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "params_hash": {
+            "title": "Params Hash",
+            "type": "string"
+          },
+          "profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null у динамического профиля",
+            "title": "Profile Key"
+          },
+          "sets": {
+            "$ref": "#/components/schemas/ProfileSets"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "backfilling",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clue_type",
+          "profile_key",
+          "params_hash",
+          "origin",
+          "status",
+          "sets"
+        ],
+        "title": "ProfileOut",
+        "type": "object"
+      },
+      "ProfileSets": {
+        "description": "Сколько наборов профиля в каком состоянии.",
+        "properties": {
+          "failed": {
+            "minimum": 0.0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "pending": {
+            "minimum": 0.0,
+            "title": "Pending",
+            "type": "integer"
+          },
+          "ready": {
+            "minimum": 0.0,
+            "title": "Ready",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ready",
+          "pending",
+          "failed"
+        ],
+        "title": "ProfileSets",
+        "type": "object"
+      },
       "RegenerateRequest": {
         "description": "Перегенерация набора.",
         "properties": {
@@ -280,6 +362,29 @@
         ],
         "title": "SourceKind",
         "type": "string"
+      },
+      "SourcePositionRequest": {
+        "description": "Порядок исходника своего вида (кадры ``frame_sequence``: 1 — самый сложный).",
+        "properties": {
+          "position": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "reason"
+        ],
+        "title": "SourcePositionRequest",
+        "type": "object"
       },
       "UploadResponse": {
         "description": "Загруженный исходник и наборы, поставленные в генерацию.",
@@ -572,6 +677,125 @@
         ]
       }
     },
+    "/admin/v1/profiles": {
+      "get": {
+        "operationId": "admin_profiles_admin_v1_profiles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clue_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clue Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "params_hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Params Hash"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileOut"
+                  },
+                  "title": "Response Admin Profiles Admin V1 Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Профили ассетов и готовность их наборов",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/v1/sources": {
       "post": {
         "operationId": "upload_source_admin_v1_sources_post",
@@ -708,6 +932,157 @@
           }
         },
         "summary": "Загрузить исходник (аудио, кадр или постер) для единицы",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/sources/{source_media_id}/position": {
+      "put": {
+        "operationId": "set_source_position_admin_v1_sources__source_media_id__position_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_media_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Media Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcePositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Изменить порядок исходника",
         "tags": [
           "admin"
         ]
