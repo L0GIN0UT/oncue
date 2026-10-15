@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import copy
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -20,9 +21,11 @@ from catalog_service.application.dto import (
     SearchQuery,
     Suggestion,
 )
+from catalog_service.domain.clue_texts import ClueTexts
 from catalog_service.domain.import_job import ImportCounters, ImportJob
 from catalog_service.domain.media_item import MediaItem
-from catalog_service.domain.model import ExternalSource
+from catalog_service.domain.model import ExternalSource, MediaDomain
+from catalog_service.domain.republish import RepublishJob
 
 from gv_core.errors import ConflictError, DependencyUnavailableError, NotFoundError
 from gv_core.pagination import Page
@@ -46,6 +49,8 @@ def clone_item(item: MediaItem) -> MediaItem:
         metrics=item.metrics,
         source_media=item.source_media,
         blocked_reason_code=item.blocked_reason_code,
+        countries=item.countries,
+        clue_texts=item.clue_texts,
     )
 
 
@@ -73,6 +78,8 @@ class CatalogStore:
     jobs: dict[uuid.UUID, ImportJob] = field(default_factory=dict)
     actions: dict[tuple[uuid.UUID, str], RecordedAction] = field(default_factory=dict)
     clue: dict[tuple[uuid.UUID, str, str], ClueStatus] = field(default_factory=dict)
+    texts: dict[uuid.UUID, ClueTexts] = field(default_factory=dict)
+    republish: dict[uuid.UUID, RepublishJob] = field(default_factory=dict)
     idempotency: InMemoryIdempotencyStore = field(default_factory=InMemoryIdempotencyStore)
     events: list[object] = field(default_factory=list)
 
@@ -121,6 +128,16 @@ class InMemoryItems:
             )
         ]
         return Page(rows[:limit], None)
+
+    async def list_ids_after(
+        self, domain: MediaDomain | None, after: uuid.UUID | None, limit: int
+    ) -> list[uuid.UUID]:
+        ids = sorted(
+            i.id
+            for i in self._s.items.values()
+            if (domain is None or i.domain is domain) and (after is None or i.id > after)
+        )
+        return ids[:limit]
 
 
 class InMemoryPersons:
@@ -173,6 +190,36 @@ class InMemoryClueStatus:
         self._s.clue[(status.media_item_id, status.clue_type, status.profile_key)] = status
 
 
+class InMemoryClueTexts:
+    def __init__(self, store: CatalogStore) -> None:
+        self._s = store
+
+    async def get(self, media_item_id: uuid.UUID) -> ClueTexts | None:
+        texts = self._s.texts.get(media_item_id)
+        return copy.copy(texts) if texts else None
+
+    async def save(self, texts: ClueTexts) -> None:
+        if texts.media_item_id not in self._s.items:
+            raise AssertionError("тексты без единицы (в БД это FK)")
+        texts.persisted = True
+        self._s.texts[texts.media_item_id] = copy.copy(texts)
+
+
+class InMemoryRepublish:
+    def __init__(self, store: CatalogStore) -> None:
+        self._s = store
+
+    async def add(self, job: RepublishJob) -> None:
+        self._s.republish[job.id] = copy.copy(job)
+
+    async def get(self, job_id: uuid.UUID) -> RepublishJob | None:
+        job = self._s.republish.get(job_id)
+        return copy.copy(job) if job else None
+
+    async def save(self, job: RepublishJob) -> None:
+        self._s.republish[job.id] = copy.copy(job)
+
+
 class FakeCatalogUow(FakeUnitOfWork):
     """UoW из testkit + репозитории в памяти; события копятся в ``store.events``."""
 
@@ -185,6 +232,8 @@ class FakeCatalogUow(FakeUnitOfWork):
         self.actions = InMemoryActions(store)
         self.idempotency = store.idempotency
         self.clue_status = InMemoryClueStatus(store)
+        self.clue_texts = InMemoryClueTexts(store)
+        self.republish = InMemoryRepublish(store)
 
     async def commit(self) -> None:
         await super().commit()

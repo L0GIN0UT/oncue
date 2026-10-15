@@ -16,6 +16,7 @@ from gv_core.uow import UnitOfWork
 from gv_db.idempotency import IdempotencyStore
 from media_pipeline_service.domain.asset_set import AssetSet
 from media_pipeline_service.domain.clues import MaskRegion
+from media_pipeline_service.domain.dynamic_profiles import DynamicProfile
 from media_pipeline_service.domain.media_items import MediaItemState
 from media_pipeline_service.domain.sources import SourceMedia
 
@@ -85,11 +86,14 @@ class Transcoder(SourceNormalizer, Protocol):
         """Длительность аудио, мс."""
         ...
 
-    async def cut_audio(self, data: bytes, *, start_s: float, duration_s: float) -> bytes:
+    async def cut_audio(
+        self, data: bytes, *, start_s: float, duration_s: float, reverse: bool = False
+    ) -> bytes:
         """Отрывок ``[start_s, start_s + duration_s)`` — AAC в fMP4 без метаданных.
 
         Декодер читает только этот интервал: результат физически не содержит более
-        позднего аудио.
+        позднего аудио. ``reverse`` — отрывок проигрывается задом наперёд (реверс уже
+        ограниченного отрывка).
         """
         ...
 
@@ -179,6 +183,23 @@ class AssetSetRepository(Protocol):
         """Сохранить изменения с оптимистичной блокировкой (``ConflictError`` при гонке)."""
         ...
 
+    async def count_by_profile(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[ProfileSetCount]:
+        """Сколько наборов каждого профиля в каком состоянии (для admin-API профилей)."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileSetCount:
+    """Число наборов профиля ``(clue_type, profile_key, params_hash)`` в состоянии ``status``."""
+
+    clue_type: str
+    profile_key: str
+    params_hash: str
+    status: str
+    count: int
+
 
 class SourceMediaRepository(Protocol):
     """Исходники."""
@@ -199,6 +220,10 @@ class SourceMediaRepository(Protocol):
         """Сохранить изменения исходника."""
         ...
 
+    async def delete(self, source_ids: Sequence[UUID]) -> None:
+        """Удалить исходники (у наборов пропадает ссылка на них)."""
+        ...
+
 
 class MediaItemStateRepository(Protocol):
     """Проекция единиц каталога."""
@@ -209,6 +234,10 @@ class MediaItemStateRepository(Protocol):
 
     async def upsert(self, state: MediaItemState) -> None:
         """Создать или обновить проекцию."""
+        ...
+
+    async def list_active_ids(self, domain: str, *, after: UUID | None, limit: int) -> list[UUID]:
+        """id активных единиц домена по возрастанию после ``after`` (досоздание наборов)."""
         ...
 
     async def next_event_version(self, media_item_id: UUID) -> int:
@@ -248,6 +277,46 @@ class LinkIssuanceJournal(Protocol):
         ...
 
 
+class DynamicProfileRepository(Protocol):
+    """Динамические профили (ADR 0025)."""
+
+    async def lock(self) -> None:
+        """Сериализовать заведение профилей до конца транзакции (лимит без гонки)."""
+        ...
+
+    async def get(
+        self, clue_type: str, params_hash: str, domain: str, *, for_update: bool = False
+    ) -> DynamicProfile | None:
+        """Профиль по ключу дедупликации."""
+        ...
+
+    async def count_usable(self) -> int:
+        """Сколько профилей не отклонено (лимит ``GV_MEDIA__MAX_DYNAMIC_PROFILES``)."""
+        ...
+
+    async def add(self, profile: DynamicProfile) -> None:
+        """Сохранить новый профиль."""
+        ...
+
+    async def save(self, profile: DynamicProfile) -> None:
+        """Сохранить изменения профиля."""
+        ...
+
+    async def list_usable(self, domain: str) -> list[DynamicProfile]:
+        """Неотклонённые профили домена."""
+        ...
+
+    async def list_backfilling(self, limit: int) -> list[DynamicProfile]:
+        """Профили, наборы которых ещё досоздаются (старые первыми)."""
+        ...
+
+    async def list_all(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[DynamicProfile]:
+        """Все профили (с фильтрами) для admin-API."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AdminAction:
     """Запись аудита admin-действия (§8 п.7)."""
@@ -275,6 +344,7 @@ class MediaUnitOfWork(UnitOfWork, Protocol):
     sources: SourceMediaRepository
     items: MediaItemStateRepository
     links: LinkIssuanceJournal
+    profiles: DynamicProfileRepository
     # Ключи admin-мутаций в транзакции этого UoW (``gv_db.idempotency``).
     idempotency: IdempotencyStore
     audit: AdminAuditLog

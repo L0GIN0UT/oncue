@@ -6,13 +6,15 @@
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
 - Публичный API: `/api/catalog/v1/...` на gateway; admin-API `/admin/v1/...` (план этапа 1, §2.5)
 - Зависимости: PostgreSQL (+`pg_trgm` из init-скрипта), Redis, Redpanda, RabbitMQ, OpenSearch (опционально)
-- Статус: этап 1 — домен, импорт (файл/TMDB/MusicBrainz/Spotify/Яндекс), поиск, admin-API.
+- Статус: этап 3a — тексты загадок (ADR 0024), страны, кадры TMDB с `position`, переопубликация; этапы 1–2 — домен, импорт, поиск, admin-API.
 
 ## Особенности
 - Нормализация живёт в `libs/text` (`gv_text`), `domain/normalization.py` — реэкспорт; своя golden-таблица `tests/unit/test_normalization.py` — регресс. Транслит ru↔lat — отдельные алиасы `translit`.
 - Ручные алиасы (`source=manual`) импорт не трогает. `PUT .../aliases` делает весь список ручным; удалённые импортные алиасы вернёт следующий импорт.
 - Изменение агрегата = `version+1` + событие с этой версией; `save` — оптимистичная блокировка по `persisted_version`.
-- `source_media_ref` — uuid5 от (единица, kind, uri): стабилен между импортами (на него ссылается media-pipeline).
+- `source_media_ref` — uuid5 от (единица, kind, uri): стабилен между импортами (на него ссылается media-pipeline). `position` вида — колонка `kind_position` (`position` — порядок строки).
+- Тексты загадок: черновик и ревизии — `clue_texts` (сущность `ClueTexts`), одобренный снимок — `media_items.clue_texts`; в событие идёт только одобренный, правка → draft (снимок прежний до нового одобрения). Импорт заполняет только пустые поля (`mask_plot` — golden-тест); засев `GV_CATALOG__SEED_TEXTS_APPROVED` (только local/ci) одобряет сразу.
+- `POST /admin/v1/items/republish` → задача `republish` порциями `GV_CATALOG__REPUBLISH_BATCH`: `version+1`, `changed_fields: [republish]`; задача несёт стартовый курсор, повтор порции — no-op.
 - Импорт сопоставляет единицы по внешним id (`tmdb` → … → `seed`); `seed` (ключ строки файла) в события не публикуется.
 - Индексатор пишет в OpenSearch актуальную строку БД с её `version` (`version_type=external`): повторы и старые события отсекает индекс; строка БД старше события → `DependencyUnavailableError(catalog.index_lag)` (ретрай).
 - Без `GV_OPENSEARCH__URL` или при его отказе поиск идёт по pg_trgm (`TrgmSearch`) — штатная деградация.

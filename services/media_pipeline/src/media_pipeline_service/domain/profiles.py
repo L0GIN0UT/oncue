@@ -1,10 +1,15 @@
-"""Профили уровней: какой набор ассетов строить для единиц какого домена (D5)."""
+"""Профили уровней: какой набор ассетов строить для единиц какого домена (D5).
+
+Профиль бывает статическим (``config/asset_profiles.yaml``) или динамическим — заведённым по
+``game.ClueAssetsRequested`` (ADR 0025, ``domain.dynamic_profiles``).
+"""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 from media_pipeline_service.domain.clues import ClueParams
@@ -13,6 +18,13 @@ from media_pipeline_service.domain.params import params_hash
 from media_pipeline_service.domain.sources import SourceKind
 
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+class ProfileOrigin(StrEnum):
+    """Откуда профиль: файл конфига сервиса или запрос админа через game (ADR 0025)."""
+
+    STATIC = "static"
+    DYNAMIC = "dynamic"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +37,11 @@ class AssetProfile:
         domains: Домены каталога, для которых профиль строится (``music``, ``film``).
         source_kind: Какой исходник нужен генератору.
         params: Проверенные параметры (модель конкретного типа загадки).
+        origin: Статический или динамический профиль.
+        raw_params: Параметры ровно в том виде, как они записаны в конфиге сервиса или
+            присланы game: ``params_hash`` считается от них (как в game по конфигу режима),
+            иначе хэши разошлись бы, если опущены поля со значением по умолчанию;
+            ``None`` — нормализованные ``params``.
         params_hash: sha256 канонического JSON параметров.
     """
 
@@ -33,6 +50,8 @@ class AssetProfile:
     domains: frozenset[str]
     source_kind: SourceKind
     params: ClueParams
+    origin: ProfileOrigin = ProfileOrigin.STATIC
+    raw_params: dict[str, Any] | None = field(default=None, compare=False)
     params_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -50,6 +69,8 @@ class AssetProfile:
 
     def params_json(self) -> dict[str, Any]:
         """Параметры как JSON-объект (для хранения и хэша)."""
+        if self.raw_params is not None:
+            return dict(self.raw_params)
         data: dict[str, Any] = self.params.model_dump(mode="json")
         return data
 
@@ -78,6 +99,15 @@ class AssetProfileCatalog:
     def get(self, clue_type: str, profile_key: str) -> AssetProfile | None:
         """Профиль по ключу."""
         return self._by_key.get((clue_type, profile_key))
+
+    def find(self, clue_type: str, params_hash: str, domain: str) -> AssetProfile | None:
+        """Профиль типа загадки с таким ``params_hash`` для домена (дубль динамического)."""
+        for profile in self._by_key.values():
+            if (profile.clue_type, profile.params_hash) == (clue_type, params_hash) and (
+                domain in profile.domains
+            ):
+                return profile
+        return None
 
 
 def profile_entries(document: Mapping[str, Any]) -> list[Mapping[str, Any]]:

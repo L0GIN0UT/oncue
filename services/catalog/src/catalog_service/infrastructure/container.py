@@ -13,7 +13,14 @@ from typing import Any
 import httpx
 import structlog
 
-from catalog_service.application.commands.admin import BlockItem, ReplaceAliases, UnblockItem
+from catalog_service.application.commands.admin import (
+    ApproveClueTexts,
+    BlockItem,
+    EditClueTexts,
+    GetClueTexts,
+    ReplaceAliases,
+    UnblockItem,
+)
 from catalog_service.application.commands.import_sources import (
     FileEntrySource,
     FilmEntrySource,
@@ -24,6 +31,7 @@ from catalog_service.application.commands.imports import (
     RunImport,
     UpsertImportedItem,
 )
+from catalog_service.application.commands.republish import RequestRepublish, RunRepublishBatch
 from catalog_service.application.ports import ImportEntrySource, MusicMetadataProvider
 from catalog_service.application.queries.search import (
     Autocomplete,
@@ -47,7 +55,7 @@ from catalog_service.infrastructure.files import FileImportProvider
 from catalog_service.infrastructure.search.opensearch import OpenSearchIndex
 from catalog_service.infrastructure.search.redis_cache import RedisPrefixCache, RedisRateLimiter
 from catalog_service.infrastructure.search.trgm import TrgmSearch
-from catalog_service.settings import Settings
+from catalog_service.settings import SEED_ENVIRONMENTS, Settings
 from gv_messaging.outbox import OutboxWriter
 from gv_messaging.rabbit import RabbitTaskQueue
 from gv_service import Infrastructure
@@ -205,6 +213,8 @@ class CatalogContainer:
             language=t.language,
             fallback_language=t.fallback_language,
             image_base_url=t.image_base_url,
+            frames_max=self.settings.catalog.tmdb_frames_max,
+            license_note=self.settings.catalog.tmdb_license_note,
         )
 
     @cached_property
@@ -256,6 +266,8 @@ class CatalogContainer:
                 FileImportProvider(
                     self.settings.imports.files_dir,
                     max_lines=self.settings.imports.max_file_lines,
+                    texts_approved=self.settings.catalog.seed_texts_approved,
+                    require_provenance=self.settings.environment not in SEED_ENVIRONMENTS,
                 )
             )
         }
@@ -307,6 +319,31 @@ class CatalogContainer:
     def replace_aliases(self) -> ReplaceAliases:
         """Замена алиасов."""
         return ReplaceAliases(self.uow, self.cache, self.normalizer)
+
+    @cached_property
+    def get_clue_texts(self) -> GetClueTexts:
+        """Тексты загадок (чтение)."""
+        return GetClueTexts(self.uow)
+
+    @cached_property
+    def edit_clue_texts(self) -> EditClueTexts:
+        """Правка текстов загадок."""
+        return EditClueTexts(self.uow, None)
+
+    @cached_property
+    def approve_clue_texts(self) -> ApproveClueTexts:
+        """Одобрение текстов загадок."""
+        return ApproveClueTexts(self.uow, None)
+
+    @cached_property
+    def request_republish(self) -> RequestRepublish:
+        """Постановка переопубликации."""
+        return RequestRepublish(self.uow, self.tasks)
+
+    @cached_property
+    def run_republish(self) -> RunRepublishBatch:
+        """Порция переопубликации (воркер)."""
+        return RunRepublishBatch(self.uow, self.tasks, batch=self.settings.catalog.republish_batch)
 
     @cached_property
     def request_import(self) -> RequestImport:

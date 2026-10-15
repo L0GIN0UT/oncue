@@ -3,13 +3,19 @@
 Изображения запрашиваются с ``include_image_language=null`` и берутся только из
 ``images.posters``/``images.backdrops`` — то есть **без надписей**: постер с названием
 выдал бы ответ загадки. ``poster_path`` из карточки не используется (он локализован).
+
+Этап 3a: ``overview`` (на языке запроса) — исходный сюжет загадки ``description`` (до
+одобрения модератором в события не попадает, ADR 0024), ``tagline``,
+``production_countries`` и до ``GV_CATALOG__TMDB_FRAMES_MAX`` кадров с ``position``
+(1 — лучший по голосам). У каждого исходника — ``source_url`` (страница фильма на TMDB)
+и ``license_note`` (D6).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from catalog_service.application.dto import ImportedItem, PersonRef
+from catalog_service.application.dto import ImportedClueTexts, ImportedItem, PersonRef
 from catalog_service.domain.model import (
     AliasDraft,
     AliasKind,
@@ -25,7 +31,9 @@ from catalog_service.infrastructure.clients.resilience import ResilientHttp
 
 MAX_ALT_TITLES = 20
 MAX_ACTORS = 5
-MAX_FRAMES = 3
+DEFAULT_FRAMES = 6
+DEFAULT_LICENSE_NOTE = "TMDB API (атрибуция TMDB)"
+TMDB_MOVIE_URL = "https://www.themoviedb.org/movie/{id}"
 
 
 class TmdbClient:
@@ -38,11 +46,15 @@ class TmdbClient:
         language: str = "ru-RU",
         fallback_language: str = "en-US",
         image_base_url: str = "https://image.tmdb.org/t/p/original",
+        frames_max: int = DEFAULT_FRAMES,
+        license_note: str = DEFAULT_LICENSE_NOTE,
     ) -> None:
         self._http = http
         self._language = language
         self._fallback = fallback_language
         self._images = image_base_url.rstrip("/")
+        self._frames_max = frames_max
+        self._license_note = license_note
 
     async def fetch_film(self, ref: str) -> ImportedItem:
         """Фильм по TMDB id."""
@@ -54,7 +66,14 @@ class TmdbClient:
                 "include_image_language": "null",
             },
         )
-        return parse_movie(data, self._language, self._fallback, self._images)
+        return parse_movie(
+            data,
+            self._language,
+            self._fallback,
+            self._images,
+            frames_max=self._frames_max,
+            license_note=self._license_note,
+        )
 
 
 def _lang(code: str) -> str:
@@ -62,7 +81,13 @@ def _lang(code: str) -> str:
 
 
 def parse_movie(
-    data: dict[str, Any], language: str, fallback_language: str, image_base: str
+    data: dict[str, Any],
+    language: str,
+    fallback_language: str,
+    image_base: str,
+    *,
+    frames_max: int = DEFAULT_FRAMES,
+    license_note: str = DEFAULT_LICENSE_NOTE,
 ) -> ImportedItem:
     """Ответ ``/movie/{id}`` → ``ImportedItem``."""
     lang, fallback = _lang(language), _lang(fallback_language)
@@ -101,13 +126,29 @@ def parse_movie(
     ]
 
     images = data.get("images") or {}
-    picked = [(SourceMediaKind.POSTER, i) for i in _no_text(images.get("posters", []))[:1]] + [
-        (SourceMediaKind.FRAME, i) for i in _no_text(images.get("backdrops", []))[:MAX_FRAMES]
+    picked = [(SourceMediaKind.POSTER, 1, i) for i in _no_text(images.get("posters", []))[:1]] + [
+        (SourceMediaKind.FRAME, position, img)
+        for position, img in enumerate(_no_text(images.get("backdrops", []))[:frames_max], 1)
     ]
+    page = TMDB_MOVIE_URL.format(id=data["id"])
     media = [
-        SourceMediaDraft(kind, SourceMediaOrigin.TMDB, image_base + img["file_path"])
-        for kind, img in picked
+        SourceMediaDraft(
+            kind,
+            SourceMediaOrigin.TMDB,
+            image_base + img["file_path"],
+            position=position,
+            source_url=page,
+            license_note=license_note,
+        )
+        for kind, position, img in picked
     ]
+    countries = tuple(
+        c["iso_3166_1"]
+        for c in data.get("production_countries") or []
+        if isinstance(c.get("iso_3166_1"), str) and len(c["iso_3166_1"]) == 2  # noqa: PLR2004
+    )
+    overview = (data.get("overview") or "").strip() or None
+    tagline = (data.get("tagline") or "").strip() or None
 
     release = data.get("release_date") or ""
     return ImportedItem(
@@ -127,6 +168,10 @@ def parse_movie(
             runtime_min=data.get("runtime") or None,
         ),
         source_media=tuple(media),
+        countries=countries,
+        clue_texts=(
+            ImportedClueTexts(plot_raw=overview, tagline=tagline) if overview or tagline else None
+        ),
     )
 
 

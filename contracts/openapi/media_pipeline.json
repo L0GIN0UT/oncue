@@ -134,18 +134,75 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/SourceKind"
+            "enum": [
+              "audio",
+              "frame",
+              "poster",
+              "soundtrack",
+              "audio_clip"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "license_note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Note"
           },
           "media_item_id": {
             "format": "uuid",
             "title": "Media Item Id",
             "type": "string"
           },
+          "origin": {
+            "anyOf": [
+              {
+                "enum": [
+                  "upload",
+                  "seed",
+                  "tmdb"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "position": {
+            "default": 1,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position",
+            "type": "integer"
+          },
           "reason": {
             "maxLength": 500,
             "minLength": 3,
             "title": "Reason",
             "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
           }
         },
         "required": [
@@ -243,6 +300,29 @@
             "title": "Clue Type",
             "type": "string"
           },
+          "domains": {
+            "items": {
+              "enum": [
+                "music",
+                "film"
+              ],
+              "type": "string"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Почему отклонён динамический профиль: profile.invalid, profile.unknown_clue_type, profile.hash_mismatch, profile.limit_reached, profile.params_too_large",
+            "title": "Error Code"
+          },
           "origin": {
             "enum": [
               "static",
@@ -264,7 +344,7 @@
                 "type": "null"
               }
             ],
-            "description": "null у динамического профиля",
+            "description": "null у динамического профиля (в наборах и AssetsReady — dyn_<16 hex хэша>)",
             "title": "Profile Key"
           },
           "sets": {
@@ -358,10 +438,73 @@
         "enum": [
           "audio",
           "frame",
-          "poster"
+          "poster",
+          "soundtrack",
+          "audio_clip",
+          "text"
         ],
         "title": "SourceKind",
         "type": "string"
+      },
+      "SourceOrigin": {
+        "description": "Происхождение исходника (D6 плана этапа 3a): загрузка, TMDB, синтетический засев;\n``catalog`` — тексты загадок, одобренные модератором catalog (ADR 0024).",
+        "enum": [
+          "upload",
+          "tmdb",
+          "seed",
+          "catalog"
+        ],
+        "title": "SourceOrigin",
+        "type": "string"
+      },
+      "SourceOut": {
+        "description": "Исходник после смены порядка и наборы, поставленные в (пере)генерацию.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/SourceKind"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SourceOrigin"
+          },
+          "position": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "scheduled_asset_set_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Scheduled Asset Set Ids",
+            "type": "array"
+          },
+          "source_media_id": {
+            "format": "uuid",
+            "title": "Source Media Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SourceStatus"
+          }
+        },
+        "required": [
+          "source_media_id",
+          "media_item_id",
+          "kind",
+          "origin",
+          "position",
+          "status",
+          "scheduled_asset_set_ids"
+        ],
+        "title": "SourceOut",
+        "type": "object"
       },
       "SourcePositionRequest": {
         "description": "Порядок исходника своего вида (кадры ``frame_sequence``: 1 — самый сложный).",
@@ -386,6 +529,16 @@
         "title": "SourcePositionRequest",
         "type": "object"
       },
+      "SourceStatus": {
+        "description": "``registered`` — известен адрес; ``ready`` — нормализованная копия в хранилище.",
+        "enum": [
+          "registered",
+          "ready",
+          "failed"
+        ],
+        "title": "SourceStatus",
+        "type": "string"
+      },
       "UploadResponse": {
         "description": "Загруженный исходник и наборы, поставленные в генерацию.",
         "properties": {
@@ -404,6 +557,15 @@
           "mime": {
             "title": "Mime",
             "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SourceOrigin"
+          },
+          "position": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position",
+            "type": "integer"
           },
           "scheduled_asset_set_ids": {
             "items": {
@@ -430,7 +592,9 @@
           "sha256",
           "bytes",
           "mime",
-          "scheduled_asset_set_ids"
+          "scheduled_asset_set_ids",
+          "position",
+          "origin"
         ],
         "title": "UploadResponse",
         "type": "object"
@@ -688,6 +852,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9_]*$",
                   "type": "string"
                 },
                 {
@@ -704,6 +870,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "pattern": "^[0-9a-f]{64}$",
                   "type": "string"
                 },
                 {
@@ -773,21 +940,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Профили ассетов и готовность их наборов",
@@ -798,6 +950,7 @@
     },
     "/admin/v1/sources": {
       "post": {
+        "description": "Вне local/ci обязательны origin, source_url и license_note (D6 плана этапа 3a), иначе 422 source.provenance_required. position — порядок среди исходников вида (кадры frame_sequence: 1 — самый сложный).",
         "operationId": "upload_source_admin_v1_sources_post",
         "parameters": [
           {
@@ -931,7 +1084,7 @@
             "description": "Зависимость временно недоступна"
           }
         },
-        "summary": "Загрузить исходник (аудио, кадр или постер) для единицы",
+        "summary": "Загрузить исходник (аудио, кадр, постер, саундтрек, звук фильма) для единицы",
         "tags": [
           "admin"
         ]
@@ -985,7 +1138,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadResponse"
+                  "$ref": "#/components/schemas/SourceOut"
                 }
               }
             },
@@ -1065,21 +1218,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Изменить порядок исходника",

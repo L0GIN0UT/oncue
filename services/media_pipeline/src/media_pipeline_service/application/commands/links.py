@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from uuid import UUID
 
 import structlog
@@ -16,8 +16,6 @@ from media_pipeline_service.domain.links import LinkPolicy
 
 log = structlog.get_logger(__name__)
 
-_PURGE_BATCH = 1000
-
 
 class IssueAssetLink:
     """Выдать короткоживущую ссылку (ADR 0012).
@@ -25,8 +23,8 @@ class IssueAssetLink:
     Порядок проверок задаёт контракт ошибок: 404 → 410 → 409 → 422 → 429. Лимит считается
     только для допустимых запросов, чтобы ошибки клиента не съедали квоту.
 
-    Журнал выдачи чистится здесь же, не чаще ``purge_interval``: отдельного планировщика
-    в этапе 1 нет, а удаление пачкой по индексу ``issued_at`` дешёвое.
+    Журнал выдачи здесь не чистится: это делает периодическая задача
+    ``media.link_issuance.purge`` (``PurgeLinkJournal``), а не горячий путь выдачи.
     """
 
     def __init__(
@@ -36,18 +34,12 @@ class IssueAssetLink:
         signer: UrlSigner,
         limiter: LinkRateLimiter,
         policy: LinkPolicy,
-        *,
-        retention: timedelta,
-        purge_interval: timedelta = timedelta(minutes=10),
     ) -> None:
         self._uow = uow
         self._clock = clock
         self._signer = signer
         self._limiter = limiter
         self._policy = policy
-        self._retention = retention
-        self._purge_interval = purge_interval
-        self._next_purge_at: datetime | None = None
 
     async def execute(
         self, asset_set_id: UUID, level: int, subject: str, *, client_id: str | None = None
@@ -84,8 +76,37 @@ class IssueAssetLink:
                 expires_at=expires_at,
                 client_id=client_id,
             )
-            if self._next_purge_at is None or now >= self._next_purge_at:
-                self._next_purge_at = now + self._purge_interval
-                await uow.links.purge_older_than(now - self._retention, limit=_PURGE_BATCH)
             await uow.commit()
         return IssuedLink(url=url, expires_at=expires_at, mime=asset.mime, level=level)
+
+
+class PurgeLinkJournal:
+    """Удалить записи журнала выдачи старше срока хранения (задача ``media.link_issuance.purge``).
+
+    Удаляет порциями по ``batch`` строк, каждая — в своей транзакции: долгая очистка не
+    держит блокировки на весь журнал. Идемпотентна: повтор удаляет только оставшееся.
+    """
+
+    def __init__(
+        self, uow: UnitOfWorkFactory, clock: Clock, *, retention: timedelta, batch: int
+    ) -> None:
+        if batch < 1:
+            raise ValueError("batch должен быть положительным")
+        self._uow = uow
+        self._clock = clock
+        self._retention = retention
+        self._batch = batch
+
+    async def execute(self) -> int:
+        """Очистить; вернуть число удалённых записей."""
+        cutoff = self._clock.now() - self._retention
+        total = 0
+        while True:
+            async with self._uow() as uow:
+                deleted = await uow.links.purge_older_than(cutoff, limit=self._batch)
+                await uow.commit()
+            total += deleted
+            if deleted < self._batch:
+                break
+        log.info("link_issuance.purged", deleted=total)
+        return total

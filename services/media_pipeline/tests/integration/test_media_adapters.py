@@ -261,3 +261,20 @@ async def test_pixelation_detail_grows_as_block_shrinks(processor: PillowImagePr
         for b in (48, 24, 12, 6, 1)
     ]
     assert details == sorted(details), details
+
+
+async def test_reverse_level_is_reversed_and_lacks_later_audio(two_tone_mp3: bytes) -> None:
+    """audio_reverse: реверс ограниченного отрывка — звука после ``start + seconds`` нет."""
+    transcoder = FfmpegTranscoder()
+    first = _pcm(await transcoder.cut_audio(two_tone_mp3, start_s=0, duration_s=1, reverse=True))
+    assert _goertzel(first, 3000) < 0.05 * _goertzel(first, 440)
+    # [0.5, 1.5): 440 Гц, затем 3000 Гц; задом наперёд — сначала 3000, потом 440.
+    forward = _pcm(await transcoder.cut_audio(two_tone_mp3, start_s=0.5, duration_s=1))
+    backward = _pcm(
+        await transcoder.cut_audio(two_tone_mp3, start_s=0.5, duration_s=1, reverse=True)
+    )
+    quarter = RATE // 4
+    head, tail = backward[:quarter], backward[-quarter:]
+    assert _goertzel(head, 3000) > 5 * _goertzel(head, 440)
+    assert _goertzel(tail, 440) > 5 * _goertzel(tail, 3000)
+    assert _goertzel(forward[:quarter], 440) > 5 * _goertzel(forward[:quarter], 3000)

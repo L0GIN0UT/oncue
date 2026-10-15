@@ -16,6 +16,7 @@ from catalog_service.application.dto import (
     ItemSummary,
     RecordedAction,
 )
+from catalog_service.domain.clue_texts import ApprovedClueTexts, ClueTexts, ClueTextStatus
 from catalog_service.domain.import_job import ImportCounters, ImportJob, ImportSource, ImportStatus
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import (
@@ -33,9 +34,11 @@ from catalog_service.domain.model import (
     SourceMediaKind,
     SourceMediaOrigin,
 )
+from catalog_service.domain.republish import RepublishJob, RepublishStatus
 from catalog_service.infrastructure.db.tables import (
     admin_actions,
     aliases,
+    clue_texts,
     external_refs,
     genres,
     idempotency_keys,
@@ -46,6 +49,7 @@ from catalog_service.infrastructure.db.tables import (
     media_items,
     media_metrics,
     persons,
+    republish_jobs,
     source_media_refs,
 )
 from gv_core.clock import Clock
@@ -155,6 +159,18 @@ class SqlMediaItemRepository:
         next_cursor = encode_cursor({"id": str(rows[limit - 1].id)}) if len(rows) > limit else None
         return Page(summaries, next_cursor)
 
+    async def list_ids_after(
+        self, domain: MediaDomain | None, after: uuid.UUID | None, limit: int
+    ) -> list[uuid.UUID]:
+        """id единиц по возрастанию (первичный ключ) после ``after``."""
+        m = media_items
+        query = select(m.c.id).order_by(m.c.id).limit(limit)
+        if domain is not None:
+            query = query.where(m.c.domain == domain.value)
+        if after is not None:
+            query = query.where(m.c.id > after)
+        return list((await self._s.execute(query)).scalars().all())
+
     # ------------------------------------------------------------------ внутреннее
 
     @staticmethod
@@ -170,6 +186,8 @@ class SqlMediaItemRepository:
             "popularity": item.metrics.popularity or 0.0,
             "blocked_reason_code": item.blocked_reason_code,
             "version": item.version,
+            "countries": list(item.countries),
+            "clue_texts": None if item.clue_texts.is_empty else item.clue_texts.to_contract(),
         }
 
     async def _write_children(self, item: MediaItem) -> None:
@@ -247,6 +265,9 @@ class SqlMediaItemRepository:
                         "origin": s.origin.value,
                         "uri": s.uri,
                         "position": i,
+                        "kind_position": s.position,
+                        "source_url": s.source_url,
+                        "license_note": s.license_note,
                     }
                     for i, s in enumerate(item.source_media)
                 ],
@@ -302,9 +323,19 @@ class SqlMediaItemRepository:
             external_refs={ExternalSource(r.source): r.external_id for r in ref_rows},
             metrics=MediaMetrics.from_mapping(metrics_data or {}),
             source_media=[
-                SourceMedia(m.id, SourceMediaKind(m.kind), SourceMediaOrigin(m.origin), m.uri)
+                SourceMedia(
+                    m.id,
+                    SourceMediaKind(m.kind),
+                    SourceMediaOrigin(m.origin),
+                    m.uri,
+                    position=m.kind_position,
+                    source_url=m.source_url,
+                    license_note=m.license_note,
+                )
                 for m in media_rows
             ],
+            countries=row.countries or (),
+            clue_texts=ApprovedClueTexts.from_mapping(row.clue_texts),
         )
 
 
@@ -485,6 +516,109 @@ class SqlClueStatusRepository:
 _CLUE_PK = frozenset({"media_item_id", "clue_type", "profile_key"})
 
 
+class SqlClueTextsRepository:
+    """``ClueTextsRepository`` на PostgreSQL."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, media_item_id: uuid.UUID) -> ClueTexts | None:
+        """Тексты с блокировкой строки."""
+        row = (
+            await self._s.execute(
+                select(clue_texts)
+                .where(clue_texts.c.media_item_id == media_item_id)
+                .with_for_update()
+            )
+        ).first()
+        if row is None:
+            return None
+        return ClueTexts(
+            row.media_item_id,
+            plot_raw=row.plot_raw,
+            plot_masked=row.plot_masked,
+            tagline=row.tagline,
+            emoji=row.emoji,
+            status=ClueTextStatus(row.status),
+            revision=row.revision,
+            approved_revision=row.approved_revision,
+            persisted=True,
+        )
+
+    async def save(self, texts: ClueTexts) -> None:
+        """Upsert."""
+        values = {
+            "media_item_id": texts.media_item_id,
+            "plot_raw": texts.plot_raw,
+            "plot_masked": texts.plot_masked,
+            "tagline": texts.tagline,
+            "emoji": texts.emoji,
+            "status": texts.status.value,
+            "revision": texts.revision,
+            "approved_revision": texts.approved_revision,
+        }
+        stmt = pg_insert(clue_texts).values(**values)
+        await self._s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[clue_texts.c.media_item_id],
+                set_={
+                    **{k: stmt.excluded[k] for k in values if k != "media_item_id"},
+                    "updated_at": func.now(),
+                },
+            )
+        )
+        texts.persisted = True
+
+
+class SqlRepublishJobRepository:
+    """``RepublishJobRepository`` на PostgreSQL."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, job: RepublishJob) -> None:
+        """Вставить."""
+        await self._s.execute(insert(republish_jobs).values(id=job.id, **self._row(job)))
+
+    async def get(self, job_id: uuid.UUID) -> RepublishJob | None:
+        """Задание с блокировкой строки."""
+        row = (
+            await self._s.execute(
+                select(republish_jobs).where(republish_jobs.c.id == job_id).with_for_update()
+            )
+        ).first()
+        if row is None:
+            return None
+        return RepublishJob(
+            row.id,
+            domain=MediaDomain(row.domain) if row.domain else None,
+            actor_id=row.actor_id,
+            reason=row.reason,
+            status=RepublishStatus(row.status),
+            cursor=row.cursor,
+            published=row.published,
+        )
+
+    async def save(self, job: RepublishJob) -> None:
+        """Обновить."""
+        await self._s.execute(
+            update(republish_jobs)
+            .where(republish_jobs.c.id == job.id)
+            .values(**self._row(job), updated_at=func.now())
+        )
+
+    @staticmethod
+    def _row(job: RepublishJob) -> dict[str, Any]:
+        return {
+            "domain": job.domain.value if job.domain else None,
+            "status": job.status.value,
+            "cursor": job.cursor,
+            "published": job.published,
+            "actor_id": job.actor_id,
+            "reason": job.reason[:500],
+        }
+
+
 class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
     """Unit of Work catalog: транзакция, outbox и репозитории на её сессии."""
 
@@ -494,6 +628,8 @@ class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
     actions: SqlAdminActionLog
     idempotency: SqlIdempotencyStore
     clue_status: SqlClueStatusRepository
+    clue_texts: SqlClueTextsRepository
+    republish: SqlRepublishJobRepository
 
     def __init__(
         self,
@@ -514,4 +650,6 @@ class CatalogSqlUnitOfWork(SqlAlchemyUnitOfWork):
         self.actions = SqlAdminActionLog(session)
         self.idempotency = SqlIdempotencyStore(session, idempotency_keys, self._clock)
         self.clue_status = SqlClueStatusRepository(session)
+        self.clue_texts = SqlClueTextsRepository(session)
+        self.republish = SqlRepublishJobRepository(session)
         return self

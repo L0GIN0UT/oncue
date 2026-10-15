@@ -39,3 +39,97 @@ profiles:
         - { pixel_block: 12 }
         - { pixel_block: 6 }
         - { pixel_block: 1 }
+
+  # ---------------------------------------------------------------- этап 3a
+  # Параметры совпадают с contracts/clues/params_hash.golden.json (profile:<clue>:<profile>):
+  # по этим params_hash game находит ассеты сидов режимов (сверяет contract-тест).
+  - clue_type: audio_reverse
+    profile_key: default
+    domains: [music]
+    params:
+      start_s: 30
+      levels:
+        - { seconds: 0.5 }
+        - { seconds: 1 }
+        - { seconds: 2 }
+        - { seconds: 4 }
+        - { seconds: 8 }
+        - { seconds: 15 }
+
+  - clue_type: soundtrack
+    profile_key: default
+    domains: [film]
+    params:
+      start_s: 0
+      levels:
+        - { seconds: 0.5 }
+        - { seconds: 1 }
+        - { seconds: 2 }
+        - { seconds: 4 }
+        - { seconds: 8 }
+        - { seconds: 15 }
+
+  - clue_type: audio_blackout
+    profile_key: default
+    domains: [film]
+    params:
+      start_s: 0
+      levels:
+        - { seconds: 0.5 }
+        - { seconds: 1 }
+        - { seconds: 2 }
+        - { seconds: 4 }
+        - { seconds: 8 }
+        - { seconds: 15 }
+
+  - clue_type: frame_sequence
+    profile_key: default
+    domains: [film]
+    params:
+      levels:
+        - { frame: 1, max_width: 960 }
+        - { frame: 2, max_width: 960 }
+        - { frame: 3, max_width: 960 }
+        - { frame: 4, max_width: 960 }
+        - { frame: 5, max_width: 960 }
+        - { frame: 6, max_width: 960 }
+
+  - clue_type: description
+    profile_key: default
+    domains: [film]
+    params:
+      levels:
+        - { fields: [tagline] }
+        - { fields: [plot_masked] }
+        - { fields: [year, genres] }
+        - { fields: [country] }
+        - { fields: [director] }
+        - { fields: [cast_top3] }
+
+  - clue_type: emoji
+    profile_key: default
+    domains: [music, film]
+    params:
+      levels:
+        - { count: 1 }
+        - { count: 2 }
+        - { count: 3 }
+        - { count: 4 }
+        - { count: 6 }
+        - { count: null }
+
+  # Одноуровневые профили: ревил audio_blackout кадром (ADR 0026), пара и сетка (план §6 M3).
+  - clue_type: frame_progressive
+    profile_key: still
+    domains: [film]
+    params:
+      levels:
+        - { blur_px: 0, crop: 1, max_width: 960 }
+
+  - clue_type: audio_intro
+    profile_key: preview
+    domains: [music]
+    params:
+      start_s: 0
+      levels:
+        - { seconds: 15 }

@@ -1,4 +1,4 @@
-"""Обработчики событий catalog и задачи RabbitMQ.
+"""Обработчики событий catalog и game (``ClueAssetsRequested``) и задачи RabbitMQ.
 
 Обработчик события работает внутри транзакции ``EventProcessor`` (отметка inbox +
 изменения — атомарно); use-cases получают UoW, привязанный к этой сессии (SAVEPOINT).
@@ -12,14 +12,16 @@ from typing import Any, Literal
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError, TaskHandler
+from media_pipeline_service.application.commands.profiles import ClueAssetsRequest
 from media_pipeline_service.application.dto import (
     GENERATE_TASK,
     CatalogSource,
+    CatalogTexts,
     MediaItemSnapshot,
 )
 from media_pipeline_service.domain.media_items import ItemStatus
@@ -28,12 +30,15 @@ from media_pipeline_service.infrastructure.container import MediaContainer
 
 log = structlog.get_logger(__name__)
 
-CONSUMED_TOPICS: tuple[str, ...] = ("catalog.media_item.v1",)
+CONSUMED_TOPICS: tuple[str, ...] = ("catalog.media_item.v1", "game.mode_config.v1")
 
 ITEM_CREATED = "catalog.MediaItemCreated"
 ITEM_UPDATED = "catalog.MediaItemUpdated"
 ITEM_BLOCKED = "catalog.MediaItemBlocked"
 ITEM_UNBLOCKED = "catalog.MediaItemUnblocked"
+# Остальные события топика game.mode_config.v1 (Published/Archived) сервису не нужны —
+# реестр их пропускает (Outcome.SKIPPED).
+CLUE_ASSETS_REQUESTED = "game.ClueAssetsRequested"
 
 
 class _Payload(BaseModel):
@@ -48,6 +53,22 @@ class _SourceMediaPayload(_Payload):
     kind: str = Field(min_length=1, max_length=32)
     origin: SourceOrigin
     uri: str = Field(min_length=1, max_length=2000)
+    position: int = Field(default=1, ge=1, le=100)
+    source_url: str | None = Field(default=None, max_length=2000)
+    license_note: str | None = Field(default=None, max_length=500)
+
+
+class _PersonPayload(_Payload):
+    name: str = Field(min_length=1, max_length=200)
+    # Строка: новые роли catalog не должны ронять событие (в текст идут director и actor).
+    role: str = Field(min_length=1, max_length=32)
+    order: int = Field(ge=0)
+
+
+class _ClueTextsPayload(_Payload):
+    plot_masked: str | None = Field(default=None, max_length=2000)
+    tagline: str | None = Field(default=None, max_length=300)
+    emoji: str | None = Field(default=None, max_length=64)
 
 
 class _SnapshotPayload(_Payload):
@@ -57,11 +78,42 @@ class _SnapshotPayload(_Payload):
     kind: Literal["track", "film"]
     status: ItemStatus
     source_media: list[_SourceMediaPayload]
+    # Этап 3a (ADR 0024): необязательные поля — старые события их не содержат.
+    year: int | None = None
+    genres: list[str] = Field(default_factory=list)
+    persons: list[_PersonPayload] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list, max_length=20)
+    clue_texts: _ClueTextsPayload | None = None
+
+    def texts(self) -> CatalogTexts:
+        """Тексты и метаданные для текстового исходника (без названия единицы)."""
+        by_order = sorted(self.persons, key=lambda p: p.order)
+        clue = self.clue_texts.model_dump(exclude_none=True) if self.clue_texts else {}
+        return CatalogTexts(
+            clue_texts=clue,
+            year=self.year,
+            genres=tuple(self.genres),
+            countries=tuple(self.countries),
+            directors=tuple(p.name for p in by_order if p.role == "director"),
+            cast=tuple(p.name for p in by_order if p.role == "actor"),
+        )
 
 
 class _StatusPayload(_Payload):
     media_item_id: UUID
     version: int = Field(ge=1)
+
+
+class _ClueAssetsRequestedPayload(_Payload):
+    request_id: UUID
+    mode_key: str = Field(max_length=100, pattern=r"^(music|film)\.[a-z0-9_]+\.[a-z0-9_]+$")
+    draft_revision: int = Field(ge=1)
+    domain: Literal["music", "film"]
+    clue_type: str = Field(max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    params: dict[str, Any]
+    params_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    actor_id: UUID
+    requested_at: AwareDatetime
 
 
 def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
@@ -84,12 +136,22 @@ def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, 
                 "media.source_kind_skipped", kind=s.kind, source_media_ref=str(s.source_media_ref)
             )
             continue
-        sources.append(CatalogSource(s.source_media_ref, SourceKind(s.kind), s.origin, s.uri))
+        sources.append(
+            CatalogSource(
+                s.source_media_ref,
+                SourceKind(s.kind),
+                s.origin,
+                s.uri,
+                position=s.position,
+                source_url=s.source_url,
+                license_note=s.license_note,
+            )
+        )
     return tuple(sources)
 
 
 def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
-    """Реестр обработчиков событий catalog."""
+    """Реестр обработчиков событий catalog и game."""
     registry = EventHandlerRegistry()
 
     async def on_snapshot(envelope: EventEnvelope, session: AsyncSession) -> None:
@@ -101,6 +163,7 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
             kind=p.kind,
             status=p.status,
             sources=known_sources(p.source_media),
+            texts=p.texts(),
         )
         await container.sync_media_item(container.uow_factory(session)).apply_snapshot(snapshot)
 
@@ -112,6 +175,24 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
 
         return handler
 
+    async def on_clue_assets_requested(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_ClueAssetsRequestedPayload, envelope.payload)
+        use_case = container.apply_clue_assets_requested(container.uow_factory(session))
+        await use_case.execute(
+            ClueAssetsRequest(
+                request_id=p.request_id,
+                mode_key=p.mode_key,
+                draft_revision=p.draft_revision,
+                domain=p.domain,
+                clue_type=p.clue_type,
+                params=p.params,
+                params_hash=p.params_hash,
+                actor_id=p.actor_id,
+                requested_at=p.requested_at,
+            )
+        )
+
+    registry.register(CLUE_ASSETS_REQUESTED, on_clue_assets_requested)
     registry.register(ITEM_CREATED, on_snapshot)
     registry.register(ITEM_UPDATED, on_snapshot)
     registry.register(ITEM_BLOCKED, on_status(ItemStatus.BLOCKED))

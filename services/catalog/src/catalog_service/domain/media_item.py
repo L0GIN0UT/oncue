@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from catalog_service.domain.clue_texts import ApprovedClueTexts
 from catalog_service.domain.events import (
     MediaItemBlocked,
     MediaItemCreated,
@@ -30,6 +31,7 @@ from catalog_service.domain.model import (
     PersonCredit,
     PersonRole,
     SourceMedia,
+    normalize_countries,
     normalize_genre,
     validate_title,
     validate_year,
@@ -53,7 +55,11 @@ _TRACKED_FIELDS = (
     "external_refs",
     "metrics",
     "source_media",
+    "countries",
+    "clue_texts",
 )
+# changed_fields переопубликации (RepublishItems): данные не менялись, снимок выпущен заново.
+REPUBLISHED_FIELD = "republish"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +75,8 @@ class _Content:
     external_refs: tuple[tuple[ExternalSource, str], ...]
     metrics: MediaMetrics
     source_media: tuple[SourceMedia, ...]
+    countries: tuple[str, ...] = ()
+    clue_texts: ApprovedClueTexts = field(default_factory=ApprovedClueTexts)
 
 
 class MediaItem(AggregateRoot[uuid.UUID]):
@@ -115,7 +123,9 @@ class MediaItem(AggregateRoot[uuid.UUID]):
         current_year: int,
     ) -> MediaItem:
         """Создать единицу из метаданных импорта (версия 1, статус ``active``)."""
-        content = _build_content(id, data, normalizer, current_year, keep=())
+        content = _build_content(
+            id, data, normalizer, current_year, keep=(), keep_texts=ApprovedClueTexts()
+        )
         item = cls(id, kind=data.kind, status=ItemStatus.ACTIVE, version=0, content=content)
         item.version = 1
         item.record(MediaItemCreated(aggregate_id=str(id), snapshot=item.snapshot()))
@@ -139,6 +149,8 @@ class MediaItem(AggregateRoot[uuid.UUID]):
         metrics: MediaMetrics,
         source_media: Iterable[SourceMedia],
         blocked_reason_code: str | None = None,
+        countries: Iterable[str] = (),
+        clue_texts: ApprovedClueTexts | None = None,
     ) -> MediaItem:
         """Восстановить агрегат из хранилища (без событий и проверок импорта)."""
         content = _Content(
@@ -151,6 +163,8 @@ class MediaItem(AggregateRoot[uuid.UUID]):
             external_refs=tuple(sorted(external_refs.items())),
             metrics=metrics,
             source_media=tuple(source_media),
+            countries=tuple(countries),
+            clue_texts=clue_texts or ApprovedClueTexts(),
         )
         return cls(
             id,
@@ -214,6 +228,16 @@ class MediaItem(AggregateRoot[uuid.UUID]):
         return self._content.source_media
 
     @property
+    def countries(self) -> tuple[str, ...]:
+        """Страны производства (ISO 3166-1 alpha-2)."""
+        return self._content.countries
+
+    @property
+    def clue_texts(self) -> ApprovedClueTexts:
+        """Одобренные тексты загадок (то, что уходит в события)."""
+        return self._content.clue_texts
+
+    @property
     def is_active(self) -> bool:
         """Можно ли показывать единицу в выдаче."""
         return self.status is ItemStatus.ACTIVE
@@ -247,8 +271,34 @@ class MediaItem(AggregateRoot[uuid.UUID]):
                 "вид единицы не совпадает с импортом", code="catalog.import_kind_mismatch"
             )
         manual = tuple(a for a in self.aliases if a.source is AliasSource.MANUAL)
-        content = _build_content(self.id, data, normalizer, current_year, keep=manual)
+        content = _build_content(
+            self.id, data, normalizer, current_year, keep=manual, keep_texts=self.clue_texts
+        )
         return self._change(content)
+
+    def set_clue_texts(self, approved: ApprovedClueTexts) -> bool:
+        """Опубликовать одобренные тексты загадок (ADR 0024).
+
+        Returns:
+            ``True`` — снимок изменился (``MediaItemUpdated`` с ``clue_texts``).
+        """
+        content = _Content(**{**_as_dict(self._content), "clue_texts": approved})
+        return bool(self._change(content))
+
+    def republish(self) -> None:
+        """Выпустить снимок заново: ``version+1`` и ``MediaItemUpdated`` без изменений данных.
+
+        Нужно, чтобы потребители заполнили новые поля для старых единиц (план этапа 3a, D9):
+        их проекции отбрасывают события с ``version`` не больше применённой.
+        """
+        self.version += 1
+        self.record(
+            MediaItemUpdated(
+                aggregate_id=str(self.id),
+                snapshot=self.snapshot(),
+                changed_fields=(REPUBLISHED_FIELD,),
+            )
+        )
 
     def replace_aliases(self, drafts: Iterable[AliasDraft], normalizer: TitleNormalizer) -> bool:
         """Заменить алиасы списком модератора (все становятся ручными).
@@ -312,9 +362,13 @@ class MediaItem(AggregateRoot[uuid.UUID]):
         )
 
     def snapshot(self) -> dict[str, Any]:
-        """Полный снимок в форме контракта ``MediaItemCreated``/``Updated``."""
+        """Полный снимок в форме контракта ``MediaItemCreated``/``Updated``.
+
+        ``countries`` и ``clue_texts`` (только одобренные) — необязательные поля
+        контракта: пустые не публикуются.
+        """
         c = self._content
-        return {
+        snapshot = {
             "media_item_id": str(self.id),
             "version": self.version,
             "domain": self.domain.value,
@@ -332,6 +386,11 @@ class MediaItem(AggregateRoot[uuid.UUID]):
             "metrics": c.metrics.to_contract(),
             "source_media": [s.to_contract() for s in c.source_media],
         }
+        if c.countries:
+            snapshot["countries"] = list(c.countries)
+        if not c.clue_texts.is_empty:
+            snapshot["clue_texts"] = c.clue_texts.to_contract()
+        return snapshot
 
     # ------------------------------------------------------------------ внутреннее
 
@@ -365,6 +424,7 @@ def _build_content(
     current_year: int,
     *,
     keep: tuple[Alias, ...],
+    keep_texts: ApprovedClueTexts,
 ) -> _Content:
     title = validate_title(data.title)
     original = data.original_title.strip() if data.original_title else None
@@ -400,6 +460,8 @@ def _build_content(
         external_refs=tuple(sorted(data.external_refs.items())),
         metrics=data.metrics,
         source_media=tuple(sources),
+        countries=normalize_countries(data.countries),
+        clue_texts=data.clue_texts if data.clue_texts is not None else keep_texts,
     )
 
 

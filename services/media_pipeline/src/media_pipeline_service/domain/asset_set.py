@@ -120,7 +120,7 @@ class AssetSet(AggregateRoot[UUID]):
         params: Mapping[str, Any],
         params_hash: str,
         levels_count: int,
-        source_media_id: UUID | None,
+        source_media_ids: Sequence[UUID],
         status: AssetSetStatus,
         generation: int,
         attempts: int,
@@ -137,7 +137,7 @@ class AssetSet(AggregateRoot[UUID]):
         self.params = dict(params)
         self.params_hash = params_hash
         self.levels_count = levels_count
-        self.source_media_id = source_media_id
+        self.source_media_ids: tuple[UUID, ...] = tuple(source_media_ids)
         self.status = status
         self.generation = generation
         self.attempts = attempts
@@ -147,6 +147,11 @@ class AssetSet(AggregateRoot[UUID]):
         self.updated_at = updated_at
         self.persisted_version = version
 
+    @property
+    def source_media_id(self) -> UUID | None:
+        """Первый (у большинства загадок — единственный) исходник набора."""
+        return self.source_media_ids[0] if self.source_media_ids else None
+
     # ------------------------------------------------------------------ создание
     @classmethod
     def plan(
@@ -155,10 +160,17 @@ class AssetSet(AggregateRoot[UUID]):
         *,
         media_item_id: UUID,
         profile: AssetProfile,
-        source_media_id: UUID,
+        source_media_ids: Sequence[UUID],
         now: datetime,
     ) -> AssetSet:
-        """Новый набор в состоянии ``pending`` (первое поколение)."""
+        """Новый набор в состоянии ``pending`` (первое поколение).
+
+        Args:
+            source_media_ids: Исходники в порядке, в котором их ждёт генератор
+                (``sources_for`` генератора, ``frame_sequence`` — кадр на уровень).
+        """
+        if not source_media_ids:
+            raise DomainError("набору нужен хотя бы один исходник", code="asset_set.no_sources")
         aggregate = cls(
             id,
             media_item_id=media_item_id,
@@ -167,7 +179,7 @@ class AssetSet(AggregateRoot[UUID]):
             params=profile.params_json(),
             params_hash=profile.params_hash,
             levels_count=profile.levels_count,
-            source_media_id=source_media_id,
+            source_media_ids=source_media_ids,
             status=AssetSetStatus.PENDING,
             generation=1,
             attempts=0,
@@ -303,15 +315,20 @@ class AssetSet(AggregateRoot[UUID]):
         return True
 
     # ------------------------------------------------------------------ управление
-    def regenerate(self, now: datetime, *, source_media_id: UUID | None = None) -> list[AssetLevel]:
-        """Новое поколение генерации (админ или смена исходника).
+    def regenerate(
+        self, now: datetime, *, source_media_ids: Sequence[UUID] | None = None
+    ) -> list[AssetLevel]:
+        """Новое поколение генерации (админ или смена исходников).
+
+        Args:
+            source_media_ids: Новые исходники; ``None`` — прежние.
 
         Returns:
             Объекты прошлого поколения — их нужно удалить из хранилища после коммита.
         """
         if self.status is AssetSetStatus.DISABLED:
             raise AssetBlockedError("ассеты единицы выключены")
-        return self._new_generation(now, source_media_id)
+        return self._new_generation(now, source_media_ids)
 
     def disable(self, now: datetime) -> list[AssetLevel]:
         """Выключить набор (единица заблокирована). Возвращает объекты к удалению."""
@@ -328,10 +345,12 @@ class AssetSet(AggregateRoot[UUID]):
             return
         self._new_generation(now, None)
 
-    def _new_generation(self, now: datetime, source_media_id: UUID | None) -> list[AssetLevel]:
+    def _new_generation(
+        self, now: datetime, source_media_ids: Sequence[UUID] | None
+    ) -> list[AssetLevel]:
         old, self.levels = list(self.levels), ()
-        if source_media_id is not None:
-            self.source_media_id = source_media_id
+        if source_media_ids:
+            self.source_media_ids = tuple(source_media_ids)
         self.generation += 1
         self.attempts = 0
         self.error_code = None

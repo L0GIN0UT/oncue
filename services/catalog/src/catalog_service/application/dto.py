@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from catalog_service.domain.clue_texts import ClueTexts
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import (
     AliasDraft,
@@ -44,8 +45,29 @@ class PersonRef:
 
 
 @dataclass(frozen=True, slots=True)
+class ImportedClueTexts:
+    """Тексты загадок из источника (ADR 0024).
+
+    Attributes:
+        plot_raw: Исходный сюжет (TMDB ``overview``); маскируется автоматически.
+        plot_masked: Уже замаскированный сюжет (файл засева); ``None`` — маскировать
+            ``plot_raw``.
+    """
+
+    plot_raw: str | None = None
+    plot_masked: str | None = None
+    tagline: str | None = None
+    emoji: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ImportedItem:
-    """Единица, как её отдал источник метаданных (TMDB, файл, MusicBrainz…)."""
+    """Единица, как её отдал источник метаданных (TMDB, файл, MusicBrainz…).
+
+    Attributes:
+        texts_authoritative: Тексты загадок заменяют текущие и сразу одобряются (только
+            синтетический засев в local/ci, ``GV_CATALOG__SEED_TEXTS_APPROVED``).
+    """
 
     kind: MediaKind
     title: str
@@ -57,6 +79,9 @@ class ImportedItem:
     external_refs: dict[ExternalSource, str] = field(default_factory=dict)
     metrics: MediaMetrics = field(default_factory=MediaMetrics)
     source_media: tuple[SourceMediaDraft, ...] = ()
+    countries: tuple[str, ...] = ()
+    clue_texts: ImportedClueTexts | None = None
+    texts_authoritative: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,4 +229,18 @@ def admin_item_view(item: MediaItem) -> dict[str, Any]:
         "external_refs": {src.value: ref for src, ref in sorted(item.external_refs.items())},
         "metrics": snapshot["metrics"],
         "source_media": snapshot["source_media"],
+        "countries": list(item.countries),
+    }
+
+
+def clue_texts_view(texts: ClueTexts) -> dict[str, Any]:
+    """Тексты загадок для admin-API (JSON-совместимые; хранятся для идемпотентности)."""
+    return {
+        "plot_raw": texts.plot_raw,
+        "plot_masked": texts.plot_masked,
+        "tagline": texts.tagline,
+        "emoji": texts.emoji,
+        "status": texts.status.value,
+        "revision": texts.revision,
+        "approved_revision": texts.approved_revision,
     }

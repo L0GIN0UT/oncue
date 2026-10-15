@@ -102,12 +102,17 @@ class FfmpegTranscoder:
         except ValueError as exc:
             raise GenerationError("source.undecodable", retryable=False) from exc
 
-    async def cut_audio(self, data: bytes, *, start_s: float, duration_s: float) -> bytes:
+    async def cut_audio(
+        self, data: bytes, *, start_s: float, duration_s: float, reverse: bool = False
+    ) -> bytes:
         """Отрывок ``[start_s, start_s + duration_s)``.
 
         ``-ss``/``-t`` стоят ДО ``-i``: ограничен вход декодера, поэтому в результат не
         попадает ни один сэмпл после конца отрывка (в отличие от обрезки на выходе).
+        ``reverse`` — ``areverse`` перед нормализацией громкости: реверсируется уже
+        ограниченный вход, а не весь трек.
         """
+        filters = f"areverse,{self._loudnorm}" if reverse else self._loudnorm
         with tempfile.TemporaryDirectory(prefix="gv-media-") as tmp:
             src, dst = Path(tmp) / "in", Path(tmp) / "out.m4a"
             src.write_bytes(data)
@@ -115,7 +120,7 @@ class FfmpegTranscoder:
                 self._ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
                 *_INPUT_GUARDS, "-ss", f"{start_s:.3f}", "-t", f"{duration_s:.3f}", "-i", str(src),
                 "-map", "0:a:0", "-vn", "-sn", "-dn", *_STRIP, "-flags:a", "+bitexact",
-                "-af", self._loudnorm, "-ac", "2", "-ar", _SAMPLE_RATE,
+                "-af", filters, "-ac", "2", "-ar", _SAMPLE_RATE,
                 "-c:a", "aac", "-b:a", self._bitrate, *_FMP4, str(dst),
             )  # fmt: skip
             return dst.read_bytes()

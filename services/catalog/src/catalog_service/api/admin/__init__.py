@@ -5,8 +5,6 @@
 (``gv_service.Reason``); аудит — ``admin_actions``/``import_jobs``.
 """
 
-# ruff: noqa: ARG001 — заглушки этапа 3a (501) объявляют параметры контракта до реализации.
-
 from __future__ import annotations
 
 import uuid
@@ -15,13 +13,12 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from catalog_service.application.commands.admin import AdminContext
+from catalog_service.application.commands.admin import AdminContext, ClueTextsEdit
 from catalog_service.application.commands.imports import ImportCommand
 from catalog_service.application.services import CatalogServices
 from catalog_service.domain.import_job import ImportSource
 from catalog_service.domain.model import AliasDraft, AliasKind, MediaDomain
 from gv_auth import Principal, require_perm
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
 
 # Ошибки, общие для всех ручек admin-API.
@@ -61,6 +58,7 @@ class AdminItem(BaseModel):
     external_refs: dict[str, str]
     metrics: dict[str, float | int]
     source_media: list[dict[str, Any]]
+    countries: list[str] = Field(default_factory=list)
 
 
 class AdminItemSummary(BaseModel):
@@ -149,6 +147,9 @@ class ClueTextsOut(BaseModel):
     emoji: str | None
     status: Literal["draft", "approved"]
     revision: int = Field(ge=0)
+    approved_revision: int | None = Field(
+        default=None, description="Последняя одобренная ревизия (её тексты сейчас в событиях)"
+    )
 
 
 class ClueTextsIn(BaseModel):
@@ -180,8 +181,6 @@ class RepublishOut(BaseModel):
 
     job_id: uuid.UUID
 
-
-STAGE_3A = "этап 3a: поток M (docs/plans/stage-3a.md)"
 
 # Права проверяются на каждой ручке; aliases на уровне модуля — FastAPI разрешает
 # отложенные аннотации (from __future__ import annotations) только по глобальным именам.
@@ -260,46 +259,64 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
         "/items/{item_id}/clue-texts",
         response_model=ClueTextsOut,
         summary="Тексты загадок единицы",
-        responses=problem_responses(*_AUTH, 404, 501),
+        responses=_READ_ONE,
     )
     async def get_clue_texts(item_id: uuid.UUID, _: Viewer) -> ClueTextsOut:
-        raise NotImplementedYetError(STAGE_3A)
+        return ClueTextsOut.model_validate(await c.get_clue_texts(item_id))
 
     @router.put(
         "/items/{item_id}/clue-texts",
         response_model=ClueTextsOut,
         summary="Изменить тексты загадок",
-        responses=problem_responses(*_AUTH, 404, 409, 501),
+        description=(
+            "Все три поля целиком (null — очистить); `base_revision` — ревизия, которую "
+            "видел модератор (иначе 409 `catalog.clue_texts_revision_mismatch`). После правки "
+            "тексты в статусе draft: в событиях остаётся прошлый одобренный снимок. "
+            "emoji — до 12 графем (422 `catalog.clue_text_invalid_emoji`)."
+        ),
+        responses=_MUTATE,
     )
     async def put_clue_texts(
         item_id: uuid.UUID, body: ClueTextsIn, principal: Editor, key: IdempotencyKey
     ) -> ClueTextsOut:
-        raise NotImplementedYetError(STAGE_3A)
+        ctx = AdminContext(principal.user_id, key, body.reason)
+        edit = ClueTextsEdit(body.plot_masked, body.tagline, body.emoji, body.base_revision)
+        return ClueTextsOut.model_validate(await c.edit_clue_texts(item_id, edit, ctx))
 
     @router.post(
         "/items/{item_id}/clue-texts/approve",
         response_model=ClueTextsOut,
         summary="Одобрить тексты загадок",
-        description="Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts`.",
-        responses=problem_responses(*_AUTH, 404, 409, 501),
+        description=(
+            "Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts` (version+1). "
+            "409 `catalog.clue_texts_revision_mismatch` — одобряется не текущая ревизия; "
+            "422 `catalog.clue_texts_empty` — одобрять нечего."
+        ),
+        responses=_MUTATE,
     )
     async def approve_clue_texts(
         item_id: uuid.UUID, body: ApproveClueTextsRequest, principal: Editor, key: IdempotencyKey
     ) -> ClueTextsOut:
-        raise NotImplementedYetError(STAGE_3A)
+        ctx = AdminContext(principal.user_id, key, body.reason)
+        return ClueTextsOut.model_validate(await c.approve_clue_texts(item_id, body.revision, ctx))
 
     @router.post(
         "/items/republish",
         response_model=RepublishOut,
         status_code=202,
         summary="Переопубликовать единицы",
-        description="Фоновая задача: `MediaItemUpdated` с `version+1` для всех единиц домена.",
-        responses=problem_responses(*_AUTH, 409, 501),
+        description=(
+            "Фоновая задача RabbitMQ порциями `GV_CATALOG__REPUBLISH_BATCH`: "
+            "`MediaItemUpdated` с `version+1` (`changed_fields: [republish]`) для всех единиц "
+            "домена (без `domain` — всех). Повтор с тем же `Idempotency-Key` — то же задание."
+        ),
+        responses=problem_responses(*_AUTH, 409, 503),
     )
     async def republish_items(
         body: RepublishRequest, principal: Importer, key: IdempotencyKey
     ) -> RepublishOut:
-        raise NotImplementedYetError(STAGE_3A)
+        ctx = AdminContext(principal.user_id, key, body.reason)
+        return RepublishOut.model_validate(await c.request_republish(body.domain, ctx))
 
     @router.post(
         "/imports",

@@ -106,3 +106,98 @@ async def test_0004_adds_nullable_client_id_with_check(database_url: str) -> Non
         await asyncio.to_thread(run_migrations, path, database_url)
     finally:
         await engine.dispose()
+
+
+async def test_0005_keeps_stage2_sources_and_accepts_new_kinds(database_url: str) -> None:
+    """0005: старые исходники получают position = 1, новые виды и text принимаются,
+    текстовое содержимое у нетекстового исходника отвергается; откат на чистых данных."""
+    path = DEFINITION.migrations_path
+    assert path is not None
+    config = alembic_config(path, database_url)
+    await asyncio.to_thread(run_migrations, path, database_url, "0004")
+    item, old = uuid7(), uuid7()
+    engine = create_async_engine(database_url)
+    insert_source = (
+        "INSERT INTO source_media (id, media_item_id, kind, origin, uri, status, created_at{col}) "
+        "VALUES (:id, :item, :kind, :origin, 'https://x/y', 'registered', now(){val})"
+    )
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO media_items_state (media_item_id, domain, kind, status, version, "
+                    "updated_at) VALUES (:id, 'film', 'film', 'active', 1, now())"
+                ),
+                {"id": item},
+            )
+            await conn.execute(
+                text(insert_source.format(col="", val="")),
+                {"id": old, "item": item, "kind": "frame", "origin": "tmdb"},
+            )
+        await asyncio.to_thread(run_migrations, path, database_url)
+        async with engine.begin() as conn:
+            position = (
+                await conn.execute(
+                    text("SELECT position FROM source_media WHERE id = :id"), {"id": old}
+                )
+            ).scalar()
+            assert position == 1
+            for kind, origin in (("soundtrack", "seed"), ("audio_clip", "upload")):
+                await conn.execute(
+                    text(insert_source.format(col=", position", val=", 3")),
+                    {"id": uuid7(), "item": item, "kind": kind, "origin": origin},
+                )
+            await conn.execute(
+                text(
+                    "INSERT INTO source_media (id, media_item_id, kind, origin, status, sha256, "
+                    "bytes, mime, created_at, text_content) VALUES (:id, :item, 'text', 'tmdb', "
+                    "'ready', :sha, 10, 'application/json', now(), CAST(:content AS jsonb))"
+                ),
+                {"id": uuid7(), "item": item, "sha": "0" * 64, "content": '{"emoji": "x"}'},
+            )
+        for col, val in (
+            (", text_content", ", CAST('{}' AS jsonb)"),  # содержимое у кадра
+            (", position", ", 0"),
+        ):
+            with pytest.raises(IntegrityError):
+                async with engine.begin() as conn:
+                    await conn.execute(
+                        text(insert_source.format(col=col, val=val)),
+                        {"id": uuid7(), "item": item, "kind": "frame", "origin": "tmdb"},
+                    )
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM source_media WHERE id <> :id"), {"id": old})
+        await asyncio.to_thread(command.downgrade, config, "0004")
+        await asyncio.to_thread(run_migrations, path, database_url)
+    finally:
+        await engine.dispose()
+
+
+async def test_0006_dynamic_profiles_up_and_down(database_url: str) -> None:
+    """0006: новая таблица и индекс; откат и повторный подъём."""
+    path = DEFINITION.migrations_path
+    assert path is not None
+    config = alembic_config(path, database_url)
+    await asyncio.to_thread(run_migrations, path, database_url)
+    engine = create_async_engine(database_url)
+    row = (
+        "INSERT INTO asset_profiles_dynamic (id, clue_type, domain, params, params_hash, status, "
+        "error_code, request_id, mode_key, actor_id, created_at, updated_at) VALUES (:id, "
+        "'emoji', 'film', CAST('{}' AS jsonb), :hash, :status, :code, :id, 'film.random.emoji', "
+        ":id, now(), now())"
+    )
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(row), {"id": uuid7(), "hash": "a" * 64, "status": "active", "code": None}
+            )
+        with pytest.raises(IntegrityError):  # отклонённый без кода
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(row),
+                    {"id": uuid7(), "hash": "b" * 64, "status": "rejected", "code": None},
+                )
+        await asyncio.to_thread(command.downgrade, config, "0005")
+        await asyncio.to_thread(run_migrations, path, database_url)
+    finally:
+        await engine.dispose()
