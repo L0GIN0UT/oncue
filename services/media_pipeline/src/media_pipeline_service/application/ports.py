@@ -199,6 +199,10 @@ class SourceMediaRepository(Protocol):
         """Сохранить изменения исходника."""
         ...
 
+    async def delete(self, source_ids: Sequence[UUID]) -> None:
+        """Удалить исходники (у наборов пропадает ссылка на них)."""
+        ...
+
 
 class MediaItemStateRepository(Protocol):
     """Проекция единиц каталога."""

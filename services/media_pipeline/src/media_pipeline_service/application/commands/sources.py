@@ -1,4 +1,5 @@
-"""Загрузка исходника админом (``POST /admin/v1/sources``)."""
+"""Исходники админом: загрузка (``POST /admin/v1/sources``) и порядок
+(``PUT /admin/v1/sources/{id}/position``)."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from gv_core.errors import ConflictError, DependencyUnavailableError, InvalidInp
 from gv_core.ids import uuid7
 from gv_db.idempotency import request_fingerprint, run_idempotent
 from media_pipeline_service.application.commands.catalog import PlanAssetSets, PlannedSets
-from media_pipeline_service.application.dto import UploadResult
+from media_pipeline_service.application.dto import SourceProvenance, SourceView, UploadResult
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import (
     AdminAction,
@@ -26,7 +27,11 @@ from media_pipeline_service.application.sources import (
     StoredSource,
     delete_quietly,
 )
-from media_pipeline_service.domain.errors import MediaItemNotFoundError
+from media_pipeline_service.domain.errors import (
+    MediaItemNotFoundError,
+    ProvenanceRequiredError,
+    SourceNotFoundError,
+)
 from media_pipeline_service.domain.media_items import MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
 from media_pipeline_service.domain.sources import (
@@ -40,7 +45,11 @@ log = structlog.get_logger(__name__)
 
 
 class UploadSource:
-    """Принять файл, перекодировать, сохранить и запланировать (пере)генерацию наборов."""
+    """Принять файл, перекодировать, сохранить и запланировать (пере)генерацию наборов.
+
+    Вне local/ci (``require_provenance``) загрузка без ``origin``, ``source_url`` и
+    ``license_note`` отклоняется (D6): по ним исходник снимают по жалобе правообладателя.
+    """
 
     def __init__(
         self,
@@ -51,6 +60,7 @@ class UploadSource:
         plan: PlanAssetSets,
         *,
         storage: ObjectStorage,
+        require_provenance: bool,
     ) -> None:
         self._storage = storage
         self._uow = uow
@@ -58,6 +68,7 @@ class UploadSource:
         self._ingestor = ingestor
         self._profiles = profiles
         self._plan = plan
+        self._require_provenance = require_provenance
 
     async def execute(
         self,
@@ -68,8 +79,14 @@ class UploadSource:
         actor_id: UUID,
         reason: str,
         idempotency_key: str,
+        position: int = 1,
+        provenance: SourceProvenance | None = None,
     ) -> UploadResult:
         """Загрузить (идемпотентно по ``(actor_id, idempotency_key)``).
+
+        Args:
+            position: Порядок среди исходников вида (кадры ``frame_sequence``).
+            provenance: Происхождение (D6); вне local/ci — все поля обязательны.
 
         Ключ и ответ сохраняются в той же транзакции, что и исходник, аудит и планирование
         наборов: сбой до коммита не оставляет ключа (повтор выполнится заново), после
@@ -81,12 +98,27 @@ class UploadSource:
                 использован с другим запросом (``idempotency.key_reused``) или запрос с ним
                 выполняется параллельно (``idempotency.in_progress``).
             InvalidInputError: вид исходника не используется профилями домена единицы,
-                файл не того типа, больше лимита или не декодируется.
+                файл не того типа, больше лимита или не декодируется; нет обязательного
+                происхождения (``source.provenance_required``).
         """
+        provenance = provenance or SourceProvenance()
+        if self._require_provenance and not provenance.is_complete:
+            raise ProvenanceRequiredError(
+                "вне local/ci нужны origin, source_url и license_note исходника"
+            )
+        origin = provenance.origin or SourceOrigin.UPLOAD
         fingerprint = request_fingerprint(
             "source.upload",
             media_item_id,
-            {"kind": kind.value, "reason": reason, "sha256": hashlib.sha256(data).hexdigest()},
+            {
+                "kind": kind.value,
+                "reason": reason,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "position": position,
+                "origin": origin.value,
+                "source_url": provenance.source_url,
+                "license_note": provenance.license_note,
+            },
         )
         async with self._uow() as uow:
             # Повтор отвечаем до перекодирования файла: ffmpeg/Pillow и S3 не нужны.
@@ -116,7 +148,14 @@ class UploadSource:
                     nonlocal planned
                     # Состояние могло измениться, пока обрабатывали файл.
                     self._check_applicable(await uow.items.get(media_item_id), kind)
-                    source = self._new_source(media_item_id, kind, stored)
+                    source = self._new_source(
+                        media_item_id,
+                        kind,
+                        stored,
+                        position=position,
+                        origin=origin,
+                        provenance=provenance,
+                    )
                     await uow.sources.add(source)
                     await uow.audit.record(
                         AdminAction(
@@ -125,7 +164,14 @@ class UploadSource:
                             target_id=media_item_id,
                             reason=reason,
                             at=source.created_at,
-                            details={"source_media_id": str(source.id), "kind": kind.value},
+                            details={
+                                "source_media_id": str(source.id),
+                                "kind": kind.value,
+                                "position": position,
+                                "origin": origin.value,
+                                "source_url": provenance.source_url,
+                                "license_note": provenance.license_note,
+                            },
                         )
                     )
                     planned = await self._plan.plan_in(uow, media_item_id)
@@ -137,6 +183,8 @@ class UploadSource:
                         size_bytes=stored.size_bytes,
                         mime=stored.mime,
                         scheduled_asset_set_ids=planned.asset_set_ids,
+                        position=position,
+                        origin=origin,
                     ).to_json()
 
                 response, executed_now = await run_idempotent(
@@ -179,16 +227,26 @@ class UploadSource:
             )
 
     def _new_source(
-        self, media_item_id: UUID, kind: SourceKind, stored: StoredSource
+        self,
+        media_item_id: UUID,
+        kind: SourceKind,
+        stored: StoredSource,
+        *,
+        position: int,
+        origin: SourceOrigin,
+        provenance: SourceProvenance,
     ) -> SourceMedia:
         source = SourceMedia(
             uuid7(),
             media_item_id=media_item_id,
             kind=kind,
-            origin=SourceOrigin.UPLOAD,
+            origin=origin,
             uri=None,
             created_at=self._clock.now(),
             status=SourceStatus.REGISTERED,
+            position=position,
+            source_url=provenance.source_url,
+            license_note=provenance.license_note,
         )
         source.mark_stored(
             object_key=stored.object_key,
@@ -197,3 +255,83 @@ class UploadSource:
             mime=stored.mime,
         )
         return source
+
+
+class SetSourcePosition:
+    """Сменить порядок исходника среди своего вида и перепланировать наборы единицы.
+
+    Новый порядок кадров меняет состав исходников ``frame_sequence`` — ``PlanAssetSets``
+    перегенерирует затронутые наборы (новое поколение).
+    """
+
+    def __init__(
+        self, uow: UnitOfWorkFactory, clock: Clock, plan: PlanAssetSets, *, storage: ObjectStorage
+    ) -> None:
+        self._uow = uow
+        self._clock = clock
+        self._plan = plan
+        self._storage = storage
+
+    async def execute(
+        self,
+        source_media_id: UUID,
+        *,
+        position: int,
+        actor_id: UUID,
+        reason: str,
+        idempotency_key: str,
+    ) -> SourceView:
+        """Сменить порядок (идемпотентно по ``(actor_id, idempotency_key)``).
+
+        Raises:
+            SourceNotFoundError: нет исходника.
+            ConflictError: единица заблокирована; ключ идемпотентности переиспользован.
+        """
+        fingerprint = request_fingerprint(
+            "source.position", source_media_id, {"position": position, "reason": reason}
+        )
+        planned = PlannedSets((), ())
+        async with self._uow() as uow:
+
+            async def perform() -> dict[str, Any]:
+                nonlocal planned
+                source = await uow.sources.get(source_media_id)
+                if source is None:
+                    raise SourceNotFoundError("исходник не найден")
+                state = await uow.items.get(source.media_item_id)
+                if state is not None and state.is_blocked:
+                    raise ConflictError("единица заблокирована", code="media_item.blocked")
+                previous = source.position
+                source.move_to(position)
+                await uow.sources.save(source)
+                await uow.audit.record(
+                    AdminAction(
+                        actor_id=actor_id,
+                        action="source.position",
+                        target_id=source.id,
+                        reason=reason,
+                        at=self._clock.now(),
+                        details={"from": previous, "to": position},
+                    )
+                )
+                planned = await self._plan.plan_in(uow, source.media_item_id)
+                return SourceView(
+                    source_media_id=source.id,
+                    media_item_id=source.media_item_id,
+                    kind=source.kind,
+                    origin=source.origin,
+                    position=source.position,
+                    status=source.status.value,
+                    scheduled_asset_set_ids=planned.asset_set_ids,
+                ).to_json()
+
+            response, executed = await run_idempotent(
+                uow.idempotency, actor_id, idempotency_key, fingerprint, perform
+            )
+            await uow.commit()
+        if executed:
+            await delete_quietly(self._storage, StorageArea.ASSETS, planned.stale_keys)
+            log.info(
+                "source.position_changed", source_media_id=str(source_media_id), position=position
+            )
+        return SourceView.from_json(response)

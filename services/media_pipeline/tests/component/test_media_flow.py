@@ -44,7 +44,7 @@ from redis.asyncio import Redis
 
 from gv_core import uuid7
 from gv_messaging import EventEnvelope, EventProcessor, Inbox, Outcome
-from gv_service import Infrastructure, create_app
+from gv_service import Environment, Infrastructure, create_app
 from gv_testkit import (
     FakeDeadLetterSink,
     InfraProvider,
@@ -65,6 +65,12 @@ SECRET = "component-test-secret-0123456789abcdef"
 TMDB_IP = "93.184.216.34"
 POSTER_PATH = "/t/p/original/abc.jpg"
 ADMIN_PERMS = ("admin.access", "media.upload_source", "media.regenerate")
+# Происхождение исходника (D6); обязательно вне local/ci.
+PROVENANCE = {
+    "origin": "upload",
+    "source_url": "https://example.org/track",
+    "license_note": "синтетический тон, без прав третьих лиц",
+}
 
 
 def _jpeg(width: int = 600, height: int = 900) -> bytes:
@@ -123,13 +129,15 @@ async def service(
 ) -> AsyncIterator[Service]:
     """Сервис на реальной инфраструктуре.
 
-    ``indirect``-параметр ``{"redis_down": True}`` — лимитер ссылок смотрит в недоступный Redis.
+    ``indirect``-параметры: ``{"redis_down": True}`` — лимитер ссылок смотрит в недоступный
+    Redis; ``{"environment": "production"}`` — окружение сервиса (по умолчанию ``ci``).
     """
     options: dict[str, Any] = getattr(request, "param", {})
     assert DEFINITION.migrations_path is not None
     await apply_migrations(database_url, DEFINITION.migrations_path)
     suffix = uuid7().hex[-12:]
     settings = Settings(
+        environment=Environment(options.get("environment", "ci")),
         database_url=SecretStr(database_url),
         redis_url=SecretStr(infra.redis_url()),
         s3=S3Settings(
@@ -395,7 +403,12 @@ def _music_item_event() -> tuple[EventEnvelope, str]:
 async def test_admin_upload_audio_generates_audio_levels(service: Service) -> None:
     event, item_id = _music_item_event()
     await service.deliver(event)
-    form = {"media_item_id": item_id, "kind": "audio", "reason": "лицензированный превью"}
+    form = {
+        "media_item_id": item_id,
+        "kind": "audio",
+        "reason": "лицензированный превью",
+        **PROVENANCE,
+    }
     files = {"file": ("track.wav", _wav(), "audio/wav")}
     headers = {**service.admin(), "Idempotency-Key": f"upload-{uuid7().hex}"}
     response = await service.client.post(
@@ -430,7 +443,7 @@ async def test_admin_upload_audio_generates_audio_levels(service: Service) -> No
 async def test_admin_upload_validation(service: Service) -> None:
     event, item_id = _music_item_event()
     await service.deliver(event)
-    form = {"media_item_id": item_id, "kind": "audio", "reason": "причина"}
+    form = {"media_item_id": item_id, "kind": "audio", "reason": "причина", **PROVENANCE}
     wav = {"file": ("a.wav", _wav(1), "audio/wav")}
 
     def key() -> dict[str, str]:
@@ -659,13 +672,88 @@ async def test_link_issuance_journal_records_client_id(service: Service) -> None
     ]
 
 
-async def test_stage3a_admin_routes_are_declared_but_not_implemented(service: Service) -> None:
+async def test_stage3a_profiles_route_is_declared_but_not_implemented(service: Service) -> None:
     """Шаг 0a этапа 3a: контракт объявлен, реализация — в потоке M (501)."""
     profiles = await service.client.get("/admin/v1/profiles", headers=service.admin())
     assert_problem(profiles, 501, "common.not_implemented")
-    position = await service.client.put(
-        f"/admin/v1/sources/{uuid7()}/position",
-        json={"position": 2, "reason": "порядок кадров"},
-        headers={**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"},
+
+
+async def test_admin_source_position(service: Service) -> None:
+    created = load_example("catalog.MediaItemCreated")
+    await service.deliver(created)
+    (source_ref,) = [s["source_media_ref"] for s in created.payload["source_media"]]
+    url = f"/admin/v1/sources/{source_ref}/position"
+    headers = {**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"}
+    response = await service.client.put(
+        url, json={"position": 3, "reason": "порядок кадров"}, headers=headers
     )
-    assert_problem(position, 501, "common.not_implemented")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["position"], body["kind"], body["origin"]) == (3, "poster", "tmdb")
+    replay = await service.client.put(
+        url, json={"position": 3, "reason": "порядок кадров"}, headers=headers
+    )
+    assert replay.json() == body
+    assert_problem(
+        await service.client.put(
+            url, json={"position": 4, "reason": "порядок кадров"}, headers=headers
+        ),
+        409,
+        "idempotency.key_reused",
+    )
+    assert_problem(
+        await service.client.put(
+            f"/admin/v1/sources/{uuid7()}/position",
+            json={"position": 2, "reason": "нет такого"},
+            headers={**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"},
+        ),
+        404,
+        "source.not_found",
+    )
+    assert_problem(
+        await service.client.put(
+            url,
+            json={"position": 0, "reason": "вне диапазона"},
+            headers={**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"},
+        ),
+        422,
+        "request.validation_failed",
+    )
+    assert_problem(
+        await service.client.put(
+            url,
+            json={"position": 2, "reason": "без права"},
+            headers={**service.admin("admin.access"), "Idempotency-Key": f"pos-{uuid7().hex}"},
+        ),
+        403,
+        "auth.forbidden",
+    )
+    assert_problem(
+        await service.client.put(
+            url, json={"position": 2, "reason": "без ключа"}, headers=service.admin()
+        ),
+        422,
+        "idempotency.key_required",
+    )
+
+
+@pytest.mark.parametrize("service", [{"environment": "production"}], indirect=True)
+async def test_admin_upload_requires_provenance_outside_local(service: Service) -> None:
+    """Вне local/ci D6 требует происхождения исходника."""
+    event, item_id = _music_item_event()
+    await service.deliver(event)
+    form = {"media_item_id": item_id, "kind": "audio", "reason": "лицензированный превью"}
+    files = {"file": ("track.wav", _wav(1), "audio/wav")}
+    headers = {**service.admin(), "Idempotency-Key": f"upload-{uuid7().hex}"}
+    assert_problem(
+        await service.client.post("/admin/v1/sources", data=form, files=files, headers=headers),
+        422,
+        "source.provenance_required",
+    )
+    assert_problem(
+        await service.client.post(
+            "/admin/v1/sources", data={**form, "kind": "text"}, files=files, headers=headers
+        ),
+        422,
+        "request.validation_failed",
+    )

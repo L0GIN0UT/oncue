@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from gv_core.clock import Clock
 from gv_core.errors import DependencyUnavailableError
 from gv_messaging.ports import TaskQueue
-from gv_service import Infrastructure
+from gv_service import Environment, Infrastructure
 from media_pipeline_service.application.commands.catalog import (
     DisableItemAssets,
     PlanAssetSets,
@@ -28,7 +28,7 @@ from media_pipeline_service.application.commands.generation import (
     RegenerateAssetSet,
 )
 from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
-from media_pipeline_service.application.commands.sources import UploadSource
+from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.generators import (
     AudioIntroGenerator,
     FrameProgressiveGenerator,
@@ -67,6 +67,8 @@ from media_pipeline_service.infrastructure.tasks import LazyRabbitTaskQueue
 from media_pipeline_service.settings import Settings
 
 _MB = 1024 * 1024
+# Окружения, где загрузка без происхождения (D6) допустима: синтетика засева и тесты.
+DEV_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
 
 
 class _NoRedisLimiter:
@@ -182,6 +184,8 @@ class MediaContainer:
             a.storage,
             {
                 SourceKind.AUDIO: a.transcoder,
+                SourceKind.SOUNDTRACK: a.transcoder,
+                SourceKind.AUDIO_CLIP: a.transcoder,
                 SourceKind.FRAME: a.images,
                 SourceKind.POSTER: a.images,
             },
@@ -241,6 +245,14 @@ class MediaContainer:
             self.profiles,
             self.plan(),
             storage=self.adapters.storage,
+            require_provenance=self.settings.environment not in DEV_ENVIRONMENTS,
+        )
+
+    @cached_property
+    def set_position(self) -> SetSourcePosition:
+        """Порядок исходника (admin)."""
+        return SetSourcePosition(
+            self.uow_factory(), self.clock, self.plan(), storage=self.adapters.storage
         )
 
     @cached_property

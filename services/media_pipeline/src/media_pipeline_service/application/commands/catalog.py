@@ -68,12 +68,26 @@ class RegisterSourceFromCatalog:
                             origin=item.origin,
                             uri=item.uri,
                             created_at=self._clock.now(),
+                            position=item.position,
+                            source_url=item.source_url,
+                            license_note=item.license_note,
                         )
                     )
-                elif existing.media_item_id == media_item_id and existing.uri != item.uri:
+                    continue
+                if existing.media_item_id != media_item_id:
+                    continue
+                changed = False
+                if existing.uri != item.uri:
                     existing.uri = item.uri
                     existing.object_key = None
                     existing.status = SourceStatus.REGISTERED
+                    changed = True
+                meta = (item.position, item.source_url, item.license_note)
+                if (existing.position, existing.source_url, existing.license_note) != meta:
+                    existing.move_to(item.position)
+                    existing.source_url, existing.license_note = item.source_url, item.license_note
+                    changed = True
+                if changed:
                     await uow.sources.save(existing)
             await uow.commit()
 
@@ -137,7 +151,7 @@ class PlanAssetSets:
                     uuid7(),
                     media_item_id=media_item_id,
                     profile=profile,
-                    source_media_id=source.id,
+                    source_media_ids=(source.id,),
                     now=now,
                 )
                 await uow.asset_sets.add(created)
@@ -146,7 +160,7 @@ class PlanAssetSets:
                 current.source_media_id != source.id
                 and current.status is not AssetSetStatus.DISABLED
             ):
-                old = current.regenerate(now, source_media_id=source.id)
+                old = current.regenerate(now, source_media_ids=(source.id,))
                 stale_keys.extend(level.object_key for level in old)
                 await uow.asset_sets.save(current)
                 scheduled.append(current)

@@ -51,3 +51,15 @@ class SourceTooLargeError(InvalidInputError):
     """Файл-источник больше лимита."""
 
     default_code = "source.too_large"
+
+
+class SourceNotFoundError(NotFoundError):
+    """Исходник не найден (404)."""
+
+    default_code = "source.not_found"
+
+
+class ProvenanceRequiredError(InvalidInputError):
+    """Вне local/ci у загрузки нет ``origin``/``source_url``/``license_note`` (D6, 422)."""
+
+    default_code = "source.provenance_required"

@@ -18,7 +18,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from gv_db import create_metadata
 from gv_db.idempotency import idempotency_table
@@ -64,13 +64,25 @@ source_media = Table(
     Column("bytes", BigInteger, nullable=True),
     Column("mime", String(64), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    CheckConstraint("kind IN ('audio', 'frame', 'poster')", name="kind_valid"),
-    CheckConstraint("origin IN ('upload', 'tmdb')", name="origin_valid"),
+    # 0005 (этап 3a): порядок внутри вида, происхождение (D6), содержимое текстового исходника.
+    Column("position", Integer, nullable=False, server_default=text("1")),
+    Column("source_url", String(2000), nullable=True),
+    Column("license_note", String(500), nullable=True),
+    # none_as_null: Python None — SQL NULL, а не JSON null (CHECK text_content_kind).
+    Column("text_content", JSONB(none_as_null=True), nullable=True),
+    CheckConstraint(
+        "kind IN ('audio', 'frame', 'poster', 'soundtrack', 'audio_clip', 'text')",
+        name="kind_valid",
+    ),
+    CheckConstraint("origin IN ('upload', 'tmdb', 'seed', 'catalog')", name="origin_valid"),
     CheckConstraint("status IN ('registered', 'ready', 'failed')", name="status_valid"),
     CheckConstraint(
-        "status <> 'ready' OR (object_key IS NOT NULL AND sha256 IS NOT NULL AND bytes > 0)",
+        "status <> 'ready' OR (object_key IS NOT NULL AND sha256 IS NOT NULL AND bytes > 0) "
+        "OR (kind = 'text' AND text_content IS NOT NULL)",
         name="ready_has_object",
     ),
+    CheckConstraint("position BETWEEN 1 AND 100", name="position_range"),
+    CheckConstraint("(kind = 'text') = (text_content IS NOT NULL)", name="text_content_kind"),
     Index("ix_source_media_media_item_id", "media_item_id"),
 )
 
@@ -95,6 +107,9 @@ asset_sets = Table(
         ForeignKey("source_media.id", ondelete="SET NULL"),
         nullable=True,
     ),
+    # 0005: все исходники набора по порядку (frame_sequence берёт N кадров); NULL — набор
+    # до 0005, его единственный исходник — source_media_id.
+    Column("source_media_ids", ARRAY(Uuid), nullable=True),
     Column("status", String(16), nullable=False),
     Column("generation", Integer, nullable=False),
     Column("attempts", Integer, nullable=False, server_default=text("0")),

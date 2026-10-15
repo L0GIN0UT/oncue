@@ -118,6 +118,10 @@ class FakeSources(_Repo):
     async def save(self, source: SourceMedia) -> None:
         self.db.sources[source.id] = copy.deepcopy(source)
 
+    async def delete(self, source_ids: Sequence[UUID]) -> None:
+        for source_id in source_ids:
+            self.db.sources.pop(source_id, None)
+
 
 class FakeItems(_Repo):
     async def get(self, media_item_id: UUID, *, for_update: bool = False) -> MediaItemState | None:
@@ -415,7 +419,9 @@ TEST_PROFILES: dict[str, Any] = {
 class MediaHarness:
     """Use-cases сервиса, собранные на фейках портов."""
 
-    def __init__(self, *, max_attempts: int = 3, link_max: int = 3) -> None:
+    def __init__(
+        self, *, max_attempts: int = 3, link_max: int = 3, require_provenance: bool = False
+    ) -> None:
         from datetime import timedelta
 
         from media_pipeline_service.application.commands.catalog import (
@@ -433,7 +439,10 @@ class MediaHarness:
             IssueAssetLink,
             PurgeLinkJournal,
         )
-        from media_pipeline_service.application.commands.sources import UploadSource
+        from media_pipeline_service.application.commands.sources import (
+            SetSourcePosition,
+            UploadSource,
+        )
         from media_pipeline_service.application.generators import (
             AudioIntroGenerator,
             FrameProgressiveGenerator,
@@ -479,6 +488,8 @@ class MediaHarness:
             self.storage,
             {
                 SourceKind.AUDIO: self.transcoder,
+                SourceKind.SOUNDTRACK: self.transcoder,
+                SourceKind.AUDIO_CLIP: self.transcoder,
                 SourceKind.FRAME: self.images,
                 SourceKind.POSTER: self.images,
             },
@@ -510,8 +521,15 @@ class MediaHarness:
         )
         self.regenerate = RegenerateAssetSet(uow, self.clock, self.queue, self.storage)
         self.upload = UploadSource(
-            uow, self.clock, self.ingestor, self.profiles, self.plan, storage=self.storage
+            uow,
+            self.clock,
+            self.ingestor,
+            self.profiles,
+            self.plan,
+            storage=self.storage,
+            require_provenance=require_provenance,
         )
+        self.set_position = SetSourcePosition(uow, self.clock, self.plan, storage=self.storage)
         self.policy = LinkPolicy(ttl_s=60, max_per_window=link_max, window_s=60)
         self.issue_link = IssueAssetLink(
             uow,
@@ -544,5 +562,6 @@ def media() -> MediaHarness:
 
 @pytest.fixture
 def media_factory() -> type[MediaHarness]:
-    """Конструктор harness с параметрами (``max_attempts``, ``link_max``)."""
+    """Конструктор harness с параметрами (``max_attempts``, ``link_max``,
+    ``require_provenance``)."""
     return MediaHarness

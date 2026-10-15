@@ -30,6 +30,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
         build_internal_router(c.issue_link, c.list_sets),
         build_admin_router(
             upload=c.upload,
+            set_position=c.set_position,
             regenerate=c.regenerate,
             list_sets=c.list_sets,
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,

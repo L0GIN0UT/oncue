@@ -154,7 +154,9 @@ def test_snapshot_parser_covers_schema_enums() -> None:
 
 
 def test_unknown_source_kinds_are_skipped_not_rejected() -> None:
-    """Виды исходников, которые catalog уже публикует, а media ещё не умеет, пропускаются."""
+    """Виды исходников, которые catalog начнёт публиковать раньше, чем media их научится
+    обрабатывать, пропускаются; новые поля этапа 3a (position, source_url, license_note)
+    разбираются."""
     from media_pipeline_service.infrastructure.messaging import known_sources
 
     payload = {
@@ -165,12 +167,20 @@ def test_unknown_source_kinds_are_skipped_not_rejected() -> None:
                 "kind": kind,
                 "origin": "upload",
                 "uri": "https://image.tmdb.org/x.jpg",
+                "position": i + 1,
+                "source_url": "https://example.org/a",
+                "license_note": "CC BY 4.0",
             }
-            for i, kind in enumerate(("frame", "soundtrack", "audio_clip"))
+            for i, kind in enumerate(("frame", "soundtrack", "audio_clip", "hologram"))
         ],
     }
     parsed = _SnapshotPayload.model_validate(payload)
-    assert [s.kind for s in known_sources(parsed.source_media)] == ["frame"]
+    sources = known_sources(parsed.source_media)
+    assert [s.kind for s in sources] == ["frame", "soundtrack", "audio_clip"]
+    assert [s.position for s in sources] == [1, 2, 3]
+    assert {(s.source_url, s.license_note) for s in sources} == {
+        ("https://example.org/a", "CC BY 4.0")
+    }
 
 
 def test_produced_event_fields_are_declared() -> None:

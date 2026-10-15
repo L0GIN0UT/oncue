@@ -48,6 +48,9 @@ class _SourceMediaPayload(_Payload):
     kind: str = Field(min_length=1, max_length=32)
     origin: SourceOrigin
     uri: str = Field(min_length=1, max_length=2000)
+    position: int = Field(default=1, ge=1, le=100)
+    source_url: str | None = Field(default=None, max_length=2000)
+    license_note: str | None = Field(default=None, max_length=500)
 
 
 class _SnapshotPayload(_Payload):
@@ -84,7 +87,17 @@ def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, 
                 "media.source_kind_skipped", kind=s.kind, source_media_ref=str(s.source_media_ref)
             )
             continue
-        sources.append(CatalogSource(s.source_media_ref, SourceKind(s.kind), s.origin, s.uri))
+        sources.append(
+            CatalogSource(
+                s.source_media_ref,
+                SourceKind(s.kind),
+                s.origin,
+                s.uri,
+                position=s.position,
+                source_url=s.source_url,
+                license_note=s.license_note,
+            )
+        )
     return tuple(sources)
 
 

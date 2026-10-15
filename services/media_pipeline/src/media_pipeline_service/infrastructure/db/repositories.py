@@ -73,6 +73,7 @@ def _set_row(aggregate: AssetSet) -> dict[str, Any]:
         "params_hash": aggregate.params_hash,
         "levels_count": aggregate.levels_count,
         "source_media_id": aggregate.source_media_id,
+        "source_media_ids": list(aggregate.source_media_ids),
         "status": aggregate.status.value,
         "generation": aggregate.generation,
         "attempts": aggregate.attempts,
@@ -81,6 +82,15 @@ def _set_row(aggregate: AssetSet) -> dict[str, Any]:
         "created_at": aggregate.created_at,
         "updated_at": aggregate.updated_at,
     }
+
+
+def _source_ids(row: RowMapping) -> tuple[UUID, ...]:
+    # Наборы до 0005: только source_media_id (может стать NULL по ON DELETE SET NULL).
+    ids = row["source_media_ids"]
+    if ids:
+        return tuple(ids)
+    single = row["source_media_id"]
+    return (single,) if single is not None else ()
 
 
 def _to_set(row: RowMapping, levels: Sequence[RowMapping]) -> AssetSet:
@@ -92,7 +102,7 @@ def _to_set(row: RowMapping, levels: Sequence[RowMapping]) -> AssetSet:
         params=row["params"],
         params_hash=row["params_hash"],
         levels_count=row["levels_count"],
-        source_media_id=row["source_media_id"],
+        source_media_ids=_source_ids(row),
         status=AssetSetStatus(row["status"]),
         generation=row["generation"],
         attempts=row["attempts"],
@@ -211,6 +221,10 @@ def _to_source(row: RowMapping) -> SourceMedia:
         sha256=row["sha256"],
         size_bytes=row["bytes"],
         mime=row["mime"],
+        position=row["position"],
+        source_url=row["source_url"],
+        license_note=row["license_note"],
+        text_content=row["text_content"],
     )
 
 
@@ -226,6 +240,10 @@ def _source_row(source: SourceMedia) -> dict[str, Any]:
         "bytes": source.size_bytes,
         "mime": source.mime,
         "created_at": source.created_at,
+        "position": source.position,
+        "source_url": source.source_url,
+        "license_note": source.license_note,
+        "text_content": source.text_content,
     }
 
 
@@ -272,6 +290,11 @@ class SqlSourceMediaRepository:
         await self._s.execute(
             update(source_media).where(source_media.c.id == source.id).values(**_source_row(source))
         )
+
+    async def delete(self, source_ids: Sequence[UUID]) -> None:
+        """Удалить исходники (наборы теряют ссылку: ``ON DELETE SET NULL``)."""
+        if source_ids:
+            await self._s.execute(delete(source_media).where(source_media.c.id.in_(source_ids)))
 
 
 # ---------------------------------------------------------------- проекция единиц

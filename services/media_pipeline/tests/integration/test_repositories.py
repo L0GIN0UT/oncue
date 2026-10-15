@@ -96,7 +96,7 @@ async def test_asset_set_lifecycle_persists_levels_and_events(
 ) -> None:
     item, source_id = await seed(sessions)
     aggregate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     async with uow(sessions) as u:
         await u.asset_sets.add(aggregate)
@@ -143,7 +143,7 @@ async def test_optimistic_lock_and_unique_profile(
 ) -> None:
     item, source_id = await seed(sessions)
     aggregate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     async with uow(sessions) as u:
         await u.asset_sets.add(aggregate)
@@ -159,7 +159,7 @@ async def test_optimistic_lock_and_unique_profile(
         with pytest.raises(ConflictError):
             await second.asset_sets.save(b)
     duplicate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     with pytest.raises(Exception, match="uq_asset_sets"):
         async with uow(sessions) as u:
@@ -309,7 +309,7 @@ async def test_regenerate_failure_after_mutation_does_not_stick_idempotency_key(
     """
     item, source_id = await seed(sessions)
     aggregate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     async with uow(sessions) as u:
         await u.asset_sets.add(aggregate)
@@ -398,3 +398,63 @@ async def test_uow_requires_exactly_one_session_source(
         SqlMediaUnitOfWork(producer="p", clock=FakeClock())
     async with sessions() as session:
         assert (await session.execute(select(1))).scalar() == 1
+
+
+async def test_stage3a_source_fields_and_multi_source_sets_roundtrip(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """0005: позиция, происхождение, текстовое содержимое и все исходники набора."""
+    item, frame_id = await seed(sessions)
+    text_id, second_frame = uuid7(), uuid7()
+    content = {"version": 1, "emoji": "🎬🚀", "genres": ["драма"], "year": 2014}
+    async with uow(sessions) as u:
+        await u.sources.add(
+            SourceMedia(
+                second_frame,
+                media_item_id=item,
+                kind=SourceKind.FRAME,
+                origin=SourceOrigin.SEED,
+                uri=None,
+                created_at=NOW,
+                position=2,
+                source_url="https://example.org/frame-2",
+                license_note="синтетика",
+            )
+        )
+        await u.sources.add(
+            SourceMedia.text(
+                text_id,
+                media_item_id=item,
+                content=content,
+                sha256="a" * 64,
+                size_bytes=12,
+                created_at=NOW,
+            )
+        )
+        aggregate = AssetSet.plan(
+            uuid7(),
+            media_item_id=item,
+            profile=profile(),
+            source_media_ids=(frame_id, second_frame),
+            now=NOW,
+        )
+        await u.asset_sets.add(aggregate)
+        await u.commit()
+    async with uow(sessions) as u:
+        stored = {s.id: s for s in await u.sources.list_for_item(item)}
+        loaded = await u.asset_sets.get(aggregate.id)
+        await u.sources.delete([text_id])
+        await u.commit()
+    assert stored[second_frame].position == 2
+    assert stored[second_frame].origin is SourceOrigin.SEED
+    assert (stored[second_frame].source_url, stored[second_frame].license_note) == (
+        "https://example.org/frame-2",
+        "синтетика",
+    )
+    assert stored[frame_id].position == 1 and stored[frame_id].text_content is None
+    assert stored[text_id].text_content == content and stored[text_id].is_usable
+    assert loaded is not None
+    assert loaded.source_media_ids == (frame_id, second_frame)
+    assert loaded.source_media_id == frame_id
+    async with uow(sessions) as u:
+        assert await u.sources.get(text_id) is None

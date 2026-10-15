@@ -584,3 +584,93 @@ async def test_assets_failed_shares_item_event_counter(media: Any) -> None:
     ready, failed = media.db.events
     assert isinstance(ready, AssetsReady) and isinstance(failed, AssetsFailed)
     assert failed.version > ready.version
+
+
+# ---------------------------------------------------------------- этап 3a: происхождение и порядок
+async def test_upload_requires_provenance_outside_local(media_factory: Any) -> None:
+    from media_pipeline_service.application.dto import SourceProvenance
+    from media_pipeline_service.domain.errors import ProvenanceRequiredError
+
+    media = media_factory(require_provenance=True)
+    await media.sync.apply_snapshot(snapshot(sources=()))
+    upload = {
+        "media_item_id": ITEM,
+        "kind": SourceKind.FRAME,
+        "data": JPEG,
+        "actor_id": ACTOR,
+        "reason": "кадр",
+    }
+    for partial in (
+        None,
+        SourceProvenance(origin=SourceOrigin.UPLOAD, source_url="https://example.org/f"),
+        SourceProvenance(source_url="https://example.org/f", license_note="CC0"),
+    ):
+        with pytest.raises(ProvenanceRequiredError):
+            await media.upload.execute(**upload, idempotency_key=key(), provenance=partial)
+    assert media.storage.keys(StorageArea.SOURCES) == []
+
+    full = SourceProvenance(
+        origin=SourceOrigin.SEED, source_url="https://example.org/f", license_note="CC0"
+    )
+    result = await media.upload.execute(
+        **upload, idempotency_key=key(), provenance=full, position=4
+    )
+    assert (result.position, result.origin) == (4, SourceOrigin.SEED)
+    stored = media.db.sources[result.source_media_id]
+    assert (stored.position, stored.source_url, stored.license_note) == (
+        4,
+        "https://example.org/f",
+        "CC0",
+    )
+    assert media.db.audit[-1].details["license_note"] == "CC0"
+
+
+async def test_set_source_position_audits_and_is_idempotent(media: Any) -> None:
+    from media_pipeline_service.domain.errors import SourceNotFoundError
+
+    await ready_poster(media)
+    idem = key()
+    view = await media.set_position.execute(
+        POSTER_REF, position=2, actor_id=ACTOR, reason="порядок", idempotency_key=idem
+    )
+    assert (view.position, view.kind) == (2, SourceKind.POSTER)
+    assert media.db.sources[POSTER_REF].position == 2
+    assert media.db.audit[-1].details == {"from": 1, "to": 2}
+    again = await media.set_position.execute(
+        POSTER_REF, position=2, actor_id=ACTOR, reason="порядок", idempotency_key=idem
+    )
+    assert again == view
+    assert len(media.db.audit) == 1
+    with pytest.raises(ConflictError):
+        await media.set_position.execute(
+            POSTER_REF, position=3, actor_id=ACTOR, reason="порядок", idempotency_key=idem
+        )
+    with pytest.raises(SourceNotFoundError):
+        await media.set_position.execute(
+            uuid7(), position=3, actor_id=ACTOR, reason="порядок", idempotency_key=key()
+        )
+
+
+async def test_catalog_position_and_provenance_are_projected(media: Any) -> None:
+    source = CatalogSource(
+        POSTER_REF,
+        SourceKind.POSTER,
+        SourceOrigin.TMDB,
+        POSTER_URI,
+        position=1,
+        source_url="https://www.themoviedb.org/movie/1",
+        license_note="TMDB",
+    )
+    await media.sync.apply_snapshot(snapshot(sources=(source,)))
+    moved = CatalogSource(
+        POSTER_REF,
+        SourceKind.POSTER,
+        SourceOrigin.TMDB,
+        POSTER_URI,
+        position=5,
+        source_url="https://www.themoviedb.org/movie/1",
+        license_note="TMDB, атрибуция",
+    )
+    await media.sync.apply_snapshot(snapshot(2, sources=(moved,)))
+    stored = media.db.sources[POSTER_REF]
+    assert (stored.position, stored.license_note) == (5, "TMDB, атрибуция")
