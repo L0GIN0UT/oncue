@@ -1,4 +1,4 @@
-"""Обработчики событий catalog и задачи RabbitMQ.
+"""Обработчики событий catalog и game (``ClueAssetsRequested``) и задачи RabbitMQ.
 
 Обработчик события работает внутри транзакции ``EventProcessor`` (отметка inbox +
 изменения — атомарно); use-cases получают UoW, привязанный к этой сессии (SAVEPOINT).
@@ -12,11 +12,12 @@ from typing import Any, Literal
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError, TaskHandler
+from media_pipeline_service.application.commands.profiles import ClueAssetsRequest
 from media_pipeline_service.application.dto import (
     GENERATE_TASK,
     CatalogSource,
@@ -29,12 +30,15 @@ from media_pipeline_service.infrastructure.container import MediaContainer
 
 log = structlog.get_logger(__name__)
 
-CONSUMED_TOPICS: tuple[str, ...] = ("catalog.media_item.v1",)
+CONSUMED_TOPICS: tuple[str, ...] = ("catalog.media_item.v1", "game.mode_config.v1")
 
 ITEM_CREATED = "catalog.MediaItemCreated"
 ITEM_UPDATED = "catalog.MediaItemUpdated"
 ITEM_BLOCKED = "catalog.MediaItemBlocked"
 ITEM_UNBLOCKED = "catalog.MediaItemUnblocked"
+# Остальные события топика game.mode_config.v1 (Published/Archived) сервису не нужны —
+# реестр их пропускает (Outcome.SKIPPED).
+CLUE_ASSETS_REQUESTED = "game.ClueAssetsRequested"
 
 
 class _Payload(BaseModel):
@@ -100,6 +104,18 @@ class _StatusPayload(_Payload):
     version: int = Field(ge=1)
 
 
+class _ClueAssetsRequestedPayload(_Payload):
+    request_id: UUID
+    mode_key: str = Field(max_length=100, pattern=r"^(music|film)\.[a-z0-9_]+\.[a-z0-9_]+$")
+    draft_revision: int = Field(ge=1)
+    domain: Literal["music", "film"]
+    clue_type: str = Field(max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    params: dict[str, Any]
+    params_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    actor_id: UUID
+    requested_at: AwareDatetime
+
+
 def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
     try:
         return model.model_validate(payload)
@@ -135,7 +151,7 @@ def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, 
 
 
 def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
-    """Реестр обработчиков событий catalog."""
+    """Реестр обработчиков событий catalog и game."""
     registry = EventHandlerRegistry()
 
     async def on_snapshot(envelope: EventEnvelope, session: AsyncSession) -> None:
@@ -159,6 +175,24 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
 
         return handler
 
+    async def on_clue_assets_requested(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_ClueAssetsRequestedPayload, envelope.payload)
+        use_case = container.apply_clue_assets_requested(container.uow_factory(session))
+        await use_case.execute(
+            ClueAssetsRequest(
+                request_id=p.request_id,
+                mode_key=p.mode_key,
+                draft_revision=p.draft_revision,
+                domain=p.domain,
+                clue_type=p.clue_type,
+                params=p.params,
+                params_hash=p.params_hash,
+                actor_id=p.actor_id,
+                requested_at=p.requested_at,
+            )
+        )
+
+    registry.register(CLUE_ASSETS_REQUESTED, on_clue_assets_requested)
     registry.register(ITEM_CREATED, on_snapshot)
     registry.register(ITEM_UPDATED, on_snapshot)
     registry.register(ITEM_BLOCKED, on_status(ItemStatus.BLOCKED))

@@ -35,6 +35,7 @@ from media_pipeline_service.infrastructure.storage import S3Storage
 from media_pipeline_service.main import (
     DEFINITION,
     build_event_handlers,
+    build_periodic_jobs,
     build_routers,
     build_task_handlers,
 )
@@ -45,7 +46,7 @@ from redis.asyncio import Redis
 
 from gv_core import uuid7
 from gv_messaging import EventEnvelope, EventProcessor, Inbox, Outcome
-from gv_service import Environment, Infrastructure, create_app
+from gv_service import Environment, Infrastructure, JobResult, ServiceDefinition, create_app
 from gv_testkit import (
     FakeDeadLetterSink,
     InfraProvider,
@@ -57,6 +58,7 @@ from gv_testkit import (
     assert_problem,
     load_example,
     outbox_envelopes,
+    run_periodic_job,
     service_client,
 )
 
@@ -98,6 +100,10 @@ class Service:
     processor: EventProcessor
     tasks: dict[str, Any]
     issuer: TestTokenIssuer
+    definition: ServiceDefinition
+
+    async def run_job(self, name: str) -> JobResult:
+        return await run_periodic_job(self.definition, name, self.infra)
 
     async def deliver(self, envelope: EventEnvelope) -> Outcome:
         return await self.processor.process(envelope.to_bytes(), source="test")
@@ -182,7 +188,9 @@ async def service(
     assert isinstance(adapters.storage, S3Storage)
     await adapters.storage.ensure_buckets()
     definition = dataclasses.replace(
-        DEFINITION, build_routers=functools.partial(build_routers, adapters=adapters)
+        DEFINITION,
+        build_routers=functools.partial(build_routers, adapters=adapters),
+        build_periodic_jobs=functools.partial(build_periodic_jobs, adapters=adapters),
     )
     assert runtime.sessions is not None
     processor = EventProcessor(
@@ -216,7 +224,7 @@ async def service(
                 client.event_hooks["request"].append(add_service_token)
                 yield Service(
                     client, runtime, queue, adapters.storage, processor,
-                    build_task_handlers(runtime, adapters), token_issuer,
+                    build_task_handlers(runtime, adapters), token_issuer, definition,
                 )  # fmt: skip
     finally:
         await runtime.close()
@@ -681,10 +689,78 @@ async def test_link_issuance_journal_records_client_id(service: Service) -> None
     ]
 
 
-async def test_stage3a_profiles_route_is_declared_but_not_implemented(service: Service) -> None:
-    """Шаг 0a этапа 3a: контракт объявлен, реализация — в потоке M (501)."""
-    profiles = await service.client.get("/admin/v1/profiles", headers=service.admin())
-    assert_problem(profiles, 501, "common.not_implemented")
+async def test_clue_assets_requested_creates_dynamic_profile_and_backfills(
+    service: Service,
+) -> None:
+    """ADR 0025: событие game → динамический профиль → досоздание задачей relay → AssetsReady
+    с params_hash из события; повтор события и повтор запроса ничего не дублируют."""
+    film, item_id = _film_with_texts(1, "Учёные … ищут новый дом.")
+    await service.deliver(film)
+    await service.run_tasks()  # description/default и emoji/default
+
+    requested = load_example("game.ClueAssetsRequested", fresh_id=False)
+    assert await service.deliver(requested) is Outcome.PROCESSED
+    assert await service.deliver(requested) is Outcome.DUPLICATE
+    again = requested.model_copy(
+        update={"event_id": uuid7(), "payload": {**requested.payload, "request_id": str(uuid7())}}
+    )
+    assert await service.deliver(again) is Outcome.PROCESSED
+    published = load_example("game.ModeConfigPublished")
+    assert await service.deliver(published) is Outcome.SKIPPED
+
+    hash_ = requested.payload["params_hash"]
+    url = "/admin/v1/profiles"
+    query = {"clue_type": "description", "params_hash": hash_}
+    (profile,) = (await service.client.get(url, params=query, headers=service.admin())).json()
+    assert (profile["origin"], profile["status"], profile["profile_key"]) == (
+        "dynamic",
+        "backfilling",
+        None,
+    )
+    assert profile["sets"] == {"ready": 0, "pending": 0, "failed": 0}
+
+    assert await service.run_job("media.profiles.backfill") is JobResult.OK
+    assert await service.run_tasks() == 1
+    (profile,) = (await service.client.get(url, params=query, headers=service.admin())).json()
+    assert (profile["status"], profile["sets"]) == (
+        "active",
+        {"ready": 1, "pending": 0, "failed": 0},
+    )
+    ready = [
+        e
+        for e in await service.outbox()
+        if e.event_type == "media_pipeline.AssetsReady" and e.payload["params_hash"] == hash_
+    ]
+    assert len(ready) == 1
+    assert_event_matches_schema(ready[0])
+    assert ready[0].payload["media_item_id"] == item_id
+    assert ready[0].payload["profile_key"] == f"dyn_{hash_[:16]}"
+    assert ready[0].payload["levels_count"] == 2
+
+
+async def test_admin_profiles_lists_static_and_requires_admin_access(service: Service) -> None:
+    url = "/admin/v1/profiles"
+    assert_problem(await service.client.get(url), 401, "auth.unauthenticated")
+    assert_problem(
+        await service.client.get(url, headers=service.admin("media.regenerate")),
+        403,
+        "auth.forbidden",
+    )
+    listed = await service.client.get(url, headers=service.admin("admin.access"))
+    assert listed.status_code == 200, listed.text
+    keys = {(p["clue_type"], p["profile_key"]) for p in listed.json() if p["origin"] == "static"}
+    assert {
+        ("frame_progressive", "still"),
+        ("audio_intro", "preview"),
+        ("emoji", "default"),
+    } <= keys
+    assert_problem(
+        await service.client.get(
+            url, params={"params_hash": "nothex"}, headers=service.admin("admin.access")
+        ),
+        422,
+        "request.validation_failed",
+    )
 
 
 async def test_admin_source_position(service: Service) -> None:

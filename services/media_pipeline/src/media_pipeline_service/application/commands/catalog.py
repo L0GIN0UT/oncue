@@ -31,10 +31,11 @@ from media_pipeline_service.application.ports import (
     StorageArea,
     UnitOfWorkFactory,
 )
+from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.sources import delete_quietly
 from media_pipeline_service.domain.asset_set import AssetSet, AssetSetStatus
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
-from media_pipeline_service.domain.profiles import AssetProfileCatalog
+from media_pipeline_service.domain.profiles import AssetProfile
 from media_pipeline_service.domain.sources import SourceKind, SourceMedia, SourceStatus
 from media_pipeline_service.domain.texts import has_text_facts, text_content, text_source_identity
 
@@ -160,7 +161,7 @@ class PlanAssetSets:
         self,
         uow: UnitOfWorkFactory,
         clock: Clock,
-        profiles: AssetProfileCatalog,
+        profiles: ProfileDirectory,
         queue: TaskQueue,
         storage: ObjectStorage,
         *,
@@ -181,11 +182,16 @@ class PlanAssetSets:
         await delete_quietly(self._storage, StorageArea.ASSETS, planned.stale_keys)
         return list(planned.asset_set_ids)
 
-    async def plan_in(self, uow: MediaUnitOfWork, media_item_id: UUID) -> PlannedSets:
+    async def plan_in(
+        self, uow: MediaUnitOfWork, media_item_id: UUID, *, only: AssetProfile | None = None
+    ) -> PlannedSets:
         """Запланировать внутри открытого UoW вызывающего (коммит — его забота).
 
         Задачи ставятся до коммита (см. докстринг модуля); объекты прошлых поколений
         вызывающий удаляет после коммита (``PlannedSets.stale_keys``).
+
+        Args:
+            only: Только этот профиль (досоздание наборов динамического профиля).
         """
         stale_keys: list[str] = []
         scheduled: list[AssetSet] = []
@@ -196,7 +202,11 @@ class PlanAssetSets:
         existing = await uow.asset_sets.list_for_item(media_item_id, for_update=True)
         by_key = {(s.clue_type, s.profile_key, s.params_hash): s for s in existing}
         now = self._clock.now()
-        for profile in self._profiles.for_domain(state.domain):
+        if only is not None:
+            profiles = [only] if state.domain in only.domains else []
+        else:
+            profiles = await self._profiles.for_domain(uow, state.domain)
+        for profile in profiles:
             generator = self._registry.get(profile.clue_type)
             if generator is None:  # профиль без генератора отсекается при загрузке конфига
                 continue

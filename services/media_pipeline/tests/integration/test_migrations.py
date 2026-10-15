@@ -171,3 +171,33 @@ async def test_0005_keeps_stage2_sources_and_accepts_new_kinds(database_url: str
         await asyncio.to_thread(run_migrations, path, database_url)
     finally:
         await engine.dispose()
+
+
+async def test_0006_dynamic_profiles_up_and_down(database_url: str) -> None:
+    """0006: новая таблица и индекс; откат и повторный подъём."""
+    path = DEFINITION.migrations_path
+    assert path is not None
+    config = alembic_config(path, database_url)
+    await asyncio.to_thread(run_migrations, path, database_url)
+    engine = create_async_engine(database_url)
+    row = (
+        "INSERT INTO asset_profiles_dynamic (id, clue_type, domain, params, params_hash, status, "
+        "error_code, request_id, mode_key, actor_id, created_at, updated_at) VALUES (:id, "
+        "'emoji', 'film', CAST('{}' AS jsonb), :hash, :status, :code, :id, 'film.random.emoji', "
+        ":id, now(), now())"
+    )
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(row), {"id": uuid7(), "hash": "a" * 64, "status": "active", "code": None}
+            )
+        with pytest.raises(IntegrityError):  # отклонённый без кода
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(row),
+                    {"id": uuid7(), "hash": "b" * 64, "status": "rejected", "code": None},
+                )
+        await asyncio.to_thread(command.downgrade, config, "0005")
+        await asyncio.to_thread(run_migrations, path, database_url)
+    finally:
+        await engine.dispose()

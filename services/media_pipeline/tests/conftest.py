@@ -23,11 +23,13 @@ from media_pipeline_service.application.ports import (
     FetchedSource,
     ImageOps,
     NormalizedMedia,
+    ProfileSetCount,
     RenderedImage,
     StorageArea,
 )
 from media_pipeline_service.domain.asset_set import AssetSet
-from media_pipeline_service.domain.media_items import MediaItemState
+from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
+from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.sources import SourceMedia
 
 from gv_core.domain import AggregateRoot, DomainEvent
@@ -48,6 +50,7 @@ class MemoryDb:
     idempotency: dict[tuple[UUID, str], IdempotencyRecord] = field(default_factory=dict)
     audit: list[AdminAction] = field(default_factory=list)
     events: list[DomainEvent] = field(default_factory=list)
+    profiles: dict[UUID, DynamicProfile] = field(default_factory=dict)
 
 
 class _Repo:
@@ -101,6 +104,17 @@ class FakeAssetSets(_Repo):
         self.db.asset_sets[aggregate.id] = stored
         aggregate.persisted_version = aggregate.version
 
+    async def count_by_profile(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[ProfileSetCount]:
+        counts: dict[tuple[str, str, str, str], int] = {}
+        for s in self.db.asset_sets.values():
+            if clue_type not in (None, s.clue_type) or params_hash not in (None, s.params_hash):
+                continue
+            key = (s.clue_type, s.profile_key, s.params_hash, s.status.value)
+            counts[key] = counts.get(key, 0) + 1
+        return [ProfileSetCount(*key, count=n) for key, n in counts.items()]
+
 
 class FakeSources(_Repo):
     async def get(self, source_id: UUID) -> SourceMedia | None:
@@ -130,6 +144,16 @@ class FakeItems(_Repo):
 
     async def upsert(self, state: MediaItemState) -> None:
         self.db.items[state.id] = copy.deepcopy(state)
+
+    async def list_active_ids(self, domain: str, *, after: UUID | None, limit: int) -> list[UUID]:
+        ids = sorted(
+            i.id
+            for i in self.db.items.values()
+            if i.domain == domain
+            and i.status is ItemStatus.ACTIVE
+            and (after is None or i.id > after)
+        )
+        return ids[:limit]
 
     async def next_event_version(self, media_item_id: UUID) -> int:
         if media_item_id not in self.db.items:
@@ -165,6 +189,50 @@ class FakeLinks(_Repo):
         before = len(self.db.links)
         self.db.links[:] = [r for r in self.db.links if r["issued_at"] >= cutoff]
         return before - len(self.db.links)
+
+
+class FakeProfiles(_Repo):
+    async def lock(self) -> None:
+        return None
+
+    async def get(
+        self, clue_type: str, params_hash: str, domain: str, *, for_update: bool = False
+    ) -> DynamicProfile | None:
+        for p in self.db.profiles.values():
+            if (p.clue_type, p.params_hash, p.domain) == (clue_type, params_hash, domain):
+                return copy.deepcopy(p)
+        return None
+
+    async def count_usable(self) -> int:
+        return sum(1 for p in self.db.profiles.values() if p.is_usable)
+
+    async def add(self, profile: DynamicProfile) -> None:
+        if await self.get(profile.clue_type, profile.params_hash, profile.domain):
+            raise ConflictError("дубль профиля")
+        self.db.profiles[profile.id] = copy.deepcopy(profile)
+
+    async def save(self, profile: DynamicProfile) -> None:
+        self.db.profiles[profile.id] = copy.deepcopy(profile)
+
+    def _sorted(self) -> list[DynamicProfile]:
+        return [
+            copy.deepcopy(p) for p in sorted(self.db.profiles.values(), key=lambda p: p.created_at)
+        ]
+
+    async def list_usable(self, domain: str) -> list[DynamicProfile]:
+        return [p for p in self._sorted() if p.domain == domain and p.is_usable]
+
+    async def list_backfilling(self, limit: int) -> list[DynamicProfile]:
+        return [p for p in self._sorted() if p.status is DynamicProfileStatus.BACKFILLING][:limit]
+
+    async def list_all(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[DynamicProfile]:
+        return [
+            p
+            for p in self._sorted()
+            if clue_type in (None, p.clue_type) and params_hash in (None, p.params_hash)
+        ]
 
 
 class FakeIdempotency(_Repo):
@@ -231,6 +299,7 @@ class FakeMediaUnitOfWork:
         self.sources = FakeSources(self)
         self.items = FakeItems(self)
         self.links = FakeLinks(self)
+        self.profiles = FakeProfiles(self)
         self.idempotency = FakeIdempotency(self)
         self.audit = FakeAudit(self)
 
@@ -256,7 +325,7 @@ class FakeMediaUnitOfWork:
             self._fail_commit(self.view)
         for aggregate in self._tracked:
             self.view.events.extend(aggregate.pull_events())
-        for name in ("asset_sets", "sources", "items", "event_versions", "idempotency"):
+        for name in ("asset_sets", "sources", "items", "event_versions", "idempotency", "profiles"):
             setattr(self._db, name, getattr(self.view, name))
         self._db.links[:] = self.view.links
         self._db.audit[:] = self.view.audit
@@ -427,7 +496,13 @@ class MediaHarness:
     """Use-cases сервиса, собранные на фейках портов."""
 
     def __init__(
-        self, *, max_attempts: int = 3, link_max: int = 3, require_provenance: bool = False
+        self,
+        *,
+        max_attempts: int = 3,
+        link_max: int = 3,
+        require_provenance: bool = False,
+        max_profiles: int = 3,
+        backfill_batch: int = 2,
     ) -> None:
         from datetime import timedelta
 
@@ -446,17 +521,26 @@ class MediaHarness:
             IssueAssetLink,
             PurgeLinkJournal,
         )
+        from media_pipeline_service.application.commands.profiles import (
+            ApplyClueAssetsRequested,
+            BackfillDynamicProfiles,
+        )
         from media_pipeline_service.application.commands.sources import (
             SetSourcePosition,
             UploadSource,
         )
         from media_pipeline_service.application.generators import (
             AudioIntroGenerator,
+            DescriptionGenerator,
+            EmojiGenerator,
             FrameProgressiveGenerator,
+            FrameSequenceGenerator,
             GeneratorRegistry,
             PosterMaskedGenerator,
         )
+        from media_pipeline_service.application.profiles import ProfileDirectory
         from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+        from media_pipeline_service.application.queries.profiles import ListProfiles
         from media_pipeline_service.application.sources import SourceIngestor
         from media_pipeline_service.domain.links import LinkPolicy
         from media_pipeline_service.domain.sources import SourceKind
@@ -476,10 +560,14 @@ class MediaHarness:
             [
                 AudioIntroGenerator(self.transcoder),
                 FrameProgressiveGenerator(self.images),
+                FrameSequenceGenerator(self.images),
                 PosterMaskedGenerator(self.images, max_width=480),
+                DescriptionGenerator(),
+                EmojiGenerator(),
             ]
         )
         self.profiles = self.registry.build_catalog(TEST_PROFILES)
+        self.directory = ProfileDirectory(self.profiles, self.registry)
 
         # Тест может задать хуки сбоев коммита (см. ``FakeMediaUnitOfWork``).
         self.fail_commit: Callable[[MemoryDb], None] | None = None
@@ -504,7 +592,7 @@ class MediaHarness:
             max_bytes=10_000,
         )
         self.plan = PlanAssetSets(
-            uow, self.clock, self.profiles, self.queue, self.storage, registry=self.registry
+            uow, self.clock, self.directory, self.queue, self.storage, registry=self.registry
         )
         self.disable = DisableItemAssets(uow, self.clock, self.storage)
         self.restore = RestoreItemAssets(uow, self.clock, self.queue)
@@ -533,7 +621,7 @@ class MediaHarness:
             uow,
             self.clock,
             self.ingestor,
-            self.profiles,
+            self.directory,
             self.plan,
             storage=self.storage,
             require_provenance=require_provenance,
@@ -549,6 +637,13 @@ class MediaHarness:
         )
         self.purge_links = PurgeLinkJournal(uow, self.clock, retention=timedelta(days=7), batch=2)
         self.list_sets = ListAssetSets(uow)
+        self.request_assets = ApplyClueAssetsRequested(
+            uow, self.clock, self.directory, max_profiles=max_profiles, max_params_bytes=4096
+        )
+        self.backfill = BackfillDynamicProfiles(
+            uow, self.clock, self.directory, self.plan, self.storage, batch=backfill_batch
+        )
+        self.list_profiles = ListProfiles(uow, self.directory)
 
     async def run_tasks(self) -> int:
         """Выполнить все поставленные задачи генерации (повторы — как ретраи очереди)."""
@@ -572,5 +667,5 @@ def media() -> MediaHarness:
 @pytest.fixture
 def media_factory() -> type[MediaHarness]:
     """Конструктор harness с параметрами (``max_attempts``, ``link_max``,
-    ``require_provenance``)."""
+    ``require_provenance``, ``max_profiles``, ``backfill_batch``)."""
     return MediaHarness

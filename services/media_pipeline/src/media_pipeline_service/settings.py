@@ -58,6 +58,14 @@ class MediaSettings(BaseModel):
     profiles_path: Path | None = None
     # Не больше числа ретраев очереди + 1 (gv_messaging.rabbit.DEFAULT_RETRY_DELAYS: 4).
     generate_max_attempts: int = Field(default=4, ge=1, le=5)
+    # Динамические профили по game.ClueAssetsRequested (ADR 0025): лимит неотклонённых,
+    # предел размера params (канонический JSON) и досоздание наборов задачей relay
+    # media.profiles.backfill — порция единиц за запуск, пауза и джиттер.
+    max_dynamic_profiles: int = Field(default=50, ge=0, le=1000)
+    dynamic_params_max_bytes: int = Field(default=16_384, ge=256, le=262_144)
+    backfill_batch: int = Field(default=200, ge=1, le=10_000)
+    backfill_interval_s: float = Field(default=60, gt=0)
+    backfill_jitter_s: float = Field(default=10, ge=0)
 
     @property
     def source_host_list(self) -> frozenset[str]:

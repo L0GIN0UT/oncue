@@ -183,7 +183,7 @@ def test_params_models_agree_with_json_schema(clue_type: str, sample: Any) -> No
 
 # ---------------------------------------------------------------- события
 def test_consumes_catalog_topic_and_examples() -> None:
-    assert CONSUMED_TOPICS == ("catalog.media_item.v1",)
+    assert CONSUMED_TOPICS == ("catalog.media_item.v1", "game.mode_config.v1")
     for event_type in (ITEM_CREATED, ITEM_UPDATED):
         envelope = load_example(event_type)
         assert envelope.topic in CONSUMED_TOPICS
@@ -193,6 +193,22 @@ def test_consumes_catalog_topic_and_examples() -> None:
         envelope = load_example(event_type)
         assert envelope.topic in CONSUMED_TOPICS
         _StatusPayload.model_validate(envelope.payload)
+
+
+def test_consumes_clue_assets_requested_example() -> None:
+    from media_pipeline_service.domain.params import params_hash
+    from media_pipeline_service.infrastructure.messaging import (
+        CLUE_ASSETS_REQUESTED,
+        _ClueAssetsRequestedPayload,
+    )
+
+    envelope = load_example(CLUE_ASSETS_REQUESTED)
+    assert envelope.topic in CONSUMED_TOPICS
+    parsed = _ClueAssetsRequestedPayload.model_validate(envelope.payload)
+    schema = load_event_schema(CLUE_ASSETS_REQUESTED)
+    assert set(schema["required"]) <= set(type(parsed).model_fields)
+    # хэш примера считается тем же алгоритмом, что и у media (golden params_hash)
+    assert params_hash(parsed.params) == parsed.params_hash
 
 
 def test_snapshot_parser_covers_schema_enums() -> None:

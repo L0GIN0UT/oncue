@@ -458,3 +458,65 @@ async def test_stage3a_source_fields_and_multi_source_sets_roundtrip(
     assert loaded.source_media_id == frame_id
     async with uow(sessions) as u:
         assert await u.sources.get(text_id) is None
+
+
+async def test_dynamic_profiles_repository(sessions: async_sessionmaker[AsyncSession]) -> None:
+    from media_pipeline_service.domain.dynamic_profiles import (
+        DynamicProfile,
+        DynamicProfileStatus,
+    )
+
+    item, source_id = await seed(sessions)
+
+    def dynamic(hash_: str, status: DynamicProfileStatus, code: str | None) -> DynamicProfile:
+        return DynamicProfile(
+            uuid7(),
+            clue_type="description",
+            domain="film",
+            params={"levels": [{"fields": ["year"]}]},
+            params_hash=hash_,
+            status=status,
+            error_code=code,
+            request_id=uuid7(),
+            mode_key="film.random.description",
+            actor_id=uuid7(),
+            backfill_cursor=None,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+    usable = dynamic("a" * 64, DynamicProfileStatus.BACKFILLING, None)
+    rejected = dynamic("b" * 64, DynamicProfileStatus.REJECTED, "profile.limit_reached")
+    async with uow(sessions) as u:
+        await u.profiles.lock()
+        await u.profiles.add(usable)
+        await u.profiles.add(rejected)
+        aggregate = AssetSet.plan(
+            uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
+        )
+        await u.asset_sets.add(aggregate)
+        await u.commit()
+    async with uow(sessions) as u:
+        assert await u.profiles.count_usable() == 1
+        assert [p.id for p in await u.profiles.list_usable("film")] == [usable.id]
+        assert await u.profiles.list_usable("music") == []
+        assert [p.id for p in await u.profiles.list_backfilling(10)] == [usable.id]
+        assert len(await u.profiles.list_all("description")) == 2
+        assert [p.id for p in await u.profiles.list_all(params_hash="b" * 64)] == [rejected.id]
+        loaded = await u.profiles.get("description", "a" * 64, "film", for_update=True)
+        assert loaded is not None and loaded.params == usable.params
+        loaded.advance(item, done=True, now=NOW)
+        await u.profiles.save(loaded)
+        assert await u.items.list_active_ids("film", after=None, limit=10) == [item]
+        assert await u.items.list_active_ids("film", after=item, limit=10) == []
+        counts = await u.asset_sets.count_by_profile("frame_progressive")
+        await u.commit()
+    assert [(c.profile_key, c.status, c.count) for c in counts] == [("default", "pending", 1)]
+    async with uow(sessions) as u:
+        stored = await u.profiles.get("description", "a" * 64, "film")
+        assert stored is not None
+        assert (stored.status, stored.backfill_cursor) == (DynamicProfileStatus.ACTIVE, item)
+    with pytest.raises(IntegrityError):
+        async with uow(sessions) as u:
+            await u.profiles.add(dynamic("a" * 64, DynamicProfileStatus.BACKFILLING, None))
+            await u.commit()

@@ -18,10 +18,12 @@ from media_pipeline_service.application.dto import SourceProvenance, SourceView,
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import (
     AdminAction,
+    MediaUnitOfWork,
     ObjectStorage,
     StorageArea,
     UnitOfWorkFactory,
 )
+from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.sources import (
     SourceIngestor,
     StoredSource,
@@ -32,8 +34,6 @@ from media_pipeline_service.domain.errors import (
     ProvenanceRequiredError,
     SourceNotFoundError,
 )
-from media_pipeline_service.domain.media_items import MediaItemState
-from media_pipeline_service.domain.profiles import AssetProfileCatalog
 from media_pipeline_service.domain.sources import (
     SourceKind,
     SourceMedia,
@@ -56,7 +56,7 @@ class UploadSource:
         uow: UnitOfWorkFactory,
         clock: Clock,
         ingestor: SourceIngestor,
-        profiles: AssetProfileCatalog,
+        profiles: ProfileDirectory,
         plan: PlanAssetSets,
         *,
         storage: ObjectStorage,
@@ -123,7 +123,8 @@ class UploadSource:
         async with self._uow() as uow:
             # Повтор отвечаем до перекодирования файла: ffmpeg/Pillow и S3 не нужны.
             existing = await uow.idempotency.find(actor_id, idempotency_key)
-            state = await uow.items.get(media_item_id)
+            if existing is None:
+                await self._check_applicable(uow, media_item_id, kind)
         if existing is not None:
             if existing.request_hash != fingerprint:
                 raise ConflictError(
@@ -131,7 +132,6 @@ class UploadSource:
                     code="idempotency.key_reused",
                 )
             return UploadResult.from_json(existing.response)
-        self._check_applicable(state, kind)
         try:
             stored = await self._ingestor.ingest(kind, data)
         except GenerationError as exc:
@@ -147,7 +147,7 @@ class UploadSource:
                 async def perform() -> dict[str, Any]:
                     nonlocal planned
                     # Состояние могло измениться, пока обрабатывали файл.
-                    self._check_applicable(await uow.items.get(media_item_id), kind)
+                    await self._check_applicable(uow, media_item_id, kind)
                     source = self._new_source(
                         media_item_id,
                         kind,
@@ -213,13 +213,16 @@ class UploadSource:
         )
         return result
 
-    def _check_applicable(self, state: MediaItemState | None, kind: SourceKind) -> None:
+    async def _check_applicable(
+        self, uow: MediaUnitOfWork, media_item_id: UUID, kind: SourceKind
+    ) -> None:
+        state = await uow.items.get(media_item_id)
         if state is None:
             raise MediaItemNotFoundError("медиа-единица не найдена")
         if state.is_blocked:
             raise ConflictError("единица заблокирована", code="media_item.blocked")
         if state.domain is None or not any(
-            p.source_kind is kind for p in self._profiles.for_domain(state.domain)
+            p.source_kind is kind for p in await self._profiles.for_domain(uow, state.domain)
         ):
             raise InvalidInputError(
                 f"исходник вида {kind.value} не используется для домена единицы",

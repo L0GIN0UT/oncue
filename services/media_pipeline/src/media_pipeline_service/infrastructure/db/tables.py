@@ -125,6 +125,8 @@ asset_sets = Table(
     CheckConstraint("generation >= 1", name="generation_positive"),
     CheckConstraint("attempts >= 0", name="attempts_non_negative"),
     CheckConstraint("version >= 1", name="version_positive"),
+    # 0006: счётчики наборов профиля для GET /admin/v1/profiles.
+    Index("ix_asset_sets_clue_type_params_hash", "clue_type", "params_hash"),
 )
 
 asset_levels = Table(
@@ -160,6 +162,31 @@ link_issuance = Table(
     CheckConstraint("client_id ~ '^[a-z][a-z0-9_]{0,63}$'", name="client_id_format"),
     Index("ix_link_issuance_issued_at", "issued_at"),
     Index("ix_link_issuance_asset_set_id", "asset_set_id"),
+)
+
+# Динамические профили ассетов (ADR 0025): заведены по game.ClueAssetsRequested.
+asset_profiles_dynamic = Table(
+    "asset_profiles_dynamic",
+    _md,
+    Column("id", Uuid, primary_key=True),
+    Column("clue_type", String(64), nullable=False),
+    Column("domain", String(16), nullable=False),
+    Column("params", JSONB, nullable=False),
+    Column("params_hash", String(64), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("error_code", String(64), nullable=True),
+    Column("request_id", Uuid, nullable=False),
+    Column("mode_key", String(100), nullable=False),
+    Column("actor_id", Uuid, nullable=False),
+    Column("backfill_cursor", Uuid, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("clue_type", "params_hash", "domain"),
+    CheckConstraint("status IN ('backfilling', 'active', 'rejected')", name="status_valid"),
+    CheckConstraint("domain IN ('music', 'film')", name="domain_valid"),
+    CheckConstraint("params_hash ~ '^[0-9a-f]{64}$'", name="params_hash_sha256"),
+    CheckConstraint("(status = 'rejected') = (error_code IS NOT NULL)", name="rejected_has_code"),
+    Index("ix_asset_profiles_dynamic_status", "status"),
 )
 
 # Ключи идемпотентности admin-мутаций (gv_db.idempotency): ключ и ответ пишутся в той же

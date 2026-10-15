@@ -33,6 +33,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
             set_position=c.set_position,
             regenerate=c.regenerate,
             list_sets=c.list_sets,
+            list_profiles=c.list_profiles,
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,
         ),
     ]

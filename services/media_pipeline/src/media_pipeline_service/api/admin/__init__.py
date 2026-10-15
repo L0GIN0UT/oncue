@@ -6,28 +6,24 @@
 транзакции (``gv_db.idempotency``).
 """
 
-# ruff: noqa: ARG001 — заглушки этапа 3a (501) объявляют параметры контракта до реализации.
-
 from __future__ import annotations
 
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from gv_auth import Principal, require_perm
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
 from media_pipeline_service.api.common import AssetSetItem
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.dto import SourceProvenance
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.domain.errors import SourceTooLargeError
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin, SourceStatus
-
-STAGE_3A = "этап 3a: поток M (docs/plans/stage-3a.md)"
 
 # Виды, которые админ загружает файлом (``text`` приходит из catalog, файлом не грузится).
 UploadKind = Literal["audio", "frame", "poster", "soundtrack", "audio_clip"]
@@ -84,11 +80,21 @@ class ProfileOut(BaseModel):
     """Профиль ассетов: статический (``asset_profiles.yaml``) или динамический (ADR 0025)."""
 
     clue_type: str
-    profile_key: str | None = Field(description="null у динамического профиля")
+    profile_key: str | None = Field(
+        description="null у динамического профиля (в наборах и AssetsReady — dyn_<16 hex хэша>)"
+    )
     params_hash: str
     origin: Literal["static", "dynamic"]
     status: Literal["active", "backfilling", "rejected"]
     sets: ProfileSets
+    domains: list[Literal["music", "film"]] = Field(default_factory=list)
+    error_code: str | None = Field(
+        default=None,
+        description=(
+            "Почему отклонён динамический профиль: profile.invalid, profile.unknown_clue_type, "
+            "profile.hash_mismatch, profile.limit_reached, profile.params_too_large"
+        ),
+    )
 
 
 class SourcePositionRequest(BaseModel):
@@ -116,6 +122,7 @@ def build_admin_router(
     set_position: SetSourcePosition,
     regenerate: RegenerateAssetSet,
     list_sets: ListAssetSets,
+    list_profiles: ListProfiles,
     max_upload_bytes: int,
 ) -> APIRouter:
     """Ручки админки: загрузка исходников, перегенерация, просмотр наборов."""
@@ -195,12 +202,27 @@ def build_admin_router(
         "/profiles",
         response_model=list[ProfileOut],
         summary="Профили ассетов и готовность их наборов",
-        responses=problem_responses(401, 403, 422, 501),
+        responses=problem_responses(401, 403, 422),
     )
     async def admin_profiles(
-        _: Viewer, clue_type: str | None = None, params_hash: str | None = None
+        _: Viewer,
+        clue_type: Annotated[str | None, Query(max_length=64, pattern=r"^[a-z][a-z0-9_]*$")] = None,
+        params_hash: Annotated[str | None, Query(pattern=r"^[0-9a-f]{64}$")] = None,
     ) -> list[ProfileOut]:
-        raise NotImplementedYetError(STAGE_3A)
+        views = await list_profiles.execute(clue_type, params_hash)
+        return [
+            ProfileOut(
+                clue_type=v.clue_type,
+                profile_key=v.profile_key,
+                params_hash=v.params_hash,
+                origin=v.origin.value,
+                status=v.status,
+                sets=ProfileSets(ready=v.ready, pending=v.pending, failed=v.failed),
+                domains=list(v.domains),
+                error_code=v.error_code,
+            )
+            for v in views
+        ]
 
     @router.put(
         "/sources/{source_media_id}/position",

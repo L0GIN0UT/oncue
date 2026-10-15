@@ -28,6 +28,10 @@ from media_pipeline_service.application.commands.generation import (
     RegenerateAssetSet,
 )
 from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
+from media_pipeline_service.application.commands.profiles import (
+    ApplyClueAssetsRequested,
+    BackfillDynamicProfiles,
+)
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.generators import (
     AudioBlackoutGenerator,
@@ -51,7 +55,9 @@ from media_pipeline_service.application.ports import (
     UnitOfWorkFactory,
     UrlSigner,
 )
+from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.application.sources import SourceIngestor
 from media_pipeline_service.domain.links import LinkPolicy
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
@@ -174,6 +180,11 @@ class MediaContainer:
         """Профили уровней (проверяются при первом обращении — на старте процесса)."""
         return load_profiles(self.registry, self.settings.media.profiles_path)
 
+    @cached_property
+    def directory(self) -> ProfileDirectory:
+        """Статические ∪ динамические профили (ADR 0025)."""
+        return ProfileDirectory(self.profiles, self.registry)
+
     def uow_factory(self, session: AsyncSession | None = None) -> UnitOfWorkFactory:
         """Фабрика UoW: своя транзакция или SAVEPOINT в транзакции consumer."""
         infra = self.infra
@@ -212,7 +223,7 @@ class MediaContainer:
         return PlanAssetSets(
             uow or self.uow_factory(),
             self.clock,
-            self.profiles,
+            self.directory,
             a.queue,
             a.storage,
             registry=self.registry,
@@ -259,7 +270,7 @@ class MediaContainer:
             self.uow_factory(),
             self.clock,
             self.ingestor,
-            self.profiles,
+            self.directory,
             self.plan(),
             storage=self.adapters.storage,
             require_provenance=self.settings.environment not in DEV_ENVIRONMENTS,
@@ -296,6 +307,34 @@ class MediaContainer:
             retention=timedelta(days=m.link_issuance_retention_days),
             batch=m.link_purge_batch,
         )
+
+    def apply_clue_assets_requested(self, uow: UnitOfWorkFactory) -> ApplyClueAssetsRequested:
+        """Заведение динамического профиля (``uow`` привязан к сессии consumer)."""
+        m = self.settings.media
+        return ApplyClueAssetsRequested(
+            uow,
+            self.clock,
+            self.directory,
+            max_profiles=m.max_dynamic_profiles,
+            max_params_bytes=m.dynamic_params_max_bytes,
+        )
+
+    @cached_property
+    def backfill(self) -> BackfillDynamicProfiles:
+        """Досоздание наборов динамических профилей (периодическая задача relay)."""
+        return BackfillDynamicProfiles(
+            self.uow_factory(),
+            self.clock,
+            self.directory,
+            self.plan(),
+            self.adapters.storage,
+            batch=self.settings.media.backfill_batch,
+        )
+
+    @cached_property
+    def list_profiles(self) -> ListProfiles:
+        """Профили для admin-API."""
+        return ListProfiles(self.uow_factory(), self.directory)
 
     @cached_property
     def list_sets(self) -> ListAssetSets:

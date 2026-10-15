@@ -8,7 +8,7 @@ from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
@@ -25,11 +25,14 @@ from media_pipeline_service.application.ports import (
     AdminAction,
     AdminAuditLog,
     AssetSetRepository,
+    DynamicProfileRepository,
     LinkIssuanceJournal,
     MediaItemStateRepository,
+    ProfileSetCount,
     SourceMediaRepository,
 )
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
+from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
 from media_pipeline_service.domain.errors import MediaItemNotFoundError
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.sources import (
@@ -42,6 +45,7 @@ from media_pipeline_service.infrastructure.db.tables import (
     TABLES,
     admin_actions,
     asset_levels,
+    asset_profiles_dynamic,
     asset_sets,
     idempotency_keys,
     link_issuance,
@@ -197,6 +201,30 @@ class SqlAssetSetRepository:
         await self._replace_levels(aggregate)
         aggregate.persisted_version = aggregate.version
 
+    async def count_by_profile(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[ProfileSetCount]:
+        """Группировка наборов по профилю и состоянию (индекс ``(clue_type, params_hash)``)."""
+        c = asset_sets.c
+        query = select(
+            c.clue_type, c.profile_key, c.params_hash, c.status, func.count().label("n")
+        ).group_by(c.clue_type, c.profile_key, c.params_hash, c.status)
+        if clue_type is not None:
+            query = query.where(c.clue_type == clue_type)
+        if params_hash is not None:
+            query = query.where(c.params_hash == params_hash)
+        rows = (await self._s.execute(query)).all()
+        return [
+            ProfileSetCount(
+                clue_type=r.clue_type,
+                profile_key=r.profile_key,
+                params_hash=r.params_hash,
+                status=r.status,
+                count=int(r.n),
+            )
+            for r in rows
+        ]
+
     async def _replace_levels(self, aggregate: AssetSet) -> None:
         await self._s.execute(
             delete(asset_levels).where(asset_levels.c.asset_set_id == aggregate.id)
@@ -340,6 +368,19 @@ class SqlMediaItemStateRepository:
             )
         )
 
+    async def list_active_ids(self, domain: str, *, after: UUID | None, limit: int) -> list[UUID]:
+        """id активных единиц домена после ``after`` (по первичному ключу)."""
+        c = media_items_state.c
+        query = (
+            select(c.media_item_id)
+            .where(c.domain == domain, c.status == ItemStatus.ACTIVE.value)
+            .order_by(c.media_item_id)
+            .limit(limit)
+        )
+        if after is not None:
+            query = query.where(c.media_item_id > after)
+        return list((await self._s.execute(query)).scalars().all())
+
     async def next_event_version(self, media_item_id: UUID) -> int:
         """Увеличить счётчик версий событий единицы и вернуть новое значение.
 
@@ -356,6 +397,119 @@ class SqlMediaItemStateRepository:
         if value is None:
             raise MediaItemNotFoundError("медиа-единица не найдена")
         return int(value)
+
+
+# ---------------------------------------------------------------- динамические профили
+# Фиксированный ключ advisory lock заведения динамических профилей (ASCII «mP_D»).
+_PROFILES_LOCK_KEY = 0x6D505F44
+
+
+def _to_profile(row: RowMapping) -> DynamicProfile:
+    return DynamicProfile(
+        row["id"],
+        clue_type=row["clue_type"],
+        domain=row["domain"],
+        params=row["params"],
+        params_hash=row["params_hash"],
+        status=DynamicProfileStatus(row["status"]),
+        error_code=row["error_code"],
+        request_id=row["request_id"],
+        mode_key=row["mode_key"],
+        actor_id=row["actor_id"],
+        backfill_cursor=row["backfill_cursor"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _profile_row(profile: DynamicProfile) -> dict[str, Any]:
+    return {
+        "clue_type": profile.clue_type,
+        "domain": profile.domain,
+        "params": profile.params,
+        "params_hash": profile.params_hash,
+        "status": profile.status.value,
+        "error_code": profile.error_code,
+        "request_id": profile.request_id,
+        "mode_key": profile.mode_key,
+        "actor_id": profile.actor_id,
+        "backfill_cursor": profile.backfill_cursor,
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+    }
+
+
+class SqlDynamicProfileRepository:
+    """Динамические профили."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def lock(self) -> None:
+        """``pg_advisory_xact_lock``: проверка лимита и вставка — без гонки реплик."""
+        await self._s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _PROFILES_LOCK_KEY})
+
+    async def get(
+        self, clue_type: str, params_hash: str, domain: str, *, for_update: bool = False
+    ) -> DynamicProfile | None:
+        """Профиль по ключу дедупликации."""
+        c = asset_profiles_dynamic.c
+        query = select(asset_profiles_dynamic).where(
+            c.clue_type == clue_type, c.params_hash == params_hash, c.domain == domain
+        )
+        if for_update:
+            query = query.with_for_update()
+        row = (await self._s.execute(query)).mappings().first()
+        return _to_profile(row) if row else None
+
+    async def count_usable(self) -> int:
+        """Неотклонённые профили."""
+        c = asset_profiles_dynamic.c
+        query = select(func.count()).where(c.status != DynamicProfileStatus.REJECTED.value)
+        return int((await self._s.execute(query)).scalar_one())
+
+    async def add(self, profile: DynamicProfile) -> None:
+        """Вставить."""
+        await self._s.execute(
+            insert(asset_profiles_dynamic).values(id=profile.id, **_profile_row(profile))
+        )
+
+    async def save(self, profile: DynamicProfile) -> None:
+        """Обновить."""
+        await self._s.execute(
+            update(asset_profiles_dynamic)
+            .where(asset_profiles_dynamic.c.id == profile.id)
+            .values(**_profile_row(profile))
+        )
+
+    async def _list(self, *conditions: Any, limit: int | None = None) -> list[DynamicProfile]:
+        c = asset_profiles_dynamic.c
+        query = select(asset_profiles_dynamic).where(*conditions).order_by(c.created_at, c.id)
+        if limit is not None:
+            query = query.limit(limit)
+        return [_to_profile(r) for r in (await self._s.execute(query)).mappings().all()]
+
+    async def list_usable(self, domain: str) -> list[DynamicProfile]:
+        """Неотклонённые профили домена."""
+        c = asset_profiles_dynamic.c
+        return await self._list(c.domain == domain, c.status != DynamicProfileStatus.REJECTED.value)
+
+    async def list_backfilling(self, limit: int) -> list[DynamicProfile]:
+        """Профили на досоздании."""
+        c = asset_profiles_dynamic.c
+        return await self._list(c.status == DynamicProfileStatus.BACKFILLING.value, limit=limit)
+
+    async def list_all(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[DynamicProfile]:
+        """Все профили с фильтрами."""
+        c = asset_profiles_dynamic.c
+        conditions: list[Any] = []
+        if clue_type is not None:
+            conditions.append(c.clue_type == clue_type)
+        if params_hash is not None:
+            conditions.append(c.params_hash == params_hash)
+        return await self._list(*conditions)
 
 
 # ---------------------------------------------------------------- журнал и аудит
@@ -439,6 +593,7 @@ class SqlMediaUnitOfWork:
     sources: SourceMediaRepository
     items: MediaItemStateRepository
     links: LinkIssuanceJournal
+    profiles: DynamicProfileRepository
     idempotency: IdempotencyStore
     audit: AdminAuditLog
 
@@ -477,6 +632,7 @@ class SqlMediaUnitOfWork:
         self.sources = SqlSourceMediaRepository(s)
         self.items = SqlMediaItemStateRepository(s)
         self.links = SqlLinkIssuanceJournal(s)
+        self.profiles = SqlDynamicProfileRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         self.audit = SqlAdminAuditLog(s)
         return self
