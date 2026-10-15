@@ -19,6 +19,10 @@ SKIP_NOT_ALLOWED = "game.skip_not_allowed"
 GIVE_UP_NOT_ALLOWED = "game.give_up_not_allowed"
 POOL_TOO_SMALL = "game.pool_too_small"
 PRESET_NOT_FOUND = "game.preset_not_found"
+ANSWER_KIND_UNSUPPORTED = "game.answer_kind_unsupported"
+OPTION_UNKNOWN = "game.option_unknown"
+SUBJECT_REQUIRED = "game.subject_required"
+TOO_MANY_SUBJECTS = "game.too_many_subjects"
 
 
 class ConfigError(InvalidInputError):
@@ -84,3 +88,34 @@ class PresetNotFoundError(InvalidInputError):
     """У режима нет пресета с таким ``preset_id`` (422 ``game.preset_not_found``)."""
 
     default_code = PRESET_NOT_FOUND
+
+
+class AnswerKindError(InvalidInputError, RuleViolation):
+    """Ответ не того вида, что принимает формат режима (422 ``game.answer_kind_unsupported``).
+
+    Например, текст в режиме ``pick`` или ``option_id`` в классическом режиме.
+    ``details = {"kind": "text", "allowed": ["option"]}``.
+    """
+
+    default_code = ANSWER_KIND_UNSUPPORTED
+
+
+class OptionNotFoundError(InvalidInputError, RuleViolation):
+    """Выбран вариант, которого нет в раунде (422 ``game.option_unknown``)."""
+
+    default_code = OPTION_UNKNOWN
+
+
+class SubjectRequiredError(InvalidInputError):
+    """Источнику по персонам не передана ни одна персона (422 ``game.subject_required``)."""
+
+    default_code = SUBJECT_REQUIRED
+
+
+class TooManySubjectsError(InvalidInputError):
+    """Персон больше, чем ``max_subjects`` режима (422 ``game.too_many_subjects``).
+
+    ``details = {"given": int, "max": int}``.
+    """
+
+    default_code = TOO_MANY_SUBJECTS

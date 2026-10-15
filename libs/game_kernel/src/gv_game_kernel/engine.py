@@ -2,9 +2,14 @@
 
 ``ModeEngine`` собирает ``EngineFactory.build`` из валидного ``ModeConfig``: параметры
 плагинов уже разобраны их ``params_schema``, а сервис работает с готовыми операциями —
-уровни, розыгрыш, сверка ответа, переходы раунда, выдача ассета уровня, очки. Сам движок
-без состояния и IO (порты передаются в вызовы), его можно кэшировать по
-``(mode_key, version)``.
+уровни, розыгрыш раундов, сверка ответа, переходы раунда, выдача ассета уровня и ревила,
+правило завершения сессии, очки. Сам движок без состояния и IO (порты передаются в
+вызовы), его можно кэшировать по ``(mode_key, version)``.
+
+Возможности источника (составляет раунды сам, раунды зависят от прошлых, нужны персоны,
+сравнение по метрике, плановый период) движок узнаёт по протоколам ``RoundSource``,
+``ProgressiveSource``, ``SubjectSource``, ``ComparisonSource``, ``PeriodSource`` — не по
+ключу плагина (ADR 0023).
 
 Недоступный ассет (``GoneError`` из ``AssetPort``) движок не перехватывает: game ловит
 ошибку и вызывает ``void`` — раунд аннулируется и не входит в ``max_score``.
@@ -13,14 +18,20 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, datetime
 from functools import cached_property
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from gv_game_kernel.errors import RoundFinishedError, RoundNotFinishedError
+from gv_core.errors import GoneError
+from gv_game_kernel.errors import (
+    AnswerKindError,
+    OptionNotFoundError,
+    RoundFinishedError,
+    RoundNotFinishedError,
+)
 from gv_game_kernel.params import params_hash
 from gv_game_kernel.plugins import (
     AnswerFormat,
@@ -28,22 +39,39 @@ from gv_game_kernel.plugins import (
     AnswerMatcher,
     ClueType,
     ClueView,
+    Comparison,
+    ComparisonSource,
     DrawContext,
     EndRule,
     LevelSpec,
     MatchContext,
     MatchResult,
+    OptionSpec,
     PartialRule,
+    PeriodSource,
     Preset,
+    ProgressiveSource,
+    RoundDraw,
+    RoundPick,
+    RoundSource,
     Scorer,
     Source,
+    SubjectSource,
 )
-from gv_game_kernel.ports import AssetPort, CandidatePort, CollectionPort, PlayableFor, PoolQuery
+from gv_game_kernel.ports import (
+    AssetPort,
+    CandidatePort,
+    CollectionPort,
+    PlayableFor,
+    PoolQuery,
+    SubjectQuery,
+)
 from gv_game_kernel.refs import AssetRef, MediaItemRef
 from gv_game_kernel.round import (
     Guess,
     GuessKind,
     RoundOutcome,
+    RoundResult,
     RoundState,
     apply_guess,
     apply_skip,
@@ -71,10 +99,46 @@ class AnswerStep:
     Attributes:
         state: Состояние после хода.
         match: Вердикт сверки (``partial_kind`` — вид частичного ответа).
+        option: Выбранный вариант раунда (формат ``pick``) или ``None``.
     """
 
     state: RoundState
     match: MatchResult
+    option: OptionSpec | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OptionView:
+    """Вариант ответа для клиента (``options[]`` снимка раунда).
+
+    Attributes:
+        id: Непрозрачный ``option_id``.
+        label_key: Ключ i18n подписи (``game.options.higher``) или ``None``.
+        title: Название единицы за вариантом, если источник её показывает (сетка);
+            ``None`` — единица скрыта («больше/меньше»).
+    """
+
+    id: str
+    label_key: str | None
+    title: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ShownView:
+    """Открыто показанная единица раунда (``shown[]`` снимка раунда).
+
+    ``item`` — для сервера (найти ассет подачи, название и год), клиенту отдаются только
+    ``title``/``year``/``metric`` и подача ассета, без ``media_item_id``.
+
+    Attributes:
+        item: Единица.
+        option_id: Вариант, который выбирает эту единицу (сетка), или ``None``.
+        metric: Видимая метрика (опорная единица «больше/меньше») или ``None``.
+    """
+
+    item: MediaItemRef
+    option_id: str | None
+    metric: float | None
 
 
 class ModeEngine:
@@ -136,10 +200,14 @@ class ModeEngine:
             config.answer.matcher.params
         )
         self.scorer_params: BaseModel = scorer.params_schema.model_validate(config.scoring.params)
+        self.comparison: Comparison | None = (
+            source.comparison(self.source_params) if isinstance(source, ComparisonSource) else None
+        )
         self._match_ctx = MatchContext(
             domain=config.domain,
             normalizer=normalizer or answer_normalizer(),
             partial_rules=partials,
+            comparison=self.comparison,
         )
 
     # ------------------------------------------------------------------------- загадка
@@ -168,6 +236,16 @@ class ModeEngine:
         """Требование играбельности единиц под параметры загадки режима."""
         return PlayableFor(clue_type=self.clue.key, params_hash=self.clue_params_hash)
 
+    @property
+    def reveal_playable_for(self) -> PlayableFor | None:
+        """Второй набор ассетов ревила (ADR 0026) или ``None``, если ревил — сама загадка.
+
+        Единица играбельна, только если готовы оба набора: ``playable_for`` и этот.
+        """
+        if self.reveal is None or self.reveal_params_hash is None:
+            return None
+        return PlayableFor(clue_type=self.reveal.key, params_hash=self.reveal_params_hash)
+
     async def clue_view(
         self, state: RoundState, asset: AssetRef, level: int, *, assets: AssetPort, subject: str
     ) -> ClueView:
@@ -183,16 +261,59 @@ class ModeEngine:
         )
 
     async def final_clue(
-        self, state: RoundState, asset: AssetRef, *, assets: AssetPort, subject: str
+        self,
+        state: RoundState,
+        asset: AssetRef,
+        *,
+        assets: AssetPort,
+        subject: str,
+        reveal_asset: AssetRef | None = None,
     ) -> ClueView:
         """Ассет ревила — только у завершённого раунда (D11).
 
+        Args:
+            state: Состояние раунда.
+            asset: Набор ассетов загадки раунда.
+            assets: Порт ссылок.
+            subject: Субъект выдачи (``sess:<id>``).
+            reveal_asset: Набор ассетов ревила (``reveal_playable_for``) — нужен, если в
+                конфиге задан ``clue.reveal``; иначе не используется.
+
         Raises:
             RoundNotFinishedError: раунд идёт.
+            GoneError: ревил другого типа, а его набора нет (как выключенный ассет).
         """
         if not state.finished:
             raise RoundNotFinishedError("ревил доступен только после раунда")
-        return await self.clue.final_view(asset, self.clue_params, assets=assets, subject=subject)
+        return await self.final_view(
+            asset, assets=assets, subject=subject, reveal_asset=reveal_asset
+        )
+
+    async def final_view(
+        self,
+        asset: AssetRef,
+        *,
+        assets: AssetPort,
+        subject: str,
+        reveal_asset: AssetRef | None = None,
+    ) -> ClueView:
+        """Подача ревила без проверки состояния (раунд заведомо завершён: итог сессии).
+
+        С ``clue.reveal`` — последний уровень загадки ревила по ``reveal_asset``, иначе —
+        последний уровень самой загадки по ``asset``.
+
+        Raises:
+            GoneError: ревил другого типа, а ``reveal_asset`` не передан.
+        """
+        if self.reveal is None or self.reveal_params is None:
+            return await self.clue.final_view(
+                asset, self.clue_params, assets=assets, subject=subject
+            )
+        if reveal_asset is None:
+            raise GoneError("набор ассетов ревила недоступен")
+        return await self.reveal.final_view(
+            reveal_asset, self.reveal_params, assets=assets, subject=subject
+        )
 
     # ------------------------------------------------------------------------- розыгрыш
     def presets(self) -> list[Preset]:
@@ -226,6 +347,7 @@ class ModeEngine:
         exclude_ids: frozenset[UUID] = frozenset(),
         collections: CollectionPort | None = None,
         candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
+        subject_ids: frozenset[UUID] = frozenset(),
     ) -> DrawContext:
         """Контекст розыгрыша с полями режима (ключ, домен, загадка, ``params_hash``)."""
         return DrawContext(
@@ -240,27 +362,196 @@ class ModeEngine:
             exclude_ids=exclude_ids,
             collections=collections,
             candidate_limit=candidate_limit,
+            subject_ids=subject_ids,
         )
 
-    async def draw(self, ctx: DrawContext, n: int | None = None) -> list[MediaItemRef]:
-        """Разыграть ``n`` единиц (по умолчанию ``session.rounds``) через Source режима.
-
-        Raises:
-            ValueError: контекст собран для другого режима или загадки.
-            PoolTooSmallError | PresetNotFoundError: ошибки источника.
-        """
+    def _require_own(self, ctx: DrawContext) -> None:
         if (ctx.mode_key, ctx.clue_type, ctx.params_hash) != (
             self.config.key,
             self.clue.key,
             self.clue_params_hash,
         ):
             raise ValueError("DrawContext собран для другого режима — см. draw_context()")
-        return await self.source.draw(ctx, self.source_params, n or self.config.session.rounds)
+
+    @property
+    def draw_size(self) -> int:
+        """Сколько единиц разыгрывает ``draw`` по умолчанию: ``session.rounds`` или, у
+        источника с продолжением, все единицы сессии (сетка 32 — 32)."""
+        if isinstance(self.source, ProgressiveSource):
+            return self.source.items_needed(self.source_params)
+        return self.config.session.rounds
+
+    async def draw(self, ctx: DrawContext, n: int | None = None) -> list[MediaItemRef]:
+        """Разыграть ``n`` единиц (по умолчанию ``draw_size``) — набор дня или периода.
+
+        Raises:
+            ValueError: контекст собран для другого режима или загадки.
+            PoolTooSmallError | PresetNotFoundError: ошибки источника.
+        """
+        self._require_own(ctx)
+        return await self.source.draw(ctx, self.source_params, n or self.draw_size)
+
+    async def draw_rounds(self, ctx: DrawContext, n: int | None = None) -> list[RoundDraw]:
+        """Начальные раунды сессии (ADR 0023): не больше ``n`` (по умолчанию
+        ``session.rounds``), детерминированно при одном ``ctx.seed`` и пуле.
+
+        Классический источник даёт единицы — каждая становится ``RoundDraw(target)``
+        (тот же розыгрыш, что ``draw``). Источник с составом раунда (пара, сетка) отдаёт
+        ``shown``/``options`` сам; у сетки это первый тур, следующие — ``followups``.
+
+        Raises:
+            ValueError: контекст собран для другого режима или загадки.
+            PoolTooSmallError | PresetNotFoundError | SubjectRequiredError |
+            TooManySubjectsError: ошибки источника.
+        """
+        self._require_own(ctx)
+        count = n or self.config.session.rounds
+        if isinstance(self.source, RoundSource):
+            return await self.source.draw_rounds(ctx, self.source_params, count)
+        return [
+            RoundDraw(target=item)
+            for item in await self.source.draw(ctx, self.source_params, count)
+        ]
+
+    def compose_rounds(self, items: Sequence[MediaItemRef]) -> list[RoundDraw]:
+        """Начальные раунды из уже разыгранного набора (дейлик, неделя сетки)."""
+        if isinstance(self.source, RoundSource):
+            return self.source.compose_rounds(self.source_params, items)
+        return [RoundDraw(target=item) for item in items]
+
+    @property
+    def is_progressive(self) -> bool:
+        """Раунды зависят от прошлых: после каждого раунда нужен ``followups``."""
+        return isinstance(self.source, ProgressiveSource)
+
+    def followups(self, history: Sequence[RoundPick]) -> list[RoundDraw]:
+        """Раунды, открытые после ``history`` (все завершённые раунды по порядку).
+
+        Пусто у источника без продолжения и пока текущий тур сетки не доигран.
+        """
+        if isinstance(self.source, ProgressiveSource):
+            return self.source.followups(self.source_params, history)
+        return []
+
+    def planned_rounds(self) -> int:
+        """Сколько раундов в сессии самое большее: у сетки — ``size - 1``, иначе
+        ``session.rounds`` (правило ``session.end`` может закончить раньше)."""
+        if isinstance(self.source, ProgressiveSource):
+            return self.source.planned_rounds(self.source_params)
+        return self.config.session.rounds
+
+    def round_stage(self, index: int) -> int | None:
+        """Этап раунда ``index`` для UI (тур сетки: 32, 16 … 2) или ``None``."""
+        if isinstance(self.source, ProgressiveSource):
+            return self.source.stage(self.source_params, index)
+        return None
+
+    def subject_query(self) -> SubjectQuery | None:
+        """Какие персоны предлагать игроку перед стартом (марафон) или ``None``."""
+        if isinstance(self.source, SubjectSource):
+            return self.source.subject_query(
+                self.source_params, domain=self.config.domain, playable_for=self.playable_for
+            )
+        return None
+
+    def max_subjects(self) -> int | None:
+        """Сколько персон игрок выбирает (марафон) или ``None`` — выбора нет."""
+        if isinstance(self.source, SubjectSource):
+            return self.source.max_subjects(self.source_params)
+        return None
+
+    def period_start(self, at: datetime) -> date | None:
+        """Начало планового периода момента ``at`` (дейлик — день, сетка — неделя) или
+        ``None``, если наборов периода у источника нет."""
+        if isinstance(self.source, PeriodSource):
+            return self.source.period_start(self.source_params, at)
+        return None
+
+    def theme_query(self) -> SubjectQuery | None:
+        """Из каких персон выбирать тему периода (сетка) или ``None``."""
+        if isinstance(self.source, PeriodSource):
+            return self.source.theme_query(
+                self.source_params, domain=self.config.domain, playable_for=self.playable_for
+            )
+        return None
+
+    # ------------------------------------------------------------------------- состав раунда
+    @staticmethod
+    def options_view(draw: RoundDraw) -> list[OptionView]:
+        """Варианты раунда для клиента: ``option_id``, подпись и (если единица открыта
+        источником) название — без ``media_item_id``."""
+        return [
+            OptionView(
+                id=o.id, label_key=o.label_key, title=o.item.title if o.item is not None else None
+            )
+            for o in draw.options
+        ]
+
+    def shown_view(self, draw: RoundDraw) -> list[ShownView]:
+        """Открыто показанные единицы: вариант, который их выбирает, и видимая метрика."""
+        by_item = {o.item.id: o.id for o in draw.options if o.item is not None}
+        return [
+            ShownView(item=item, option_id=by_item.get(item.id), metric=self.metric_of(item))
+            for item in draw.shown
+        ]
+
+    @property
+    def metric_name(self) -> str | None:
+        """Метрика сравнения раундов («больше/меньше») или ``None``."""
+        return self.comparison.metric if self.comparison is not None else None
+
+    def metric_of(self, item: MediaItemRef) -> float | None:
+        """Значение метрики сравнения у единицы (для ``shown`` и ревила) или ``None``."""
+        name = self.metric_name
+        return item.metric(name) if name is not None else None
+
+    @staticmethod
+    def option(draw: RoundDraw, option_id: str) -> OptionSpec:
+        """Вариант раунда по ``option_id``.
+
+        Raises:
+            OptionNotFoundError: такого варианта в раунде нет (422 ``game.option_unknown``).
+        """
+        found = next((o for o in draw.options if o.id == option_id), None)
+        if found is None:
+            raise OptionNotFoundError(
+                "такого варианта в раунде нет", details={"option_id": option_id}
+            )
+        return found
 
     # ------------------------------------------------------------------------- раунд
-    def check(self, answer: AnswerInput, item: MediaItemRef) -> MatchResult:
-        """Сверить ответ с загаданной единицей (matcher + правила частичного ответа)."""
-        return self.matcher.match(answer, item, self.matcher_params, self._match_ctx)
+    def _require_kind(self, answer: AnswerInput) -> None:
+        allowed = self.answer_format.input_kinds
+        if answer.input_kind not in allowed:
+            raise AnswerKindError(
+                "режим не принимает такой ответ",
+                details={"kind": answer.input_kind, "allowed": sorted(allowed)},
+            )
+
+    def check(
+        self, answer: AnswerInput, item: MediaItemRef, draw: RoundDraw | None = None
+    ) -> MatchResult:
+        """Сверить ответ с загаданной единицей (matcher + правила частичного ответа).
+
+        Args:
+            answer: Ответ игрока.
+            item: Загаданная единица (``draw.target``).
+            draw: Состав раунда — обязателен для ответа ``{option_id}``.
+
+        Raises:
+            AnswerKindError: вид ответа не принимается форматом режима
+                (422 ``game.answer_kind_unsupported``).
+            OptionNotFoundError: ``option_id`` нет среди вариантов раунда
+                (422 ``game.option_unknown``).
+            ValueError: ответ ``{option_id}`` без состава раунда (ошибка вызова).
+        """
+        self._require_kind(answer)
+        if answer.option_id is not None:
+            if draw is None:
+                raise ValueError("ответ option_id сверяется только с составом раунда (draw)")
+            self.option(draw, answer.option_id)
+        ctx = self._match_ctx if draw is None else replace(self._match_ctx, draw=draw)
+        return self.matcher.match(answer, item, self.matcher_params, ctx)
 
     @staticmethod
     def new_round() -> RoundState:
@@ -274,7 +565,13 @@ class ModeEngine:
         )
 
     def answer(
-        self, state: RoundState, answer: AnswerInput, item: MediaItemRef, *, display: str
+        self,
+        state: RoundState,
+        answer: AnswerInput,
+        item: MediaItemRef,
+        *,
+        display: str,
+        draw: RoundDraw | None = None,
     ) -> AnswerStep:
         """Сверить ответ и применить его к раунду.
 
@@ -282,18 +579,30 @@ class ModeEngine:
             state: Состояние раунда (идущего).
             answer: Ответ игрока.
             item: Загаданная единица.
-            display: Что показать в истории попыток (название выбранной единицы или текст).
+            display: Что показать в истории попыток (название выбранной единицы, текст
+                или подпись варианта).
+            draw: Состав раунда (обязателен для формата ``pick``).
 
         Raises:
             RoundFinishedError: раунд уже завершён.
+            AnswerKindError | OptionNotFoundError: см. ``check``.
         """
         if state.finished:
             # В завершённом раунде ответ не сверяем: matcher не должен подсказывать ответ.
             raise RoundFinishedError("раунд уже завершён", details={"outcome": str(state.outcome)})
-        match = self.check(answer, item)
-        kind = GuessKind.ITEM if answer.media_item_id is not None else GuessKind.TEXT
-        guess = Guess(kind=kind, level=state.level, verdict=match.verdict, display=display)
-        return AnswerStep(state=self.advance(state, guess), match=match)
+        match = self.check(answer, item, draw)
+        option = (
+            self.option(draw, answer.option_id)
+            if draw is not None and answer.option_id is not None
+            else None
+        )
+        guess = Guess(
+            kind=GuessKind(answer.input_kind),
+            level=state.level,
+            verdict=match.verdict,
+            display=display,
+        )
+        return AnswerStep(state=self.advance(state, guess), match=match, option=option)
 
     def skip(self, state: RoundState) -> RoundState:
         """Пропустить уровень (``session.skip_allowed``)."""
@@ -320,6 +629,18 @@ class ModeEngine:
     def lives_left(self, history: Sequence[RoundOutcome]) -> int | None:
         """Сколько «жизней» осталось или ``None``, если правило их не считает."""
         return self.end_rule.lives_left(history, self.end_params)
+
+    @staticmethod
+    def streak(history: Sequence[RoundOutcome]) -> int:
+        """Текущая серия: сколько последних раундов подряд угаданы точно (``void`` пропускается)."""
+        count = 0
+        for outcome in reversed(history):
+            if outcome.result is RoundResult.VOID:
+                continue
+            if outcome.result is not RoundResult.EXACT:
+                break
+            count += 1
+        return count
 
     @property
     def presentation(self) -> str:
