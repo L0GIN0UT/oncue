@@ -22,6 +22,9 @@
 | `genres` | `[string]` ≤ 20 | нет | Жанры (приводятся к slug в нижнем регистре) |
 | `external_refs` | `{tmdb?, musicbrainz?, isrc?, spotify?, yandex_music?}` | нет | Внешние id (строки). Если единица с таким id уже есть — она обновляется |
 | `metrics` | `{popularity?, vote_average?, vote_count?, revenue_usd?, runtime_min?, duration_ms?}` | нет | Неотрицательные числа, `vote_average` 0..10 |
+| `countries` | `[string]` ≤ 20 | нет | Страны производства, ISO 3166-1 alpha-2 (`US`, `ru` → `RU`) |
+| `clue_texts` | `{plot_raw?, plot_masked?, tagline?, emoji?}` | нет | Тексты загадок `description`/`emoji` (ADR 0024): `plot_raw` ≤ 5000 (маскируется автоматически, если нет `plot_masked`), `plot_masked` ≤ 2000, `tagline` ≤ 300, `emoji` ≤ 12 графем. Попадают в черновик; с `GV_CATALOG__SEED_TEXTS_APPROVED=true` (только local/ci) — сразу одобрены и публикуются |
+| `source_media` | `[{kind, origin, uri, position?, source_url?, license_note?}]` ≤ 20 | нет | Исходники по адресу: `kind` — `audio`/`frame`/`poster`/`soundtrack`/`audio_clip`, `origin` — `upload`/`tmdb`, `uri` — `https://…`, `position` 1..100 (кадры `frame_sequence`). Вне local/ci без `source_url` и `license_note` строка отклоняется (D6) |
 
 Неизвестные поля — ошибка строки (опечатки не теряются молча).
 Транслит-алиасы (`interstellar` ↔ `интерстеллар`) строятся автоматически.
