@@ -153,6 +153,26 @@ def test_snapshot_parser_covers_schema_enums() -> None:
         _SnapshotPayload.model_validate({**load_example(ITEM_CREATED).payload, "domain": domain})
 
 
+def test_unknown_source_kinds_are_skipped_not_rejected() -> None:
+    """Виды исходников, которые catalog уже публикует, а media ещё не умеет, пропускаются."""
+    from media_pipeline_service.infrastructure.messaging import known_sources
+
+    payload = {
+        **load_example(ITEM_CREATED).payload,
+        "source_media": [
+            {
+                "source_media_ref": f"0192a3b4-c5d6-7e8f-9a0b-00000000030{i}",
+                "kind": kind,
+                "origin": "upload",
+                "uri": "https://image.tmdb.org/x.jpg",
+            }
+            for i, kind in enumerate(("frame", "soundtrack", "audio_clip"))
+        ],
+    }
+    parsed = _SnapshotPayload.model_validate(payload)
+    assert [s.kind for s in known_sources(parsed.source_media)] == ["frame"]
+
+
 def test_produced_event_fields_are_declared() -> None:
     from dataclasses import fields
 

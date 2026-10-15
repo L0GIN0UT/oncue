@@ -163,6 +163,11 @@ class SessionPresenter:
             ],
             "points": r.points if r.finished else None,
             "reveal": await self.reveal(session, r, rules, items.get(r.media_item_id)),
+            # Состав раунда этапа 3a (ADR 0023): у классических режимов пуст. Поля пишутся
+            # явно, чтобы снимок в `game.desync` совпадал со снимком в ответе хода.
+            "shown": [],
+            "options": [],
+            "progress": None,
         }
 
     async def snapshot(

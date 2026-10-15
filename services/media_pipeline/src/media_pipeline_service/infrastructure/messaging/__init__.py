@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import UUID
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +25,8 @@ from media_pipeline_service.application.dto import (
 from media_pipeline_service.domain.media_items import ItemStatus
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin
 from media_pipeline_service.infrastructure.container import MediaContainer
+
+log = structlog.get_logger(__name__)
 
 CONSUMED_TOPICS: tuple[str, ...] = ("catalog.media_item.v1",)
 
@@ -39,7 +43,9 @@ class _Payload(BaseModel):
 
 class _SourceMediaPayload(_Payload):
     source_media_ref: UUID
-    kind: SourceKind
+    # Строка, а не SourceKind: catalog добавляет виды раньше, чем их начинает обрабатывать
+    # media-pipeline (план этапа 3a, M2) — неизвестный вид пропускается, а не роняет событие.
+    kind: str = Field(min_length=1, max_length=32)
     origin: SourceOrigin
     uri: str = Field(min_length=1, max_length=2000)
 
@@ -68,6 +74,20 @@ def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
         ) from exc
 
 
+def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, ...]:
+    """Исходники известных сервису видов; неизвестные пропускаются с записью в лог."""
+    known = {k.value for k in SourceKind}
+    sources: list[CatalogSource] = []
+    for s in items:
+        if s.kind not in known:
+            log.info(
+                "media.source_kind_skipped", kind=s.kind, source_media_ref=str(s.source_media_ref)
+            )
+            continue
+        sources.append(CatalogSource(s.source_media_ref, SourceKind(s.kind), s.origin, s.uri))
+    return tuple(sources)
+
+
 def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
     """Реестр обработчиков событий catalog."""
     registry = EventHandlerRegistry()
@@ -80,9 +100,7 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
             domain=p.domain,
             kind=p.kind,
             status=p.status,
-            sources=tuple(
-                CatalogSource(s.source_media_ref, s.kind, s.origin, s.uri) for s in p.source_media
-            ),
+            sources=known_sources(p.source_media),
         )
         await container.sync_media_item(container.uow_factory(session)).apply_snapshot(snapshot)
 
