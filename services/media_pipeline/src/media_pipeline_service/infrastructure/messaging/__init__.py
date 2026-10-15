@@ -20,6 +20,7 @@ from gv_messaging.ports import PermanentError, TaskHandler
 from media_pipeline_service.application.dto import (
     GENERATE_TASK,
     CatalogSource,
+    CatalogTexts,
     MediaItemSnapshot,
 )
 from media_pipeline_service.domain.media_items import ItemStatus
@@ -53,6 +54,19 @@ class _SourceMediaPayload(_Payload):
     license_note: str | None = Field(default=None, max_length=500)
 
 
+class _PersonPayload(_Payload):
+    name: str = Field(min_length=1, max_length=200)
+    # Строка: новые роли catalog не должны ронять событие (в текст идут director и actor).
+    role: str = Field(min_length=1, max_length=32)
+    order: int = Field(ge=0)
+
+
+class _ClueTextsPayload(_Payload):
+    plot_masked: str | None = Field(default=None, max_length=2000)
+    tagline: str | None = Field(default=None, max_length=300)
+    emoji: str | None = Field(default=None, max_length=64)
+
+
 class _SnapshotPayload(_Payload):
     media_item_id: UUID
     version: int = Field(ge=1)
@@ -60,6 +74,25 @@ class _SnapshotPayload(_Payload):
     kind: Literal["track", "film"]
     status: ItemStatus
     source_media: list[_SourceMediaPayload]
+    # Этап 3a (ADR 0024): необязательные поля — старые события их не содержат.
+    year: int | None = None
+    genres: list[str] = Field(default_factory=list)
+    persons: list[_PersonPayload] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list, max_length=20)
+    clue_texts: _ClueTextsPayload | None = None
+
+    def texts(self) -> CatalogTexts:
+        """Тексты и метаданные для текстового исходника (без названия единицы)."""
+        by_order = sorted(self.persons, key=lambda p: p.order)
+        clue = self.clue_texts.model_dump(exclude_none=True) if self.clue_texts else {}
+        return CatalogTexts(
+            clue_texts=clue,
+            year=self.year,
+            genres=tuple(self.genres),
+            countries=tuple(self.countries),
+            directors=tuple(p.name for p in by_order if p.role == "director"),
+            cast=tuple(p.name for p in by_order if p.role == "actor"),
+        )
 
 
 class _StatusPayload(_Payload):
@@ -114,6 +147,7 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
             kind=p.kind,
             status=p.status,
             sources=known_sources(p.source_media),
+            texts=p.texts(),
         )
         await container.sync_media_item(container.uow_factory(session)).apply_snapshot(snapshot)
 

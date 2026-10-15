@@ -11,6 +11,7 @@ import dataclasses
 import functools
 import hashlib
 import io
+import json
 import subprocess
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -765,3 +766,92 @@ async def test_admin_upload_requires_provenance_outside_local(service: Service) 
         422,
         "request.validation_failed",
     )
+
+
+# ---------------------------------------------------------------- тексты загадок (ADR 0024)
+def _film_with_texts(version: int, plot: str) -> tuple[EventEnvelope, str]:
+    created = load_example("catalog.MediaItemCreated")
+    item_id = str(uuid7())
+    payload = {
+        **created.payload,
+        "media_item_id": item_id,
+        "version": version,
+        "source_media": [],
+        "persons": [
+            {"person_id": str(uuid7()), "name": "Режиссёр Синтетический", "role": "director",
+             "order": 0},
+            *[
+                {"person_id": str(uuid7()), "name": f"Актёр {i}", "role": "actor", "order": i}
+                for i in range(1, 5)
+            ],
+        ],
+        "countries": ["US", "GB"],
+        "clue_texts": {"plot_masked": plot, "tagline": "Слоган", "emoji": "🚀🌌⏳🕳️👨‍🚀🌽🧑‍🔬"},
+    }  # fmt: skip
+    envelope = created.model_copy(
+        update={"payload": payload, "event_id": uuid7(), "aggregate_id": item_id}
+    )
+    return envelope, item_id
+
+
+async def test_clue_texts_become_json_assets_and_edit_regenerates(service: Service) -> None:
+    created, item_id = _film_with_texts(1, "Учёные … ищут новый дом.")
+    assert await service.deliver(created) is Outcome.PROCESSED
+    assert await service.run_tasks() == 2
+    sets = {
+        s["clue_type"]: s
+        for s in (
+            await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
+        ).json()
+    }
+    assert set(sets) == {"description", "emoji"}
+    assert all(s["status"] == "ready" and s["levels_count"] == 6 for s in sets.values())
+
+    link = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": sets["description"]["asset_set_id"], "level": 2, "subject": "s"},
+    )
+    body = link.json()
+    assert body["mime"] == "application/json"
+    path = urlsplit(body["url"]).path
+    assert path.startswith("/media/a/") and path.endswith(".json")
+    document = json.loads(
+        await service.storage.get(
+            StorageArea.ASSETS, path.removeprefix("/media/"), max_bytes=100_000
+        )
+    )
+    assert document == {
+        "version": 1,
+        "blocks": [
+            {"kind": "tagline", "text": "Слоган"},
+            {"kind": "plot", "text": "Учёные … ищут новый дом."},
+        ],
+    }
+    assert "Интерстеллар" not in json.dumps(document, ensure_ascii=False)
+
+    # Правка одобренного текста → новый текстовый исходник → новое поколение наборов.
+    edited, _ = _film_with_texts(2, "Исследователи … летят сквозь червоточину.")
+    payload = {**edited.payload, "media_item_id": item_id}
+    update = edited.model_copy(
+        update={
+            "payload": payload,
+            "aggregate_id": item_id,
+            "event_type": "catalog.MediaItemUpdated",
+        }
+    )
+    assert await service.deliver(update) is Outcome.PROCESSED
+    assert await service.run_tasks() == 2
+    regenerated = {
+        s["clue_type"]: s
+        for s in (
+            await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
+        ).json()
+    }
+    assert {s["generation"] for s in regenerated.values()} == {2}
+    assert {s["asset_set_id"] for s in regenerated.values()} == {
+        s["asset_set_id"] for s in sets.values()
+    }
+    ready = [e for e in await service.outbox() if e.event_type == "media_pipeline.AssetsReady"]
+    assert len(ready) == 4
+    for event in ready:
+        assert_event_matches_schema(event)

@@ -21,6 +21,7 @@ from gv_messaging.ports import TaskQueue
 from media_pipeline_service.application.dto import (
     GENERATE_TASK,
     CatalogSource,
+    CatalogTexts,
     MediaItemSnapshot,
 )
 from media_pipeline_service.application.generators.base import GeneratorRegistry
@@ -34,7 +35,8 @@ from media_pipeline_service.application.sources import delete_quietly
 from media_pipeline_service.domain.asset_set import AssetSet, AssetSetStatus
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
-from media_pipeline_service.domain.sources import SourceMedia, SourceStatus
+from media_pipeline_service.domain.sources import SourceKind, SourceMedia, SourceStatus
+from media_pipeline_service.domain.texts import has_text_facts, text_content, text_source_identity
 
 log = structlog.get_logger(__name__)
 
@@ -49,15 +51,27 @@ async def schedule_generation(queue: TaskQueue, aggregate: AssetSet) -> None:
 
 
 class RegisterSourceFromCatalog:
-    """Зарегистрировать исходники из снимка единицы (скачиваются позже, в задаче генерации)."""
+    """Зарегистрировать исходники из снимка единицы (скачиваются позже, в задаче генерации).
+
+    Тексты загадок и метаданные единицы становятся одним текстовым исходником (ADR 0024):
+    его id — хэш содержимого, поэтому правка текста даёт новый исходник, прежний удаляется,
+    а наборы ``description``/``emoji`` перепланируются в новое поколение.
+    """
 
     def __init__(self, uow: UnitOfWorkFactory, clock: Clock) -> None:
         self._uow = uow
         self._clock = clock
 
-    async def execute(self, media_item_id: UUID, sources: Sequence[CatalogSource]) -> None:
+    async def execute(
+        self,
+        media_item_id: UUID,
+        sources: Sequence[CatalogSource],
+        texts: CatalogTexts | None = None,
+    ) -> None:
         """Добавить новые исходники; смена адреса у известного — повторная загрузка."""
         async with self._uow() as uow:
+            if texts is not None:
+                await self._register_text(uow, media_item_id, texts)
             for item in sources:
                 existing = await uow.sources.get(item.source_media_ref)
                 if existing is None:
@@ -91,6 +105,38 @@ class RegisterSourceFromCatalog:
                 if changed:
                     await uow.sources.save(existing)
             await uow.commit()
+
+    async def _register_text(
+        self, uow: MediaUnitOfWork, media_item_id: UUID, texts: CatalogTexts
+    ) -> None:
+        content = text_content(
+            clue_texts=texts.clue_texts,
+            year=texts.year,
+            genres=texts.genres,
+            countries=texts.countries,
+            directors=texts.directors,
+            cast=texts.cast,
+        )
+        if not has_text_facts(content):
+            return
+        source_id, digest, size = text_source_identity(media_item_id, content)
+        current = [
+            s for s in await uow.sources.list_for_item(media_item_id) if s.kind is SourceKind.TEXT
+        ]
+        if any(s.id == source_id for s in current):
+            return
+        await uow.sources.delete([s.id for s in current])
+        await uow.sources.add(
+            SourceMedia.text(
+                source_id,
+                media_item_id=media_item_id,
+                content=content,
+                sha256=digest,
+                size_bytes=size,
+                created_at=self._clock.now(),
+            )
+        )
+        log.info("text_source.registered", media_item_id=str(media_item_id), replaced=len(current))
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,7 +353,7 @@ class SyncMediaItem:
                 )
                 return False
             await uow.commit()
-        await self._register.execute(snapshot.media_item_id, snapshot.sources)
+        await self._register.execute(snapshot.media_item_id, snapshot.sources, snapshot.texts)
         await self._after_status(snapshot.media_item_id, snapshot.status)
         return True
 

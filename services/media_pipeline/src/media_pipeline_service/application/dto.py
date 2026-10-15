@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -200,6 +200,24 @@ class CatalogSource:
 
 
 @dataclass(frozen=True, slots=True)
+class CatalogTexts:
+    """Тексты загадок и метаданные единицы для текстового исходника (ADR 0024).
+
+    Attributes:
+        clue_texts: Одобренные тексты (``plot_masked``, ``tagline``, ``emoji``).
+        directors: Режиссёры по порядку.
+        cast: Актёры по порядку в титрах.
+    """
+
+    clue_texts: dict[str, str] = field(default_factory=dict)
+    year: int | None = None
+    genres: tuple[str, ...] = ()
+    countries: tuple[str, ...] = ()
+    directors: tuple[str, ...] = ()
+    cast: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class MediaItemSnapshot:
     """Полный снимок единицы из ``MediaItemCreated``/``MediaItemUpdated``."""
 
@@ -209,3 +227,4 @@ class MediaItemSnapshot:
     kind: str
     status: ItemStatus
     sources: tuple[CatalogSource, ...]
+    texts: CatalogTexts = field(default_factory=CatalogTexts)

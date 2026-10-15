@@ -674,3 +674,33 @@ async def test_catalog_position_and_provenance_are_projected(media: Any) -> None
     await media.sync.apply_snapshot(snapshot(2, sources=(moved,)))
     stored = media.db.sources[POSTER_REF]
     assert (stored.position, stored.license_note) == (5, "TMDB, атрибуция")
+
+
+async def test_text_source_is_content_addressed_and_replaced_on_edit(media: Any) -> None:
+    from media_pipeline_service.application.dto import CatalogTexts
+
+    texts = CatalogTexts(clue_texts={"emoji": "🚀🌌"}, year=2014, genres=("драма",))
+    await media.sync.apply_snapshot(
+        MediaItemSnapshot(ITEM, 1, "film", "film", ItemStatus.ACTIVE, (), texts)
+    )
+    (first,) = [s for s in media.db.sources.values() if s.kind is SourceKind.TEXT]
+    assert first.text_content == {
+        "version": 1, "emoji": "🚀🌌", "year": 2014, "genres": ["драма"],
+    }  # fmt: skip
+    # тот же текст в следующем событии — тот же исходник
+    await media.sync.apply_snapshot(
+        MediaItemSnapshot(ITEM, 2, "film", "film", ItemStatus.ACTIVE, (), texts)
+    )
+    assert [s.id for s in media.db.sources.values() if s.kind is SourceKind.TEXT] == [first.id]
+    edited = CatalogTexts(clue_texts={"emoji": "🚀🌌⏳"}, year=2014, genres=("драма",))
+    await media.sync.apply_snapshot(
+        MediaItemSnapshot(ITEM, 3, "film", "film", ItemStatus.ACTIVE, (), edited)
+    )
+    (second,) = [s for s in media.db.sources.values() if s.kind is SourceKind.TEXT]
+    assert second.id != first.id and second.text_content is not None
+    assert second.text_content["emoji"] == "🚀🌌⏳"
+
+
+async def test_item_without_text_facts_gets_no_text_source(media: Any) -> None:
+    await media.sync.apply_snapshot(snapshot(sources=()))
+    assert not [s for s in media.db.sources.values() if s.kind is SourceKind.TEXT]

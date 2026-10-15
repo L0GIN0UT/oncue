@@ -8,11 +8,15 @@ JSON-ассет уровня по ``contracts/clues/text_asset.v1.json``.
 
 from __future__ import annotations
 
+import hashlib
 import unicodedata
+import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
+from uuid import UUID
 
 from media_pipeline_service.domain.clues import DescriptionField, DescriptionParams, EmojiParams
+from media_pipeline_service.domain.params import canonical_json
 
 TEXT_CONTENT_VERSION = 1
 TEXT_ASSET_VERSION = 1
@@ -118,6 +122,27 @@ def text_content(
         if cleaned:
             content[key] = cleaned
     return content
+
+
+def has_text_facts(content: Mapping[str, Any]) -> bool:
+    """В содержимом есть что показать (не только версия формата)."""
+    return any(key != "version" for key in content)
+
+
+# Пространство имён uuid5 текстовых исходников: id = f(единица, хэш содержимого).
+_TEXT_SOURCE_NAMESPACE = UUID("0192a3b4-c5d6-7e8f-9a0b-7e4700000000")
+
+
+def text_source_identity(media_item_id: UUID, content: Mapping[str, Any]) -> tuple[UUID, str, int]:
+    """id, sha256 и размер текстового исходника.
+
+    id зависит от хэша содержимого: изменение текста или метаданных даёт новый исходник, а
+    наборы, построенные на старом, перепланируются в новое поколение (как при смене кадра).
+    """
+    data = canonical_json(content).encode()
+    digest = hashlib.sha256(data).hexdigest()
+    source_id = uuid.uuid5(_TEXT_SOURCE_NAMESPACE, f"{media_item_id}:{digest}")
+    return source_id, digest, len(data)
 
 
 def _field_value(content: Mapping[str, Any], field: DescriptionField) -> str | None:
