@@ -8,17 +8,29 @@
 uv run python seeds/media/generate.py          # → seeds/media/out/
 ```
 
-Получится `track-<slug>.m4a` (20 с, AAC) на каждый трек и `film-<slug>.jpg` (1280×720) на
-каждый фильм; имя файла — ключ строки каталога с `-` вместо `:`.
+Генератор читает все `seeds/catalog/*.jsonl`. Получится (имя — ключ строки каталога с `-`
+вместо `:`):
+
+| Файл | Единица | Вид исходника (`kind`) | Загадки |
+|---|---|---|---|
+| `track-<slug>.m4a` (50 с, AAC) | трек | `audio` | `audio_intro`, `audio_reverse` (`start_s` 30) |
+| `film-<slug>.jpg` (1280×720) | фильм | `frame` | `frame_progressive`, ревил `audio_blackout` |
+| `film-<slug>-{1..6}.jpg` | фильм | `frame`, `position` = номер | `frame_sequence` (1 — самый сложный) |
+| `soundtrack-<slug>.m4a` (20 с) | фильм | `soundtrack` | `soundtrack` |
+| `clip-<slug>.m4a` (20 с) | фильм | `audio_clip` | `audio_blackout` |
+
+Тексты `description`/`emoji` — не файлы: они приходят из catalog (`clue_texts` строки
+импорта, одобряются сразу при `GV_CATALOG__SEED_TEXTS_APPROVED=true`, только local/ci).
 
 ## Порядок загрузки (local)
 
 1. `gv dev up infra`, `gv dev up services`.
 2. Импорт каталога через admin: `POST /admin/v1/imports {"source": "file", "file_id": "tracks.jsonl", "reason": "сиды"}`
    и то же для `films.jsonl` (см. `seeds/catalog/README.md`). catalog публикует `MediaItemCreated`.
-3. Для каждой единицы найти `media_item_id` в админке (карточка единицы) и загрузить файл:
-   `POST /admin/v1/sources` (media-pipeline, multipart: `media_item_id`, `kind` = `audio` для
-   треков или `frame` для фильмов, `reason`, `file`; заголовок `Idempotency-Key`).
+3. Для каждой единицы найти `media_item_id` в админке (карточка единицы) и загрузить файлы:
+   `POST /admin/v1/sources` (media-pipeline, multipart: `media_item_id`, `kind` из таблицы
+   выше, `position` для кадров последовательности, `reason`, `file`; заголовок
+   `Idempotency-Key`). Вне local/ci обязательны `origin`, `source_url`, `license_note` (D6).
 4. media-pipeline генерирует наборы по профилям `default` и публикует `AssetsReady`;
    game заполняет проекцию `clue_assets`.
 5. game публикует сиды режимов (`seeds/game/modes`, только local/ci, `GV_GAME__BOOTSTRAP_MODES_DIR`)
