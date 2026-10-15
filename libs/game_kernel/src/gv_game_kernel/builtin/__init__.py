@@ -3,12 +3,14 @@
 ``register_builtin(registry)`` регистрирует всё, что game оркестрирует на этапе 2:
 загадки ``audio_intro``, ``frame_progressive``, ``poster_masked``; источники ``daily`` и
 ``random``; matcher ``title_alias``; частичный ответ ``artist``; очки ``by_level`` и
-``by_speed``. Источник ``collection`` готов, но регистрируется отдельно
-(``register_collection``) — в game с этапа 3, вместе с проекциями сборников.
+``by_speed``; формат ответа ``classic`` и правило завершения ``all_rounds`` (этап 3a).
+Источник ``collection`` готов, но регистрируется отдельно (``register_collection``) — в
+game с этапа 3, вместе с проекциями сборников.
 """
 
 from __future__ import annotations
 
+from gv_game_kernel.builtin.answer_formats import ClassicFormat
 from gv_game_kernel.builtin.clues import (
     AudioIntroClue,
     AudioIntroParams,
@@ -18,6 +20,7 @@ from gv_game_kernel.builtin.clues import (
     PosterMaskedClue,
     PosterMaskedParams,
 )
+from gv_game_kernel.builtin.end_rules import AllRoundsEnd, AllRoundsParams
 from gv_game_kernel.builtin.matching import (
     ArtistPartial,
     TitleAliasMatcher,
@@ -61,6 +64,8 @@ def register_builtin(registry: PluginRegistry) -> PluginRegistry:
     registry.register_partial(ArtistPartial())
     registry.register_scorer(ByLevelScorer())
     registry.register_scorer(BySpeedScorer())
+    registry.register_answer_format(ClassicFormat())
+    registry.register_end_rule(AllRoundsEnd())
     return registry
 
 
@@ -71,6 +76,8 @@ def register_collection(registry: PluginRegistry) -> PluginRegistry:
 
 
 __all__ = [
+    "AllRoundsEnd",
+    "AllRoundsParams",
     "ArtistPartial",
     "AudioIntroClue",
     "AudioIntroParams",
@@ -78,6 +85,7 @@ __all__ = [
     "ByLevelScorer",
     "BySpeedParams",
     "BySpeedScorer",
+    "ClassicFormat",
     "CollectionParams",
     "CollectionSource",
     "DailyParams",

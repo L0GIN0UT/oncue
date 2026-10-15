@@ -29,6 +29,9 @@ POINTS_INCREASING = "config.points_increasing"
 MIN_ABOVE_MAX = "config.min_above_max"
 """Код проблемы: ``min_points`` больше ``max_points``."""
 
+SCORE_PRESENTATION = "score"
+"""Подача итога суммой очков (``Scorer.presentation``)."""
+
 Ratio = Annotated[StrictFloat, Field(ge=0, le=1)]
 
 
@@ -61,6 +64,7 @@ class ByLevelScorer:
 
     key: ClassVar[str] = "by_level"
     params_schema: ClassVar[type[BaseModel]] = ByLevelParams
+    presentation: ClassVar[str] = SCORE_PRESENTATION
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void``, ``miss`` и ``gave_up`` без частичного — 0).
@@ -125,6 +129,7 @@ class BySpeedScorer:
     """
 
     key: ClassVar[str] = "by_speed"
+    presentation: ClassVar[str] = SCORE_PRESENTATION
     params_schema: ClassVar[type[BaseModel]] = BySpeedParams
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:

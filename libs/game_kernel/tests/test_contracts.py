@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from referencing import Registry, Resource
 
 from gv_game_kernel import ConfigError, ModeConfig, params_hash, parse_mode_config
-from gv_game_kernel.spec import AnswerSpec, PluginSpec, SessionSpec
+from gv_game_kernel.spec import AnswerSpec, ClueSpec, PluginSpec, SessionSpec
 
 pytestmark = pytest.mark.contract
 
@@ -53,7 +53,7 @@ def _errors(path: Path, instance: object) -> list[str]:
 
 
 def _plugin_schema(section: str, plugin_type: str) -> Path:
-    if section == "clue":
+    if section in ("clue", "reveal"):
         return CLUES / f"{plugin_type}.params.v1.json"
     return MODES / "params" / f"{section}.{plugin_type}.v1.json"
 
@@ -73,8 +73,11 @@ def test_mode_config_model_matches_schema() -> None:
     _assert_model_matches(ModeConfig, schema, "ModeConfig")
     _assert_model_matches(SessionSpec, schema["properties"]["session"], "session")
     _assert_model_matches(AnswerSpec, schema["properties"]["answer"], "answer")
-    for section in ("source", "clue", "scoring"):
+    for section in ("source", "scoring"):
         _assert_model_matches(PluginSpec, schema["properties"][section], section)
+    _assert_model_matches(ClueSpec, schema["properties"]["clue"], "clue")
+    _assert_model_matches(PluginSpec, schema["properties"]["clue"]["properties"]["reveal"], "rev")
+    _assert_model_matches(PluginSpec, schema["properties"]["session"]["properties"]["end"], "end")
     _assert_model_matches(PluginSpec, schema["properties"]["answer"]["properties"]["matcher"], "m")
 
 
@@ -113,6 +116,10 @@ def test_seed_is_valid_by_schema_and_models(seed: Path) -> None:
         ("scorer", body["scoring"]),
         ("matcher", body["answer"]["matcher"]),
     ]
+    if "end" in body["session"]:
+        plugins.append(("end", body["session"]["end"]))
+    if "reveal" in body["clue"]:
+        plugins.append(("reveal", body["clue"]["reveal"]))
     for section, plugin in plugins:
         path = _plugin_schema(section, plugin["type"])
         assert path.is_file(), f"нет схемы параметров {path.relative_to(ROOT)}"
@@ -231,6 +238,7 @@ def _contract_shape(path: Path) -> dict[str, Any]:
 
 def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
     from gv_game_kernel.builtin import (
+        AllRoundsParams,
         AudioIntroParams,
         ByLevelParams,
         BySpeedParams,
@@ -253,6 +261,7 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         ("by_level", ByLevelParams, params / "scorer.by_level.v1.json"),
         ("by_speed", BySpeedParams, params / "scorer.by_speed.v1.json"),
         ("title_alias", TitleAliasParams, params / "matcher.title_alias.v1.json"),
+        ("all_rounds", AllRoundsParams, params / "end.all_rounds.v1.json"),
     ]
 
 
@@ -274,5 +283,6 @@ def test_every_registered_plugin_has_a_contract() -> None:
         *(registry.source(k) for k in ("daily", "random")),
         registry.matcher("title_alias"),
         *(registry.scorer(k) for k in ("by_level", "by_speed")),
+        registry.end_rule("all_rounds"),
     ]
     assert all(p is not None and p.params_schema in covered for p in plugins)

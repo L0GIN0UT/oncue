@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from functools import cached_property
@@ -22,11 +23,13 @@ from pydantic import BaseModel
 from gv_game_kernel.errors import RoundFinishedError, RoundNotFinishedError
 from gv_game_kernel.params import params_hash
 from gv_game_kernel.plugins import (
+    AnswerFormat,
     AnswerInput,
     AnswerMatcher,
     ClueType,
     ClueView,
     DrawContext,
+    EndRule,
     LevelSpec,
     MatchContext,
     MatchResult,
@@ -84,6 +87,9 @@ class ModeEngine:
         matcher: Сверка ответов.
         partials: Правила частичного ответа (в порядке ``answer.partial``).
         scorer: Подсчёт очков.
+        answer_format: Формат ответа (``answer.format``).
+        end_rule: Правило завершения сессии (``session.end`` или ``all_rounds``).
+        reveal: Тип загадки ревила (``clue.reveal``) или ``None``.
         normalizer: Нормализатор ответов (по умолчанию ``answer_normalizer()``).
 
     Raises:
@@ -100,6 +106,9 @@ class ModeEngine:
         matcher: AnswerMatcher,
         partials: tuple[PartialRule, ...],
         scorer: Scorer,
+        answer_format: AnswerFormat,
+        end_rule: EndRule,
+        reveal: ClueType | None = None,
         normalizer: TitleNormalizer | None = None,
     ) -> None:
         self.config = config
@@ -108,6 +117,19 @@ class ModeEngine:
         self.matcher = matcher
         self.partials = partials
         self.scorer = scorer
+        self.answer_format = answer_format
+        self.end_rule = end_rule
+        self.reveal = reveal
+        end = config.session.end
+        self.end_params: BaseModel = end_rule.params_schema.model_validate(
+            end.params if end is not None else {}
+        )
+        reveal_spec = config.clue.reveal
+        self.reveal_params: BaseModel | None = (
+            reveal.params_schema.model_validate(reveal_spec.params)
+            if reveal is not None and reveal_spec is not None
+            else None
+        )
         self.clue_params: BaseModel = clue.params_schema.model_validate(config.clue.params)
         self.source_params: BaseModel = source.params_schema.model_validate(config.source.params)
         self.matcher_params: BaseModel = matcher.params_schema.model_validate(
@@ -134,6 +156,12 @@ class ModeEngine:
     def clue_params_hash(self) -> str:
         """``params_hash(clue.params)``: по нему game ищет ассеты из ``AssetsReady`` (D7)."""
         return params_hash(self.config.clue.params)
+
+    @cached_property
+    def reveal_params_hash(self) -> str | None:
+        """``params_hash(clue.reveal.params)`` или ``None``, если ревил — сама загадка."""
+        reveal = self.config.clue.reveal
+        return params_hash(reveal.params) if reveal is not None else None
 
     @property
     def playable_for(self) -> PlayableFor:
@@ -283,6 +311,20 @@ class ModeEngine:
     def require_level_open(self, state: RoundState, level: int) -> None:
         """Проверить, что уровень можно выдать клиенту (``LevelLockedError`` иначе)."""
         require_level_open(state, level, levels_count=self.levels_count)
+
+    # ------------------------------------------------------------------------- сессия
+    def should_end(self, history: Sequence[RoundOutcome]) -> bool:
+        """Закончить ли сессию досрочно после ``history`` (правило ``session.end``)."""
+        return self.end_rule.should_end(history, self.end_params)
+
+    def lives_left(self, history: Sequence[RoundOutcome]) -> int | None:
+        """Сколько «жизней» осталось или ``None``, если правило их не считает."""
+        return self.end_rule.lives_left(history, self.end_params)
+
+    @property
+    def presentation(self) -> str:
+        """Подача итога сессии (``Scorer.presentation``): ``score`` | ``streak`` | ``bracket``."""
+        return self.scorer.presentation
 
     # ------------------------------------------------------------------------- очки
     @staticmethod

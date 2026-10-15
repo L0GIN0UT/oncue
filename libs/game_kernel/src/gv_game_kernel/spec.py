@@ -62,7 +62,13 @@ class ClueSpec(PluginSpec):
 
     ``params`` совпадают с параметрами профиля media-pipeline: по их ``params_hash`` game
     находит готовые ассеты (D7).
+
+    Attributes:
+        reveal: Подача ревила другим типом загадки того же домена (ADR 0026), например
+            кадр фильма после ``audio_blackout``; ``None`` — последний уровень самой загадки.
     """
+
+    reveal: PluginSpec | None = None
 
 
 class MatcherSpec(PluginSpec):
@@ -77,12 +83,13 @@ class AnswerSpec(_Spec):
     """Формат ответа, matcher и виды частичного ответа.
 
     Attributes:
-        format: Формат ответа (на этапе 2 — только ``classic``).
+        format: Ключ плагина ``AnswerFormat``: ``classic`` — ввод названия, ``pick`` — выбор
+            варианта раунда (ADR 0023).
         matcher: Плагин сверки.
         partial: Ключи плагинов ``PartialRule`` (например ``artist``).
     """
 
-    format: Literal["classic"]
+    format: PluginKey
     matcher: MatcherSpec
     partial: tuple[PluginKey, ...] = Field(default=(), max_length=10)
 
@@ -98,15 +105,18 @@ class SessionSpec(_Spec):
         give_up_allowed: Можно ли сдаться в раунде.
         allow_guest: Пускать ли гостей (D5).
         abandon_after_min: Через сколько минут без ходов сессия брошена.
+        end: Правило досрочного завершения (плагин ``EndRule``, ADR 0023); ``None`` —
+            сессия идёт все ``rounds`` раундов. С правилом ``rounds`` — максимум раундов.
     """
 
     kind: Literal["solo"]
-    rounds: StrictInt = Field(ge=1, le=50)
+    rounds: StrictInt = Field(ge=1, le=200)
     attempts_per_level: StrictInt = Field(ge=1, le=5)
     skip_allowed: StrictBool
     give_up_allowed: StrictBool
     allow_guest: StrictBool
     abandon_after_min: StrictInt = Field(ge=1, le=10080)
+    end: PluginSpec | None = None
 
 
 class ModeConfig(_Spec):

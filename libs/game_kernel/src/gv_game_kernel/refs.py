@@ -42,6 +42,9 @@ class MediaItemRef:
         persons: Персоны (исполнители, режиссёры, актёры).
         genres: Жанры.
         popularity: Популярность из метрик каталога.
+        metrics: Метрики каталога парами ``(имя, значение)`` (``vote_average``,
+            ``revenue_usd`` …) — для «больше/меньше»; кортеж, чтобы ссылка оставалась
+            хэшируемой.
     """
 
     id: UUID
@@ -54,6 +57,11 @@ class MediaItemRef:
     persons: tuple[PersonRef, ...] = ()
     genres: tuple[str, ...] = ()
     popularity: float | None = None
+    metrics: tuple[tuple[str, float], ...] = ()
+
+    def metric(self, name: str) -> float | None:
+        """Значение метрики ``name`` или ``None``, если у единицы её нет."""
+        return dict(self.metrics).get(name)
 
 
 @dataclass(frozen=True, slots=True)

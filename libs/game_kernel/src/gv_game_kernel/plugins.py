@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, ClassVar, Protocol
@@ -26,6 +26,7 @@ from gv_game_kernel.ports import (
     CollectionPort,
     PlayableFor,
     PoolQuery,
+    SubjectQuery,
 )
 from gv_game_kernel.refs import AssetRef, MediaItemRef
 from gv_game_kernel.round import MatchVerdict, RoundOutcome
@@ -69,7 +70,8 @@ class ClueView:
 
     Attributes:
         level: Уровень.
-        kind: Способ подачи: ``audio`` | ``image`` (клиент выбирает компонент по нему).
+        kind: Способ подачи: ``audio`` | ``image`` | ``text`` (клиент выбирает компонент по
+            нему; ``text`` — JSON-ассет ``contracts/clues/text_asset.v1.json``).
         asset: Выданная ссылка на ассет.
         meta: Параметры уровня для UI (``seconds`` или ``blur``).
     """
@@ -160,6 +162,53 @@ class Preset:
     title_key: str
 
 
+@dataclass(frozen=True, slots=True)
+class OptionSpec:
+    """Вариант ответа раунда в формате ``pick`` (ADR 0023).
+
+    Клиент видит только ``id`` и подпись; какая единица за вариантом стоит, знает сервер.
+
+    Attributes:
+        id: Непрозрачный идентификатор варианта внутри раунда (``a``, ``b``, ``higher``).
+        label_key: Ключ i18n подписи (``higher``/``lower``) или ``None``.
+        item: Единица за вариантом (сетка — сама единица; «больше/меньше» — ``None``).
+    """
+
+    id: str
+    label_key: str | None = None
+    item: MediaItemRef | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RoundDraw:
+    """Состав раунда, разыгранный источником (ADR 0023).
+
+    Attributes:
+        target: Загаданная единица (по ней выдаётся загадка и считается ответ).
+        shown: Единицы, которые клиент видит открыто (опорная единица пары).
+        options: Варианты ответа формата ``pick`` (пусто — классический ввод).
+    """
+
+    target: MediaItemRef
+    shown: tuple[MediaItemRef, ...] = ()
+    options: tuple[OptionSpec, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RoundPick:
+    """Завершённый раунд для источников с продолжением (сетка) и правил завершения.
+
+    Attributes:
+        draw: Состав раунда.
+        outcome: Итог раунда.
+        option_id: Выбранный вариант (формат ``pick``) или ``None``.
+    """
+
+    draw: RoundDraw
+    outcome: RoundOutcome
+    option_id: str | None = None
+
+
 class Source(Protocol):
     """Источник единиц раундов (``daily``, ``random``, ``collection``).
 
@@ -213,25 +262,63 @@ class Source(Protocol):
         ...
 
 
+class ProgressiveSource(Protocol):
+    """Источник, чьи раунды зависят от прошлых (сетка: пары победителей тура, ADR 0023).
+
+    Раунды материализуются лениво: сервис вызывает ``followups`` после каждого раунда и
+    дописывает новые раунды в план сессии.
+    """
+
+    def planned_rounds(self, params: BaseModel) -> int:
+        """Сколько раундов будет в сессии всего (сетка 32 — 31 выбор)."""
+        ...
+
+    def followups(self, params: BaseModel, history: Sequence[RoundPick]) -> list[RoundDraw]:
+        """Раунды, которые открываются после ``history`` (пусто — пока ничего нового)."""
+        ...
+
+
+class SubjectSource(Protocol):
+    """Источник по персонам, выбранным игроком (марафон, D14 плана этапа 3a)."""
+
+    def subject_query(self, params: BaseModel, *, domain: str) -> SubjectQuery:
+        """Какие персоны можно предложить игроку (роли, минимум играбельных единиц)."""
+        ...
+
+    def max_subjects(self, params: BaseModel) -> int:
+        """Сколько персон игрок может выбрать за сессию."""
+        ...
+
+
 # ----------------------------------------------------------------------------- ответы
 @dataclass(frozen=True, slots=True)
 class AnswerInput:
-    """Ответ игрока: выбор из автокомплита или свободный текст (ровно одно из двух).
+    """Ответ игрока: выбор из автокомплита, свободный текст или вариант раунда (ровно одно).
 
     Attributes:
         media_item_id: Выбранная единица.
         text: Свободный текст (1..120 символов, ограничивает API).
         selected: Выбранная единица из проекции game (для ``accept_same_title`` и
             частичных ответов); ``None`` для текста или если единицы нет в проекции.
+        option_id: Выбранный вариант раунда (формат ``pick``, ADR 0023).
     """
 
     media_item_id: UUID | None = None
     text: str | None = None
     selected: MediaItemRef | None = None
+    option_id: str | None = None
+
+    @property
+    def input_kind(self) -> str:
+        """Вид ответа: ``item`` | ``text`` | ``option`` (сверяется с ``AnswerFormat``)."""
+        if self.option_id is not None:
+            return "option"
+        return "item" if self.media_item_id is not None else "text"
 
     def __post_init__(self) -> None:
-        if (self.media_item_id is None) == (self.text is None):
-            raise ValueError("ответ — либо media_item_id, либо text")
+        given = [v for v in (self.media_item_id, self.text, self.option_id) if v is not None]
+        if len(given) != 1:
+            raise ValueError("ответ — ровно одно из media_item_id, text, option_id")
         if self.selected is not None and self.selected.id != self.media_item_id:
             raise ValueError("selected должен быть единицей media_item_id")
 
@@ -298,6 +385,20 @@ class AnswerMatcher(Protocol):
         ...
 
 
+class AnswerFormat(Protocol):
+    """Формат ответа (``classic``, ``pick``; ADR 0023): какие ответы принимает раунд.
+
+    Attributes:
+        key: Ключ в реестре и значение ``answer.format``.
+        input_kinds: Допустимые виды ``AnswerInput.input_kind``.
+        needs_options: Нужны ли раунду варианты ответа от источника.
+    """
+
+    key: ClassVar[str]
+    input_kinds: ClassVar[frozenset[str]]
+    needs_options: ClassVar[bool]
+
+
 # ----------------------------------------------------------------------------- Scorer
 class Scorer(Protocol):
     """Подсчёт очков раунда (``by_level``, ``by_speed``).
@@ -305,10 +406,13 @@ class Scorer(Protocol):
     Attributes:
         key: Ключ в реестре.
         params_schema: Модель параметров (``contracts/modes/params/scorer.<key>.v1.json``).
+        presentation: Как показывать итог: ``score`` | ``streak`` | ``bracket`` (D12 плана
+            этапа 3a; клиент выбирает экран итога по нему).
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    presentation: ClassVar[str]
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void`` и ``gave_up`` без частичного — 0)."""
@@ -322,4 +426,25 @@ class Scorer(Protocol):
         self, params: BaseModel, *, config: ModeConfig, levels_count: int
     ) -> list[ParamIssue]:
         """Согласованность с загадкой (например, ``len(points) == levels_count``)."""
+        ...
+
+
+# ----------------------------------------------------------------------------- EndRule
+class EndRule(Protocol):
+    """Правило досрочного завершения сессии (``all_rounds``, ``lives``; ADR 0023).
+
+    Attributes:
+        key: Ключ в реестре и значение ``session.end.type``.
+        params_schema: Модель параметров (``contracts/modes/params/end.<key>.v1.json``).
+    """
+
+    key: ClassVar[str]
+    params_schema: ClassVar[type[BaseModel]]
+
+    def should_end(self, history: Sequence[RoundOutcome], params: BaseModel) -> bool:
+        """Закончить ли сессию после ``history`` завершённых раундов."""
+        ...
+
+    def lives_left(self, history: Sequence[RoundOutcome], params: BaseModel) -> int | None:
+        """Сколько «жизней» осталось (для UI) или ``None``, если правило их не считает."""
         ...

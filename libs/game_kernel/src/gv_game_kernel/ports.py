@@ -71,6 +71,9 @@ class PoolQuery:
         min_popularity: Популярность не ниже.
         playable_for: Только единицы с готовыми ассетами под параметры загадки.
         exclude_ids: Исключить единицы (например, из недавних наборов дня).
+        person_ids_any: Хотя бы одна из персон (марафон и сетка по персоне; пусто — без
+            фильтра).
+        has_metric: Только единицы с этой метрикой каталога («больше/меньше»).
     """
 
     domain: str
@@ -81,6 +84,25 @@ class PoolQuery:
     min_popularity: float | None = None
     playable_for: PlayableFor | None = None
     exclude_ids: frozenset[UUID] = frozenset()
+    person_ids_any: frozenset[UUID] = frozenset()
+    has_metric: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectQuery:
+    """Какие персоны можно предложить игроку в марафоне (D14 плана этапа 3a).
+
+    Attributes:
+        domain: Домен режима.
+        roles: Роли персон (``artist``, ``director``, ``actor``).
+        min_items: Минимум играбельных единиц у персоны.
+        playable_for: Требование играбельности единиц.
+    """
+
+    domain: str
+    roles: frozenset[str]
+    min_items: int
+    playable_for: PlayableFor | None = None
 
 
 class CandidatePort(Protocol):
