@@ -22,6 +22,13 @@
             ],
             "title": "Blocked Reason Code"
           },
+          "countries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Countries",
+            "type": "array"
+          },
           "domain": {
             "$ref": "#/components/schemas/MediaDomain"
           },
@@ -426,6 +433,18 @@
       "ClueTextsOut": {
         "description": "Тексты загадок единицы (ADR 0024): в событие уходят только одобренные.",
         "properties": {
+          "approved_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последняя одобренная ревизия (её тексты сейчас в событиях)",
+            "title": "Approved Revision"
+          },
           "emoji": {
             "anyOf": [
               {
@@ -1411,7 +1430,7 @@
     },
     "/admin/v1/items/republish": {
       "post": {
-        "description": "Фоновая задача: `MediaItemUpdated` с `version+1` для всех единиц домена.",
+        "description": "Фоновая задача RabbitMQ порциями `GV_CATALOG__REPUBLISH_BATCH`: `MediaItemUpdated` с `version+1` (`changed_fields: [republish]`) для всех единиц домена (без `domain` — всех). Повтор с тем же `Idempotency-Key` — то же задание.",
         "operationId": "republish_items_admin_v1_items_republish_post",
         "parameters": [
           {
@@ -1514,7 +1533,7 @@
             },
             "description": "Некорректные данные"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1527,7 +1546,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Переопубликовать единицы",
@@ -1986,21 +2005,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Тексты загадок единицы",
@@ -2009,6 +2013,7 @@
         ]
       },
       "put": {
+        "description": "Все три поля целиком (null — очистить); `base_revision` — ревизия, которую видел модератор (иначе 409 `catalog.clue_texts_revision_mismatch`). После правки тексты в статусе draft: в событиях остаётся прошлый одобренный снимок. emoji — до 12 графем (422 `catalog.clue_text_invalid_emoji`).",
         "operationId": "put_clue_texts_admin_v1_items__item_id__clue_texts_put",
         "parameters": [
           {
@@ -2135,21 +2140,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Изменить тексты загадок",
@@ -2160,7 +2150,7 @@
     },
     "/admin/v1/items/{item_id}/clue-texts/approve": {
       "post": {
-        "description": "Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts`.",
+        "description": "Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts` (version+1). 409 `catalog.clue_texts_revision_mismatch` — одобряется не текущая ревизия; 422 `catalog.clue_texts_empty` — одобрять нечего.",
         "operationId": "approve_clue_texts_admin_v1_items__item_id__clue_texts_approve_post",
         "parameters": [
           {
@@ -2287,21 +2277,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Одобрить тексты загадок",
