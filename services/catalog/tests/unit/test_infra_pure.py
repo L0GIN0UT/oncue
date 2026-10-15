@@ -193,3 +193,63 @@ async def test_seeds_are_valid(file_id: str, kind: str) -> None:
     assert {e.kind.value for e in entries if not isinstance(e, ValueError)} == {kind}
     keys = [e.external_refs[ExternalSource.SEED] for e in entries if not isinstance(e, ValueError)]
     assert len(set(keys)) == len(keys)
+
+
+# ---------------------------------------------------------------- файловый импорт этапа 3a (M8)
+_STAGE3A_LINE = (
+    '{"key": "film:synthetic-1", "kind": "film", "title": "Синтетика 1", "year": 2001,'
+    ' "countries": ["us", "GB"], "metrics": {"vote_average": 7.5, "popularity": 10},'
+    ' "clue_texts": {"plot_masked": "Сюжет …", "tagline": "Слоган", "emoji": "🚀🌌⏳"},'
+    ' "source_media": [{"kind": "frame", "origin": "upload", "uri": "https://x.test/f2.jpg",'
+    ' "position": 2, "source_url": "https://x.test/", "license_note": "синтетика"}]}'
+)
+
+
+def test_parse_line_stage3a_fields() -> None:
+    from catalog_service.domain.model import SourceMediaKind
+
+    item = parse_line(_STAGE3A_LINE, 1)
+    assert not isinstance(item, ValueError)
+    assert item.countries == ("us", "GB")  # нормализует домен единицы
+    assert item.metrics.vote_average == 7.5
+    assert item.clue_texts is not None
+    assert (item.clue_texts.plot_masked, item.clue_texts.emoji) == ("Сюжет …", "🚀🌌⏳")
+    assert not item.texts_authoritative
+    (frame,) = item.source_media
+    assert (frame.kind, frame.position, frame.license_note) == (
+        SourceMediaKind.FRAME,
+        2,
+        "синтетика",
+    )
+    approved = parse_line(_STAGE3A_LINE, 1, texts_approved=True)
+    assert not isinstance(approved, ValueError) and approved.texts_authoritative
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        '"source_media": [{"kind": "frame", "origin": "upload", "uri": "http://x.test/a.jpg"}]',
+        '"source_media": [{"kind": "text", "origin": "upload", "uri": "https://x.test/a"}]',
+        '"source_media": [{"kind": "frame", "origin": "seed", "uri": "https://x.test/a"}]',
+        '"source_media": [{"kind": "frame", "origin": "upload", "uri": "https://x/a",'
+        ' "position": 0}]',
+        '"clue_texts": {"plot": "нет такого поля"}',
+        '"countries": ["US", "GB", "FR", "DE", "IT", "ES", "PT", "NL", "BE", "LU", "AT", "CH",'
+        ' "PL", "CZ", "SK", "HU", "RO", "BG", "GR", "TR", "RU"]',
+    ],
+)
+def test_parse_line_stage3a_rejects_bad_fields(fragment: str) -> None:
+    line = f'{{"key": "film:x", "kind": "film", "title": "X", {fragment}}}'
+    assert isinstance(parse_line(line, 3), ValueError)
+
+
+def test_parse_line_requires_provenance_outside_local() -> None:
+    line = (
+        '{"key": "film:x", "kind": "film", "title": "X", "source_media":'
+        ' [{"kind": "frame", "origin": "upload", "uri": "https://x.test/a.jpg"}]}'
+    )
+    assert not isinstance(parse_line(line, 1), ValueError)
+    error = parse_line(line, 1, require_provenance=True)
+    assert isinstance(error, ValueError)
+    assert "source_url" in str(error)
+    assert not isinstance(parse_line(_STAGE3A_LINE, 1, require_provenance=True), ValueError)

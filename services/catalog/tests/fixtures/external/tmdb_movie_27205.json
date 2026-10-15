@@ -1,0 +1,55 @@
+{
+  "id": 27205,
+  "title": "Начало",
+  "original_title": "Inception",
+  "original_language": "en",
+  "overview": "Кобб — талантливый вор, лучший в опасном искусстве извлечения: он крадёт ценные секреты из глубин подсознания во время сна. Кристофер Нолан превращает «Начало» в историю о последнем деле Кобба — внедрении идеи.",
+  "tagline": "Твой разум — место преступления",
+  "release_date": "2010-07-15",
+  "runtime": 148,
+  "revenue": 839030630,
+  "popularity": 98.1,
+  "vote_average": 8.4,
+  "vote_count": 36000,
+  "poster_path": "/ru_poster_with_text.jpg",
+  "genres": [
+    {"id": 28, "name": "боевик"},
+    {"id": 878, "name": "фантастика"}
+  ],
+  "production_countries": [
+    {"iso_3166_1": "GB", "name": "United Kingdom"},
+    {"iso_3166_1": "US", "name": "United States of America"}
+  ],
+  "alternative_titles": {
+    "titles": [{"iso_3166_1": "US", "title": "Inception: The IMAX Experience", "type": ""}]
+  },
+  "translations": {
+    "translations": [
+      {"iso_639_1": "ru", "iso_3166_1": "RU", "data": {"title": "Начало", "overview": "", "tagline": ""}},
+      {"iso_639_1": "en", "iso_3166_1": "US", "data": {"title": "Inception", "overview": "Cobb steals secrets.", "tagline": ""}}
+    ]
+  },
+  "credits": {
+    "cast": [
+      {"id": 6193, "name": "Леонардо ДиКаприо", "order": 0},
+      {"id": 24045, "name": "Джозеф Гордон-Левитт", "order": 1},
+      {"id": 3899, "name": "Эллен Пейдж", "order": 2},
+      {"id": 2524, "name": "Том Харди", "order": 3}
+    ],
+    "crew": [{"id": 525, "name": "Кристофер Нолан", "job": "Director"}]
+  },
+  "images": {
+    "posters": [{"file_path": "/clean_poster.jpg", "iso_639_1": null, "vote_average": 5.5}],
+    "backdrops": [
+      {"file_path": "/frame_title.jpg", "iso_639_1": "en", "vote_average": 9.9},
+      {"file_path": "/frame1.jpg", "iso_639_1": null, "vote_average": 8.5},
+      {"file_path": "/frame2.jpg", "iso_639_1": null, "vote_average": 8.0},
+      {"file_path": "/frame3.jpg", "iso_639_1": null, "vote_average": 7.5},
+      {"file_path": "/frame4.jpg", "iso_639_1": null, "vote_average": 7.0},
+      {"file_path": "/frame5.jpg", "iso_639_1": null, "vote_average": 6.5},
+      {"file_path": "/frame6.jpg", "iso_639_1": null, "vote_average": 6.0},
+      {"file_path": "/frame7.jpg", "iso_639_1": null, "vote_average": 5.5},
+      {"file_path": "/frame8.jpg", "iso_639_1": null, "vote_average": 5.0}
+    ]
+  }
+}

@@ -12,6 +12,7 @@ ImportEntrySource]`` из composition root; источник, которого �
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -25,6 +26,12 @@ from catalog_service.application.ports import (
     ImportEntrySource,
     TaskQueue,
     UnitOfWorkFactory,
+)
+from catalog_service.domain.clue_texts import (
+    ApprovedClueTexts,
+    ClueTexts,
+    ClueTextStatus,
+    mask_plot,
 )
 from catalog_service.domain.import_job import ImportJob, ImportSource, ItemOutcome
 from catalog_service.domain.media_item import MediaItem
@@ -145,7 +152,13 @@ class RequestImport:
 
 
 class UpsertImportedItem:
-    """Создать или обновить единицу по данным импорта (одна транзакция с outbox)."""
+    """Создать или обновить единицу по данным импорта (одна транзакция с outbox).
+
+    Тексты загадок импорта (ADR 0024) попадают в черновик (``ClueTexts``): сюжет без
+    готовой маскировки маскируется ``mask_plot`` по названию, алиасам и персонам. В
+    событие они уходят только после одобрения модератором; исключение — синтетический
+    засев (``texts_authoritative``): тексты сразу одобрены и публикуются тем же событием.
+    """
 
     def __init__(
         self,
@@ -165,20 +178,58 @@ class UpsertImportedItem:
         async with self._uow() as uow:
             data = await self._resolve(uow, imported)
             item = await self._find_existing(uow, imported)
+            item_id = item.id if item is not None else self._new_id()
+            texts = await self._merge_texts(uow, item_id, imported, data)
+            if texts is not None and texts.status is ClueTextStatus.APPROVED:
+                data = dataclasses.replace(data, clue_texts=_approved(texts))
             if item is None:
-                item = MediaItem.create(
-                    self._new_id(), data, self._normalizer, current_year=current_year
-                )
+                item = MediaItem.create(item_id, data, self._normalizer, current_year=current_year)
                 await uow.items.add(item)
                 outcome = ItemOutcome.CREATED
             elif item.apply_import(data, self._normalizer, current_year=current_year):
                 await uow.items.save(item)
                 outcome = ItemOutcome.UPDATED
+            elif texts is not None:
+                outcome = ItemOutcome.UPDATED  # изменился только черновик текстов
             else:
                 return ItemOutcome.UNCHANGED
+            if texts is not None:
+                await uow.clue_texts.save(texts)  # после единицы: FK clue_texts → media_items
             uow.track(item)
             await uow.commit()
         return outcome
+
+    @staticmethod
+    async def _merge_texts(
+        uow: CatalogUnitOfWork, item_id: uuid.UUID, imported: ImportedItem, data: ItemData
+    ) -> ClueTexts | None:
+        """Тексты импорта → черновик. ``None`` — тексты не изменились."""
+        incoming = imported.clue_texts
+        if incoming is None:
+            return None
+        texts = await uow.clue_texts.get(item_id) or ClueTexts(item_id)
+        masked = incoming.plot_masked
+        if masked is None and incoming.plot_raw:
+            masked = mask_plot(
+                incoming.plot_raw,
+                titles=[data.title, data.original_title or "", *(a.text for a in data.aliases)],
+                person_names=[p.name for p in data.persons],
+            )
+        changed = texts.apply_import(
+            plot_raw=incoming.plot_raw,
+            plot_masked=masked,
+            tagline=incoming.tagline,
+            emoji=incoming.emoji,
+            authoritative=imported.texts_authoritative,
+        )
+        if (
+            imported.texts_authoritative
+            and texts.status is ClueTextStatus.DRAFT
+            and not _approved(texts).is_empty
+        ):
+            texts.approve(texts.revision)
+            changed = True
+        return texts if changed else None
 
     @staticmethod
     async def _find_existing(uow: CatalogUnitOfWork, imported: ImportedItem) -> MediaItem | None:
@@ -207,7 +258,12 @@ class UpsertImportedItem:
             external_refs=dict(imported.external_refs),
             metrics=imported.metrics,
             source_media=imported.source_media,
+            countries=imported.countries,
         )
+
+
+def _approved(texts: ClueTexts) -> ApprovedClueTexts:
+    return ApprovedClueTexts(texts.plot_masked, texts.tagline, texts.emoji)
 
 
 class RunImport:

@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from catalog_service.domain.clue_texts import ApprovedClueTexts
 from gv_core.errors import DomainError, InvalidInputError
 
 MIN_YEAR = 1870
 FUTURE_YEARS = 2
 MAX_TITLE_LEN = 300
 MAX_GENRE_LEN = 64
+MAX_COUNTRIES = 20
+MAX_SOURCE_POSITION = 100
+MAX_SOURCE_URL = 2000
+MAX_LICENSE_NOTE = 500
+_COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 
 # Пространство имён для детерминированных id исходников (uuid5): одна и та же пара
 # (единица, kind, uri) при повторном импорте получает тот же id — на него ссылается
@@ -72,11 +79,13 @@ class PersonRole(StrEnum):
 
 
 class SourceMediaKind(StrEnum):
-    """Вид исходника для загадок."""
+    """Вид исходника для загадок (контракт ``source_media[].kind``)."""
 
     AUDIO = "audio"
     FRAME = "frame"
     POSTER = "poster"
+    SOUNDTRACK = "soundtrack"
+    AUDIO_CLIP = "audio_clip"
 
 
 class SourceMediaOrigin(StrEnum):
@@ -225,14 +234,38 @@ def _opt_int(value: Any) -> int | None:
     return None if value is None else int(value)
 
 
+def _check_source(position: int, source_url: str | None, license_note: str | None) -> None:
+    if not 1 <= position <= MAX_SOURCE_POSITION:
+        raise DomainError(
+            f"position исходника вне 1..{MAX_SOURCE_POSITION}", code="catalog.invalid_source"
+        )
+    if source_url is not None and not 0 < len(source_url) <= MAX_SOURCE_URL:
+        raise DomainError("недопустимый source_url", code="catalog.invalid_source")
+    if license_note is not None and not 0 < len(license_note) <= MAX_LICENSE_NOTE:
+        raise DomainError("недопустимый license_note", code="catalog.invalid_source")
+
+
 @dataclass(frozen=True, slots=True)
 class SourceMedia:
-    """Исходник для загадок (постер, кадр, аудио)."""
+    """Исходник для загадок (постер, кадр, аудио, саундтрек, звук фильма).
+
+    Attributes:
+        position: Порядок среди исходников своего вида (кадры ``frame_sequence``:
+            1 — самый сложный).
+        source_url: Откуда взят (D6 плана этапа 3a): по нему снимают по жалобе.
+        license_note: Основание использования (D6).
+    """
 
     id: uuid.UUID
     kind: SourceMediaKind
     origin: SourceMediaOrigin
     uri: str
+    position: int = 1
+    source_url: str | None = None
+    license_note: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_source(self.position, self.source_url, self.license_note)
 
     def to_contract(self) -> dict[str, Any]:
         """Представление для событий."""
@@ -241,6 +274,9 @@ class SourceMedia:
             "kind": self.kind.value,
             "origin": self.origin.value,
             "uri": self.uri,
+            "position": self.position,
+            "source_url": self.source_url,
+            "license_note": self.license_note,
         }
 
 
@@ -251,11 +287,25 @@ class SourceMediaDraft:
     kind: SourceMediaKind
     origin: SourceMediaOrigin
     uri: str
+    position: int = 1
+    source_url: str | None = None
+    license_note: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_source(self.position, self.source_url, self.license_note)
 
     def materialize(self, media_item_id: uuid.UUID) -> SourceMedia:
         """Исходник с детерминированным id (uuid5 от единицы, вида и адреса)."""
         ref = uuid.uuid5(_SOURCE_MEDIA_NS, f"{media_item_id}:{self.kind.value}:{self.uri}")
-        return SourceMedia(id=ref, kind=self.kind, origin=self.origin, uri=self.uri)
+        return SourceMedia(
+            id=ref,
+            kind=self.kind,
+            origin=self.origin,
+            uri=self.uri,
+            position=self.position,
+            source_url=self.source_url,
+            license_note=self.license_note,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,6 +325,9 @@ class ItemData:
     external_refs: dict[ExternalSource, str] = field(default_factory=dict)
     metrics: MediaMetrics = field(default_factory=MediaMetrics)
     source_media: tuple[SourceMediaDraft, ...] = ()
+    countries: tuple[str, ...] = ()
+    # Одобренные тексты загадок; ``None`` — импорт их не меняет (их меняет только одобрение).
+    clue_texts: ApprovedClueTexts | None = None
 
     @property
     def domain(self) -> MediaDomain:
@@ -299,6 +352,22 @@ def validate_title(title: str) -> str:
     if not value or len(value) > MAX_TITLE_LEN:
         raise DomainError("недопустимое название", code="catalog.invalid_title")
     return value
+
+
+def normalize_countries(countries: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """Страны ISO 3166-1 alpha-2 в верхнем регистре, без дублей, не больше 20.
+
+    Raises:
+        DomainError: код страны не ISO alpha-2.
+    """
+    result: list[str] = []
+    for raw in countries:
+        code = raw.strip().upper()
+        if not _COUNTRY_RE.match(code):
+            raise DomainError(f"недопустимый код страны: {raw!r}", code="catalog.invalid_country")
+        if code not in result:
+            result.append(code)
+    return tuple(result[:MAX_COUNTRIES])
 
 
 def normalize_genre(genre: str) -> str | None:

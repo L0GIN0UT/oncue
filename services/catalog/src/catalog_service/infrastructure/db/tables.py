@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    ARRAY,
     CheckConstraint,
     Column,
     DateTime,
@@ -21,6 +22,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Table,
+    Text,
     UniqueConstraint,
     Uuid,
     func,
@@ -57,6 +59,9 @@ media_items = Table(
     Column("popularity", Float, nullable=False, server_default=text("0")),
     Column("blocked_reason_code", String(64), nullable=True),
     Column("version", Integer, nullable=False),
+    # 0004 (этап 3a): страны производства и одобренные тексты загадок (ADR 0024).
+    Column("countries", ARRAY(String(2)), nullable=False, server_default=text("'{}'")),
+    Column("clue_texts", JSONB(none_as_null=True), nullable=True),
     _ts("created_at"),
     _ts("updated_at"),
     CheckConstraint("domain IN ('music', 'film')", name="domain_known"),
@@ -163,10 +168,59 @@ source_media_refs = Table(
     Column("kind", String(16), nullable=False),
     Column("origin", String(16), nullable=False),
     Column("uri", String(2000), nullable=False),
+    # Порядок строки в снимке единицы (не путать с kind_position).
     Column("position", SmallInteger, nullable=False),
-    CheckConstraint("kind IN ('audio', 'frame', 'poster')", name="kind_known"),
+    # 0004: порядок среди исходников своего вида (контракт source_media[].position) и
+    # происхождение (D6 плана этапа 3a).
+    Column("kind_position", SmallInteger, nullable=False, server_default=text("1")),
+    Column("source_url", String(2000), nullable=True),
+    Column("license_note", String(500), nullable=True),
+    CheckConstraint(
+        "kind IN ('audio', 'frame', 'poster', 'soundtrack', 'audio_clip')", name="kind_known"
+    ),
     CheckConstraint("origin IN ('upload', 'tmdb')", name="origin_known"),
+    CheckConstraint("kind_position BETWEEN 1 AND 100", name="kind_position_range"),
     Index("ix_source_media_refs_media_item_id", "media_item_id"),
+)
+
+# Тексты загадок (ADR 0024): черновик и ревизии; одобренный снимок — media_items.clue_texts.
+clue_texts = Table(
+    "clue_texts",
+    _md,
+    Column("media_item_id", Uuid(as_uuid=True), _fk_item(), primary_key=True),
+    Column("plot_raw", Text, nullable=True),
+    Column("plot_masked", String(2000), nullable=True),
+    Column("tagline", String(300), nullable=True),
+    Column("emoji", String(64), nullable=True),
+    Column("status", String(16), nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("approved_revision", Integer, nullable=True),
+    _ts("updated_at"),
+    CheckConstraint("status IN ('draft', 'approved')", name="status_known"),
+    CheckConstraint("revision >= 0", name="revision_non_negative"),
+    CheckConstraint(
+        "approved_revision IS NULL OR approved_revision BETWEEN 1 AND revision",
+        name="approved_revision_range",
+    ),
+    CheckConstraint("plot_raw IS NULL OR length(plot_raw) <= 5000", name="plot_raw_length"),
+)
+
+# Задания переопубликации единиц (RepublishItems): курсор порций и счётчик.
+republish_jobs = Table(
+    "republish_jobs",
+    _md,
+    Column("id", Uuid(as_uuid=True), primary_key=True),
+    Column("domain", String(16), nullable=True),
+    Column("status", String(16), nullable=False),
+    Column("cursor", Uuid(as_uuid=True), nullable=True),
+    Column("published", Integer, nullable=False, server_default=text("0")),
+    Column("actor_id", Uuid(as_uuid=True), nullable=False),
+    Column("reason", String(500), nullable=False),
+    _ts("created_at"),
+    _ts("updated_at"),
+    CheckConstraint("domain IS NULL OR domain IN ('music', 'film')", name="domain_known"),
+    CheckConstraint("status IN ('running', 'done')", name="status_known"),
+    CheckConstraint("published >= 0", name="published_non_negative"),
 )
 
 media_item_clue_status = Table(
