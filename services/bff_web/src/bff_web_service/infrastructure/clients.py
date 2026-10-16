@@ -15,18 +15,26 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from bff_web_service.application.dto import (
+    AnswerFormat,
+    Bracket,
+    BracketPick,
     DailyRoundStat,
     DailyStatus,
     Domain,
     Item,
     Me,
     Mode,
+    ModeStart,
     Person,
+    PersonalRecord,
+    Presentation,
     Preset,
+    ResultRecord,
     ResultRound,
     Reveal,
     SessionResult,
     Share,
+    SubjectPick,
 )
 from bff_web_service.application.ports import UpstreamUnavailableError
 from bff_web_service.infrastructure.http import UpstreamHttp
@@ -44,6 +52,21 @@ class _PresetIn(_In):
     title_key: str
 
 
+class _SubjectPickIn(_In):
+    roles: list[str]
+    max: int = Field(ge=1)
+
+
+class _StartIn(_In):
+    subject: _SubjectPickIn | None = None
+
+    def dto(self) -> ModeStart:
+        subject = self.subject
+        return ModeStart(
+            subject=SubjectPick(list(subject.roles), subject.max) if subject is not None else None
+        )
+
+
 class _ModeIn(_In):
     key: str
     version: int
@@ -54,6 +77,9 @@ class _ModeIn(_In):
     rounds: int
     allow_guest: bool
     presets: list[_PresetIn] | None = None
+    answer_format: AnswerFormat = "classic"
+    presentation: Presentation = "score"
+    start: _StartIn | None = None
 
     def dto(self) -> Mode:
         return Mode(
@@ -68,6 +94,9 @@ class _ModeIn(_In):
             presets=[Preset(p.id, p.title_key) for p in self.presets]
             if self.presets is not None
             else None,
+            answer_format=self.answer_format,
+            presentation=self.presentation,
+            start=self.start.dto() if self.start is not None else None,
         )
 
 
@@ -113,12 +142,38 @@ class _ShareIn(_In):
     text: str
 
 
+class _ResultRecordIn(_In):
+    best: int
+    is_new: bool
+    percentile: float | None = Field(default=None, ge=0, le=100)
+
+
+class _BracketPickIn(_In):
+    stage: int
+    winner: str
+    loser: str
+
+
+class _BracketIn(_In):
+    champion: str
+    picks: list[_BracketPickIn]
+
+    def dto(self) -> Bracket:
+        return Bracket(
+            champion=self.champion,
+            picks=[BracketPick(p.stage, p.winner, p.loser) for p in self.picks],
+        )
+
+
 class _ResultIn(_In):
     score: int
     max_score: int
     rounds: list[_RoundIn]
     share: _ShareIn
     daily_stats: list[_StatIn] | None = None
+    presentation: Presentation = "score"
+    record: _ResultRecordIn | None = None
+    bracket: _BracketIn | None = None
 
     def dto(self) -> SessionResult:
         return SessionResult(
@@ -138,11 +193,33 @@ class _ResultIn(_In):
             daily_stats=[DailyRoundStat(s.index, s.exact_pct) for s in self.daily_stats]
             if self.daily_stats is not None
             else None,
+            presentation=self.presentation,
+            record=ResultRecord(self.record.best, self.record.is_new, self.record.percentile)
+            if self.record is not None
+            else None,
+            bracket=self.bracket.dto() if self.bracket is not None else None,
+        )
+
+
+class _RecordIn(_In):
+    mode_key: str
+    best: int
+    achieved_at: datetime
+    percentile: float | None = Field(default=None, ge=0, le=100)
+
+    def dto(self) -> PersonalRecord:
+        return PersonalRecord(
+            mode_key=self.mode_key,
+            best=self.best,
+            achieved_at=self.achieved_at,
+            percentile=self.percentile,
         )
 
 
 _MODES = TypeAdapter(list[_ModeIn])
 _DAILIES = TypeAdapter(list[_DailyIn])
+_RECORDS = TypeAdapter(list[_RecordIn])
+_RESULT = TypeAdapter(_ResultIn)
 
 
 def _parse[T](service: str, adapter: TypeAdapter[T], body: bytes) -> T:
@@ -156,8 +233,8 @@ def _parse[T](service: str, adapter: TypeAdapter[T], body: bytes) -> T:
 class HttpGameClient:
     """Публичный API game (``/v1``).
 
-    Список режимов публичный и одинаков для всех — кэшируется (``modes_ttl_s``); дейлики и
-    итог личные и не кэшируются никогда.
+    Список режимов публичный и одинаков для всех — кэшируется (``modes_ttl_s``); дейлики,
+    рекорды и итог личные и не кэшируются никогда.
     """
 
     def __init__(self, http: UpstreamHttp, *, modes_ttl_s: int, cache_prefix: str) -> None:
@@ -173,7 +250,7 @@ class HttpGameClient:
         return [m.dto() for m in modes]
 
     async def daily(self, token: str, domain: Domain | None) -> list[DailyStatus]:
-        """Дейлики субъекта токена."""
+        """Плановые режимы периода (дейлики и недельная сетка) субъекта токена."""
         params = {"domain": domain} if domain is not None else None
         body = await self._http.get("/v1/daily", token=token, params=params)
         return [d.dto() for d in _parse(self._http.service, _DAILIES, body)]
@@ -181,7 +258,12 @@ class HttpGameClient:
     async def session_result(self, token: str, session_id: UUID) -> SessionResult:
         """Итог своей завершённой сессии."""
         body = await self._http.get(f"/v1/sessions/{session_id}/result", token=token)
-        return _parse(self._http.service, TypeAdapter(_ResultIn), body).dto()
+        return _parse(self._http.service, _RESULT, body).dto()
+
+    async def records(self, token: str) -> list[PersonalRecord]:
+        """Личные рекорды субъекта токена (все режимы)."""
+        body = await self._http.get("/v1/me/records", token=token)
+        return [r.dto() for r in _parse(self._http.service, _RECORDS, body)]
 
 
 # ----------------------------------------------------------------------------- catalog

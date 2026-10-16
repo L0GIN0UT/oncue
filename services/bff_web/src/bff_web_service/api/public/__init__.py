@@ -134,6 +134,11 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         "/pages/solo",
         response_model=SoloPage,
         summary="Хаб соло-режимов",
+        description=(
+            "Блоки: дейлики и недельная сетка субъекта, витрина режимов по группам "
+            "(`source_type`, `presentation`), личные рекорды (только пользователю; гостю и "
+            "анониму — `records: null`). Ответ с токеном — `private, no-store`."
+        ),
         responses=problem_responses(422),
     )
     async def solo_page(

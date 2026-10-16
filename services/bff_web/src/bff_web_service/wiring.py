@@ -14,6 +14,7 @@ from bff_web_service.application.queries import (
     GetResultsPage,
     GetSession,
     GetSoloPage,
+    PageLayout,
 )
 from bff_web_service.infrastructure.cache import RedisPageCache
 from bff_web_service.infrastructure.clients import (
@@ -56,14 +57,16 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         upstream("catalog", up.catalog_url), item_ttl_s=pc.item_ttl_s, cache_prefix=pc.key_prefix
     )
     identity = HttpIdentityClient(upstream("identity", up.identity_url))
+    pages = settings.pages
+    layout = PageLayout.of(
+        random_source_types=pages.random_source_types,
+        scheduled_source_types=pages.scheduled_source_types,
+        weekly_source_types=pages.weekly_source_types,
+    )
     return BffDeps(
         get_session=GetSession(identity),
-        get_home=GetHomePage(game, concurrency=up.max_concurrency),
-        get_solo=GetSoloPage(
-            game,
-            concurrency=up.max_concurrency,
-            random_source_types=settings.pages.random_source_types,
-        ),
+        get_home=GetHomePage(game, concurrency=up.max_concurrency, layout=layout),
+        get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),
         get_results=GetResultsPage(game, catalog, concurrency=up.max_concurrency),
         http_cache=settings.http_cache,
     )

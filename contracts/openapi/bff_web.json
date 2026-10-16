@@ -121,8 +121,116 @@
         "title": "Block[list[ModeCard]]",
         "type": "object"
       },
+      "Block_list_ModeGroup__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModeGroup"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[ModeGroup]]",
+        "type": "object"
+      },
+      "Block_list_RecordCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RecordCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[RecordCard]]",
+        "type": "object"
+      },
+      "BracketPick": {
+        "description": "Выбор в сетке: тур и названия победителя и проигравшего.",
+        "properties": {
+          "loser": {
+            "title": "Loser",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "winner": {
+            "title": "Winner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "winner",
+          "loser"
+        ],
+        "title": "BracketPick",
+        "type": "object"
+      },
+      "BracketSummary": {
+        "description": "Итог сетки: чемпион и выборы по турам.",
+        "properties": {
+          "champion": {
+            "title": "Champion",
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/BracketPick"
+            },
+            "title": "Picks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "champion",
+          "picks"
+        ],
+        "title": "BracketSummary",
+        "type": "object"
+      },
       "DailyCard": {
-        "description": "Карточка дейлика: режим + статус субъекта (``game /v1/modes`` + ``/v1/daily``).",
+        "description": "Карточка планового режима периода + статус субъекта (``game /v1/modes`` + ``/v1/daily``).\n\nДейлик — период «день», недельная сетка — «неделя»; ``day`` — начало периода,\n``next_reset_at`` — его конец.",
         "properties": {
           "day": {
             "format": "date",
@@ -148,6 +256,16 @@
           "next_reset_at": {
             "format": "date-time",
             "title": "Next Reset At",
+            "type": "string"
+          },
+          "presentation": {
+            "default": "score",
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
             "type": "string"
           },
           "score": {
@@ -222,15 +340,21 @@
         "description": "Блоки главной.",
         "properties": {
           "dailies": {
-            "$ref": "#/components/schemas/Block_list_DailyCard__"
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы дня (без недельной сетки)"
           },
           "modes": {
             "$ref": "#/components/schemas/Block_list_ModeCard__"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы недели (сетка)"
           }
         },
         "required": [
           "dailies",
-          "modes"
+          "modes",
+          "weekly"
         ],
         "title": "HomeBlocks",
         "type": "object"
@@ -334,6 +458,16 @@
             "title": "Allow Guest",
             "type": "boolean"
           },
+          "answer_format": {
+            "default": "classic",
+            "description": "Реестр ответов фронта",
+            "enum": [
+              "classic",
+              "pick"
+            ],
+            "title": "Answer Format",
+            "type": "string"
+          },
           "clue_type": {
             "title": "Clue Type",
             "type": "string"
@@ -348,6 +482,17 @@
           },
           "key": {
             "title": "Key",
+            "type": "string"
+          },
+          "presentation": {
+            "default": "score",
+            "description": "Реестр итогов фронта",
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
             "type": "string"
           },
           "presets": {
@@ -365,12 +510,24 @@
             "title": "Presets"
           },
           "rounds": {
+            "description": "Число раундов; у марафона и пары — максимум",
             "title": "Rounds",
             "type": "integer"
           },
           "source_type": {
             "title": "Source Type",
             "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeStartCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — выбирать нечего"
           },
           "title_key": {
             "title": "Title Key",
@@ -387,6 +544,55 @@
           "allow_guest"
         ],
         "title": "ModeCard",
+        "type": "object"
+      },
+      "ModeGroup": {
+        "description": "Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``.",
+        "properties": {
+          "modes": {
+            "items": {
+              "$ref": "#/components/schemas/ModeCard"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "presentation": {
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_type",
+          "presentation",
+          "modes"
+        ],
+        "title": "ModeGroup",
+        "type": "object"
+      },
+      "ModeStartCard": {
+        "description": "Что игрок выбирает перед стартом режима.",
+        "properties": {
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectPickCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ModeStartCard",
         "type": "object"
       },
       "PersonCard": {
@@ -506,6 +712,100 @@
         "title": "Problem",
         "type": "object"
       },
+      "RecordCard": {
+        "description": "Личный рекорд режима (``game /v1/me/records``).",
+        "properties": {
+          "achieved_at": {
+            "format": "date-time",
+            "title": "Achieved At",
+            "type": "string"
+          },
+          "best": {
+            "title": "Best",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          },
+          "presentation": {
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode_key",
+          "domain",
+          "title_key",
+          "presentation",
+          "best",
+          "achieved_at"
+        ],
+        "title": "RecordCard",
+        "type": "object"
+      },
+      "ResultRecord": {
+        "description": "Рекорд в итоге (только пользователи, режимы с рекордами).",
+        "properties": {
+          "best": {
+            "title": "Best",
+            "type": "integer"
+          },
+          "is_new": {
+            "title": "Is New",
+            "type": "boolean"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          }
+        },
+        "required": [
+          "best",
+          "is_new"
+        ],
+        "title": "ResultRecord",
+        "type": "object"
+      },
       "ResultRoundCard": {
         "description": "Раунд итога (из ``game /v1/sessions/{id}/result``).",
         "properties": {
@@ -580,6 +880,17 @@
       "ResultSummary": {
         "description": "Итог сессии для экрана результатов.",
         "properties": {
+          "bracket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BracketSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у сетки"
+          },
           "max_score": {
             "title": "Max Score",
             "type": "integer"
@@ -594,6 +905,28 @@
               }
             ],
             "title": "Mode Key"
+          },
+          "presentation": {
+            "default": "score",
+            "description": "Реестр итогов фронта",
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultRecord"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — гость или без рекордов"
           },
           "rounds": {
             "items": {
@@ -699,15 +1032,38 @@
         "description": "Блоки хаба соло-режимов.",
         "properties": {
           "daily": {
-            "$ref": "#/components/schemas/Block_list_DailyCard__"
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы дня"
+          },
+          "modes": {
+            "$ref": "#/components/schemas/Block_list_ModeGroup__",
+            "description": "Витрина: неплановые режимы домена по группам (source_type, presentation)"
           },
           "random": {
-            "$ref": "#/components/schemas/Block_list_ModeCard__"
+            "$ref": "#/components/schemas/Block_list_ModeCard__",
+            "description": "Случайные режимы (витрина этапа 2)"
+          },
+          "records": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_list_RecordCard__"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Личные рекорды; null — гость или аноним"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы недели (сетка)"
           }
         },
         "required": [
           "daily",
-          "random"
+          "random",
+          "modes",
+          "weekly"
         ],
         "title": "SoloBlocks",
         "type": "object"
@@ -752,6 +1108,29 @@
           "kind"
         ],
         "title": "Subject",
+        "type": "object"
+      },
+      "SubjectPickCard": {
+        "description": "Выбор персон перед стартом (марафон): ``GET game /v1/modes/{key}/subjects``.",
+        "properties": {
+          "max": {
+            "minimum": 1.0,
+            "title": "Max",
+            "type": "integer"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "max"
+        ],
+        "title": "SubjectPickCard",
         "type": "object"
       }
     }
@@ -916,6 +1295,7 @@
     },
     "/v1/pages/solo": {
       "get": {
+        "description": "Блоки: дейлики и недельная сетка субъекта, витрина режимов по группам (`source_type`, `presentation`), личные рекорды (только пользователю; гостю и анониму — `records: null`). Ответ с токеном — `private, no-store`.",
         "operationId": "solo_page_v1_pages_solo_get",
         "parameters": [
           {
