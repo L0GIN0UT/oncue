@@ -3,10 +3,10 @@
 Доступ — ``admin.access`` + конкретное право (миграция identity ``0007``):
 ``collections.view`` (чтение), ``collections.curate`` (кураторские, «рекомендуемое»),
 ``collections.unpublish`` (скрыть/показать), ``collections.restrict_author``. Мутации —
-``Idempotency-Key`` и ``reason`` (аудит). Шаг 0a: ручки отвечают 501 до потока K.
+``Idempotency-Key`` и ``reason`` (аудит ``admin_actions``).
 """
 
-# ruff: noqa: ARG001 — заглушки этапа 3b (501) объявляют параметры контракта до реализации.
+# ruff: noqa: ARG001 — параметр principal нужен ради зависимости с проверкой права.
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
 
+from collections_service.api.common import ApiServices, NoStoreRoute, admin_ctx
 from collections_service.api.schemas import (
     AdminCollectionDetail,
     AdminCollectionOut,
@@ -28,8 +29,8 @@ from collections_service.api.schemas import (
     ReasonRequest,
     RestrictionOut,
 )
+from collections_service.domain.model import DraftBody
 from gv_auth import Principal, require_perm
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 ADMIN_ACCESS = "admin.access"
@@ -41,22 +42,27 @@ Restrictor = Annotated[
 ]
 CollectionId = Annotated[UUID, Path(description="Идентификатор сборника")]
 UserId = Annotated[UUID, Path(description="Пользователь-автор")]
-STAGE_3B = "этап 3b: реализуется в потоке K (docs/plans/stage-3b.md)"
 
-_READ = problem_responses(401, 403, 422, 501)
-_READ_ONE = problem_responses(401, 403, 404, 422, 501)
-_MUTATE = problem_responses(401, 403, 404, 409, 422, 501)
+_READ = problem_responses(401, 403, 422)
+_READ_ONE = problem_responses(401, 403, 404, 422)
+_MUTATE = problem_responses(401, 403, 404, 409, 422)
 
 
-def build_admin_router() -> APIRouter:
+def _body(data: CuratedCollectionIn | CuratedCollectionUpdate) -> DraftBody:
+    """Тело кураторского сборника как тело черновика (те же проверки публикации)."""
+    raw = data.model_dump(mode="json", exclude={"reason", "domain", "base_version"})
+    return DraftBody.from_json(raw)
+
+
+def build_admin_router(c: ApiServices) -> APIRouter:
     """Админские ручки collections."""
-    router = APIRouter(prefix="/admin/v1", tags=["admin"])
+    router = APIRouter(prefix="/admin/v1", tags=["admin"], route_class=NoStoreRoute)
 
     @router.get(
         "/collections",
         response_model=AdminCollectionPage,
         summary="Сборники (включая черновики и скрытые)",
-        description="Поиск по названию и автору (нику).",
+        description="Поиск по названию и автору (нику); удалённые не показываются.",
         responses=_READ,
     )
     async def admin_list(
@@ -68,16 +74,20 @@ def build_admin_router() -> APIRouter:
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
     ) -> AdminCollectionPage:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.queries.admin_list(
+            q=q, status=status_, kind=kind, cursor=cursor, limit=limit
+        )
+        return AdminCollectionPage.model_validate(data)
 
     @router.get(
         "/collections/{collection_id}",
         response_model=AdminCollectionDetail,
         summary="Сборник с составом",
+        description="Опубликованный состав; у ни разу не опубликованного — состав черновика.",
         responses=_READ_ONE,
     )
     async def admin_get(collection_id: CollectionId, principal: Viewer) -> AdminCollectionDetail:
-        raise NotImplementedYetError(STAGE_3B)
+        return AdminCollectionDetail.model_validate(await c.queries.admin_detail(collection_id))
 
     @router.post(
         "/collections",
@@ -94,15 +104,19 @@ def build_admin_router() -> APIRouter:
     async def admin_create(
         body: CuratedCollectionIn, principal: Curator, key: IdempotencyKey
     ) -> AdminCollectionDetail:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.create_curated(
+            admin_ctx(principal, body.reason, key), domain=body.domain, body=_body(body)
+        )
+        return AdminCollectionDetail.model_validate(data)
 
     @router.put(
         "/collections/{collection_id}",
         response_model=AdminCollectionDetail,
         summary="Новая версия кураторского сборника",
         description=(
-            "409 `collections.version_conflict` — `base_version` устарела; 409 "
-            "`collections.not_curated` — UGC правит только автор."
+            "409 `collections.version_conflict` — `base_version` устарела "
+            "(`details.current_version`); 409 `collections.not_curated` — UGC правит только "
+            "автор; 422 `collections.publish_invalid`."
         ),
         responses=_MUTATE,
     )
@@ -112,7 +126,13 @@ def build_admin_router() -> APIRouter:
         principal: Curator,
         key: IdempotencyKey,
     ) -> AdminCollectionDetail:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.update_curated(
+            admin_ctx(principal, body.reason, key),
+            collection_id,
+            base_version=body.base_version,
+            body=_body(body),
+        )
+        return AdminCollectionDetail.model_validate(data)
 
     @router.post(
         "/collections/{collection_id}/hide",
@@ -120,7 +140,8 @@ def build_admin_router() -> APIRouter:
         summary="Скрыть сборник",
         description=(
             "Пропадает из каталога, старт сессии в game — 404; автор видит плашку. Событие "
-            "`collections.CollectionUpdated` (`status: hidden`)."
+            "`collections.CollectionUpdated` (`status: hidden`); повтор — без события. 409 "
+            "`collections.not_published` — сборник ещё не публиковался."
         ),
         responses=_MUTATE,
     )
@@ -130,12 +151,16 @@ def build_admin_router() -> APIRouter:
         principal: Unpublisher,
         key: IdempotencyKey,
     ) -> AdminCollectionOut:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.set_hidden(
+            admin_ctx(principal, body.reason, key), collection_id, hidden=True
+        )
+        return AdminCollectionOut.model_validate(data)
 
     @router.post(
         "/collections/{collection_id}/unhide",
         response_model=AdminCollectionOut,
         summary="Показать скрытый сборник",
+        description="Событие `collections.CollectionUpdated` (`status: published`).",
         responses=_MUTATE,
     )
     async def admin_unhide(
@@ -144,13 +169,19 @@ def build_admin_router() -> APIRouter:
         principal: Unpublisher,
         key: IdempotencyKey,
     ) -> AdminCollectionOut:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.set_hidden(
+            admin_ctx(principal, body.reason, key), collection_id, hidden=False
+        )
+        return AdminCollectionOut.model_validate(data)
 
     @router.put(
         "/collections/{collection_id}/featured",
         response_model=AdminCollectionOut,
         summary="Отметка «рекомендуемое»",
-        description="Кураторские и UGC (D14); только опубликованные.",
+        description=(
+            "Кураторские и UGC (D14); только опубликованные (409 `collections.not_published`). "
+            "Без `rank` — в конце блока (1000). Событий нет; каталог `sort=featured`."
+        ),
         responses=_MUTATE,
     )
     async def admin_featured(
@@ -159,7 +190,13 @@ def build_admin_router() -> APIRouter:
         principal: Curator,
         key: IdempotencyKey,
     ) -> AdminCollectionOut:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.set_featured(
+            admin_ctx(principal, body.reason, key),
+            collection_id,
+            featured=body.featured,
+            rank=body.rank,
+        )
+        return AdminCollectionOut.model_validate(data)
 
     @router.post(
         "/authors/{user_id}/restriction",
@@ -171,12 +208,14 @@ def build_admin_router() -> APIRouter:
     async def restrict_author(
         user_id: UserId, body: ReasonRequest, principal: Restrictor, key: IdempotencyKey
     ) -> RestrictionOut:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.restrict(admin_ctx(principal, body.reason, key), user_id)
+        return RestrictionOut.model_validate(data)
 
     @router.delete(
         "/authors/{user_id}/restriction",
         response_model=RestrictionOut,
         summary="Снять ограничение автора",
+        description="Идемпотентно: без ограничения — тот же ответ `restricted: false`.",
         responses=_MUTATE,
     )
     async def unrestrict_author(
@@ -185,6 +224,7 @@ def build_admin_router() -> APIRouter:
         principal: Restrictor,
         key: IdempotencyKey,
     ) -> RestrictionOut:
-        raise NotImplementedYetError(STAGE_3B)
+        data = await c.admin.unrestrict(admin_ctx(principal, body.reason, key), user_id)
+        return RestrictionOut.model_validate(data)
 
     return router

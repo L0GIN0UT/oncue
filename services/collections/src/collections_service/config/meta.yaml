@@ -1,0 +1,101 @@
+# Словари конструктора сборников (план этапа 3b §2.5, D6, D10).
+# Свой файл — GV_COLLECTIONS__META_CONFIG (заменяет этот целиком).
+#
+# cover_presets — обложки без постеров: градиент (#rrggbb) и эмодзи.
+# tags — свободных тегов нет; title_key — ключ перевода фронтенда,
+#   domains — где тег доступен, search — слова, по которым сборник ищется в каталоге.
+cover_presets:
+  - id: night
+    gradient: ["#0f2027", "#203a43", "#2c5364"]
+    emoji: "🌙"
+  - id: sunset
+    gradient: ["#ff7e5f", "#feb47b"]
+    emoji: "🌅"
+  - id: neon
+    gradient: ["#fc466b", "#3f5efb"]
+    emoji: "✨"
+  - id: forest
+    gradient: ["#134e5e", "#71b280"]
+    emoji: "🌲"
+  - id: cinema
+    gradient: ["#232526", "#414345"]
+    emoji: "🎬"
+  - id: vinyl
+    gradient: ["#41295a", "#2f0743"]
+    emoji: "🎵"
+  - id: popcorn
+    gradient: ["#f7971e", "#ffd200"]
+    emoji: "🍿"
+  - id: ocean
+    gradient: ["#2193b0", "#6dd5ed"]
+    emoji: "🌊"
+
+tags:
+  - key: classic
+    title_key: collections.tags.classic
+    domains: [music, film]
+    search: [классика, classic]
+  - key: nineties
+    title_key: collections.tags.nineties
+    domains: [music, film]
+    search: [90-е, девяностые, 90s]
+  - key: eighties
+    title_key: collections.tags.eighties
+    domains: [music, film]
+    search: [80-е, восьмидесятые, 80s]
+  - key: soviet
+    title_key: collections.tags.soviet
+    domains: [music, film]
+    search: [советское, ссср, советские]
+  - key: russian
+    title_key: collections.tags.russian
+    domains: [music, film]
+    search: [русское, российское, отечественное]
+  - key: hard
+    title_key: collections.tags.hard
+    domains: [music, film]
+    search: [сложно, хардкор, hard]
+  - key: family
+    title_key: collections.tags.family
+    domains: [film]
+    search: [семейное, детское, family]
+  - key: horror
+    title_key: collections.tags.horror
+    domains: [film]
+    search: [ужасы, хоррор, horror]
+  - key: comedy
+    title_key: collections.tags.comedy
+    domains: [film]
+    search: [комедии, комедия, comedy]
+  - key: scifi
+    title_key: collections.tags.scifi
+    domains: [film]
+    search: [фантастика, sci-fi]
+  - key: animation
+    title_key: collections.tags.animation
+    domains: [film]
+    search: [мультфильмы, анимация, аниме]
+  - key: series
+    title_key: collections.tags.series
+    domains: [film]
+    search: [сериалы, сериал]
+  - key: rock
+    title_key: collections.tags.rock
+    domains: [music]
+    search: [рок, rock]
+  - key: pop
+    title_key: collections.tags.pop
+    domains: [music]
+    search: [поп, pop]
+  - key: hiphop
+    title_key: collections.tags.hiphop
+    domains: [music]
+    search: [рэп, хип-хоп, hip-hop]
+  - key: electronic
+    title_key: collections.tags.electronic
+    domains: [music]
+    search: [электроника, electronic]
+  - key: soundtrack
+    title_key: collections.tags.soundtrack
+    domains: [music]
+    search: [саундтреки, ost, soundtrack]

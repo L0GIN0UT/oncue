@@ -1930,6 +1930,7 @@
   "paths": {
     "/admin/v1/authors/{user_id}/restriction": {
       "delete": {
+        "description": "Идемпотентно: без ограничения — тот же ответ `restricted: false`.",
         "operationId": "unrestrict_author_admin_v1_authors__user_id__restriction_delete",
         "parameters": [
           {
@@ -2058,21 +2059,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Снять ограничение автора",
@@ -2210,21 +2196,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Ограничить автора",
@@ -2235,7 +2206,7 @@
     },
     "/admin/v1/collections": {
       "get": {
-        "description": "Поиск по названию и автору (нику).",
+        "description": "Поиск по названию и автору (нику); удалённые не показываются.",
         "operationId": "admin_list_admin_v1_collections_get",
         "parameters": [
           {
@@ -2382,21 +2353,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сборники (включая черновики и скрытые)",
@@ -2522,21 +2478,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать кураторский сборник",
@@ -2547,6 +2488,7 @@
     },
     "/admin/v1/collections/{collection_id}": {
       "get": {
+        "description": "Опубликованный состав; у ни разу не опубликованного — состав черновика.",
         "operationId": "admin_get_admin_v1_collections__collection_id__get",
         "parameters": [
           {
@@ -2632,21 +2574,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сборник с составом",
@@ -2655,7 +2582,7 @@
         ]
       },
       "put": {
-        "description": "409 `collections.version_conflict` — `base_version` устарела; 409 `collections.not_curated` — UGC правит только автор.",
+        "description": "409 `collections.version_conflict` — `base_version` устарела (`details.current_version`); 409 `collections.not_curated` — UGC правит только автор; 422 `collections.publish_invalid`.",
         "operationId": "admin_update_admin_v1_collections__collection_id__put",
         "parameters": [
           {
@@ -2784,21 +2711,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Новая версия кураторского сборника",
@@ -2809,7 +2721,7 @@
     },
     "/admin/v1/collections/{collection_id}/featured": {
       "put": {
-        "description": "Кураторские и UGC (D14); только опубликованные.",
+        "description": "Кураторские и UGC (D14); только опубликованные (409 `collections.not_published`). Без `rank` — в конце блока (1000). Событий нет; каталог `sort=featured`.",
         "operationId": "admin_featured_admin_v1_collections__collection_id__featured_put",
         "parameters": [
           {
@@ -2938,21 +2850,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Отметка «рекомендуемое»",
@@ -2963,7 +2860,7 @@
     },
     "/admin/v1/collections/{collection_id}/hide": {
       "post": {
-        "description": "Пропадает из каталога, старт сессии в game — 404; автор видит плашку. Событие `collections.CollectionUpdated` (`status: hidden`).",
+        "description": "Пропадает из каталога, старт сессии в game — 404; автор видит плашку. Событие `collections.CollectionUpdated` (`status: hidden`); повтор — без события. 409 `collections.not_published` — сборник ещё не публиковался.",
         "operationId": "admin_hide_admin_v1_collections__collection_id__hide_post",
         "parameters": [
           {
@@ -3092,21 +2989,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Скрыть сборник",
@@ -3117,6 +2999,7 @@
     },
     "/admin/v1/collections/{collection_id}/unhide": {
       "post": {
+        "description": "Событие `collections.CollectionUpdated` (`status: published`).",
         "operationId": "admin_unhide_admin_v1_collections__collection_id__unhide_post",
         "parameters": [
           {
@@ -3245,21 +3128,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Показать скрытый сборник",
@@ -3270,7 +3138,7 @@
     },
     "/v1/collections": {
       "get": {
-        "description": "Только опубликованные публичные (не скрытые) сборники. Поиск — по названию, описанию и тегам, не по единицам (D6). Без `q` — `Cache-Control: public, max-age=30`.",
+        "description": "Только опубликованные публичные (не скрытые) сборники. Поиск — по названию, описанию и словам тегов, не по единицам (D6). Сортировки: `popular` (лайки и завершения за окно), `new`, `likes`, `difficulty` (сложные раньше, без сложности — в конце), `featured` (только «рекомендуемые» по порядку). Без `q` — `Cache-Control: public, max-age=30`. 429 `collections.rate_limited` — лимит поиска с `q`.",
         "operationId": "catalog_v1_collections_get",
         "parameters": [
           {
@@ -3376,7 +3244,8 @@
                 "popular",
                 "new",
                 "likes",
-                "difficulty"
+                "difficulty",
+                "featured"
               ],
               "title": "Sort",
               "type": "string"
@@ -3452,21 +3321,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Каталог сборников",
@@ -3608,7 +3462,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -3621,7 +3475,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Создать сборник (черновик)",
@@ -3632,7 +3486,7 @@
     },
     "/v1/collections/{collection_id}": {
       "delete": {
-        "description": "Опубликованный — событие `collections.CollectionDeleted`.",
+        "description": "Повтор — 204. Опубликованный — событие `collections.CollectionDeleted`.",
         "operationId": "delete_collection_v1_collections__collection_id__delete",
         "parameters": [
           {
@@ -3760,7 +3614,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -3773,7 +3627,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Удалить сборник",
@@ -3782,7 +3636,7 @@
         ]
       },
       "get": {
-        "description": "Публичный и unlisted (по ссылке). `items` — только автору, админу и игроку со статусом «пройден» (D6), иначе `items: null`, `items_visible: false`. Скрытый — только автору (`status: hidden`), остальным 404.",
+        "description": "Публичный и unlisted (по ссылке). `items` — только автору, админу и игроку со статусом «пройден» текущей версии (D6), иначе `items: null`, `items_visible: false`; свои эмодзи единиц (`custom`) — только автору и админу. Скрытый — только автору и админу (`status: hidden`), остальным 404; гостю и анониму `me: null`.",
         "operationId": "get_collection_v1_collections__collection_id__get",
         "parameters": [
           {
@@ -3853,21 +3707,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сборник",
@@ -3964,21 +3803,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Черновик сборника",
@@ -3987,7 +3811,7 @@
         ]
       },
       "put": {
-        "description": "Оптимистичная блокировка (D2): `base_revision` ≠ текущей — 409 `collections.draft_conflict`, `details.current` — актуальный `DraftOut` (`revision`, `updated_at`, `client_label`, `body`). 409 `collections.hidden` — сборник скрыт модератором; 422 `collections.draft_invalid` (`details.errors` — `[{path, code}]`).",
+        "description": "Оптимистичная блокировка (D2): `base_revision` ≠ текущей — 409 `collections.draft_conflict`, `details.current` — актуальный `DraftOut` (`revision`, `updated_at`, `client_label`, `body`). 409 `collections.hidden` — сборник скрыт модератором; 409 `collections.deleted` — удалён; 422 `collections.draft_invalid` (`details.errors` — `[{path, code}]`: `collections.items_too_many`, `collections.tags_too_many`).",
         "operationId": "save_draft_v1_collections__collection_id__draft_put",
         "parameters": [
           {
@@ -4132,7 +3956,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4145,7 +3969,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Сохранить черновик",
@@ -4290,7 +4114,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4303,7 +4127,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Убрать из избранного",
@@ -4446,7 +4270,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4459,7 +4283,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Добавить в избранное",
@@ -4605,7 +4429,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4618,7 +4442,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Снять лайк",
@@ -4762,7 +4586,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4775,7 +4599,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Лайкнуть сборник",
@@ -4786,7 +4610,7 @@
     },
     "/v1/collections/{collection_id}/publish": {
       "post": {
-        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.tag_unknown`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`), 429 `collections.publish_limit` (fail-closed).",
+        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, reason?}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).",
         "operationId": "publish_v1_collections__collection_id__publish_post",
         "parameters": [
           {
@@ -4931,7 +4755,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4944,7 +4768,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Опубликовать черновик",
@@ -5063,21 +4887,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Мои сборники",
@@ -5088,6 +4897,7 @@
     },
     "/v1/me/favorites": {
       "get": {
+        "description": "Опубликованные сборники по времени добавления (новые раньше).",
         "operationId": "my_favorites_v1_me_favorites_get",
         "parameters": [
           {
@@ -5175,21 +4985,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Избранные сборники",
