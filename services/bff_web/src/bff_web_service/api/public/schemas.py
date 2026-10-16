@@ -1,7 +1,8 @@
-"""Схемы публичного API bff_web (план этапа 2, §2.6) — экраны веб-клиента.
+"""Схемы публичного API bff_web (план этапа 2, §2.6; этап 3a, §2.5) — экраны веб-клиента.
 
 bff только читает (D4): агрегирует game, identity и catalog. Блок упавшего сервиса
-отдаётся как ``{"status": "unavailable"}`` — страница рендерится без него.
+отдаётся как ``{"status": "unavailable"}`` — страница рендерится без него. Подачу (формат
+ответа, вид итога, выбор перед стартом) фронтенд выбирает по данным (D12), не по ключу режима.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 Domain = Literal["music", "film"]
+AnswerFormat = Literal["classic", "pick"]
+Presentation = Literal["score", "streak", "bracket"]
 
 
 class Block[T](BaseModel):
@@ -44,6 +47,19 @@ class PresetCard(BaseModel):
     title_key: str
 
 
+class SubjectPickCard(BaseModel):
+    """Выбор персон перед стартом (марафон): ``GET game /v1/modes/{key}/subjects``."""
+
+    roles: list[str]
+    max: int = Field(ge=1)
+
+
+class ModeStartCard(BaseModel):
+    """Что игрок выбирает перед стартом режима."""
+
+    subject: SubjectPickCard | None = None
+
+
 class ModeCard(BaseModel):
     """Карточка режима (из ``game /v1/modes``)."""
 
@@ -52,13 +68,28 @@ class ModeCard(BaseModel):
     title_key: str
     source_type: str
     clue_type: str
-    rounds: int
+    rounds: int = Field(description="Число раундов; у марафона и пары — максимум")
     allow_guest: bool
     presets: list[PresetCard] | None = None
+    answer_format: AnswerFormat = Field(default="classic", description="Реестр ответов фронта")
+    presentation: Presentation = Field(default="score", description="Реестр итогов фронта")
+    start: ModeStartCard | None = Field(default=None, description="null — выбирать нечего")
+
+
+class ModeGroup(BaseModel):
+    """Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``."""
+
+    source_type: str
+    presentation: Presentation
+    modes: list[ModeCard]
 
 
 class DailyCard(BaseModel):
-    """Карточка дейлика: режим + статус субъекта (``game /v1/modes`` + ``/v1/daily``)."""
+    """Карточка планового режима периода + статус субъекта (``game /v1/modes`` + ``/v1/daily``).
+
+    Дейлик — период «день», недельная сетка — «неделя»; ``day`` — начало периода,
+    ``next_reset_at`` — его конец.
+    """
 
     mode_key: str
     domain: Domain
@@ -69,13 +100,27 @@ class DailyCard(BaseModel):
     score: int | None = None
     max_score: int
     next_reset_at: datetime
+    presentation: Presentation = "score"
+
+
+class RecordCard(BaseModel):
+    """Личный рекорд режима (``game /v1/me/records``)."""
+
+    mode_key: str
+    domain: Domain
+    title_key: str
+    presentation: Presentation
+    best: int
+    percentile: float | None = Field(default=None, ge=0, le=100)
+    achieved_at: datetime
 
 
 class HomeBlocks(BaseModel):
     """Блоки главной."""
 
-    dailies: Block[list[DailyCard]]
+    dailies: Block[list[DailyCard]] = Field(description="Наборы дня (без недельной сетки)")
     modes: Block[list[ModeCard]]
+    weekly: Block[list[DailyCard]] = Field(description="Наборы недели (сетка)")
 
 
 class HomePage(BaseModel):
@@ -87,8 +132,15 @@ class HomePage(BaseModel):
 class SoloBlocks(BaseModel):
     """Блоки хаба соло-режимов."""
 
-    daily: Block[list[DailyCard]]
-    random: Block[list[ModeCard]]
+    daily: Block[list[DailyCard]] = Field(description="Наборы дня")
+    random: Block[list[ModeCard]] = Field(description="Случайные режимы (витрина этапа 2)")
+    modes: Block[list[ModeGroup]] = Field(
+        description="Витрина: неплановые режимы домена по группам (source_type, presentation)"
+    )
+    weekly: Block[list[DailyCard]] = Field(description="Наборы недели (сетка)")
+    records: Block[list[RecordCard]] | None = Field(
+        default=None, description="Личные рекорды; null — гость или аноним"
+    )
 
 
 class SoloPage(BaseModel):
@@ -139,6 +191,29 @@ class ResultRoundCard(BaseModel):
     )
 
 
+class ResultRecord(BaseModel):
+    """Рекорд в итоге (только пользователи, режимы с рекордами)."""
+
+    best: int
+    is_new: bool
+    percentile: float | None = Field(default=None, ge=0, le=100)
+
+
+class BracketPick(BaseModel):
+    """Выбор в сетке: тур и названия победителя и проигравшего."""
+
+    stage: int
+    winner: str
+    loser: str
+
+
+class BracketSummary(BaseModel):
+    """Итог сетки: чемпион и выборы по турам."""
+
+    champion: str
+    picks: list[BracketPick]
+
+
 class ResultSummary(BaseModel):
     """Итог сессии для экрана результатов."""
 
@@ -148,6 +223,9 @@ class ResultSummary(BaseModel):
     max_score: int
     share_text: str
     rounds: list[ResultRoundCard]
+    presentation: Presentation = Field(default="score", description="Реестр итогов фронта")
+    record: ResultRecord | None = Field(default=None, description="null — гость или без рекордов")
+    bracket: BracketSummary | None = Field(default=None, description="Только у сетки")
 
 
 class ResultsBlocks(BaseModel):

@@ -21,6 +21,7 @@ from bff_web_service.application.dto import (
     Item,
     Me,
     Mode,
+    PersonalRecord,
     SessionResult,
 )
 
@@ -66,7 +67,14 @@ class GameClient(Protocol):
         ...
 
     async def daily(self, token: str, domain: Domain | None) -> list[DailyStatus]:
-        """Дейлики субъекта токена (личные, не кэшируются)."""
+        """Плановые режимы периода (дейлики и недельная сетка) субъекта токена.
+
+        Личные, не кэшируются.
+        """
+        ...
+
+    async def records(self, token: str) -> list[PersonalRecord]:
+        """Личные рекорды субъекта токена (гостю — пустой список; не кэшируются)."""
         ...
 
     async def session_result(self, token: str, session_id: UUID) -> SessionResult:

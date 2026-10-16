@@ -63,11 +63,18 @@ class PagesSettings(BaseModel):
 
     Attributes:
         random_source_types: Типы Source, режимы которых попадают в блок «случайный» хаба.
+        scheduled_source_types: Типы Source плановых режимов (набор периода из
+            ``game /v1/daily``): их показывают блоки ``daily``/``weekly``, а не витрина
+            ``modes``.
+        weekly_source_types: Какие из плановых типов — недельные: их статусы уходят в блок
+            ``weekly``, остальные статусы ``/v1/daily`` — в блок дейликов.
     """
 
     model_config = ConfigDict(frozen=True)
 
     random_source_types: tuple[str, ...] = ("random",)
+    scheduled_source_types: tuple[str, ...] = ("daily", "bracket")
+    weekly_source_types: tuple[str, ...] = ("bracket",)
 
 
 class Settings(ServiceSettings):

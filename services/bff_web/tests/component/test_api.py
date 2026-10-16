@@ -114,6 +114,90 @@ ME = {
 }
 
 
+MODES_3A = [
+    *MODES,
+    {
+        "key": "film.marathon.director",
+        "version": 1,
+        "domain": "film",
+        "title_key": "modes.film.marathon.director.title",
+        "source_type": "marathon",
+        "clue_type": "frame_progressive",
+        "rounds": 200,
+        "levels": [{"index": 1, "hint": {"blur_px": 24, "crop": 0.4}}],
+        "allow_guest": True,
+        "presets": None,
+        "answer_format": "classic",
+        "presentation": "streak",
+        "start": {"subject": {"roles": ["director"], "max": 3}},
+    },
+    {
+        "key": "film.pair.rating",
+        "version": 1,
+        "domain": "film",
+        "title_key": "modes.film.pair.rating.title",
+        "source_type": "pair",
+        "clue_type": "frame_progressive",
+        "rounds": 200,
+        "levels": [{"index": 1, "hint": {"blur_px": 0, "crop": 1}}],
+        "allow_guest": True,
+        "presets": None,
+        "answer_format": "pick",
+        "presentation": "streak",
+        "start": None,
+    },
+    {
+        "key": "film.bracket.weekly",
+        "version": 1,
+        "domain": "film",
+        "title_key": "modes.film.bracket.weekly.title",
+        "source_type": "bracket",
+        "clue_type": "frame_progressive",
+        "rounds": 31,
+        "levels": [{"index": 1, "hint": {"blur_px": 0, "crop": 1}}],
+        "allow_guest": True,
+        "presets": None,
+        "answer_format": "pick",
+        "presentation": "bracket",
+        "start": None,
+    },
+]
+WEEKLY = {
+    "mode_key": "film.bracket.weekly",
+    "day": "2026-10-12",
+    "status": "in_progress",
+    "session_id": str(SESSION),
+    "score": None,
+    "max_score": 0,
+    "next_reset_at": "2026-10-18T21:00:00Z",
+}
+RECORDS = [
+    {
+        "mode_key": "film.pair.rating",
+        "best": 14,
+        "percentile": 87.5,
+        "achieved_at": "2026-10-11T18:00:00Z",
+    },
+    {"mode_key": "music.pair.popularity", "best": 3, "achieved_at": "2026-10-09T10:00:00Z"},
+]
+RESULT_BRACKET = {
+    "score": 0,
+    "max_score": 0,
+    "share": {"text": "OnCue Топ-32: Брат 🏆"},
+    "daily_stats": None,
+    "presentation": "bracket",
+    "record": None,
+    "bracket": {
+        "champion": "Брат",
+        "picks": [
+            {"stage": 1, "winner": "Брат", "loser": "Жмурки"},
+            {"stage": 5, "winner": "Брат", "loser": "Брат 2"},
+        ],
+    },
+    "rounds": [],
+}
+
+
 @dataclass
 class Stubs:
     game: ServiceStub
@@ -215,9 +299,13 @@ async def test_home_for_user_all_ok(bff: Bff) -> None:
                 "score": 21,
                 "max_score": 30,
                 "next_reset_at": "2026-10-10T21:00:00Z",
+                "presentation": "score",
             }
         ],
     }
+    assert blocks["weekly"] == {"status": "ok", "data": []}
+    assert blocks["modes"]["data"][0]["answer_format"] == "classic"  # поле по умолчанию game
+    assert blocks["modes"]["data"][0]["start"] is None
     assert daily.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
 
@@ -245,6 +333,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
         "blocks": {
             "dailies": {"status": "unavailable", "data": None},
             "modes": {"status": "unavailable", "data": None},
+            "weekly": {"status": "unavailable", "data": None},
         }
     }
 
@@ -330,12 +419,175 @@ async def test_solo_page_by_domain(bff: Bff) -> None:
     blocks = response.json()["blocks"]
     assert [m["key"] for m in blocks["random"]["data"]] == ["film.random.frame"]
     assert blocks["daily"] == {"status": "ok", "data": []}
+    assert blocks["records"] is None  # гость: рекордов нет
     assert daily.calls.last.request.url.params["domain"] == "film"
     bad = await bff.client.get("/v1/pages/solo?domain=books")
     assert_problem(bad, 422, "request.validation_failed")
 
 
+async def test_solo_user_gets_showcase_weekly_and_records(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[WEEKLY])
+    records = bff.stubs.game.route("GET", "/v1/me/records").respond(200, json=RECORDS)
+
+    response = await bff.client.get("/v1/pages/solo?domain=film", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    blocks = response.json()["blocks"]
+    assert [
+        (g["source_type"], g["presentation"], [m["key"] for m in g["modes"]])
+        for g in blocks["modes"]["data"]
+    ] == [
+        ("random", "score", ["film.random.frame"]),
+        ("marathon", "streak", ["film.marathon.director"]),
+        ("pair", "streak", ["film.pair.rating"]),
+    ]
+    marathon = blocks["modes"]["data"][1]["modes"][0]
+    assert marathon["start"] == {"subject": {"roles": ["director"], "max": 3}}
+    assert marathon["rounds"] == 200
+    assert blocks["modes"]["data"][2]["modes"][0]["answer_format"] == "pick"
+    assert blocks["daily"] == {"status": "ok", "data": []}  # сетка — не дейлик
+    assert blocks["weekly"]["data"] == [
+        {
+            "mode_key": "film.bracket.weekly",
+            "domain": "film",
+            "title_key": "modes.film.bracket.weekly.title",
+            "day": "2026-10-12",
+            "status": "in_progress",
+            "session_id": str(SESSION),
+            "score": None,
+            "max_score": 0,
+            "next_reset_at": "2026-10-18T21:00:00Z",
+            "presentation": "bracket",
+        }
+    ]
+    # Рекорд музыкального режима отфильтрован доменом хаба.
+    assert blocks["records"] == {
+        "status": "ok",
+        "data": [
+            {
+                "mode_key": "film.pair.rating",
+                "domain": "film",
+                "title_key": "modes.film.pair.rating.title",
+                "presentation": "streak",
+                "best": 14,
+                "percentile": 87.5,
+                "achieved_at": "2026-10-11T18:00:00Z",
+            }
+        ],
+    }
+    assert records.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_solo_guest_has_no_records_and_game_is_not_asked(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[])
+    records = bff.stubs.game.route("GET", "/v1/me/records").respond(200, json=[])
+
+    guest = await bff.client.get("/v1/pages/solo", headers=bff.bearer(bff.issuer.issue_guest()))
+    anonymous = await bff.client.get("/v1/pages/solo")
+
+    assert guest.json()["blocks"]["records"] is None
+    assert guest.headers["cache-control"] == PRIVATE
+    assert anonymous.json()["blocks"]["records"] is None
+    assert anonymous.headers["cache-control"] == PUBLIC
+    assert records.call_count == 0
+
+
+async def test_solo_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(503)
+    bff.stubs.game.route("GET", "/v1/daily").mock(side_effect=httpx.ConnectError("refused"))
+    bff.stubs.game.route("GET", "/v1/me/records").respond(500)
+
+    response = await bff.client.get("/v1/pages/solo", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    unavailable = {"status": "unavailable", "data": None}
+    assert response.json() == {
+        "blocks": dict.fromkeys(("daily", "random", "modes", "weekly", "records"), unavailable)
+    }
+
+
+async def test_solo_records_down_keeps_other_blocks(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[*DAILY, WEEKLY])
+    bff.stubs.game.route("GET", "/v1/me/records").respond(429)
+
+    response = await bff.client.get("/v1/pages/solo", headers=bff.bearer(bff.issuer.issue()))
+
+    blocks = response.json()["blocks"]
+    assert response.status_code == 200
+    assert blocks["records"] == {"status": "unavailable", "data": None}
+    assert [c["mode_key"] for c in blocks["daily"]["data"]] == ["music.daily.classic"]
+    assert [c["mode_key"] for c in blocks["weekly"]["data"]] == ["film.bracket.weekly"]
+    assert blocks["modes"]["status"] == "ok"
+
+
+async def test_home_weekly_bracket_does_not_break_daily_cards(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[*DAILY, WEEKLY])
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue_guest()))
+
+    blocks = response.json()["blocks"]
+    assert [c["mode_key"] for c in blocks["dailies"]["data"]] == ["music.daily.classic"]
+    assert [(c["mode_key"], c["max_score"]) for c in blocks["weekly"]["data"]] == [
+        ("film.bracket.weekly", 0)
+    ]
+    assert len(blocks["modes"]["data"]) == len(MODES_3A)
+
+
 # ----------------------------------------------------------------------------- итог
+async def test_results_page_bracket_presentation_and_record(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT_BRACKET)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200, response.text
+    summary = response.json()["blocks"]["result"]["data"]
+    assert summary["presentation"] == "bracket"
+    assert summary["record"] is None
+    assert summary["bracket"] == RESULT_BRACKET["bracket"]
+    assert response.json()["blocks"]["items"] == {"status": "ok", "data": []}
+
+
+async def test_results_page_streak_record(bff: Bff) -> None:
+    streak = {
+        **RESULT,
+        "daily_stats": None,
+        "presentation": "streak",
+        "record": {"best": 14, "is_new": True, "percentile": 87.5},
+        "bracket": None,
+    }
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=streak)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    summary = response.json()["blocks"]["result"]["data"]
+    assert summary["presentation"] == "streak"
+    assert summary["record"] == {"best": 14, "is_new": True, "percentile": 87.5}
+    assert summary["bracket"] is None
+
+
+async def test_results_page_stage2_result_defaults_to_score(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    summary = response.json()["blocks"]["result"]["data"]
+    assert (summary["presentation"], summary["record"], summary["bracket"]) == ("score", None, None)
+
+
 async def test_results_page_joins_catalog_and_caches_card(bff: Bff) -> None:
     token = bff.issuer.issue()
     result = bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)

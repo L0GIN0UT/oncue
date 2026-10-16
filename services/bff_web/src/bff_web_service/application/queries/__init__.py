@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Iterable, Sequence
+from dataclasses import dataclass
 from uuid import UUID
 
 import structlog
@@ -23,7 +24,11 @@ from bff_web_service.application.dto import (
     ItemCard,
     Mode,
     ModeCard,
+    ModeGroup,
     Person,
+    PersonalRecord,
+    Presentation,
+    RecordCard,
     ResultRoundCard,
     ResultsBlocks,
     ResultsPage,
@@ -55,6 +60,38 @@ _HTTP_NOT_FOUND = 404
 _HTTP_CONFLICT = 409
 
 type UpstreamError = UpstreamUnavailableError | UpstreamRejectedError
+
+
+@dataclass(frozen=True, slots=True)
+class PageLayout:
+    """Как режимы раскладываются по блокам экранов — по данным game, без ключей режимов.
+
+    Attributes:
+        random_source_types: Типы Source блока «случайный» хаба (витрина этапа 2).
+        scheduled_source_types: Типы Source плановых режимов: их показывают блоки периода
+            (``daily``/``weekly``), а не витрина ``modes``.
+        weekly_source_types: Плановые типы с недельным периодом (блок ``weekly``); статусы
+            ``/v1/daily`` остальных типов — дейлики.
+    """
+
+    random_source_types: frozenset[str] = frozenset({"random"})
+    scheduled_source_types: frozenset[str] = frozenset({"daily", "bracket"})
+    weekly_source_types: frozenset[str] = frozenset({"bracket"})
+
+    @classmethod
+    def of(
+        cls,
+        *,
+        random_source_types: Iterable[str],
+        scheduled_source_types: Iterable[str],
+        weekly_source_types: Iterable[str],
+    ) -> PageLayout:
+        """Раскладка из настроек (кортежи ``GV_PAGES__*``)."""
+        return cls(
+            random_source_types=frozenset(random_source_types),
+            scheduled_source_types=frozenset(scheduled_source_types),
+            weekly_source_types=frozenset(weekly_source_types),
+        )
 
 
 class Limiter:
@@ -94,6 +131,18 @@ async def _personal_daily(
     return await limiter.attempt(game.daily(viewer.token, domain))
 
 
+async def _personal_records(
+    limiter: Limiter, game: GameClient, viewer: Viewer
+) -> list[PersonalRecord] | UpstreamError | None:
+    """Рекорды пользователя; гостю и анониму рекордов нет (D11) — ``None`` без вызова game.
+
+    Непроверенный токен (JWKS недоступен) уходит в game: гостю он ответит пустым списком.
+    """
+    if viewer.token is None or viewer.kind is SubjectKind.GUEST:
+        return None
+    return await limiter.attempt(game.records(viewer.token))
+
+
 def _block[T](value: T | UpstreamError, block: str) -> Block[T]:
     if value is _ANONYMOUS:
         return Block.unavailable()
@@ -120,7 +169,67 @@ def mode_card(mode: Mode) -> ModeCard:
         rounds=mode.rounds,
         allow_guest=mode.allow_guest,
         presets=mode.presets,
+        answer_format=mode.answer_format,
+        presentation=mode.presentation,
+        start=mode.start,
     )
+
+
+def mode_groups(modes: Iterable[Mode], *, exclude_source_types: frozenset[str]) -> list[ModeGroup]:
+    """Витрина: режимы, сгруппированные по ``(source_type, presentation)``.
+
+    Группы и режимы внутри них идут в порядке первого появления в ответе game (порядок
+    витрины задаёт game). Плановые типы (``exclude_source_types``) в витрину не входят —
+    их показывают блоки периода.
+    """
+    groups: dict[tuple[str, Presentation], list[ModeCard]] = {}
+    for mode in modes:
+        if mode.source_type in exclude_source_types:
+            continue
+        groups.setdefault((mode.source_type, mode.presentation), []).append(mode_card(mode))
+    return [
+        ModeGroup(source_type=source_type, presentation=presentation, modes=cards)
+        for (source_type, presentation), cards in groups.items()
+    ]
+
+
+def period_cards(
+    modes: Sequence[Mode], statuses: Iterable[DailyStatus], *, weekly_source_types: frozenset[str]
+) -> tuple[list[DailyCard], list[DailyCard]]:
+    """Статусы ``/v1/daily`` → карточки дейликов и карточки недельных наборов.
+
+    Период определяется типом Source режима: так недельная сетка не попадает к дейликам
+    (очков у неё нет, ``max_score`` равен 0), а неизвестный плановый тип по-прежнему
+    показывается дейликом, как в этапе 2.
+    """
+    weekly_keys = {m.key for m in modes if m.source_type in weekly_source_types}
+    daily: list[DailyStatus] = []
+    weekly: list[DailyStatus] = []
+    for status in statuses:
+        (weekly if status.mode_key in weekly_keys else daily).append(status)
+    return daily_cards(modes, daily), daily_cards(modes, weekly)
+
+
+def record_cards(modes: Sequence[Mode], records: Iterable[PersonalRecord]) -> list[RecordCard]:
+    """Рекорды + режимы → карточки (порядок — как у game); рекорды снятых режимов пропускаются."""
+    by_key = {m.key: m for m in modes}
+    cards: list[RecordCard] = []
+    for record in records:
+        mode = by_key.get(record.mode_key)
+        if mode is None:
+            continue
+        cards.append(
+            RecordCard(
+                mode_key=record.mode_key,
+                domain=mode.domain,
+                title_key=mode.title_key,
+                presentation=mode.presentation,
+                best=record.best,
+                achieved_at=record.achieved_at,
+                percentile=record.percentile,
+            )
+        )
+    return cards
 
 
 def daily_cards(modes: Sequence[Mode], statuses: Iterable[DailyStatus]) -> list[DailyCard]:
@@ -147,6 +256,7 @@ def daily_cards(modes: Sequence[Mode], statuses: Iterable[DailyStatus]) -> list[
                 next_reset_at=status.next_reset_at,
                 session_id=status.session_id,
                 score=status.score,
+                presentation=mode.presentation,
             )
         )
     return cards
@@ -171,6 +281,9 @@ def result_summary(session_id: UUID, result: SessionResult) -> ResultSummary:
             )
             for r in result.rounds
         ],
+        presentation=result.presentation,
+        record=result.record,
+        bracket=result.bracket,
     )
 
 
@@ -231,10 +344,13 @@ class GetSession:
 
 
 class GetHomePage:
-    """Главная: дейлики субъекта и все опубликованные режимы."""
+    """Главная: дейлики и недельные наборы субъекта, все опубликованные режимы."""
 
-    def __init__(self, game: GameClient, *, concurrency: int) -> None:
+    def __init__(
+        self, game: GameClient, *, concurrency: int, layout: PageLayout | None = None
+    ) -> None:
         self._game, self._concurrency = game, concurrency
+        self._layout = layout or PageLayout()
 
     async def __call__(self, viewer: Viewer) -> HomePage:
         """Собрать главную."""
@@ -245,10 +361,8 @@ class GetHomePage:
         )
         modes_block = _block(modes, "modes")
         daily_block = _block(daily, "dailies")
-        dailies: Block[list[DailyCard]] = (
-            Block.ok(daily_cards(modes_block.data, daily_block.data))
-            if modes_block.data is not None and daily_block.data is not None
-            else Block.unavailable()
+        dailies, weekly = _period_blocks(
+            modes_block.data, daily_block.data, self._layout.weekly_source_types
         )
         return HomePage(
             blocks=HomeBlocks(
@@ -256,26 +370,41 @@ class GetHomePage:
                 modes=Block.ok([mode_card(m) for m in modes_block.data])
                 if modes_block.data is not None
                 else Block.unavailable(),
+                weekly=weekly,
             ),
             personal=viewer.is_personal,
         )
 
 
+def _period_blocks(
+    modes: Sequence[Mode] | None,
+    statuses: Sequence[DailyStatus] | None,
+    weekly_source_types: frozenset[str],
+) -> tuple[Block[list[DailyCard]], Block[list[DailyCard]]]:
+    """Блоки дейликов и недельных наборов: гаснут вместе (один источник ``/v1/daily``)."""
+    if modes is None or statuses is None:
+        return Block.unavailable(), Block.unavailable()
+    daily, weekly = period_cards(modes, statuses, weekly_source_types=weekly_source_types)
+    return Block.ok(daily), Block.ok(weekly)
+
+
 class GetSoloPage:
-    """Хаб соло-режимов: дейлики и случайные режимы домена."""
+    """Хаб соло-режимов домена: блоки периода, витрина режимов, личные рекорды."""
 
     def __init__(
-        self, game: GameClient, *, concurrency: int, random_source_types: Iterable[str]
+        self, game: GameClient, *, concurrency: int, layout: PageLayout | None = None
     ) -> None:
         self._game, self._concurrency = game, concurrency
-        self._random_types = frozenset(random_source_types)
+        self._layout = layout or PageLayout()
 
     async def __call__(self, viewer: Viewer, domain: Domain | None) -> SoloPage:
         """Собрать хаб (``domain = None`` — оба домена)."""
         limiter = Limiter(self._concurrency)
-        modes, daily = await asyncio.gather(
+        layout = self._layout
+        modes, daily, records = await asyncio.gather(
             limiter.attempt(self._game.list_modes()),
             _personal_daily(limiter, self._game, viewer, domain),
+            _personal_records(limiter, self._game, viewer),
         )
         modes_block = _block(modes, "modes")
         daily_block = _block(daily, "daily")
@@ -284,19 +413,40 @@ class GetSoloPage:
             if modes_block.data is not None
             else None
         )
+        daily_cards_block, weekly = _period_blocks(
+            in_domain, daily_block.data, layout.weekly_source_types
+        )
+        random: Block[list[ModeCard]] = Block.unavailable()
+        showcase: Block[list[ModeGroup]] = Block.unavailable()
+        if in_domain is not None:
+            random = Block.ok(
+                [mode_card(m) for m in in_domain if m.source_type in layout.random_source_types]
+            )
+            showcase = Block.ok(
+                mode_groups(in_domain, exclude_source_types=layout.scheduled_source_types)
+            )
         return SoloPage(
             blocks=SoloBlocks(
-                daily=Block.ok(daily_cards(in_domain, daily_block.data))
-                if in_domain is not None and daily_block.data is not None
-                else Block.unavailable(),
-                random=Block.ok(
-                    [mode_card(m) for m in in_domain if m.source_type in self._random_types]
-                )
-                if in_domain is not None
-                else Block.unavailable(),
+                daily=daily_cards_block,
+                random=random,
+                modes=showcase,
+                weekly=weekly,
+                records=_records_block(in_domain, records),
             ),
             personal=viewer.is_personal,
         )
+
+
+def _records_block(
+    modes: Sequence[Mode] | None, records: list[PersonalRecord] | UpstreamError | None
+) -> Block[list[RecordCard]] | None:
+    """Блок рекордов: ``None`` — гость или аноним; без режимов карточек нет — ``unavailable``."""
+    if records is None:
+        return None
+    block = _block(records, "records")
+    if modes is None or block.data is None:
+        return Block.unavailable()
+    return Block.ok(record_cards(modes, block.data))
 
 
 class GetResultsPage:

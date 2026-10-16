@@ -17,6 +17,8 @@ from bff_web_service.domain import Block
 Domain = Literal["music", "film"]
 DailyState = Literal["not_started", "in_progress", "finished"]
 RoundOutcome = Literal["exact", "partial", "miss", "gave_up", "void"]
+AnswerFormat = Literal["classic", "pick"]
+Presentation = Literal["score", "streak", "bracket"]
 
 
 # ----------------------------------------------------------------------------- зритель
@@ -61,8 +63,29 @@ class Preset:
 
 
 @dataclass(frozen=True, slots=True)
+class SubjectPick:
+    """Выбор персон перед стартом (марафон): допустимые роли и сколько можно выбрать."""
+
+    roles: list[str]
+    max: int
+
+
+@dataclass(frozen=True, slots=True)
+class ModeStart:
+    """Что игрок выбирает перед стартом режима (``None`` у полей — выбирать нечего)."""
+
+    subject: SubjectPick | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Mode:
-    """Опубликованный режим (``game GET /v1/modes``)."""
+    """Опубликованный режим (``game GET /v1/modes``).
+
+    Attributes:
+        answer_format: Формат ответа (плагин ``AnswerFormat``): поле ввода или выбор варианта.
+        presentation: Как показывать итог (объявляет Scorer): очки, серия, сетка.
+        start: Выбор перед стартом; ``None`` — стартовать сразу (или по пресету).
+    """
 
     key: str
     version: int
@@ -73,6 +96,9 @@ class Mode:
     rounds: int
     allow_guest: bool
     presets: list[Preset] | None = None
+    answer_format: AnswerFormat = "classic"
+    presentation: Presentation = "score"
+    start: ModeStart | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +148,32 @@ class Share:
 
 
 @dataclass(frozen=True, slots=True)
+class ResultRecord:
+    """Рекорд в итоге сессии (только пользователи, режимы с ``features.records``)."""
+
+    best: int
+    is_new: bool
+    percentile: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BracketPick:
+    """Выбор в сетке: тур и названия победителя и проигравшего."""
+
+    stage: int
+    winner: str
+    loser: str
+
+
+@dataclass(frozen=True, slots=True)
+class Bracket:
+    """Итог сетки: чемпион и выборы по турам."""
+
+    champion: str
+    picks: list[BracketPick]
+
+
+@dataclass(frozen=True, slots=True)
 class SessionResult:
     """Итог завершённой сессии (``game GET /v1/sessions/{id}/result``)."""
 
@@ -130,6 +182,19 @@ class SessionResult:
     rounds: list[ResultRound]
     share: Share
     daily_stats: list[DailyRoundStat] | None = None
+    presentation: Presentation = "score"
+    record: ResultRecord | None = None
+    bracket: Bracket | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PersonalRecord:
+    """Личный рекорд режима (``game GET /v1/me/records``; гостю — пустой список)."""
+
+    mode_key: str
+    best: int
+    achieved_at: datetime
+    percentile: float | None = None
 
 
 # ----------------------------------------------------------------------------- catalog
@@ -192,11 +257,26 @@ class ModeCard:
     rounds: int
     allow_guest: bool
     presets: list[Preset] | None = None
+    answer_format: AnswerFormat = "classic"
+    presentation: Presentation = "score"
+    start: ModeStart | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ModeGroup:
+    """Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``."""
+
+    source_type: str
+    presentation: Presentation
+    modes: list[ModeCard]
 
 
 @dataclass(frozen=True, slots=True)
 class DailyCard:
-    """Карточка дейлика: режим + статус субъекта."""
+    """Карточка планового режима периода (дейлик — день, сетка — неделя) + статус субъекта.
+
+    ``day`` — начало периода, ``next_reset_at`` — его конец.
+    """
 
     mode_key: str
     domain: Domain
@@ -207,14 +287,29 @@ class DailyCard:
     next_reset_at: datetime
     session_id: UUID | None = None
     score: int | None = None
+    presentation: Presentation = "score"
+
+
+@dataclass(frozen=True, slots=True)
+class RecordCard:
+    """Личный рекорд режима для витрины."""
+
+    mode_key: str
+    domain: Domain
+    title_key: str
+    presentation: Presentation
+    best: int
+    achieved_at: datetime
+    percentile: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class HomeBlocks:
-    """Блоки главной."""
+    """Блоки главной: ``dailies`` — наборы дня, ``weekly`` — наборы недели (сетка)."""
 
     dailies: Block[list[DailyCard]]
     modes: Block[list[ModeCard]]
+    weekly: Block[list[DailyCard]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,10 +322,21 @@ class HomePage:
 
 @dataclass(frozen=True, slots=True)
 class SoloBlocks:
-    """Блоки хаба соло-режимов."""
+    """Блоки хаба соло-режимов.
+
+    Attributes:
+        daily: Плановые режимы дня.
+        random: Режимы ``random_source_types`` (витрина этапа 2, оставлена для совместимости).
+        modes: Витрина: все неплановые режимы, сгруппированные по данным.
+        weekly: Плановые режимы недели (сетка).
+        records: Личные рекорды; ``None`` — гость или аноним (рекордов у них нет, D11).
+    """
 
     daily: Block[list[DailyCard]]
     random: Block[list[ModeCard]]
+    modes: Block[list[ModeGroup]]
+    weekly: Block[list[DailyCard]]
+    records: Block[list[RecordCard]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +369,9 @@ class ResultSummary:
     share_text: str
     rounds: list[ResultRoundCard]
     mode_key: str | None = None
+    presentation: Presentation = "score"
+    record: ResultRecord | None = None
+    bracket: Bracket | None = None
 
 
 @dataclass(frozen=True, slots=True)
