@@ -59,7 +59,7 @@ def errors_of(body: DraftBody, known: dict[UUID, ItemInfo] = KNOWN) -> set[tuple
 
 
 GOLDEN: list[tuple[str, dict[str, Any], set[tuple[str, str]]]] = [
-    ("title empty", {"title": " ​ "}, {("title", "collections.title_invalid")}),
+    ("title empty", {"title": " \u200b "}, {("title", "collections.title_invalid")}),
     ("title too long", {"title": "я" * 21}, {("title", "collections.title_invalid")}),
     ("title link", {"title": "см. kino.ru"}, {("title", "collections.title_invalid")}),
     ("title denylist", {"title": "Дураки 90-х"}, {("title", "collections.title_invalid")}),
@@ -130,10 +130,10 @@ GOLDEN: list[tuple[str, dict[str, Any], set[tuple[str, str]]]] = [
     ),
     (
         "emoji bare zwj",
-        {"items": (Item(A, "‍🎬"), Item(B))},
+        {"items": (Item(A, "\u200d🎬"), Item(B))},
         {("items[0].custom.emoji", "collections.emoji_invalid")},
     ),
-    ("emoji zwj family ok", {"items": (Item(A, "👨‍👩‍👧"), Item(B))}, set()),
+    ("emoji zwj family ok", {"items": (Item(A, "👨\u200d👩\u200d👧"), Item(B))}, set()),
     ("emoji flag+skin ok", {"items": (Item(A, "🇷🇺👍🏽"), Item(B))}, set()),
 ]
 
@@ -164,7 +164,7 @@ def test_title_reason_is_kept_in_errors() -> None:
 
 def test_publishable_normalizes_text() -> None:
     body = draft(
-        title="  Кино‮  кадры ",
+        title="  Кино\u202e  кадры ",
         description="  строка 1\n\n\n\nстрока 2  ",
         tags=("horror", "horror"),
         cover="night",
@@ -175,7 +175,7 @@ def test_publishable_normalizes_text() -> None:
     assert result.description == "строка 1\n\nстрока 2"
     assert result.tags == ("horror",) and result.cover == "night"
     assert result.visibility is Visibility.UNLISTED
-    assert POLICY.publishable(Domain.FILM, draft(description=" ​ "), KNOWN).description is None
+    assert POLICY.publishable(Domain.FILM, draft(description=" \u200b "), KNOWN).description is None
 
 
 def test_title_check_returns_reason() -> None:

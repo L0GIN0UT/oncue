@@ -32,6 +32,16 @@ def test_difficulty_thresholds_must_be_ordered(thresholds: tuple[float, float]) 
         DifficultySettings(thresholds=thresholds)
 
 
+def test_stage3b_jobs_and_meta_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings().collections
+    assert (settings.popular.window_days, settings.sweep.batch) == (7, 100)
+    assert settings.meta_config is None
+    monkeypatch.setenv("GV_COLLECTIONS__META_CONFIG", "")
+    monkeypatch.setenv("GV_COLLECTIONS__POPULAR__WINDOW_DAYS", "3")
+    settings = Settings().collections
+    assert settings.meta_config is None and settings.popular.window_days == 3
+
+
 def test_items_range_must_be_consistent() -> None:
     with pytest.raises(ValidationError):
         CollectionsLimits(items_min=10, items_max=5)
