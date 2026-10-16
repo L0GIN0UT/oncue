@@ -124,7 +124,7 @@ def test_collection_modes_are_registered_templates(factory: RulesFactory, name: 
     assert rules.engine.round_options() == [5, 10, 25, "all"]
     assert rules.min_playable() == 5
     assert not rules.records_enabled
-    assert rules.domain == name.split(".")[0]
+    assert rules.domain == name.split(".", maxsplit=1)[0]
 
 
 def test_editor_schema_lists_plugins(factory: RulesFactory) -> None:

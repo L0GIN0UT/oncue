@@ -70,7 +70,11 @@ def build_public_router(c: ApiServices) -> APIRouter:
         "/modes",
         response_model=list[ModeOut],
         summary="Опубликованные режимы",
-        description="Публичный, `Cache-Control: public, max-age=30`.",
+        description=(
+            "Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника "
+            "(source `collection`) не входят: они приходят из "
+            "`GET /v1/collections/{collection_id}/modes`."
+        ),
         responses=problem_responses(422, 503),
     )
     async def list_modes(

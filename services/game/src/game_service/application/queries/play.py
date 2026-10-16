@@ -97,11 +97,12 @@ class PlayQueries:
         self._candidate_limit = candidate_limit
 
     async def modes(self, domain: str | None) -> list[Json]:
-        """Опубликованные режимы."""
+        """Опубликованные режимы, кроме шаблонов сборника: без ``collection_id`` их не
+        начать, они приходят из ``GET /v1/collections/{id}/modes`` (ADR 0028)."""
         return [
             mode_json(r)
             for r in await self._catalog.published()
-            if domain is None or r.domain == domain
+            if (domain is None or r.domain == domain) and not r.engine.uses_collection
         ]
 
     async def result(self, player: Player, session_id: UUID) -> Json:

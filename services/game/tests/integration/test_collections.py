@@ -164,9 +164,7 @@ async def test_own_set_counts_for_reveal_too_and_hidden_collection_is_empty(
     need = PlayableFor(CLUE, HASH, scope=CID)
     async with sessions() as session, session.begin():
         collections = SqlCollectionRepository(session)
-        found = await SqlCollectionPort(collections, 100, REVEAL).items(
-            CID, 100, playable_for=need
-        )
+        found = await SqlCollectionPort(collections, 100, REVEAL).items(CID, 100, playable_for=need)
         assert [r.id for r in found] == [IDS[3], IDS[0], IDS[5]]
         assert await collections.total(CID) == 6  # заблокированная не считается
         hidden = _proj(CID, CollectionStatus.HIDDEN)

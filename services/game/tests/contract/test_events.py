@@ -23,6 +23,14 @@ CONSUMED = [
     "media_pipeline.AssetsReady",
     "media_pipeline.AssetsFailed",
     "identity.UserDeleted",
+    "collections.CollectionPublished",
+    "collections.CollectionUpdated",
+    "collections.CollectionDeleted",
+]
+# Варианты примеров той же схемы (этап 3b): набор сборника со ``scope``.
+VARIANTS = [
+    ("media_pipeline.AssetsReady", "collection"),
+    ("media_pipeline.AssetsFailed", "collection"),
 ]
 
 
@@ -35,6 +43,15 @@ async def test_consumed_examples_are_processed(game: Any) -> None:
     for event_type in CONSUMED:
         outcome = await game.deliver(load_example(event_type))
         assert outcome is Outcome.PROCESSED, event_type
+    for event_type, variant in VARIANTS:
+        outcome = await game.deliver(load_example(event_type, variant=variant))
+        assert outcome is Outcome.PROCESSED, (event_type, variant)
+
+
+async def test_collection_liked_is_skipped(game: Any) -> None:
+    """Лайки game не нужны: топик тот же, тип события не обрабатывается."""
+    assert load_event_schema("collections.CollectionLiked")["x-topic"] in messaging.CONSUMED_TOPICS
+    assert await game.deliver(load_example("collections.CollectionLiked")) is Outcome.SKIPPED
 
 
 async def test_catalog_stage3a_fields_are_projected_tolerantly(game: Any) -> None:

@@ -4454,21 +4454,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Темы периода сетки: поиск персон",
@@ -4812,21 +4797,6 @@
             },
             "description": "Некорректные данные"
           },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
-          },
           "503": {
             "content": {
               "application/json": {
@@ -5025,7 +4995,7 @@
     },
     "/v1/modes": {
       "get": {
-        "description": "Публичный, `Cache-Control: public, max-age=30`.",
+        "description": "Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника (source `collection`) не входят: они приходят из `GET /v1/collections/{collection_id}/modes`.",
         "operationId": "list_modes_v1_modes_get",
         "parameters": [
           {
@@ -5215,21 +5185,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           },
           "503": {
             "content": {
