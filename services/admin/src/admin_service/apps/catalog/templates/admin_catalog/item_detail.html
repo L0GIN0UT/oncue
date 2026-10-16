@@ -43,8 +43,19 @@
   {% endfor %}
 </table>
 
+<h2>Тексты загадок</h2>
+<p><a href="{% url 'catalog:clue_texts' item_id=item_id %}">Сюжет, слоган и эмодзи для загадок…</a></p>
+
+{% if can_upload %}
 <h2>Загрузить исходник</h2>
 <form method="post" enctype="multipart/form-data" action="{% url 'catalog:upload' item_id=item_id %}">
   {% csrf_token %}{{ upload_form.as_p }}<input type="submit" value="Загрузить">
 </form>
+
+<h2>Порядок кадров</h2>
+<p>Порядок исходника среди своего вида (кадры последовательности: 1 — самый сложный). id исходника показывается после загрузки.</p>
+<form method="post" action="{% url 'catalog:position' item_id=item_id %}">
+  {% csrf_token %}{{ position_form.as_p }}<input type="submit" value="Изменить порядок">
+</form>
+{% endif %}
 {% endblock %}

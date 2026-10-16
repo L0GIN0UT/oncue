@@ -62,4 +62,14 @@ class ReplaceItemForm(MutationForm):
 
 
 class RegenerateForm(MutationForm):
-    """Перегенерация набора: только причина."""
+    """Перегенерация набора: причина и (для набора с темой — сетки недели) новая тема.
+
+    Пустая тема — генератор выберет её сам; играбельность темы проверяет game
+    (409 ``game.theme_not_playable``).
+    """
+
+    subject_id = forms.UUIDField(
+        label="Новая тема (id персоны)",
+        required=False,
+        help_text="только для набора с темой; пусто — тему выберет генератор",
+    )

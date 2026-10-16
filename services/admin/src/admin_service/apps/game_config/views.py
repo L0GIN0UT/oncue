@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from typing import Any
 
 from django.contrib import messages
@@ -21,6 +23,7 @@ from admin_service.apps.game_config import config_text
 from admin_service.apps.game_config.forms import (
     MODE_KEY_RE,
     ArchiveForm,
+    AssetRequestForm,
     EditorForm,
     ModeFilterForm,
     NewModeForm,
@@ -28,12 +31,22 @@ from admin_service.apps.game_config.forms import (
     RollbackForm,
 )
 from admin_service.core.game_client import GAME, GameAdminClient
+from admin_service.core.media_client import MEDIA, MediaAdminClient
 from admin_service.core.permissions import has_perm, require_perm
+from admin_service.core.service_client import ServiceClient
 from admin_service.core.views import mutate, read
 
 VIEW, EDIT, PUBLISH = "config.modes.view", "config.modes.edit", "config.modes.publish"
 _NOT_FOUND = 404
 _ACTIONS = ("validate", "save")
+PROFILE_MISSING = "assets.profile_missing"
+# Предупреждения проверки конфига — человеческим текстом; неизвестный код показывается как есть.
+_WARNING_TEXTS = {
+    PROFILE_MISSING: "нет ни одного ассета под эти параметры — нажмите «Запросить ассеты»",
+}
+# Как параметры GET /admin/v1/profiles у media-pipeline: другое значение туда не отправляем.
+_CLUE_TYPE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_PARAMS_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -46,6 +59,18 @@ def _list(value: Any) -> list[dict[str, Any]]:
 
 def _int(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _warnings(result: Any) -> list[dict[str, str]]:
+    """Предупреждения проверки для шаблона: код, секция конфига и пояснение."""
+    return [
+        {
+            "code": str(w.get("code") or ""),
+            "path": str(w.get("path") or ""),
+            "text": _WARNING_TEXTS.get(str(w.get("code") or ""), ""),
+        }
+        for w in _list(_dict(result).get("warnings"))
+    ]
 
 
 # ---------------------------------------------------------------------------- список
@@ -141,6 +166,7 @@ def _detail_context(request: HttpRequest, key: str, **forms: Any) -> dict[str, A
             new_label=f"черновик r{draft.get('revision')}",
         )
     validation = _dict((draft or {}).get("validation"))
+    draft_warnings = _warnings(validation)
     context.update(
         detail=detail,
         published=published,
@@ -148,6 +174,11 @@ def _detail_context(request: HttpRequest, key: str, **forms: Any) -> dict[str, A
         draft=draft,
         draft_valid=bool(validation.get("ok")),
         draft_errors=_list(validation.get("errors")),
+        draft_warnings=draft_warnings,
+        profile_missing=any(w["code"] == PROFILE_MISSING for w in draft_warnings),
+        asset_form=forms.get("asset_form")
+        or AssetRequestForm(initial={"draft_revision": (draft or {}).get("revision")}),
+        **_asset_panel(request, key),
         diff=diff,
         draft_text=config_text.dump(draft.get("body"), "yaml") if draft else None,
         shown=shown,
@@ -162,6 +193,55 @@ def _detail_context(request: HttpRequest, key: str, **forms: Any) -> dict[str, A
         archive_form=forms.get("archive_form") or ArchiveForm(),
     )
     return context
+
+
+def _profiles_by_type(
+    request: HttpRequest, clue_types: list[str]
+) -> tuple[dict[tuple[str, str], dict[str, Any]], str | None]:
+    """Профили media-pipeline по типам загадок: ``{(clue_type, params_hash): профиль}``.
+
+    Один запрос на тип загадки, а не на каждый запрос ассетов: число типов ограничено
+    плагинами, а запросов у режима со временем становится много.
+    """
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def profiles_of(clue_type: str) -> Callable[[ServiceClient], Any]:
+        return lambda c: MediaAdminClient(c).profiles(clue_type=clue_type)
+
+    for clue_type in clue_types:
+        rows, error = read(request, MEDIA, profiles_of(clue_type))
+        if error is not None:
+            return found, error.message
+        for row in _list(rows):
+            found.setdefault((str(row.get("clue_type")), str(row.get("params_hash"))), row)
+    return found, None
+
+
+def _asset_panel(request: HttpRequest, key: str) -> dict[str, Any]:
+    """Запросы ассетов режима (game) и статус их профилей (media-pipeline, ADR 0025).
+
+    Недоступность media-pipeline не роняет карточку: панель показывает ошибку, а запросы —
+    без статуса профиля.
+    """
+    rows, error = read(request, GAME, lambda c: GameAdminClient(c).asset_requests(key))
+    requests = _list(rows)
+    clue_types = sorted(
+        {
+            str(r.get("clue_type"))
+            for r in requests
+            if _CLUE_TYPE_RE.match(str(r.get("clue_type") or ""))
+            and _PARAMS_HASH_RE.match(str(r.get("params_hash") or ""))
+        }
+    )
+    profiles, media_error = _profiles_by_type(request, clue_types)
+    return {
+        "asset_requests": [
+            {**r, "profile": profiles.get((str(r.get("clue_type")), str(r.get("params_hash"))))}
+            for r in requests
+        ],
+        "asset_requests_error": error.message if error is not None else None,
+        "profiles_error": media_error,
+    }
 
 
 def _int_param(raw: str | None) -> int | None:
@@ -206,7 +286,7 @@ def _validation_view(result: Any, text: str) -> dict[str, Any]:
     return {
         "ok": result.get("ok") is True,
         "errors": errors,
-        "warnings": [str(w.get("code") or "") for w in _list(result.get("warnings"))],
+        "warnings": _warnings(result),
         "playable_count": _int(pool.get("playable_count")),
         "lines": config_text.numbered(text, marked),
     }
@@ -416,5 +496,39 @@ def mode_archive(request: HttpRequest, key: str) -> HttpResponse:
         audit_fields=("status", "published_version"),
         call=lambda c: GameAdminClient(c).archive(key, reason=reason, idempotency_key=idem),
         success="Режим отправлен в архив",
+    )
+    return redirect("game_config:mode", key=key)
+
+
+# ---------------------------------------------------------------------------- ассеты
+
+
+@require_POST
+@require_perm(PUBLISH)
+def mode_request_assets(request: HttpRequest, key: str) -> HttpResponse:
+    """«Запросить ассеты» под загадку (и ревил) черновика: game публикует событие (D8).
+
+    Право — ``config.modes.publish`` (§2.7 плана этапа 3a): запрос запускает генерацию
+    в media-pipeline. 409 ``game.assets_already_available`` — понятное сообщение и аудит отказа.
+    """
+    form = AssetRequestForm(request.POST)
+    if not form.is_valid():
+        return _invalid(request, key, asset_form=form)
+    reason, idem = form.cleaned_data["reason"], str(form.cleaned_data["idempotency_key"])
+    revision = form.cleaned_data["draft_revision"]
+    mutate(
+        request,
+        service=GAME,
+        action="game.request_assets",
+        target_type="mode_config",
+        target_id=key,
+        reason=reason,
+        idempotency_key=idem,
+        before={"draft_revision": revision},
+        audit_fields=("request_id", "clue_type", "params_hash", "status"),
+        call=lambda c: GameAdminClient(c).request_assets(
+            key, draft_revision=revision, reason=reason, idempotency_key=idem
+        ),
+        success="Запрос ассетов отправлен: media-pipeline сгенерирует наборы порциями",
     )
     return redirect("game_config:mode", key=key)

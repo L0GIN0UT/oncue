@@ -15,6 +15,15 @@ urlpatterns = [
     path("items/<uuid:item_id>/unblock/", views.item_unblock, name="unblock"),
     path("items/<uuid:item_id>/aliases/", views.item_aliases, name="aliases"),
     path("items/<uuid:item_id>/sources/", views.source_upload, name="upload"),
+    path("items/<uuid:item_id>/sources/position/", views.source_position, name="position"),
+    path("items/<uuid:item_id>/clue-texts/", views.clue_texts, name="clue_texts"),
+    path("items/<uuid:item_id>/clue-texts/save/", views.clue_texts_save, name="clue_texts_save"),
+    path(
+        "items/<uuid:item_id>/clue-texts/approve/",
+        views.clue_texts_approve,
+        name="clue_texts_approve",
+    ),
+    path("republish/", views.republish, name="republish"),
     path(
         "items/<uuid:item_id>/asset-sets/<uuid:asset_set_id>/regenerate/",
         views.asset_set_regenerate,
