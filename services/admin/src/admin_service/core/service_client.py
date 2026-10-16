@@ -65,6 +65,33 @@ _MESSAGES: Mapping[str, str] = {
     "source.kind_not_applicable": "Этот вид исходника не используется для домена единицы",
     "source.position": "Порядок исходника — от 1 до 100",
     "source.not_found": "Исходник не найден",
+    # game, этап 3b: темы сетки и сборники (docs/plans/stage-3b.md §2.5, §7)
+    "game.subjects_not_supported": "Этот режим не выбирает тему-персону",
+    "game.collection_not_found": "Сборник не найден, скрыт или удалён",
+    "game.collection_required": "Режим играется только по сборнику",
+    "game.collection_not_supported": "Режим не играется по сборнику",
+    "game.collection_domain_mismatch": "Домен сборника не совпадает с доменом режима",
+    "game.rounds_not_allowed": "Такое число раундов режим не допускает",
+    "game.pool_too_small": "В сборнике мало играбельных единиц для этого режима",
+    # collections, этап 3b (docs/plans/stage-3b.md §2.5, §5)
+    "collections.not_found": "Сборник не найден",
+    "collections.version_conflict": (
+        "Сборник уже изменил кто-то другой — ваша правка не сохранена, сравните её с текущей"
+    ),
+    "collections.not_curated": "Это пользовательский сборник: его правит только автор",
+    "collections.not_published": "Сборник ещё не опубликован — действие недоступно",
+    "collections.hidden": "Сборник скрыт модератором",
+    "collections.deleted": "Сборник удалён",
+    "collections.publish_invalid": "Сборник не прошёл проверку — исправьте ошибки и повторите",
+    "collections.draft_invalid": "Сборник нарушает лимиты — исправьте ошибки и повторите",
+    "collections.title_invalid": "Название не подходит (ссылки, @, e-mail или запрещённые слова)",
+    "collections.draft_conflict": "Черновик уже изменили — обновите страницу",
+    "collections.drafts_limit": "У автора слишком много черновиков",
+    "collections.author_restricted": "Автору запрещено создавать и править сборники",
+    "collections.own_collection": "Свой сборник лайкнуть нельзя",
+    "collections.publish_limit": "Слишком много публикаций за сутки — повторите позже",
+    "collections.rate_limited": "Слишком много запросов — повторите позже",
+    "collections.limiter_unavailable": "Лимитер публикаций недоступен — повторите позже",
 }
 
 
@@ -76,14 +103,28 @@ class ServiceError(Exception):
         status: HTTP-статус; ``None`` — ответа нет (сеть, таймаут).
         code: Машинный код (``code`` из Problem Details или ``service.unavailable``).
         message: Сообщение для модератора.
+        details: ``details`` Problem Details (например, ``errors`` с путями полей у
+            ``collections.publish_invalid``); пусто — сервис их не прислал.
+        errors: ``errors`` Problem Details (ошибки валидации запроса: ``loc``, ``msg``).
     """
 
-    def __init__(self, service: str, status: int | None, code: str, message: str) -> None:
+    def __init__(
+        self,
+        service: str,
+        status: int | None,
+        code: str,
+        message: str,
+        *,
+        details: Mapping[str, Any] | None = None,
+        errors: list[dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__(f"{service}: {code}")
         self.service = service
         self.status = status
         self.code = code
         self.message = message
+        self.details: Mapping[str, Any] = details or {}
+        self.errors: list[dict[str, Any]] = errors or []
 
 
 class SessionExpiredError(Exception):
@@ -111,7 +152,15 @@ def problem_to_error(service: str, response: httpx.Response) -> ServiceError:
             if isinstance(e, dict)
         )
         message = f"{message}: {details}"
-    return ServiceError(service, response.status_code, code, message)
+    raw_details = body.get("details")
+    return ServiceError(
+        service,
+        response.status_code,
+        code,
+        message,
+        details=raw_details if isinstance(raw_details, dict) else None,
+        errors=[e for e in errors if isinstance(e, dict)] if isinstance(errors, list) else None,
+    )
 
 
 class ServiceClient:
@@ -185,6 +234,10 @@ class ServiceClient:
     def put(self, path: str, *, idempotency_key: str, json: Any) -> Any:
         """PUT-мутация."""
         return self._send("PUT", path, idempotency_key=idempotency_key, json=json)
+
+    def delete(self, path: str, *, idempotency_key: str, json: Any = None) -> Any:
+        """DELETE-мутация (тело — причина действия, если сервис её требует)."""
+        return self._send("DELETE", path, idempotency_key=idempotency_key, json=json)
 
     def _send(
         self,

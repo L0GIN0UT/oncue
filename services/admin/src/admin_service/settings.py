@@ -68,6 +68,7 @@ class AdminConfig(BaseModel):
             "catalog": "http://catalog:8000",
             "media_pipeline": "http://media-pipeline:8000",
             "game": "http://game:8000",
+            "collections": "http://collections:8000",
         }
     )
     service_timeout_s: float = Field(default=10.0, gt=0)

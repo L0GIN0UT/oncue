@@ -37,6 +37,10 @@ class MediaAdminClient:
             "/admin/v1/profiles", params={"clue_type": clue_type, "params_hash": params_hash}
         )
 
+    def sources(self, media_item_id: UUID) -> Any:
+        """Исходники единицы по виду и порядку (``admin.access``, этап 3b; без scoped)."""
+        return self._client.get(_SOURCES, params={"media_item_id": str(media_item_id)})
+
     def regenerate(self, asset_set_id: UUID, *, reason: str, idempotency_key: str) -> Any:
         """Перегенерировать набор ассетов (``media.regenerate``)."""
         return self._client.post(
