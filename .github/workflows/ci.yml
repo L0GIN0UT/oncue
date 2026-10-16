@@ -189,9 +189,10 @@ jobs:
             nginx:1.28-alpine nginx -t
 
   e2e-smoke:
-    # Полный стек на compose: смоук (e2e/stack.spec.ts), сценарии «дейлик» (e2e/daily.spec.ts)
-    # и режимы этапа 3a (e2e/modes.spec.ts) — последние два только при E2E_SEEDED=1, когда стек
-    # засеян, `pnpm test:e2e:stack`. На main и по метке PR `e2e`.
+    # Полный стек на compose: смоук (e2e/stack.spec.ts), сценарии «дейлик» (e2e/daily.spec.ts),
+    # режимы этапа 3a (e2e/modes.spec.ts) и сборники этапа 3b (e2e/collections.spec.ts) — все,
+    # кроме смоука, только при E2E_SEEDED=1, когда стек засеян, `pnpm test:e2e:stack`
+    # (testMatch e2e/playwright.config.ts подхватывает все *.spec.ts). На main и по метке PR `e2e`.
     name: E2E smoke (compose)
     needs: [lint]
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'e2e')
@@ -245,7 +246,7 @@ jobs:
         # Стек поднят с --wait (миграции завершены → bootstrap-админ создан). Сидер ходит
         # напрямую на опубликованные порты сервисов (compose.services.dev.yml) и грузит
         # каталог (с синтетикой 3a), все виды исходников, наборы дня и недели. Успех →
-        # E2E_SEEDED=1 раскрывает e2e/daily.spec.ts и e2e/modes.spec.ts.
+        # E2E_SEEDED=1 раскрывает e2e/daily.spec.ts, e2e/modes.spec.ts и e2e/collections.spec.ts.
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
           export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
@@ -265,7 +266,7 @@ jobs:
           node-version: "24"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: E2E — смоук стека (и «дейлик», режимы 3a при E2E_SEEDED=1)
+      - name: E2E — смоук стека (и «дейлик», режимы 3a, сборники 3b при E2E_SEEDED=1)
         if: steps.app.outputs.present == 'true'
         # modes.spec.ts ходит в admin-API game/media (запрос ассетов) как `gv dev seed`:
         # учётные данные админа — из .env, в лог не попадают.

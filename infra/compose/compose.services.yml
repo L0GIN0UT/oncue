@@ -355,9 +355,11 @@ services:
       GV_SERVICE_NAME: collections
       GV_DATABASE_URL: postgresql+asyncpg://collections:${PG_PASSWORD_COLLECTIONS:?задайте PG_PASSWORD_COLLECTIONS}@postgres:5432/collections
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
     depends_on:
       collections-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
     deploy:
       resources:
@@ -397,9 +399,11 @@ services:
       GV_SERVICE_NAME: library
       GV_DATABASE_URL: postgresql+asyncpg://library:${PG_PASSWORD_LIBRARY:?задайте PG_PASSWORD_LIBRARY}@postgres:5432/library
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
     depends_on:
       library-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
     deploy:
       resources:
