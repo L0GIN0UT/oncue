@@ -26,6 +26,8 @@ SEEDS = sorted(
     p.stem for p in (Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml")
 )
 FACTORY = EngineFactory(register_builtin(PluginRegistry()))
+# Сиды game собираются реестром процесса game: встроенные плагины и ``collection`` (3b).
+SEED_FACTORY = EngineFactory(register_collection(register_builtin(PluginRegistry())))
 
 
 def _issues(body: dict[str, Any], factory: EngineFactory = FACTORY) -> list[ConfigIssue]:
@@ -35,8 +37,8 @@ def _issues(body: dict[str, Any], factory: EngineFactory = FACTORY) -> list[Conf
 @pytest.mark.parametrize("key", SEEDS)
 def test_seeds_are_valid_and_build(key: str, seed_body: SeedBody) -> None:
     config = parse_mode_config(seed_body(key))
-    assert FACTORY.validate(config) == []
-    engine = FACTORY.build(config)
+    assert SEED_FACTORY.validate(config) == []
+    engine = SEED_FACTORY.build(config)
     if engine.answer_format.single_answer:
         # Формат pick (пара, сетка): один уровень и один ответ на раунд.
         assert engine.levels_count == 1
