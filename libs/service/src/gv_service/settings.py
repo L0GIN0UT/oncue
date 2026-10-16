@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,6 +87,26 @@ class ServiceAuthSettings(BaseModel):
     timeout_s: float = Field(default=2.0, gt=0, le=30)
     refresh_ratio: float = Field(default=0.5, gt=0, lt=1)
     retry_backoff_s: float = Field(default=5.0, ge=0, le=300)
+
+
+class UgcSettings(BaseModel):
+    """Пользовательский текст (ADR 0030): ``GV_UGC__*`` сервисов с UGC (collections, library).
+
+    Attributes:
+        denylist_path: Свой файл denylist (формат ``gv_text.ugc.UgcPolicy``), заменяет
+            встроенный целиком (``GV_UGC__DENYLIST_PATH``); пусто или ``None`` — встроенный
+            ``gv_text/data/ugc_denylist.txt``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    denylist_path: Path | None = None
+
+    @field_validator("denylist_path", mode="before")
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        # compose передаёт `${GV_UGC__DENYLIST_PATH:-}`: пустая строка = «не задан».
+        return None if value == "" else value
 
 
 class ServiceSettings(BaseSettings):

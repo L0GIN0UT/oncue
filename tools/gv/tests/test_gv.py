@@ -282,7 +282,7 @@ def test_public_origins_for_cookie_mutation_services() -> None:
 
     rendered = render_all(load_services(ROOT))
     services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
-    for name in ("identity", "game"):
+    for name in ("identity", "game", "collections", "library"):
         value = services[name]["environment"]["GV_PUBLIC_ORIGINS"]
         assert value.startswith("${GV_PUBLIC_ORIGINS:?"), name
     assert "GV_PUBLIC_ORIGINS" not in services["bff-web"]["environment"]  # только GET

@@ -412,3 +412,21 @@ def test_environment_defaults_to_production(monkeypatch: pytest.MonkeyPatch) -> 
     """Забытая GV_ENVIRONMENT не должна включать /docs и отладочное поведение."""
     monkeypatch.delenv("GV_ENVIRONMENT", raising=False)
     assert ServiceSettings(service_name="demo").is_production
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("raw", "expected"), [("", None), ("/etc/deny.txt", "/etc/deny.txt")])
+def test_ugc_denylist_path_empty_means_builtin(
+    monkeypatch: pytest.MonkeyPatch, raw: str, expected: str | None
+) -> None:
+    """compose передаёт пустую строку, если свой denylist не задан (ADR 0030)."""
+    from pathlib import Path
+
+    from gv_service import UgcSettings
+
+    class Demo(ServiceSettings):
+        ugc: UgcSettings = UgcSettings()
+
+    monkeypatch.setenv("GV_UGC__DENYLIST_PATH", raw)
+    path = Demo(service_name="demo").ugc.denylist_path
+    assert path == (Path(expected) if expected else None)

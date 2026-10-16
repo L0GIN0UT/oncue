@@ -13,6 +13,7 @@ from gv_service.settings import (
     InternalAuthSettings,
     ServiceAuthSettings,
     ServiceSettings,
+    UgcSettings,
 )
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "ServiceAuthSettings",
     "ServiceDefinition",
     "ServiceSettings",
+    "UgcSettings",
     "build_service_token_provider",
     "create_app",
     "idempotency_key",

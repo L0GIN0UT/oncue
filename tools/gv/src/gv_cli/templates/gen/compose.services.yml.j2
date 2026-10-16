@@ -114,6 +114,30 @@ services:
       GV_GAME__MEDIA_URL: http://{{ m.dns }}:8000
 {% endfor %}
 {% endif %}
+{% if s.name == "collections" %}
+      GV_COLLECTIONS__LIMITS__DRAFTS_MAX: ${GV_COLLECTIONS__LIMITS__DRAFTS_MAX:-20}
+      GV_COLLECTIONS__LIMITS__PUBLISH_PER_DAY: ${GV_COLLECTIONS__LIMITS__PUBLISH_PER_DAY:-5}
+      GV_COLLECTIONS__LIMITS__ITEMS_MIN: ${GV_COLLECTIONS__LIMITS__ITEMS_MIN:-5}
+      GV_COLLECTIONS__LIMITS__ITEMS_MAX: ${GV_COLLECTIONS__LIMITS__ITEMS_MAX:-200}
+      GV_COLLECTIONS__LIMITS__TAGS_MAX: ${GV_COLLECTIONS__LIMITS__TAGS_MAX:-5}
+      GV_COLLECTIONS__DIFFICULTY__PRIOR: ${GV_COLLECTIONS__DIFFICULTY__PRIOR:-0.5}
+      GV_COLLECTIONS__DIFFICULTY__M: ${GV_COLLECTIONS__DIFFICULTY__M:-10}
+      GV_COLLECTIONS__DIFFICULTY__MIN_PLAYS: ${GV_COLLECTIONS__DIFFICULTY__MIN_PLAYS:-10}
+      GV_COLLECTIONS__DIFFICULTY__THRESHOLDS: ${GV_COLLECTIONS__DIFFICULTY__THRESHOLDS:-[0.4,0.7]}
+{% endif %}
+{% if s.name == "library" %}
+      # Пусто — встроенный config/shelves.yaml; свой файл нужно смонтировать в контейнер.
+      GV_LIBRARY__SHELVES_CONFIG: ${GV_LIBRARY__SHELVES_CONFIG:-}
+      GV_LIBRARY__LIMITS__CUSTOM_SHELVES_MAX: ${GV_LIBRARY__LIMITS__CUSTOM_SHELVES_MAX:-50}
+      GV_LIBRARY__LIMITS__SAVES_PER_MIN: ${GV_LIBRARY__LIMITS__SAVES_PER_MIN:-60}
+{% endif %}
+{% if s.name in ("collections", "library") %}
+      # Пусто — встроенный denylist gv_text; свой файл нужно смонтировать в контейнер.
+      GV_UGC__DENYLIST_PATH: ${GV_UGC__DENYLIST_PATH:-}
+{% endif %}
+{% if s.name == "game" %}
+      GV_GAME_LIMITS__PLAYABILITY_PER_MIN: ${GV_GAME_LIMITS__PLAYABILITY_PER_MIN:-30}
+{% endif %}
 {% if s.name in service_clients %}
       GV_SERVICE_AUTH__TOKEN_URL: http://identity:8000/internal/v1/service-tokens
       GV_SERVICE_AUTH__CLIENT_ID: {{ s.name }}
