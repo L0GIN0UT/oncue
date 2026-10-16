@@ -19,6 +19,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Каталог сборников
+         * @description Без `q` — блоки `featured`, `popular`, `new` (публично, кэш); с `q` — только `results` (поиск по названию, описанию и тегам). Упавший collections — блоки `unavailable`, страница 200.
+         */
+        get: operations["collections_page_v1_pages_collections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница сборника
+         * @description Карточка (collections), режимы с играбельностью (game; недоступен — `modes: unavailable`), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`.
+         */
+        get: operations["collection_page_v1_pages_collections__collection_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/home": {
         parameters: {
             query?: never;
@@ -28,6 +68,46 @@ export interface paths {
         };
         /** Главная: дейлики и режимы */
         get: operations["home_page_v1_pages_home_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Медиатека: полки
+         * @description Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`.
+         */
+        get: operations["library_page_v1_pages_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/library/{shelf_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Медиатека: полка
+         * @description `shelf_ref` — `system:<key>` или uuid своей полки; чужая — 404.
+         */
+        get: operations["library_shelf_page_v1_pages_library__shelf_ref__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -100,6 +180,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Block[CollectionDetail] */
+        Block_CollectionDetail_: {
+            data?: components["schemas"]["CollectionDetail"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[CollectionResults] */
+        Block_CollectionResults_: {
+            data?: components["schemas"]["CollectionResults"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[CollectionCard]] */
+        Block_list_CollectionCard__: {
+            /** Data */
+            data?: components["schemas"]["CollectionCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[CollectionModeCard]] */
+        Block_list_CollectionModeCard__: {
+            /** Data */
+            data?: components["schemas"]["CollectionModeCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[DailyCard]] */
         Block_list_DailyCard__: {
             /** Data */
@@ -150,9 +268,28 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[ShelfCard]] */
+        Block_list_ShelfCard__: {
+            /** Data */
+            data?: components["schemas"]["ShelfCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[ResultSummary] */
         Block_ResultSummary_: {
             data?: components["schemas"]["ResultSummary"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[ShelfItems] */
+        Block_ShelfItems_: {
+            data?: components["schemas"]["ShelfItems"] | null;
             /**
              * Status
              * @enum {string}
@@ -180,6 +317,242 @@ export interface components {
             champion: string;
             /** Picks */
             picks: components["schemas"]["BracketPick"][];
+        };
+        /**
+         * CollectionAuthor
+         * @description Автор сборника (``collections``): пользователь, «Guessverse» или удалённый.
+         */
+        CollectionAuthor: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "user" | "curator" | "deleted";
+            /** Nickname */
+            nickname?: string | null;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /**
+         * CollectionBlocks
+         * @description Блоки страницы сборника: недоступный game даёт ``modes: unavailable``.
+         */
+        CollectionBlocks: {
+            collection: components["schemas"]["Block_CollectionDetail_"];
+            modes: components["schemas"]["Block_list_CollectionModeCard__"];
+        };
+        /**
+         * CollectionCard
+         * @description Карточка сборника в каталоге (``collections /v1/collections``), без состава.
+         */
+        CollectionCard: {
+            author: components["schemas"]["CollectionAuthor"];
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            cover?: components["schemas"]["CollectionCover"] | null;
+            /** Default Mode Key */
+            default_mode_key: string;
+            /** Difficulty */
+            difficulty?: ("easy" | "medium" | "hard") | null;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+            /** Items Count */
+            items_count: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ugc" | "curated";
+            /** Likes Count */
+            likes_count: number;
+            /** Plays Count */
+            plays_count: number;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Tags */
+            tags: string[];
+            /** Title */
+            title: string;
+        };
+        /**
+         * CollectionCover
+         * @description Обложка — пресет (градиент и эмодзи из ``collections /v1/meta``).
+         */
+        CollectionCover: {
+            /** Preset */
+            preset: string;
+        };
+        /**
+         * CollectionDetail
+         * @description Сборник целиком (``collections /v1/collections/{id}``).
+         */
+        CollectionDetail: {
+            author: components["schemas"]["CollectionAuthor"];
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            cover?: components["schemas"]["CollectionCover"] | null;
+            /** Default Mode Key */
+            default_mode_key: string;
+            /** Description */
+            description?: string | null;
+            /** Difficulty */
+            difficulty?: ("easy" | "medium" | "hard") | null;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+            /** Items */
+            items?: components["schemas"]["CollectionItemCard"][] | null;
+            /** Items Count */
+            items_count: number;
+            /** Items Visible */
+            items_visible: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ugc" | "curated";
+            /** Likes Count */
+            likes_count: number;
+            /** Plays Count */
+            plays_count: number;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "published" | "hidden";
+            /** Tags */
+            tags: string[];
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "public" | "unlisted";
+        };
+        /**
+         * CollectionItemCard
+         * @description Единица состава: только если состав открыт субъекту (D6).
+         */
+        CollectionItemCard: {
+            /** Available */
+            available: boolean;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /** Position */
+            position: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * CollectionMe
+         * @description Отношение пользователя к сборнику; гостю и анониму — ``me: null``.
+         */
+        CollectionMe: {
+            /** Completed */
+            completed: boolean;
+            /** Favorite */
+            favorite: boolean;
+            /**
+             * Is Author
+             * @default false
+             */
+            is_author: boolean;
+            /** Liked */
+            liked: boolean;
+        };
+        /**
+         * CollectionModeCard
+         * @description Режим сборника (``game /v1/collections/{id}/modes``).
+         */
+        CollectionModeCard: {
+            /** Allow Guest */
+            allow_guest: boolean;
+            /** Available */
+            available: boolean;
+            /** Clue Type */
+            clue_type: string;
+            /** Mode Key */
+            mode_key: string;
+            /** Playable */
+            playable: number;
+            /** Round Options */
+            round_options: (5 | 10 | 25 | "all")[];
+            /** Title Key */
+            title_key: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * CollectionPage
+         * @description ``GET /v1/pages/collections/{id}``.
+         */
+        CollectionPage: {
+            blocks: components["schemas"]["CollectionBlocks"];
+            me?: components["schemas"]["CollectionMe"] | null;
+        };
+        /**
+         * CollectionResults
+         * @description Результаты поиска (страница по курсору).
+         */
+        CollectionResults: {
+            /** Items */
+            items: components["schemas"]["CollectionCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * CollectionsBlocks
+         * @description Блоки каталога: без ``q`` — витрины, с ``q`` — только ``results``.
+         */
+        CollectionsBlocks: {
+            featured?: components["schemas"]["Block_list_CollectionCard__"] | null;
+            new?: components["schemas"]["Block_list_CollectionCard__"] | null;
+            popular?: components["schemas"]["Block_list_CollectionCard__"] | null;
+            results?: components["schemas"]["Block_CollectionResults_"] | null;
+        };
+        /**
+         * CollectionsPage
+         * @description ``GET /v1/pages/collections``.
+         */
+        CollectionsPage: {
+            blocks: components["schemas"]["CollectionsBlocks"];
         };
         /**
          * DailyCard
@@ -283,6 +656,34 @@ export interface components {
             title: string;
             /** Year */
             year?: number | null;
+        };
+        /**
+         * LibraryBlocks
+         * @description Блоки медиатеки.
+         */
+        LibraryBlocks: {
+            shelves: components["schemas"]["Block_list_ShelfCard__"];
+        };
+        /**
+         * LibraryPage
+         * @description ``GET /v1/pages/library`` (только пользователь).
+         */
+        LibraryPage: {
+            blocks: components["schemas"]["LibraryBlocks"];
+        };
+        /**
+         * LibraryShelfBlocks
+         * @description Блоки страницы полки.
+         */
+        LibraryShelfBlocks: {
+            shelf: components["schemas"]["Block_ShelfItems_"];
+        };
+        /**
+         * LibraryShelfPage
+         * @description ``GET /v1/pages/library/{ref}`` (только пользователь).
+         */
+        LibraryShelfPage: {
+            blocks: components["schemas"]["LibraryShelfBlocks"];
         };
         /**
          * ModeCard
@@ -542,6 +943,85 @@ export interface components {
             subject: components["schemas"]["Subject"] | null;
         };
         /**
+         * ShelfCard
+         * @description Полка (``library /v1/shelves``).
+         */
+        ShelfCard: {
+            /** Domains */
+            domains: ("music" | "film")[];
+            /** Exclusive With */
+            exclusive_with?: string[];
+            /** Items Count */
+            items_count: number;
+            /** Key */
+            key?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "system" | "custom";
+            /** Ref */
+            ref: string;
+            /** Shelf Id */
+            shelf_id?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Title Key */
+            title_key?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * ShelfItemCard
+         * @description Единица на полке: карточка из проекции catalog в library.
+         */
+        ShelfItemCard: {
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Kind */
+            kind: string;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /** Persons */
+            persons?: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "reveal" | "results" | "card" | "collection" | "library";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "unavailable";
+            /** Title */
+            title: string;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * ShelfItems
+         * @description Полка и её единицы (страница по курсору).
+         */
+        ShelfItems: {
+            /** Items */
+            items: components["schemas"]["ShelfItemCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            shelf: components["schemas"]["ShelfCard"];
+        };
+        /**
          * SoloBlocks
          * @description Блоки хаба соло-режимов.
          */
@@ -616,6 +1096,106 @@ export interface operations {
             };
         };
     };
+    collections_page_v1_pages_collections_get: {
+        parameters: {
+            query?: {
+                curated?: boolean | null;
+                cursor?: string | null;
+                difficulty?: ("easy" | "medium" | "hard") | null;
+                domain?: ("music" | "film") | null;
+                mode?: string | null;
+                q?: string | null;
+                sort?: "popular" | "new" | "likes" | "difficulty";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionsPage"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    collection_page_v1_pages_collections__collection_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionPage"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     home_page_v1_pages_home_get: {
         parameters: {
             query?: never;
@@ -632,6 +1212,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomePage"];
+                };
+            };
+        };
+    };
+    library_page_v1_pages_library_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    library_shelf_page_v1_pages_library__shelf_ref__get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                shelf_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryShelfPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

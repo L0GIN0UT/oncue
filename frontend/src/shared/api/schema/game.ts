@@ -185,6 +185,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/mode-configs/{mode_key}/subjects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Темы периода сетки: поиск персон
+         * @description Хвост 3a (план этапа 3b §2.5): админ выбирает тему недели поиском, а не UUID. Роли и `min_items` — из конфига сетки (`source.params.subject`); по убыванию числа играбельных единиц. Режим без темы-персоны — 422 `game.subjects_not_supported`.
+         */
+        get: operations["admin_subjects_admin_v1_mode_configs__mode_key__subjects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/mode-configs/{mode_key}/versions/{version}": {
         parameters: {
             query?: never;
@@ -248,6 +268,26 @@ export interface paths {
         };
         /** Поиск кандидатов в проекции game */
         get: operations["search_projection_admin_v1_projection_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/collections/{collection_id}/modes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Режимы сборника
+         * @description Опубликованные режимы с source `collection` домена сборника и сколько единиц в каждом играбельно. Только опубликованный, не скрытый сборник (по проекции `collections.collection.v1`), иначе 404 `game.collection_not_found`. Без названий и `media_item_id` (D6). Субъект не обязателен.
+         */
+        get: operations["collection_modes_v1_collections__collection_id__modes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -330,6 +370,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/modes/{mode_key}/playability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Играбельность единиц черновика сборника
+         * @description Для конструктора: какие из ≤ 200 единиц играбельны в режиме (активны в каталоге и есть каталожный набор ассетов). Только пользователи (гость — 403 `auth.guest_forbidden`), лимит `GV_GAME_LIMITS__PLAYABILITY_PER_MIN` (429). Режим без source `collection` — 422 `game.collection_not_supported`.
+         */
+        post: operations["playability_v1_modes__mode_key__playability_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/modes/{mode_key}/subjects": {
         parameters: {
             query?: never;
@@ -361,7 +421,7 @@ export interface paths {
         put?: never;
         /**
          * Начать сессию
-         * @description 201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`.
+         * @description 201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.
          */
         post: operations["start_session_v1_sessions_post"];
         delete?: never;
@@ -661,6 +721,56 @@ export interface components {
         ClueRequest: {
             /** Level */
             level: number;
+        };
+        /**
+         * CollectionModeOut
+         * @description Режим сборника (``GET /v1/collections/{id}/modes``): сколько единиц играбельно.
+         */
+        CollectionModeOut: {
+            /** Allow Guest */
+            allow_guest: boolean;
+            /**
+             * Available
+             * @description playable ≥ min_items режима
+             */
+            available: boolean;
+            /** Clue Type */
+            clue_type: string;
+            /** Mode Key */
+            mode_key: string;
+            /**
+             * Playable
+             * @description Играбельных единиц сборника в этом режиме
+             */
+            playable: number;
+            /**
+             * Round Options
+             * @description Варианты числа раундов, доступные при текущем playable
+             */
+            round_options: (5 | 10 | 25 | "all")[];
+            /** Title Key */
+            title_key: string;
+            /**
+             * Total
+             * @description Единиц в сборнике (активных в каталоге)
+             */
+            total: number;
+        };
+        /**
+         * CollectionRef
+         * @description Сборник сессии: версия состава фиксируется при старте (ADR 0028).
+         */
+        CollectionRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Version
+             * @description content_version сборника
+             */
+            version: number;
         };
         ConfigBody: {
             [key: string]: unknown;
@@ -1088,6 +1198,24 @@ export interface components {
             role: string;
         };
         /**
+         * PlayabilityOut
+         * @description Какие из переданных единиц играбельны в режиме (без названий и ассетов, D6).
+         */
+        PlayabilityOut: {
+            /** Mode Key */
+            mode_key: string;
+            /** Playable Ids */
+            playable_ids: string[];
+        };
+        /**
+         * PlayabilityRequest
+         * @description Единицы черновика сборника для проверки играбельности в режиме.
+         */
+        PlayabilityRequest: {
+            /** Media Item Ids */
+            media_item_ids: string[];
+        };
+        /**
          * PoolInfo
          * @description Размер пула по проекции game.
          */
@@ -1367,6 +1495,8 @@ export interface components {
          */
         SessionResult: {
             bracket?: components["schemas"]["BracketOut"] | null;
+            /** @description Сессия по сборнику */
+            collection?: components["schemas"]["CollectionRef"] | null;
             /** Daily Stats */
             daily_stats?: components["schemas"]["DailyRoundStat"][] | null;
             /** Max Score */
@@ -1455,10 +1585,20 @@ export interface components {
          * @description Старт сессии режима.
          */
         StartSessionRequest: {
+            /**
+             * Collection Id
+             * @description Сборник для режима с source `collection` (опубликованный, не скрытый)
+             */
+            collection_id?: string | null;
             /** Mode Key */
             mode_key: string;
             /** Preset Id */
             preset_id?: string | null;
+            /**
+             * Rounds
+             * @description Число раундов из `round_options` режима сборника; null — первый вариант
+             */
+            rounds?: (5 | 10 | 25 | "all") | null;
             /**
              * Subject Ids
              * @description Персоны марафона
@@ -2444,6 +2584,81 @@ export interface operations {
             };
         };
     };
+    admin_subjects_admin_v1_mode_configs__mode_key__subjects_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path: {
+                mode_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubjectOut"][];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     get_mode_config_version_admin_v1_mode_configs__mode_key__versions__version__get: {
         parameters: {
             query?: never;
@@ -2678,6 +2893,79 @@ export interface operations {
             };
         };
     };
+    collection_modes_v1_collections__collection_id__modes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор сборника */
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionModeOut"][];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     daily_status_v1_daily_get: {
         parameters: {
             query?: {
@@ -2804,6 +3092,103 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    playability_v1_modes__mode_key__playability_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ключ режима */
+                mode_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayabilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayabilityOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
