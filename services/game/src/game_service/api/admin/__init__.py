@@ -32,9 +32,10 @@ from game_service.api.admin.schemas import (
     ValidationResult,
 )
 from game_service.api.common import ApiServices, NoStoreRoute
-from game_service.api.public.schemas import Domain
+from game_service.api.public.schemas import Domain, SubjectOut
 from game_service.application.commands.modes import AdminContext
 from gv_auth import Principal, require_perm
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 ADMIN_ACCESS = "admin.access"
@@ -241,6 +242,26 @@ def build_admin_router(c: ApiServices) -> APIRouter:
             mode_key, ctx=_ctx(principal, body.reason, idempotency_key)
         )
         return ModeConfigSummary.model_validate(summary)
+
+    @router.get(
+        "/mode-configs/{mode_key}/subjects",
+        response_model=list[SubjectOut],
+        summary="Темы периода сетки: поиск персон",
+        description=(
+            "Хвост 3a (план этапа 3b §2.5): админ выбирает тему недели поиском, а не UUID. "
+            "Роли и `min_items` — из конфига сетки (`source.params.subject`); по убыванию "
+            "числа играбельных единиц. Режим без темы-персоны — 422 "
+            "`game.subjects_not_supported`."
+        ),
+        responses=problem_responses(401, 403, 404, 422, 501),
+    )
+    async def admin_subjects(
+        mode_key: ModeKeyPath,
+        principal: DailyViewer,
+        q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+        limit: Annotated[int, Query(ge=1, le=20)] = 20,
+    ) -> list[SubjectOut]:
+        raise NotImplementedYetError("этап 3b: поток B (docs/plans/stage-3b.md)")
 
     # ------------------------------------------------------------------ наборы дня
     @router.get(

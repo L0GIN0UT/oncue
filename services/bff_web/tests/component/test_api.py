@@ -656,3 +656,34 @@ async def test_breaker_stops_calling_failed_service(bff: Bff) -> None:
     for _ in range(5):
         assert (await bff.client.get("/v1/pages/home")).status_code == 200
     assert modes.call_count == 3  # breaker_failures = 3, дальше цепь разомкнута
+
+
+# ----------------------------------------------------------------------------- этап 3b (0a)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/pages/collections",
+        "/v1/pages/collections?q=кадры&domain=film&sort=new&difficulty=easy&curated=true",
+        "/v1/pages/collections/0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+        "/v1/pages/library",
+        "/v1/pages/library/system:watch_later",
+        "/v1/pages/library/0192a3b4-c5d6-7e8f-9a0b-000000000d01?cursor=abc",
+    ],
+)
+async def test_stage3b_pages_are_declared_but_not_implemented(bff: Bff, path: str) -> None:
+    """Шаг 0a этапа 3b: контракт страниц объявлен, реализация — в потоке C (501)."""
+    response = await bff.client.get(path, headers=bff.bearer(bff.issuer.issue()))
+    assert_problem(response, 501, "common.not_implemented")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/pages/library/system:Bad-Key",
+        "/v1/pages/library/123",
+        "/v1/pages/collections/not-a-uuid",
+        "/v1/pages/collections?sort=random",
+    ],
+)
+async def test_stage3b_page_params_are_strict(bff: Bff, path: str) -> None:
+    assert (await bff.client.get(path)).status_code == 422

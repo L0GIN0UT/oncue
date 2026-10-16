@@ -3,7 +3,8 @@
 Античит (D11): до ревила в снимке сессии нет ``media_item_id``, названия и
 ``asset_set_id``; ``reveal`` есть только у завершённого раунда. Этап 3a (план, §2.5):
 варианты ответа — непрозрачные ``option_id``, метрика скрытой единицы пары до ответа не
-отдаётся.
+отдаётся. Этап 3b (план, §2.5): сессия по сборнику (``collection_id``, ``rounds``),
+режимы сборника и проверка играбельности — без названий единиц (D6).
 """
 
 from __future__ import annotations
@@ -27,6 +28,10 @@ Presentation = Literal["score", "streak", "bracket"]
 OptionId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,32}$")]
 MAX_ROUND_INDEX = 199
 """Последний допустимый номер раунда (``session.rounds`` ≤ 200, план этапа 3a)."""
+RoundsChoice = Literal[5, 10, 25, "all"]
+"""Число раундов сессии по сборнику (``source.collection.round_options``, ADR 0028)."""
+MAX_PLAYABILITY_IDS = 200
+"""Сколько единиц черновика проверяет одна ``POST /v1/modes/{key}/playability``."""
 
 
 class _Request(BaseModel):
@@ -102,6 +107,14 @@ class StartSessionRequest(_Request):
     preset_id: PresetId | None = None
     subject_ids: list[UUID] | None = Field(
         default=None, min_length=1, max_length=10, description="Персоны марафона"
+    )
+    collection_id: UUID | None = Field(
+        default=None,
+        description="Сборник для режима с source `collection` (опубликованный, не скрытый)",
+    )
+    rounds: RoundsChoice | None = Field(
+        default=None,
+        description="Число раундов из `round_options` режима сборника; null — первый вариант",
     )
 
 
@@ -366,6 +379,13 @@ class BracketOut(BaseModel):
     picks: list[BracketPick]
 
 
+class CollectionRef(BaseModel):
+    """Сборник сессии: версия состава фиксируется при старте (ADR 0028)."""
+
+    id: UUID
+    version: int = Field(ge=1, description="content_version сборника")
+
+
 class SessionResult(BaseModel):
     """Итог завершённой сессии."""
 
@@ -377,6 +397,36 @@ class SessionResult(BaseModel):
     presentation: Presentation = "score"
     record: ResultRecord | None = None
     bracket: BracketOut | None = None
+    collection: CollectionRef | None = Field(default=None, description="Сессия по сборнику")
+
+
+# ----------------------------------------------------------------------------- сборники
+class CollectionModeOut(BaseModel):
+    """Режим сборника (``GET /v1/collections/{id}/modes``): сколько единиц играбельно."""
+
+    mode_key: str
+    title_key: str
+    clue_type: str
+    allow_guest: bool
+    playable: int = Field(ge=0, description="Играбельных единиц сборника в этом режиме")
+    total: int = Field(ge=0, description="Единиц в сборнике (активных в каталоге)")
+    available: bool = Field(description="playable ≥ min_items режима")
+    round_options: list[RoundsChoice] = Field(
+        description="Варианты числа раундов, доступные при текущем playable"
+    )
+
+
+class PlayabilityRequest(_Request):
+    """Единицы черновика сборника для проверки играбельности в режиме."""
+
+    media_item_ids: list[UUID] = Field(min_length=1, max_length=MAX_PLAYABILITY_IDS)
+
+
+class PlayabilityOut(BaseModel):
+    """Какие из переданных единиц играбельны в режиме (без названий и ассетов, D6)."""
+
+    mode_key: str
+    playable_ids: list[UUID]
 
 
 class DailyStatus(BaseModel):

@@ -446,6 +446,47 @@
         "title": "SourceKind",
         "type": "string"
       },
+      "SourceListItem": {
+        "description": "Исходник единицы в списке админки (хвост 3a, план этапа 3b §2.5).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SourceKind"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SourceOrigin"
+          },
+          "position": {
+            "description": "Порядок среди исходников вида",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "source_media_id": {
+            "format": "uuid",
+            "title": "Source Media Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SourceStatus"
+          }
+        },
+        "required": [
+          "source_media_id",
+          "kind",
+          "position",
+          "origin",
+          "status",
+          "created_at"
+        ],
+        "title": "SourceListItem",
+        "type": "object"
+      },
       "SourceOrigin": {
         "description": "Происхождение исходника (D6 плана этапа 3a): загрузка, TMDB, синтетический засев;\n``catalog`` — тексты загадок, одобренные модератором catalog (ADR 0024).",
         "enum": [
@@ -949,6 +990,102 @@
       }
     },
     "/admin/v1/sources": {
+      "get": {
+        "description": "По виду, затем по `position` (кадры `frame_sequence`: 1 — самый сложный). Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`.",
+        "operationId": "admin_sources_admin_v1_sources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "media_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Media Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceListItem"
+                  },
+                  "title": "Response Admin Sources Admin V1 Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Исходники единицы с порядком (для карточки в админке)",
+        "tags": [
+          "admin"
+        ]
+      },
       "post": {
         "description": "Вне local/ci обязательны origin, source_url и license_note (D6 плана этапа 3a), иначе 422 source.provenance_required. position — порядок среди исходников вида (кадры frame_sequence: 1 — самый сложный).",
         "operationId": "upload_source_admin_v1_sources_post",

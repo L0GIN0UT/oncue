@@ -5,6 +5,8 @@
 Чужая или несуществующая сессия — 404 ``game.session_not_found`` (не 403).
 """
 
+# ruff: noqa: ARG001 — заглушки этапа 3b (501) объявляют параметры контракта до реализации.
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -18,6 +20,7 @@ from game_service.api.public.schemas import (
     MAX_ROUND_INDEX,
     ClueOut,
     ClueRequest,
+    CollectionModeOut,
     DailyStatus,
     Domain,
     GiveUpRequest,
@@ -27,6 +30,8 @@ from game_service.api.public.schemas import (
     ModeOut,
     MoveResult,
     OptionAnswer,
+    PlayabilityOut,
+    PlayabilityRequest,
     RecordOut,
     SessionResult,
     SessionSnapshot,
@@ -35,10 +40,15 @@ from game_service.api.public.schemas import (
     SubjectOut,
     TextAnswer,
 )
-from gv_auth import Principal, current_principal
+from gv_auth import Principal, current_principal, optional_principal, require_user
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 Subject = Annotated[Principal, Depends(current_principal)]
+OptionalSubject = Annotated[Principal | None, Depends(optional_principal)]
+User = Annotated[Principal, Depends(require_user)]
+CollectionId = Annotated[UUID, Path(description="Идентификатор сборника")]
+STAGE_3B = "этап 3b: реализуется в потоке B (docs/plans/stage-3b.md)"
 SessionId = Annotated[UUID, Path(description="Идентификатор сессии")]
 RoundIndex = Annotated[int, Path(ge=0, le=MAX_ROUND_INDEX, description="Номер раунда с 0")]
 PathModeKey = Annotated[ModeKey, Path(description="Ключ режима")]
@@ -86,7 +96,12 @@ def build_public_router(c: ApiServices) -> APIRouter:
             "Марафон: `subject_ids` обязательны — 422 `game.subject_required`, "
             "`game.too_many_subjects`; режим без выбора персон — 422 "
             "`game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — "
-            "409 `game.daily_already_played`."
+            "409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 "
+            "`game.collection_not_found` (нет, скрыт или удалён), 422 "
+            "`game.collection_required` (режим с source `collection` без сборника), 422 "
+            "`game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в "
+            "`round_options`), 422 `game.collection_not_supported` (`collection_id` у режима "
+            "без source `collection`), 422 `game.pool_too_small`."
         ),
         responses={
             200: {"model": SessionSnapshot, "description": "Незавершённая сессия дейлика"},
@@ -100,6 +115,8 @@ def build_public_router(c: ApiServices) -> APIRouter:
         request: Request,
         response: Response,
     ) -> SessionSnapshot:
+        if body.collection_id is not None or body.rounds is not None:
+            raise NotImplementedYetError(STAGE_3B)
         snapshot, created = await c.play.start(
             player_of(subject, request),
             body.mode_key,
@@ -269,6 +286,40 @@ def build_public_router(c: ApiServices) -> APIRouter:
     ) -> list[RecordOut]:
         rows = await c.queries.records(player_of(subject), mode_key)
         return [RecordOut.model_validate(r) for r in rows]
+
+    @router.get(
+        "/collections/{collection_id}/modes",
+        response_model=list[CollectionModeOut],
+        summary="Режимы сборника",
+        description=(
+            "Опубликованные режимы с source `collection` домена сборника и сколько единиц "
+            "в каждом играбельно. Только опубликованный, не скрытый сборник (по проекции "
+            "`collections.collection.v1`), иначе 404 `game.collection_not_found`. Без "
+            "названий и `media_item_id` (D6). Субъект не обязателен."
+        ),
+        responses=problem_responses(401, 404, 422, 501, 503),
+    )
+    async def collection_modes(
+        collection_id: CollectionId, subject: OptionalSubject
+    ) -> list[CollectionModeOut]:
+        raise NotImplementedYetError(STAGE_3B)
+
+    @router.post(
+        "/modes/{mode_key}/playability",
+        response_model=PlayabilityOut,
+        summary="Играбельность единиц черновика сборника",
+        description=(
+            "Для конструктора: какие из ≤ 200 единиц играбельны в режиме (активны в "
+            "каталоге и есть каталожный набор ассетов). Только пользователи (гость — 403 "
+            "`auth.guest_forbidden`), лимит `GV_GAME_LIMITS__PLAYABILITY_PER_MIN` (429). "
+            "Режим без source `collection` — 422 `game.collection_not_supported`."
+        ),
+        responses=problem_responses(401, 403, 404, 422, 429, 501, 503),
+    )
+    async def playability(
+        mode_key: PathModeKey, body: PlayabilityRequest, subject: User
+    ) -> PlayabilityOut:
+        raise NotImplementedYetError(STAGE_3B)
 
     @router.get(
         "/daily",

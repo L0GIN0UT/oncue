@@ -323,6 +323,91 @@
         "title": "ClueRequest",
         "type": "object"
       },
+      "CollectionModeOut": {
+        "description": "Режим сборника (``GET /v1/collections/{id}/modes``): сколько единиц играбельно.",
+        "properties": {
+          "allow_guest": {
+            "title": "Allow Guest",
+            "type": "boolean"
+          },
+          "available": {
+            "description": "playable ≥ min_items режима",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "playable": {
+            "description": "Играбельных единиц сборника в этом режиме",
+            "minimum": 0.0,
+            "title": "Playable",
+            "type": "integer"
+          },
+          "round_options": {
+            "description": "Варианты числа раундов, доступные при текущем playable",
+            "items": {
+              "enum": [
+                5,
+                10,
+                25,
+                "all"
+              ]
+            },
+            "title": "Round Options",
+            "type": "array"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          },
+          "total": {
+            "description": "Единиц в сборнике (активных в каталоге)",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode_key",
+          "title_key",
+          "clue_type",
+          "allow_guest",
+          "playable",
+          "total",
+          "available",
+          "round_options"
+        ],
+        "title": "CollectionModeOut",
+        "type": "object"
+      },
+      "CollectionRef": {
+        "description": "Сборник сессии: версия состава фиксируется при старте (ADR 0028).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "content_version сборника",
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "CollectionRef",
+        "type": "object"
+      },
       "ConfigBody": {
         "additionalProperties": true,
         "type": "object"
@@ -1323,6 +1408,50 @@
         "title": "PersonOut",
         "type": "object"
       },
+      "PlayabilityOut": {
+        "description": "Какие из переданных единиц играбельны в режиме (без названий и ассетов, D6).",
+        "properties": {
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "playable_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Playable Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode_key",
+          "playable_ids"
+        ],
+        "title": "PlayabilityOut",
+        "type": "object"
+      },
+      "PlayabilityRequest": {
+        "additionalProperties": false,
+        "description": "Единицы черновика сборника для проверки играбельности в режиме.",
+        "properties": {
+          "media_item_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Media Item Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "media_item_ids"
+        ],
+        "title": "PlayabilityRequest",
+        "type": "object"
+      },
       "PoolInfo": {
         "description": "Размер пула по проекции game.",
         "properties": {
@@ -1984,6 +2113,17 @@
               }
             ]
           },
+          "collection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Сессия по сборнику"
+          },
           "daily_stats": {
             "anyOf": [
               {
@@ -2216,6 +2356,19 @@
         "additionalProperties": false,
         "description": "Старт сессии режима.",
         "properties": {
+          "collection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Сборник для режима с source `collection` (опубликованный, не скрытый)",
+            "title": "Collection Id"
+          },
           "mode_key": {
             "maxLength": 100,
             "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
@@ -2234,6 +2387,23 @@
               }
             ],
             "title": "Preset Id"
+          },
+          "rounds": {
+            "anyOf": [
+              {
+                "enum": [
+                  5,
+                  10,
+                  25,
+                  "all"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Число раундов из `round_options` режима сборника; null — первый вариант",
+            "title": "Rounds"
           },
           "subject_ids": {
             "anyOf": [
@@ -4163,6 +4333,150 @@
         ]
       }
     },
+    "/admin/v1/mode-configs/{mode_key}/subjects": {
+      "get": {
+        "description": "Хвост 3a (план этапа 3b §2.5): админ выбирает тему недели поиском, а не UUID. Роли и `min_items` — из конфига сетки (`source.params.subject`); по убыванию числа играбельных единиц. Режим без темы-персоны — 422 `game.subjects_not_supported`.",
+        "operationId": "admin_subjects_admin_v1_mode_configs__mode_key__subjects_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mode_key",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+              "title": "Mode Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SubjectOut"
+                  },
+                  "title": "Response Admin Subjects Admin V1 Mode Configs  Mode Key  Subjects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Темы периода сетки: поиск персон",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/v1/mode-configs/{mode_key}/versions/{version}": {
       "get": {
         "operationId": "get_mode_config_version_admin_v1_mode_configs__mode_key__versions__version__get",
@@ -4420,6 +4734,121 @@
         ]
       }
     },
+    "/v1/collections/{collection_id}/modes": {
+      "get": {
+        "description": "Опубликованные режимы с source `collection` домена сборника и сколько единиц в каждом играбельно. Только опубликованный, не скрытый сборник (по проекции `collections.collection.v1`), иначе 404 `game.collection_not_found`. Без названий и `media_item_id` (D6). Субъект не обязателен.",
+        "operationId": "collection_modes_v1_collections__collection_id__modes_get",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CollectionModeOut"
+                  },
+                  "title": "Response Collection Modes V1 Collections  Collection Id  Modes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Режимы сборника",
+        "tags": [
+          "game"
+        ]
+      }
+    },
     "/v1/daily": {
       "get": {
         "operationId": "daily_status_v1_daily_get",
@@ -4672,6 +5101,158 @@
         ]
       }
     },
+    "/v1/modes/{mode_key}/playability": {
+      "post": {
+        "description": "Для конструктора: какие из ≤ 200 единиц играбельны в режиме (активны в каталоге и есть каталожный набор ассетов). Только пользователи (гость — 403 `auth.guest_forbidden`), лимит `GV_GAME_LIMITS__PLAYABILITY_PER_MIN` (429). Режим без source `collection` — 422 `game.collection_not_supported`.",
+        "operationId": "playability_v1_modes__mode_key__playability_post",
+        "parameters": [
+          {
+            "description": "Ключ режима",
+            "in": "path",
+            "name": "mode_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ режима",
+              "maxLength": 100,
+              "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+              "title": "Mode Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayabilityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Играбельность единиц черновика сборника",
+        "tags": [
+          "game"
+        ]
+      }
+    },
     "/v1/modes/{mode_key}/subjects": {
       "get": {
         "description": "Поиск по имени среди персон с ролью режима и не меньше `min_items` играбельных единиц; по убыванию числа единиц. 422 `game.subjects_not_supported` — режим не выбирает персон; 429.",
@@ -4805,7 +5386,7 @@
     },
     "/v1/sessions": {
       "post": {
-        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`.",
+        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.",
         "operationId": "start_session_v1_sessions_post",
         "parameters": [
           {

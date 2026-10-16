@@ -1,4 +1,5 @@
-"""Схемы публичного API bff_web (план этапа 2, §2.6; этап 3a, §2.5) — экраны веб-клиента.
+"""Схемы публичного API bff_web (план этапа 2, §2.6; этап 3a, §2.5; этап 3b, §2.5) — экраны
+веб-клиента.
 
 bff только читает (D4): агрегирует game, identity и catalog. Блок упавшего сервиса
 отдаётся как ``{"status": "unavailable"}`` — страница рендерится без него. Подачу (формат
@@ -239,3 +240,183 @@ class ResultsPage(BaseModel):
     """``GET /v1/pages/results/{session_id}``."""
 
     blocks: ResultsBlocks
+
+
+# ----------------------------------------------------------------------------- сборники (3b)
+CollectionSort = Literal["popular", "new", "likes", "difficulty"]
+Difficulty = Literal["easy", "medium", "hard"]
+RoundsChoice = Literal[5, 10, 25, "all"]
+
+
+class CollectionAuthor(BaseModel):
+    """Автор сборника (``collections``): пользователь, «Guessverse» или удалённый."""
+
+    kind: Literal["user", "curator", "deleted"]
+    user_id: UUID | None = None
+    nickname: str | None = None
+
+
+class CollectionCover(BaseModel):
+    """Обложка — пресет (градиент и эмодзи из ``collections /v1/meta``)."""
+
+    preset: str
+
+
+class CollectionCard(BaseModel):
+    """Карточка сборника в каталоге (``collections /v1/collections``), без состава."""
+
+    collection_id: UUID
+    domain: Domain
+    kind: Literal["ugc", "curated"]
+    title: str
+    cover: CollectionCover | None = None
+    tags: list[str]
+    author: CollectionAuthor
+    default_mode_key: str
+    items_count: int = Field(ge=0)
+    likes_count: int = Field(ge=0)
+    plays_count: int = Field(ge=0)
+    difficulty: Difficulty | None = None
+    featured: bool = False
+    published_at: datetime
+
+
+class CollectionResults(BaseModel):
+    """Результаты поиска (страница по курсору)."""
+
+    items: list[CollectionCard]
+    next_cursor: str | None = None
+
+
+class CollectionsBlocks(BaseModel):
+    """Блоки каталога: без ``q`` — витрины, с ``q`` — только ``results``."""
+
+    featured: Block[list[CollectionCard]] | None = None
+    popular: Block[list[CollectionCard]] | None = None
+    new: Block[list[CollectionCard]] | None = None
+    results: Block[CollectionResults] | None = None
+
+
+class CollectionsPage(BaseModel):
+    """``GET /v1/pages/collections``."""
+
+    blocks: CollectionsBlocks
+
+
+class CollectionItemCard(BaseModel):
+    """Единица состава: только если состав открыт субъекту (D6)."""
+
+    position: int = Field(ge=0)
+    media_item_id: UUID
+    title: str
+    year: int | None = None
+    available: bool
+
+
+class CollectionDetail(CollectionCard):
+    """Сборник целиком (``collections /v1/collections/{id}``)."""
+
+    description: str | None = None
+    visibility: Literal["public", "unlisted"]
+    status: Literal["published", "hidden"]
+    version: int = Field(ge=1)
+    items_visible: bool
+    items: list[CollectionItemCard] | None = None
+
+
+class CollectionModeCard(BaseModel):
+    """Режим сборника (``game /v1/collections/{id}/modes``)."""
+
+    mode_key: str
+    title_key: str
+    clue_type: str
+    allow_guest: bool
+    playable: int = Field(ge=0)
+    total: int = Field(ge=0)
+    available: bool
+    round_options: list[RoundsChoice]
+
+
+class CollectionMe(BaseModel):
+    """Отношение пользователя к сборнику; гостю и анониму — ``me: null``."""
+
+    liked: bool
+    favorite: bool
+    completed: bool
+    is_author: bool = False
+
+
+class CollectionBlocks(BaseModel):
+    """Блоки страницы сборника: недоступный game даёт ``modes: unavailable``."""
+
+    collection: Block[CollectionDetail]
+    modes: Block[list[CollectionModeCard]]
+
+
+class CollectionPage(BaseModel):
+    """``GET /v1/pages/collections/{id}``."""
+
+    blocks: CollectionBlocks
+    me: CollectionMe | None = None
+
+
+# ----------------------------------------------------------------------------- медиатека (3b)
+class ShelfCard(BaseModel):
+    """Полка (``library /v1/shelves``)."""
+
+    ref: str
+    shelf_id: UUID | None = None
+    kind: Literal["system", "custom"]
+    key: str | None = None
+    title: str | None = None
+    title_key: str | None = None
+    domains: list[Domain]
+    exclusive_with: list[str] = Field(default_factory=list)
+    items_count: int = Field(ge=0)
+    updated_at: datetime | None = None
+
+
+class ShelfItemCard(BaseModel):
+    """Единица на полке: карточка из проекции catalog в library."""
+
+    media_item_id: UUID
+    domain: Domain
+    kind: str
+    title: str
+    year: int | None = None
+    persons: list[str] = Field(default_factory=list)
+    status: Literal["available", "unavailable"]
+    source: Literal["reveal", "results", "card", "collection", "library"]
+    added_at: datetime
+
+
+class LibraryBlocks(BaseModel):
+    """Блоки медиатеки."""
+
+    shelves: Block[list[ShelfCard]]
+
+
+class LibraryPage(BaseModel):
+    """``GET /v1/pages/library`` (только пользователь)."""
+
+    blocks: LibraryBlocks
+
+
+class ShelfItems(BaseModel):
+    """Полка и её единицы (страница по курсору)."""
+
+    shelf: ShelfCard
+    items: list[ShelfItemCard]
+    next_cursor: str | None = None
+
+
+class LibraryShelfBlocks(BaseModel):
+    """Блоки страницы полки."""
+
+    shelf: Block[ShelfItems]
+
+
+class LibraryShelfPage(BaseModel):
+    """``GET /v1/pages/library/{ref}`` (только пользователь)."""
+
+    blocks: LibraryShelfBlocks

@@ -185,3 +185,94 @@ async def test_round_index_accepts_long_sessions(
     body = {"round_index": 200, "expected_version": 1}
     response = await client.post(f"/v1/sessions/{SESSION}/skips", json=body, headers=headers)
     assert response.status_code == 422
+
+
+COLLECTION = "0192a3b4-c5d6-7e8f-9a0b-000000000c01"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", f"/v1/collections/{COLLECTION}/modes", None),
+        (
+            "POST",
+            "/v1/modes/film.collection.frame/playability",
+            {"media_item_ids": [SESSION]},
+        ),
+        (
+            "POST",
+            "/v1/sessions",
+            {"mode_key": "film.collection.frame", "collection_id": COLLECTION, "rounds": 5},
+        ),
+        ("POST", "/v1/sessions", {"mode_key": "film.collection.frame", "rounds": "all"}),
+    ],
+)
+async def test_stage3b_public_routes_are_declared_but_not_implemented(
+    *,
+    client: httpx.AsyncClient,
+    token_issuer: TestTokenIssuer,
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> None:
+    """Шаг 0a этапа 3b: контракт объявлен, реализация — в потоке B (501)."""
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    response = await client.request(method, path, json=body, headers=headers)
+    assert_problem(response, 501, "common.not_implemented")
+
+
+async def test_stage3b_collection_modes_need_no_subject(client: httpx.AsyncClient) -> None:
+    """Режимы сборника видит и аноним (страница сборника через bff)."""
+    response = await client.get(f"/v1/collections/{COLLECTION}/modes")
+    assert_problem(response, 501, "common.not_implemented")
+
+
+async def test_stage3b_playability_is_for_users_only(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer
+) -> None:
+    path = "/v1/modes/film.collection.frame/playability"
+    body = {"media_item_ids": [SESSION]}
+    assert_problem(await client.post(path, json=body), 401, "auth.unauthenticated")
+    guest = {"Authorization": f"Bearer {token_issuer.issue_guest()}"}
+    assert_problem(await client.post(path, json=body, headers=guest), 403, "auth.guest_forbidden")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"media_item_ids": []},
+        {"media_item_ids": [SESSION] * 201},
+        {"media_item_ids": [SESSION], "titles": True},
+    ],
+)
+async def test_stage3b_playability_request_is_bounded(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer, body: dict[str, object]
+) -> None:
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}"}
+    response = await client.post(
+        "/v1/modes/film.collection.frame/playability", json=body, headers=headers
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("rounds", [7, "5", "все", 0])
+async def test_stage3b_rounds_is_one_of_options(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer, rounds: object
+) -> None:
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    body = {"mode_key": "film.collection.frame", "collection_id": COLLECTION, "rounds": rounds}
+    response = await client.post("/v1/sessions", json=body, headers=headers)
+    assert response.status_code == 422
+
+
+async def test_stage3b_admin_subjects_requires_daily_view(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer
+) -> None:
+    """Хвост 3a: поиск тем сетки — `admin.access` + `game.daily.view`, затем 501."""
+    path = "/admin/v1/mode-configs/film.bracket.director/subjects?q=нолан"
+    for token in (token_issuer.issue(perms=["admin.access"]), token_issuer.issue_guest()):
+        response = await client.get(path, headers={"Authorization": f"Bearer {token}"})
+        assert_problem(response, 403, "auth.forbidden")
+    token = token_issuer.issue(perms=["admin.access", "game.daily.view"])
+    response = await client.get(path, headers={"Authorization": f"Bearer {token}"})
+    assert_problem(response, 501, "common.not_implemented")

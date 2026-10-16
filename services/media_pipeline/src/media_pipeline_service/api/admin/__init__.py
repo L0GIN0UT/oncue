@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from gv_auth import Principal, require_perm
+from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
 from media_pipeline_service.api.common import AssetSetItem
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
@@ -66,6 +68,17 @@ class SourceOut(BaseModel):
     position: int = Field(ge=1, le=100)
     status: SourceStatus
     scheduled_asset_set_ids: list[UUID]
+
+
+class SourceListItem(BaseModel):
+    """Исходник единицы в списке админки (хвост 3a, план этапа 3b §2.5)."""
+
+    source_media_id: UUID
+    kind: SourceKind
+    position: int = Field(ge=1, le=100, description="Порядок среди исходников вида")
+    origin: SourceOrigin
+    status: SourceStatus
+    created_at: datetime
 
 
 class ProfileSets(BaseModel):
@@ -252,6 +265,22 @@ def build_admin_router(
             status=SourceStatus(view.status),
             scheduled_asset_set_ids=list(view.scheduled_asset_set_ids),
         )
+
+    @router.get(
+        "/sources",
+        response_model=list[SourceListItem],
+        summary="Исходники единицы с порядком (для карточки в админке)",
+        description=(
+            "По виду, затем по `position` (кадры `frame_sequence`: 1 — самый сложный). "
+            "Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`."
+        ),
+        responses=problem_responses(401, 403, 422, 501),
+    )
+    async def admin_sources(
+        media_item_id: UUID,  # noqa: ARG001 — заглушка 501 объявляет параметр контракта
+        _: Viewer,
+    ) -> list[SourceListItem]:
+        raise NotImplementedYetError("этап 3b: поток M (docs/plans/stage-3b.md)")
 
     @router.get(
         "/asset-sets",

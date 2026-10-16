@@ -626,6 +626,28 @@ async def test_admin_asset_sets_requires_admin_access(service: Service) -> None:
     assert [s["asset_set_id"] for s in listed.json()] == [asset_set["asset_set_id"]]
 
 
+async def test_stage3b_admin_sources_is_declared_but_not_implemented(service: Service) -> None:
+    """Шаг 0a этапа 3b (хвост 3a): список исходников — `admin.access`, реализация — поток M."""
+    params = {"media_item_id": str(UUID(int=1))}
+    assert_problem(
+        await service.client.get("/admin/v1/sources", params=params), 401, "auth.unauthenticated"
+    )
+    assert_problem(
+        await service.client.get(
+            "/admin/v1/sources", params=params, headers=service.admin("media.regenerate")
+        ),
+        403,
+        "auth.forbidden",
+    )
+    assert_problem(
+        await service.client.get(
+            "/admin/v1/sources", params=params, headers=service.admin("admin.access")
+        ),
+        501,
+        "common.not_implemented",
+    )
+
+
 async def test_asset_sets_requires_media_item_id(service: Service) -> None:
     assert_problem(
         await service.client.get("/internal/v1/asset-sets"), 422, "request.validation_failed"
