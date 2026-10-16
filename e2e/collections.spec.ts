@@ -462,7 +462,7 @@ test("B: поиск сборника, страница без состава, 5 
   expect(shelves.shelves).not.toContain(WATCH_LATER);
 });
 
-test("B: режим эмодзи принимает «все» (8 раундов) и отклоняет 25", async () => {
+test("B: режим эмодзи принимает «все» (8 раундов) и отклоняет 25 (мало единиц)", async () => {
   const game = api(player.page, "game");
   await expect
     .poll(async () => {
@@ -471,7 +471,8 @@ test("B: режим эмодзи принимает «все» (8 раундов
     })
     .toBe(true);
   const rejected = await game.post("/sessions", { mode_key: EMOJI, collection_id: collectionId, rounds: 25 });
-  expect(await problem(rejected, 422)).toBe("game.rounds_not_allowed");
+  // 25 есть в round_options, но в сборнике 8 единиц — нехватка пула, а не запрет варианта.
+  expect(await problem(rejected, 422)).toBe("game.pool_too_small");
   const all = await json<{ rounds: unknown[] }>(
     await game.post("/sessions", { mode_key: EMOJI, collection_id: collectionId, rounds: "all" }),
     201,
