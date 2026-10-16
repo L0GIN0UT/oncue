@@ -63,7 +63,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Хаб соло-режимов */
+        /**
+         * Хаб соло-режимов
+         * @description Блоки: дейлики и недельная сетка субъекта, витрина режимов по группам (`source_type`, `presentation`), личные рекорды (только пользователю; гостю и анониму — `records: null`). Ответ с токеном — `private, no-store`.
+         */
         get: operations["solo_page_v1_pages_solo_get"];
         put?: never;
         post?: never;
@@ -127,6 +130,26 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[ModeGroup]] */
+        Block_list_ModeGroup__: {
+            /** Data */
+            data?: components["schemas"]["ModeGroup"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[RecordCard]] */
+        Block_list_RecordCard__: {
+            /** Data */
+            data?: components["schemas"]["RecordCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[ResultSummary] */
         Block_ResultSummary_: {
             data?: components["schemas"]["ResultSummary"] | null;
@@ -137,8 +160,33 @@ export interface components {
             status: "ok" | "unavailable";
         };
         /**
+         * BracketPick
+         * @description Выбор в сетке: тур и названия победителя и проигравшего.
+         */
+        BracketPick: {
+            /** Loser */
+            loser: string;
+            /** Stage */
+            stage: number;
+            /** Winner */
+            winner: string;
+        };
+        /**
+         * BracketSummary
+         * @description Итог сетки: чемпион и выборы по турам.
+         */
+        BracketSummary: {
+            /** Champion */
+            champion: string;
+            /** Picks */
+            picks: components["schemas"]["BracketPick"][];
+        };
+        /**
          * DailyCard
-         * @description Карточка дейлика: режим + статус субъекта (``game /v1/modes`` + ``/v1/daily``).
+         * @description Карточка планового режима периода + статус субъекта (``game /v1/modes`` + ``/v1/daily``).
+         *
+         *     Дейлик — период «день», недельная сетка — «неделя»; ``day`` — начало периода,
+         *     ``next_reset_at`` — его конец.
          */
         DailyCard: {
             /**
@@ -160,6 +208,12 @@ export interface components {
              * Format: date-time
              */
             next_reset_at: string;
+            /**
+             * Presentation
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
             /** Score */
             score?: number | null;
             /** Session Id */
@@ -187,8 +241,11 @@ export interface components {
          * @description Блоки главной.
          */
         HomeBlocks: {
+            /** @description Наборы дня (без недельной сетки) */
             dailies: components["schemas"]["Block_list_DailyCard__"];
             modes: components["schemas"]["Block_list_ModeCard__"];
+            /** @description Наборы недели (сетка) */
+            weekly: components["schemas"]["Block_list_DailyCard__"];
         };
         /**
          * HomePage
@@ -234,6 +291,13 @@ export interface components {
         ModeCard: {
             /** Allow Guest */
             allow_guest: boolean;
+            /**
+             * Answer Format
+             * @description Реестр ответов фронта
+             * @default classic
+             * @enum {string}
+             */
+            answer_format: "classic" | "pick";
             /** Clue Type */
             clue_type: string;
             /**
@@ -243,14 +307,48 @@ export interface components {
             domain: "music" | "film";
             /** Key */
             key: string;
+            /**
+             * Presentation
+             * @description Реестр итогов фронта
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
             /** Presets */
             presets?: components["schemas"]["PresetCard"][] | null;
-            /** Rounds */
+            /**
+             * Rounds
+             * @description Число раундов; у марафона и пары — максимум
+             */
             rounds: number;
             /** Source Type */
             source_type: string;
+            /** @description null — выбирать нечего */
+            start?: components["schemas"]["ModeStartCard"] | null;
             /** Title Key */
             title_key: string;
+        };
+        /**
+         * ModeGroup
+         * @description Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``.
+         */
+        ModeGroup: {
+            /** Modes */
+            modes: components["schemas"]["ModeCard"][];
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** Source Type */
+            source_type: string;
+        };
+        /**
+         * ModeStartCard
+         * @description Что игрок выбирает перед стартом режима.
+         */
+        ModeStartCard: {
+            subject?: components["schemas"]["SubjectPickCard"] | null;
         };
         /**
          * PersonCard
@@ -312,6 +410,47 @@ export interface components {
             type: string;
         };
         /**
+         * RecordCard
+         * @description Личный рекорд режима (``game /v1/me/records``).
+         */
+        RecordCard: {
+            /**
+             * Achieved At
+             * Format: date-time
+             */
+            achieved_at: string;
+            /** Best */
+            best: number;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Mode Key */
+            mode_key: string;
+            /** Percentile */
+            percentile?: number | null;
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** Title Key */
+            title_key: string;
+        };
+        /**
+         * ResultRecord
+         * @description Рекорд в итоге (только пользователи, режимы с рекордами).
+         */
+        ResultRecord: {
+            /** Best */
+            best: number;
+            /** Is New */
+            is_new: boolean;
+            /** Percentile */
+            percentile?: number | null;
+        };
+        /**
          * ResultRoundCard
          * @description Раунд итога (из ``game /v1/sessions/{id}/result``).
          */
@@ -358,10 +497,21 @@ export interface components {
          * @description Итог сессии для экрана результатов.
          */
         ResultSummary: {
+            /** @description Только у сетки */
+            bracket?: components["schemas"]["BracketSummary"] | null;
             /** Max Score */
             max_score: number;
             /** Mode Key */
             mode_key?: string | null;
+            /**
+             * Presentation
+             * @description Реестр итогов фронта
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** @description null — гость или без рекордов */
+            record?: components["schemas"]["ResultRecord"] | null;
             /** Rounds */
             rounds: components["schemas"]["ResultRoundCard"][];
             /** Score */
@@ -396,8 +546,16 @@ export interface components {
          * @description Блоки хаба соло-режимов.
          */
         SoloBlocks: {
+            /** @description Наборы дня */
             daily: components["schemas"]["Block_list_DailyCard__"];
+            /** @description Витрина: неплановые режимы домена по группам (source_type, presentation) */
+            modes: components["schemas"]["Block_list_ModeGroup__"];
+            /** @description Случайные режимы (витрина этапа 2) */
             random: components["schemas"]["Block_list_ModeCard__"];
+            /** @description Личные рекорды; null — гость или аноним */
+            records?: components["schemas"]["Block_list_RecordCard__"] | null;
+            /** @description Наборы недели (сетка) */
+            weekly: components["schemas"]["Block_list_DailyCard__"];
         };
         /**
          * SoloPage
@@ -418,6 +576,16 @@ export interface components {
              * @enum {string}
              */
             kind: "user" | "guest";
+        };
+        /**
+         * SubjectPickCard
+         * @description Выбор персон перед стартом (марафон): ``GET game /v1/modes/{key}/subjects``.
+         */
+        SubjectPickCard: {
+            /** Max */
+            max: number;
+            /** Roles */
+            roles: string[];
         };
     };
     responses: never;
