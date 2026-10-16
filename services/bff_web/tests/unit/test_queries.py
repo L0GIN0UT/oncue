@@ -12,6 +12,7 @@ from bff_web_service.application.dto import (
     ANONYMOUS,
     Bracket,
     BracketPick,
+    CollectionMode,
     DailyState,
     DailyStatus,
     Domain,
@@ -158,6 +159,8 @@ class FakeGame:
     )
     daily_calls: list[tuple[str, Domain | None]] = field(default_factory=list)
     records_calls: list[str] = field(default_factory=list)
+    collection: list[CollectionMode] | Exception = field(default_factory=list)
+    collection_calls: list[UUID] = field(default_factory=list)
 
     async def list_modes(self) -> list[Mode]:
         if isinstance(self.modes, Exception):
@@ -180,6 +183,12 @@ class FakeGame:
         if isinstance(self.best, Exception):
             raise self.best
         return self.best
+
+    async def collection_modes(self, collection_id: UUID) -> list[CollectionMode]:
+        self.collection_calls.append(collection_id)
+        if isinstance(self.collection, Exception):
+            raise self.collection
+        return self.collection
 
 
 @dataclass
@@ -487,3 +496,18 @@ async def test_session_identity_failures(
     assert (subject.kind.value if subject else None) == expected
     if subject is not None:
         assert subject.display_name is None
+
+
+async def test_collection_modes_never_reach_solo_or_home_showcases() -> None:
+    """Режим сборника стартует только со страницы сборника (нужен ``collection_id``)."""
+    collection_mode = mode("film.collection.frame", "film", "collection")
+    game = FakeGame(modes=[*MODES, collection_mode])
+
+    solo = await GetSoloPage(game, concurrency=10, layout=LAYOUT)(USER, "film")
+    home = await GetHomePage(game, concurrency=10, layout=LAYOUT)(USER)
+
+    assert solo.blocks.modes.data is not None and home.blocks.modes.data is not None
+    showcase = [m.key for g in solo.blocks.modes.data for m in g.modes]
+    assert "film.collection.frame" not in showcase
+    assert "film.collection.frame" not in [m.key for m in home.blocks.modes.data]
+    assert LAYOUT.hidden_from_showcase == {"daily", "bracket", "collection"}

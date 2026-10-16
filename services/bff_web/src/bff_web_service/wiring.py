@@ -10,7 +10,11 @@ import httpx
 from bff_web_service.api.deps import BffDeps
 from bff_web_service.application.ports import PageCache
 from bff_web_service.application.queries import (
+    GetCollectionPage,
+    GetCollectionsPage,
     GetHomePage,
+    GetLibraryPage,
+    GetLibraryShelfPage,
     GetResultsPage,
     GetSession,
     GetSoloPage,
@@ -19,8 +23,10 @@ from bff_web_service.application.queries import (
 from bff_web_service.infrastructure.cache import RedisPageCache
 from bff_web_service.infrastructure.clients import (
     HttpCatalogClient,
+    HttpCollectionsClient,
     HttpGameClient,
     HttpIdentityClient,
+    HttpLibraryClient,
 )
 from bff_web_service.infrastructure.http import CircuitBreaker, UpstreamHttp
 from bff_web_service.settings import Settings
@@ -51,22 +57,43 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         return UpstreamHttp(service, client, breaker, timeout_s=up.timeout_s, cache=cache)
 
     game = HttpGameClient(
-        upstream("game", up.game_url), modes_ttl_s=pc.modes_ttl_s, cache_prefix=pc.key_prefix
+        upstream("game", up.game_url),
+        modes_ttl_s=pc.modes_ttl_s,
+        cache_prefix=pc.key_prefix,
+        collection_modes_ttl_s=pc.collection_modes_ttl_s,
     )
     catalog = HttpCatalogClient(
         upstream("catalog", up.catalog_url), item_ttl_s=pc.item_ttl_s, cache_prefix=pc.key_prefix
     )
     identity = HttpIdentityClient(upstream("identity", up.identity_url))
+    collections = HttpCollectionsClient(
+        upstream("collections", up.collections_url),
+        catalog_ttl_s=pc.collections_ttl_s,
+        cache_prefix=pc.key_prefix,
+    )
+    library = HttpLibraryClient(upstream("library", up.library_url))
     pages = settings.pages
     layout = PageLayout.of(
         random_source_types=pages.random_source_types,
         scheduled_source_types=pages.scheduled_source_types,
         weekly_source_types=pages.weekly_source_types,
+        collection_source_types=pages.collection_source_types,
     )
     return BffDeps(
         get_session=GetSession(identity),
         get_home=GetHomePage(game, concurrency=up.max_concurrency, layout=layout),
         get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),
         get_results=GetResultsPage(game, catalog, concurrency=up.max_concurrency),
+        get_collections=GetCollectionsPage(
+            collections,
+            concurrency=up.max_concurrency,
+            showcase_limit=pages.collections_showcase_limit,
+            results_limit=pages.collections_results_limit,
+        ),
+        get_collection=GetCollectionPage(collections, game, concurrency=up.max_concurrency),
+        get_library=GetLibraryPage(library, concurrency=up.max_concurrency),
+        get_library_shelf=GetLibraryShelfPage(
+            library, concurrency=up.max_concurrency, items_limit=pages.library_items_limit
+        ),
         http_cache=settings.http_cache,
     )

@@ -16,6 +16,10 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from bff_web_service.application.dto import (
+    CatalogQuery,
+    CollectionDetail,
+    CollectionList,
+    CollectionMode,
     DailyStatus,
     Domain,
     Item,
@@ -23,6 +27,8 @@ from bff_web_service.application.dto import (
     Mode,
     PersonalRecord,
     SessionResult,
+    Shelf,
+    ShelfItems,
 )
 
 TRACE_HEADERS: ContextVar[dict[str, str] | None] = ContextVar("bff_trace_headers", default=None)
@@ -81,6 +87,14 @@ class GameClient(Protocol):
         """Итог своей завершённой сессии."""
         ...
 
+    async def collection_modes(self, collection_id: UUID) -> list[CollectionMode]:
+        """Режимы сборника с играбельностью (публичные, не зависят от субъекта; кэшируются).
+
+        Неопубликованный, скрытый или ещё не спроецированный сборник —
+        ``UpstreamRejectedError(404)``.
+        """
+        ...
+
 
 class CatalogClient(Protocol):
     """Публичный API catalog."""
@@ -95,6 +109,38 @@ class IdentityClient(Protocol):
 
     async def me(self, token: str) -> Me:
         """Профиль субъекта токена. Гость — ``UpstreamRejectedError(403)``."""
+        ...
+
+
+class CollectionsClient(Protocol):
+    """Публичный API collections."""
+
+    async def catalog(self, query: CatalogQuery) -> CollectionList:
+        """Каталог сборников (без токена: каталог одинаков для всех).
+
+        Без ``q`` и курсора — кэшируется.
+        """
+        ...
+
+    async def detail(self, token: str | None, collection_id: UUID) -> CollectionDetail:
+        """Сборник глазами субъекта токена: ``items`` и ``me`` зависят от него (D6).
+
+        Нет, скрыт для чужих или удалён — ``UpstreamRejectedError(404)``.
+        """
+        ...
+
+
+class LibraryClient(Protocol):
+    """Публичный API library (всё личное, не кэшируется)."""
+
+    async def shelves(self, token: str) -> list[Shelf]:
+        """Полки пользователя (системные первыми). Гость — ``UpstreamRejectedError(403)``."""
+        ...
+
+    async def shelf_items(
+        self, token: str, shelf_ref: str, *, cursor: str | None, limit: int
+    ) -> ShelfItems:
+        """Полка и страница её единиц. Чужая или нет — ``UpstreamRejectedError(404)``."""
         ...
 
 
