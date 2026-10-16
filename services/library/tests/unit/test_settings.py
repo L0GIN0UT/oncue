@@ -14,6 +14,10 @@ def test_defaults_match_plan() -> None:
     settings = Settings()
     assert settings.library.shelves_config is None
     assert settings.library.limits.custom_shelves_max == 50
+    assert settings.library.limits.items_per_shelf_max == 2000
+    assert settings.library.limits.shelf_title_max == 60
+    assert settings.library.limits.saves_per_min == 60
+    assert settings.library.purge_batch == 500
     assert settings.ugc.denylist_path is None
 
 

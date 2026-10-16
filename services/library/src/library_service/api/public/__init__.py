@@ -1,24 +1,22 @@
 """Публичный API (/v1). На gateway: /api/library/v1/....
 
-Шаг 0a этапа 3b: схемы и коды ошибок зафиксированы, ручки отвечают 501 до потока L
-(docs/plans/stage-3b.md §2.5, §6). Все ручки — только пользователь (``require_user``);
-мутации — ``Idempotency-Key``, cookie-аутентификация — с Origin и CSRF (``gv_auth``).
-Ответы личные — ``Cache-Control: no-store``.
+План этапа 3b §2.5, §6 (L5). Все ручки — только пользователь (``require_user``: гость —
+403 ``auth.guest_forbidden``); мутации — ``Idempotency-Key``, cookie-аутентификация — с
+Origin и CSRF (``gv_auth``). Ответы личные — ``Cache-Control: no-store`` (``NoStoreRoute``).
+Медиатека приватна: чужая полка — 404 ``library.shelf_not_found``.
 """
-
-# ruff: noqa: ARG001 — заглушки этапа 3b (501) объявляют параметры контракта до реализации.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Response, status
 from pydantic import BaseModel
 
 from gv_auth import Principal, require_user
-from gv_core.errors import NotImplementedYetError
-from gv_service import IdempotencyKey, Infrastructure, problem_responses
+from gv_service import IdempotencyKey, problem_responses
+from library_service.api.common import ApiServices, NoStoreRoute
 from library_service.api.schemas import (
     CreateShelfRequest,
     Cursor,
@@ -31,15 +29,15 @@ from library_service.api.schemas import (
     ShelfOut,
     ShelfRef,
 )
+from library_service.domain.shelves import SaveSource as SaveSourceEnum
 
 User = Annotated[Principal, Depends(require_user)]
 ShelfRefPath = Annotated[ShelfRef, Path(description="`system:<key>` или uuid своей полки")]
 ShelfId = Annotated[UUID, Path(description="Своя полка")]
 MediaItemId = Annotated[UUID, Path(description="Единица каталога")]
-STAGE_3B = "этап 3b: реализуется в потоке L (docs/plans/stage-3b.md)"
 
-_READ = problem_responses(401, 403, 404, 422, 501)
-_MUTATE = problem_responses(401, 403, 404, 409, 422, 429, 501)
+_READ = problem_responses(401, 403, 404, 422)
+_MUTATE = problem_responses(401, 403, 404, 409, 422, 429)
 
 
 class ServiceMeta(BaseModel):
@@ -49,13 +47,14 @@ class ServiceMeta(BaseModel):
     status: str
 
 
-def build_public_router(infra: Infrastructure) -> APIRouter:
+def build_public_router(services: ApiServices) -> APIRouter:
     """Публичные ручки."""
-    router = APIRouter(prefix="/v1", tags=["library"])
+    router = APIRouter(prefix="/v1", tags=["library"], route_class=NoStoreRoute)
+    commands, queries = services.commands, services.queries
 
     @router.get("/meta", response_model=ServiceMeta, summary="Сведения о сервисе")
     async def meta() -> ServiceMeta:
-        return ServiceMeta(service=infra.settings.service_name, status="stub")
+        return ServiceMeta(service=services.service_name, status="ok")
 
     @router.get(
         "/shelves",
@@ -64,8 +63,8 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         description="Системные (из конфига, D11) — всегда, даже пустые; затем свои.",
         responses=_READ,
     )
-    async def list_shelves(user: User) -> list[ShelfOut]:
-        raise NotImplementedYetError(STAGE_3B)
+    async def list_shelves(user: User) -> list[dict[str, Any]]:
+        return await queries.shelves(user.user_id)
 
     @router.post(
         "/shelves",
@@ -78,8 +77,10 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         ),
         responses=_MUTATE,
     )
-    async def create_shelf(body: CreateShelfRequest, user: User, key: IdempotencyKey) -> ShelfOut:
-        raise NotImplementedYetError(STAGE_3B)
+    async def create_shelf(
+        body: CreateShelfRequest, user: User, key: IdempotencyKey
+    ) -> dict[str, Any]:
+        return await commands.create_shelf(user.user_id, body.title, key)
 
     @router.patch(
         "/shelves/{shelf_id}",
@@ -89,8 +90,8 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
     )
     async def rename_shelf(
         shelf_id: ShelfId, body: RenameShelfRequest, user: User, key: IdempotencyKey
-    ) -> ShelfOut:
-        raise NotImplementedYetError(STAGE_3B)
+    ) -> dict[str, Any]:
+        return await commands.rename_shelf(user.user_id, shelf_id, body.title, key)
 
     @router.delete(
         "/shelves/{shelf_id}",
@@ -99,8 +100,9 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         description="Единицы полки — `library.ItemRemoved` с `source: shelf_deleted`.",
         responses=_MUTATE,
     )
-    async def delete_shelf(shelf_id: ShelfId, user: User, key: IdempotencyKey) -> None:
-        raise NotImplementedYetError(STAGE_3B)
+    async def delete_shelf(shelf_id: ShelfId, user: User, key: IdempotencyKey) -> Response:
+        await commands.delete_shelf(user.user_id, shelf_id, key)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get(
         "/shelves/{shelf_ref}/items",
@@ -113,8 +115,8 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         user: User,
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    ) -> ShelfItemsPage:
-        raise NotImplementedYetError(STAGE_3B)
+    ) -> dict[str, Any]:
+        return await queries.items(user.user_id, shelf_ref, cursor, limit)
 
     @router.put(
         "/shelves/{shelf_ref}/items/{media_item_id}",
@@ -135,8 +137,10 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         body: SaveItemRequest,
         user: User,
         key: IdempotencyKey,
-    ) -> SaveResult:
-        raise NotImplementedYetError(STAGE_3B)
+    ) -> dict[str, Any]:
+        return await commands.save_item(
+            user.user_id, shelf_ref, media_item_id, SaveSourceEnum(body.source), key
+        )
 
     @router.delete(
         "/shelves/{shelf_ref}/items/{media_item_id}",
@@ -151,8 +155,10 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         user: User,
         key: IdempotencyKey,
         source: Annotated[SaveSource, Query()] = "library",
-    ) -> SaveResult:
-        raise NotImplementedYetError(STAGE_3B)
+    ) -> dict[str, Any]:
+        return await commands.remove_item(
+            user.user_id, shelf_ref, media_item_id, SaveSourceEnum(source), key
+        )
 
     @router.get(
         "/items/{media_item_id}/shelves",
@@ -160,7 +166,7 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         summary="На каких полках единица",
         responses=_READ,
     )
-    async def item_shelves(media_item_id: MediaItemId, user: User) -> ItemShelvesOut:
-        raise NotImplementedYetError(STAGE_3B)
+    async def item_shelves(media_item_id: MediaItemId, user: User) -> dict[str, Any]:
+        return await queries.item_shelves(user.user_id, media_item_id)
 
     return router

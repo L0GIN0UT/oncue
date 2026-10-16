@@ -14,7 +14,7 @@ async def test_meta_and_health() -> None:
     infra = await Infrastructure.open(Settings(), DEFINITION.tables)
     try:
         async with service_client(create_app(DEFINITION, infra)) as client:
-            assert (await client.get("/v1/meta")).json() == {"service": "library", "status": "stub"}
+            assert (await client.get("/v1/meta")).json() == {"service": "library", "status": "ok"}
             assert (await client.get("/health/live")).status_code == 200
             assert (await client.get("/health/ready")).status_code == 200
     finally:
