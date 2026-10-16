@@ -20,6 +20,9 @@
 <p>Ревизия r{{ draft.revision }}, изменён {{ draft.updated_at }} —
   {% if draft_valid %}<strong>валиден</strong>{% else %}<strong>не прошёл проверку</strong> (ошибок: {{ draft_errors|length }}){% endif %}.
   {% if can_edit %}<a href="{% url 'game_config:edit' key=key %}">Редактировать</a>{% endif %}</p>
+  {% if draft_warnings %}
+  <ul class="messagelist">{% for w in draft_warnings %}<li class="warning">Предупреждение: {{ w.code }}{% if w.path %} в <code>{{ w.path }}</code>{% endif %}{% if w.text %} — {{ w.text }}{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
   {% if diff %}
   <h3>Отличия от опубликованной версии</h3>
   {% include "admin_game_config/_diff.html" %}
@@ -36,6 +39,31 @@
 {% else %}
 <p>Черновика нет.{% if can_edit %} <a href="{% url 'game_config:edit' key=key %}">Создать из опубликованной версии</a>{% endif %}</p>
 {% endif %}
+
+<h2>Ассеты загадки</h2>
+{% if can_publish and draft and draft_valid %}
+<p>{% if profile_missing %}<strong>Под параметры черновика ассетов нет.</strong> {% endif %}Запрос заведёт профиль в media-pipeline под параметры загадки (и ревила) черновика r{{ draft.revision }}; наборы генерируются порциями.</p>
+<form method="post" action="{% url 'game_config:request_assets' key=key %}">
+  {% csrf_token %}{{ asset_form.as_p }}<input type="submit" value="Запросить ассеты">
+</form>
+{% endif %}
+{% if asset_requests_error %}<ul class="messagelist"><li class="error">Запросы ассетов: {{ asset_requests_error }}</li></ul>{% endif %}
+{% if profiles_error %}<ul class="messagelist"><li class="error">Статус профилей (media-pipeline): {{ profiles_error }}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Запрошено</th><th>Ревизия</th><th>Тип загадки</th><th>params_hash</th><th>Запрос</th><th>Профиль</th><th>Наборы: готово / в работе / ошибка</th><th>Причина</th></tr></thead>
+  {% for r in asset_requests %}
+  <tr>
+    <td>{{ r.requested_at }}</td><td>r{{ r.draft_revision }}</td><td>{{ r.clue_type }}</td>
+    <td><code>{{ r.params_hash|truncatechars:15 }}</code></td><td>{{ r.status }}</td>
+    {% if r.profile %}
+    <td><strong>{{ r.profile.status }}</strong> ({{ r.profile.origin }}{% if r.profile.profile_key %}, {{ r.profile.profile_key }}{% endif %}){% if r.profile.error_code %} — <code>{{ r.profile.error_code }}</code>{% endif %}</td>
+    <td>{{ r.profile.sets.ready }} / {{ r.profile.sets.pending }} / {{ r.profile.sets.failed }}</td>
+    {% else %}<td>{% if profiles_error %}?{% else %}ещё не заведён{% endif %}</td><td>—</td>{% endif %}
+    <td>{{ r.reason }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="8">Запросов ассетов не было</td></tr>
+  {% endfor %}
+</table>
 
 <h2>Версии</h2>
 <table>
