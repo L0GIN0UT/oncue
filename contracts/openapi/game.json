@@ -1159,6 +1159,19 @@
             "title": "Levels",
             "type": "array"
           },
+          "min_items": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у шаблона сборника: минимум играбельных единиц для игры",
+            "title": "Min Items"
+          },
           "presentation": {
             "default": "score",
             "enum": [
@@ -1182,6 +1195,26 @@
               }
             ],
             "title": "Presets"
+          },
+          "round_options": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    5,
+                    10,
+                    25,
+                    "all"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у шаблона сборника (`kind=collection`): варианты числа раундов из конфига, без учёта конкретного сборника",
+            "title": "Round Options"
           },
           "rounds": {
             "title": "Rounds",
@@ -4995,7 +5028,7 @@
     },
     "/v1/modes": {
       "get": {
-        "description": "Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника (source `collection`) не входят: они приходят из `GET /v1/collections/{collection_id}/modes`.",
+        "description": "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`.",
         "operationId": "list_modes_v1_modes_get",
         "parameters": [
           {
@@ -5016,6 +5049,20 @@
                 }
               ],
               "title": "Domain"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "play",
+              "enum": [
+                "play",
+                "collection"
+              ],
+              "title": "Kind",
+              "type": "string"
             }
           }
         ],

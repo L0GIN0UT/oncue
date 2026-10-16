@@ -25,7 +25,11 @@ from gv_game_kernel import PlayableFor, SubjectQuery
 
 
 def mode_json(rules: ModeRules) -> Json:
-    """Режим для ``GET /v1/modes``: подача выбирается по данным (D12), не по ключу."""
+    """Режим для ``GET /v1/modes``: подача выбирается по данным (D12), не по ключу.
+
+    У шаблона сборника (``kind=collection``) — ещё ``round_options`` и ``min_items`` из
+    конфига (без учёта конкретного сборника); у остальных они ``None``."""
+    template = rules.engine.uses_collection
     presets = rules.presets()
     query = rules.subject_query()
     limit = rules.max_subjects()
@@ -48,6 +52,8 @@ def mode_json(rules: ModeRules) -> Json:
         "answer_format": rules.answer_format,
         "presentation": rules.presentation,
         "start": {"subject": subject} if subject is not None else None,
+        "round_options": rules.engine.round_options() if template else None,
+        "min_items": rules.min_playable() if template else None,
     }
 
 
@@ -96,13 +102,14 @@ class PlayQueries:
         self._playability_per_min = playability_per_min
         self._candidate_limit = candidate_limit
 
-    async def modes(self, domain: str | None) -> list[Json]:
-        """Опубликованные режимы, кроме шаблонов сборника: без ``collection_id`` их не
-        начать, они приходят из ``GET /v1/collections/{id}/modes`` (ADR 0028)."""
+    async def modes(self, domain: str | None, *, collection: bool = False) -> list[Json]:
+        """Опубликованные режимы одного вида: по умолчанию — играемые сами по себе, без
+        шаблонов сборника (без ``collection_id`` их не начать, ADR 0028); при
+        ``collection`` — только шаблоны сборника (конструктор, экран сессии по сборнику)."""
         return [
             mode_json(r)
             for r in await self._catalog.published()
-            if (domain is None or r.domain == domain) and not r.engine.uses_collection
+            if (domain is None or r.domain == domain) and r.engine.uses_collection == collection
         ]
 
     async def result(self, player: Player, session_id: UUID) -> Json:
