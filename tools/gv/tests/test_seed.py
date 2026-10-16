@@ -4,8 +4,10 @@
 аутентификации, использование admin-токена, импорт файлов, загрузку всех видов исходников
 с ``position``/``origin=seed``, ожидание наборов, профилей и играбельных пулов, перегенерацию
 наборов всех плановых режимов (день и неделя), идемпотентность и опрос готовности.
-Отдельно — контракт синтетических сидов ``seeds/catalog/synthetic-*.jsonl`` и имён файлов
-генератора ``seeds/media/generate.py``.
+Кураторские сборники 3b: создание/новая версия через admin-API collections, ожидание
+единиц в проекции collections, наборов своих эмодзи со ``scope`` и проекции сборника в game.
+Отдельно — контракт синтетических сидов ``seeds/catalog/synthetic-*.jsonl``, сидов сборников
+``seeds/collections/*.yaml`` и имён файлов генератора ``seeds/media/generate.py``.
 """
 
 from __future__ import annotations
@@ -25,11 +27,13 @@ import pytest
 
 from gv_cli.seed import (
     IMPORT_FILES,
+    ITEM_UNAVAILABLE,
     SOURCES_BY_DOMAIN,
     SYNTHETIC_TITLE_QUERY,
     SeedConfig,
     Seeder,
     SeedError,
+    load_collection_spec,
     mode_plan,
 )
 
@@ -67,6 +71,17 @@ class FakeStack:
     bracket_subject: str | None = "55555555-5555-5555-5555-555555555555"
     playable_count: int = 40  # сколько играбельных единиц отдаёт поиск проекции (≤ 50)
     synthetic_playable: int = 0  # сколько ещё — только по запросу q=синтетика
+    # collections: сколько мутаций ответят 422 item_unavailable (проекция не догнала catalog)
+    collection_unknown_polls: int = 0
+    collection_drops: int = 0  # сколько мутаций оборвут соединение (рестарт collections)
+    collection_error: str | None = None  # код нарушения публикации (иначе — успех)
+    hidden: bool = False  # существующие сборники скрыты модератором
+    # game: сколько опросов режимов сборника ответят 404 (CollectionPublished не обработан)
+    modes_missing_polls: int = 0
+    modes_short: int = 0  # сколько единиц сборника game не считает играбельными
+    scoped_pending_polls: int = 0  # опросов наборов со scope в статусе pending
+    scoped_failed: bool = False  # набор своих эмодзи провален
+    collections: dict[str, dict[str, Any]] = field(default_factory=dict)
     requests: list[httpx.Request] = field(default_factory=list)
     _asset_polls: dict[str, int] = field(default_factory=dict)
     _counters: dict[str, int] = field(default_factory=dict)
@@ -97,14 +112,22 @@ class FakeStack:
             ("GET", r"/admin/v1/projection/items", self._projection),
             ("POST", r"/admin/v1/daily-sets/.+/regenerate", self._daily_post),
             ("GET", r"/admin/v1/daily-sets", self._daily_list),
+            ("GET", r"/admin/v1/collections", self._collections_list),
+            ("POST", r"/admin/v1/collections", self._collection_create),
+            ("GET", rf"/admin/v1/collections/{_UUID}", self._collection_detail),
+            ("PUT", rf"/admin/v1/collections/{_UUID}", self._collection_update),
+            ("PUT", rf"/admin/v1/collections/{_UUID}/featured", self._collection_featured),
+            ("GET", rf"/v1/collections/{_UUID}/modes", self._collection_modes),
         ]
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         path, method = request.url.path, request.method
-        # Все admin-ручки обязаны нести admin-токен.
+        # Все admin-ручки обязаны нести admin-токен, публичные — не нести его.
         if path.startswith("/admin/v1/"):
             assert request.headers["Authorization"] == "Bearer admin-tok", path
+        if path.startswith("/v1/"):
+            assert "Authorization" not in request.headers, path
         for route_method, pattern, responder in self._routes():
             if method == route_method and re.fullmatch(pattern, path):
                 return responder(request)
@@ -240,26 +263,50 @@ class FakeStack:
         clue_types = ["audio_intro", "audio_reverse", "emoji"]
         if media_item_id == ITEMS[0][2]:
             clue_types = ["frame_progressive", "frame_sequence", "soundtrack", "description"]
-        return httpx.Response(
-            200,
-            json=[
-                {
-                    "asset_set_id": f"44444444-4444-4444-4444-44444444444{i}",
-                    "media_item_id": media_item_id,
-                    "clue_type": clue,
-                    "profile_key": "default",
-                    "params_hash": "h",
-                    # Набор в работе у одного типа: сидер обязан ждать все наборы единицы.
-                    "status": "failed"
-                    if clue == self.failed_clue
-                    else (status if i == len(clue_types) - 1 else "ready"),
-                    "levels_count": 6,
-                    "generation": 1,
-                    "error_code": None,
-                }
-                for i, clue in enumerate(clue_types)
-            ],
-        )
+        sets: list[dict[str, Any]] = [
+            {
+                "asset_set_id": f"44444444-4444-4444-4444-44444444444{i}",
+                "media_item_id": media_item_id,
+                "clue_type": clue,
+                "profile_key": "default",
+                "params_hash": "h",
+                # Набор в работе у одного типа: сидер обязан ждать все наборы единицы.
+                "status": "failed"
+                if clue == self.failed_clue
+                else (status if i == len(clue_types) - 1 else "ready"),
+                "levels_count": 6,
+                "generation": 1,
+                "error_code": None,
+                "scope": None,
+            }
+            for i, clue in enumerate(clue_types)
+        ]
+        return httpx.Response(200, json=sets + self._scoped_sets(media_item_id))
+
+    def _scoped_sets(self, media_item_id: str) -> list[dict[str, Any]]:
+        """Наборы своих эмодзи сборников (media строит их из CollectionPublished)."""
+        sets: list[dict[str, Any]] = []
+        for collection_id, detail in self.collections.items():
+            for item in detail["items"]:
+                if item["media_item_id"] != media_item_id or not item["custom"]:
+                    continue
+                polls = self._tick(f"scoped-{collection_id}-{media_item_id}")
+                status = "pending" if polls <= self.scoped_pending_polls else "ready"
+                sets.append(
+                    {
+                        "asset_set_id": "55555555-5555-5555-5555-555555555555",
+                        "media_item_id": media_item_id,
+                        "clue_type": "emoji",
+                        "profile_key": "default",
+                        "params_hash": "h",
+                        "status": "failed" if self.scoped_failed else status,
+                        "levels_count": 6,
+                        "generation": 1,
+                        "error_code": "emoji.too_short" if self.scoped_failed else None,
+                        "scope": {"kind": "collection", "id": collection_id},
+                    }
+                )
+        return sets
 
     def _profiles(self, request: httpx.Request) -> httpx.Response:
         pending = 1 if self._tick("profiles") <= self.profiles_pending_polls else 0
@@ -350,6 +397,131 @@ class FakeStack:
         if self.daily_status != 200:
             return httpx.Response(self.daily_status, json={"code": "game.daily_locked"})
         return httpx.Response(200, json=self._period_body(mode_key, day))
+
+    # ---------------------------------------------------------------- collections
+    def _collections_list(self, request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+        assert params["kind"] == "curated"
+        assert int(params["limit"]) <= 100
+        rows = [
+            {k: v for k, v in d.items() if k not in {"items", "tags", "cover", "description"}}
+            for d in self.collections.values()
+            if params["q"].lower() in d["title"].lower()
+        ]
+        return httpx.Response(200, json={"items": rows, "next_cursor": None})
+
+    def _collection_detail(self, request: httpx.Request) -> httpx.Response:
+        collection_id = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json=self.collections[collection_id])
+
+    def _mutation_failure(self, request: httpx.Request) -> httpx.Response | None:
+        """Общие отказы мутаций: обрыв, проекция не догнала, нарушение публикации."""
+        assert request.headers["Idempotency-Key"].startswith("seed-collection-")
+        assert len(json.loads(request.content)["reason"]) >= 3
+        if self._tick("collections_drop") <= self.collection_drops:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        if self._tick("collections_unknown") <= self.collection_unknown_polls:
+            return _problem(
+                422,
+                "collections.publish_invalid",
+                errors=[{"path": "items[0]", "code": ITEM_UNAVAILABLE}],
+            )
+        if self.collection_error:
+            return _problem(
+                422,
+                "collections.publish_invalid",
+                errors=[{"path": "items[0].custom.emoji", "code": self.collection_error}],
+            )
+        return None
+
+    def _store(self, collection_id: str, body: dict[str, Any], version: int) -> dict[str, Any]:
+        detail = {
+            "collection_id": collection_id,
+            "domain": body.get("domain", self.collections.get(collection_id, {}).get("domain")),
+            "kind": "curated",
+            "status": "hidden" if self.hidden else "published",
+            "visibility": body["visibility"],
+            "title": body["title"],
+            "description": body["description"],
+            "tags": body["tags"],
+            "cover": body["cover"],
+            "default_mode_key": body["default_mode_key"],
+            "version": version,
+            "featured": False,
+            "featured_rank": None,
+            "items": [
+                {
+                    "position": pos,
+                    "media_item_id": item["media_item_id"],
+                    "title": "t",
+                    "year": None,
+                    "available": True,
+                    "custom": item["custom"],
+                }
+                for pos, item in enumerate(body["items"])
+            ],
+        }
+        self.collections[collection_id] = detail
+        return detail
+
+    def _collection_create(self, request: httpx.Request) -> httpx.Response:
+        failure = self._mutation_failure(request)
+        if failure is not None:
+            return failure
+        body = json.loads(request.content)
+        assert body["domain"] in {"film", "music"}
+        seq = len(self.collections) + 1
+        collection_id = f"66666666-6666-6666-6666-00000000000{seq}"
+        return httpx.Response(201, json=self._store(collection_id, body, 1))
+
+    def _collection_update(self, request: httpx.Request) -> httpx.Response:
+        failure = self._mutation_failure(request)
+        if failure is not None:
+            return failure
+        collection_id = request.url.path.rsplit("/", 1)[-1]
+        body = json.loads(request.content)
+        current = self.collections[collection_id]["version"]
+        if body["base_version"] != current:
+            return _problem(409, "collections.version_conflict")
+        return httpx.Response(200, json=self._store(collection_id, body, current + 1))
+
+    def _collection_featured(self, request: httpx.Request) -> httpx.Response:
+        assert request.headers["Idempotency-Key"].startswith("seed-featured-")
+        collection_id = request.url.path.split("/")[-2]
+        body = json.loads(request.content)
+        detail = self.collections[collection_id]
+        detail.update(featured=body["featured"], featured_rank=body["rank"])
+        return httpx.Response(200, json=detail)
+
+    def _collection_modes(self, request: httpx.Request) -> httpx.Response:
+        collection_id = request.url.path.split("/")[-2]
+        if self._tick(f"modes-{collection_id}") <= self.modes_missing_polls:
+            return _problem(404, "game.collection_not_found")
+        detail = self.collections[collection_id]
+        total = len(detail["items"])
+        playable = max(total - self.modes_short, 0)
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "mode_key": detail["default_mode_key"],
+                    "title_key": "t",
+                    "clue_type": "frame_progressive",
+                    "allow_guest": True,
+                    "playable": playable,
+                    "total": total,
+                    "available": playable >= 1,
+                    "round_options": [5],
+                }
+            ],
+        )
+
+
+def _problem(status: int, code: str, **details: Any) -> httpx.Response:
+    return httpx.Response(status, json={"code": code, "status": status, "details": details or None})
+
+
+_UUID = "[0-9a-f-]{36}"
 
 
 def form_fields(request: httpx.Request) -> dict[str, str]:
@@ -444,7 +616,35 @@ def workspace(tmp_path: Path) -> Path:
     (modes / "film.bracket.weekly.yaml").write_text(_BRACKET_YAML, encoding="utf-8")
     (modes / "film.marathon.director.yaml").write_text(_MARATHON_YAML, encoding="utf-8")
     (tmp_path / "seeds" / "media" / "out").mkdir(parents=True)
+    collections = tmp_path / "seeds" / "collections"
+    collections.mkdir(parents=True)
+    (collections / "film-emoji.yaml").write_text(_FILM_COLLECTION, encoding="utf-8")
+    (collections / "music-intro.yaml").write_text(_MUSIC_COLLECTION, encoding="utf-8")
     return tmp_path
+
+
+_FILM_COLLECTION = """\
+key: film-emoji
+title: "Кино · эмодзи"
+description: "Фильмы в эмодзи"
+domain: film
+default_mode_key: film.collection.emoji
+tags: [scifi]
+cover: popcorn
+featured_rank: 1
+items:
+  - item: film:interstellar
+    emoji: "🚀🌌⏳🌽🪐📚"
+"""
+
+_MUSIC_COLLECTION = """\
+key: music-intro
+title: "Музыка · интро"
+domain: music
+default_mode_key: music.collection.intro
+items:
+  - track:bohemian-rhapsody
+"""
 
 
 def _config(root: Path, **overrides: object) -> SeedConfig:
@@ -453,6 +653,7 @@ def _config(root: Path, **overrides: object) -> SeedConfig:
         "catalog_url": "http://catalog",
         "media_url": "http://media",
         "game_url": "http://game",
+        "collections_url": "http://collections",
         "admin_login": "admin@example.com",
         "admin_password": "secret",
         "service_secret": "svc-secret",
@@ -630,7 +831,13 @@ class TestSeedPolling:
     def test_waits_for_all_asset_sets_ready(self, workspace: Path) -> None:
         stack = FakeStack(assets_ready_after=2)
         _run(stack, workspace)
-        polls = stack.recorded("GET", "/admin/v1/asset-sets")
+        # Шаг исходников — до сборников (те опрашивают asset-sets ради своих эмодзи).
+        first_collection = next(
+            i for i, r in enumerate(stack.requests) if r.url.path == "/admin/v1/collections"
+        )
+        polls = [
+            r for r in stack.requests[:first_collection] if r.url.path == "/admin/v1/asset-sets"
+        ]
         assert len(polls) == 3 * len(ITEMS)  # два pending-опроса на единицу + ready
 
     def test_assets_timeout_raises(self, workspace: Path) -> None:
@@ -687,6 +894,176 @@ class TestSeedErrors:
         )
         with seeder, pytest.raises(SeedError, match="нет исходника"):
             seeder.run()
+
+
+FILM_ID, TRACK_ID = ITEMS[0][2], ITEMS[1][2]
+_MUTATIONS = r"/admin/v1/collections(/[0-9a-f-]{36})?"
+
+
+def _mutations(stack: FakeStack) -> list[httpx.Request]:
+    return [
+        r
+        for r in stack.requests
+        if r.method in {"POST", "PUT"} and re.fullmatch(_MUTATIONS, r.url.path)
+    ]
+
+
+class TestSeedCollections:
+    def test_creates_curated_collections_through_admin_api(self, workspace: Path) -> None:
+        stack = FakeStack()
+        _run(stack, workspace)
+
+        created = stack.recorded("POST", "/admin/v1/collections")
+        assert len(created) == 2
+        bodies = {json.loads(r.content)["title"]: json.loads(r.content) for r in created}
+        film = bodies["Кино · эмодзи"]
+        # Ключи сидов → media_item_id каталога, свои эмодзи — в custom, словари — как в сиде.
+        assert film["domain"] == "film"
+        assert film["default_mode_key"] == "film.collection.emoji"
+        assert film["items"] == [{"media_item_id": FILM_ID, "custom": {"emoji": "🚀🌌⏳🌽🪐📚"}}]
+        assert film["tags"] == ["scifi"]
+        assert film["cover"] == {"preset": "popcorn"}
+        assert len(film["reason"]) >= 3
+        music = bodies["Музыка · интро"]
+        assert music["items"] == [{"media_item_id": TRACK_ID, "custom": None}]
+        assert music["cover"] is None
+        # Ключ идемпотентности стабилен и свой у каждого сборника.
+        keys = [r.headers["Idempotency-Key"] for r in created]
+        assert len(set(keys)) == 2
+        assert all(k.startswith("seed-collection-") for k in keys)
+
+        # «Рекомендуемое» — только у сборника с featured_rank.
+        featured = stack.recorded("PUT", rf"/admin/v1/collections/{_UUID}/featured")
+        assert len(featured) == 1
+        assert json.loads(featured[0].content) == {
+            "featured": True,
+            "rank": 1,
+            "reason": "сиды e2e",
+        }
+
+        # Сборники — после наборов периода; game опрашивается публично по каждому сборнику.
+        paths = [r.url.path for r in stack.requests]
+        last_regen = max(i for i, p in enumerate(paths) if p.endswith("/regenerate"))
+        assert paths.index("/admin/v1/collections") > last_regen
+        modes = {r.url.path for r in stack.recorded("GET", rf"/v1/collections/{_UUID}/modes")}
+        assert modes == {f"/v1/collections/{cid}/modes" for cid in stack.collections}
+
+    def test_rerun_without_changes_does_not_mutate(self, workspace: Path) -> None:
+        stack = FakeStack()
+        _run(stack, workspace)
+        _run(stack, workspace)
+        assert len(_mutations(stack)) == 2  # только создание при первом прогоне
+        assert len(stack.recorded("PUT", rf"/admin/v1/collections/{_UUID}/featured")) == 1
+
+    def test_changed_seed_publishes_new_version(self, workspace: Path) -> None:
+        stack = FakeStack()
+        _run(stack, workspace)
+        path = workspace / "seeds" / "collections" / "music-intro.yaml"
+        path.write_text(_MUSIC_COLLECTION + "tags: [rock]\n", encoding="utf-8")
+        _run(stack, workspace)
+
+        updates = stack.recorded("PUT", rf"/admin/v1/collections/{_UUID}")
+        assert len(updates) == 1
+        body = json.loads(updates[0].content)
+        assert body["base_version"] == 1
+        assert body["tags"] == ["rock"]
+        assert "domain" not in body
+        created_keys = {r.headers["Idempotency-Key"] for r in stack.recorded("POST", _MUTATIONS)}
+        assert updates[0].headers["Idempotency-Key"] not in created_keys
+        assert {d["version"] for d in stack.collections.values()} == {1, 2}
+
+    def test_waits_until_collections_knows_items(self, workspace: Path) -> None:
+        # collections ещё не обработал MediaItemCreated: 422 item_unavailable — ждать.
+        stack = FakeStack(collection_unknown_polls=2)
+        _run(stack, workspace)
+        keys = [r.headers["Idempotency-Key"] for r in _mutations(stack)]
+        assert len(keys) == 4
+        assert keys[0] == keys[1] == keys[2]
+
+    def test_retries_when_collections_restarts(self, workspace: Path) -> None:
+        stack = FakeStack(collection_drops=1)
+        _run(stack, workspace)
+        keys = [r.headers["Idempotency-Key"] for r in _mutations(stack)]
+        assert len(keys) == 3
+        assert keys[0] == keys[1]
+
+    def test_publish_violation_raises_with_codes(self, workspace: Path) -> None:
+        stack = FakeStack(collection_error="collections.emoji_too_short")
+        with pytest.raises(
+            SeedError, match=r"items\[0\]\.custom\.emoji: collections\.emoji_too_short"
+        ):
+            _run(stack, workspace)
+        assert len(_mutations(stack)) == 1  # без повторов
+
+    def test_items_unavailable_timeout_names_paths(self, workspace: Path) -> None:
+        stack = FakeStack(collection_unknown_polls=10_000)
+        with pytest.raises(SeedError, match=r"проекции collections.*items\[0\]"):
+            _run(stack, workspace, assets_timeout_s=0.02)
+
+    def test_waits_for_scoped_emoji_sets(self, workspace: Path) -> None:
+        stack = FakeStack(scoped_pending_polls=2)
+        _run(stack, workspace)
+        # После создания сборника — опросы наборов единицы со своими эмодзи до ready.
+        first = next(
+            i for i, r in enumerate(stack.requests) if r.url.path == "/admin/v1/collections"
+        )
+        polls = [
+            r
+            for r in stack.requests[first:]
+            if r.url.path == "/admin/v1/asset-sets" and r.url.params["media_item_id"] == FILM_ID
+        ]
+        assert len(polls) == 3
+        # Музыкальный сборник без своих эмодзи наборы со scope не ждёт.
+        assert all(
+            r.url.params["media_item_id"] != TRACK_ID
+            for r in stack.requests[first:]
+            if r.url.path == "/admin/v1/asset-sets"
+        )
+
+    def test_failed_scoped_set_raises(self, workspace: Path) -> None:
+        stack = FakeStack(scoped_failed=True)
+        with pytest.raises(SeedError, match=r"film-emoji/film:interstellar.*failed"):
+            _run(stack, workspace)
+
+    def test_waits_for_collection_in_game(self, workspace: Path) -> None:
+        stack = FakeStack(modes_missing_polls=2)
+        _run(stack, workspace)
+        for collection_id in stack.collections:
+            polls = stack.recorded("GET", rf"/v1/collections/{collection_id}/modes")
+            assert len(polls) == 3
+
+    def test_game_timeout_reports_playable(self, workspace: Path) -> None:
+        stack = FakeStack(modes_short=1)
+        with pytest.raises(SeedError, match=r"film-emoji в проекции game.*играбельно 0 из 1"):
+            _run(stack, workspace, assets_timeout_s=0.02)
+
+    def test_hidden_collection_raises(self, workspace: Path) -> None:
+        stack = FakeStack()
+        _run(stack, workspace)
+        stack.hidden = True
+        for detail in stack.collections.values():
+            detail["status"] = "hidden"
+        with pytest.raises(SeedError, match="скрыт модератором"):
+            _run(stack, workspace)
+
+    def test_unknown_item_key_fails_before_import(self, workspace: Path) -> None:
+        path = workspace / "seeds" / "collections" / "music-intro.yaml"
+        path.write_text(_MUSIC_COLLECTION + "  - track:missing\n", encoding="utf-8")
+        stack = FakeStack()
+        with pytest.raises(SeedError, match=r"track:missing"):
+            _run(stack, workspace)
+        assert not stack.recorded("POST", "/admin/v1/imports")
+
+    def test_bad_seed_names_file(self, workspace: Path) -> None:
+        path = workspace / "seeds" / "collections" / "broken.yaml"
+        path.write_text("key: broken\ntitle: x\n", encoding="utf-8")
+        with pytest.raises(SeedError, match=r"broken\.yaml"):
+            _run(FakeStack(), workspace)
+
+    def test_no_collections_dir_skips_step(self, workspace: Path) -> None:
+        stack = FakeStack()
+        _run(stack, workspace, collections_dir=workspace / "nowhere")
+        assert not stack.recorded("GET", "/admin/v1/collections")
 
 
 class TestModePlan:
@@ -783,6 +1160,85 @@ class TestSyntheticCatalog:
         }
         stage2 = {r["key"] for n in ("films.jsonl", "tracks.jsonl") for r in _rows(n)}
         assert not synthetic & stage2
+
+
+# ----------------------------------------------------------------------------- сборники
+_COLLECTIONS = sorted((REPO / "seeds" / "collections").glob("*.yaml"))
+_META = REPO / "services/collections/src/collections_service/config/meta.yaml"
+
+
+def _catalog_domains() -> dict[str, str]:
+    """Ключ сида → домен по всем файлам импорта."""
+    domains = {"film": "film", "track": "music"}
+    return {r["key"]: domains[r["kind"]] for name in IMPORT_FILES for r in _rows(name)}
+
+
+class TestCollectionSeeds:
+    """Контракт ``seeds/collections/*.yaml`` с collections и game (план 3b §0 п. 1, §16 п. 5)."""
+
+    def test_three_curated_collections(self) -> None:
+        specs = [load_collection_spec(p) for p in _COLLECTIONS]
+        modes = {s.default_mode_key for s in specs}
+        assert {"film.collection.frame", "film.collection.emoji", "music.collection.intro"} <= modes
+        assert len({s.key for s in specs}) == len(specs)
+        assert len({s.title for s in specs}) == len(specs)  # по названию засев находит сборник
+        # Свой набор эмодзи — хотя бы у одного сборника (AssetsReady со scope в демонстрации).
+        assert any(s.emoji_items() for s in specs)
+
+    @pytest.mark.parametrize("path", _COLLECTIONS, ids=lambda p: p.stem)
+    def test_matches_meta_modes_and_catalog(self, path: Path) -> None:
+        import yaml
+
+        limits = pytest.importorskip("collections_service.settings").CollectionsLimits()
+        spec = load_collection_spec(path)
+        meta = yaml.safe_load(_META.read_text("utf-8"))
+        tags = {t["key"]: t["domains"] for t in meta["tags"]}
+        presets = {p["id"] for p in meta["cover_presets"]}
+        mode = yaml.safe_load(
+            (REPO / "seeds/game/modes" / f"{spec.default_mode_key}.yaml").read_text("utf-8")
+        )
+
+        assert path.stem == spec.key
+        assert len(spec.title) <= limits.title_max
+        assert spec.description is None or len(spec.description) <= limits.description_max
+        assert len(spec.tags) <= limits.tags_max
+        for tag in spec.tags:
+            assert spec.domain in tags[tag], tag
+        assert spec.cover in presets
+        assert spec.visibility in {"public", "unlisted"}
+        assert mode["domain"] == spec.domain
+        assert mode["source"]["type"] == "collection"
+        min_items = max(limits.items_min, int(mode["source"]["params"]["min_items"]))
+        assert min_items <= len(spec.items) <= limits.items_max
+        # Сценарий e2e играет 5 раундов: столько единиц нужно и самому малому варианту.
+        assert len(spec.items) >= min(
+            o for o in mode["source"]["params"]["round_options"] if o != "all"
+        )
+
+        catalog = _catalog_domains()
+        keys = [i.seed_key for i in spec.items]
+        assert len(set(keys)) == len(keys)
+        for key in keys:
+            assert catalog[key] == spec.domain, key
+
+    @pytest.mark.parametrize("path", _COLLECTIONS, ids=lambda p: p.stem)
+    def test_custom_emoji_are_strict(self, path: Path) -> None:
+        emoji = pytest.importorskip("gv_text.emoji")
+        limits = pytest.importorskip("collections_service.settings").CollectionsLimits()
+        for item in load_collection_spec(path).emoji_items():
+            text = item.emoji or ""
+            assert emoji.is_strict_emoji(text, max_graphemes=limits.emoji_max_graphemes), text
+            # Профиль emoji media-pipeline открывает до 6 эмодзи: меньше — набор не строится.
+            assert len(emoji.graphemes(text)) >= limits.emoji_min_graphemes, text
+
+    def test_emoji_collection_needs_scoped_sets(self) -> None:
+        # Реальные фильмы сидов без эмодзи в каталоге: в режиме emoji они играбельны только
+        # через свои эмодзи сборника — так засев проверяет AssetsReady со scope.
+        spec = load_collection_spec(REPO / "seeds/collections/film-emoji.yaml")
+        stage2 = {r["key"]: r for r in _rows("films.jsonl")}
+        custom = [i for i in spec.emoji_items() if i.seed_key in stage2]
+        assert len(custom) >= 5
+        assert all("clue_texts" not in stage2[i.seed_key] for i in custom)
 
 
 # ----------------------------------------------------------------------------- генератор
