@@ -4,7 +4,8 @@
   503 ``DependencyUnavailableError``, 429 ``RateLimitedError``);
 * ``FakeCandidatePort`` — пул в памяти с фильтрацией по ``PoolQuery`` (включая персоны и
   метрику) и журналом запросов; ``subjects`` — поиск персон для марафона и темы сетки;
-* ``FakeCollectionPort`` — сборники в памяти;
+* ``FakeCollectionPort`` — сборники в памяти: порядок автора, блокировка единиц,
+  играбельность по ``PlayableFor`` с набором сборника (``scope``) или каталожным;
 * ``media_item(...)`` — единица каталога с разумными значениями по умолчанию;
 * ``given_mode(cfg)`` — DSL сценария игры поверх настоящих плагинов::
 
@@ -16,14 +17,18 @@
         .when_pick("higher").when_pick("lower")
         .then_round(outcome="miss").then_session_ended())
 
+    (given_mode(collection_cfg).given_collection(items, rounds=5, seed=b"s")
+        .when_guess(item=items[0]).then_rounds(5))
+
   Сценарий ведёт сессию как game: после каждого раунда спрашивает у движка ``followups``
-  (сетка дописывает туры) и ``should_end`` (правило ``session.end``).
+  (сетка дописывает туры) и ``should_end`` (правило ``session.end``). ``given_collection``
+  стартует сессию по сборнику через ядро: ``rounds_for`` → ``draw_rounds``.
 """
 
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -45,12 +50,14 @@ from gv_game_kernel import (
     PluginRegistry,
     PoolQuery,
     RoundDraw,
+    RoundOption,
     RoundOutcome,
     RoundPick,
     RoundState,
     SubjectQuery,
     parse_mode_config,
     register_builtin,
+    register_collection,
 )
 
 _counter = itertools.count(1)
@@ -266,27 +273,93 @@ class SubjectHit:
 
 
 class FakeCollectionPort:
-    """``CollectionPort`` в памяти: ``{collection_id: [единицы в порядке сборника]}``."""
+    """``CollectionPort`` в памяти: ``{collection_id: [единицы в порядке сборника]}``.
 
-    def __init__(self, collections: Mapping[UUID, Sequence[MediaItemRef]] | None = None) -> None:
+    Семантика, которую ждут от адаптера game (проекции сборников ∩ активный каталог ∩
+    играбельность, ADR 0028/0029): единицы — в порядке сборника, без заблокированных
+    (``block``); при ``playable_for`` единица играбельна, если есть набор сборника
+    ``playable_for.scope`` (``scoped``) или каталожный набор (``playable``).
+
+    Args:
+        collections: Сборники и их единицы по порядку (неизвестный сборник — пусто).
+        playable: Каталожные наборы ``(media_item_id, clue_type, params_hash)``; ``None`` —
+            каталожный набор есть у всех единиц.
+        scoped: Наборы сборников ``(collection_id, media_item_id, clue_type, params_hash)``.
+    """
+
+    def __init__(
+        self,
+        collections: Mapping[UUID, Sequence[MediaItemRef]] | None = None,
+        *,
+        playable: Iterable[tuple[UUID, str, str]] | None = None,
+        scoped: Iterable[tuple[UUID, UUID, str, str]] = (),
+    ) -> None:
         self.collections = {k: list(v) for k, v in (collections or {}).items()}
+        self._playable = None if playable is None else set(playable)
+        self._scoped = set(scoped)
+        self._blocked: set[UUID] = set()
+        self.queries: list[tuple[UUID, int, PlayableFor | None]] = []
+
+    def add(self, collection_id: UUID, *items: MediaItemRef) -> None:
+        """Дописать единицы в конец сборника (создать сборник, если его нет)."""
+        self.collections.setdefault(collection_id, []).extend(items)
+
+    def remove(self, collection_id: UUID) -> None:
+        """Убрать сборник (скрыт или удалён: ``items`` вернёт пусто)."""
+        self.collections.pop(collection_id, None)
+
+    def block(self, *item_ids: UUID) -> None:
+        """Единицы больше не активны в каталоге (``MediaItemBlocked``)."""
+        self._blocked.update(item_ids)
+
+    def matches(self, item: MediaItemRef, pf: PlayableFor | None) -> bool:
+        """Входит ли единица сборника в выдачу (та же семантика ждётся от адаптера game)."""
+        if item.id in self._blocked:
+            return False
+        if pf is None:
+            return True
+        if pf.scope is not None and (pf.scope, item.id, pf.clue_type, pf.params_hash) in (
+            self._scoped
+        ):
+            return True
+        return self._playable is None or (item.id, pf.clue_type, pf.params_hash) in self._playable
 
     async def items(
         self, collection_id: UUID, limit: int, *, playable_for: PlayableFor | None
     ) -> list[MediaItemRef]:
-        """До ``limit`` единиц сборника (неизвестный сборник — пусто).
+        """До ``limit`` единиц сборника в его порядке (неизвестный сборник — пусто)."""
+        self.queries.append((collection_id, limit, playable_for))
+        found = [
+            item
+            for item in self.collections.get(collection_id, [])
+            if self.matches(item, playable_for)
+        ]
+        return found[:limit]
 
-        ``playable_for`` пока не фильтрует (фильтр играбельности и ``scope`` — поток A
-        этапа 3b): все единицы фейка считаются играбельными.
-        """
-        del playable_for
-        return self.collections.get(collection_id, [])[:limit]
+
+def run_sync[T](awaitable: Coroutine[Any, Any, T]) -> T:
+    """Выполнить корутину, которая не ждёт IO (розыгрыш на фейках портов), синхронно.
+
+    DSL сценария синхронный, а ``Source.draw`` — асинхронный; фейки портов этого модуля
+    отвечают сразу, поэтому корутина завершается за один шаг.
+
+    Raises:
+        RuntimeError: корутина ждёт чего-то внешнего (настоящий порт вместо фейка).
+    """
+    try:
+        awaitable.send(None)
+    except StopIteration as done:
+        result: T = done.value
+        return result
+    awaitable.close()
+    raise RuntimeError("корутина ждёт IO: в DSL нужны фейки портов gv_testkit.game")
 
 
 # ----------------------------------------------------------------------------- движок
 def builtin_registry() -> PluginRegistry:
-    """Реестр со встроенными плагинами (``register_builtin``)."""
-    return register_builtin(PluginRegistry())
+    """Реестр со встроенными плагинами и источником ``collection``, как в game с этапа 3b
+    (``register_builtin`` + ``register_collection``)."""
+    return register_collection(register_builtin(PluginRegistry()))
 
 
 def build_engine(config: ModeConfig | Mapping[str, Any]) -> ModeEngine:
@@ -330,6 +403,8 @@ class GameScenario:
 
     def __init__(self, engine: ModeEngine) -> None:
         self.engine = engine
+        self.collection_id: UUID | None = None
+        self.collections: FakeCollectionPort | None = None
         self.rounds: list[PlayedRound] = []
         self._current = 0
         self._last: PlayedRound | None = None
@@ -342,6 +417,49 @@ class GameScenario:
         """Составы раундов по порядку (например, ``engine.draw_rounds(ctx)``)."""
         self.rounds = [PlayedRound(draw) for draw in draws]
         self._current = 0
+        return self
+
+    def given_collection(
+        self,
+        items: Sequence[MediaItemRef] = (),
+        *,
+        rounds: RoundOption | None = None,
+        seed: bytes = b"seed",
+        collection_id: UUID | None = None,
+        port: FakeCollectionPort | None = None,
+        exclude_ids: frozenset[UUID] = frozenset(),
+    ) -> GameScenario:
+        """Сессия по сборнику, как её стартует game: ``rounds_for`` → ``draw_rounds``.
+
+        Args:
+            items: Единицы сборника в порядке автора (добавляются в ``port``).
+            rounds: Выбор игрока (``5 | 10 | 25 | "all"``; ``None`` — первый вариант).
+            seed: Seed сессии (перемешивание при ``shuffle``).
+            collection_id: Сборник (по умолчанию — новый детерминированный UUID).
+            port: Готовый ``FakeCollectionPort`` (играбельность, блокировки, наборы
+                сборника); по умолчанию — пустой.
+            exclude_ids: ``DrawContext.exclude_ids``.
+
+        Raises:
+            CollectionRequiredError | RoundsNotAllowedError | PoolTooSmallError: как у game.
+        """
+        self.collection_id = collection_id or _uuid(next(_counter))
+        self.collections = port or FakeCollectionPort()
+        if items:
+            self.collections.add(self.collection_id, *items)
+        ctx = self.engine.draw_context(
+            seed=seed,
+            candidates=FakeCandidatePort(),
+            collections=self.collections,
+            collection_id=self.collection_id,
+            exclude_ids=exclude_ids,
+        )
+        n = run_sync(self.engine.rounds_for(ctx, rounds))
+        return self.with_draws(*run_sync(self.engine.draw_rounds(ctx, n)))
+
+    def then_rounds(self, expected: int) -> GameScenario:
+        """Проверить число раундов сессии (с дописанными ``followups``)."""
+        assert len(self.rounds) == expected, f"раундов {len(self.rounds)}, ожидалось {expected}"
         return self
 
     # ------------------------------------------------------------------------- сессия
