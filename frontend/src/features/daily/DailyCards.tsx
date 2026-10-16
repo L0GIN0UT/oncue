@@ -5,7 +5,7 @@
  */
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { api, unwrap } from "@/shared/api/client";
 import type { DailyCard, HomePage } from "@/shared/api/types";
@@ -32,6 +32,8 @@ export function DailyBoard({ initial }: { initial: HomePage | null }) {
   const { data, isPending } = useHomePage(initial);
   const block = data?.blocks.dailies;
   const cards = block?.status === "ok" ? (block.data ?? []) : [];
+  const weeklyBlock = data?.blocks.weekly;
+  const weekly = weeklyBlock?.status === "ok" ? (weeklyBlock.data ?? []) : [];
   const target = cards[0]?.next_reset_at ?? nextMidnight(new Date()).toISOString();
   const refresh = useCallback(() => {
     void client.invalidateQueries({ queryKey: homeQueryKey });
@@ -44,12 +46,13 @@ export function DailyBoard({ initial }: { initial: HomePage | null }) {
   // сбоя апстрима так не лечится, и цикла запросов быть не должно.
   const recovered = useRef(false);
   useEffect(() => {
-    if (recovered.current || block?.status !== "unavailable") return;
+    const personal = [block?.status, weeklyBlock?.status];
+    if (recovered.current || !personal.includes("unavailable")) return;
     recovered.current = true;
     void recoverSession()
       .then(refresh)
       .catch(() => undefined);
-  }, [block?.status, refresh]);
+  }, [block?.status, weeklyBlock?.status, refresh]);
 
   return (
     <section aria-labelledby="dailies-title" className="flex flex-col gap-6">
@@ -72,7 +75,36 @@ export function DailyBoard({ initial }: { initial: HomePage | null }) {
           ))}
         </ul>
       )}
+      {weekly.length > 0 && <WeeklyBlock cards={weekly} />}
     </section>
+  );
+}
+
+/** Наборы недели (сетка): тот же билет, отдельный блок со сроком смены темы. */
+function WeeklyBlock({ cards }: { cards: DailyCard[] }) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const reset = cards[0]?.next_reset_at;
+  return (
+    <div className="flex flex-col gap-4" data-testid="weekly">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h3 className="font-display text-lg font-semibold">{t("weekly.title")}</h3>
+        {reset && (
+          <p className="text-sm text-ink-muted">
+            {t("weekly.nextReset", {
+              date: format.dateTime(new Date(reset), { day: "numeric", month: "long" }),
+            })}
+          </p>
+        )}
+      </div>
+      <ul className="grid gap-5 md:grid-cols-2">
+        {cards.map((card) => (
+          <li key={card.mode_key}>
+            <DailyTicket card={card} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -82,6 +114,11 @@ export function DailyTicket({ card }: { card: DailyCard }) {
   const dt = useDynamicT();
   const title = dt(card.title_key, card.mode_key);
   const finished = card.status === "finished";
+  // Подача итога решает подписи: у сетки нет очков, у серии — не «из максимума».
+  const scored = (card.presentation ?? "score") === "score";
+  const pitch = scored
+    ? t(`daily.pitch.${card.domain}`)
+    : dt(card.title_key.replace(/\.title$/, ".description"), t(`daily.pitch.${card.domain}`));
   const href =
     finished && card.session_id ? `/results/${card.session_id}` : `/play/${card.mode_key}`;
   return (
@@ -99,12 +136,16 @@ export function DailyTicket({ card }: { card: DailyCard }) {
           </div>
           <DomainGlyph domain={card.domain} />
         </div>
-        <p className="max-w-[38ch] text-ink-muted">{t(`daily.pitch.${card.domain}`)}</p>
+        <p className="max-w-[38ch] text-ink-muted">{pitch}</p>
         <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-dashed border-rule pt-5">
           <p className={cn("text-sm", finished ? "text-ink" : "text-ink-muted")}>
             {finished
-              ? t("daily.status.finished", { score: card.score ?? 0, max: card.max_score })
-              : t(`daily.status.${card.status}`)}
+              ? scored
+                ? t("daily.status.finished", { score: card.score ?? 0, max: card.max_score })
+                : t("daily.status.finishedPlain")
+              : scored
+                ? t(`daily.status.${card.status}`)
+                : t(`daily.statusPlain.${card.status}`)}
           </p>
           <Button asChild size="md" variant={finished ? "secondary" : "primary"}>
             <Link href={href}>{t(`daily.action.${card.status}`)}</Link>
