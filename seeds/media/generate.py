@@ -7,7 +7,7 @@
 
 Этап 3a (план §10): на фильм — шесть разных кадров ``film-<slug>-{1..6}.jpg``
 (``frame_sequence``, ``position`` = номер), саундтрек ``soundtrack-<slug>.m4a`` и звук фильма
-``clip-<slug>.m4a`` (``audio_blackout``); тоны треков — 50 с, чтобы хватило профилю
+``clip-<slug>.m4a`` (``audio_blackout``) по 50 с; тоны треков — 50 с, чтобы хватило профилю
 ``audio_reverse/default`` (``start_s`` 30 + 15 с). Читаются все ``seeds/catalog/*.jsonl``.
 
 Запуск::
@@ -30,7 +30,9 @@ from PIL import Image, ImageDraw
 HERE = Path(__file__).resolve().parent
 CATALOG = HERE.parent / "catalog"
 TONE_SECONDS = 50
-FILM_AUDIO_SECONDS = 20
+# Саундтрек и звук фильма — тоже 50 с: статическим профилям хватит 15 с, но запрос ассетов
+# (динамический профиль, ADR 0025) может сдвинуть ``start_s`` — запас как у тонов треков.
+FILM_AUDIO_SECONDS = 50
 FRAMES_PER_FILM = 6
 FRAME_SIZE = (1280, 720)
 
@@ -77,7 +79,7 @@ def tone(key: str, out: Path) -> Path:
 
 
 def soundtrack(key: str, out: Path) -> Path:
-    """«Саундтрек» фильма 20 с: аккорд из двух тонов с медленной пульсацией."""
+    """«Саундтрек» фильма 50 с: аккорд из двух тонов с медленной пульсацией."""
     s = _seed(f"{key}#soundtrack")
     low = 110 + s[0] % 110
     high = low * (1.5 if s[1] % 2 else 1.25)
@@ -87,7 +89,7 @@ def soundtrack(key: str, out: Path) -> Path:
 
 
 def clip(key: str, out: Path) -> Path:
-    """«Звук фильма» 20 с: свип частоты с прерывистой огибающей (без речи и музыки)."""
+    """«Звук фильма» 50 с: свип частоты с прерывистой огибающей (без речи и музыки)."""
     s = _seed(f"{key}#clip")
     start = 300 + s[0] % 300
     span = 200 + s[1] % 400
