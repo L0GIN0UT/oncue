@@ -73,6 +73,21 @@ describe("messages/ru.json", () => {
         "failed",
       ].flatMap((k) => [`start.error.${k}.title`, `start.error.${k}.text`]),
       ...["pending", "ok", "failed"].map((k) => `auth.verify.${k}`),
+      // Этап 3a: перечисления контрактов text_asset, presentation, туры сетки, варианты пары.
+      ...["year", "genres", "country", "director", "cast_top3"].map((k) => `game.textField.${k}`),
+      ...["not_started", "in_progress", "finished"].map((s) => `daily.statusPlain.${s}`),
+      ...["score", "streak", "bracket"].flatMap((p) => [
+        `solo.presentation.${p}`,
+        `records.best.${p}`,
+      ]),
+      ...["score", "streak"].map((u) => `results.record.best.${u}`),
+      ...["final", "semifinal", "fraction"].map((k) => `game.bracket.${k}`),
+      ...["higher", "lower"].map((k) => `game.options.${k}`),
+      ...["random", "marathon", "pair"].flatMap((g) => [
+        `solo.group.${g}.title`,
+        `solo.group.${g}.text`,
+      ]),
+      ...["streak", "newRecord", "champion"].map((k) => `results.shareText.${k}`),
     ];
     expect(dynamic.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
   });
@@ -81,6 +96,17 @@ describe("messages/ru.json", () => {
     const dir = path.resolve(root, "..", "seeds", "game", "modes");
     const keys = readdirSync(dir).flatMap((f) =>
       [...readFileSync(path.join(dir, f), "utf8").matchAll(/title_i18n:\s*([\w.]+)/g)].map(
+        (m) => m[1]!,
+      ),
+    );
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
+  });
+
+  it("переводит description_i18n режимов из сидов (карточки витрины и билеты)", () => {
+    const dir = path.resolve(root, "..", "seeds", "game", "modes");
+    const keys = readdirSync(dir).flatMap((f) =>
+      [...readFileSync(path.join(dir, f), "utf8").matchAll(/description_i18n:\s*([\w.]+)/g)].map(
         (m) => m[1]!,
       ),
     );

@@ -155,7 +155,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
           {snapshot.rounds.length <= RAIL_MAX_ROUNDS && (
             <RoundRail rounds={snapshot.rounds} current={round.index} />
           )}
-          {presentation === "score" && (
+          {mode?.presentation === "score" && (
             <p className="tabular font-display text-xl font-semibold" data-testid="score">
               <span className="sr-only">{t("game.score")}: </span>
               {snapshot.score}
