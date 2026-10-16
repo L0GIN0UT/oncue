@@ -273,7 +273,9 @@ def test_produced_event_fields_are_declared() -> None:
     for event_cls, name in ((AssetsReady, "AssetsReady"), (AssetsFailed, "AssetsFailed")):
         schema = load_event_schema(f"media_pipeline.{name}")
         declared = {f.name for f in fields(event_cls)} - {"aggregate_id"}
-        assert declared == set(schema["required"]) == set(schema["properties"])
+        # Все обязательные поля публикуются, необъявленных полей нет. Необязательные поля
+        # схемы (`scope`, этап 3b, ADR 0029) продюсер может ещё не заполнять.
+        assert set(schema["required"]) <= declared <= set(schema["properties"])
         assert event_cls.aggregate_type == schema["x-aggregate-type"]
 
 
