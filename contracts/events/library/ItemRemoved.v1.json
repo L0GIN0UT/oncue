@@ -1,0 +1,84 @@
+{
+  "$id": "urn:guessverse:contracts:events:library:ItemRemoved:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Единица убрана с полки (только при фактическом изменении). exclusive — убрана правилом exclusive_with системной полки, shelf_deleted — вместе со своей полкой. aggregate_id — user_id.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "media_item_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "shelf_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "shelf_key": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Ключ системной полки из конфига (watch_later, watched, favorite); null у своей"
+    },
+    "shelf_kind": {
+      "enum": [
+        "system",
+        "custom"
+      ],
+      "type": "string"
+    },
+    "source": {
+      "description": "Экран или правило, которым убрали",
+      "enum": [
+        "reveal",
+        "results",
+        "card",
+        "collection",
+        "library",
+        "exclusive",
+        "shelf_deleted"
+      ],
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия медиатеки пользователя (user_versions): потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "shelf_id",
+    "shelf_kind",
+    "shelf_key",
+    "media_item_id",
+    "domain",
+    "source",
+    "version",
+    "at"
+  ],
+  "title": "library.ItemRemoved v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "library.shelf.v1"
+}

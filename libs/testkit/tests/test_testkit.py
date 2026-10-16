@@ -200,6 +200,31 @@ class TestContractExamples:
         assert envelope.event_id == stored
         assert load_example("catalog.MediaItemCreated", fresh_id=False) == envelope
 
+    @pytest.mark.usefixtures("contracts")
+    def test_load_example_variant(self) -> None:
+        """Вариант примера той же схемы: ``<Event>.<variant>.v<N>.json``."""
+        from gv_testkit import assert_event_matches_schema, load_example
+
+        envelope = load_example("game.GameFinished", variant="collection")
+        assert envelope.payload["collection_id"] is not None
+        assert load_example("game.GameFinished").payload.get("collection_id") is None
+        assert_event_matches_schema(envelope)
+
+    @pytest.mark.usefixtures("contracts")
+    def test_every_example_file_matches_its_schema(self) -> None:
+        """Все примеры, включая варианты, проходят схему своего события."""
+        from gv_testkit import assert_event_matches_schema, load_example
+
+        for path in _EXAMPLES:
+            event, *variant, version = path.name.removesuffix(".json").split(".")
+            envelope = load_example(
+                f"{path.parent.parent.name}.{event}",
+                int(version.removeprefix("v")),
+                variant=".".join(variant) or None,
+            )
+            assert envelope.event_type == f"{path.parent.parent.name}.{event}", path
+            assert_event_matches_schema(envelope)
+
 
 class TestInMemoryIdempotencyStore:
     """Фейк ведёт себя как ``SqlIdempotencyStore`` для ``run_idempotent``."""

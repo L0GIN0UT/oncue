@@ -1,0 +1,71 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000700",
+  "aggregate_type": "session",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0202",
+  "event_type": "game.GameFinished",
+  "event_version": 1,
+  "occurred_at": "2026-10-10T12:00:00Z",
+  "payload": {
+    "clue_type": "frame_progressive",
+    "collection_id": "0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+    "collection_version": 1,
+    "day": null,
+    "domain": "film",
+    "finished_at": "2026-10-10T12:00:00Z",
+    "is_guest": false,
+    "max_score": 24,
+    "mode_key": "film.collection.frame",
+    "mode_version": 1,
+    "rounds": [
+      {
+        "elapsed_ms": 4200,
+        "index": 0,
+        "level": 1,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+        "outcome": "exact",
+        "points": 6
+      },
+      {
+        "elapsed_ms": 21000,
+        "index": 1,
+        "level": 3,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+        "outcome": "exact",
+        "points": 4
+      },
+      {
+        "elapsed_ms": 30500,
+        "index": 2,
+        "level": 2,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000102",
+        "outcome": "partial",
+        "points": 2
+      },
+      {
+        "elapsed_ms": null,
+        "index": 3,
+        "level": null,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000103",
+        "outcome": "void",
+        "points": 0
+      },
+      {
+        "elapsed_ms": 9800,
+        "index": 4,
+        "level": 2,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000104",
+        "outcome": "exact",
+        "points": 5
+      }
+    ],
+    "score": 17,
+    "session_id": "0192a3b4-c5d6-7e8f-9a0b-000000000700",
+    "source_type": "collection",
+    "started_at": "2026-10-10T11:55:00Z",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000001",
+    "version": 12
+  },
+  "producer": "game"
+}

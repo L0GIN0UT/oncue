@@ -1,0 +1,131 @@
+{
+  "$id": "urn:guessverse:contracts:events:collections:CollectionPublished:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сборник опубликован впервые или опубликована новая версия состава из черновика (ADR 0028). aggregate_id — collection_id. Несёт полный снимок: потребитель (game, media-pipeline) заменяет проекцию целиком. Без названия и описания (UGC-текст живёт только в collections).",
+  "properties": {
+    "author_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null — кураторский сборник («Guessverse») или автор удалён"
+    },
+    "collection_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "content_version": {
+      "description": "Номер неизменяемой версии состава (collection_versions): меняется при публикации черновика и при удалении заблокированной единицы; сессия game фиксирует его как collection_version",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "default_mode_key": {
+      "description": "Режим по умолчанию: ^{domain}\\.collection\\.[a-z0-9_]+$",
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.collection\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "items": {
+      "description": "Состав сборника в порядке автора. При публикации 5..200 единиц; после блокировки единиц в catalog список может стать короче (вплоть до пустого)",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "custom": {
+            "additionalProperties": false,
+            "description": "Свои загадки автора (ADR 0029): в 3b только эмодзи",
+            "properties": {
+              "emoji": {
+                "description": "Строго RGI-эмодзи (gv_text.emoji.is_strict_emoji), 1..12 графем, без текста и пробелов",
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "position": {
+            "description": "Позиция с 0, без пропусков",
+            "maximum": 199,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "position"
+        ],
+        "type": "object"
+      },
+      "maxItems": 200,
+      "minItems": 0,
+      "type": "array"
+    },
+    "kind": {
+      "enum": [
+        "ugc",
+        "curated"
+      ],
+      "type": "string"
+    },
+    "published_at": {
+      "description": "Когда опубликована версия состава content_version",
+      "format": "date-time",
+      "type": "string"
+    },
+    "status": {
+      "description": "hidden — скрыт модератором: не играется, не ищется",
+      "enum": [
+        "published",
+        "hidden"
+      ],
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата сборника (общая для публикации, правок, скрытия, лайков и удаления): потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "visibility": {
+      "description": "unlisted — играется по ссылке, но не попадает в каталог",
+      "enum": [
+        "public",
+        "unlisted"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "collection_id",
+    "version",
+    "content_version",
+    "domain",
+    "kind",
+    "visibility",
+    "status",
+    "author_id",
+    "default_mode_key",
+    "items",
+    "published_at"
+  ],
+  "title": "collections.CollectionPublished v1",
+  "type": "object",
+  "x-aggregate-type": "collection",
+  "x-topic": "collections.collection.v1"
+}

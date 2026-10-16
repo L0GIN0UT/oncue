@@ -1,0 +1,22 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
+  "aggregate_type": "user",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000d0002",
+  "event_type": "library.ItemRemoved",
+  "event_version": 1,
+  "occurred_at": "2026-10-16T12:00:00Z",
+  "payload": {
+    "at": "2026-10-16T12:05:00Z",
+    "domain": "film",
+    "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+    "shelf_id": "0192a3b4-c5d6-7e8f-9a0b-000000000d01",
+    "shelf_key": "watch_later",
+    "shelf_kind": "system",
+    "source": "exclusive",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
+    "version": 6
+  },
+  "producer": "library"
+}

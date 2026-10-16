@@ -31,6 +31,35 @@
     "retryable": {
       "type": "boolean"
     },
+    "scope": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "collection_id",
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "collection"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Владелец набора (ADR 0029): нет поля или null — каталожный набор; collection — набор своих загадок сборника, выдаётся только в сессиях этого сборника"
+    },
     "version": {
       "description": "Монотонная версия агрегата: потребитель отбрасывает событие с version не больше уже применённой",
       "minimum": 1,

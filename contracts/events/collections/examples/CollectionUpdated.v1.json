@@ -1,0 +1,47 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+  "aggregate_type": "collection",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0002",
+  "event_type": "collections.CollectionUpdated",
+  "event_version": 1,
+  "occurred_at": "2026-10-16T12:00:00Z",
+  "payload": {
+    "author_id": "0192a3b4-c5d6-7e8f-9a0b-000000000001",
+    "collection_id": "0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+    "content_version": 2,
+    "default_mode_key": "film.collection.frame",
+    "domain": "film",
+    "items": [
+      {
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+        "position": 0
+      },
+      {
+        "custom": {
+          "emoji": "🚢🧊💔"
+        },
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+        "position": 1
+      },
+      {
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000102",
+        "position": 2
+      },
+      {
+        "custom": {
+          "emoji": "🧙‍♂️💍🌋"
+        },
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000103",
+        "position": 3
+      }
+    ],
+    "kind": "ugc",
+    "published_at": "2026-10-16T12:00:00Z",
+    "status": "hidden",
+    "version": 7,
+    "visibility": "public"
+  },
+  "producer": "collections"
+}

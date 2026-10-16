@@ -1,0 +1,18 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+  "aggregate_type": "collection",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0004",
+  "event_type": "collections.CollectionLiked",
+  "event_version": 1,
+  "occurred_at": "2026-10-16T12:00:00Z",
+  "payload": {
+    "collection_id": "0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+    "liked_at": "2026-10-16T12:00:00Z",
+    "likes_count": 12,
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
+    "version": 4
+  },
+  "producer": "collections"
+}

@@ -1,0 +1,82 @@
+{
+  "$id": "urn:guessverse:contracts:events:library:ItemSaved:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Единица сохранена на полку (только при фактическом изменении, D12). aggregate_id — user_id. Медиатека приватна: событие для статистики и будущих наград, без названий.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "media_item_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "shelf_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "shelf_key": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Ключ системной полки из конфига (watch_later, watched, favorite); null у своей"
+    },
+    "shelf_kind": {
+      "enum": [
+        "system",
+        "custom"
+      ],
+      "type": "string"
+    },
+    "source": {
+      "description": "Экран, с которого сохранили",
+      "enum": [
+        "reveal",
+        "results",
+        "card",
+        "collection",
+        "library"
+      ],
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия медиатеки пользователя (user_versions): потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "shelf_id",
+    "shelf_kind",
+    "shelf_key",
+    "media_item_id",
+    "domain",
+    "source",
+    "version",
+    "at"
+  ],
+  "title": "library.ItemSaved v1",
+  "type": "object",
+  "x-aggregate-type": "user",
+  "x-topic": "library.shelf.v1"
+}
