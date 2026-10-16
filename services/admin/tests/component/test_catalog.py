@@ -328,6 +328,8 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
             "bytes": 7,
             "mime": "audio/mp4",
             "scheduled_asset_set_ids": [str(uuid7())],
+            "position": 1,
+            "origin": "upload",
         },
     )
     key = _key()
@@ -335,6 +337,7 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
         f"/catalog/items/{ITEM}/sources/",
         {
             "kind": "audio",
+            "position": "1",
             "reason": "аудио правообладателя",
             "idempotency_key": key,
             "file": SimpleUploadedFile("tone.m4a", b"\x00\x01audio", content_type="audio/mp4"),
@@ -347,7 +350,14 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
     assert str(ITEM).encode() in body and b'name="kind"' in body and b"\x00\x01audio" in body
     entry = AuditEntry.objects.get()
     assert entry.action == "media.upload_source"
-    assert entry.after == {"kind": "audio", "file_name": "tone.m4a", "bytes": 7}
+    assert entry.after == {
+        "kind": "audio",
+        "position": 1,
+        "origin": None,
+        "source_url": None,
+        "file_name": "tone.m4a",
+        "bytes": 7,
+    }
 
 
 def test_regenerate_asset_set(client: Any, login: Any, media: Any) -> None:

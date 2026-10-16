@@ -1,0 +1,8 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p>catalog заново отправит <code>MediaItemUpdated</code> (version+1) для всех единиц выбранного домена порциями в фоне.
+  Нужно один раз после выкладки новых полей (метрики, тексты загадок), чтобы ими заполнились проекции потребителей.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}<input type="submit" value="Переопубликовать"></form>
+<p><a href="{% url 'catalog:items' %}">← к каталогу</a></p>
+{% endblock %}

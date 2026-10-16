@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  .gv-texts { display: flex; gap: 16px; flex-wrap: wrap; }
+  .gv-texts > div { flex: 1 1 320px; min-width: 0; }
+  .gv-raw { white-space: pre-wrap; border: 1px solid var(--hairline-color, #ccc); padding: 8px; min-height: 8em; }
+  .gv-texts textarea { width: 100%; box-sizing: border-box; }
+</style>
+{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'catalog:item' item_id=item_id %}">← к единице</a></p>
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+{% if texts %}
+<div class="module">
+  <table>
+    <tr><th>Единица</th><td>{{ item.title|default:item_id }}{% if item.year %} ({{ item.year }}){% endif %}</td></tr>
+    <tr><th>Статус</th><td><strong>{% if texts.status == "approved" %}одобрены{% else %}черновик — в игру не попадает{% endif %}</strong></td></tr>
+    <tr><th>Ревизия</th><td>r{{ texts.revision }}{% if texts.approved_revision %} · одобрена r{{ texts.approved_revision }}{% else %} · одобренных нет{% endif %}</td></tr>
+  </table>
+</div>
+
+<form method="post" action="{% url 'catalog:clue_texts_save' item_id=item_id %}">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <div class="gv-texts">
+    <div>
+      <h3>Исходный сюжет</h3>
+      <div class="gv-raw">{{ texts.plot_raw|default:"—" }}</div>
+    </div>
+    <div>
+      <h3>{{ form.plot_masked.label }}</h3>
+      {{ form.plot_masked.errors }}{{ form.plot_masked }}
+    </div>
+  </div>
+  {{ form.tagline.errors }}<p>{{ form.tagline.label_tag }} {{ form.tagline }}</p>
+  {{ form.emoji.errors }}<p>{{ form.emoji.label_tag }} {{ form.emoji }} <small>{{ form.emoji.help_text }}</small></p>
+  {% if can_edit %}
+  {{ form.base_revision }}{{ form.idempotency_key }}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  <input type="submit" value="Сохранить тексты">
+  {% endif %}
+</form>
+
+{% if can_approve %}
+<h2>Одобрение</h2>
+<p>Одобренные тексты ревизии r{{ texts.revision }} уйдут в игру (событие catalog → media-pipeline).</p>
+<form method="post" action="{% url 'catalog:clue_texts_approve' item_id=item_id %}">
+  {% csrf_token %}{{ approve_form.as_p }}<input type="submit" value="Одобрить r{{ texts.revision }}">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}
