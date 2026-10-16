@@ -24,7 +24,8 @@ Kind = Literal["ugc", "curated"]
 Visibility = Literal["public", "unlisted"]
 CollectionStatus = Literal["draft", "published", "hidden"]
 """Статус для автора и админа; удалённый сборник не отдаётся никому (404)."""
-Sort = Literal["popular", "new", "likes", "difficulty"]
+Sort = Literal["popular", "new", "likes", "difficulty", "featured"]
+"""``featured`` — только «рекомендуемые» по ``featured_rank`` (блок витрины bff, D14)."""
 Difficulty = Literal["easy", "medium", "hard"]
 CollectionModeKey = Annotated[
     str,
