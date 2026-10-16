@@ -87,6 +87,9 @@ class Settings(ServiceSettings):
     """Настройки сервиса. Новые поля добавлять здесь с безопасными значениями по умолчанию."""
 
     service_name: str = "media_pipeline"
+    # Генерация — ffmpeg и Pillow по исходнику: при prefetch 10 параллельные задачи засева
+    # (8 исходников на фильм) выводили процесс за лимит памяти контейнера (OOM, рестарт).
+    task_prefetch: int = Field(default=2, ge=1, le=100)
     s3: S3Settings = S3Settings()
     media: MediaSettings = MediaSettings()
     ffmpeg: FfmpegSettings = FfmpegSettings()

@@ -49,7 +49,7 @@ redis = true
 kafka = true
 rabbitmq = true
 s3 = true
-memory_mb = 512
+memory_mb = 768
 apt = ["ffmpeg"]
 
 [services.game]

@@ -57,6 +57,7 @@ class FakeStack:
     import_status: str = "done"  # статус задания импорта в ответе GET
     item_detail_status: int = 200  # для проверки неожиданного ответа каталога
     media_unknown_polls: int = 0  # сколько загрузок ответят 404 (media не знает единицу)
+    media_drops: int = 0  # сколько загрузок оборвут соединение (рестарт media-pipeline)
     profiles_pending_polls: int = 0  # сколько опросов профилей вернут pending
     profile_failed: int = 0  # проваленных наборов статического профиля
     daily_status: int = 200  # 409 — набор уже есть
@@ -208,6 +209,8 @@ class FakeStack:
     def _sources_post(self, request: httpx.Request) -> httpx.Response:
         assert request.headers["Idempotency-Key"].startswith("seed-source-")
         assert request.headers["content-type"].startswith("multipart/form-data")
+        if self._tick("sources_drop") <= self.media_drops:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
         if self._tick("sources") <= self.media_unknown_polls:
             return httpx.Response(404, json={"code": "media_item.not_found"})
         fields = form_fields(request)
@@ -581,6 +584,15 @@ class TestSeedHappyPath:
         assert len(stack.recorded("POST", "/admin/v1/sources")) == (
             FILM_SOURCES + MUSIC_SOURCES + 2
         )
+
+    def test_retries_upload_when_media_restarts(self, workspace: Path) -> None:
+        # Регресс засева 3a: рестарт media-pipeline рвал соединение посреди загрузки и ронял
+        # засев. Загрузка идемпотентна по ключу — повторяем с тем же ключом.
+        stack = FakeStack(media_drops=2)
+        _run(stack, workspace)
+        keys = [r.headers["Idempotency-Key"] for r in stack.recorded("POST", "/admin/v1/sources")]
+        assert len(keys) == FILM_SOURCES + MUSIC_SOURCES + 2
+        assert keys[0] == keys[1] == keys[2]
 
 
 class TestPeriodSetValidation:

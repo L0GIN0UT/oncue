@@ -23,5 +23,6 @@
 - Лимит выдачи ссылок в Redis — fail-closed: 503 с `details.retry_after` (`GV_MEDIA__LINK_LIMITER_RETRY_AFTER_S`) → заголовок `Retry-After`. Журнал `link_issuance` хранит только sha256 субъекта (`subject_hash`) и `client_id`, чистит его задача relay `media.link_issuance.purge` порциями.
 - Тексты загадок: из `MediaItemCreated/Updated` (одобренные `clue_texts` + год, жанры, страны, персоны, без названия) — один исходник `kind=text` с содержимым в строке БД, id = uuid5(единица, sha256 содержимого): правка → новый исходник → новое поколение. Ассет уровня — JSON `text_asset.v1` (`application/json`, ключ `a/<hex>.json`).
 - Загрузка вне local/ci требует `origin`/`source_url`/`license_note` (D6, `source.provenance_required`).
+- Генерация тяжёлая (ffmpeg, Pillow): воркер берёт не больше `GV_TASK_PREFETCH` задач (по умолчанию 2), лимит памяти контейнера — `memory_mb` в `infra/services.toml`.
 - Один `MediaContainer` на процесс (`container_for`); его `close` (ленивое соединение RabbitMQ) регистрируется в `Infrastructure.add_closer` — закрывается для любой команды.
 - Тестовые фейки портов сервиса — в `tests/conftest.py` (фикстура `media`, хуки сбоев `fail_commit`/`after_commit`), без правки `sys.path`. `load_example` по умолчанию даёт новый `event_id`; `fresh_id=False` — только для проверки дублей.

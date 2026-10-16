@@ -281,7 +281,9 @@ class Runtime:
             try:
                 async with asyncio.TaskGroup() as group:
                     for task_type, handler in handlers.items():
-                        group.create_task(queue.consume(task_type, handler, self.stop))
+                        group.create_task(
+                            queue.consume(task_type, handler, self.stop, prefetch=s.task_prefetch)
+                        )
             finally:
                 await queue.stop()
 

@@ -441,13 +441,19 @@ class Seeder:
         }
 
         def upload() -> bool:
-            with path.open("rb") as fh:
-                resp = self._media.post(
-                    "/admin/v1/sources",
-                    headers={"Idempotency-Key": key},
-                    data=data,
-                    files={"file": (path.name, fh, spec.mime)},
-                )
+            try:
+                with path.open("rb") as fh:
+                    resp = self._media.post(
+                        "/admin/v1/sources",
+                        headers={"Idempotency-Key": key},
+                        data=data,
+                        files={"file": (path.name, fh, spec.mime)},
+                    )
+            except httpx.TransportError as exc:
+                # Соединение оборвалось (media-pipeline перезапускается): загрузка идемпотентна
+                # по ключу — повторяем тем же запросом до таймаута, а не роняем засев.
+                self._echo(f"seed: повтор загрузки {path.name}: {type(exc).__name__}")
+                return False
             # 404 media_item.not_found: media-pipeline ещё не обработал MediaItemCreated
             # из catalog — единица появится, ждём, а не падаем.
             if resp.status_code == httpx.codes.NOT_FOUND:

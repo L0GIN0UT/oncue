@@ -122,6 +122,10 @@ class ServiceSettings(BaseSettings):
     redis_url: SecretStr | None = None
     kafka_bootstrap: str | None = None
     rabbitmq_url: SecretStr | None = None
+    # Сколько задач RabbitMQ воркер обрабатывает одновременно (prefetch на очередь). Тяжёлым
+    # задачам (ffmpeg в media-pipeline) нужно меньше, иначе пик памяти выходит за лимит
+    # контейнера и процесс убивает OOM: GV_TASK_PREFETCH.
+    task_prefetch: int = Field(default=10, ge=1, le=100)
 
     retention: RetentionSettings = RetentionSettings()
     idempotency: IdempotencySettings = IdempotencySettings()
