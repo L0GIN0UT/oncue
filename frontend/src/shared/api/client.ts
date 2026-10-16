@@ -4,6 +4,8 @@ import type { paths as GamePaths } from "./schema/game";
 import type { paths as BffPaths } from "./schema/bff_web";
 import type { paths as CatalogPaths } from "./schema/catalog";
 import type { paths as IdentityPaths } from "./schema/identity";
+import type { paths as CollectionsPaths } from "./schema/collections";
+import type { paths as LibraryPaths } from "./schema/library";
 import { ApiError } from "./errors";
 import { apiFetch } from "./http";
 
@@ -12,6 +14,8 @@ export const API_PREFIX = {
   web: "/api/web",
   catalog: "/api/catalog",
   identity: "/api/identity",
+  collections: "/api/collections",
+  library: "/api/library",
 } as const;
 
 type Clients = {
@@ -19,6 +23,8 @@ type Clients = {
   web: Client<BffPaths>;
   catalog: Client<CatalogPaths>;
   identity: Client<IdentityPaths>;
+  collections: Client<CollectionsPaths>;
+  library: Client<LibraryPaths>;
 };
 
 let clients: Clients | null = null;
@@ -34,6 +40,8 @@ export function api(): Clients {
       web: make<BffPaths>(API_PREFIX.web),
       catalog: make<CatalogPaths>(API_PREFIX.catalog),
       identity: make<IdentityPaths>(API_PREFIX.identity),
+      collections: make<CollectionsPaths>(API_PREFIX.collections),
+      library: make<LibraryPaths>(API_PREFIX.library),
     };
   }
   return clients;

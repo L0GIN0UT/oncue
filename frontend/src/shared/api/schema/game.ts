@@ -359,7 +359,7 @@ export interface paths {
         };
         /**
          * Опубликованные режимы
-         * @description Публичный, `Cache-Control: public, max-age=30`.
+         * @description Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника (source `collection`) не входят: они приходят из `GET /v1/collections/{collection_id}/modes`.
          */
         get: operations["list_modes_v1_modes_get"];
         put?: never;
@@ -2647,16 +2647,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     get_mode_config_version_admin_v1_mode_configs__mode_key__versions__version__get: {
@@ -2944,16 +2934,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Зависимость временно недоступна */
             503: {
                 headers: {
@@ -3179,16 +3159,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
