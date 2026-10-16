@@ -536,21 +536,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "На каких полках единица",
@@ -658,21 +643,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Полки пользователя",
@@ -813,21 +783,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать свою полку",
@@ -965,21 +920,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Удалить свою полку",
@@ -1131,21 +1071,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Переименовать свою полку",
@@ -1270,21 +1195,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Единицы полки",
@@ -1458,21 +1368,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Убрать единицу с полки",
@@ -1637,21 +1532,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сохранить единицу на полку",
