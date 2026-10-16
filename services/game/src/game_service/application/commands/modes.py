@@ -25,21 +25,27 @@ from game_service.application.ports import (
     ModeConfigSource,
     UnitOfWorkFactory,
 )
-from game_service.application.rules import RulesFactory
+from game_service.application.rules import ModeRules, RulesFactory
+from game_service.domain.asset_requests import AssetRequest
 from game_service.domain.errors import (
+    AssetsAlreadyAvailableError,
     ConfigTooLargeError,
     ModeNotFoundError,
     ModeVersionNotFoundError,
 )
-from game_service.domain.modes import ConfigVersion, Draft, ModeLine
+from game_service.domain.modes import ConfigVersion, Draft, ModeLine, domain_of
 from gv_core.clock import Clock
+from gv_core.ids import uuid7
 from gv_db.idempotency import request_fingerprint, run_idempotent
-from gv_game_kernel import ConfigError
+from gv_game_kernel import ConfigError, PluginSpec, params_hash, parse_mode_config
 
 log = structlog.get_logger(__name__)
 
 KEY_MISMATCH = "config.key_mismatch"
 POOL_TOO_SMALL = "config.pool_too_small"
+PROFILE_MISSING = "assets.profile_missing"
+"""Предупреждение: под параметры загадки (или ревила) в проекции нет ни одного ассета —
+профиля media-pipeline, видимо, нет; админ может запросить ассеты (ADR 0025)."""
 MESSAGE_KEY_PREFIX = "admin.mode_config.errors."
 
 
@@ -110,6 +116,18 @@ class ValidateModeConfig:
         self._factory = factory
         self._limits = limits
 
+    @staticmethod
+    async def _profile_warnings(uow: GameUnitOfWork, rules: ModeRules) -> list[Json]:
+        """``assets.profile_missing`` для загадки и ревила без единого ассета в проекции."""
+        warnings: list[Json] = []
+        targets = [("clue.params", rules.playable_for)]
+        if rules.reveal_playable_for is not None:
+            targets.append(("clue.reveal.params", rules.reveal_playable_for))
+        for path, playable in targets:
+            if not await uow.projection.has_assets(playable.clue_type, playable.params_hash):
+                warnings.append({"code": PROFILE_MISSING, "path": path})
+        return warnings
+
     def check_size(self, body: Mapping[str, Any]) -> None:
         """Тело не больше ``GV_GAME__MODE_CONFIG_MAX_BYTES`` (§9 п. 9).
 
@@ -148,14 +166,12 @@ class ValidateModeConfig:
         pool_info: Json | None = None
         rules = check.rules
         if rules is not None:
-            spec = rules.pool
-            if spec is not None:
-                count = await uow.projection.count_candidates(
-                    spec.query(rules.domain, rules.playable_for)
-                )
+            warnings.extend(await self._profile_warnings(uow, rules))
+            query = rules.pool_query()
+            if query is not None:
+                count = await uow.projection.count_candidates(query, also=rules.reveal_playable_for)
                 pool_info = {"playable_count": count}
-                minimum = max(spec.min_playable or 0, rules.rounds)
-                if count < minimum:
+                if count < rules.min_playable():
                     if check_pool:
                         errors.append(
                             {"path": "source.params.pool.min_playable", "code": POOL_TOO_SMALL}
@@ -339,6 +355,156 @@ class ModeConfigCommands:
         if executed:
             await self._source.invalidate()
         return response
+
+
+# ---------------------------------------------------------------- запросы ассетов
+def asset_request_json(r: AssetRequest) -> Json:
+    """Запрос ассетов для admin-API."""
+    return {
+        "request_id": str(r.id),
+        "mode_key": r.mode_key,
+        "draft_revision": r.draft_revision,
+        "clue_type": r.clue_type,
+        "params_hash": r.params_hash,
+        "status": str(r.status),
+        "actor_id": str(r.actor_id),
+        "reason": r.reason,
+        "requested_at": r.requested_at.isoformat(),
+    }
+
+
+class RequestClueAssets:
+    """``RequestClueAssets`` (D8, ADR 0025): запросить ассеты под загадку черновика.
+
+    Параметры загадки и ревила черновика проверяются схемами плагинов (те же схемы, что у
+    media-pipeline, §11 п. 5). Для каждых параметров без единого ассета в проекции —
+    строка ``asset_requests`` и событие ``game.ClueAssetsRequested`` в одной транзакции;
+    пока такой запрос ``pending``, повтор отвечает им же без нового события. Повтор с тем
+    же ``Idempotency-Key`` — тот же ответ.
+
+    Args:
+        uow: Фабрика транзакций.
+        clock: Часы.
+        factory: Схемы плагинов.
+    """
+
+    def __init__(self, uow: UnitOfWorkFactory, clock: Clock, factory: RulesFactory) -> None:
+        self._uow = uow
+        self._clock = clock
+        self._factory = factory
+
+    async def execute(self, key: str, *, draft_revision: int, ctx: AdminContext) -> Json:
+        """Запросить ассеты; ответ — запрос под параметры загадки (или ревила).
+
+        Raises:
+            DraftNotFoundError, DraftConflictError: нет черновика этой ревизии.
+            ConfigError: тело или параметры загадки не проходят схему (422).
+            AssetsAlreadyAvailableError: ассеты под все параметры уже есть (409).
+        """
+        fingerprint = request_fingerprint(
+            "mode_config.asset_request", key, {"revision": draft_revision, "reason": ctx.reason}
+        )
+        async with self._uow() as uow:
+
+            async def perform() -> Json:
+                line = await uow.modes.get_line(key, for_update=True)
+                draft = line.require_draft(draft_revision)
+                config = parse_mode_config(draft.body)
+                if config.key != key:
+                    raise ConfigError(details={"errors": [{"path": "key", "code": KEY_MISMATCH}]})
+                responses: list[Json] = []
+                # Схемы плагинов проверяют параметры, а в событие и хэш идут параметры в
+                # присланном виде: media-pipeline считает params_hash от них же.
+                checked = {path for path, _, _ in self._factory.clue_params(config)}
+                specs: list[tuple[str, PluginSpec]] = [("clue", config.clue)]
+                if config.clue.reveal is not None:
+                    specs.append(("clue.reveal", config.clue.reveal))
+                for path, spec in specs:
+                    if path not in checked:  # pragma: no cover — clue_params разбирает все
+                        continue
+                    clue_type, raw = spec.type, dict(spec.params)
+                    digest = params_hash(raw)
+                    if await uow.projection.has_assets(clue_type, digest):
+                        continue
+                    responses.append(
+                        await self._request(
+                            uow,
+                            key,
+                            draft_revision=draft_revision,
+                            clue_type=clue_type,
+                            params=raw,
+                            digest=digest,
+                            ctx=ctx,
+                        )
+                    )
+                if not responses:
+                    raise AssetsAlreadyAvailableError("ассеты под параметры загадки уже есть")
+                await uow.audit.record(
+                    AdminAction(
+                        actor_id=ctx.actor_id,
+                        action="mode_config.asset_request",
+                        target=key,
+                        reason=ctx.reason,
+                        at=self._clock.now(),
+                        details={
+                            "draft_revision": draft_revision,
+                            "requests": [r["request_id"] for r in responses],
+                        },
+                    )
+                )
+                return responses[0]
+
+            response, _ = await run_idempotent(
+                uow.idempotency, ctx.actor_id, ctx.idempotency_key, fingerprint, perform
+            )
+            await uow.commit()
+        return response
+
+    async def _request(
+        self,
+        uow: GameUnitOfWork,
+        key: str,
+        *,
+        draft_revision: int,
+        clue_type: str,
+        params: Mapping[str, Any],
+        digest: str,
+        ctx: AdminContext,
+    ) -> Json:
+        existing = await uow.asset_requests.pending(clue_type, digest)
+        if existing is not None:
+            return asset_request_json(existing)
+        request = AssetRequest.create(
+            uuid7(),
+            mode_key=key,
+            draft_revision=draft_revision,
+            domain=domain_of(key),
+            clue_type=clue_type,
+            params=params,
+            params_hash=digest,
+            actor_id=ctx.actor_id,
+            reason=ctx.reason,
+            now=self._clock.now(),
+        )
+        if not await uow.asset_requests.add(request):  # pragma: no cover — гонка двух админов
+            request.pull_events()
+            raced = await uow.asset_requests.pending(clue_type, digest)
+            assert raced is not None  # noqa: S101 — частичный UNIQUE сработал, строка есть
+            return asset_request_json(raced)
+        uow.track(request)
+        log.info(
+            "game.clue_assets_requested",
+            mode_key=key,
+            clue_type=clue_type,
+            params_hash=digest,
+            request_id=str(request.id),
+        )
+        return asset_request_json(request)
+
+    async def for_mode(self, key: str) -> list[Json]:
+        """Запросы режима, новые первыми."""
+        async with self._uow() as uow:
+            return [asset_request_json(r) for r in await uow.asset_requests.for_mode(key)]
 
 
 # ---------------------------------------------------------------- чтение для админки

@@ -37,8 +37,13 @@ def test_seeds_are_valid_and_build(key: str, seed_body: SeedBody) -> None:
     config = parse_mode_config(seed_body(key))
     assert FACTORY.validate(config) == []
     engine = FACTORY.build(config)
-    assert engine.levels_count == 6
-    assert engine.max_score() == 6 * config.session.rounds
+    if engine.answer_format.single_answer:
+        # Формат pick (пара, сетка): один уровень и один ответ на раунд.
+        assert engine.levels_count == 1
+        assert engine.max_score() == engine.round_max_score() * config.session.rounds
+    else:
+        assert engine.levels_count == 6
+        assert engine.max_score() == 6 * config.session.rounds
 
 
 def _set(body: dict[str, Any], path: str, value: Any) -> dict[str, Any]:

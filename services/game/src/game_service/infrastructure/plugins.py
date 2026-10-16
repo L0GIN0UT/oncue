@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from gv_game_kernel import (
     AnswerMatcher,
     ClueType,
+    EndRule,
     ModeConfig,
     PartialRule,
     PluginRegistry,
@@ -36,6 +37,7 @@ class CatalogRegistry(PluginRegistry):
             "source": {},
             "matcher": {},
             "scoring": {},
+            "end": {},
         }
         self.partial_kinds: list[str] = []
 
@@ -65,6 +67,11 @@ class CatalogRegistry(PluginRegistry):
         """Подсчёт очков."""
         super().register_scorer(plugin)
         self.schemas["scoring"][plugin.key] = plugin.params_schema
+
+    def register_end_rule(self, plugin: EndRule) -> None:
+        """Правило завершения сессии (``session.end``)."""
+        super().register_end_rule(plugin)
+        self.schemas["end"][plugin.key] = plugin.params_schema
 
     def editor_schema(self) -> dict[str, Any]:
         """Сводная схема: модель конфига + схемы ``params`` каждого плагина по секциям."""

@@ -82,6 +82,8 @@ class ApplyAssetsEvent:
                 version=data.version,
             )
         )
+        # Запрос ассетов под этот хэш выполнен: профиль media-pipeline отдаёт наборы (ADR 0025).
+        await uow.asset_requests.mark_sent(data.clue_type, data.params_hash)
         return True
 
     async def failed(

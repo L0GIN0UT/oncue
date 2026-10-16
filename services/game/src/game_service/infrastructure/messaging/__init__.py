@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from game_service.application.commands.projection import AssetsReadyData
-from game_service.domain.projection import CatalogItem, ItemStatus
+from game_service.domain.projection import CatalogItem, ItemStatus, catalog_metrics
 from game_service.infrastructure.container import GameContainer
 from gv_game_kernel import PersonRef
 from gv_messaging import EventEnvelope, EventHandlerRegistry
@@ -54,10 +54,6 @@ class _Person(_Payload):
     role: str = Field(max_length=32)
 
 
-class _Metrics(_Payload):
-    popularity: float | None = None
-
-
 class _SnapshotPayload(_Payload):
     media_item_id: UUID
     version: int = Field(ge=1)
@@ -69,7 +65,11 @@ class _SnapshotPayload(_Payload):
     aliases: list[_Alias] = Field(default_factory=list)
     persons: list[_Person] = Field(default_factory=list)
     genres: list[str] = Field(default_factory=list)
-    metrics: _Metrics | None = None
+    # Метрики — словарь чисел (``vote_average``, ``revenue_usd`` …): новые метрики catalog
+    # не ломают разбор; нечисловые значения отбрасывает ``catalog_metrics``. Поля этапа 3a
+    # (``countries``, ``clue_texts``, ``source_media``) game не нужны и игнорируются.
+    # Any: значения проверяет catalog_metrics (числа), остальное отбрасывается.
+    metrics: dict[str, Any] | None = None
 
 
 class _StatusPayload(_Payload):
@@ -105,6 +105,11 @@ def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
         ) from exc
 
 
+def _popularity(metrics: dict[str, Any] | None) -> float | None:
+    value = (metrics or {}).get("popularity")
+    return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
 def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
     """Реестр обработчиков событий."""
     registry = EventHandlerRegistry()
@@ -125,7 +130,8 @@ def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
             ),
             persons=tuple(PersonRef(id=x.person_id, name=x.name, role=x.role) for x in p.persons),
             genres=tuple(p.genres),
-            popularity=p.metrics.popularity if p.metrics else None,
+            popularity=_popularity(p.metrics),
+            metrics=catalog_metrics(p.metrics, year=p.year),
         )
         async with container.uow_factory(session)() as uow:
             await container.catalog_events.snapshot(uow, item)

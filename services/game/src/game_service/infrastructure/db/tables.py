@@ -82,10 +82,15 @@ catalog_items = Table(
     Column("persons", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("genres", ARRAY(Text), nullable=False, server_default=text("'{}'::text[]")),
     Column("popularity", Float, nullable=True),
+    # Этап 3a: метрики каталога для «больше/меньше» (D9; плюс ``year`` единицы) и персоны
+    # для марафона и темы сетки (D14).
+    Column("metrics", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("person_ids", ARRAY(Uuid), nullable=False, server_default=text("'{}'::uuid[]")),
     CheckConstraint("status IN ('active', 'blocked')", name="status_valid"),
     CheckConstraint("version >= 1", name="version_positive"),
     Index("ix_catalog_items_genres", "genres", postgresql_using="gin"),
     Index("ix_catalog_items_domain_kind", "domain", "kind"),
+    Index("ix_catalog_items_person_ids", "person_ids", postgresql_using="gin"),
 )
 
 clue_assets = Table(
@@ -118,8 +123,12 @@ daily_sets = Table(
     Column("locked_at", DateTime(timezone=True), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    # Этап 3a (ADR 0027): набор периода — ``day`` = начало периода; тема сетки — персона.
+    Column("period", String(16), nullable=False, server_default=text("'day'")),
+    Column("subject_id", Uuid, nullable=True),
     PrimaryKeyConstraint("mode_key", "day"),
     CheckConstraint("status IN ('scheduled', 'locked', 'failed')", name="status_valid"),
+    CheckConstraint("period IN ('day', 'week')", name="period_valid"),
     CheckConstraint("generation >= 1", name="generation_positive"),
     CheckConstraint("status <> 'locked' OR locked_at IS NOT NULL", name="locked_has_time"),
 )
@@ -202,6 +211,69 @@ daily_round_stats = Table(
     CheckConstraint(
         "played >= 0 AND exact >= 0 AND partial >= 0 AND exact + partial <= played",
         name="counts_valid",
+    ),
+)
+
+# ---------------------------------------------------------------- этап 3a: рекорды и сетка
+player_records = Table(
+    "player_records",
+    _md,
+    Column("user_id", Uuid, nullable=False),
+    Column("mode_key", String(100), nullable=False),
+    Column("best", Integer, nullable=False),
+    Column("session_id", Uuid, nullable=False),
+    Column("achieved_at", DateTime(timezone=True), nullable=False),
+    PrimaryKeyConstraint("user_id", "mode_key"),
+    CheckConstraint("best >= 0", name="best_non_negative"),
+)
+
+score_histogram = Table(
+    "score_histogram",
+    _md,
+    Column("mode_key", String(100), nullable=False),
+    Column("score", Integer, nullable=False),
+    Column("sessions", Integer, nullable=False),
+    PrimaryKeyConstraint("mode_key", "score"),
+    CheckConstraint("score >= 0 AND sessions >= 0", name="counts_valid"),
+)
+
+bracket_pick_stats = Table(
+    "bracket_pick_stats",
+    _md,
+    Column("mode_key", String(100), nullable=False),
+    Column("period_start", Date, nullable=False),
+    Column("winner_id", Uuid, nullable=False),
+    Column("loser_id", Uuid, nullable=False),
+    Column("picks", Integer, nullable=False),
+    PrimaryKeyConstraint("mode_key", "period_start", "winner_id", "loser_id"),
+    CheckConstraint("picks >= 0", name="picks_non_negative"),
+    CheckConstraint("winner_id <> loser_id", name="distinct_items"),
+)
+
+asset_requests = Table(
+    "asset_requests",
+    _md,
+    Column("request_id", Uuid, primary_key=True),
+    Column("mode_key", String(100), nullable=False),
+    Column("draft_revision", Integer, nullable=False),
+    Column("clue_type", String(64), nullable=False),
+    Column("params_hash", String(64), nullable=False),
+    Column("params", JSONB, nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("actor_id", Uuid, nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("requested_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("status IN ('pending', 'sent')", name="status_valid"),
+    CheckConstraint("length(params_hash) = 64", name="params_hash_sha256"),
+    CheckConstraint("draft_revision >= 1", name="draft_revision_positive"),
+    Index("ix_asset_requests_mode_key_requested_at", "mode_key", "requested_at"),
+    # Повторный запрос того же набора параметров, пока ассетов нет, — без нового события.
+    Index(
+        "uq_asset_requests_pending_hash",
+        "clue_type",
+        "params_hash",
+        unique=True,
+        postgresql_where=text("status = 'pending'"),
     ),
 )
 

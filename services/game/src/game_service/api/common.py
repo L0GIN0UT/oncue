@@ -10,7 +10,11 @@ from fastapi import Request, Response
 from fastapi.routing import APIRoute
 
 from game_service.application.commands.daily import DailySetAdmin
-from game_service.application.commands.modes import ModeConfigCommands, ModeConfigQueries
+from game_service.application.commands.modes import (
+    ModeConfigCommands,
+    ModeConfigQueries,
+    RequestClueAssets,
+)
 from game_service.application.commands.play import Player, PlayService
 from game_service.application.queries.play import PlayQueries
 from game_service.domain.session import PlayerKind, PlayerRef
@@ -31,6 +35,7 @@ class ApiServices:
     mode_commands: ModeConfigCommands
     mode_queries: ModeConfigQueries
     daily_admin: DailySetAdmin
+    asset_requests: RequestClueAssets
     editor_schema: Callable[[], dict[str, Any]]
 
 

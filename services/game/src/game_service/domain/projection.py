@@ -7,6 +7,7 @@ game не читает. Порядок защищает ``version`` из payload
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
@@ -51,6 +52,9 @@ class CatalogItem:
         persons: Персоны.
         genres: Жанры.
         popularity: Популярность.
+        metrics: Метрики каталога парами ``(имя, значение)`` (``vote_average``,
+            ``revenue_usd``, ``runtime_min``, ``popularity``…) плюс ``year`` единицы —
+            для «больше/меньше» (D9).
     """
 
     media_item_id: UUID
@@ -65,6 +69,16 @@ class CatalogItem:
     persons: tuple[PersonRef, ...] = ()
     genres: tuple[str, ...] = ()
     popularity: float | None = None
+    metrics: tuple[tuple[str, float], ...] = ()
+
+    @property
+    def person_ids(self) -> tuple[UUID, ...]:
+        """Персоны единицы без повторов (колонка ``person_ids`` с GIN-индексом, D14)."""
+        return tuple(dict.fromkeys(p.id for p in self.persons))
+
+    def metric(self, name: str) -> float | None:
+        """Значение метрики ``name`` или ``None``."""
+        return dict(self.metrics).get(name)
 
     @property
     def is_active(self) -> bool:
@@ -84,7 +98,26 @@ class CatalogItem:
             persons=self.persons,
             genres=self.genres,
             popularity=self.popularity,
+            metrics=self.metrics,
         )
+
+
+def catalog_metrics(
+    raw: Mapping[str, object] | None, *, year: int | None
+) -> tuple[tuple[str, float], ...]:
+    """Метрики события catalog → пары проекции.
+
+    Берутся только числовые значения (неизвестные метрики тоже — список задаёт конфиг
+    режима); год единицы добавляется метрикой ``year``: в событиях catalog её нет, а пара
+    по году (``metric: year``) иначе была бы пустой.
+    """
+    values: dict[str, float] = {}
+    for name, value in (raw or {}).items():
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            values[str(name)] = float(value)
+    if year is not None:
+        values["year"] = float(year)
+    return tuple(sorted(values.items()))
 
 
 @dataclass(frozen=True, slots=True)

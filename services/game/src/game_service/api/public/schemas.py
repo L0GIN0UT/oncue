@@ -38,10 +38,11 @@ class LevelOut(BaseModel):
     """Уровень загадки для UI."""
 
     index: int = Field(ge=1)
-    hint: dict[str, float | int | str] = Field(
+    hint: dict[str, float | int | str | list[str] | None] = Field(
         description=(
             "Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, "
-            "{pixel_block} для постера"
+            "{pixel_block} для постера, {frame} для последовательности кадров, "
+            "{fields} для описания (накопленные поля), {count} для эмодзи (null — все)"
         )
     )
 
@@ -144,6 +145,9 @@ class Reveal(BaseModel):
     title: str
     year: int | None
     persons: list[PersonOut]
+    metric: float | None = Field(
+        default=None, description="Метрика сравнения загаданной единицы («больше/меньше»)"
+    )
     final_clue: FinalClue
 
 

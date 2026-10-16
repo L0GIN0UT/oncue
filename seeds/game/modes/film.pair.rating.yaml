@@ -1,0 +1,43 @@
+# «Больше/меньше» по рейтингу (D9): метрика опорной видна, загаданной — после ответа;
+# кадр — одноуровневый профиль frame_progressive/still media.
+key: film.pair.rating
+title_i18n: modes.film.pair.rating.title
+description_i18n: modes.film.pair.rating.description
+domain: film
+source:
+  type: pair
+  params:
+    metric: vote_average
+    min_gap: 0.3
+    ties: both_correct
+    pool:
+      kinds: [film]
+      min_playable: 10
+clue:
+  type: frame_progressive
+  params:
+    levels:
+      - { blur_px: 0, crop: 1, max_width: 960 }
+answer:
+  format: pick
+  matcher:
+    type: metric_compare
+    params: {}
+scoring:
+  type: streak
+  params:
+    points_per_round: 1
+session:
+  kind: solo
+  rounds: 200
+  attempts_per_level: 1
+  skip_allowed: false
+  give_up_allowed: false
+  allow_guest: true
+  abandon_after_min: 120
+  end:
+    type: lives
+    params: { count: 1 }
+features:
+  share: true
+  records: true

@@ -175,6 +175,24 @@ class DailyIndexOutOfRangeError(InvalidInputError):
     default_code = "game.daily_index_out_of_range"
 
 
+class SubjectsNotSupportedError(InvalidInputError):
+    """Режим не выбирает персон, а ``subject_ids`` переданы (422)."""
+
+    default_code = "game.subjects_not_supported"
+
+
+class ThemeNotPlayableError(ConflictError):
+    """У выбранной темы периода не хватает играбельных единиц (409)."""
+
+    default_code = "game.theme_not_playable"
+
+
+class AssetsAlreadyAvailableError(ConflictError):
+    """Под параметры загадки уже есть ассеты — запрос не нужен (409)."""
+
+    default_code = "game.assets_already_available"
+
+
 def desync(snapshot: dict[str, Any]) -> DesyncError:
     """Ошибка рассинхронизации с актуальным снимком в ``details.session``."""
     return DesyncError("версия сессии устарела", details={"session": snapshot})
