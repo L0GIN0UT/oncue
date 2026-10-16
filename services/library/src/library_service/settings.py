@@ -35,12 +35,21 @@ class LibrarySettings(BaseModel):
             ``exclusive_with``); пусто или ``None`` — встроенный ``config/shelves.yaml``
             пакета сервиса (``GV_LIBRARY__SHELVES_CONFIG``).
         limits: Лимиты.
+        purge_batch: Строк ``shelf_items`` за одну порцию удаления пользователя
+            (``identity.UserDeleted``), каждая порция — своя транзакция.
+        purge_users_per_run: Пользователей за один запуск задачи удаления.
+        purge_interval_s: Пауза между запусками задачи ``library.users.purge`` (relay).
+        purge_jitter_s: Случайная добавка к паузе.
     """
 
     model_config = ConfigDict(frozen=True)
 
     shelves_config: Path | None = None
     limits: LibraryLimits = LibraryLimits()
+    purge_batch: int = Field(default=500, ge=1, le=10000)
+    purge_users_per_run: int = Field(default=20, ge=1, le=1000)
+    purge_interval_s: float = Field(default=60, gt=0)
+    purge_jitter_s: float = Field(default=10, ge=0)
 
     @field_validator("shelves_config", mode="before")
     @classmethod

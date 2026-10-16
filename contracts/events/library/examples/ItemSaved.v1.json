@@ -1,6 +1,6 @@
 {
   "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
-  "aggregate_type": "user",
+  "aggregate_type": "shelf",
   "causation_id": null,
   "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
   "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000d0001",
