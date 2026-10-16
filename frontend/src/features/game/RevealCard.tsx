@@ -8,9 +8,10 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import { useTranslations } from "next-intl";
 import { Pause, Play, Users } from "lucide-react";
-import type { MoveStats, Presentation, RoundOut } from "@/shared/api/types";
+import type { Domain, MoveStats, Presentation, RoundOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
+import { SaveButton } from "@/features/library/SaveButton";
 import { roundOutcome } from "./levels";
 import { Metric } from "./Metric";
 import { useFinalClue } from "./use-final-clue";
@@ -22,6 +23,8 @@ type Props = {
   stats: MoveStats | null;
   last: boolean;
   onNext: () => void;
+  /** Домен сессии: меню «Сохранить» показывает только подходящие полки. */
+  domain?: Domain | null;
 };
 
 type BodyProps = Omit<Props, "presentation" | "last" | "onNext"> & { headingId: string };
@@ -40,7 +43,15 @@ const revealBodies: Record<Presentation, ComponentType<BodyProps>> = {
   bracket: ChoiceReveal,
 };
 
-export function RevealCard({ sessionId, round, presentation, stats, last, onNext }: Props) {
+export function RevealCard({
+  sessionId,
+  round,
+  presentation,
+  stats,
+  last,
+  onNext,
+  domain = null,
+}: Props) {
   const t = useTranslations();
   const Body = revealBodies[presentation];
   const headingId = `reveal-${round.index}`;
@@ -56,6 +67,7 @@ export function RevealCard({ sessionId, round, presentation, stats, last, onNext
         round={round}
         stats={stats}
         headingId={headingId}
+        domain={domain}
       />
       {stats && <AgreePct pct={stats.agree_pct} />}
       <Button size="lg" onClick={onNext} className="self-start" data-testid="reveal-next">
@@ -90,7 +102,7 @@ function useFocusHeading(index: number) {
   return heading;
 }
 
-function AnswerReveal({ sessionId, round, headingId }: BodyProps) {
+function AnswerReveal({ sessionId, round, headingId, domain }: BodyProps) {
   const t = useTranslations();
   const outcome = roundOutcome(round);
   const kind =
@@ -132,6 +144,13 @@ function AnswerReveal({ sessionId, round, headingId }: BodyProps) {
             {reveal.metric !== null && reveal.metric !== undefined && (
               <Metric value={reveal.metric} testId="reveal-metric" />
             )}
+            {/* После ревила id единицы известен клиенту — сохранение античит не ослабляет (D12). */}
+            <SaveButton
+              mediaItemId={reveal.media_item_id}
+              domain={domain}
+              source="reveal"
+              className="mt-1 self-start"
+            />
             {reveal.persons.length > 0 && (
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
                 {reveal.persons.map((p) => (
@@ -174,7 +193,7 @@ function ChoiceReveal({ round, headingId }: BodyProps) {
   );
 }
 
-type T = ReturnType<typeof useTranslations>;
+type T = ReturnType<typeof useTranslations<never>>;
 function roleLabel(t: T, role: string): string {
   const key = `game.role.${role}` as Parameters<T>[0];
   return t.has(key) ? t(key) : role;
