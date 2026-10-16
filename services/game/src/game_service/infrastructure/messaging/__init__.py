@@ -1,4 +1,4 @@
-"""Обработчики событий catalog, media-pipeline и identity.
+"""Обработчики событий catalog, media-pipeline, collections и identity.
 
 Обработчик работает в транзакции ``EventProcessor`` (отметка inbox + изменения атомарно);
 use-cases получают UoW, привязанный к этой сессии (SAVEPOINT). Нарушение контракта payload —
@@ -7,14 +7,22 @@ use-cases получают UoW, привязанный к этой сессии 
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from game_service.application.commands.projection import AssetsReadyData
-from game_service.domain.projection import CatalogItem, ItemStatus, catalog_metrics
+from game_service.application.commands.projection import AssetsReadyData, CollectionSnapshot
+from game_service.domain.projection import (
+    CatalogItem,
+    CollectionItem,
+    CollectionProj,
+    CollectionStatus,
+    ItemStatus,
+    catalog_metrics,
+)
 from game_service.infrastructure.container import GameContainer
 from gv_game_kernel import PersonRef
 from gv_messaging import EventEnvelope, EventHandlerRegistry
@@ -25,6 +33,7 @@ CONSUMED_TOPICS: tuple[str, ...] = (
     "catalog.media_item.v1",
     "media_pipeline.asset_set.v1",
     "identity.user.v1",
+    "collections.collection.v1",
 )
 
 ITEM_CREATED = "catalog.MediaItemCreated"
@@ -34,6 +43,11 @@ ITEM_UNBLOCKED = "catalog.MediaItemUnblocked"
 ASSETS_READY = "media_pipeline.AssetsReady"
 ASSETS_FAILED = "media_pipeline.AssetsFailed"
 USER_DELETED = "identity.UserDeleted"
+COLLECTION_PUBLISHED = "collections.CollectionPublished"
+COLLECTION_UPDATED = "collections.CollectionUpdated"
+COLLECTION_DELETED = "collections.CollectionDeleted"
+# Максимум единиц сборника (контракт ``collections.collection.v1``, ADR 0028).
+MAX_COLLECTION_ITEMS = 200
 # Виды алиасов, которые считаются названием единицы (``MediaItemRef.title_aliases``).
 TITLE_ALIAS_KINDS = frozenset({"title", "alt"})
 
@@ -77,6 +91,11 @@ class _StatusPayload(_Payload):
     version: int = Field(ge=1)
 
 
+class _Scope(_Payload):
+    kind: Literal["collection"]
+    id: UUID
+
+
 class _ReadyPayload(_Payload):
     asset_set_id: UUID
     media_item_id: UUID
@@ -84,6 +103,36 @@ class _ReadyPayload(_Payload):
     params_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     levels_count: int = Field(ge=1)
     version: int = Field(ge=1)
+    # ADR 0029: набор сборника (свои эмодзи автора); нет или null — каталожный.
+    scope: _Scope | None = None
+
+
+class _Custom(_Payload):
+    emoji: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class _CollectionItem(_Payload):
+    media_item_id: UUID
+    position: int = Field(ge=0, lt=MAX_COLLECTION_ITEMS)
+    custom: _Custom | None = None
+
+
+class _CollectionPayload(_Payload):
+    # Название, теги, обложка и прочее UGC game не нужны (и не хранятся, D6).
+    collection_id: UUID
+    version: int = Field(ge=1)
+    content_version: int = Field(ge=1)
+    domain: Literal["music", "film"]
+    status: Literal["published", "hidden"]
+    visibility: Literal["public", "unlisted"]
+    author_id: UUID | None = None
+    items: list[_CollectionItem] = Field(max_length=MAX_COLLECTION_ITEMS)
+
+
+class _CollectionDeletedPayload(_Payload):
+    collection_id: UUID
+    version: int = Field(ge=1)
+    deleted_at: datetime
 
 
 class _FailedPayload(_Payload):
@@ -108,6 +157,33 @@ def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
 def _popularity(metrics: dict[str, Any] | None) -> float | None:
     value = (metrics or {}).get("popularity")
     return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def _collection_snapshot(p: _CollectionPayload, at: datetime) -> CollectionSnapshot:
+    """Снимок сборника из payload ``CollectionPublished|Updated`` (UGC-поля не берутся)."""
+    snapshot = CollectionSnapshot(
+        proj=CollectionProj(
+            collection_id=p.collection_id,
+            version=p.version,
+            content_version=p.content_version,
+            domain=p.domain,
+            status=CollectionStatus(p.status),
+            visibility=p.visibility,
+            author_id=p.author_id,
+            updated_at=at,
+        ),
+        items=tuple(
+            CollectionItem(
+                position=i.position,
+                media_item_id=i.media_item_id,
+                custom=i.custom is not None and i.custom.emoji is not None,
+            )
+            for i in p.items
+        ),
+    )
+    if len({i.position for i in snapshot.items}) != len(snapshot.items):
+        raise PermanentError("позиции единиц сборника повторяются")
+    return snapshot
 
 
 def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
@@ -155,9 +231,24 @@ def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
             params_hash=p.params_hash,
             levels_count=p.levels_count,
             version=p.version,
+            scope_id=p.scope.id if p.scope is not None else None,
         )
         async with container.uow_factory(session)() as uow:
             await container.assets_events.ready(uow, data)
+            await uow.commit()
+
+    async def on_collection(envelope: EventEnvelope, session: AsyncSession) -> None:
+        snapshot = _collection_snapshot(
+            _parse(_CollectionPayload, envelope.payload), envelope.occurred_at
+        )
+        async with container.uow_factory(session)() as uow:
+            await container.collection_events.snapshot(uow, snapshot)
+            await uow.commit()
+
+    async def on_collection_deleted(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_CollectionDeletedPayload, envelope.payload)
+        async with container.uow_factory(session)() as uow:
+            await container.collection_events.deleted(uow, p.collection_id, p.version, p.deleted_at)
             await uow.commit()
 
     async def on_failed(envelope: EventEnvelope, session: AsyncSession) -> None:
@@ -179,4 +270,7 @@ def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
     registry.register(ASSETS_READY, on_ready)
     registry.register(ASSETS_FAILED, on_failed)
     registry.register(USER_DELETED, on_user_deleted)
+    registry.register(COLLECTION_PUBLISHED, on_collection)
+    registry.register(COLLECTION_UPDATED, on_collection)
+    registry.register(COLLECTION_DELETED, on_collection_deleted)
     return registry

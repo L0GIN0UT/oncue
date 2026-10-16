@@ -1,8 +1,8 @@
 """Реестр плагинов процесса game и сводная JSON Schema конфига для редактора админки.
 
-Встроенные плагины регистрирует ядро (``gv_game_kernel.builtin.register_builtin``).
-``collection`` в game на этапе 2 не регистрируется (проекции сборников — этап 3), поэтому
-конфиг с ним не проходит валидацию.
+Встроенные плагины регистрирует ядро (``gv_game_kernel.builtin.register_builtin``),
+источник ``collection`` — ``register_collection`` (этап 3b, ADR 0028): единицы сборника
+даёт адаптер ``CollectionPort`` поверх проекции ``collections.collection.v1``.
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ from gv_game_kernel import (
     Scorer,
     Source,
 )
-from gv_game_kernel.builtin import register_builtin
+from gv_game_kernel.builtin import register_builtin, register_collection
 
-EXCLUDED_SOURCES = frozenset({"collection"})
+EXCLUDED_SOURCES: frozenset[str] = frozenset()
 
 
 class CatalogRegistry(PluginRegistry):
@@ -86,7 +86,8 @@ class CatalogRegistry(PluginRegistry):
 
 
 def build_registry() -> CatalogRegistry:
-    """Реестр процесса со встроенными плагинами ядра."""
+    """Реестр процесса со встроенными плагинами ядра и источником ``collection``."""
     registry = CatalogRegistry()
     register_builtin(registry)
+    register_collection(registry)
     return registry

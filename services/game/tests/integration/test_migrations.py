@@ -79,13 +79,19 @@ async def test_0004_keeps_stage2_data_and_downgrades(database_url: str) -> None:
         await engine.dispose()
 
 
+_ASSET_SQL = text(
+    "INSERT INTO clue_assets (media_item_id, clue_type, params_hash, asset_set_id, "
+    "levels_count, status, version) VALUES (:item, 'emoji', :hash, :set, 6, 'ready', 1)"
+)
+_SCOPED_ASSET_SQL = text(
+    "INSERT INTO clue_assets (media_item_id, clue_type, params_hash, asset_set_id, "
+    "levels_count, status, version, scope_id) "
+    "VALUES (:item, 'emoji', :hash, :set, 6, 'ready', 1, :scope)"
+)
+
+
 def _asset_sql(*, scoped: bool) -> TextClause:
-    scope_col, scope_val = (", scope_id", ", :scope") if scoped else ("", "")
-    return text(
-        "INSERT INTO clue_assets (media_item_id, clue_type, params_hash, asset_set_id, "
-        f"levels_count, status, version{scope_col}) VALUES (:item, 'emoji', :hash, :set, 6, "
-        f"'ready', 1{scope_val})"
-    )
+    return _SCOPED_ASSET_SQL if scoped else _ASSET_SQL
 
 
 async def test_0005_keeps_stage3a_assets_and_downgrades(database_url: str) -> None:
