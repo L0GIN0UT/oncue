@@ -79,3 +79,36 @@ async def test_0005_seeds_game_perms_and_is_reversible(database_url: str) -> Non
     assert not (await _grants(database_url))["*"] & GAME_PERMS
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["admin"] >= GAME_PERMS
+
+
+COLLECTIONS_PERMS = {
+    "collections.view",
+    "collections.curate",
+    "collections.unpublish",
+    "collections.restrict_author",
+}
+
+
+async def test_0007_seeds_collections_perms_and_is_reversible(database_url: str) -> None:
+    """План этапа 3b, §2.8: admin — все 4 права, moderator — просмотр и скрытие."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= COLLECTIONS_PERMS
+    assert grants["admin"] >= COLLECTIONS_PERMS
+    assert grants["moderator"] & COLLECTIONS_PERMS == {"collections.view", "collections.unpublish"}
+    assert not grants.get("user", set()) & COLLECTIONS_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0006")
+    after = await _grants(database_url)
+    assert not after["*"] & COLLECTIONS_PERMS
+    assert after["admin"] >= GAME_PERMS  # права 0005 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= COLLECTIONS_PERMS
