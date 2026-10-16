@@ -12,4 +12,5 @@ urlpatterns = [
     path("", views.calendar, name="calendar"),
     path("<modekey:key>/<isodate:day>/items/<int:index>/", views.replace_item, name="item"),
     path("<modekey:key>/<isodate:day>/regenerate/", views.regenerate, name="regenerate"),
+    path("<modekey:key>/<isodate:day>/theme/", views.theme, name="theme"),
 ]
