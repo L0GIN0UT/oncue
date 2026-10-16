@@ -512,7 +512,7 @@ export class MockWorld {
     return new Date(nextMidnight(this.now()).getTime() + 6 * 86_400_000).toISOString();
   }
 
-  /** Режим по ключу, включая шаблоны сборников (их нет в `GET /v1/modes`). */
+  /** Режим по ключу, включая шаблоны сборников (`GET /v1/modes?kind=collection`). */
   mode(key: string): ModeOut | undefined {
     return MODES.find((m) => m.key === key) ?? COLLECTION_MODES.find((m) => m.key === key);
   }

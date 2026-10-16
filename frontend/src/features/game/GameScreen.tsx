@@ -5,15 +5,14 @@
  *
  * Подача выбирается по данным (D12 плана этапа 3a): загадка — по `clue.kind` (сцена — по
  * `clue_type`), ответ — по `answer_format` режима, ревил — по `presentation`. Ключ режима и
- * `source_type` экран не читает.
+ * `source_type` экран не читает. Режим сессии ищется по `mode.key` снимка во всех видах каталога
+ * (`kind=play` и `kind=collection`), поэтому у сессии по сборнику те же уровни и название.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
-import type { AnswerFormat, Domain, ModeOut, Presentation, RoundOut } from "@/shared/api/types";
+import type { AnswerFormat, ModeOut, Presentation, RoundOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
@@ -26,6 +25,7 @@ import { needsLevelClue } from "./answers/pick";
 import { answerRegistry } from "./answers/registry";
 import { clueRegistry, clueSceneOf } from "./clues/registry";
 import { tapeWeights } from "./levels";
+import { useSessionMode } from "./modes";
 import type { Move } from "./moves";
 import { readyForResults, statsOf, visibleRound } from "./state";
 import { useClue, useReleaseClues } from "./use-clue";
@@ -33,16 +33,6 @@ import { useGame } from "./use-game";
 
 /** Индикатор точками — пока раундов немного; длинные сессии (марафон, сетка) — только текстом. */
 const RAIL_MAX_ROUNDS = 12;
-
-function useModes(domain: Domain | undefined) {
-  return useQuery({
-    queryKey: ["modes", domain],
-    queryFn: async (): Promise<ModeOut[]> =>
-      unwrap(await api().game.GET("/v1/modes", { params: { query: { domain } } })),
-    enabled: !!domain,
-    staleTime: 5 * 60_000,
-  });
-}
 
 /** Формат ответа: из режима, а пока список режимов не пришёл — по наличию вариантов раунда. */
 export function answerFormatOf(mode: ModeOut | undefined, round: RoundOut): AnswerFormat {
@@ -61,8 +51,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   const revealing = state.revealRound !== null;
   const playable =
     !!snapshot && snapshot.status === "active" && round?.status === "active" && !revealing;
-  const modes = useModes(snapshot?.mode.domain);
-  const mode = modes.data?.find((m) => m.key === snapshot?.mode.key);
+  const { mode } = useSessionMode(snapshot?.mode.domain, snapshot?.mode.key);
   const levels = mode?.levels ?? [];
   const withClue = !!round && needsLevelClue(round);
   const clue = useClue(

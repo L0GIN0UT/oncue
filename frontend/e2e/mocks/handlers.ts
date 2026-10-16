@@ -7,6 +7,7 @@ import type { MockWorld } from "./world";
 import { MODES, itemById } from "./world";
 import { audioWav, frameSvg } from "./media";
 import { createUgcHandlers } from "./handlers-3b";
+import { COLLECTION_MODES } from "./ugc";
 
 const CSRF = "gv_csrf";
 const ACCESS = "gv_access";
@@ -126,8 +127,17 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
   return [
     // ---------------------------------------------------------------- game
     http.get(`${g}/modes`, ({ request }) => {
-      const domain = new URL(request.url).searchParams.get("domain");
-      return HttpResponse.json(MODES.filter((m) => !domain || m.domain === domain));
+      const params = new URL(request.url).searchParams;
+      const domain = params.get("domain");
+      const kind = params.get("kind") ?? "play";
+      if (kind !== "play" && kind !== "collection") return problem(422, "common.validation_failed");
+      const list = kind === "collection" ? COLLECTION_MODES : MODES;
+      return HttpResponse.json(
+        list.filter((m) => !domain || m.domain === domain),
+        {
+          headers: { "Cache-Control": "public, max-age=30" },
+        },
+      );
     }),
 
     http.get(`${g}/daily`, ({ request }) => {

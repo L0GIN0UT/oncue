@@ -19,7 +19,7 @@ import { useViewer } from "@/features/auth/session";
 import { collectionKeys, fetchDraft, fetchPlayability, useCollectionsMeta } from "../api";
 import { coverGradient } from "../Cover";
 import { apiErrorText, errorText, fieldOf } from "../errors";
-import { modeTitleKey, useCollectionModes } from "../modes";
+import { useCollectionModes } from "../modes";
 import { ConflictScreen } from "./ConflictScreen";
 import { isDirty } from "./draft";
 import { ItemList } from "./ItemList";
@@ -291,8 +291,8 @@ export function CollectionEditor({
                 >
                   <option value="">{t("collections.editor.modeNone")}</option>
                   {modes.map((m) => (
-                    <option key={m} value={m}>
-                      {dt(modeTitleKey(m), m)}
+                    <option key={m.key} value={m.key}>
+                      {m.titleKey ? dt(m.titleKey, m.key) : m.key}
                     </option>
                   ))}
                 </select>

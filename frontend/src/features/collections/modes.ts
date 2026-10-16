@@ -1,28 +1,23 @@
 /**
- * Режимы-шаблоны сборников (`<domain>.collection.<вид>`, source `collection`, D4).
+ * Режимы-шаблоны сборников (source `collection`, D4) для конструктора и фильтра каталога.
  *
- * game не отдаёт шаблоны в `GET /v1/modes`, а `GET /v1/collections/{id}/modes` есть только у
- * опубликованного сборника. Поэтому конструктор берёт список из переводов `modes.<domain>.collection`:
- * их наличие для каждого сида `seeds/game/modes/*.collection.*` проверяет messages.test.ts.
- * Неизвестный режим черновика (сид без перевода) всё равно остаётся в списке.
+ * Список — из game `GET /v1/modes?kind=collection` (шаблоны домена, без учёта конкретного
+ * сборника); переводы нужны только для названий (`title_key`). Режим черновика или фильтра,
+ * которого нет в списке (снят с публикации), остаётся выбранным — с ключом вместо названия.
  */
-import { useMessages } from "next-intl";
 import type { Domain } from "@/shared/api/types";
+import { useModeList } from "@/features/game/modes";
 
-const COLLECTION_SOURCE = "collection";
+export type CollectionModeOption = { key: string; titleKey: string | null };
 
-export function collectionModeKeys(messages: unknown, domain: Domain): string[] {
-  const modes = (messages as { modes?: Record<string, Record<string, unknown>> }).modes;
-  const group = modes?.[domain]?.[COLLECTION_SOURCE];
-  if (!group || typeof group !== "object") return [];
-  return Object.keys(group).map((kind) => `${domain}.${COLLECTION_SOURCE}.${kind}`);
+/** Шаблоны сборника домена (без `domain` — всех доменов); `current` добавляется, если его нет. */
+export function useCollectionModes(
+  domain: Domain | null | undefined,
+  current?: string | null,
+): CollectionModeOption[] {
+  const list = useModeList(domain ?? undefined, "collection");
+  const options = (list.data ?? []).map((m) => ({ key: m.key, titleKey: m.title_key }));
+  return current && !options.some((m) => m.key === current)
+    ? [...options, { key: current, titleKey: null }]
+    : options;
 }
-
-/** Режимы сборника домена; `current` (режим черновика) добавляется, если его нет в переводах. */
-export function useCollectionModes(domain: Domain, current?: string | null): string[] {
-  const keys = collectionModeKeys(useMessages(), domain);
-  return current && !keys.includes(current) ? [...keys, current] : keys;
-}
-
-/** Ключ перевода названия режима по его ключу (`film.collection.frame` → `modes.film…title`). */
-export const modeTitleKey = (modeKey: string) => `modes.${modeKey}.title`;

@@ -31,6 +31,9 @@ const AUDIO_LEVELS = [0.5, 1, 2, 4, 8, 15].map((seconds, i) => ({
 }));
 const EMOJI_LEVELS = [1, 2, 3, 4, 6, null].map((count, i) => ({ index: i + 1, hint: { count } }));
 
+const ROUND_OPTIONS: NonNullable<ModeOut["round_options"]> = [5, 10, 25, "all"];
+const MIN_ITEMS = 5;
+
 const template = (key: string, clue_type: string, levels: ModeOut["levels"]): ModeOut => ({
   key,
   version: 1,
@@ -45,16 +48,17 @@ const template = (key: string, clue_type: string, levels: ModeOut["levels"]): Mo
   presentation: "score",
   start: null,
   presets: null,
+  round_options: ROUND_OPTIONS,
+  min_items: MIN_ITEMS,
 });
 
-/** Шаблоны режимов сборников (в game их нет в `GET /v1/modes`). */
+/** Шаблоны режимов сборников: `GET /v1/modes?kind=collection` (в `kind=play` их нет). */
 export const COLLECTION_MODES: ModeOut[] = [
   template("film.collection.frame", "frame_progressive", FRAME_LEVELS),
   template("film.collection.emoji", "emoji", EMOJI_LEVELS),
   template("music.collection.intro", "audio_intro", AUDIO_LEVELS),
   template("music.collection.emoji", "emoji", EMOJI_LEVELS),
 ];
-const ROUND_OPTIONS: CollectionModeCard["round_options"] = [5, 10, 25, "all"];
 /** Без каталожных эмодзи в моке: в режиме эмодзи играбельны только единицы со своими эмодзи. */
 const catalogPlayable = (mode: ModeOut, id: string) =>
   mode.clue_type !== "emoji" && itemById(id)?.domain === mode.domain;
@@ -583,8 +587,8 @@ export class UgcWorld {
         allow_guest: m.allow_guest,
         playable,
         total: c.items.length,
-        available: playable >= 5,
-        round_options: ROUND_OPTIONS,
+        available: playable >= (m.min_items ?? MIN_ITEMS),
+        round_options: m.round_options ?? [],
       };
     });
   }
