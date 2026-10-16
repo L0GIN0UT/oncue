@@ -22,6 +22,17 @@ export type SessionResult = G["SessionResult"];
 export type DailyStatus = G["DailyStatus"];
 export type Answer = G["GuessRequest"]["answer"];
 export type Domain = ModeOut["domain"];
+export type FinalClue = G["FinalClue"];
+export type ShownItem = G["ShownItem"];
+export type OptionOut = G["OptionOut"];
+export type RoundProgress = G["RoundProgress"];
+export type MoveStats = G["MoveStats"];
+export type SubjectOut = G["SubjectOut"];
+export type ModeStart = G["ModeStart"];
+/** Формат ответа режима — ключ реестра ответов фронта (D12). */
+export type AnswerFormat = NonNullable<ModeOut["answer_format"]>;
+/** Подача итога (`Scorer.presentation`) — ключ реестра презентеров итога (D12). */
+export type Presentation = NonNullable<ModeOut["presentation"]>;
 
 export type HomePage = B["HomePage"];
 export type SoloPage = B["SoloPage"];
@@ -32,6 +43,10 @@ export type ItemCard = B["ItemCard"];
 export type DailyCard = B["DailyCard"];
 export type ModeCard = B["ModeCard"];
 export type SessionInfo = B["SessionInfo"];
+export type ModeGroup = B["ModeGroup"];
+export type RecordCard = B["RecordCard"];
+export type ResultRecord = B["ResultRecord"];
+export type BracketSummary = B["BracketSummary"];
 
 export type Suggestion = Catalog["schemas"]["SuggestionOut"];
 export type LoginRequest = Identity["schemas"]["LoginRequest"];

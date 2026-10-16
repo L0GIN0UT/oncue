@@ -113,7 +113,10 @@ export interface paths {
         };
         /** Тексты загадок единицы */
         get: operations["get_clue_texts_admin_v1_items__item_id__clue_texts_get"];
-        /** Изменить тексты загадок */
+        /**
+         * Изменить тексты загадок
+         * @description Все три поля целиком (null — очистить); `base_revision` — ревизия, которую видел модератор (иначе 409 `catalog.clue_texts_revision_mismatch`). После правки тексты в статусе draft: в событиях остаётся прошлый одобренный снимок. emoji — до 12 графем (422 `catalog.clue_text_invalid_emoji`).
+         */
         put: operations["put_clue_texts_admin_v1_items__item_id__clue_texts_put"];
         post?: never;
         delete?: never;
@@ -133,7 +136,7 @@ export interface paths {
         put?: never;
         /**
          * Одобрить тексты загадок
-         * @description Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts`.
+         * @description Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts` (version+1). 409 `catalog.clue_texts_revision_mismatch` — одобряется не текущая ревизия; 422 `catalog.clue_texts_empty` — одобрять нечего.
          */
         post: operations["approve_clue_texts_admin_v1_items__item_id__clue_texts_approve_post"];
         delete?: never;
@@ -170,7 +173,7 @@ export interface paths {
         put?: never;
         /**
          * Переопубликовать единицы
-         * @description Фоновая задача: `MediaItemUpdated` с `version+1` для всех единиц домена.
+         * @description Фоновая задача RabbitMQ порциями `GV_CATALOG__REPUBLISH_BATCH`: `MediaItemUpdated` с `version+1` (`changed_fields: [republish]`) для всех единиц домена (без `domain` — всех). Повтор с тем же `Idempotency-Key` — то же задание.
          */
         post: operations["republish_items_admin_v1_items_republish_post"];
         delete?: never;
@@ -260,6 +263,8 @@ export interface components {
             aliases: components["schemas"]["AliasOut"][];
             /** Blocked Reason Code */
             blocked_reason_code: string | null;
+            /** Countries */
+            countries?: string[];
             domain: components["schemas"]["MediaDomain"];
             /** External Refs */
             external_refs: {
@@ -415,6 +420,11 @@ export interface components {
          * @description Тексты загадок единицы (ADR 0024): в событие уходят только одобренные.
          */
         ClueTextsOut: {
+            /**
+             * Approved Revision
+             * @description Последняя одобренная ревизия (её тексты сейчас в событиях)
+             */
+            approved_revision?: number | null;
             /** Emoji */
             emoji: string | null;
             /** Plot Masked */
@@ -1141,16 +1151,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     put_clue_texts_admin_v1_items__item_id__clue_texts_put: {
@@ -1230,16 +1230,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     approve_clue_texts_admin_v1_items__item_id__clue_texts_approve_post: {
@@ -1311,16 +1301,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1475,8 +1455,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

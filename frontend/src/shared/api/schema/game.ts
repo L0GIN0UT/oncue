@@ -119,7 +119,7 @@ export interface paths {
         put?: never;
         /**
          * Запросить ассеты под загадку черновика
-         * @description Если под `params_hash(clue.params)` черновика нет профиля ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ.
+         * @description Если под `params_hash(clue.params)` (и `clue.reveal.params`) черновика в проекции нет ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ; пока запрос `pending`, повтор тех же параметров отвечает им же без нового события. 409 `game.assets_already_available` — ассеты уже есть; 422 `game.config_invalid` — параметры не проходят схему загадки.
          */
         post: operations["request_assets_admin_v1_mode_configs__mode_key__asset_requests_post"];
         delete?: never;
@@ -339,7 +339,7 @@ export interface paths {
         };
         /**
          * Персоны для марафона
-         * @description Поиск по имени среди персон с достаточным числом играбельных единиц.
+         * @description Поиск по имени среди персон с ролью режима и не меньше `min_items` играбельных единиц; по убыванию числа единиц. 422 `game.subjects_not_supported` — режим не выбирает персон; 429.
          */
         get: operations["list_subjects_v1_modes__mode_key__subjects_get"];
         put?: never;
@@ -361,7 +361,7 @@ export interface paths {
         put?: never;
         /**
          * Начать сессию
-         * @description 201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready`.
+         * @description 201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`.
          */
         post: operations["start_session_v1_sessions_post"];
         delete?: never;
@@ -398,7 +398,7 @@ export interface paths {
         put?: never;
         /**
          * Ответ
-         * @description Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.
+         * @description Ответ — `{media_item_id}`, `{text}` (формат `classic`) или `{option_id}` (формат `pick`). Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 422 `game.answer_kind_unsupported` (вид ответа не для формата режима), 422 `game.option_unknown`, 429. У сетки — `stats.agree_pct`.
          */
         post: operations["submit_guess_v1_sessions__session_id__guesses_post"];
         delete?: never;
@@ -677,7 +677,7 @@ export interface components {
         };
         /**
          * DailySet
-         * @description Набор дня режима.
+         * @description Набор периода режима (дейлик — день, сетка — неделя; ``day`` — начало периода).
          */
         DailySet: {
             /**
@@ -692,10 +692,21 @@ export interface components {
             /** Mode Version */
             mode_version: number;
             /**
+             * Period
+             * @default day
+             * @enum {string}
+             */
+            period: "day" | "week";
+            /**
              * Status
              * @enum {string}
              */
             status: "scheduled" | "locked" | "failed";
+            /**
+             * Subject Id
+             * @description Тема периода (персона сетки)
+             */
+            subject_id?: string | null;
         };
         /**
          * DailySetItem
@@ -843,10 +854,10 @@ export interface components {
         LevelOut: {
             /**
              * Hint
-             * @description Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, {pixel_block} для постера
+             * @description Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, {pixel_block} для постера, {frame} для последовательности кадров, {fields} для описания (накопленные поля), {count} для эмодзи (null — все)
              */
             hint: {
-                [key: string]: number | string;
+                [key: string]: number | string | string[] | null;
             };
             /** Index */
             index: number;
@@ -1194,11 +1205,14 @@ export interface components {
         };
         /**
          * RegenerateRequest
-         * @description Перегенерировать набор (только ``scheduled`` / ``failed``).
+         * @description Перегенерировать набор (только ``scheduled`` / ``failed``); ``subject_id`` — новая тема
+         *     периода (сетка), иначе тему выбирает генератор.
          */
         RegenerateRequest: {
             /** Reason */
             reason: string;
+            /** Subject Id */
+            subject_id?: string | null;
         };
         /**
          * ReplaceItemRequest
@@ -1255,6 +1269,11 @@ export interface components {
              * Format: uuid
              */
             media_item_id: string;
+            /**
+             * Metric
+             * @description Метрика сравнения загаданной единицы («больше/меньше»)
+             */
+            metric?: number | null;
             /** Persons */
             persons: components["schemas"]["PersonOut"][];
             /** Title */
@@ -1538,11 +1557,16 @@ export interface components {
         };
         /**
          * ValidationWarning
-         * @description Предупреждение (например, пул меньше рекомендуемого).
+         * @description Предупреждение (пул меньше нужного в bootstrap, ``assets.profile_missing``).
          */
         ValidationWarning: {
             /** Code */
             code: string;
+            /**
+             * Path
+             * @description Секция конфига: clue.params | clue.reveal.params
+             */
+            path?: string | null;
         };
     };
     responses: never;
@@ -2062,16 +2086,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     request_assets_admin_v1_mode_configs__mode_key__asset_requests_post: {
@@ -2143,16 +2157,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2756,16 +2760,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     meta_v1_meta_get: {
@@ -2886,16 +2880,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3420,16 +3404,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

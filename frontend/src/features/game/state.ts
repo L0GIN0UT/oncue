@@ -3,7 +3,7 @@
  * клиент не считает очки и не решает исход попытки, а только показывает снимок, держит
  * открытым ревил завершённого раунда до нажатия «Далее» и показывает уведомления.
  */
-import type { MoveResult, RoundOut, SessionSnapshot } from "@/shared/api/types";
+import type { MoveResult, MoveStats, RoundOut, SessionSnapshot } from "@/shared/api/types";
 
 export type MoveOutcome = MoveResult["result"];
 
@@ -16,6 +16,11 @@ export type GameState = {
   revealRound: number | null;
   /** Исход последней попытки — для короткой обратной связи у поля ответа. */
   lastOutcome: MoveOutcome;
+  /**
+   * Статистика выбора последнего хода (`stats` ответа, у сетки — «согласны N %»): показывается
+   * в ревиле этого раунда и сбрасывается на «Далее».
+   */
+  lastStats: { round: number; stats: MoveStats } | null;
   /** Ход отправлен и ждёт ответа: кнопки блокируются, повторной отправки нет. */
   busy: boolean;
   notice: NoticeKind | null;
@@ -33,6 +38,7 @@ export const initialGameState: GameState = {
   snapshot: null,
   revealRound: null,
   lastOutcome: null,
+  lastStats: null,
   busy: false,
   notice: null,
 };
@@ -70,13 +76,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...next,
         busy: false,
         lastOutcome: result.result,
+        lastStats: result.stats ? { round: result.round.index, stats: result.stats } : null,
         revealRound: isClosed(result.round) ? result.round.index : state.revealRound,
       };
     }
     case "move_failed":
       return { ...state, busy: false, notice: action.notice };
     case "continue":
-      return { ...state, revealRound: null, lastOutcome: null };
+      return { ...state, revealRound: null, lastOutcome: null, lastStats: null };
     case "dismiss_notice":
       return { ...state, notice: null };
   }
@@ -88,6 +95,11 @@ export function visibleRound(state: GameState): RoundOut | null {
   if (!s) return null;
   const index = state.revealRound ?? s.current_round;
   return s.rounds.find((r) => r.index === index) ?? null;
+}
+
+/** Статистика выбора для показанного раунда (только если она пришла ходом этого раунда). */
+export function statsOf(state: GameState, roundIndex: number): MoveStats | null {
+  return state.lastStats?.round === roundIndex ? state.lastStats.stats : null;
 }
 
 /** Сессия завершена и ревил последнего раунда закрыт — пора на экран итога. */

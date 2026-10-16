@@ -4,6 +4,7 @@ import {
   gameReducer,
   initialGameState,
   readyForResults,
+  statsOf,
   visibleRound,
   type GameState,
 } from "./state";
@@ -128,6 +129,31 @@ describe("gameReducer", () => {
     expect(readyForResults(state)).toBe(false);
     state = gameReducer(state, { type: "continue" });
     expect(readyForResults(state)).toBe(true);
+  });
+
+  it("статистика выбора (сетка) — у ревила своего раунда до «Далее»", () => {
+    const picked = round(0, {
+      status: "finished",
+      points: 0,
+      guesses: [{ kind: "option", display: "Сталкер", result: "exact" }],
+    });
+    let state = gameReducer(withSnap(snap()), {
+      type: "move_succeeded",
+      result: {
+        result: "exact",
+        round: picked,
+        session: snap({
+          version: 1,
+          current_round: 1,
+          rounds: [picked, round(1, { status: "active" })],
+        }),
+        stats: { agree_pct: 64 },
+      },
+    });
+    expect(statsOf(state, 0)).toEqual({ agree_pct: 64 });
+    expect(statsOf(state, 1)).toBeNull();
+    state = gameReducer(state, { type: "continue" });
+    expect(statsOf(state, 0)).toBeNull();
   });
 
   it("ошибка хода снимает блокировку и показывает уведомление", () => {

@@ -5,7 +5,7 @@ test("случайный режим с пресетом «2000-е» старту
   expectAccessible,
 }) => {
   await page.goto("/solo");
-  const mode = page.getByTestId("random-music.random.classic");
+  const mode = page.getByTestId("mode-card-music.random.classic");
   await expect(mode).toContainText("10 раундов");
   await expectAccessible(page);
   await mode.getByRole("link", { name: "2000-е" }).click();

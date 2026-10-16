@@ -1,6 +1,6 @@
 /** Общие фикстуры e2e на моках: сброс мок-бэкенда, управление сценариями, проверка axe. */
 import AxeBuilder from "@axe-core/playwright";
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import type { Scenario } from "./mocks/world";
 
 const MOCK_URL = `http://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 3101}`;
@@ -53,6 +53,39 @@ export async function answerWithSuggestion(
   await expect(input).toHaveValue(title);
   await page.getByRole("button", { name: "Ответить" }).click();
 }
+
+/** Ход клиента: POST ответа, пропуска или сдачи (как в ../e2e/modes.spec.ts). */
+export function isMove(url: string, method: string): boolean {
+  return (
+    method === "POST" &&
+    /\/api\/game\/v1\/sessions\/[^/]+\/(guesses|skips|rounds\/\d+\/give-up)$/.test(url)
+  );
+}
+
+/**
+ * Довести сессию до итога: «Дальше»/«К итогам» (`reveal-next`), иначе — действие раунда
+ * (`give-up` или первый `pick-option-*`). Каждый ход ждёт ответ сервера.
+ */
+export async function playUntilResults(page: Page, action: Locator, maxSteps = 80) {
+  const next = page.getByTestId("reveal-next");
+  const done = page.getByTestId("final-score");
+  for (let step = 0; step < maxSteps; step++) {
+    await expect(done.or(next).or(action).first()).toBeVisible();
+    if (await done.isVisible()) return;
+    if (await next.isVisible()) {
+      await next.click();
+      continue;
+    }
+    await Promise.all([
+      page.waitForResponse((r) => isMove(r.url(), r.request().method())),
+      action.first().click(),
+    ]);
+  }
+  throw new Error(`сессия не дошла до итога за ${maxSteps} шагов`);
+}
+
+export const giveUpButton = (page: Page) => page.locator("[data-testid=give-up]:enabled");
+export const pickButton = (page: Page) => page.locator("[data-testid^=pick-option-]:enabled");
 
 /** Сдать все оставшиеся раунды (быстрое завершение сессии). */
 export async function giveUpRemaining(page: Page): Promise<void> {

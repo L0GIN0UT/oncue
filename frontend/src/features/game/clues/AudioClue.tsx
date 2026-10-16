@@ -1,14 +1,16 @@
 "use client";
 /**
  * Аудио-загадка: фрагмент уровня уже скачан в `Blob`. Воспроизведение — только по жесту
- * (браузеры блокируют автозапуск), повтор не запрашивает новую ссылку.
+ * (браузеры блокируют автозапуск), повтор не запрашивает новую ссылку. Сцена `blackout` —
+ * тот же плеер на чёрном экране (звук фильма, кадр — в ревиле).
  */
 import { useEffect, useRef, useState } from "react";
 import { useTranslations, useFormatter } from "next-intl";
 import { Pause, Play } from "lucide-react";
+import { cn } from "@/shared/lib/cn";
 import type { ClueStageProps } from "./types";
 
-export function AudioClue({ clue, onProgress }: ClueStageProps) {
+export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps) {
   const t = useTranslations();
   const format = useFormatter();
   const audio = useRef<HTMLAudioElement>(null);
@@ -62,7 +64,16 @@ export function AudioClue({ clue, onProgress }: ClueStageProps) {
     : t("game.listenPlain");
 
   return (
-    <div className="flex flex-col items-center gap-4 py-6">
+    <div
+      className={cn(
+        "flex flex-col items-center gap-4 py-6",
+        // Чёрная сцена: звук фильма без картинки — экран «погашен», кадр будет в ревиле.
+        scene === "blackout" &&
+          "aspect-video w-full justify-center rounded-[var(--radius-control)] bg-black text-white ring-1 ring-rule",
+      )}
+      data-scene={scene}
+      data-testid="clue-scene"
+    >
       <audio
         ref={audio}
         src={clue.objectUrl}
@@ -86,6 +97,7 @@ export function AudioClue({ clue, onProgress }: ClueStageProps) {
       <p className="tabular font-display text-lg font-semibold" aria-hidden>
         {label}
       </p>
+      {scene === "blackout" && <p className="text-sm text-white/70">{t("game.blackoutHint")}</p>}
     </div>
   );
 }

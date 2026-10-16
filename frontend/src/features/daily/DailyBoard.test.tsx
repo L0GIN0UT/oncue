@@ -18,12 +18,30 @@ const card = {
   next_reset_at: "2026-10-14T21:00:00Z",
   session_id: null,
   score: null,
+  presentation: "score",
+} as const;
+const weeklyCard = {
+  ...card,
+  mode_key: "film.bracket.weekly",
+  domain: "film",
+  title_key: "modes.film.bracket.weekly.title",
+  max_score: 0,
+  next_reset_at: "2026-10-18T21:00:00Z",
+  presentation: "bracket",
 } as const;
 const ok: HomePage = {
-  blocks: { modes: { status: "ok", data: [] }, dailies: { status: "ok", data: [card] } },
+  blocks: {
+    modes: { status: "ok", data: [] },
+    dailies: { status: "ok", data: [card] },
+    weekly: { status: "ok", data: [weeklyCard] },
+  },
 };
 const unavailable: HomePage = {
-  blocks: { modes: { status: "ok", data: [] }, dailies: { status: "unavailable" } },
+  blocks: {
+    modes: { status: "ok", data: [] },
+    dailies: { status: "unavailable" },
+    weekly: { status: "unavailable" },
+  },
 };
 
 let next: HomePage = ok;
@@ -61,5 +79,15 @@ describe("DailyBoard — восстановление сессии для бло
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(recoverSession).not.toHaveBeenCalled();
     expect(screen.getByTestId("daily-music.daily.classic")).toBeInTheDocument();
+  });
+
+  it("сетка недели — отдельный блок с описанием режима и без очков", async () => {
+    const { DailyBoard } = await import("./DailyCards");
+    renderWithProviders(<DailyBoard initial={ok} />);
+    const ticket = screen.getByTestId("daily-film.bracket.weekly");
+    expect(screen.getByTestId("weekly")).toContainElement(ticket);
+    expect(ticket).toHaveTextContent("32 фильма темы недели");
+    expect(ticket).toHaveTextContent("Новая тема, одна попытка");
+    expect(ticket.querySelector("a")).toHaveAttribute("href", "/play/film.bracket.weekly");
   });
 });
