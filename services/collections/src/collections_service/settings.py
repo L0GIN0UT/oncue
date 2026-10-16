@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from gv_service import ServiceSettings, UgcSettings
 
@@ -73,13 +74,59 @@ class DifficultySettings(BaseModel):
         return self
 
 
+class PopularSettings(BaseModel):
+    """Сортировка «популярные» (D10): ``GV_COLLECTIONS__POPULAR__*``.
+
+    ``popular_score = like_weight·лайки + play_weight·завершения`` за последние
+    ``window_days`` дней; пересчитывает периодическая задача ``collections.popular.recompute``
+    порциями по ``batch`` сборников.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    window_days: int = Field(default=7, ge=1, le=90)
+    like_weight: float = Field(default=1.0, ge=0)
+    play_weight: float = Field(default=1.0, ge=0)
+    interval_s: float = Field(default=600, gt=0)
+    jitter_s: float = Field(default=60, ge=0)
+    batch: int = Field(default=500, ge=1, le=10000)
+    stats_retention_days: int = Field(default=30, ge=1, le=3650)
+
+
+class SweepSettings(BaseModel):
+    """Удаление заблокированных единиц из сборников (K7): ``GV_COLLECTIONS__SWEEP__*``.
+
+    Consumer ``MediaItemBlocked`` сразу обрабатывает первые ``batch`` сборников, остальное —
+    задача ``collections.blocked.sweep`` (по одной новой версии на сборник).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    batch: int = Field(default=100, ge=1, le=10000)
+    interval_s: float = Field(default=60, gt=0)
+    jitter_s: float = Field(default=10, ge=0)
+
+
 class CollectionsSettings(BaseModel):
-    """Настройки домена сборников: ``GV_COLLECTIONS__*``."""
+    """Настройки домена сборников: ``GV_COLLECTIONS__*``.
+
+    Attributes:
+        meta_config: YAML словарей конструктора — теги и пресеты обложек
+            (``GV_COLLECTIONS__META_CONFIG``); пусто — встроенный ``config/meta.yaml``.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     limits: CollectionsLimits = CollectionsLimits()
     difficulty: DifficultySettings = DifficultySettings()
+    popular: PopularSettings = PopularSettings()
+    sweep: SweepSettings = SweepSettings()
+    meta_config: Path | None = None
+
+    @field_validator("meta_config", mode="before")
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        return None if value == "" else value
 
 
 class Settings(ServiceSettings):
