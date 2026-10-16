@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import UUID
 
 from gv_core.domain import DomainEvent
@@ -106,3 +106,56 @@ class ModeConfigArchived(DomainEvent):
     version: int
     actor_id: UUID | None
     archived_at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class BracketPickSummary:
+    """Выбор в ``BracketCompleted.picks``.
+
+    Attributes:
+        stage: Размер тура (32, 16 … 2).
+        winner_id: Выбранная единица.
+        loser_id: Единица, проигравшая выбор.
+    """
+
+    stage: int
+    winner_id: UUID
+    loser_id: UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class BracketCompleted(DomainEvent):
+    """Игрок прошёл сетку предпочтений периода до чемпиона (ADR 0027).
+
+    Сетка не публикует ``GameFinished``: правильного ответа и очков у неё нет.
+    """
+
+    aggregate_type: ClassVar[str] = SESSION_AGGREGATE
+
+    session_id: UUID
+    version: int
+    user_id: UUID | None
+    is_guest: bool
+    mode_key: str
+    mode_version: int
+    period_start: str
+    champion_id: UUID
+    picks: tuple[BracketPickSummary, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClueAssetsRequested(DomainEvent):
+    """Админ запросил ассеты под параметры загадки черновика (ADR 0025)."""
+
+    aggregate_type: ClassVar[str] = MODE_CONFIG_AGGREGATE
+
+    request_id: UUID
+    mode_key: str
+    draft_revision: int
+    domain: str
+    clue_type: str
+    # Any: параметры загадки — JSON по contracts/clues/<clue_type>.params.v1.json.
+    params: dict[str, Any]
+    params_hash: str
+    actor_id: UUID
+    requested_at: datetime

@@ -59,6 +59,9 @@ class GameLimits(BaseModel):
     clue_per_min: int = Field(default=120, ge=1)
     sessions_per_hour: int = Field(default=60, ge=1)
     guest_sessions_per_ip_per_hour: int = Field(default=30, ge=1)
+    # Этап 3a (план §2.7): свежая ссылка ревила (D13) и поиск персон марафона (D14).
+    final_clue_per_min: int = Field(default=30, ge=1)
+    subjects_per_min: int = Field(default=60, ge=1)
 
 
 class Settings(ServiceSettings):

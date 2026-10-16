@@ -1,69 +1,103 @@
-"""Правила режима для game: фасад над ``ModeEngine`` ядра и разобранные параметры.
+"""Правила режима для game: фасад над ``ModeEngine`` ядра.
 
-game не знает про конкретные плагины: ни ``if type == ...``, ни разбора ``params``
-по ключу. Единственное, что game узнаёт о параметрах, — возможности, объявленные самими
-моделями параметров:
+game не знает про конкретные плагины: ни ``if type == ...``, ни разбора ``params`` по
+ключу плагина. Возможности режима game узнаёт у ядра — по протоколам источника
+(``RoundSource``, ``ProgressiveSource``, ``SubjectSource``, ``PeriodSource``; ADR 0023) и
+атрибутам плагинов (``Scorer.presentation``, ``clue.reveal``). Из параметров источника
+game читает только общие поля плановых наборов (возможности, а не ключи):
 
-* ``ScheduledSource`` — источник с наборами дня (поля ``size``, ``timezone``,
-  ``schedule_ahead_days``, ``exclude_recent_days``, как в ``source.daily.v1.json``);
-* ``presets`` — источник объявляет пресеты (``Source.presets``);
-* ``pool`` — общий фрагмент ``contracts/modes/params/pool.v1.json`` для подсчёта пула.
+* ``timezone`` — зона смены периода (у ``daily`` и ``bracket``);
+* ``schedule_ahead_days`` | ``schedule_ahead_periods`` — на сколько периодов вперёд
+  создавать наборы;
+* ``exclude_recent_days`` — сколько дней не повторять единицы (нет — 0);
+* ``period`` — имя периода (нет — ``day``).
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Protocol, runtime_checkable
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel
 
 from game_service.domain.errors import ModeUnavailableError
 from game_service.domain.modes import ConfigVersion
 from gv_core.errors import AppError
 from gv_game_kernel import (
-    AnswerInput,
     AssetPort,
     AssetRef,
     ClueView,
     ConfigError,
     ConfigIssue,
-    DrawContext,
     EngineFactory,
-    Guess,
     LevelSpec,
-    MatchResult,
-    MediaItemRef,
     ModeConfig,
     ModeEngine,
+    PeriodSource,
     PlayableFor,
     PluginRegistry,
     PoolQuery,
     RoundOutcome,
     RoundState,
+    SubjectQuery,
     params_hash,
     parse_mode_config,
 )
-from gv_game_kernel import round as kernel_round
-from gv_game_kernel.spec import error_path
 
 POOL_TOO_SMALL = "game.pool_too_small"
 """Код ошибки ядра: в пуле меньше единиц, чем нужно (``PoolTooSmallError`` потока A)."""
 
+DEFAULT_PERIOD = "day"
+MAX_PERIOD_DAYS = 31
+"""Самый длинный период, который ищет ``next_period_start`` (неделя, месяц)."""
+
+RECORDS_FEATURE = "records"
+"""Флаг ``features.records``: личные рекорды и процентиль (D11)."""
+
 
 @runtime_checkable
-class ScheduledSource(Protocol):
-    """Параметры источника с наборами дня (возможность, а не ключ плагина)."""
-
-    size: int
+class _Zoned(Protocol):
     timezone: str
+
+
+@runtime_checkable
+class _AheadDays(Protocol):
     schedule_ahead_days: int
+
+
+@runtime_checkable
+class _AheadPeriods(Protocol):
+    schedule_ahead_periods: int
+
+
+@runtime_checkable
+class _ExcludeRecent(Protocol):
     exclude_recent_days: int
 
 
 @runtime_checkable
-class _PresetSource(Protocol):
-    def presets(self, params: BaseModel) -> Sequence[Any]: ...  # Preset ядра (id, title_key)
+class _Periodic(Protocol):
+    period: str
+
+
+@dataclass(frozen=True, slots=True)
+class PeriodSchedule:
+    """Плановые наборы режима (дейлик — день, сетка — неделя; ADR 0027).
+
+    Attributes:
+        period: Имя периода (``day`` | ``week``) — ``daily_sets.period``.
+        timezone: IANA-зона смены периода.
+        ahead: На сколько периодов вперёд создавать наборы.
+        exclude_recent_days: Сколько последних дней не повторять единицы.
+    """
+
+    period: str
+    timezone: str
+    ahead: int
+    exclude_recent_days: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,60 +108,8 @@ class PresetView:
     title_key: str
 
 
-class _Years(BaseModel):
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
-
-    year_from: int | None = Field(default=None, alias="from")
-    year_to: int | None = Field(default=None, alias="to")
-
-
-class PoolSpec(BaseModel):
-    """Фрагмент ``pool.v1.json``: правила пула (проверяет ядро, game только считает пул)."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    genres_any: list[str] = Field(default_factory=list)
-    years: _Years | None = None
-    min_popularity: float | None = None
-    kinds: list[str] = Field(default_factory=list)
-    min_playable: int | None = None
-
-    def query(self, domain: str, playable_for: PlayableFor | None) -> PoolQuery:
-        """Запрос кандидатов пула."""
-        return PoolQuery(
-            domain=domain,
-            kinds=frozenset(self.kinds),
-            genres_any=frozenset(self.genres_any),
-            year_from=self.years.year_from if self.years else None,
-            year_to=self.years.year_to if self.years else None,
-            min_popularity=self.min_popularity,
-            playable_for=playable_for,
-        )
-
-
 def _issue(path: str, code: str) -> dict[str, str]:
     return {"path": path, "code": code}
-
-
-def _params_issues(prefix: str, exc: ValidationError) -> list[dict[str, str]]:
-    issues = []
-    for e in exc.errors(include_url=False, include_input=False):
-        loc = tuple(e["loc"])
-        path = f"{prefix}.{error_path(loc)}" if loc else prefix
-        issues.append(_issue(path, f"schema.{e['type']}"))
-    return issues
-
-
-def _parse_params(schema: type[BaseModel], params: Mapping[str, Any], section: str) -> BaseModel:
-    """Параметры плагина; ошибки — ``ConfigError`` с путями ``<section>.params.…``.
-
-    Валидатор ядра тоже проверяет параметры — здесь проверка на случай, если сборка
-    движка их не разобрала (параметры нужны game для ревила и наборов дня).
-    """
-    try:
-        return schema.model_validate(dict(params))
-    except ValidationError as exc:
-        raise ConfigError(details={"errors": _params_issues(f"{section}.params", exc)}) from exc
 
 
 class ModeRules:
@@ -147,10 +129,6 @@ class ModeRules:
         self.config = config
         self.engine = engine
         self.params_hash = params_hash(config.clue.params)
-        self._clue_params = _parse_params(engine.clue.params_schema, config.clue.params, "clue")
-        self._source_params = _parse_params(
-            engine.source.params_schema, config.source.params, "source"
-        )
         self._levels = list(engine.levels())
 
     # ------------------------------------------------------------------ свойства режима
@@ -170,10 +148,30 @@ class ModeRules:
         return self.config.source.type
 
     @property
+    def answer_format(self) -> str:
+        """Ключ формата ответа (``classic`` | ``pick``)."""
+        return self.config.answer.format
+
+    @property
+    def presentation(self) -> str:
+        """Подача итога (``Scorer.presentation``): ``score`` | ``streak`` | ``bracket``."""
+        return self.engine.presentation
+
+    @property
+    def records_enabled(self) -> bool:
+        """Личные рекорды режима включены флагом ``features.records`` (D11)."""
+        return bool(self.config.features.get(RECORDS_FEATURE, False))
+
+    @property
+    def is_progressive(self) -> bool:
+        """Раунды зависят от прошлых (сетка): туры дописываются ``followups``."""
+        return self.engine.is_progressive
+
+    @property
     def rounds(self) -> int:
-        """Раундов в сессии (для дейлика — ``size`` набора)."""
-        schedule = self.schedule
-        return schedule.size if schedule is not None else self.config.session.rounds
+        """Раундов в сессии самое большее (сетка — ``size - 1``; с ``session.end`` —
+        максимум, правило может закончить раньше)."""
+        return self.engine.planned_rounds()
 
     @property
     def levels(self) -> list[LevelSpec]:
@@ -188,58 +186,114 @@ class ModeRules:
     @property
     def round_max(self) -> int:
         """Максимум очков за один раунд (Scorer)."""
-        return self.engine.max_score(1)
-
-    @property
-    def schedule(self) -> ScheduledSource | None:
-        """Параметры наборов дня, если источник их объявляет."""
-        params = self._source_params
-        return params if isinstance(params, ScheduledSource) else None
+        return self.engine.round_max_score()
 
     @property
     def playable_for(self) -> PlayableFor:
         """Требование играбельности единиц (готовые ассеты под ``clue.params``)."""
-        return PlayableFor(self.clue_type, self.params_hash)
+        return self.engine.playable_for
 
     @property
-    def pool(self) -> PoolSpec | None:
-        """Правила пула из ``source.params.pool``."""
-        raw = self.config.source.params.get("pool")
-        return PoolSpec.model_validate(raw) if isinstance(raw, Mapping) else None
+    def reveal_playable_for(self) -> PlayableFor | None:
+        """Второй набор ассетов ревила другого типа (ADR 0026) или ``None``."""
+        return self.engine.reveal_playable_for
 
+    # ------------------------------------------------------------------ плановые наборы
+    @property
+    def schedule(self) -> PeriodSchedule | None:
+        """Плановые наборы, если источник их объявляет (``PeriodSource`` ядра)."""
+        if not isinstance(self.engine.source, PeriodSource):
+            return None
+        params = self.engine.source_params
+        if not isinstance(params, _Zoned):
+            return None
+        if isinstance(params, _AheadPeriods):
+            ahead = params.schedule_ahead_periods
+        elif isinstance(params, _AheadDays):
+            ahead = params.schedule_ahead_days
+        else:
+            ahead = 0
+        return PeriodSchedule(
+            period=params.period if isinstance(params, _Periodic) else DEFAULT_PERIOD,
+            timezone=params.timezone,
+            ahead=ahead,
+            exclude_recent_days=(
+                params.exclude_recent_days if isinstance(params, _ExcludeRecent) else 0
+            ),
+        )
+
+    def period_start(self, at: datetime) -> date:
+        """Начало периода момента ``at`` (``day`` набора).
+
+        Raises:
+            ModeUnavailableError: у режима нет плановых наборов (ошибка вызова).
+        """
+        start = self.engine.period_start(at)
+        if start is None:
+            raise ModeUnavailableError("у режима нет плановых наборов")
+        return start
+
+    def next_period_start(self, start: date) -> date:
+        """Начало периода, следующего за периодом ``start``.
+
+        Период ищется через ``period_start`` ядра: game не знает его длину.
+
+        Raises:
+            ModeUnavailableError: нет плановых наборов или период длиннее ``MAX_PERIOD_DAYS``.
+        """
+        schedule = self.schedule
+        if schedule is None:
+            raise ModeUnavailableError("у режима нет плановых наборов")
+        zone = ZoneInfo(schedule.timezone)
+        for offset in range(1, MAX_PERIOD_DAYS + 1):
+            day = start + timedelta(days=offset)
+            following = self.period_start(datetime.combine(day, time(12), tzinfo=zone))
+            if following != start:
+                return following
+        raise ModeUnavailableError("период режима длиннее допустимого")
+
+    def next_reset_at(self, at: datetime) -> datetime:
+        """Момент смены периода после ``at`` (00:00 следующего периода в зоне, UTC)."""
+        schedule = self.schedule
+        if schedule is None:
+            raise ModeUnavailableError("у режима нет плановых наборов")
+        following = self.next_period_start(self.period_start(at))
+        zone = ZoneInfo(schedule.timezone)
+        return datetime.combine(following, time.min, tzinfo=zone).astimezone(UTC)
+
+    def theme_query(self) -> SubjectQuery | None:
+        """Из каких персон выбирать тему периода (сетка) или ``None``."""
+        return self.engine.theme_query()
+
+    # ------------------------------------------------------------------ старт
     def presets(self) -> list[PresetView]:
         """Пресеты источника (пусто — их нет)."""
-        source = self.engine.source
-        if not isinstance(source, _PresetSource):
-            return []
-        return [
-            PresetView(str(p.id), str(p.title_key)) for p in source.presets(self._source_params)
-        ]
+        return [PresetView(p.id, p.title_key) for p in self.engine.presets()]
 
-    # ------------------------------------------------------------------ правила
-    async def draw(self, ctx: DrawContext, n: int) -> list[MediaItemRef]:
-        """Разыграть ``n`` единиц."""
-        return await self.engine.draw(ctx, n)
+    def subject_query(self) -> SubjectQuery | None:
+        """Персоны, из которых игрок выбирает (марафон), или ``None``."""
+        return self.engine.subject_query()
 
-    def check(self, answer: AnswerInput, item: MediaItemRef) -> MatchResult:
-        """Сверить ответ."""
-        return self.engine.check(answer, item)
+    def max_subjects(self) -> int | None:
+        """Сколько персон можно выбрать или ``None``."""
+        return self.engine.max_subjects()
 
-    def guess(self, state: RoundState, guess: Guess) -> RoundState:
-        """Переход раунда после ответа."""
-        return kernel_round.apply_guess(
-            state, guess, levels_count=self.levels_count, session=self.config.session
-        )
+    def pool_query(self) -> PoolQuery | None:
+        """Запрос играбельного пула режима (без пресета) для проверки при публикации."""
+        return self.engine.pool_query()
 
+    def min_playable(self) -> int:
+        """Минимум играбельных единиц для публикации."""
+        return self.engine.min_playable()
+
+    # ------------------------------------------------------------------ правила раунда
     def skip(self, state: RoundState) -> RoundState:
         """Переход раунда после пропуска."""
-        return kernel_round.apply_skip(
-            state, levels_count=self.levels_count, session=self.config.session
-        )
+        return self.engine.skip(state)
 
     def give_up(self, state: RoundState) -> RoundState:
         """Сдаться."""
-        return kernel_round.give_up(state, session=self.config.session)
+        return self.engine.give_up(state)
 
     def score(self, outcome: RoundOutcome) -> int:
         """Очки за раунд."""
@@ -256,10 +310,23 @@ class ModeRules:
         """
         return await self.engine.clue_view(state, asset, level, assets=assets, subject=subject)
 
-    async def final_view(self, asset: AssetRef, *, assets: AssetPort, subject: str) -> ClueView:
-        """Подача для ревила завершённого раунда."""
+    async def final_view(
+        self,
+        asset: AssetRef,
+        *,
+        assets: AssetPort,
+        subject: str,
+        reveal_asset: AssetRef | None = None,
+    ) -> ClueView:
+        """Подача для ревила завершённого раунда (``clue.reveal`` — набор ``reveal_asset``)."""
+        return await self.engine.final_view(
+            asset, assets=assets, subject=subject, reveal_asset=reveal_asset
+        )
+
+    async def shown_view(self, asset: AssetRef, *, assets: AssetPort, subject: str) -> ClueView:
+        """Подача открыто показанной единицы: последний уровень самой загадки режима."""
         return await self.engine.clue.final_view(
-            asset, self._clue_params, assets=assets, subject=subject
+            asset, self.engine.clue_params, assets=assets, subject=subject
         )
 
 
@@ -300,6 +367,31 @@ class RulesFactory:
         except ConfigError as exc:
             return ConfigCheck(config, None, list(exc.details.get("errors", [])))
         return ConfigCheck(config, rules, [])
+
+    def clue_params(self, config: ModeConfig) -> list[tuple[str, str, BaseModel]]:
+        """Параметры загадки и ревила, разобранные схемами плагинов: ``[(путь, тип, params)]``.
+
+        Raises:
+            ConfigError: плагина нет или параметры не проходят его схему (пути
+                ``clue.params…`` / ``clue.reveal.params…``).
+        """
+        specs = [("clue", config.clue.type, config.clue.params)]
+        if config.clue.reveal is not None:
+            specs.append(("clue.reveal", config.clue.reveal.type, config.clue.reveal.params))
+        parsed: list[tuple[str, str, BaseModel]] = []
+        for path, clue_type, params in specs:
+            plugin = self.registry.clue(clue_type)
+            if plugin is None:
+                raise ConfigError(
+                    details={"errors": [_issue(f"{path}.type", "config.unknown_plugin")]}
+                )
+            try:
+                parsed.append((path, clue_type, plugin.params_schema.model_validate(params)))
+            except ValueError as exc:
+                raise ConfigError(
+                    details={"errors": [_issue(f"{path}.params", "schema.invalid")]}
+                ) from exc
+        return parsed
 
     def build(self, version: ConfigVersion) -> ModeRules:
         """Правила опубликованной версии (кэш на процесс: версии неизменяемы).

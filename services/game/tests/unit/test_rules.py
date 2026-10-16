@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import copy
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
-from game_service.application.rules import RulesFactory
+from game_service.application.rules import ModeRules, PeriodSchedule, RulesFactory
 from game_service.infrastructure.plugins import CatalogRegistry
 
 pytestmark = pytest.mark.unit
@@ -31,19 +32,60 @@ def test_seeds_are_valid(factory: RulesFactory, name: str) -> None:
     check = factory.check(body(name))
     assert check.errors == []
     assert check.rules is not None
-    assert check.rules.levels_count == 6
-    assert check.rules.round_max == 6
+    # Формат pick — один уровень и один ответ (ядро), классика — шесть уровней.
+    assert check.rules.levels_count == (1 if check.rules.answer_format == "pick" else 6)
+
+
+def rules_of(factory: RulesFactory, name: str) -> ModeRules:
+    rules = factory.check(body(name)).rules
+    assert rules is not None
+    return rules
 
 
 def test_schedule_and_presets_capabilities(factory: RulesFactory) -> None:
-    daily = factory.check(body("music.daily.classic")).rules
-    random = factory.check(body("music.random.classic")).rules
-    assert daily is not None and random is not None
-    assert daily.schedule is not None and daily.schedule.timezone == "Europe/Moscow"
+    daily = rules_of(factory, "music.daily.classic")
+    random = rules_of(factory, "music.random.classic")
+    assert daily.schedule == PeriodSchedule("day", "Europe/Moscow", 2, 7)
     assert daily.rounds == 5 and daily.presets() == []
     assert random.schedule is None and random.rounds == 5
     assert [p.id for p in random.presets()] == ["oldies", "modern", "rock"]
-    assert daily.pool is not None and daily.pool.min_playable == 10
+    assert daily.min_playable() == 10 and daily.round_max == 6
+    assert (daily.presentation, daily.answer_format, daily.records_enabled) == (
+        "score",
+        "classic",
+        False,
+    )
+
+
+def test_week_period_capabilities(factory: RulesFactory) -> None:
+    """Сетка: период «неделя» из ``period_start`` ядра, тема — персоны, без ключей режима."""
+    bracket = rules_of(factory, "film.bracket.weekly")
+    assert bracket.schedule == PeriodSchedule("week", "Europe/Moscow", 1, 0)
+    friday = datetime(2026, 10, 16, 12, tzinfo=UTC)
+    assert bracket.period_start(friday) == date(2026, 10, 12)
+    assert bracket.next_period_start(date(2026, 10, 12)) == date(2026, 10, 19)
+    assert bracket.next_reset_at(friday) == datetime(2026, 10, 18, 21, tzinfo=UTC)
+    theme = bracket.theme_query()
+    assert theme is not None and theme.roles == {"director"} and theme.min_items == 32
+    assert bracket.is_progressive and bracket.rounds == 31 and bracket.presentation == "bracket"
+    daily = rules_of(factory, "film.daily.frame")
+    assert daily.next_period_start(date(2026, 10, 10)) == date(2026, 10, 11)
+    assert daily.theme_query() is None
+
+
+def test_subjects_reveal_and_records_capabilities(factory: RulesFactory) -> None:
+    marathon = rules_of(factory, "film.marathon.director")
+    query = marathon.subject_query()
+    assert query is not None and query.roles == {"director"} and marathon.max_subjects() == 3
+    assert marathon.records_enabled and marathon.schedule is None
+    blackout = rules_of(factory, "film.random.blackout")
+    reveal = blackout.reveal_playable_for
+    assert reveal is not None and reveal.clue_type == "frame_progressive"
+    pair = rules_of(factory, "film.pair.rating")
+    assert pair.presentation == "streak" and pair.answer_format == "pick"
+    pool = pair.pool_query()
+    assert pool is not None and pool.has_metric == "vote_average"
+    assert rules_of(factory, "music.random.classic").subject_query() is None
 
 
 def test_schema_errors_have_paths(factory: RulesFactory) -> None:

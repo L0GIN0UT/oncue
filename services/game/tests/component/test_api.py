@@ -136,31 +136,45 @@ async def test_schema_endpoint_lists_mode_config(
 
 
 @pytest.mark.parametrize(
-    ("method", "path", "body"),
+    ("method", "path"),
     [
-        ("GET", "/v1/modes/film.marathon.director/subjects?q=нолан", None),
-        ("POST", f"/v1/sessions/{SESSION}/rounds/0/final-clue", None),
-        ("GET", "/v1/me/records", None),
-        ("POST", "/v1/sessions", {"mode_key": "film.marathon.director", "subject_ids": [SESSION]}),
-        (
-            "POST",
-            f"/v1/sessions/{SESSION}/guesses",
-            {"round_index": 0, "expected_version": 1, "answer": {"option_id": "higher"}},
-        ),
+        ("GET", "/v1/modes/film.marathon.director/subjects?q=нолан"),
+        ("POST", f"/v1/sessions/{SESSION}/rounds/0/final-clue"),
+        ("GET", "/v1/me/records"),
     ],
 )
-async def test_stage3a_public_routes_are_declared_but_not_implemented(
-    *,
-    client: httpx.AsyncClient,
-    token_issuer: TestTokenIssuer,
-    method: str,
-    path: str,
-    body: dict[str, object] | None,
+async def test_stage3a_public_routes_require_subject(
+    client: httpx.AsyncClient, method: str, path: str
 ) -> None:
-    """Шаг 0a этапа 3a: контракт объявлен, реализация — в потоке B (501)."""
+    """Ручки этапа 3a — только для субъекта (пользователь или гость), ответы no-store."""
+    response = await client.request(method, path)
+    assert_problem(response, 401, "auth.unauthenticated")
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        (
+            f"/v1/sessions/{SESSION}/guesses",
+            {"round_index": 0, "expected_version": 1, "answer": {"option_id": "Higher!"}},
+        ),
+        ("/v1/sessions", {"mode_key": "film.marathon.director", "subject_ids": []}),
+        (
+            "/v1/sessions",
+            {"mode_key": "film.marathon.director", "subject_ids": [SESSION] * 11},
+        ),
+        ("/v1/modes/film.marathon.director/subjects?limit=21", None),
+    ],
+)
+async def test_stage3a_inputs_are_bounded_by_schema(
+    *, client: httpx.AsyncClient, token_issuer: TestTokenIssuer, path: str, body: object
+) -> None:
+    """``option_id`` — непрозрачный короткий id, персон 1..10, подсказок ≤ 20 (§11 п. 4)."""
     headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    method = "GET" if body is None else "POST"
     response = await client.request(method, path, json=body, headers=headers)
-    assert_problem(response, 501, "common.not_implemented")
+    assert response.status_code == 422, response.text
 
 
 async def test_round_index_accepts_long_sessions(

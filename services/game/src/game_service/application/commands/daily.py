@@ -1,9 +1,12 @@
-"""Наборы дня (D6): планирование вперёд, блокировка в начале дня, курация админом.
+"""Наборы периода (D6, ADR 0027): планирование вперёд, блокировка в начале периода,
+курация админом.
 
 Розыгрыш делает Source ядра (``draw`` с seed ``HMAC(secret, mode_key|day)``), game
 передаёт контекст: кандидатов из проекции, недавние единицы режима для
-``exclude_recent_days``. Все операции идемпотентны: набор на день один (PK), повтор
-планировщика ничего не меняет, блокировка повторно — no-op.
+``exclude_recent_days`` и тему периода (сетка: персона с ≥ ``min_items`` играбельных
+единиц из ``theme_query`` ядра). Период (день, неделя) game узнаёт у ядра
+(``period_start``), а не по ключу источника. Все операции идемпотентны: набор на период
+один (PK), повтор планировщика ничего не меняет, блокировка повторно — no-op.
 """
 
 from __future__ import annotations
@@ -19,25 +22,27 @@ from prometheus_client import Counter
 from game_service.application.catalog import ModeCatalog
 from game_service.application.commands.modes import AdminContext
 from game_service.application.ports import AdminAction, GameUnitOfWork, Json, UnitOfWorkFactory
-from game_service.application.rules import ModeRules, ScheduledSource, is_pool_too_small
+from game_service.application.rules import ModeRules, PeriodSchedule, is_pool_too_small
 from game_service.domain.daily import (
     DailySet,
     DailySetStatus,
     GeneratedBy,
     daily_seed,
-    day_in_zone,
 )
 from game_service.domain.errors import (
     DailyLockedError,
     DailyNotReadyError,
     DailySetNotFoundError,
     ModeNotFoundError,
+    SubjectsNotSupportedError,
+    ThemeNotPlayableError,
 )
 from game_service.domain.projection import CatalogItem
 from gv_core.clock import Clock
 from gv_core.errors import AppError, InvalidInputError
+from gv_core.random import SeededRandom
 from gv_db.idempotency import request_fingerprint, run_idempotent
-from gv_game_kernel import DrawContext
+from gv_game_kernel import SubjectQuery
 
 log = structlog.get_logger(__name__)
 
@@ -50,6 +55,14 @@ DAILY_ITEMS_AUTO_REPLACED = Counter(
 
 
 @dataclass(frozen=True, slots=True)
+class DrawnSet:
+    """Разыгранный набор периода: единицы (пусто — пул мал) и тема (персона) или ``None``."""
+
+    items: list[UUID]
+    subject_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DailySettings:
     """Параметры наборов дня."""
 
@@ -59,7 +72,7 @@ class DailySettings:
 
 
 class DailySetGenerator:
-    """Розыгрыш единиц набора дня через Source режима."""
+    """Розыгрыш единиц набора периода через Source режима."""
 
     def __init__(self, settings: DailySettings) -> None:
         self._settings = settings
@@ -69,11 +82,29 @@ class DailySetGenerator:
         """Секрет seed задан (без него наборы не создаются)."""
         return self._settings.seed_secret is not None
 
-    def _schedule(self, rules: ModeRules) -> ScheduledSource:
+    @staticmethod
+    def schedule(rules: ModeRules) -> PeriodSchedule:
+        """Плановые наборы режима.
+
+        Raises:
+            ModeNotFoundError: у режима нет плановых наборов.
+        """
         schedule = rules.schedule
         if schedule is None:
-            raise ModeNotFoundError("режим без наборов дня")
+            raise ModeNotFoundError("режим без плановых наборов")
         return schedule
+
+    async def _theme(
+        self, uow: GameUnitOfWork, rules: ModeRules, query: SubjectQuery, seed: bytes
+    ) -> UUID | None:
+        """Тема периода: персона с ≥ ``min_items`` играбельных единиц, выбор по seed."""
+        rows = await uow.projection.subjects(
+            query, text_=None, limit=self._settings.candidate_limit, also=rules.reveal_playable_for
+        )
+        if not rows:
+            return None
+        ordered = sorted({r.person_id for r in rows})
+        return SeededRandom(seed).sample(ordered, 1)[0]
 
     async def draw(
         self,
@@ -84,37 +115,58 @@ class DailySetGenerator:
         generation: int,
         n: int | None = None,
         exclude: frozenset[UUID] = frozenset(),
-    ) -> list[UUID]:
-        """Разыграть единицы; пустой список — пул меньше нужного (набор ``failed``)."""
+        subject_id: UUID | None = None,
+    ) -> DrawnSet:
+        """Разыграть единицы; пустой список — пул меньше нужного (набор ``failed``).
+
+        Args:
+            subject_id: Тема периода, выбранная админом; ``None`` — тему выбирает генератор
+                (если она у режима есть).
+        """
         secret = self._settings.seed_secret
         if secret is None:
             raise DailyNotReadyError("секрет наборов дня не задан (GV_GAME__DAILY_SEED_SECRET)")
-        schedule = self._schedule(rules)
-        count = schedule.size if n is None else n
-        recent = await uow.daily_sets.items_between(
-            rules.key, day - timedelta(days=schedule.exclude_recent_days), day - timedelta(days=1)
-        )
-        ctx = DrawContext(
-            mode_key=rules.key,
-            domain=rules.domain,
-            clue_type=rules.clue_type,
-            params_hash=rules.params_hash,
-            seed=daily_seed(secret, rules.key, day, generation),
-            candidates=uow.candidates,
+        schedule = self.schedule(rules)
+        count = rules.engine.draw_size if n is None else n
+        recent: set[UUID] = set()
+        if schedule.exclude_recent_days:
+            recent = await uow.daily_sets.items_between(
+                rules.key,
+                day - timedelta(days=schedule.exclude_recent_days),
+                day - timedelta(days=1),
+            )
+        seed = daily_seed(secret, rules.key, day, generation)
+        theme_query = rules.theme_query()
+        subject = subject_id
+        if theme_query is not None and subject is None:
+            subject = await self._theme(uow, rules, theme_query, seed)
+            if subject is None:
+                return self._failed(rules, day, "theme")
+        ctx = rules.engine.draw_context(
+            seed=seed,
+            candidates=uow.candidates_for(rules.reveal_playable_for),
             day=day,
             exclude_ids=frozenset(recent) | exclude,
+            subject_ids=frozenset({subject}) if subject is not None else frozenset(),
+            candidate_limit=self._settings.candidate_limit,
         )
         try:
-            items = await rules.draw(ctx, count)
+            items = await rules.engine.draw(ctx, count)
         except AppError as exc:
             if not is_pool_too_small(exc):
                 raise
             items = []
         if len(items) < count:
-            DAILY_SETS_FAILED.labels(rules.key).inc()
-            log.warning("game.daily_pool_too_small", mode_key=rules.key, day=day.isoformat())
-            return []
-        return [item.id for item in items]
+            return self._failed(rules, day, "pool")
+        return DrawnSet([item.id for item in items], subject if theme_query is not None else None)
+
+    @staticmethod
+    def _failed(rules: ModeRules, day: date, reason: str) -> DrawnSet:
+        DAILY_SETS_FAILED.labels(rules.key).inc()
+        log.warning(
+            "game.daily_pool_too_small", mode_key=rules.key, day=day.isoformat(), reason=reason
+        )
+        return DrawnSet([])
 
 
 async def playable_ids(uow: GameUnitOfWork, rules: ModeRules, ids: list[UUID]) -> set[UUID]:
@@ -124,8 +176,8 @@ async def playable_ids(uow: GameUnitOfWork, rules: ModeRules, ids: list[UUID]) -
 
 
 class ScheduleDailySets:
-    """Периодическая задача: наборы на сегодня и ``schedule_ahead_days`` вперёд, блокировка
-    наступивших дней с автоматической заменой непригодных единиц.
+    """Периодическая задача: наборы на текущий период и ``schedule_ahead_*`` вперёд,
+    блокировка наступивших периодов с автоматической заменой непригодных единиц.
 
     Args:
         uow: Фабрика транзакций.
@@ -155,35 +207,45 @@ class ScheduleDailySets:
             schedule = rules.schedule
             if schedule is None:
                 continue
-            today = day_in_zone(self._clock.now(), schedule.timezone)
-            for offset in range(schedule.schedule_ahead_days + 1):
-                await self.ensure(rules, today + timedelta(days=offset), GeneratedBy.SCHEDULE)
+            today = rules.period_start(self._clock.now())
+            day = today
+            for _ in range(schedule.ahead + 1):
+                await self.ensure(rules, day, GeneratedBy.SCHEDULE)
+                day = rules.next_period_start(day)
             await self.lock_due(rules, today)
 
     async def ensure(self, rules: ModeRules, day: date, generated_by: GeneratedBy) -> DailySet:
-        """Набор на день: создать, если нет; повторить розыгрыш ``failed``."""
+        """Набор на период ``day``: создать, если нет; повторить розыгрыш ``failed``."""
+        schedule = self._generator.schedule(rules)
         async with self._uow() as uow:
             daily = await uow.daily_sets.get(rules.key, day, for_update=True)
             if daily is not None and daily.status is not DailySetStatus.FAILED:
                 return daily
             if daily is None:
-                items = await self._generator.draw(uow, rules, day, generation=1)
+                drawn = await self._generator.draw(uow, rules, day, generation=1)
                 daily = DailySet.generated(
                     rules.key,
                     day,
                     mode_version=rules.version,
-                    items=items,
+                    items=drawn.items,
                     generated_by=generated_by,
+                    period=schedule.period,
+                    subject_id=drawn.subject_id,
                 )
                 if not await uow.daily_sets.add(daily):
                     # Набор вставила другая реплика или первый запрос дня — берём её.
                     await uow.rollback()
                     return await self._get(rules.key, day)
             else:
-                items = await self._generator.draw(uow, rules, day, generation=daily.generation + 1)
-                if not items:
+                drawn = await self._generator.draw(uow, rules, day, generation=daily.generation + 1)
+                if not drawn.items:
                     return daily
-                daily.reroll(items, mode_version=rules.version, generated_by=generated_by)
+                daily.reroll(
+                    drawn.items,
+                    mode_version=rules.version,
+                    generated_by=generated_by,
+                    subject_id=drawn.subject_id,
+                )
                 await uow.daily_sets.save(daily)
             await uow.commit()
         log.info(
@@ -222,14 +284,18 @@ class ScheduleDailySets:
         bad = [i for i, item in enumerate(daily.items) if item not in ok]
         if not bad:
             return
-        fresh = await self._generator.draw(
+        # Источник с набором ровно нужного размера (сетка) разыгрывает весь набор заново —
+        # из него берутся первые свежие единицы.
+        drawn = await self._generator.draw(
             uow,
             rules,
             daily.day,
             generation=daily.generation + 100,
-            n=len(bad),
+            n=None if rules.is_progressive else len(bad),
             exclude=frozenset(daily.items),
+            subject_id=daily.subject_id,
         )
+        fresh = [i for i in drawn.items if i not in daily.items][: len(bad)]
         for index, item in zip(bad, fresh, strict=False):
             daily.auto_replace(index, item)
             DAILY_ITEMS_AUTO_REPLACED.inc()
@@ -270,11 +336,10 @@ class DailySetAdmin:
         self._settings = settings
 
     async def _today(self, key: str) -> tuple[ModeRules, date]:
+        """Правила режима и начало текущего периода (в нём набор уже только читается)."""
         _, rules = await self._catalog.latest(key)
-        schedule = rules.schedule
-        if schedule is None:
-            raise ModeNotFoundError("режим без наборов дня")
-        return rules, day_in_zone(self._clock.now(), schedule.timezone)
+        DailySetGenerator.schedule(rules)
+        return rules, rules.period_start(self._clock.now())
 
     async def _set_json(self, uow: GameUnitOfWork, daily: DailySet) -> Json:
         rules = await self._catalog.rules(daily.mode_key, daily.mode_version)
@@ -285,6 +350,8 @@ class DailySetAdmin:
             "day": daily.day.isoformat(),
             "mode_version": daily.mode_version,
             "status": str(daily.status),
+            "period": daily.period,
+            "subject_id": str(daily.subject_id) if daily.subject_id else None,
             "items": [
                 _item_json(i, item_id, items.get(item_id), playable=item_id in ok)
                 for i, item_id in enumerate(daily.items)
@@ -360,11 +427,26 @@ class DailySetAdmin:
             await uow.commit()
         return response
 
-    async def regenerate(self, key: str, day: date, *, ctx: AdminContext) -> Json:
-        """Перегенерировать набор (``scheduled``/``failed``, до начала дня)."""
+    async def regenerate(
+        self, key: str, day: date, *, ctx: AdminContext, subject_id: UUID | None = None
+    ) -> Json:
+        """Перегенерировать набор (``scheduled``/``failed``, до начала периода).
+
+        Args:
+            subject_id: Новая тема периода (замена темы сетки админом); ``None`` — тему
+                выбирает генератор.
+
+        Raises:
+            SubjectsNotSupportedError: у режима нет темы, а ``subject_id`` передан.
+            ThemeNotPlayableError: у выбранной темы мало играбельных единиц.
+        """
         rules, today = await self._today(key)
+        if subject_id is not None and rules.theme_query() is None:
+            raise SubjectsNotSupportedError("у режима нет темы периода")
         fingerprint = request_fingerprint(
-            "daily_set.regenerate", f"{key}|{day}", {"reason": ctx.reason}
+            "daily_set.regenerate",
+            f"{key}|{day}",
+            {"reason": ctx.reason, "subject_id": str(subject_id) if subject_id else None},
         )
         async with self._uow() as uow:
 
@@ -376,9 +458,17 @@ class DailySetAdmin:
                 # «боевого» паззла там нет; запланированный замораживается в начале дня.
                 if daily.is_locked_on(today) and daily.status is not DailySetStatus.FAILED:
                     raise DailyLockedError("день начался — набор только для чтения")
-                items = await self._generator.draw(uow, rules, day, generation=daily.generation + 1)
+                drawn = await self._generator.draw(
+                    uow, rules, day, generation=daily.generation + 1, subject_id=subject_id
+                )
+                if subject_id is not None and not drawn.items:
+                    raise ThemeNotPlayableError("у темы не хватает играбельных единиц")
                 daily.regenerate(
-                    items, mode_version=rules.version, generated_by=GeneratedBy.ADMIN, today=today
+                    drawn.items,
+                    mode_version=rules.version,
+                    generated_by=GeneratedBy.ADMIN,
+                    today=today,
+                    subject_id=drawn.subject_id,
                 )
                 await uow.daily_sets.save(daily)
                 await self._audit(

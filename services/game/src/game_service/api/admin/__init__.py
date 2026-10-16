@@ -35,7 +35,6 @@ from game_service.api.common import ApiServices, NoStoreRoute
 from game_service.api.public.schemas import Domain
 from game_service.application.commands.modes import AdminContext
 from gv_auth import Principal, require_perm
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 ADMIN_ACCESS = "admin.access"
@@ -175,10 +174,13 @@ def build_admin_router(c: ApiServices) -> APIRouter:
         status_code=201,
         summary="Запросить ассеты под загадку черновика",
         description=(
-            "Если под `params_hash(clue.params)` черновика нет профиля ассетов — событие "
-            "`game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ."
+            "Если под `params_hash(clue.params)` (и `clue.reveal.params`) черновика в проекции "
+            "нет ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же "
+            "ключом — тот же ответ; пока запрос `pending`, повтор тех же параметров отвечает "
+            "им же без нового события. 409 `game.assets_already_available` — ассеты уже есть; "
+            "422 `game.config_invalid` — параметры не проходят схему загадки."
         ),
-        responses=problem_responses(401, 403, 404, 409, 422, 501, 503),
+        responses=problem_responses(401, 403, 404, 409, 422, 503),
     )
     async def request_assets(
         mode_key: ModeKeyPath,
@@ -186,18 +188,25 @@ def build_admin_router(c: ApiServices) -> APIRouter:
         principal: ConfigPublisher,
         idempotency_key: IdempotencyKey,
     ) -> AssetRequestOut:
-        raise NotImplementedYetError("этап 3a: поток B (docs/plans/stage-3a.md)")
+        request = await c.asset_requests.execute(
+            mode_key,
+            draft_revision=body.draft_revision,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+        )
+        return AssetRequestOut.model_validate(request)
 
     @router.get(
         "/mode-configs/{mode_key}/asset-requests",
         response_model=list[AssetRequestOut],
         summary="Запросы ассетов режима",
-        responses=problem_responses(401, 403, 404, 422, 501),
+        responses=problem_responses(401, 403, 404, 422),
     )
     async def list_asset_requests(
         mode_key: ModeKeyPath, principal: ConfigViewer
     ) -> list[AssetRequestOut]:
-        raise NotImplementedYetError("этап 3a: поток B (docs/plans/stage-3a.md)")
+        return [
+            AssetRequestOut.model_validate(r) for r in await c.asset_requests.for_mode(mode_key)
+        ]
 
     @router.post(
         "/mode-configs/{mode_key}/rollback",
@@ -291,7 +300,10 @@ def build_admin_router(c: ApiServices) -> APIRouter:
         idempotency_key: IdempotencyKey,
     ) -> DailySet:
         daily = await c.daily_admin.regenerate(
-            mode_key, day, ctx=_ctx(principal, body.reason, idempotency_key)
+            mode_key,
+            day,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+            subject_id=body.subject_id,
         )
         return DailySet.model_validate(daily)
 
