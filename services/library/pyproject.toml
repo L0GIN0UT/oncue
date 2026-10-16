@@ -3,7 +3,7 @@ name = "guessverse-library"
 version = "0.1.0"
 description = "Личная медиатека: плейлисты, «смотреть позже», «просмотрено», «любимое»"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-text", "pyyaml>=6"]
 
 [project.scripts]
 library = "library_service.main:run"

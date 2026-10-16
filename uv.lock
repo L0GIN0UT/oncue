@@ -1628,6 +1628,8 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "gv-text" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1637,6 +1639,8 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "gv-text", editable = "libs/text" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
@@ -1732,6 +1736,8 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "gv-text" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1741,6 +1747,8 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "gv-text", editable = "libs/text" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
