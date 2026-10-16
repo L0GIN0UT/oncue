@@ -6,6 +6,7 @@ import { http, HttpResponse, type HttpHandler } from "msw";
 import type { MockWorld } from "./world";
 import { MODES, itemById } from "./world";
 import { audioWav, frameSvg } from "./media";
+import { createUgcHandlers } from "./handlers-3b";
 
 const CSRF = "gv_csrf";
 const ACCESS = "gv_access";
@@ -20,7 +21,7 @@ function cookiesOf(request: Request): Record<string, string> {
 }
 
 /** Субъект по cookie `gv_access` (`guest.<id>` или `user.<id>`) или Bearer. */
-function subjectOf(request: Request): string | null {
+export function subjectOf(request: Request): string | null {
   const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const token = bearer || cookiesOf(request)[ACCESS];
   return token && /^(guest|user)\.[\w-]+$/.test(token) ? token : null;
@@ -41,7 +42,7 @@ function refreshSubjectOf(request: Request, world: MockWorld): string | null {
   return world.revokedRefresh.has(subject) ? null : subject;
 }
 
-const csrfOk = (request: Request) => {
+export const csrfOk = (request: Request) => {
   const cookie = cookiesOf(request)[CSRF];
   return Boolean(cookie) && request.headers.get("x-csrf-token") === cookie;
 };
@@ -149,9 +150,32 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
         mode_key: string;
         preset_id?: string | null;
         subject_ids?: string[] | null;
+        collection_id?: string | null;
+        rounds?: number | "all" | null;
       };
       const mode = world.mode(body.mode_key);
       if (!mode) return problem(404, "game.mode_not_found");
+      // Сборник (этап 3b, D4): режим с source `collection` и опубликованный сборник домена.
+      if (mode.source_type === "collection" || body.collection_id) {
+        if (mode.source_type !== "collection") return problem(422, "game.collection_not_supported");
+        if (!body.collection_id) return problem(422, "game.collection_required");
+        const c = world.ugc.find(body.collection_id);
+        if (!c || c.status !== "published") return problem(404, "game.collection_not_found");
+        if (c.domain !== mode.domain) return problem(422, "game.collection_domain_mismatch");
+        const options = [5, 10, 25, "all"] as const;
+        const rounds = body.rounds ?? options[0];
+        if (!options.includes(rounds as (typeof options)[number]))
+          return problem(422, "game.rounds_not_allowed", { requested: rounds, options });
+        const pool = world.ugc.playableItems(c, mode);
+        const count = rounds === "all" ? pool.length : rounds;
+        if (pool.length < 5 || count > pool.length) return problem(422, "game.pool_too_small");
+        const s = world.startSession(subject, mode, null, [], {
+          id: c.id,
+          version: c.version,
+          itemIds: pool.slice(0, count),
+        });
+        return HttpResponse.json(world.snapshot(s), { status: 201 });
+      }
       if (!mode.allow_guest && subject.startsWith("guest."))
         return problem(403, "game.guest_not_allowed");
       const subjectIds = body.subject_ids ?? [];
@@ -364,6 +388,9 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
         headers: { "Cache-Control": "private, no-store" },
       });
     }),
+
+    // ---------------------------------------------------------------- этап 3b
+    ...createUgcHandlers(world),
 
     // ---------------------------------------------------------------- identity
     http.post("*/api/identity/v1/auth/guest", ({ request }) => {

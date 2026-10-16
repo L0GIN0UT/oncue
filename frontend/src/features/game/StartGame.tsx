@@ -6,6 +6,10 @@
  *
  * Что выбрать перед стартом, говорит режим (`start` из `GET /v1/modes`, D12): `start.subject` —
  * сначала выбор персон (марафон), иначе сессия стартует сразу.
+ *
+ * Игра по сборнику (этап 3b, D4): страница сборника ведёт на `/play/{mode}?collection=…&rounds=…`,
+ * старт — `POST /v1/sessions {mode_key, collection_id, rounds}`. Режимы-шаблоны сборников не
+ * входят в `GET /v1/modes`, поэтому стартуют сразу.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -19,14 +23,25 @@ import { Button } from "@/shared/ui/button";
 import { newIdempotencyKey } from "@/shared/lib/id";
 import { withSession } from "@/features/auth/session";
 import { SubjectPicker } from "@/features/solo/SubjectPicker";
+import type { CollectionStart } from "./start-params";
 
 type Failure =
-  "guest_not_allowed" | "daily_not_ready" | "mode_not_found" | "rate_limited" | "failed";
+  | "guest_not_allowed"
+  | "daily_not_ready"
+  | "mode_not_found"
+  | "collection_not_found"
+  | "rounds_not_allowed"
+  | "pool_too_small"
+  | "rate_limited"
+  | "failed";
 
 export function failureOf(e: unknown): Failure {
   if (isApiError(e, "game.guest_not_allowed")) return "guest_not_allowed";
   if (isApiError(e, "game.daily_not_ready")) return "daily_not_ready";
   if (isApiError(e, "game.mode_not_found")) return "mode_not_found";
+  if (isApiError(e, "game.collection_not_found")) return "collection_not_found";
+  if (isApiError(e, "game.rounds_not_allowed")) return "rounds_not_allowed";
+  if (isApiError(e, "game.pool_too_small")) return "pool_too_small";
   if (isApiError(e) && e.status === 429) return "rate_limited";
   return "failed";
 }
@@ -36,6 +51,14 @@ export function playedSessionOf(e: unknown): string | null {
   const id = isApiError(e, "game.daily_already_played") ? e.details?.session_id : null;
   return typeof id === "string" && id ? id : null;
 }
+
+/** Повтор не поможет: режима или сборника нет, выбор раундов или сборник не подходят. */
+const NO_RETRY = new Set<Failure>([
+  "mode_not_found",
+  "collection_not_found",
+  "rounds_not_allowed",
+  "pool_too_small",
+]);
 
 export const modesQueryKey = ["modes", "all"] as const;
 
@@ -51,7 +74,11 @@ export function useAllModes() {
 
 type StartBody = { subjectIds?: string[] };
 
-function useStartSession(modeKey: string, presetId: string | null) {
+function useStartSession(
+  modeKey: string,
+  presetId: string | null,
+  collection: CollectionStart | null,
+) {
   const router = useRouter();
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
@@ -70,6 +97,9 @@ function useStartSession(modeKey: string, presetId: string | null) {
                 mode_key: modeKey,
                 preset_id: presetId,
                 ...(subjectIds?.length ? { subject_ids: subjectIds } : {}),
+                ...(collection
+                  ? { collection_id: collection.collectionId, rounds: collection.rounds }
+                  : {}),
               },
             }),
           ),
@@ -86,15 +116,24 @@ function useStartSession(modeKey: string, presetId: string | null) {
         }
       }
     },
-    [modeKey, presetId, router],
+    [modeKey, presetId, router, collection],
   );
   return { start, failure, pending, clearFailure: () => setFailure(null) };
 }
 
-export function StartGame({ modeKey, presetId }: { modeKey: string; presetId: string | null }) {
+export function StartGame({
+  modeKey,
+  presetId,
+  collection = null,
+}: {
+  modeKey: string;
+  presetId: string | null;
+  collection?: CollectionStart | null;
+}) {
   const t = useTranslations();
   const modes = useAllModes();
-  const { start, failure, pending, clearFailure } = useStartSession(modeKey, presetId);
+  const { start, failure, pending, clearFailure } = useStartSession(modeKey, presetId, collection);
+  const back = collection ? `/collections/${collection.collectionId}` : "/solo";
   const mode = modes.data?.find((m) => m.key === modeKey);
   const subject = mode?.start?.subject ?? null;
   // Список режимов не пришёл — стартуем без выбора: сервер сам ответит, если выбор нужен.
@@ -116,11 +155,13 @@ export function StartGame({ modeKey, presetId }: { modeKey: string; presetId: st
         <div className="flex flex-wrap gap-3">
           {failure === "guest_not_allowed" ? (
             <Button asChild>
-              <Link href={`/login?next=${encodeURIComponent(`/play/${modeKey}`)}`}>
+              <Link
+                href={`/login?next=${encodeURIComponent(collection ? back : `/play/${modeKey}`)}`}
+              >
                 {t("nav.login")}
               </Link>
             </Button>
-          ) : failure !== "mode_not_found" ? (
+          ) : !NO_RETRY.has(failure) ? (
             <Button
               onClick={() => {
                 clearFailure();
@@ -131,7 +172,7 @@ export function StartGame({ modeKey, presetId }: { modeKey: string; presetId: st
             </Button>
           ) : null}
           <Button asChild variant="secondary">
-            <Link href="/solo">{t("start.toSolo")}</Link>
+            <Link href={back}>{collection ? t("start.toCollection") : t("start.toSolo")}</Link>
           </Button>
         </div>
       </div>

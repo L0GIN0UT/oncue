@@ -5,6 +5,7 @@ import { server, signInAsGuest, setupMockBackend, world } from "@/test/msw";
 import { renderWithProviders } from "@/test/render";
 import { personId } from "../../../e2e/mocks/world";
 import { StartGame } from "./StartGame";
+import { parseCollectionStart, parseRounds } from "./start-params";
 import { toggleSubject } from "@/features/solo/SubjectPicker";
 
 const replace = vi.fn();
@@ -67,6 +68,54 @@ describe("StartGame", () => {
     const session = [...world.sessions.values()].at(-1)!;
     expect(session.mode.key).toBe("film.marathon.director");
     expect(session.rounds.map((r) => r.itemId)).toHaveLength(5);
+  });
+
+  it("сборник: POST с collection_id и rounds, сессия из состава сборника", async () => {
+    signInAsGuest();
+    const c = world.ugc.collections[0]!;
+    renderWithProviders(
+      <StartGame
+        modeKey="film.collection.frame"
+        presetId={null}
+        collection={{ collectionId: c.id, rounds: 5 }}
+      />,
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/play\/s\//)),
+    );
+    const session = [...world.sessions.values()].at(-1)!;
+    expect(session.collection).toEqual({ id: c.id, version: c.version });
+    expect(session.rounds).toHaveLength(5);
+  });
+
+  it("сборник: недопустимое число раундов — ошибка без повтора и ссылка на сборник", async () => {
+    signInAsGuest();
+    const c = world.ugc.collections[0]!;
+    renderWithProviders(
+      <StartGame
+        modeKey="film.collection.frame"
+        presetId={null}
+        collection={{ collectionId: c.id, rounds: 25 }}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("В сборнике мало единиц");
+    expect(screen.queryByRole("button", { name: "Попробовать ещё раз" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "К сборнику" })).toHaveAttribute(
+      "href",
+      `/collections/${c.id}`,
+    );
+  });
+
+  it("parseRounds: только варианты контракта", () => {
+    expect(parseRounds("5")).toBe(5);
+    expect(parseRounds("all")).toBe("all");
+    expect(parseRounds("7")).toBeNull();
+    expect(parseRounds(null)).toBeNull();
+    expect(parseCollectionStart("../etc", "5")).toBeNull();
+    expect(parseCollectionStart("00000000-0000-4000-a000-000000000001", "x")).toEqual({
+      collectionId: "00000000-0000-4000-a000-000000000001",
+      rounds: null,
+    });
   });
 
   it("повторный вход в сыгранную сетку недели (409) ведёт на итог", async () => {

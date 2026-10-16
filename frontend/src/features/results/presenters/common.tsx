@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { Trophy } from "lucide-react";
 import type { ResultRecord, ResultRoundCard } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
+import { SaveButton } from "@/features/library/SaveButton";
 import type { PresenterProps } from "./types";
 
 const OUTCOME_TONE: Record<ResultRoundCard["outcome"], string> = {
@@ -14,7 +15,10 @@ const OUTCOME_TONE: Record<ResultRoundCard["outcome"], string> = {
   void: "bg-skip",
 };
 
-/** Строка на каждый сыгранный раунд (у марафона и пары — столько, сколько успели сыграть). */
+/**
+ * Строка на каждый сыгранный раунд (у марафона и пары — столько, сколько успели сыграть).
+ * У раунда с единицей — «Сохранить» в медиатеку (этап 3b, D5; источник `results`).
+ */
 export function ResultRows({ summary, items }: PresenterProps) {
   const t = useTranslations();
   return (
@@ -25,11 +29,13 @@ export function ResultRows({ summary, items }: PresenterProps) {
           <li
             key={r.index}
             data-testid="result-row"
-            className="grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
+            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-4 gap-y-1 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
           >
             <span aria-hidden className={cn("size-3 rounded-full", OUTCOME_TONE[r.outcome])} />
             <div className="min-w-0">
-              <p className="truncate font-medium">{item?.title ?? t("results.unknownItem")}</p>
+              <p dir="auto" className="truncate font-medium">
+                {item?.title ?? t("results.unknownItem")}
+              </p>
               <p className="truncate text-sm text-ink-muted">
                 {t(`results.outcome.${r.outcome}`, { level: r.level ?? 0 })}
                 {item
@@ -38,8 +44,13 @@ export function ResultRows({ summary, items }: PresenterProps) {
               </p>
             </div>
             <span className="tabular font-display text-lg font-semibold">+{r.points}</span>
+            {r.media_item_id ? (
+              <SaveButton mediaItemId={r.media_item_id} domain={item?.domain} source="results" />
+            ) : (
+              <span />
+            )}
             {r.exact_pct !== null && r.exact_pct !== undefined && (
-              <div className="col-span-3 col-start-1 mt-1 flex items-center gap-3 text-xs text-ink-muted sm:col-span-2 sm:col-start-2">
+              <div className="col-span-4 col-start-1 mt-1 flex items-center gap-3 text-xs text-ink-muted sm:col-span-3 sm:col-start-2">
                 <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-rule">
                   <span
                     className="block h-full rounded-full bg-[var(--accent)]"

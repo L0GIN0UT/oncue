@@ -175,6 +175,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
           stats={statsOf(state, round.index)}
           last={isLastRound}
           onNext={proceed}
+          domain={snapshot.mode.domain}
         />
       ) : (
         <>

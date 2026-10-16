@@ -24,6 +24,29 @@ const summary = (patch: Partial<ResultSummary> = {}): ResultSummary => ({
   ...patch,
 });
 
+describe("buildShareText — сессия по сборнику (этап 3b)", () => {
+  const collection = { title: "Тарковский и компания", url: "https://o.example/collections/c1" };
+
+  it("первой строкой — название сборника, ссылка — на сборник, а не на главную", () => {
+    const text = buildShareText(summary(), {
+      ...ctx("Сборник по кадрам", "https://o.example/"),
+      collection,
+    });
+    expect(text).toBe(
+      "Сборник «Тарковский и компания»\nСборник по кадрам 14/30\n🟩🟨🟥🟥⬜\nhttps://o.example/collections/c1",
+    );
+  });
+
+  it("текст сервера со ссылкой на главную дополняется ссылкой на сборник", () => {
+    const text = buildShareText(summary({ share_text: "OnCue 14/30\nhttps://o.example/" }), {
+      ...ctx("x", "https://o.example/"),
+      collection,
+    });
+    expect(text.split("\n")[0]).toBe("Сборник «Тарковский и компания»");
+    expect(text.endsWith("https://o.example/collections/c1")).toBe(true);
+  });
+});
+
 describe("buildShareText", () => {
   it("без текста сервера собирает сетку по исходам и добавляет ссылку", () => {
     expect(buildShareText(summary(), ctx("Трек дня", "https://oncue.example/"))).toBe(

@@ -1,5 +1,6 @@
 /**
- * Состояние мок-бэкенда по контрактам (contracts/openapi/{game,bff_web,catalog,identity}.json).
+ * Состояние мок-бэкенда по контрактам (contracts/openapi/{game,bff_web,catalog,identity}.json;
+ * сборники и медиатека этапа 3b — e2e/mocks/ugc.ts).
  *
  * Общий для unit-тестов (MSW в jsdom) и Playwright (HTTP-сервер e2e/mocks/server.ts).
  * Логика игры упрощена, но соблюдает инварианты контракта: до ревила в снимке нет
@@ -17,6 +18,7 @@ import type {
   Suggestion,
 } from "@/shared/api/types";
 import { dayIn, nextMidnight } from "@/features/daily/countdown";
+import { COLLECTION_MODES, UgcWorld } from "./ugc";
 
 export type Domain = "music" | "film";
 
@@ -391,6 +393,8 @@ export type MockSession = {
   current: number;
   rounds: Round[];
   lives: number | null;
+  /** Сессия по сборнику (этап 3b): `collection` итога. */
+  collection: { id: string; version: number } | null;
 };
 
 export type MockUser = {
@@ -438,18 +442,30 @@ const blank = (index: number, itemId: string): Round => ({
 
 const LOST = new Set(["miss", "gave_up"]);
 
+/** Пользователи мок-мира: игрок и автор сборников (этап 3b). */
+const BASE_USERS: MockUser[] = [
+  {
+    id: uuid(901),
+    nickname: "player",
+    email: "player@example.com",
+    password: "correct-horse",
+    verified: true,
+  },
+  {
+    id: uuid(902),
+    nickname: "author",
+    email: "author@example.com",
+    password: "correct-horse",
+    verified: true,
+  },
+];
+
 export class MockWorld {
   sessions = new Map<string, MockSession>();
   idempotency = new Map<string, { status: number; body: unknown }>();
-  users: MockUser[] = [
-    {
-      id: uuid(901),
-      nickname: "player",
-      email: "player@example.com",
-      password: "correct-horse",
-      verified: true,
-    },
-  ];
+  users: MockUser[] = BASE_USERS.map((u) => ({ ...u }));
+  /** Сборники и медиатека (этап 3b). */
+  ugc = new UgcWorld();
   scenario: Scenario = {};
   /** Субъекты, чья refresh-сессия отозвана (refresh отвечает 401). */
   revokedRefresh = new Set<string>();
@@ -473,7 +489,8 @@ export class MockWorld {
     this.revokedRefresh.clear();
     this.refreshCalls = 0;
     this.finalClueCalls = 0;
-    this.users = this.users.slice(0, 1);
+    this.users = BASE_USERS.map((u) => ({ ...u }));
+    this.ugc.reset();
     this.seq = 0;
   }
 
@@ -495,8 +512,9 @@ export class MockWorld {
     return new Date(nextMidnight(this.now()).getTime() + 6 * 86_400_000).toISOString();
   }
 
+  /** Режим по ключу, включая шаблоны сборников (их нет в `GET /v1/modes`). */
   mode(key: string): ModeOut | undefined {
-    return MODES.find((m) => m.key === key);
+    return MODES.find((m) => m.key === key) ?? COLLECTION_MODES.find((m) => m.key === key);
   }
 
   isScheduled(m: ModeOut): boolean {
@@ -541,6 +559,7 @@ export class MockWorld {
     m: ModeOut,
     presetId: string | null,
     subjectIds: string[] = [],
+    collection: { id: string; version: number; itemIds: string[] } | null = null,
   ): MockSession {
     const pool = ITEMS.filter((i) => i.domain === m.domain);
     const session: MockSession = {
@@ -553,8 +572,11 @@ export class MockWorld {
       current: 0,
       rounds: [],
       lives: LIVES[m.source_type] ?? null,
+      collection: collection ? { id: collection.id, version: collection.version } : null,
     };
-    if (m.source_type === "daily") {
+    if (collection) {
+      session.rounds = collection.itemIds.map((id, k) => blank(k, id));
+    } else if (m.source_type === "daily") {
       session.rounds = (DAILY_SETS[m.key] ?? []).map((id, i) => blank(i, id));
     } else if (m.source_type === "marathon") {
       const names = new Set(subjectIds);
@@ -626,6 +648,7 @@ export class MockWorld {
       s.rounds = s.rounds.filter((x) => x.status !== "pending");
       s.status = "finished";
       this.saveRecord(s);
+      this.markCompleted(s);
     }
   }
 
@@ -642,6 +665,15 @@ export class MockWorld {
       const round = s.rounds.find((x) => x.index === next.index + k);
       if (round) this.fillPair(round, winners[2 * k]!, winners[2 * k + 1]!, stage);
     }
+  }
+
+  /** «Пройден» (как consumer `GameFinished` в collections): только пользователь и не автор. */
+  private markCompleted(s: MockSession): void {
+    const c = s.collection ? this.ugc.find(s.collection.id) : undefined;
+    if (!c || !s.subject.startsWith("user.") || this.ugc.isAuthor(c, s.subject)) return;
+    if (c.version !== s.collection!.version) return;
+    if (!c.completed.has(s.subject)) c.plays += 1;
+    c.completed.add(s.subject);
   }
 
   private saveRecord(s: MockSession): void {
@@ -999,6 +1031,7 @@ export class MockWorld {
           : null,
       record: this.record(s),
       bracket: this.bracket(s),
+      collection: s.collection,
     };
   }
 

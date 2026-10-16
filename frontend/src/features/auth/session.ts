@@ -21,6 +21,16 @@ export function useSessionInfo() {
 }
 
 /**
+ * Вид зрителя для экранов этапа 3b: создавать сборники, лайкать и вести медиатеку может только
+ * пользователь (D7); гостю и анониму — ссылка на регистрацию. `pending` — сессия ещё грузится.
+ */
+export function useViewer(): { kind: "user" | "guest" | "anonymous"; pending: boolean } {
+  const { data, isPending } = useSessionInfo();
+  const kind = data?.subject?.kind ?? "anonymous";
+  return { kind, pending: isPending };
+}
+
+/**
  * Начать гостевую сессию.
  *
  * 409 `auth.already_authenticated` — у identity есть живая сессия, но браузер, раз уж дошёл

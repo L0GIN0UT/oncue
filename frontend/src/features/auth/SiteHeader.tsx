@@ -1,5 +1,8 @@
 "use client";
-/** Шапка: знак, раздел «Соло», статус входа (личные данные — только на клиенте, D2). */
+/**
+ * Шапка: знак, разделы «Соло» и «Сборники», «Медиатека» (только пользователю, этап 3b D7),
+ * статус входа (личные данные — только на клиенте, D2).
+ */
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Wordmark } from "@/shared/ui/wordmark";
@@ -18,10 +21,32 @@ export function SiteHeader() {
         <Link href="/solo" className="rounded-md px-3 py-2 text-ink-muted hover:text-ink">
           {t("nav.solo")}
         </Link>
+        <Link
+          href="/collections"
+          className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+          data-testid="nav-collections"
+        >
+          {t("nav.collections")}
+        </Link>
+        {subject?.kind === "user" && (
+          <Link
+            href="/library"
+            className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+            data-testid="nav-library"
+          >
+            {t("nav.library")}
+          </Link>
+        )}
         {subject?.kind === "user" ? (
-          <span className="rounded-md px-3 py-2 font-medium text-ink" data-testid="user-name">
+          <Link
+            href="/me/collections"
+            className="rounded-md px-3 py-2 font-medium text-ink hover:underline"
+            data-testid="user-name"
+            dir="auto"
+            title={t("nav.myCollections")}
+          >
             {subject.display_name ?? t("nav.player")}
-          </span>
+          </Link>
         ) : (
           <Link
             href="/login"

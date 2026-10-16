@@ -17,7 +17,15 @@ const CELL: Record<ResultSummary["rounds"][number]["outcome"], string> = {
 /** Перевод ключа i18n (`useTranslations()` или `createTranslator`). */
 export type Translate = (key: string, values?: Record<string, string | number>) => string;
 
-export type ShareContext = { title: string; homeUrl: string; t: Translate };
+/** Сборник сессии (этап 3b, D7): в шэре — его название и ссылка вместо главной. */
+export type ShareCollection = { title: string; url: string };
+
+export type ShareContext = {
+  title: string;
+  homeUrl: string;
+  t: Translate;
+  collection?: ShareCollection | null;
+};
 
 const withLink = (body: string, homeUrl: string) =>
   body.includes(homeUrl) ? body : `${body}\n${homeUrl}`;
@@ -62,9 +70,17 @@ export const shareTextRegistry: Record<
   bracket: bracketShareText,
 };
 
-/** Текст для «Поделиться» по `presentation` итога. */
+/**
+ * Текст для «Поделиться» по `presentation` итога. Сессия по сборнику: ссылка ведёт на
+ * страницу сборника, первой строкой — его название (UGC-текст, в шэре — как есть, без разметки).
+ */
 export function buildShareText(summary: ResultSummary, ctx: ShareContext): string {
-  return shareTextRegistry[summary.presentation ?? "score"](summary, ctx);
+  const collection = ctx.collection ?? null;
+  const build = shareTextRegistry[summary.presentation ?? "score"];
+  if (!collection) return build(summary, ctx);
+  const body = build(summary, { ...ctx, homeUrl: collection.url });
+  const line = ctx.t("results.shareText.collection", { title: collection.title });
+  return body.includes(line) ? body : `${line}\n${body}`;
 }
 
 export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
