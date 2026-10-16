@@ -109,37 +109,6 @@
         "title": "Block[ShelfItems]",
         "type": "object"
       },
-      "Block_list_CollectionCard__": {
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/CollectionCard"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          },
-          "status": {
-            "enum": [
-              "ok",
-              "unavailable"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "Block[list[CollectionCard]]",
-        "type": "object"
-      },
       "Block_list_CollectionModeCard__": {
         "properties": {
           "data": {
@@ -757,6 +726,17 @@
             "title": "Available",
             "type": "boolean"
           },
+          "custom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomClueCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только автору"
+          },
           "media_item_id": {
             "format": "uuid",
             "title": "Media Item Id",
@@ -904,7 +884,7 @@
         "type": "object"
       },
       "CollectionResults": {
-        "description": "Результаты поиска (страница по курсору).",
+        "description": "Страница карточек по курсору; курсор привязан к сортировке блока.",
         "properties": {
           "items": {
             "items": {
@@ -922,6 +902,7 @@
                 "type": "null"
               }
             ],
+            "description": "Продолжение: `GET /v1/pages/collections?sort=<сортировка блока>&cursor=…` (с теми же фильтрами) вернёт блок `results`; null — дальше пусто",
             "title": "Next Cursor"
           }
         },
@@ -932,37 +913,40 @@
         "type": "object"
       },
       "CollectionsBlocks": {
-        "description": "Блоки каталога: без ``q`` — витрины, с ``q`` — только ``results``.",
+        "description": "Блоки каталога: без ``q`` и ``cursor`` — витрины, иначе только ``results``.\n\nОтсутствующий в этом виде страницы блок — ``null``.",
         "properties": {
           "featured": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Block_list_CollectionCard__"
+                "$ref": "#/components/schemas/Block_CollectionResults_"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Рекомендуемые (sort=featured)"
           },
           "new": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Block_list_CollectionCard__"
+                "$ref": "#/components/schemas/Block_CollectionResults_"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Новые (sort=new)"
           },
           "popular": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Block_list_CollectionCard__"
+                "$ref": "#/components/schemas/Block_CollectionResults_"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Популярные (sort=popular)"
           },
           "results": {
             "anyOf": [
@@ -972,7 +956,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Поиск (`q`) или продолжение по `cursor` в сортировке `sort`"
           }
         },
         "title": "CollectionsBlocks",
@@ -989,6 +974,24 @@
           "blocks"
         ],
         "title": "CollectionsPage",
+        "type": "object"
+      },
+      "CustomClueCard": {
+        "description": "Своя загадка единицы (эмодзи); приходит только автору и админу.",
+        "properties": {
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          }
+        },
+        "title": "CustomClueCard",
         "type": "object"
       },
       "DailyCard": {
@@ -2195,7 +2198,7 @@
     },
     "/v1/pages/collections": {
       "get": {
-        "description": "Без `q` — блоки `featured`, `popular`, `new` (публично, кэш); с `q` — только `results` (поиск по названию, описанию и тегам). Упавший collections — блоки `unavailable`, страница 200.",
+        "description": "Без `q` и `cursor` — витрины `featured`, `popular`, `new` с общими фильтрами (`results: null`; публично, `public, max-age`). С `q` или `cursor` — только `results` в сортировке `sort` (витрины `null`); с `q` — `private, no-store`. Поиск — по названию, описанию и тегам. Упавший collections — блоки `unavailable`, страница 200; курсор не от этой сортировки — 422 от collections.",
         "operationId": "collections_page_v1_pages_collections_get",
         "parameters": [
           {
@@ -2244,6 +2247,7 @@
               "anyOf": [
                 {
                   "maxLength": 100,
+                  "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,4}$",
                   "type": "string"
                 },
                 {
@@ -2297,6 +2301,7 @@
             "schema": {
               "default": "popular",
               "enum": [
+                "featured",
                 "popular",
                 "new",
                 "likes",
@@ -2349,21 +2354,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Каталог сборников",
@@ -2374,7 +2364,7 @@
     },
     "/v1/pages/collections/{collection_id}": {
       "get": {
-        "description": "Карточка (collections), режимы с играбельностью (game; недоступен — `modes: unavailable`), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`.",
+        "description": "Карточка (collections; `items` — только автору, админу и прошедшему, D6), режимы с играбельностью (game; недоступен — `modes: unavailable`, карточка отдаётся), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`. С токеном — `private, no-store`.",
         "operationId": "collection_page_v1_pages_collections__collection_id__get",
         "parameters": [
           {
@@ -2398,6 +2388,36 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
           },
           "404": {
             "content": {
@@ -2428,21 +2448,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Страница сборника",
@@ -2474,7 +2479,7 @@
     },
     "/v1/pages/library": {
       "get": {
-        "description": "Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`.",
+        "description": "Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Упавший library — `shelves: unavailable`, страница 200. Всегда `private, no-store`.",
         "operationId": "library_page_v1_pages_library_get",
         "responses": {
           "200": {
@@ -2516,21 +2521,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Медиатека: полки",
@@ -2541,7 +2531,7 @@
     },
     "/v1/pages/library/{shelf_ref}": {
       "get": {
-        "description": "`shelf_ref` — `system:<key>` или uuid своей полки; чужая — 404.",
+        "description": "`shelf_ref` — `system:<key>` или uuid своей полки; чужая и несуществующая — 404 `library.shelf_not_found`; без токена — 401, гость — 403. Упавший library — `shelf: unavailable`. Всегда `private, no-store`.",
         "operationId": "library_shelf_page_v1_pages_library__shelf_ref__get",
         "parameters": [
           {
@@ -2642,21 +2632,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Медиатека: полка",

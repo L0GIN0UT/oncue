@@ -155,7 +155,9 @@ class UpstreamHttp:
             cache,
         )
 
-    async def get_public(self, path: str, *, cache_key: str) -> tuple[bytes, bool]:
+    async def get_public(
+        self, path: str, *, cache_key: str, params: Mapping[str, str] | None = None
+    ) -> tuple[bytes, bool]:
         """Публичный ответ (без токена) через кэш: тело и признак «взято из кэша».
 
         В кэш тело кладёт вызывающий (``remember``) — только после разбора по контракту,
@@ -167,7 +169,7 @@ class UpstreamHttp:
                 PAGE_CACHE.labels("hit").inc()
                 return cached, True
             PAGE_CACHE.labels("miss").inc()
-        return await self.get(path, token=None), False
+        return await self.get(path, token=None, params=params), False
 
     async def remember(self, cache_key: str, body: bytes, ttl_s: int) -> None:
         """Положить в кэш тело, которое прошло разбор по контракту."""

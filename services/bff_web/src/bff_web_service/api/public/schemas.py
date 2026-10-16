@@ -243,7 +243,7 @@ class ResultsPage(BaseModel):
 
 
 # ----------------------------------------------------------------------------- сборники (3b)
-CollectionSort = Literal["popular", "new", "likes", "difficulty"]
+CollectionSort = Literal["featured", "popular", "new", "likes", "difficulty"]
 Difficulty = Literal["easy", "medium", "hard"]
 RoundsChoice = Literal[5, 10, 25, "all"]
 
@@ -282,25 +282,46 @@ class CollectionCard(BaseModel):
 
 
 class CollectionResults(BaseModel):
-    """Результаты поиска (страница по курсору)."""
+    """Страница карточек по курсору; курсор привязан к сортировке блока."""
 
     items: list[CollectionCard]
-    next_cursor: str | None = None
+    next_cursor: str | None = Field(
+        default=None,
+        description=(
+            "Продолжение: `GET /v1/pages/collections?sort=<сортировка блока>&cursor=…` "
+            "(с теми же фильтрами) вернёт блок `results`; null — дальше пусто"
+        ),
+    )
 
 
 class CollectionsBlocks(BaseModel):
-    """Блоки каталога: без ``q`` — витрины, с ``q`` — только ``results``."""
+    """Блоки каталога: без ``q`` и ``cursor`` — витрины, иначе только ``results``.
 
-    featured: Block[list[CollectionCard]] | None = None
-    popular: Block[list[CollectionCard]] | None = None
-    new: Block[list[CollectionCard]] | None = None
-    results: Block[CollectionResults] | None = None
+    Отсутствующий в этом виде страницы блок — ``null``.
+    """
+
+    featured: Block[CollectionResults] | None = Field(
+        default=None, description="Рекомендуемые (sort=featured)"
+    )
+    popular: Block[CollectionResults] | None = Field(
+        default=None, description="Популярные (sort=popular)"
+    )
+    new: Block[CollectionResults] | None = Field(default=None, description="Новые (sort=new)")
+    results: Block[CollectionResults] | None = Field(
+        default=None, description="Поиск (`q`) или продолжение по `cursor` в сортировке `sort`"
+    )
 
 
 class CollectionsPage(BaseModel):
     """``GET /v1/pages/collections``."""
 
     blocks: CollectionsBlocks
+
+
+class CustomClueCard(BaseModel):
+    """Своя загадка единицы (эмодзи); приходит только автору и админу."""
+
+    emoji: str | None = None
 
 
 class CollectionItemCard(BaseModel):
@@ -311,6 +332,7 @@ class CollectionItemCard(BaseModel):
     title: str
     year: int | None = None
     available: bool
+    custom: CustomClueCard | None = Field(default=None, description="Только автору")
 
 
 class CollectionDetail(CollectionCard):
