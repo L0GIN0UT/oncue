@@ -1,4 +1,5 @@
-"""Оркестратор ``gv dev seed`` — наполнение запущенного стека для e2e (дейлики и режимы 3a).
+"""Оркестратор ``gv dev seed`` — наполнение запущенного стека для e2e (дейлики, режимы 3a,
+кураторские сборники 3b).
 
 Только для local/ci: сидер работает на хосте и обращается к admin/internal-ручкам сервисов
 напрямую (в dev/ci они опубликованы на 127.0.0.1 через ``compose.services.dev.yml``; на
@@ -19,10 +20,16 @@ gateway этих ручек нет). Шаги идемпотентны и без
 4. Ожидание играбельного пула каждого режима из ``seeds/game/modes`` в проекции game.
 5. Перегенерация наборов **всех** плановых источников (дейлики — день, сетка — неделя) на
    текущий период с проверкой пригодности набора.
+6. Кураторские сборники ``seeds/collections/*.yaml`` (план этапа 3b §0 п. 1, D14): создание
+   (``POST /admin/v1/collections``) или новая версия (``PUT``) через admin-API collections —
+   с ожиданием единиц в проекции collections (``collections.item_unavailable``), набора своих
+   эмодзи со ``scope`` сборника в media-pipeline и проекции сборника в game
+   (``GET /v1/collections/{id}/modes`` → режим по умолчанию ``available``).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import time
@@ -60,6 +67,13 @@ SYNTHETIC_TITLE_QUERY = "Синтетика"
 PROJECTION_LIMIT = 50
 # Кадров ``frame_sequence`` на фильм (профиль ``frame_sequence/default`` и генератор).
 FRAMES_PER_FILM = 6
+# Код ошибки публикации collections: единицы ещё нет в проекции каталога collections
+# (``MediaItemCreated`` не обработан) — засев ждёт, а не падает.
+ITEM_UNAVAILABLE = "collections.item_unavailable"
+# Вид владельца набора ассетов своих загадок сборника (``AssetsReady.scope.kind``, ADR 0029).
+COLLECTION_SCOPE = "collection"
+# Лимит строк списка сборников admin-API collections (``limit ≤ 100``).
+ADMIN_COLLECTIONS_LIMIT = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +131,8 @@ class SeedConfig:
         identity_url: Базовый адрес identity (internal-ручки).
         catalog_url: Базовый адрес catalog (admin-ручки).
         media_url: Базовый адрес media-pipeline (admin-ручки).
-        game_url: Базовый адрес game (admin-ручки).
+        game_url: Базовый адрес game (admin-ручки и публичные режимы сборника).
+        collections_url: Базовый адрес collections (admin-ручки кураторских сборников).
         admin_login: Логин администратора (e-mail или никнейм).
         admin_password: Пароль администратора.
         service_client_id: Идентификатор сервисного клиента (по умолчанию ``admin``).
@@ -128,16 +143,19 @@ class SeedConfig:
         catalog_dir: Каталог файлов импорта (по умолчанию ``seeds/catalog``).
         media_out_dir: Куда генератор кладёт исходники (по умолчанию ``seeds/media/out``).
         modes_dir: Сиды режимов game (по умолчанию ``seeds/game/modes``).
+        collections_dir: Кураторские сборники (по умолчанию ``seeds/collections``).
         http_timeout_s: Таймаут одного HTTP-запроса.
         poll_interval_s: Пауза между опросами готовности.
         import_timeout_s: Предел ожидания завершения импорта и появления единиц.
-        assets_timeout_s: Предел ожидания готовности наборов ассетов, пулов и наборов периода.
+        assets_timeout_s: Предел ожидания готовности наборов ассетов, пулов, наборов периода и
+            проекций сборников.
     """
 
     identity_url: str
     catalog_url: str
     media_url: str
     game_url: str
+    collections_url: str
     admin_login: str
     admin_password: str
     service_secret: str
@@ -147,6 +165,7 @@ class SeedConfig:
     catalog_dir: Path | None = None
     media_out_dir: Path | None = None
     modes_dir: Path | None = None
+    collections_dir: Path | None = None
     http_timeout_s: float = 30.0
     poll_interval_s: float = 1.0
     import_timeout_s: float = 60.0
@@ -163,6 +182,10 @@ class SeedConfig:
     def modes_path(self) -> Path:
         """Каталог сидов режимов."""
         return self.modes_dir or self.repo_root / "seeds" / "game" / "modes"
+
+    def collections_path(self) -> Path:
+        """Каталог кураторских сборников."""
+        return self.collections_dir or self.repo_root / "seeds" / "collections"
 
 
 @dataclass(slots=True)
@@ -221,6 +244,133 @@ def mode_plan(spec: Mapping[str, Any]) -> ModePlan:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class CollectionItemSpec:
+    """Единица кураторского сборника: ключ сида каталога и свои эмодзи куратора."""
+
+    seed_key: str
+    emoji: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionSpec:
+    """Кураторский сборник из ``seeds/collections/<key>.yaml`` (формат — README каталога).
+
+    Attributes:
+        key: Ключ засева: часть ``Idempotency-Key`` мутаций (на сервере не хранится).
+        title: Название — по нему засев находит уже созданный кураторский сборник.
+        domain: ``film``/``music``.
+        default_mode_key: Режим сборника по умолчанию (``<domain>.collection.*``).
+        items: Единицы в порядке сборника.
+        description: Описание.
+        tags: Ключи тегов из ``meta.yaml`` collections.
+        cover: Пресет обложки из ``meta.yaml`` collections.
+        visibility: ``public``/``unlisted``.
+        featured_rank: Отметка «рекомендуемое» с этим порядком (``None`` — не ставить).
+    """
+
+    key: str
+    title: str
+    domain: str
+    default_mode_key: str
+    items: tuple[CollectionItemSpec, ...]
+    description: str | None = None
+    tags: tuple[str, ...] = ()
+    cover: str | None = None
+    visibility: str = "public"
+    featured_rank: int | None = None
+
+    def body(self, refs: Mapping[str, _ItemRef]) -> dict[str, Any]:
+        """Тело ``CuratedCollectionIn``/``Update`` без ``domain``, ``reason``, ``base_version``."""
+        return {
+            "title": self.title,
+            "description": self.description,
+            "tags": list(self.tags),
+            "cover": {"preset": self.cover} if self.cover else None,
+            "default_mode_key": self.default_mode_key,
+            "visibility": self.visibility,
+            "items": [
+                {
+                    "media_item_id": refs[item.seed_key].media_item_id,
+                    "custom": {"emoji": item.emoji} if item.emoji else None,
+                }
+                for item in self.items
+            ],
+        }
+
+    def emoji_items(self) -> list[CollectionItemSpec]:
+        """Единицы со своими эмодзи (для них media-pipeline строит набор со ``scope``)."""
+        return [item for item in self.items if item.emoji]
+
+
+def load_collection_spec(path: Path) -> CollectionSpec:
+    """Прочитать сид сборника; ошибка формата — :class:`SeedError` с именем файла."""
+    try:
+        raw = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")))
+        items = tuple(_collection_item(row) for row in raw["items"])
+        rank = raw.get("featured_rank")
+        return CollectionSpec(
+            key=str(raw["key"]),
+            title=str(raw["title"]),
+            domain=str(raw["domain"]),
+            default_mode_key=str(raw["default_mode_key"]),
+            items=items,
+            description=str(raw["description"]) if raw.get("description") else None,
+            tags=tuple(str(t) for t in raw.get("tags") or ()),
+            cover=str(raw["cover"]) if raw.get("cover") else None,
+            visibility=str(raw.get("visibility", "public")),
+            featured_rank=int(rank) if rank is not None else None,
+        )
+    except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
+        raise SeedError(f"сид сборника {path.name} некорректен: {exc!r}") from exc
+
+
+def _mapping(raw: object) -> dict[str, Any]:
+    """Корень сида — словарь (иначе ``TypeError``, его оборачивает загрузчик)."""
+    if not isinstance(raw, dict):
+        raise TypeError("ожидается словарь")
+    return raw
+
+
+def _collection_item(row: object) -> CollectionItemSpec:
+    """Строка ``items``: ключ сида или ``{item, emoji}``."""
+    if isinstance(row, str):
+        return CollectionItemSpec(seed_key=row)
+    if isinstance(row, dict):
+        emoji = row.get("emoji")
+        return CollectionItemSpec(seed_key=str(row["item"]), emoji=str(emoji) if emoji else None)
+    raise TypeError(f"единица сборника: {row!r}")
+
+
+def _content_digest(body: Mapping[str, Any]) -> str:
+    """Короткий отпечаток содержимого: новый ключ идемпотентности на каждую правку сида."""
+    raw = json.dumps(body, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _published_body(detail: Mapping[str, Any]) -> dict[str, Any]:
+    """Тело опубликованной версии (``AdminCollectionDetail``) в форме ``CollectionSpec.body``."""
+    items = sorted(detail.get("items") or [], key=lambda i: int(i["position"]))
+    cover = detail.get("cover")
+    return {
+        "title": detail.get("title"),
+        "description": detail.get("description"),
+        "tags": list(detail.get("tags") or []),
+        "cover": {"preset": cover["preset"]} if cover else None,
+        "default_mode_key": detail.get("default_mode_key"),
+        "visibility": detail.get("visibility"),
+        "items": [
+            {
+                "media_item_id": str(i["media_item_id"]),
+                "custom": {"emoji": i["custom"]["emoji"]}
+                if i.get("custom") and i["custom"].get("emoji")
+                else None,
+            }
+            for i in items
+        ],
+    }
+
+
 def default_client_factory(timeout_s: float) -> ClientFactory:
     """Фабрика HTTP-клиентов с общим таймаутом (один клиент на сервис)."""
 
@@ -262,11 +412,25 @@ class Seeder:
         self._catalog = factory(config.catalog_url)
         self._media = factory(config.media_url)
         self._game = factory(config.game_url)
+        # Публичные ручки game (режимы сборника) — без admin-токена: тот выпущен для admin-ручек,
+        # а ``/v1/collections/{id}/modes`` открыт и анониму.
+        self._game_public = factory(config.game_url)
+        self._collections = factory(config.collections_url)
         self._admin_token: str | None = None
+
+    def _clients(self) -> tuple[httpx.Client, ...]:
+        return (
+            self._identity,
+            self._catalog,
+            self._media,
+            self._game,
+            self._game_public,
+            self._collections,
+        )
 
     def close(self) -> None:
         """Закрыть все HTTP-клиенты."""
-        for client in (self._identity, self._catalog, self._media, self._game):
+        for client in self._clients():
             client.close()
 
     def __enter__(self) -> Seeder:
@@ -281,6 +445,8 @@ class Seeder:
         self.authenticate()
         expected = self._expected_keys()
         plans = self.mode_plans()
+        # Сиды сборников проверяются до долгих шагов: опечатка в ключе единицы видна сразу.
+        collections = self.collection_specs(expected)
         self.import_catalog()
         items = self.resolve_items(expected)
         self.generate_sources()
@@ -288,6 +454,7 @@ class Seeder:
         self.wait_profiles()
         self.wait_playable_pools(plans)
         self.regenerate_period_sets(plans)
+        self.seed_collections(collections, items)
         self._echo("seed: готово")
 
     # ------------------------------------------------------------------ шаг 1: вход
@@ -303,8 +470,8 @@ class Seeder:
         self._check(resp, {200}, "вход в админку")
         token = str(resp.json()["access_token"])
         self._admin_token = token
-        # admin-токен — Bearer для всех admin-ручек каталога, медиа и игры.
-        for client in (self._catalog, self._media, self._game):
+        # admin-токен — Bearer для всех admin-ручек каталога, медиа, игры и сборников.
+        for client in (self._catalog, self._media, self._game, self._collections):
             client.headers["Authorization"] = f"Bearer {token}"
         return token
 
@@ -673,6 +840,235 @@ class Seeder:
             raise SeedError(f"не найдены плановые режимы в {self._cfg.modes_path()}")
         return plans
 
+    # ------------------------------------------------------------------ шаг 6: сборники
+    def collection_specs(self, known_keys: Iterable[str] = ()) -> list[CollectionSpec]:
+        """Сиды кураторских сборников; ключи единиц обязаны быть среди файлов импорта.
+
+        Нет каталога ``seeds/collections`` — сборников нет (шаг пропускается).
+        """
+        root = self._cfg.collections_path()
+        specs = [load_collection_spec(path) for path in sorted(root.glob("*.yaml"))]
+        known = set(known_keys)
+        seen: set[str] = set()
+        for spec in specs:
+            if spec.key in seen:
+                raise SeedError(f"ключ сборника {spec.key!r} повторяется в {root}")
+            seen.add(spec.key)
+            unknown = sorted({i.seed_key for i in spec.items} - known) if known else []
+            if unknown:
+                raise SeedError(f"сборник {spec.key}: нет единиц в файлах импорта: {unknown}")
+        return specs
+
+    def seed_collections(
+        self, specs: Iterable[CollectionSpec], items: Mapping[str, _ItemRef]
+    ) -> dict[str, str]:
+        """Создать или обновить сборники и дождаться их проекций; вернуть ключ → ``collection_id``.
+
+        Сначала все мутации (проекции разных сборников догоняют параллельно), затем ожидание:
+        наборы своих эмодзи со ``scope`` сборника в media-pipeline, после — режим по умолчанию
+        в game (``available`` и играбельны все единицы сборника).
+        """
+        created = [(spec, self._upsert_collection(spec, items)) for spec in specs]
+        for spec, collection_id in created:
+            self._wait_scoped_assets(spec, collection_id, items)
+            self._wait_collection_modes(spec, collection_id)
+        return {spec.key: collection_id for spec, collection_id in created}
+
+    def _upsert_collection(self, spec: CollectionSpec, items: Mapping[str, _ItemRef]) -> str:
+        """Кураторский сборник с содержимым сида: создать, выпустить новую версию или оставить."""
+        body = spec.body(items)
+        digest = _content_digest({**body, "domain": spec.domain})
+        existing = self._find_curated(spec.title)
+        if existing is None:
+            self._echo(f"seed: сборник {spec.key} — создание")
+            detail = self._collection_mutation(
+                spec,
+                "POST",
+                "/admin/v1/collections",
+                key=f"seed-collection-{spec.key}-{digest}",
+                payload={**body, "domain": spec.domain, "reason": REASON},
+                expected={200, 201},
+            )
+        else:
+            detail = self._admin_detail(str(existing["collection_id"]), spec.key)
+            if detail.get("status") == "hidden":
+                raise SeedError(
+                    f"сборник {spec.key} скрыт модератором: покажите его в админке "
+                    "(POST /admin/v1/collections/{id}/unhide) и повторите засев"
+                )
+            if _published_body(detail) == body:
+                self._echo(f"seed: сборник {spec.key} — без изменений (версия {detail['version']})")
+            else:
+                version = int(detail["version"])
+                self._echo(f"seed: сборник {spec.key} — новая версия поверх {version}")
+                detail = self._collection_mutation(
+                    spec,
+                    "PUT",
+                    f"/admin/v1/collections/{detail['collection_id']}",
+                    key=f"seed-collection-{spec.key}-v{version}-{digest}",
+                    payload={**body, "base_version": version, "reason": REASON},
+                    expected={200},
+                )
+        collection_id = str(detail["collection_id"])
+        self._ensure_featured(spec, detail)
+        return collection_id
+
+    def _find_curated(self, title: str) -> dict[str, Any] | None:
+        """Кураторский сборник с точно таким названием (удалённые admin-список не отдаёт)."""
+        resp = self._collections.get(
+            "/admin/v1/collections",
+            params={"q": title, "kind": "curated", "limit": ADMIN_COLLECTIONS_LIMIT},
+        )
+        self._check(resp, {200}, "список кураторских сборников")
+        rows = [r for r in resp.json()["items"] if r.get("title") == title]
+        if len(rows) > 1:
+            ids = sorted(str(r["collection_id"]) for r in rows)
+            raise SeedError(f"несколько кураторских сборников с названием {title!r}: {ids}")
+        return rows[0] if rows else None
+
+    def _admin_detail(self, collection_id: str, key: str) -> dict[str, Any]:
+        resp = self._collections.get(f"/admin/v1/collections/{collection_id}")
+        self._check(resp, {200}, f"сборник {key}")
+        detail: dict[str, Any] = resp.json()
+        return detail
+
+    def _collection_mutation(
+        self,
+        spec: CollectionSpec,
+        method: str,
+        path: str,
+        *,
+        key: str,
+        payload: Mapping[str, Any],
+        expected: set[int],
+    ) -> dict[str, Any]:
+        """Мутация сборника с повтором, пока collections не узнает все единицы.
+
+        422 ``collections.publish_invalid``, где все нарушения — ``item_unavailable``: catalog
+        уже создал единицы, но consumer collections ещё не обработал ``MediaItemCreated`` —
+        ждём. Обрыв соединения (рестарт collections) — повтор тем же ``Idempotency-Key``.
+        Другие нарушения — сразу ошибка со списком ``path: code``.
+        """
+        holder: dict[str, Any] = {}
+        waiting: dict[str, list[str]] = {}
+
+        def attempt() -> bool:
+            try:
+                resp = self._collections.request(
+                    method, path, headers={"Idempotency-Key": key}, json=dict(payload)
+                )
+            except httpx.TransportError as exc:
+                self._echo(f"seed: повтор сохранения сборника {spec.key}: {type(exc).__name__}")
+                return False
+            if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+                errors = _publish_errors(resp)
+                if errors and all(e.get("code") == ITEM_UNAVAILABLE for e in errors):
+                    if not waiting:
+                        self._echo(f"seed: ожидание единиц сборника {spec.key} в collections")
+                    waiting["paths"] = sorted(str(e.get("path")) for e in errors)
+                    return False
+                if errors:
+                    listed = ", ".join(f"{e.get('path')}: {e.get('code')}" for e in errors)
+                    raise SeedError(f"сборник {spec.key} не проходит проверки публикации: {listed}")
+            self._check(resp, expected, f"сохранение сборника {spec.key}")
+            holder["detail"] = resp.json()
+            return True
+
+        self._poll(
+            attempt,
+            timeout_s=self._cfg.assets_timeout_s,
+            what=f"единицы сборника {spec.key} в проекции collections",
+            on_timeout=lambda: f"недоступны: {waiting.get('paths')}",
+        )
+        detail: dict[str, Any] = holder["detail"]
+        return detail
+
+    def _ensure_featured(self, spec: CollectionSpec, detail: Mapping[str, Any]) -> None:
+        """Отметка «рекомендуемое» из сида (снять чужую отметку засев не пытается)."""
+        rank = spec.featured_rank
+        if rank is None or (detail.get("featured") and detail.get("featured_rank") == rank):
+            return
+        resp = self._collections.put(
+            f"/admin/v1/collections/{detail['collection_id']}/featured",
+            headers={"Idempotency-Key": f"seed-featured-{spec.key}-{rank}"},
+            json={"featured": True, "rank": rank, "reason": REASON},
+        )
+        self._check(resp, {200}, f"«рекомендуемое» сборника {spec.key}")
+
+    def _wait_scoped_assets(
+        self, spec: CollectionSpec, collection_id: str, items: Mapping[str, _ItemRef]
+    ) -> None:
+        """Наборы своих эмодзи сборника готовы (``AssetsReady`` со ``scope`` = сборник).
+
+        media-pipeline строит их из ``CollectionPublished``; ``failed`` — сразу ошибка.
+        """
+        for item in spec.emoji_items():
+            media_item_id = items[item.seed_key].media_item_id
+            label = f"{spec.key}/{item.seed_key}"
+
+            def ready(media_item_id: str = media_item_id, label: str = label) -> bool:
+                try:
+                    resp = self._media.get(
+                        "/admin/v1/asset-sets", params={"media_item_id": media_item_id}
+                    )
+                except httpx.TransportError:
+                    return False
+                self._check(resp, {200}, f"наборы ассетов {label}")
+                scoped = [
+                    s
+                    for s in resp.json()
+                    if (s.get("scope") or {}).get("kind") == COLLECTION_SCOPE
+                    and str((s.get("scope") or {}).get("id")) == collection_id
+                ]
+                failed = [s for s in scoped if s["status"] == "failed"]
+                if failed:
+                    codes = sorted(str(s.get("error_code")) for s in failed)
+                    raise SeedError(f"набор своих эмодзи {label} в статусе failed: {codes}")
+                return bool(scoped) and all(s["status"] == "ready" for s in scoped)
+
+            self._echo(f"seed: ожидание своих эмодзи {label}")
+            self._poll(
+                ready,
+                timeout_s=self._cfg.assets_timeout_s,
+                what=f"набор своих эмодзи {label} (scope collection)",
+            )
+
+    def _wait_collection_modes(self, spec: CollectionSpec, collection_id: str) -> None:
+        """Проекция сборника в game: режим по умолчанию доступен, играбельны все единицы.
+
+        404 ``game.collection_not_found`` — game ещё не обработал ``CollectionPublished``.
+        """
+        state: dict[str, Any] = {}
+        need = len(spec.items)
+
+        def ready() -> bool:
+            try:
+                resp = self._game_public.get(f"/v1/collections/{collection_id}/modes")
+            except httpx.TransportError:
+                return False
+            if resp.status_code == httpx.codes.NOT_FOUND:
+                state["mode"] = "сборника нет в проекции game"
+                return False
+            self._check(resp, {200}, f"режимы сборника {spec.key}")
+            mode = next(
+                (m for m in resp.json() if m.get("mode_key") == spec.default_mode_key), None
+            )
+            if mode is None:
+                state["mode"] = f"нет режима {spec.default_mode_key}"
+                return False
+            state["mode"] = (
+                f"available={mode.get('available')}, играбельно {mode.get('playable')} из {need}"
+            )
+            return bool(mode.get("available")) and int(mode.get("playable", 0)) >= need
+
+        self._echo(f"seed: ожидание сборника {spec.key} в game ({spec.default_mode_key})")
+        self._poll(
+            ready,
+            timeout_s=self._cfg.assets_timeout_s,
+            what=f"сборник {spec.key} в проекции game",
+            on_timeout=lambda: str(state.get("mode", "нет ответа")),
+        )
+
     # ------------------------------------------------------------------ вспомогательное
     def _expected_keys(self) -> set[str]:
         """Ключи единиц из файлов импорта (``key`` каждой строки JSONL)."""
@@ -716,6 +1112,18 @@ class Seeder:
                 extra = f": {on_timeout()}" if on_timeout else ""
                 raise SeedError(f"таймаут ожидания ({what}){extra}")
             time.sleep(self._cfg.poll_interval_s)
+
+
+def _publish_errors(resp: httpx.Response) -> list[dict[str, Any]]:
+    """Нарушения ``collections.publish_invalid`` (``details.errors``); иное — пустой список."""
+    try:
+        body = resp.json()
+    except ValueError:
+        return []
+    if not isinstance(body, dict) or body.get("code") != "collections.publish_invalid":
+        return []
+    errors = (body.get("details") or {}).get("errors") or []
+    return [e for e in errors if isinstance(e, dict)]
 
 
 def _jsonl_keys(path: Path) -> set[str]:

@@ -1,0 +1,23 @@
+# Кураторский сборник засева (план этапа 3b §0 п. 1, D14): `gv dev seed` создаёт его через
+# admin-API collections (`POST /admin/v1/collections`) и обновляет (`PUT`) при правке файла.
+# Формат — seeds/collections/README.md. Единицы — ключи сидов каталога (seeds/catalog/*.jsonl).
+key: film-frames
+title: "Кино · кадры: синтетика и классика"
+description: "Угадайте фильм по кадру: от размытого фрагмента до чёткой картинки."
+domain: film
+default_mode_key: film.collection.frame
+tags: [classic, scifi]
+cover: cinema
+visibility: public
+featured_rank: 1
+items:
+  - film:synthetic-01
+  - film:synthetic-02
+  - film:synthetic-03
+  - film:synthetic-04
+  - film:synthetic-05
+  - film:synthetic-06
+  - film:synthetic-07
+  - film:synthetic-08
+  - film:interstellar
+  - film:the-matrix

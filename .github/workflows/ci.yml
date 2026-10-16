@@ -241,11 +241,12 @@ jobs:
         # seeds/media/generate.py делает синтетические аудио-тоны через ffmpeg; на
         # ubuntu-раннере его нет из коробки. Pillow (кадры) уже в окружении uv.
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Засев стека для дейлика и режимов 3a (gv dev seed)
+      - name: Засев стека для дейлика, режимов 3a и сборников 3b (gv dev seed)
         if: steps.app.outputs.present == 'true'
         # Стек поднят с --wait (миграции завершены → bootstrap-админ создан). Сидер ходит
         # напрямую на опубликованные порты сервисов (compose.services.dev.yml) и грузит
-        # каталог (с синтетикой 3a), все виды исходников, наборы дня и недели. Успех →
+        # каталог (с синтетикой 3a), все виды исходников, наборы дня и недели, кураторские
+        # сборники seeds/collections (admin-API collections, ожидание проекций). Успех →
         # E2E_SEEDED=1 раскрывает e2e/daily.spec.ts, e2e/modes.spec.ts и e2e/collections.spec.ts.
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
@@ -268,8 +269,9 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - name: E2E — смоук стека (и «дейлик», режимы 3a, сборники 3b при E2E_SEEDED=1)
         if: steps.app.outputs.present == 'true'
-        # modes.spec.ts ходит в admin-API game/media (запрос ассетов) как `gv dev seed`:
-        # учётные данные админа — из .env, в лог не попадают.
+        # modes.spec.ts и collections.spec.ts ходят в admin-API game/media/collections как
+        # `gv dev seed`: учётные данные админа — из .env, в лог не попадают. collections.spec.ts
+        # берёт ссылку подтверждения e-mail из `docker compose logs identity` (E2E_COMPOSE_FILES).
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
           export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
