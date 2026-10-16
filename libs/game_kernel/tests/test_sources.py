@@ -304,7 +304,7 @@ async def test_collection_draw() -> None:
         await src.draw(_ctx(FakeCandidatePort(), collections=port), shuffled, 1)
     assert src.presets(shuffled) == []
     assert src.pool_query(shuffled, domain="music", playable_for=None) is None
-    assert src.min_playable(shuffled, rounds=7) == 7
+    assert src.min_playable(shuffled, rounds=7) == 1  # min_items
 
 
 @pytest.mark.parametrize(

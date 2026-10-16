@@ -67,6 +67,7 @@ from gv_game_kernel.plugins import (
     ParamIssue,
     Preset,
     RoundDraw,
+    RoundOption,
     RoundPick,
 )
 from gv_game_kernel.ports import PlayableFor, PoolQuery, SubjectQuery
@@ -356,8 +357,8 @@ class RandomSource:
 
 
 # ----------------------------------------------------------------------------- collection
-RoundOption = Literal[5, 10, 25, "all"]
-"""Вариант числа раундов сессии по сборнику: число или ``"all"`` — весь играбельный пул."""
+ROUND_OPTION_ABOVE_ROUNDS = "config.round_option_above_rounds"
+"""Код проблемы: вариант числа раундов сборника больше ``session.rounds``."""
 
 RoundOptions = Annotated[
     tuple[RoundOption, ...],
@@ -384,11 +385,22 @@ class CollectionParams(PluginParams):
 
 
 class CollectionSource:
-    """Единицы сборника через ``CollectionPort`` (ADR 0028; в game — ``register_collection``)."""
+    """Единицы сборника через ``CollectionPort`` (ADR 0028; в game — ``register_collection``).
+
+    Единицы — играбельные под загадку режима (``PlayableFor`` со ``scope`` сборника: свой
+    набор сборника, иначе каталожный), без повторов, в порядке автора. При ``shuffle``
+    розыгрыш детерминирован по ``ctx.seed`` (тот же seed и состав — тот же набор), без него
+    берутся первые ``n``. Единицы из ``ctx.exclude_ids`` берутся, только если остальных не
+    хватает на ``n`` (как у дейлика: пустая сессия хуже повтора).
+    """
 
     key: ClassVar[str] = "collection"
     params_schema: ClassVar[type[BaseModel]] = CollectionParams
     answer_formats: ClassVar[frozenset[str]] = CLASSIC_ONLY
+
+    def round_options(self, params: BaseModel) -> list[RoundOption]:
+        """Варианты числа раундов в порядке конфига (первый — по умолчанию)."""
+        return list(typed(params, CollectionParams).round_options)
 
     def rounds_for(self, params: BaseModel, requested: RoundOption | None, pool: int) -> int:
         """Сколько раундов разыграть по выбору игрока и размеру играбельного пула сборника.
@@ -415,16 +427,9 @@ class CollectionSource:
             raise _pool_too_small(pool, choice)
         return choice
 
-    async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
-        """``n`` единиц сборника ``ctx.collection_id`` (по ``ctx.seed`` или по порядку).
-
-        Raises:
-            ValueError: в контексте нет ``CollectionPort``.
-            CollectionRequiredError: в контексте нет ``collection_id``.
-            PoolTooSmallError: в сборнике меньше ``n`` единиц.
-        """
-        _require_n(n)
-        p = typed(params, CollectionParams)
+    @staticmethod
+    async def _items(ctx: DrawContext) -> list[MediaItemRef]:
+        """Играбельные единицы сборника без повторов в порядке сборника."""
         if ctx.collections is None:
             raise ValueError("источнику collection нужен CollectionPort")
         if ctx.collection_id is None:
@@ -439,14 +444,45 @@ class CollectionSource:
         seen: set[UUID] = set()
         ordered: list[MediaItemRef] = []
         for item in items:
-            if item.id not in seen and item.id not in ctx.exclude_ids:
+            if item.id not in seen:
                 seen.add(item.id)
                 ordered.append(item)
+        return ordered
+
+    async def pool_size(self, ctx: DrawContext, params: BaseModel) -> int:
+        """Число различных играбельных единиц сборника (вход ``rounds_for``).
+
+        Raises:
+            ValueError: в контексте нет ``CollectionPort``.
+            CollectionRequiredError: в контексте нет ``collection_id``.
+        """
+        typed(params, CollectionParams)
+        return len(await self._items(ctx))
+
+    async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
+        """``n`` единиц сборника ``ctx.collection_id`` (по ``ctx.seed`` или по порядку).
+
+        Raises:
+            ValueError: в контексте нет ``CollectionPort`` или ``n < 1``.
+            CollectionRequiredError: в контексте нет ``collection_id``.
+            PoolTooSmallError: в сборнике меньше ``min_items`` или меньше ``n`` единиц.
+        """
+        _require_n(n)
+        p = typed(params, CollectionParams)
+        ordered = await self._items(ctx)
+        if len(ordered) < p.min_items:
+            raise _pool_too_small(len(ordered), p.min_items)
         if len(ordered) < n:
             raise _pool_too_small(len(ordered), n)
-        if p.shuffle:
-            return SeededRandom(ctx.seed).sample(ordered, n)
-        return ordered[:n]
+        fresh = [item for item in ordered if item.id not in ctx.exclude_ids]
+        recent = [item for item in ordered if item.id in ctx.exclude_ids]
+        if not p.shuffle:
+            chosen = {item.id for item in [*fresh, *recent][:n]}
+            return [item for item in ordered if item.id in chosen]
+        rng = SeededRandom(ctx.seed)
+        if len(fresh) >= n:
+            return rng.sample(fresh, n)
+        return rng.sample(fresh, len(fresh)) + rng.sample(recent, n - len(fresh))
 
     def presets(self, params: BaseModel) -> list[Preset]:
         """У сборника пресетов нет."""
@@ -456,9 +492,14 @@ class CollectionSource:
     def cross_check(
         self, params: BaseModel, *, config: ModeConfig, levels_count: int
     ) -> list[ParamIssue]:
-        """Перекрёстных правил нет."""
-        typed(params, CollectionParams)
-        return []
+        """Каждый числовой вариант ``round_options`` не больше ``session.rounds``
+        (``session.rounds`` — потолок сессии, им же ограничивается ``"all"``)."""
+        p = typed(params, CollectionParams)
+        return [
+            ParamIssue(f"round_options[{i}]", ROUND_OPTION_ABOVE_ROUNDS)
+            for i, option in enumerate(p.round_options)
+            if option != "all" and option > config.session.rounds
+        ]
 
     def pool_query(
         self,
@@ -472,9 +513,8 @@ class CollectionSource:
         typed(params, CollectionParams)
 
     def min_playable(self, params: BaseModel, *, rounds: int) -> int:
-        """Сборник должен покрывать все раунды."""
-        typed(params, CollectionParams)
-        return rounds
+        """Минимум играбельных единиц сборника для режима — ``min_items``."""
+        return typed(params, CollectionParams).min_items
 
 
 # ----------------------------------------------------------------------------- общее 3a

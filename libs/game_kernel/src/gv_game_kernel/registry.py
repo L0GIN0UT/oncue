@@ -17,6 +17,11 @@
 формат с одним ответом (``AnswerFormat.single_answer``) — один уровень, одна попытка и
 без ``partial``; Scorer с ``requires_early_end`` (серия) — правило ``EndRule.ends_early``;
 ``clue.reveal`` — известная загадка того же домена.
+
+Правило этапа 3b (ADR 0028): у источника из сборника (``CollectionBasedSource``) число
+раундов зависит от сессии, поэтому ``features.records`` запрещён; формат ответа — только
+тот, что объявляет источник (у ``collection`` — ``classic``), варианты ``round_options`` —
+не больше ``session.rounds`` (``Source.cross_check``).
 """
 
 from __future__ import annotations
@@ -33,6 +38,7 @@ from gv_game_kernel.plugins import (
     AnswerFormat,
     AnswerMatcher,
     ClueType,
+    CollectionBasedSource,
     ComparisonSource,
     EndRule,
     PartialRule,
@@ -71,6 +77,12 @@ SINGLE_ANSWER_LEVELS = "config.single_answer_levels"
 
 PARTIAL_UNSUPPORTED = "config.partial_unsupported"
 """Код проблемы: частичный ответ при формате с одним ответом не имеет смысла."""
+
+RECORDS_UNSUPPORTED = "config.records_unsupported"
+"""Код проблемы: личные рекорды несравнимы у режима, где раунды выбирает игрок (сборник)."""
+
+RECORDS_FEATURE = "records"
+"""Флаг ``features.records`` — личные рекорды и процентиль режима (ADR 0027)."""
 
 DEFAULT_END_RULE = "all_rounds"
 """Правило завершения, если ``session.end`` не задан (ADR 0023)."""
@@ -359,6 +371,12 @@ def _compatibility_issues(
         issues.append(ConfigIssue("answer.matcher.type", COMPARISON_REQUIRED))
     if answer_format is not None and answer_format.single_answer and config.answer.partial:
         issues.append(ConfigIssue("answer.partial", PARTIAL_UNSUPPORTED))
+    if (
+        source is not None
+        and isinstance(source, CollectionBasedSource)
+        and config.features.get(RECORDS_FEATURE)
+    ):
+        issues.append(ConfigIssue(f"features.{RECORDS_FEATURE}", RECORDS_UNSUPPORTED))
     return issues
 
 
@@ -407,6 +425,8 @@ __all__ = [
     "END_RULE_REQUIRED",
     "PARTIAL_DOMAIN_UNSUPPORTED",
     "PARTIAL_UNSUPPORTED",
+    "RECORDS_FEATURE",
+    "RECORDS_UNSUPPORTED",
     "SESSION_UNSUPPORTED",
     "SINGLE_ANSWER_LEVELS",
     "UNKNOWN_PLUGIN",

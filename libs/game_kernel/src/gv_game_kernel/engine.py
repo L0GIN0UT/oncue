@@ -8,8 +8,15 @@
 
 Возможности источника (составляет раунды сам, раунды зависят от прошлых, нужны персоны,
 сравнение по метрике, плановый период) движок узнаёт по протоколам ``RoundSource``,
-``ProgressiveSource``, ``SubjectSource``, ``ComparisonSource``, ``PeriodSource`` — не по
-ключу плагина (ADR 0023).
+``ProgressiveSource``, ``SubjectSource``, ``ComparisonSource``, ``PeriodSource``,
+``CollectionBasedSource`` — не по ключу плагина (ADR 0023, 0028).
+
+Сессия по сборнику (ADR 0028)::
+
+    ctx = engine.draw_context(seed=..., candidates=..., collections=port, collection_id=cid)
+    n = await engine.rounds_for(ctx, requested)    # 5 | 10 | 25 | "all" | None
+    draws = await engine.draw_rounds(ctx, n)
+    max_score = engine.max_score(len(draws))       # по фактическим раундам
 
 Недоступный ассет (``GoneError`` из ``AssetPort``) движок не перехватывает: game ловит
 ошибку и вызывает ``void`` — раунд аннулируется и не входит в ``max_score``.
@@ -31,6 +38,7 @@ from gv_game_kernel.errors import (
     OptionNotFoundError,
     RoundFinishedError,
     RoundNotFinishedError,
+    RoundsNotAllowedError,
 )
 from gv_game_kernel.params import params_hash
 from gv_game_kernel.plugins import (
@@ -39,6 +47,7 @@ from gv_game_kernel.plugins import (
     AnswerMatcher,
     ClueType,
     ClueView,
+    CollectionBasedSource,
     Comparison,
     ComparisonSource,
     DrawContext,
@@ -52,6 +61,7 @@ from gv_game_kernel.plugins import (
     Preset,
     ProgressiveSource,
     RoundDraw,
+    RoundOption,
     RoundPick,
     RoundSource,
     Scorer,
@@ -395,7 +405,8 @@ class ModeEngine:
 
     async def draw_rounds(self, ctx: DrawContext, n: int | None = None) -> list[RoundDraw]:
         """Начальные раунды сессии (ADR 0023): не больше ``n`` (по умолчанию
-        ``session.rounds``), детерминированно при одном ``ctx.seed`` и пуле.
+        ``session.rounds``), детерминированно при одном ``ctx.seed`` и пуле. Для сессии по
+        сборнику ``n`` — результат ``rounds_for``.
 
         Классический источник даёт единицы — каждая становится ``RoundDraw(target)``
         (тот же розыгрыш, что ``draw``). Источник с составом раунда (пара, сетка) отдаёт
@@ -414,6 +425,42 @@ class ModeEngine:
             RoundDraw(target=item)
             for item in await self.source.draw(ctx, self.source_params, count)
         ]
+
+    @property
+    def uses_collection(self) -> bool:
+        """Единицы — из сборника сессии: ``collection_id`` при старте обязателен."""
+        return isinstance(self.source, CollectionBasedSource)
+
+    def round_options(self) -> list[RoundOption] | None:
+        """Варианты числа раундов для выбора игроком (сборник) или ``None`` — выбора нет."""
+        if isinstance(self.source, CollectionBasedSource):
+            return self.source.round_options(self.source_params)
+        return None
+
+    async def rounds_for(self, ctx: DrawContext, requested: RoundOption | None = None) -> int:
+        """Число раундов сессии — его game передаёт в ``draw_rounds`` и ``max_score``.
+
+        У источника из сборника — ``rounds_for`` источника по выбору игрока и размеру
+        играбельного пула сборника, но не больше ``session.rounds`` (потолок для
+        ``"all"``). У остальных источников выбора нет: ``planned_rounds()``.
+
+        Raises:
+            ValueError: контекст собран для другого режима или в нём нет ``CollectionPort``.
+            CollectionRequiredError: источнику из сборника не передан ``collection_id``.
+            RoundsNotAllowedError: ``requested`` нет в ``round_options`` (или выбора нет).
+            PoolTooSmallError: в сборнике меньше ``min_items`` или запрошенного числа.
+        """
+        self._require_own(ctx)
+        if isinstance(self.source, CollectionBasedSource):
+            pool = await self.source.pool_size(ctx, self.source_params)
+            rounds = self.source.rounds_for(self.source_params, requested, pool)
+            return min(rounds, self.config.session.rounds)
+        if requested is not None:
+            raise RoundsNotAllowedError(
+                "у режима нет выбора числа раундов",
+                details={"requested": requested, "options": []},
+            )
+        return self.planned_rounds()
 
     def compose_rounds(self, items: Sequence[MediaItemRef]) -> list[RoundDraw]:
         """Начальные раунды из уже разыгранного набора (дейлик, неделя сетки)."""
@@ -665,6 +712,9 @@ class ModeEngine:
 
     def max_score(self, rounds: int | None = None) -> int:
         """Максимум очков за ``rounds`` не-``void`` раундов (по умолчанию ``session.rounds``).
+
+        Считается по фактическим раундам: у сессии по сборнику или марафона их может быть
+        меньше ``session.rounds`` — game передаёт число выданных не-``void`` раундов.
 
         Raises:
             ValueError: отрицательное число раундов.
