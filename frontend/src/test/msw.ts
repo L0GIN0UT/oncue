@@ -71,3 +71,12 @@ export function signInAsGuest(id = "test"): string {
 export function dropAccessCookie(): void {
   document.cookie = "gv_access=; Max-Age=0; Path=/";
 }
+
+/** Войти в мок как пользователь (по умолчанию `player`, автор сборников — `AUTHOR_ID`). */
+export function signInAsUser(id = "00000000-0000-4000-8000-000000000901"): string {
+  const subject = `user.${id}`;
+  document.cookie = `gv_access=${subject}; Path=/`;
+  document.cookie = `gv_refresh=r-${subject}; Path=/`;
+  document.cookie = `gv_csrf=csrf-${id}; Path=/`;
+  return subject;
+}

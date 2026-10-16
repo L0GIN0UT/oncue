@@ -88,8 +88,67 @@ describe("messages/ru.json", () => {
         `solo.group.${g}.text`,
       ]),
       ...["streak", "newRecord", "champion"].map((k) => `results.shareText.${k}`),
+      // Этап 3b: сборники и медиатека.
+      ...["collection_not_found", "rounds_not_allowed", "pool_too_small"].flatMap((k) => [
+        `start.error.${k}.title`,
+        `start.error.${k}.text`,
+      ]),
+      ...["easy", "medium", "hard"].map((d) => `collections.difficulty.${d}`),
+      ...["popular", "new", "likes", "difficulty", "featured"].map((s) => `collections.sort.${s}`),
+      ...["featured", "popular", "new"].map((b) => `collections.blocks.${b}`),
+      ...["draft", "published", "hidden"].map((s) => `collections.status.${s}`),
+      ...["published", "drafts"].flatMap((k) => [
+        `collections.mine.${k}`,
+        `collections.mine.empty.${k}`,
+      ]),
+      ...["empty", "not_emoji", "too_short", "too_long"].map(
+        (k) => `collections.editor.emojiCheck.${k}`,
+      ),
+      ...["music", "film"].map((d) => `collections.editor.searchPlaceholder.${d}`),
+      // Коды публикации (details.errors[].code) и причины gv_text.ugc (reason).
+      ...[
+        "items_too_few",
+        "items_too_many",
+        "item_duplicate",
+        "item_domain_mismatch",
+        "item_unavailable",
+        "mode_invalid",
+        "emoji_invalid",
+        "emoji_too_short",
+        "tag_unknown",
+        "tags_too_many",
+        "cover_unknown",
+        "title_invalid",
+        "description_invalid",
+        "draft_conflict",
+        "drafts_limit",
+        "publish_limit",
+        "own_collection",
+      ].map((k) => `errors.collections.${k}`),
+      ...[
+        "empty",
+        "too_long",
+        "denied_word",
+        "link_forbidden",
+        "mention_forbidden",
+        "email_forbidden",
+      ].map((k) => `errors.ugc.${k}`),
     ];
     expect(dynamic.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
+  });
+
+  it("переводит title_key тегов collections и системных полок library из их конфигов", () => {
+    const configs = [
+      "services/collections/src/collections_service/config/meta.yaml",
+      "services/library/src/library_service/config/shelves.yaml",
+    ];
+    const keys = configs.flatMap((f) =>
+      [...readFileSync(path.resolve(root, "..", f), "utf8").matchAll(/title_key:\s*([\w.]+)/g)].map(
+        (m) => m[1]!,
+      ),
+    );
+    expect(keys.length).toBeGreaterThan(3);
+    expect(keys.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
   });
 
   it("переводит title_i18n режимов и пресетов из сидов seeds/game/modes", () => {

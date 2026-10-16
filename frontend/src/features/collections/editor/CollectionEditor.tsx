@@ -104,13 +104,20 @@ function usePlayability(modeKey: string | null | undefined, ids: string[]) {
   return q.data ?? null;
 }
 
-export function CollectionEditor({ draft }: { draft: DraftOut }) {
+export function CollectionEditor({
+  draft,
+  debounceMs,
+}: {
+  draft: DraftOut;
+  /** Пауза автосохранения (тесты укорачивают). */
+  debounceMs?: number;
+}) {
   const t = useTranslations();
   const dt = useDynamicT();
   const router = useRouter();
   const toast = useToast();
   const meta = useCollectionsMeta();
-  const editor = useDraftEditor(draft);
+  const editor = useDraftEditor(draft, debounceMs);
   const { state, dispatch } = editor;
   const body = state.body;
   const items = useMemo(() => body.items ?? [], [body.items]);

@@ -18,11 +18,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
-import type { ModeOut, RoundOption, SessionSnapshot } from "@/shared/api/types";
+import type { ModeOut, SessionSnapshot } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { newIdempotencyKey } from "@/shared/lib/id";
 import { withSession } from "@/features/auth/session";
 import { SubjectPicker } from "@/features/solo/SubjectPicker";
+import type { CollectionStart } from "./start-params";
 
 type Failure =
   | "guest_not_allowed"
@@ -72,17 +73,6 @@ export function useAllModes() {
 }
 
 type StartBody = { subjectIds?: string[] };
-
-/** Сборник и число раундов (`5|10|25|"all"`) из адреса старта. */
-export type CollectionStart = { collectionId: string; rounds: RoundOption | null };
-
-const ROUNDS = new Set(["5", "10", "25"]);
-
-/** Число раундов из адреса: только варианты контракта, иначе — выбор сервера (первый вариант). */
-export function parseRounds(raw: string | null | undefined): RoundOption | null {
-  if (raw === "all") return "all";
-  return raw && ROUNDS.has(raw) ? (Number(raw) as RoundOption) : null;
-}
 
 function useStartSession(
   modeKey: string,

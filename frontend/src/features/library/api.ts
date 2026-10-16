@@ -22,6 +22,16 @@ export const libraryKeys = {
 
 const key = () => ({ "Idempotency-Key": newIdempotencyKey() });
 
+/**
+ * Параметры пути без кодирования `:` — ref системной полки уходит как `system:watch_later`
+ * (допустимый символ сегмента пути; так же его пишет сервер и ждёт e2e полного стека).
+ */
+export function refPathSerializer(pathname: string, params: Record<string, unknown>): string {
+  return pathname.replace(/\{([^}]+)\}/g, (_, name: string) =>
+    encodeURIComponent(String(params[name] ?? "")).replace(/%3A/gi, ":"),
+  );
+}
+
 export async function fetchShelves(): Promise<ShelfOut[]> {
   return unwrap(await api().library.GET("/v1/shelves"));
 }
@@ -48,9 +58,11 @@ export async function toggleShelfItem(
       ? await l.PUT("/v1/shelves/{shelf_ref}/items/{media_item_id}", {
           params: { header: key(), path },
           body: { source },
+          pathSerializer: refPathSerializer,
         })
       : await l.DELETE("/v1/shelves/{shelf_ref}/items/{media_item_id}", {
           params: { header: key(), path, query: { source } },
+          pathSerializer: refPathSerializer,
         }),
   );
 }
@@ -89,6 +101,7 @@ export async function fetchShelfPage(
   return unwrap(
     await api().web.GET("/v1/pages/library/{shelf_ref}", {
       params: { path: { shelf_ref: ref }, query: { cursor: cursor ?? undefined } },
+      pathSerializer: refPathSerializer,
     }),
   );
 }

@@ -200,11 +200,11 @@ function Reactions({ collectionId, me }: { collectionId: string; me: CollectionP
   const t = useTranslations();
   const toast = useToast();
   const client = useQueryClient();
-  const viewer = useViewer();
   const key = collectionKeys.page(collectionId);
   const [pending, setPending] = useState<"like" | "favorite" | null>(null);
 
-  if (viewer.kind !== "user" || !me) {
+  // `me` bff отдаёт только пользователю (гостю и анониму — null, D7).
+  if (!me) {
     return (
       <div className="flex flex-wrap gap-3">
         <Link
