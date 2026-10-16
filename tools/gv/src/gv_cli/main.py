@@ -309,10 +309,10 @@ def dev_seed(
     ] = "admin",
     date_: Annotated[
         str | None,
-        typer.Option("--date", help="День дейликов YYYY-MM-DD (по умолчанию — сегодня)"),
+        typer.Option("--date", help="День плановых наборов YYYY-MM-DD (по умолчанию — сегодня)"),
     ] = None,
 ) -> None:
-    """Наполнить запущенный стек для e2e-сценария daily (только local/ci, идемпотентно).
+    """Наполнить запущенный стек для e2e (дейлики и режимы 3a; только local/ci, идемпотентно).
 
     Учётные данные администратора — из окружения ``GV_BOOTSTRAP_ADMIN__LOGIN`` и
     ``GV_BOOTSTRAP_ADMIN__PASSWORD``; секрет сервисного клиента — из

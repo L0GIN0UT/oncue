@@ -184,7 +184,15 @@ async def test_file_provider_skips_comments_and_limits_lines(tmp_path: Path) -> 
     assert isinstance(entries[-1], ValueError)
 
 
-@pytest.mark.parametrize(("file_id", "kind"), [("films.jsonl", "film"), ("tracks.jsonl", "track")])
+@pytest.mark.parametrize(
+    ("file_id", "kind"),
+    [
+        ("films.jsonl", "film"),
+        ("tracks.jsonl", "track"),
+        ("synthetic-films.jsonl", "film"),
+        ("synthetic-tracks.jsonl", "track"),
+    ],
+)
 async def test_seeds_are_valid(file_id: str, kind: str) -> None:
     entries = [e async for e in FileImportProvider(SEEDS).read(file_id)]
     errors = [e for e in entries if isinstance(e, ValueError)]

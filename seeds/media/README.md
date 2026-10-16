@@ -16,13 +16,30 @@ uv run python seeds/media/generate.py          # → seeds/media/out/
 | `track-<slug>.m4a` (50 с, AAC) | трек | `audio` | `audio_intro`, `audio_reverse` (`start_s` 30) |
 | `film-<slug>.jpg` (1280×720) | фильм | `frame` | `frame_progressive`, ревил `audio_blackout` |
 | `film-<slug>-{1..6}.jpg` | фильм | `frame`, `position` = номер | `frame_sequence` (1 — самый сложный) |
-| `soundtrack-<slug>.m4a` (20 с) | фильм | `soundtrack` | `soundtrack` |
-| `clip-<slug>.m4a` (20 с) | фильм | `audio_clip` | `audio_blackout` |
+| `soundtrack-<slug>.m4a` (50 с) | фильм | `soundtrack` | `soundtrack` |
+| `clip-<slug>.m4a` (50 с) | фильм | `audio_clip` | `audio_blackout` |
 
 Тексты `description`/`emoji` — не файлы: они приходят из catalog (`clue_texts` строки
 импорта, одобряются сразу при `GV_CATALOG__SEED_TEXTS_APPROVED=true`, только local/ci).
 
-## Порядок загрузки (local)
+## Засев одной командой (local/ci)
+
+```bash
+gv dev up infra && gv dev up services          # стек с dev-оверлеем (порты 127.0.0.1:81xx)
+export GV_BOOTSTRAP_ADMIN__LOGIN=... GV_BOOTSTRAP_ADMIN__PASSWORD=... GV_SERVICE_SECRET_ADMIN=...  # из infra/compose/.env
+uv run gv dev seed [--date YYYY-MM-DD]
+```
+
+`gv dev seed` (`tools/gv/src/gv_cli/seed.py`) импортирует все файлы каталога, генерирует
+исходники и загружает на фильм шесть кадров (`position` 1..6), саундтрек и звук фильма, на
+трек — тон (`origin=seed`); ждёт готовности всех наборов единицы и статических профилей,
+играбельного пула каждого режима в проекции game и перегенерирует наборы всех плановых
+режимов на текущий период: дейлики — на день, `film.bracket.weekly` — на неделю (с
+понедельника), с проверкой пригодности (у сетки — тема и 32 единицы). Повторный запуск
+безопасен (стабильные `Idempotency-Key`). Основной кадр `film-<slug>.jpg` сидер не грузит:
+`frame_progressive` берёт самый свежий кадр вида `frame`.
+
+## Порядок загрузки вручную (local)
 
 1. `gv dev up infra`, `gv dev up services`.
 2. Импорт каталога через admin: `POST /admin/v1/imports {"source": "file", "file_id": "tracks.jsonl", "reason": "сиды"}`

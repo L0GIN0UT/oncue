@@ -14,6 +14,9 @@ services:
       GV_LOG_JSON: "false"
       # Файлы импорта каталога (`gv dev seed`): воркер читает их из этого каталога.
       GV_IMPORTS__FILES_DIR: /seeds/catalog
+      # Тексты загадок синтетического засева одобряются сразу (ТОЛЬКО local/ci, ADR 0024);
+      # dev-оверлей — только local/ci, значение из .env имеет приоритет.
+      GV_CATALOG__SEED_TEXTS_APPROVED: ${GV_CATALOG__SEED_TEXTS_APPROVED:-true}
     volumes:
       - ../../seeds/catalog:/seeds/catalog:ro
   media-pipeline:

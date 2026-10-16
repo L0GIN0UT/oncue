@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../frontend/node_modules/@types"],
+    "baseUrl": ".",
+    "paths": { "@playwright/test": ["../frontend/node_modules/@playwright/test"] }
+  },
+  "include": ["*.ts"]
+}
