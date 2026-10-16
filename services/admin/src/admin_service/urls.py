@@ -26,6 +26,7 @@ urlpatterns = [
     path("users/", include("admin_service.apps.users.urls")),
     path("game/modes/", include("admin_service.apps.game_config.urls")),
     path("game/daily/", include("admin_service.apps.game_daily.urls")),
+    path("collections/", include("admin_service.apps.collections.urls")),
     # Статика django-admin прямо из пакетов (без collectstatic и отдельного сервера):
     # админка внутренняя и малонагруженная, а общий Dockerfile не меняем (D7).
     re_path(r"^static/(?P<path>.*)$", serve, {"insecure": True}),

@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "admin_service.apps.users",
     "admin_service.apps.game_config",
     "admin_service.apps.game_daily",
+    "admin_service.apps.collections",
 ]
 
 MIDDLEWARE = [
@@ -184,6 +185,7 @@ GV_MODE_CONFIG_MAX_BYTES = GV.admin.mode_config_max_bytes
 GV_DAILY_TIMEZONE = GV.admin.daily_timezone
 GV_DAILY_DEFAULT_DAYS = GV.admin.daily_default_days
 GV_DAILY_RANGE_MAX_DAYS = GV.admin.daily_range_max_days
+GV_COLLECTION_TEXT_MAX_BYTES = GV.admin.collection_text_max_bytes
 GV_SESSION_ENC_KEY = (
     GV.admin.session_enc_key.get_secret_value() if GV.admin.session_enc_key is not None else None
 )

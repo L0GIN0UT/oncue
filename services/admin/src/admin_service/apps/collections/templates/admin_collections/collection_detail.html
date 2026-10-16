@@ -1,0 +1,67 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'collections:list' %}">← к списку</a></p>
+{% if not_found %}<p>Сборник не найден (или удалён).</p>{% endif %}
+{% if detail %}
+<div class="module">
+  <table>
+    <tr><th>ID</th><td><code>{{ collection_id }}</code></td></tr>
+    <tr><th>Название</th><td>{{ detail.title }}</td></tr>
+    <tr><th>Описание</th><td>{{ detail.description|default:"—"|linebreaksbr }}</td></tr>
+    <tr><th>Домен / вид</th><td>{{ detail.domain }} / {{ detail.kind }}</td></tr>
+    <tr><th>Статус</th><td><strong>{{ detail.status }}</strong>{% if detail.version %} · версия v{{ detail.version }}{% endif %}{% if detail.draft_revision %} · черновик r{{ detail.draft_revision }}{% endif %}</td></tr>
+    {% if detail.hidden %}<tr><th>Скрыт</th><td>{{ detail.hidden.at }} · {{ detail.hidden.reason }}{% if detail.hidden.actor_id %} · <code>{{ detail.hidden.actor_id }}</code>{% endif %}</td></tr>{% endif %}
+    <tr><th>Видимость</th><td>{{ detail.visibility }}</td></tr>
+    <tr><th>Автор</th><td>{{ author_label }}{% if author_id %} <code>{{ author_id }}</code>{% endif %}{% if detail.author_restricted %} <strong>(ограничен)</strong>{% endif %}</td></tr>
+    <tr><th>Режим по умолчанию</th><td>{{ detail.default_mode_key|default:"—" }}</td></tr>
+    <tr><th>Теги</th><td>{{ detail.tags|join:", "|default:"—" }}</td></tr>
+    <tr><th>Обложка</th><td>{{ detail.cover.preset|default:"—" }}</td></tr>
+    <tr><th>Рекомендуемое</th><td>{% if detail.featured %}да{% if detail.featured_rank %}, порядок {{ detail.featured_rank }}{% endif %}{% else %}нет{% endif %}</td></tr>
+    <tr><th>Лайки / прохождения</th><td>{{ detail.likes_count }} / {{ detail.plays_count }} · сложность {{ detail.difficulty|default:"—" }}</td></tr>
+    <tr><th>Опубликован</th><td>{{ detail.published_at|default:"—" }}</td></tr>
+  </table>
+</div>
+{% if can_edit %}<p><a href="{% url 'collections:edit' collection_id=collection_id %}">Редактировать (YAML)…</a></p>{% endif %}
+
+<h2>Состав ({{ detail.items_count }})</h2>
+<table>
+  <thead><tr><th>#</th><th>Единица</th><th>Год</th><th>Доступна</th><th>Свои эмодзи</th></tr></thead>
+  {% for i in items %}
+  <tr>
+    <td>{{ i.position|add:1 }}</td>
+    <td>{% if i.catalog_url %}<a href="{{ i.catalog_url }}">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %} <small><code>{{ i.media_item_id }}</code></small></td>
+    <td>{{ i.year|default:"—" }}</td>
+    <td>{% if i.available %}да{% else %}<strong>нет</strong>{% endif %}</td>
+    <td>{{ i.emoji|default:"—" }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="5">Состав пуст</td></tr>
+  {% endfor %}
+</table>
+
+{% if can_hide or can_unhide %}
+<h2>{% if can_hide %}Скрыть{% else %}Показать{% endif %}</h2>
+<form method="post" action="{% if can_hide %}{% url 'collections:hide' collection_id=collection_id %}{% else %}{% url 'collections:unhide' collection_id=collection_id %}{% endif %}">
+  {% csrf_token %}{{ hide_form.as_p }}
+  <input type="submit" value="{% if can_hide %}Скрыть сборник{% else %}Показать сборник{% endif %}">
+</form>
+{% endif %}
+
+{% if can_feature %}
+<h2>Рекомендуемое</h2>
+<form method="post" action="{% url 'collections:featured' collection_id=collection_id %}">
+  {% csrf_token %}{{ featured_form.as_p }}
+  <p><small>Порядок — меньше выше; пусто — в конец блока.</small></p>
+  <input type="submit" value="Сохранить">
+</form>
+{% endif %}
+
+{% if can_restrict %}
+<h2>Автор</h2>
+<form method="post" action="{% url 'collections:author_restriction' collection_id=collection_id %}">
+  {% csrf_token %}{{ restriction_form.as_p }}
+  <input type="submit" value="{% if detail.author_restricted %}Снять ограничение автора{% else %}Ограничить автора{% endif %}">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

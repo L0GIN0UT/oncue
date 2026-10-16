@@ -51,6 +51,8 @@ class AdminConfig(BaseModel):
             смена дня в ``source.params.timezone`` сидов game).
         daily_default_days: Сколько дней показывать в календаре наборов по умолчанию.
         daily_range_max_days: Самый длинный диапазон календаря наборов за один запрос.
+        collection_text_max_bytes: Предел размера YAML кураторского сборника в редакторе
+            (200 единиц с эмодзи и описание укладываются с запасом).
     """
 
     secret_key: SecretStr | None = None
@@ -78,6 +80,7 @@ class AdminConfig(BaseModel):
     daily_timezone: str = "Europe/Moscow"
     daily_default_days: int = Field(default=7, ge=1)
     daily_range_max_days: int = Field(default=62, ge=1)
+    collection_text_max_bytes: int = Field(default=65536, ge=1024)
 
     @field_validator("ip_allowlist")
     @classmethod
