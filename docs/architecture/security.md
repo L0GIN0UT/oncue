@@ -110,3 +110,15 @@
 - Гость может переиграть дейлик, сбросив cookie; результаты гостей не входят в статистику дня и `DailyCompleted`.
 - Лимиты game, выдачи гостевых сессий и сервисных токенов — fail-open (как лимиты входа): попытки ограничены правилами раунда, выдачу ссылок держит fail-closed лимитер media-pipeline.
 - Ссылка финального кадра ревила живёт 60 с: если ревил открыт поздно, медиа может не загрузиться.
+
+### Этап 3b: сборники и медиатека (план, шаг 0a)
+
+Меры зафиксированы в [плане](../plans/stage-3b.md) §12 и [ADR 0030](../adr/0030-minimal-ugc-safety-before-moderation.md); реализация — потоки этапа.
+
+| Мера | Где |
+|---|---|
+| UGC-текст: `gv_text.ugc` — NFKC, удаление управляющих, bidi- и zero-width-символов, длина после нормализации, denylist по «скелету» (похожие символы, диакритика, повторы; `GV_UGC__DENYLIST_PATH`), в названии нет ссылок, `@` и e-mail; коды `ugc.*` | `libs/text`, collections, library |
+| Свои эмодзи — только RGI Unicode 16.0 (`gv_text.emoji.is_strict_emoji`), ≤ 12 графем, проверка в collections и media-pipeline | `libs/text`, collections, media_pipeline |
+| Права модерации `collections.view|curate|unpublish|restrict_author` (identity `0007`: admin — все, moderator — `view`, `unpublish`); гость не создаёт, не лайкает и не ведёт медиатеку (`auth.guest_forbidden`) | identity, collections, library |
+| IDOR: чужой черновик, полка, скрытый сборник — 404; состав сборника — только автору, админу и прошедшему игроку (D6); публичные схемы `extra=forbid` (`kind`, `author_id`, `featured`, `status` — только admin-API) | collections, library |
+| CSRF/Origin для cookie-мутаций collections и library (`GV_PUBLIC_ORIGINS`), `Idempotency-Key` у всех мутаций | `libs/auth`, collections, library |

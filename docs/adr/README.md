@@ -31,3 +31,7 @@
 | [0025](0025-dynamic-asset-profiles.md) | Динамические профили ассетов по `ClueAssetsRequested` |
 | [0026](0026-reveal-with-other-clue-type.md) | Ревил ассетом другого типа — `clue.reveal` |
 | [0027](0027-period-sets-preference-modes-records.md) | Плановые наборы с периодом, режимы предпочтения, рекорды |
+| [0028](0028-collections-versions-draft-projection.md) | Сборники: версии, черновик с оптимистичной блокировкой, проекция в game, сборник в параметрах старта |
+| [0029](0029-collection-assets-scoped-sets.md) | Ассеты сборников — наборы со `scope` |
+| [0030](0030-minimal-ugc-safety-before-moderation.md) | Минимальная безопасность UGC до модерации этапа 5 |
+| [0031](0031-library-config-shelves-private-catalog-projection.md) | Медиатека: системные полки из конфига, приватность, проекция каталога |

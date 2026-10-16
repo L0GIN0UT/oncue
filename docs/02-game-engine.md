@@ -189,6 +189,10 @@ Source `collection` (`register_collection`) подключается в game н�
 
 Возможности источника движок узнаёт по протоколам, а не по ключу: `RoundSource` (сам составляет `RoundDraw` с `shown`/`options`), `ProgressiveSource` (`followups`, `planned_rounds`, `stage`), `SubjectSource` (выбор персон), `ComparisonSource` (метрика сравнения), `PeriodSource` (начало периода, тема). Совместимость в `EngineFactory.validate` — тоже по атрибутам плагинов: `answer_formats` у источника и matcher, `single_answer` у формата, `requires_early_end` у Scorer и `ends_early` у EndRule.
 
+### 5.1b. Источник `collection` (этап 3b)
+
+Регистрируется отдельно (`register_collection`, [ADR 0028](adr/0028-collections-versions-draft-projection.md); план — [stage-3b](plans/stage-3b.md) §2.6, §4). Конфиг — шаблон режима домена (`<domain>.collection.<clue>`), параметры `contracts/modes/params/source.collection.v1.json`: `round_options ⊆ {5, 10, 25, "all"}`, `min_items`, `shuffle`. Сборник приходит в `POST /v1/sessions` (`collection_id`, `rounds`) и лежит в `DrawContext.collection_id`; единицы — `CollectionPort.items(collection_id, limit, *, playable_for)` в порядке автора, играбельность сначала по набору со `scope` сборника (`PlayableFor.scope`, [ADR 0029](adr/0029-collection-assets-scoped-sets.md)), затем по каталожному. Число раундов — `CollectionSource.rounds_for(params, requested, pool)`: `"all"` — весь пул, иначе запрошенное, если оно есть в `round_options` и не больше пула (`game.rounds_not_allowed`, `game.pool_too_small`); без сборника — `game.collection_required`.
+
 ### 5.2. Периодические задачи game
 
 Выполняются в процессе relay (`ServiceDefinition.build_periodic_jobs`) под `pg_try_advisory_xact_lock`, поэтому несколько реплик безопасны; все задачи идемпотентны. Код — `services/game/src/game_service/infrastructure/jobs.py`.

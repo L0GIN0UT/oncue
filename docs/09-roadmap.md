@@ -70,7 +70,7 @@
 | Лимит сервисных токенов разделён: `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` из плана заменён на `FAILURES_PER_CLIENT_IP_PER_MIN` и `SUCCESS_PER_CLIENT_PER_MIN` — обновить env окружений | identity, `infra/` | При выкладке |
 
 ## Этап 3. Сборники и медиатека
-Владелец разделил этап (2026-10-16): **3a «Режимы и загадки»** — новые ClueType, марафон, больше/меньше, топ-32, `ClueAssetsRequested` ([план](plans/stage-3a.md), ADR 0023–0027, шаг 0a — контракты); **3b** — collections и library, отдельным планом.
+Владелец разделил этап (2026-10-16): **3a «Режимы и загадки»** — новые ClueType, марафон, больше/меньше, топ-32, `ClueAssetsRequested` ([план](plans/stage-3a.md), ADR 0023–0027, шаг 0a — контракты); **3b «Сборники и медиатека»** — collections и library ([план](plans/stage-3b.md), утверждён 2026-10-16, ADR 0028–0031; шаг 0a — контракты событий `collections.collection.v1`/`library.shelf.v1`, `source.collection`, заглушки API, `gv_text.ugc`/`emoji`, права identity `0007`).
 - collections: конструктор, черновики, каталог, лайки, игра по сборнику.
 - library: «смотреть позже», плейлисты, сохранение из ревила.
 - Остальные ClueType: `audio_reverse`, `audio_blackout`, `soundtrack`, `description`, `emoji`, `frame_sequence`.
