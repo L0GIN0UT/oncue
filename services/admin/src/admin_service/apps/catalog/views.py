@@ -87,11 +87,50 @@ def _asset_sets(item_id: UUID, rows: Any) -> list[dict[str, Any]]:
     return result
 
 
+def _sources(rows: Any, *, can_upload: bool) -> list[dict[str, Any]]:
+    """Исходники единицы для таблицы: у каждого — своя форма порядка (с правом загрузки).
+
+    Форма на строку, а не одна с вводом id: модератор переставляет кадр там, где его видит.
+    У каждой формы свой ``idempotency_key`` и свои id полей (``auto_id``) — строки не мешают
+    друг другу.
+    """
+    result = []
+    for n, row in enumerate(rows if isinstance(rows, list) else [], start=1):
+        if not isinstance(row, dict):
+            continue
+        try:
+            source_id = UUID(str(row.get("source_media_id")))
+        except ValueError:
+            continue
+        form = (
+            SourcePositionForm(
+                initial={"source_media_id": source_id, "position": row.get("position")},
+                auto_id=f"src{n}_%s",
+            )
+            if can_upload
+            else None
+        )
+        result.append({**row, "position_form": form})
+    return result
+
+
+def _source_position(request: HttpRequest, item_id: UUID, source_id: UUID) -> int | None:
+    """Текущий порядок исходника — «до» для аудита (ошибка чтения не мешает: решает media)."""
+    rows, _ = read(request, MEDIA, lambda c: MediaAdminClient(c).sources(item_id))
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and str(row.get("source_media_id")) == str(source_id):
+            position = row.get("position")
+            return position if isinstance(position, int) else None
+    return None
+
+
 def _item_context(request: HttpRequest, item_id: UUID, **forms: Any) -> dict[str, Any]:
     item, error = fetch(request, CATALOG, f"/admin/v1/items/{item_id}")
     asset_sets, assets_error = fetch(
         request, MEDIA, "/admin/v1/asset-sets", media_item_id=str(item_id)
     )
+    sources, sources_error = read(request, MEDIA, lambda c: MediaAdminClient(c).sources(item_id))
+    can_upload = has_perm(request, UPLOAD)
     item = item if isinstance(item, dict) else None
     context: dict[str, Any] = {
         "title": (item or {}).get("title") or "Единица каталога",
@@ -103,9 +142,11 @@ def _item_context(request: HttpRequest, item_id: UUID, **forms: Any) -> dict[str
         "status_form": ReasonForm(),
         "aliases_form": AliasesForm(initial={"aliases": _aliases_text(item)}),
         "upload_form": SourceUploadForm(),
-        "position_form": SourcePositionForm(),
+        "sources": _sources(sources, can_upload=can_upload),
+        "sources_error": sources_error.message if sources_error else None,
+        "position_form": None,
         "regenerate_form": ReasonForm(),
-        "can_upload": has_perm(request, UPLOAD),
+        "can_upload": can_upload,
     }
     context.update(forms)
     return context
@@ -229,7 +270,7 @@ def source_upload(request: HttpRequest, item_id: UUID) -> HttpResponse:
         success="Исходник загружен, ассеты будут перегенерированы",
     )
     if ok and isinstance(result, dict) and result.get("source_media_id"):
-        # id исходника нужен для смены порядка кадров: списка исходников в admin-API нет.
+        # Новый исходник — сразу в сообщении: по id его легко найти в таблице исходников.
         messages.info(
             request,
             f"Исходник {result['source_media_id']}: {result.get('kind')}, "
@@ -257,7 +298,10 @@ def source_position(request: HttpRequest, item_id: UUID) -> HttpResponse:
         target_id=str(source_id),
         reason=reason,
         idempotency_key=key,
-        before={"media_item_id": str(item_id)},
+        before={
+            "media_item_id": str(item_id),
+            "position": _source_position(request, item_id, source_id),
+        },
         audit_fields=("position", "kind", "media_item_id"),
         call=lambda c: MediaAdminClient(c).set_source_position(
             source_id, position=position, reason=reason, idempotency_key=key

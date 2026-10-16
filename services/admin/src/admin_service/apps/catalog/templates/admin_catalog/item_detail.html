@@ -46,16 +46,34 @@
 <h2>Тексты загадок</h2>
 <p><a href="{% url 'catalog:clue_texts' item_id=item_id %}">Сюжет, слоган и эмодзи для загадок…</a></p>
 
+<h2>Исходники</h2>
+<p>По виду, затем по порядку (кадры последовательности: 1 — самый сложный). Смена порядка перегенерирует ассеты.</p>
+{% if sources_error %}<ul class="messagelist"><li class="error">{{ sources_error }}</li></ul>{% endif %}
+{% if position_form and position_form.errors %}<ul class="messagelist"><li class="error">Порядок не изменён: {% for field, errs in position_form.errors.items %}{{ errs|join:", " }} {% endfor %}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Вид</th><th>Порядок</th><th>Происхождение</th><th>Статус</th><th>Загружен</th><th>id</th>{% if can_upload %}<th>Новый порядок</th>{% endif %}</tr></thead>
+  {% for s in sources %}
+  <tr>
+    <td>{{ s.kind }}</td><td>{{ s.position }}</td><td>{{ s.origin }}</td><td>{{ s.status }}</td><td>{{ s.created_at }}</td>
+    <td><small><code>{{ s.source_media_id }}</code></small></td>
+    {% if s.position_form %}<td>
+      <form method="post" action="{% url 'catalog:position' item_id=item_id %}">
+        {% csrf_token %}{{ s.position_form.source_media_id }}{{ s.position_form.idempotency_key }}
+        {{ s.position_form.position }}
+        <input type="text" name="reason" minlength="3" maxlength="500" required placeholder="причина">
+        <input type="submit" value="Переставить">
+      </form>
+    </td>{% endif %}
+  </tr>
+  {% empty %}<tr><td colspan="7">Исходников нет</td></tr>
+  {% endfor %}
+</table>
+
 {% if can_upload %}
 <h2>Загрузить исходник</h2>
 <form method="post" enctype="multipart/form-data" action="{% url 'catalog:upload' item_id=item_id %}">
   {% csrf_token %}{{ upload_form.as_p }}<input type="submit" value="Загрузить">
 </form>
 
-<h2>Порядок кадров</h2>
-<p>Порядок исходника среди своего вида (кадры последовательности: 1 — самый сложный). id исходника показывается после загрузки.</p>
-<form method="post" action="{% url 'catalog:position' item_id=item_id %}">
-  {% csrf_token %}{{ position_form.as_p }}<input type="submit" value="Изменить порядок">
-</form>
 {% endif %}
 {% endblock %}
