@@ -23,6 +23,7 @@ from media_pipeline_service.application.commands.catalog import (
     RestoreItemAssets,
     SyncMediaItem,
 )
+from media_pipeline_service.application.commands.collections import SyncCollectionAssets
 from media_pipeline_service.application.commands.generation import (
     GenerateAssetSet,
     RegenerateAssetSet,
@@ -58,6 +59,7 @@ from media_pipeline_service.application.ports import (
 from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 from media_pipeline_service.application.queries.profiles import ListProfiles
+from media_pipeline_service.application.queries.sources import ListSources
 from media_pipeline_service.application.sources import SourceIngestor
 from media_pipeline_service.domain.links import LinkPolicy
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
@@ -227,6 +229,17 @@ class MediaContainer:
             a.queue,
             a.storage,
             registry=self.registry,
+            scoped_clue_types=self.settings.media.scoped_clue_types,
+        )
+
+    def sync_collection(self, uow: UnitOfWorkFactory) -> SyncCollectionAssets:
+        """Обработка событий collections (``uow`` привязан к сессии consumer)."""
+        return SyncCollectionAssets(
+            uow,
+            self.clock,
+            self.plan(uow),
+            self.adapters.storage,
+            emoji_max_graphemes=self.settings.media.collection_emoji_max_graphemes,
         )
 
     def sync_media_item(self, uow: UnitOfWorkFactory) -> SyncMediaItem:
@@ -340,6 +353,11 @@ class MediaContainer:
     def list_sets(self) -> ListAssetSets:
         """Список наборов."""
         return ListAssetSets(self.uow_factory())
+
+    @cached_property
+    def list_sources(self) -> ListSources:
+        """Исходники единицы (admin)."""
+        return ListSources(self.uow_factory())
 
     async def close(self) -> None:
         """Закрыть клиенты, открытые лениво (соединение RabbitMQ очереди задач)."""

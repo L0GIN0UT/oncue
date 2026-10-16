@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from gv_auth import Principal, require_perm
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
 from media_pipeline_service.api.common import AssetSetItem
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
@@ -24,6 +23,7 @@ from media_pipeline_service.application.commands.sources import SetSourcePositio
 from media_pipeline_service.application.dto import SourceProvenance
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 from media_pipeline_service.application.queries.profiles import ListProfiles
+from media_pipeline_service.application.queries.sources import ListSources
 from media_pipeline_service.domain.errors import SourceTooLargeError
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin, SourceStatus
 
@@ -136,6 +136,7 @@ def build_admin_router(
     regenerate: RegenerateAssetSet,
     list_sets: ListAssetSets,
     list_profiles: ListProfiles,
+    list_sources: ListSources,
     max_upload_bytes: int,
 ) -> APIRouter:
     """Ручки админки: загрузка исходников, перегенерация, просмотр наборов."""
@@ -274,13 +275,20 @@ def build_admin_router(
             "По виду, затем по `position` (кадры `frame_sequence`: 1 — самый сложный). "
             "Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`."
         ),
-        responses=problem_responses(401, 403, 422, 501),
+        responses=problem_responses(401, 403, 422),
     )
-    async def admin_sources(
-        media_item_id: UUID,  # noqa: ARG001 — заглушка 501 объявляет параметр контракта
-        _: Viewer,
-    ) -> list[SourceListItem]:
-        raise NotImplementedYetError("этап 3b: поток M (docs/plans/stage-3b.md)")
+    async def admin_sources(media_item_id: UUID, _: Viewer) -> list[SourceListItem]:
+        return [
+            SourceListItem(
+                source_media_id=v.source_media_id,
+                kind=v.kind,
+                position=v.position,
+                origin=v.origin,
+                status=v.status,
+                created_at=v.created_at,
+            )
+            for v in await list_sources.execute(media_item_id)
+        ]
 
     @router.get(
         "/asset-sets",
