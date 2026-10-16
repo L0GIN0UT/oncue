@@ -6,7 +6,8 @@
 <div class="module">
   <table>
     <tr><th>Режим</th><td>{{ key }}</td></tr>
-    <tr><th>День</th><td>{{ day|date:"Y-m-d" }} — {{ daily_set.status }}</td></tr>
+    <tr><th>{% if daily_set.period == "week" %}Неделя с{% else %}День{% endif %}</th><td>{{ day|date:"Y-m-d" }} — {{ daily_set.status }}</td></tr>
+    {% if daily_set.subject_id %}<tr><th>Тема</th><td><code>{{ daily_set.subject_id }}</code></td></tr>{% endif %}
     <tr><th>Раунд</th><td>{{ index|add:1 }}</td></tr>
     <tr><th>Сейчас</th><td>{% if item %}{{ item.title }} ({{ item.year|default:"—" }}), играбельна: {% if item.playable %}да{% else %}нет{% endif %}{% else %}—{% endif %}</td></tr>
   </table>

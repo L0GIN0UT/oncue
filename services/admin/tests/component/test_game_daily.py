@@ -214,6 +214,7 @@ def test_regenerate_sends_reason_and_audits(client: Any, login: Any, game: Any) 
     assert AuditEntry.objects.get(action="game.regenerate_daily_set").after == {
         "status": "scheduled",
         "mode_version": 2,
+        "subject_id": None,
     }
 
 
