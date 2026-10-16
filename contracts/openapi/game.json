@@ -349,7 +349,7 @@
         "type": "object"
       },
       "DailySet": {
-        "description": "Набор дня режима.",
+        "description": "Набор периода режима (дейлик — день, сетка — неделя; ``day`` — начало периода).",
         "properties": {
           "day": {
             "format": "date",
@@ -371,6 +371,15 @@
             "title": "Mode Version",
             "type": "integer"
           },
+          "period": {
+            "default": "day",
+            "enum": [
+              "day",
+              "week"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "scheduled",
@@ -379,6 +388,19 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Тема периода (персона сетки)",
+            "title": "Subject Id"
           }
         },
         "required": [
@@ -714,10 +736,19 @@
                 },
                 {
                   "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
                 }
               ]
             },
-            "description": "Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, {pixel_block} для постера",
+            "description": "Что открывает уровень: {seconds} для аудио, {blur_px, crop} для кадра, {pixel_block} для постера, {frame} для последовательности кадров, {fields} для описания (накопленные поля), {count} для эмодзи (null — все)",
             "title": "Hint",
             "type": "object"
           },
@@ -1536,13 +1567,25 @@
       },
       "RegenerateRequest": {
         "additionalProperties": false,
-        "description": "Перегенерировать набор (только ``scheduled`` / ``failed``).",
+        "description": "Перегенерировать набор (только ``scheduled`` / ``failed``); ``subject_id`` — новая тема\nпериода (сетка), иначе тему выбирает генератор.",
         "properties": {
           "reason": {
             "maxLength": 500,
             "minLength": 3,
             "title": "Reason",
             "type": "string"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
           }
         },
         "required": [
@@ -1671,6 +1714,18 @@
             "format": "uuid",
             "title": "Media Item Id",
             "type": "string"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Метрика сравнения загаданной единицы («больше/меньше»)",
+            "title": "Metric"
           },
           "persons": {
             "items": {
@@ -2410,11 +2465,23 @@
         "type": "object"
       },
       "ValidationWarning": {
-        "description": "Предупреждение (например, пул меньше рекомендуемого).",
+        "description": "Предупреждение (пул меньше нужного в bootstrap, ``assets.profile_missing``).",
         "properties": {
           "code": {
             "title": "Code",
             "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Секция конфига: clue.params | clue.reveal.params",
+            "title": "Path"
           }
         },
         "required": [
@@ -3479,21 +3546,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Запросы ассетов режима",
@@ -3502,7 +3554,7 @@
         ]
       },
       "post": {
-        "description": "Если под `params_hash(clue.params)` черновика нет профиля ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ.",
+        "description": "Если под `params_hash(clue.params)` (и `clue.reveal.params`) черновика в проекции нет ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же ключом — тот же ответ; пока запрос `pending`, повтор тех же параметров отвечает им же без нового события. 409 `game.assets_already_available` — ассеты уже есть; 422 `game.config_invalid` — параметры не проходят схему загадки.",
         "operationId": "request_assets_admin_v1_mode_configs__mode_key__asset_requests_post",
         "parameters": [
           {
@@ -3630,21 +3682,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           },
           "503": {
             "content": {
@@ -4528,21 +4565,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Личные рекорды",
@@ -4652,7 +4674,7 @@
     },
     "/v1/modes/{mode_key}/subjects": {
       "get": {
-        "description": "Поиск по имени среди персон с достаточным числом играбельных единиц.",
+        "description": "Поиск по имени среди персон с ролью режима и не меньше `min_items` играбельных единиц; по убыванию числа единиц. 422 `game.subjects_not_supported` — режим не выбирает персон; 429.",
         "operationId": "list_subjects_v1_modes__mode_key__subjects_get",
         "parameters": [
           {
@@ -4773,21 +4795,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Персоны для марафона",
@@ -4798,7 +4805,7 @@
     },
     "/v1/sessions": {
       "post": {
-        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready`.",
+        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`.",
         "operationId": "start_session_v1_sessions_post",
         "parameters": [
           {
@@ -5055,7 +5062,7 @@
     },
     "/v1/sessions/{session_id}/guesses": {
       "post": {
-        "description": "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 429.",
+        "description": "Ответ — `{media_item_id}`, `{text}` (формат `classic`) или `{option_id}` (формат `pick`). Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), 409 `game.round_finished`, 422 `game.answer_kind_unsupported` (вид ответа не для формата режима), 422 `game.option_unknown`, 429. У сетки — `stats.agree_pct`.",
         "operationId": "submit_guess_v1_sessions__session_id__guesses_post",
         "parameters": [
           {
@@ -5622,21 +5629,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           },
           "503": {
             "content": {
