@@ -107,14 +107,24 @@ def test_unknown_plugin_and_bad_params(factory: RulesFactory) -> None:
     assert errors and all(e["path"].startswith("clue.params") for e in errors)
 
 
-def test_collection_source_is_not_registered() -> None:
-    registry = CatalogRegistry()
-
-    class Collection:
-        key = "collection"
-
-    registry.register_source(Collection())  # type: ignore[arg-type]  # минимальный фейк Source
-    assert registry.source("collection") is None
+@pytest.mark.parametrize(
+    "name",
+    [
+        "film.collection.frame",
+        "film.collection.emoji",
+        "music.collection.intro",
+        "music.collection.emoji",
+    ],
+)
+def test_collection_modes_are_registered_templates(factory: RulesFactory, name: str) -> None:
+    """3b (D4): источник ``collection`` зарегистрирован, сиды — шаблоны без рекордов,
+    варианты числа раундов и порог — из ``source.params``."""
+    rules = rules_of(factory, name)
+    assert rules.engine.uses_collection
+    assert rules.engine.round_options() == [5, 10, 25, "all"]
+    assert rules.min_playable() == 5
+    assert not rules.records_enabled
+    assert rules.domain == name.split(".", maxsplit=1)[0]
 
 
 def test_editor_schema_lists_plugins(factory: RulesFactory) -> None:

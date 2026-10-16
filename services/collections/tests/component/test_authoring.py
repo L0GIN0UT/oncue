@@ -142,7 +142,7 @@ async def test_publish_emits_valid_event_and_replay_returns_same(svc: Any) -> No
     draft = await svc.create(author)
     cid = draft["collection_id"]
     custom = [
-        {"media_item_id": str(items[0]), "custom": {"emoji": "🚢🧊💔"}},
+        {"media_item_id": str(items[0]), "custom": {"emoji": "🚢🧊💔🌊🎻🥶"}},
         *({"media_item_id": str(i)} for i in items[1:]),
     ]
     saved = await svc.save(
@@ -166,7 +166,7 @@ async def test_publish_emits_valid_event_and_replay_returns_same(svc: Any) -> No
     detail = first.json()
     assert detail["version"] == 1 and detail["status"] == "published"
     assert detail["items_count"] == 6 and detail["items_visible"] is True
-    assert detail["items"][0]["custom"] == {"emoji": "🚢🧊💔"}
+    assert detail["items"][0]["custom"] == {"emoji": "🚢🧊💔🌊🎻🥶"}
     assert detail["description"] == "Кадры\n\nиз фильмов"
     assert detail["me"] == {
         "liked": False,
@@ -183,7 +183,7 @@ async def test_publish_emits_valid_event_and_replay_returns_same(svc: Any) -> No
     (event,) = await svc.events("collections.CollectionPublished", cid)
     assert_event_matches_schema(event)
     assert event.payload["version"] == 1 and event.payload["content_version"] == 1
-    assert event.payload["items"][0]["custom"] == {"emoji": "🚢🧊💔"}
+    assert event.payload["items"][0]["custom"] == {"emoji": "🚢🧊💔🌊🎻🥶"}
     assert "custom" not in event.payload["items"][1]
     assert "title" not in event.payload
 

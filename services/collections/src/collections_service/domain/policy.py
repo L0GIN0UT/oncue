@@ -20,7 +20,7 @@ from collections_service.domain.errors import (
     TitleInvalidError,
 )
 from collections_service.domain.model import CollectionBody, Domain, DraftBody, Item
-from gv_text.emoji import is_strict_emoji
+from gv_text.emoji import graphemes, is_strict_emoji
 from gv_text.ugc import UgcPolicy, UgcViolation
 
 ITEMS_TOO_FEW = "collections.items_too_few"
@@ -30,6 +30,7 @@ ITEM_DOMAIN_MISMATCH = "collections.item_domain_mismatch"
 ITEM_UNAVAILABLE = "collections.item_unavailable"
 MODE_INVALID = "collections.mode_invalid"
 EMOJI_INVALID = "collections.emoji_invalid"
+EMOJI_TOO_SHORT = "collections.emoji_too_short"
 TAG_UNKNOWN = "collections.tag_unknown"
 TAGS_TOO_MANY = "collections.tags_too_many"
 COVER_UNKNOWN = "collections.cover_unknown"
@@ -94,6 +95,8 @@ class Limits:
     items_max: int
     tags_max: int
     emoji_max_graphemes: int
+    # Профиль ``emoji`` media-pipeline не строит набор из меньшего числа графем (ADR 0029).
+    emoji_min_graphemes: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,8 +247,12 @@ class CollectionPolicy:
                 errors.append(_error(path, ITEM_UNAVAILABLE))
             elif info.domain != domain:
                 errors.append(_error(path, ITEM_DOMAIN_MISMATCH))
-            if item.emoji is not None and not is_strict_emoji(
-                item.emoji, max_graphemes=limits.emoji_max_graphemes
-            ):
+            if item.emoji is None:
+                continue
+            if not is_strict_emoji(item.emoji, max_graphemes=limits.emoji_max_graphemes):
                 errors.append(_error(f"{path}.custom.emoji", EMOJI_INVALID))
+            elif len(graphemes(item.emoji)) < limits.emoji_min_graphemes:
+                errors.append(
+                    _error(f"{path}.custom.emoji", EMOJI_TOO_SHORT, min=limits.emoji_min_graphemes)
+                )
         return tuple(raw)

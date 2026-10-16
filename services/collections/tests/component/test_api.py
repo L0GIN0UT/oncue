@@ -105,6 +105,7 @@ async def test_meta_exposes_real_limits_and_dictionaries(service_factory: Any) -
         "items_max": 200,
         "tags_max": 5,
         "emoji_max_graphemes": 12,
+        "emoji_min_graphemes": 6,
         "drafts_max": 20,
         "publish_per_day": 3,
     }

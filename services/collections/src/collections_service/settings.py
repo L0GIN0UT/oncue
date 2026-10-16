@@ -22,6 +22,9 @@ class CollectionsLimits(BaseModel):
         title_max: Длина названия после нормализации (кодовые точки).
         description_max: Длина описания после нормализации.
         emoji_max_graphemes: Графем в своих эмодзи единицы.
+        emoji_min_graphemes: Минимум графем своих эмодзи: встроенный профиль ``emoji``
+            media-pipeline открывает до 6 эмодзи и при меньшем числе набор не строит
+            (ADR 0029) — короткие эмодзи отклоняются при публикации.
         reactions_per_min: Лайки и избранное в минуту на пользователя (fail-open).
         search_per_min: Запросы каталога с ``q`` в минуту на субъекта (fail-open).
     """
@@ -36,6 +39,7 @@ class CollectionsLimits(BaseModel):
     title_max: int = Field(default=80, ge=1, le=200)
     description_max: int = Field(default=500, ge=0, le=5000)
     emoji_max_graphemes: int = Field(default=12, ge=1, le=12)
+    emoji_min_graphemes: int = Field(default=6, ge=1, le=12)
     reactions_per_min: int = Field(default=60, ge=1)
     search_per_min: int = Field(default=120, ge=1)
 
@@ -43,6 +47,8 @@ class CollectionsLimits(BaseModel):
     def _items_range(self) -> Self:
         if self.items_min > self.items_max:
             raise ValueError("items_min не может быть больше items_max")
+        if self.emoji_min_graphemes > self.emoji_max_graphemes:
+            raise ValueError("emoji_min_graphemes не может быть больше emoji_max_graphemes")
         return self
 
 

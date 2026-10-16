@@ -5,8 +5,6 @@
 Чужая или несуществующая сессия — 404 ``game.session_not_found`` (не 403).
 """
 
-# ruff: noqa: ARG001 — заглушки этапа 3b (501) объявляют параметры контракта до реализации.
-
 from __future__ import annotations
 
 from typing import Annotated
@@ -41,14 +39,12 @@ from game_service.api.public.schemas import (
     TextAnswer,
 )
 from gv_auth import Principal, current_principal, optional_principal, require_user
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 
 Subject = Annotated[Principal, Depends(current_principal)]
 OptionalSubject = Annotated[Principal | None, Depends(optional_principal)]
 User = Annotated[Principal, Depends(require_user)]
 CollectionId = Annotated[UUID, Path(description="Идентификатор сборника")]
-STAGE_3B = "этап 3b: реализуется в потоке B (docs/plans/stage-3b.md)"
 SessionId = Annotated[UUID, Path(description="Идентификатор сессии")]
 RoundIndex = Annotated[int, Path(ge=0, le=MAX_ROUND_INDEX, description="Номер раунда с 0")]
 PathModeKey = Annotated[ModeKey, Path(description="Ключ режима")]
@@ -74,7 +70,11 @@ def build_public_router(c: ApiServices) -> APIRouter:
         "/modes",
         response_model=list[ModeOut],
         summary="Опубликованные режимы",
-        description="Публичный, `Cache-Control: public, max-age=30`.",
+        description=(
+            "Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника "
+            "(source `collection`) не входят: они приходят из "
+            "`GET /v1/collections/{collection_id}/modes`."
+        ),
         responses=problem_responses(422, 503),
     )
     async def list_modes(
@@ -115,14 +115,14 @@ def build_public_router(c: ApiServices) -> APIRouter:
         request: Request,
         response: Response,
     ) -> SessionSnapshot:
-        if body.collection_id is not None or body.rounds is not None:
-            raise NotImplementedYetError(STAGE_3B)
         snapshot, created = await c.play.start(
             player_of(subject, request),
             body.mode_key,
             body.preset_id,
             key,
             subject_ids=body.subject_ids or (),
+            collection_id=body.collection_id,
+            rounds=body.rounds,
         )
         if not created:
             response.status_code = status.HTTP_200_OK
@@ -297,12 +297,14 @@ def build_public_router(c: ApiServices) -> APIRouter:
             "`collections.collection.v1`), иначе 404 `game.collection_not_found`. Без "
             "названий и `media_item_id` (D6). Субъект не обязателен."
         ),
-        responses=problem_responses(401, 404, 422, 501, 503),
+        responses=problem_responses(401, 404, 422, 503),
     )
     async def collection_modes(
-        collection_id: CollectionId, subject: OptionalSubject
+        collection_id: CollectionId,
+        subject: OptionalSubject,  # noqa: ARG001 — токен необязателен, но проверяется
     ) -> list[CollectionModeOut]:
-        raise NotImplementedYetError(STAGE_3B)
+        rows = await c.queries.collection_modes(collection_id)
+        return [CollectionModeOut.model_validate(r) for r in rows]
 
     @router.post(
         "/modes/{mode_key}/playability",
@@ -314,12 +316,13 @@ def build_public_router(c: ApiServices) -> APIRouter:
             "`auth.guest_forbidden`), лимит `GV_GAME_LIMITS__PLAYABILITY_PER_MIN` (429). "
             "Режим без source `collection` — 422 `game.collection_not_supported`."
         ),
-        responses=problem_responses(401, 403, 404, 422, 429, 501, 503),
+        responses=problem_responses(401, 403, 404, 422, 429, 503),
     )
     async def playability(
         mode_key: PathModeKey, body: PlayabilityRequest, subject: User
     ) -> PlayabilityOut:
-        raise NotImplementedYetError(STAGE_3B)
+        result = await c.queries.playability(player_of(subject), mode_key, body.media_item_ids)
+        return PlayabilityOut.model_validate(result)
 
     @router.get(
         "/daily",

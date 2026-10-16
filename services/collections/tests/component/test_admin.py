@@ -146,7 +146,9 @@ async def test_admin_list_and_detail(svc: Any) -> None:
         draft["collection_id"],
         {
             "title": "Черновик",
-            "items": [{"media_item_id": str(i), "custom": {"emoji": "🎬"}} for i in items],
+            "items": [
+                {"media_item_id": str(i), "custom": {"emoji": "🎬🍿🎥🎭🌟🎻"}} for i in items
+            ],
         },
         base=1,
     )
@@ -170,7 +172,10 @@ async def test_admin_list_and_detail(svc: Any) -> None:
         )
     ).json()
     assert detail["draft_revision"] == 2
-    assert [i["custom"] for i in detail["items"]] == [{"emoji": "🎬"}, {"emoji": "🎬"}]
+    assert [i["custom"] for i in detail["items"]] == [
+        {"emoji": "🎬🍿🎥🎭🌟🎻"},
+        {"emoji": "🎬🍿🎥🎭🌟🎻"},
+    ]
     by_title = (
         await svc.client.get(
             "/admin/v1/collections", params={"q": "опублик"}, headers=viewer.headers

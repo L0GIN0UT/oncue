@@ -6,7 +6,7 @@
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
 - Публичный API: `/api/game/v1/...` на gateway; admin — `/admin/v1/mode-configs|daily-sets|projection`
 - Зависимости: PostgreSQL, Redis, Redpanda; `gv_game_kernel` (правила), `gv_text` (нормализация)
-- Статус: этап 3a — марафон, «больше/меньше», сетка топ-32, ревил другим типом, рекорды, запрос ассетов (`docs/plans/stage-3a.md` §5); этап 2 — конфиги, дейлик, соло-сессии, проекции
+- Статус: этап 3b — игра по сборнику (`docs/plans/stage-3b.md` §7, ADR 0028, 0029); этап 3a — марафон, «больше/меньше», сетка топ-32, ревил другим типом, рекорды, запрос ассетов (`docs/plans/stage-3a.md` §5); этап 2 — конфиги, дейлик, соло-сессии, проекции
 
 ## Особенности
 - Контракт API зафиксирован в 0a (§2.6 плана): схемы — `api/public/schemas.py`, `api/admin/schemas.py`; правка схемы = правка `contracts/openapi/game.json` (`gv contracts export`).
@@ -24,3 +24,4 @@
 - 409 `game.desync`: `details = {"session": SessionSnapshot}`; после 401 от media-pipeline кэш сервисного токена сбрасывается (`TokenProvider.invalidate`).
 - Параметр пути admin-ручек — `{mode_key}`: имя `key` конфликтует с параметром зависимости `Idempotency-Key`.
 - Периодические задачи (наборы дня, брошенные сессии) — `ServiceDefinition.build_periodic_jobs`, выполняются в relay под advisory lock; должны быть идемпотентными.
+- Сборники (3b): проекция `collection_proj`/`collection_items_proj` из `collections.collection.v1` (снимок по общей `version`, удалённый — надгробие); адаптер `SqlCollectionPort` обязан совпадать с `FakeCollectionPort.matches` (`tests/integration/test_collections.py`). Сессия фиксирует `collection_id` и `content_version` в `state.collection` и доигрывается после скрытия. Наборы со `scope_id` (свои эмодзи) — только в сессии своего сборника и первыми; удаляет их game сам по снимку (событий удаления от media нет). Шаблоны `*.collection.*` не входят в `GET /v1/modes`.

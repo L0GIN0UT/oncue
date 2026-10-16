@@ -82,6 +82,7 @@ def build_public_router(c: ApiServices) -> APIRouter:
                 items_max=lim.items_max,
                 tags_max=lim.tags_max,
                 emoji_max_graphemes=lim.emoji_max_graphemes,
+                emoji_min_graphemes=lim.emoji_min_graphemes,
                 drafts_max=lim.drafts_max,
                 publish_per_day=lim.publish_per_day,
             ),
@@ -180,7 +181,8 @@ def build_public_router(c: ApiServices) -> APIRouter:
             "`collections.items_too_few`, `collections.items_too_many`, "
             "`collections.item_duplicate`, `collections.item_domain_mismatch`, "
             "`collections.item_unavailable`, `collections.mode_invalid`, "
-            "`collections.emoji_invalid`, `collections.tag_unknown`, "
+            "`collections.emoji_invalid`, `collections.emoji_too_short` (`min`), "
+            "`collections.tag_unknown`, "
             "`collections.tags_too_many`, `collections.cover_unknown`, "
             "`collections.title_invalid`, `collections.description_invalid`; `reason` — код "
             "`ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 "

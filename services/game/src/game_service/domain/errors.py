@@ -193,6 +193,25 @@ class AssetsAlreadyAvailableError(ConflictError):
     default_code = "game.assets_already_available"
 
 
+# ---------------------------------------------------------------- этап 3b: сборники
+class CollectionNotFoundError(NotFoundError):
+    """Сборника нет в проекции, он скрыт или удалён (404, ADR 0028)."""
+
+    default_code = "game.collection_not_found"
+
+
+class CollectionDomainMismatchError(InvalidInputError):
+    """Домен сборника не совпадает с доменом режима (422)."""
+
+    default_code = "game.collection_domain_mismatch"
+
+
+class CollectionNotSupportedError(InvalidInputError):
+    """Сборник передан режиму без источника из сборника (422)."""
+
+    default_code = "game.collection_not_supported"
+
+
 def desync(snapshot: dict[str, Any]) -> DesyncError:
     """Ошибка рассинхронизации с актуальным снимком в ``details.session``."""
     return DesyncError("версия сессии устарела", details={"session": snapshot})

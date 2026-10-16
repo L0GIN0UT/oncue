@@ -7,7 +7,7 @@ Postgres (транзакции, блокировки и уникальные и�
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Protocol
@@ -16,11 +16,23 @@ from uuid import UUID
 from game_service.domain.asset_requests import AssetRequest
 from game_service.domain.daily import DailySet
 from game_service.domain.modes import ConfigVersion, ModeLine
-from game_service.domain.projection import CatalogItem, ClueAssets
+from game_service.domain.projection import (
+    CatalogItem,
+    ClueAssets,
+    CollectionItem,
+    CollectionProj,
+)
 from game_service.domain.session import GameSession, PlayerRef
 from gv_core.uow import UnitOfWork
 from gv_db.idempotency import IdempotencyStore
-from gv_game_kernel import CandidatePort, PlayableFor, PoolQuery, SubjectQuery
+from gv_game_kernel import (
+    CandidatePort,
+    CollectionPort,
+    MediaItemRef,
+    PlayableFor,
+    PoolQuery,
+    SubjectQuery,
+)
 
 
 # ---------------------------------------------------------------- конфиги режимов
@@ -128,7 +140,11 @@ class ProjectionRepository(Protocol):
         ...
 
     async def upsert_assets(self, assets: ClueAssets) -> None:
-        """Создать или заменить набор под ``(media_item_id, clue_type, params_hash)``."""
+        """Создать или заменить набор под ``(media_item_id, clue_type, params_hash, scope_id)``."""
+        ...
+
+    async def delete_scoped_assets(self, scope_id: UUID, keep: Collection[UUID]) -> int:
+        """Убрать наборы сборника ``scope_id`` (ADR 0029), кроме наборов единиц ``keep``."""
         ...
 
     async def fail_assets(self, asset_set_id: UUID, version: int) -> bool:
@@ -136,9 +152,18 @@ class ProjectionRepository(Protocol):
         ...
 
     async def ready_assets(
-        self, ids: Sequence[UUID], clue_type: str, params_hash: str
+        self,
+        ids: Sequence[UUID],
+        clue_type: str,
+        params_hash: str,
+        *,
+        scope: UUID | None = None,
     ) -> dict[UUID, ClueAssets]:
-        """Готовые наборы единиц под параметры загадки (только активные единицы)."""
+        """Готовые наборы единиц под параметры загадки (только активные единицы).
+
+        ``scope`` — сборник сессии: его свой набор берётся первым, иначе каталожный; без
+        ``scope`` наборы сборников не учитываются (ADR 0029).
+        """
         ...
 
     async def count_candidates(self, query: PoolQuery, *, also: PlayableFor | None = None) -> int:
@@ -168,6 +193,33 @@ class ProjectionRepository(Protocol):
         limit: int,
     ) -> list[CatalogItem]:
         """Поиск единиц по названию (админка)."""
+        ...
+
+
+class CollectionRepository(Protocol):
+    """Проекция сборников из ``collections.collection.v1`` (ADR 0028)."""
+
+    async def get(self, collection_id: UUID, *, for_update: bool = False) -> CollectionProj | None:
+        """Сборник (в том числе надгробие удалённого) или ``None``."""
+        ...
+
+    async def save(self, proj: CollectionProj, items: Sequence[CollectionItem]) -> None:
+        """Записать снимок сборника и заменить состав."""
+        ...
+
+    async def total(self, collection_id: UUID) -> int:
+        """Различных единиц сборника, активных в каталоге."""
+        ...
+
+    async def items(
+        self,
+        collection_id: UUID,
+        limit: int,
+        *,
+        playable_for: PlayableFor | None,
+        also: PlayableFor | None = None,
+    ) -> list[MediaItemRef]:
+        """Единицы опубликованного сборника в его порядке (``CollectionPort.items``)."""
         ...
 
 
@@ -321,9 +373,14 @@ class GameUnitOfWork(UnitOfWork, Protocol):
     records: RecordsRepository
     bracket_stats: BracketStatsRepository
     asset_requests: AssetRequestRepository
+    collections: CollectionRepository
 
     def candidates_for(self, also: PlayableFor | None) -> CandidatePort:
         """``CandidatePort`` с дополнительным требованием второго набора ассетов."""
+        ...
+
+    def collection_port(self, also: PlayableFor | None) -> CollectionPort:
+        """``CollectionPort`` ядра с дополнительным требованием второго набора ассетов."""
         ...
 
 
