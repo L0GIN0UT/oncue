@@ -7,6 +7,7 @@ UNIQUE, единица не повторяется в наборе дня — UN
 from __future__ import annotations
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     Column,
     Date,
@@ -103,11 +104,64 @@ clue_assets = Table(
     Column("levels_count", SmallInteger, nullable=False),
     Column("status", String(16), nullable=False),
     Column("version", Integer, nullable=False),
-    PrimaryKeyConstraint("media_item_id", "clue_type", "params_hash"),
+    # Этап 3b (ADR 0029): владелец набора — сборник (свои эмодзи автора) или NULL —
+    # каталожный набор. Ключ — ``(media_item_id, clue_type, params_hash, scope_id)`` с
+    # NULLS NOT DISTINCT: прежний PK по трём полям не дал бы завести набор сборника рядом
+    # с каталожным (миграция 0005).
+    Column("scope_id", Uuid, nullable=True),
     CheckConstraint("status IN ('ready', 'failed')", name="status_valid"),
     CheckConstraint("levels_count >= 1", name="levels_positive"),
     CheckConstraint("version >= 1", name="version_positive"),
     Index("ix_clue_assets_asset_set_id", "asset_set_id"),
+    Index(
+        "uq_clue_assets_scope_key",
+        "media_item_id",
+        "clue_type",
+        "params_hash",
+        "scope_id",
+        unique=True,
+        postgresql_nulls_not_distinct=True,
+    ),
+    Index("ix_clue_assets_scope_id", "scope_id", postgresql_where=text("scope_id IS NOT NULL")),
+)
+
+# Этап 3b (ADR 0028, D3): проекция сборников из ``collections.collection.v1``. Удалённый
+# сборник остаётся надгробием (``status = 'deleted'``, без единиц): опоздавший
+# ``CollectionPublished`` со старой ``version`` его не воскресит.
+collection_proj = Table(
+    "collection_proj",
+    _md,
+    Column("collection_id", Uuid, primary_key=True),
+    Column("version", BigInteger, nullable=False),
+    Column("content_version", Integer, nullable=False),
+    # NULL — только у надгробия сборника, которого game не видел до ``CollectionDeleted``.
+    Column("domain", String(16), nullable=True),
+    Column("status", String(16), nullable=False),
+    Column("visibility", String(16), nullable=True),
+    Column("author_id", Uuid, nullable=True),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version >= 1", name="version_positive"),
+    CheckConstraint("content_version >= 0", name="content_version_non_negative"),
+    CheckConstraint("domain IN ('music', 'film')", name="domain_valid"),
+    CheckConstraint("status IN ('published', 'hidden', 'deleted')", name="status_valid"),
+    CheckConstraint("visibility IN ('public', 'unlisted')", name="visibility_valid"),
+    CheckConstraint(
+        "status = 'deleted' OR (domain IS NOT NULL AND visibility IS NOT NULL)",
+        name="live_has_domain",
+    ),
+)
+
+collection_items_proj = Table(
+    "collection_items_proj",
+    _md,
+    Column("collection_id", Uuid, nullable=False),
+    Column("position", SmallInteger, nullable=False),
+    Column("media_item_id", Uuid, nullable=False),
+    PrimaryKeyConstraint("collection_id", "position"),
+    ForeignKeyConstraint(
+        ["collection_id"], ["collection_proj.collection_id"], ondelete="CASCADE"
+    ),
+    CheckConstraint("position >= 0 AND position < 200", name="position_valid"),
 )
 
 # ---------------------------------------------------------------- наборы дня
