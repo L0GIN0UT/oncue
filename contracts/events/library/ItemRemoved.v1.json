@@ -79,6 +79,6 @@
   ],
   "title": "library.ItemRemoved v1",
   "type": "object",
-  "x-aggregate-type": "user",
+  "x-aggregate-type": "shelf",
   "x-topic": "library.shelf.v1"
 }
