@@ -1,0 +1,58 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000710",
+  "aggregate_type": "session",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0211",
+  "event_type": "game.BracketCompleted",
+  "event_version": 1,
+  "occurred_at": "2026-10-10T12:00:00Z",
+  "payload": {
+    "champion_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100",
+    "is_guest": false,
+    "mode_key": "film.bracket.weekly",
+    "mode_version": 1,
+    "period_start": "2026-10-12",
+    "picks": [
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+        "stage": 8,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100"
+      },
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000103",
+        "stage": 8,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000102"
+      },
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000105",
+        "stage": 8,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000104"
+      },
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000107",
+        "stage": 8,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000106"
+      },
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000102",
+        "stage": 4,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100"
+      },
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000104",
+        "stage": 4,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000106"
+      },
+      {
+        "loser_id": "0192a3b4-c5d6-7e8f-9a0b-000000000106",
+        "stage": 2,
+        "winner_id": "0192a3b4-c5d6-7e8f-9a0b-000000000100"
+      }
+    ],
+    "session_id": "0192a3b4-c5d6-7e8f-9a0b-000000000710",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003",
+    "version": 8
+  },
+  "producer": "game"
+}

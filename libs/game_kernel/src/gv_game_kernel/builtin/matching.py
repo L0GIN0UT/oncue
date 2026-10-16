@@ -1,4 +1,5 @@
-"""Сверка ответов: matcher ``title_alias`` и правило частичного ответа ``artist``.
+"""Сверка ответов: matcher-ы ``title_alias``, ``metric_compare``, ``preference`` и правило
+частичного ответа ``artist``.
 
 Обе стороны сравнения нормализуются одним ``ctx.normalizer`` (по умолчанию —
 ``gv_text`` с заменами союзов, см. ``ModeEngine``): алиасы каталога уже нормализованы
@@ -6,7 +7,8 @@
 (``M(N(x)) == M(x)``, golden-тест ``libs/text``). Поэтому «Rock & Roll» в ответе совпадает
 с алиасом «rock and roll».
 
-Семантика зафиксирована golden-таблицей ``tests/golden/matcher.yaml``.
+Семантика зафиксирована golden-таблицами ``tests/golden/matcher.yaml`` (ввод названия) и
+``tests/golden/matcher_pick.yaml`` (выбор варианта).
 """
 
 from __future__ import annotations
@@ -17,13 +19,23 @@ from typing import Annotated, ClassVar
 from pydantic import BaseModel, Field, StrictBool, StrictInt
 
 from gv_game_kernel.builtin._base import PluginParams, typed
-from gv_game_kernel.plugins import AnswerInput, MatchContext, MatchResult
+from gv_game_kernel.builtin.clues import CLASSIC_FORMAT, PICK_FORMAT
+from gv_game_kernel.plugins import AnswerInput, MatchContext, MatchResult, RoundDraw
 from gv_game_kernel.refs import MediaItemRef
 from gv_game_kernel.round import MatchVerdict
 from gv_text import TitleNormalizer, damerau_levenshtein
 
 MAX_ANSWER_LEN = 300
 """Длиннее нормализованного алиаса каталога (300) ответ совпасть не может — без расчёта."""
+
+HIGHER = "higher"
+"""Вариант «у загаданной единицы метрика больше, чем у опорной» (``source.pair``)."""
+
+LOWER = "lower"
+"""Вариант «у загаданной единицы метрика меньше, чем у опорной»."""
+
+TIES_BOTH_CORRECT = "both_correct"
+"""Ничья метрик: верен любой вариант."""
 
 
 class TypoRule(PluginParams):
@@ -67,6 +79,8 @@ class TitleAliasMatcher:
 
     key: ClassVar[str] = "title_alias"
     params_schema: ClassVar[type[BaseModel]] = TitleAliasParams
+    answer_formats: ClassVar[frozenset[str]] = frozenset({CLASSIC_FORMAT})
+    requires_comparison: ClassVar[bool] = False
 
     def match(
         self, answer: AnswerInput, item: MediaItemRef, params: BaseModel, ctx: MatchContext
@@ -134,3 +148,86 @@ class ArtistPartial:
             if translit:
                 names.add(translit)
         return text in names
+
+
+# ----------------------------------------------------------------------------- pick
+def _require_draw(answer: AnswerInput, ctx: MatchContext) -> tuple[str, RoundDraw]:
+    """Выбранный вариант и состав раунда (их гарантирует ``ModeEngine.answer``)."""
+    if answer.option_id is None or ctx.draw is None:
+        raise ValueError("matcher формата pick ждёт option_id и состав раунда в MatchContext")
+    if all(option.id != answer.option_id for option in ctx.draw.options):
+        raise ValueError(f"варианта {answer.option_id!r} нет в раунде")
+    return answer.option_id, ctx.draw
+
+
+class MetricCompareParams(PluginParams):
+    """Параметры ``metric_compare`` (``contracts/modes/params/matcher.metric_compare.v1.json``)."""
+
+
+class MetricCompareMatcher:
+    """«Больше/меньше»: верно ли, что метрика загаданной единицы больше (``higher``) или
+    меньше (``lower``) метрики опорной (``draw.shown[0]``).
+
+    Метрику и правило ничьей объявляет источник (``ctx.comparison``). Ничья при
+    ``ties = both_correct`` — верен любой вариант. Единица без метрики не играбельна:
+    источник пары её не разыгрывает, а здесь это ошибка сборки раунда (``ValueError``).
+    """
+
+    key: ClassVar[str] = "metric_compare"
+    params_schema: ClassVar[type[BaseModel]] = MetricCompareParams
+    answer_formats: ClassVar[frozenset[str]] = frozenset({PICK_FORMAT})
+    requires_comparison: ClassVar[bool] = True
+
+    def match(
+        self, answer: AnswerInput, item: MediaItemRef, params: BaseModel, ctx: MatchContext
+    ) -> MatchResult:
+        """``exact`` — направление угадано (или ничья), иначе ``miss``.
+
+        Raises:
+            ValueError: нет состава раунда, правила сравнения, опорной единицы или метрики.
+        """
+        typed(params, MetricCompareParams)
+        option, draw = _require_draw(answer, ctx)
+        if ctx.comparison is None or not draw.shown:
+            raise ValueError("metric_compare ждёт правило сравнения и опорную единицу")
+        metric = ctx.comparison.metric
+        anchor, target = draw.shown[0].metric(metric), item.metric(metric)
+        if anchor is None or target is None:
+            raise ValueError(f"у единицы нет метрики {metric!r} — она не играбельна")
+        if option not in (HIGHER, LOWER):
+            raise ValueError(f"metric_compare не знает варианта {option!r}")
+        if target == anchor:
+            tie_ok = ctx.comparison.ties == TIES_BOTH_CORRECT
+            return MatchResult(MatchVerdict.EXACT if tie_ok else MatchVerdict.MISS)
+        correct = HIGHER if target > anchor else LOWER
+        return MatchResult(MatchVerdict.EXACT if option == correct else MatchVerdict.MISS)
+
+
+class PreferenceParams(PluginParams):
+    """Параметры ``preference`` (``contracts/modes/params/matcher.preference.v1.json``)."""
+
+
+class PreferenceMatcher:
+    """Предпочтение (сетка): любой вариант раунда верен. Выбор сохраняет game
+    (``RoundPick.option_id``), по нему сетка строит следующий тур."""
+
+    key: ClassVar[str] = "preference"
+    params_schema: ClassVar[type[BaseModel]] = PreferenceParams
+    answer_formats: ClassVar[frozenset[str]] = frozenset({PICK_FORMAT})
+    requires_comparison: ClassVar[bool] = False
+
+    def match(
+        self,
+        answer: AnswerInput,
+        item: MediaItemRef,  # noqa: ARG002 — протокол AnswerMatcher; правильного ответа нет
+        params: BaseModel,
+        ctx: MatchContext,
+    ) -> MatchResult:
+        """Всегда ``exact`` для варианта из раунда.
+
+        Raises:
+            ValueError: нет состава раунда или варианта в нём.
+        """
+        typed(params, PreferenceParams)
+        _require_draw(answer, ctx)
+        return MatchResult(MatchVerdict.EXACT)

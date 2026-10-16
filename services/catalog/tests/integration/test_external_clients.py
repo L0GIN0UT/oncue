@@ -229,3 +229,43 @@ async def test_yandex_empty_result_is_not_found() -> None:
     respx.get(f"{YM}/tracks/1").respond(200, json={"result": []})
     with pytest.raises(NotFoundError):
         await YandexMusicMetadataProvider(http(YM)).get_track("1")
+
+
+@respx.mock
+async def test_tmdb_stage3a_texts_countries_and_frames() -> None:
+    """Этап 3a (M8): сюжет и слоган (ru), страны, до frames_max кадров с position,
+    source_url и license_note у каждого исходника; кадр с надписью не берётся."""
+    respx.get(f"{TMDB}/movie/27205").respond(200, json=fixture("tmdb_movie_27205.json"))
+    client = TmdbClient(
+        http(TMDB, "tmdb"),
+        image_base_url="https://img.test/o",
+        frames_max=6,
+        license_note="TMDB, атрибуция",
+    )
+    item = await client.fetch_film("27205")
+
+    assert item.clue_texts is not None
+    assert item.clue_texts.plot_raw is not None
+    assert item.clue_texts.plot_raw.startswith("Кобб — талантливый вор")
+    assert item.clue_texts.tagline == "Твой разум — место преступления"
+    assert item.clue_texts.plot_masked is None  # маскирует use-case импорта
+    assert item.countries == ("GB", "US")
+    frames = [m for m in item.source_media if m.kind is SourceMediaKind.FRAME]
+    assert [(m.position, m.uri) for m in frames] == [
+        (i, f"https://img.test/o/frame{i}.jpg") for i in range(1, 7)
+    ]
+    assert {(m.source_url, m.license_note) for m in item.source_media} == {
+        ("https://www.themoviedb.org/movie/27205", "TMDB, атрибуция")
+    }
+    roles = [(p.name, p.role, p.order) for p in item.persons if p.role is PersonRole.ACTOR]
+    assert roles[0] == ("Леонардо ДиКаприо", PersonRole.ACTOR, 0)
+
+
+@respx.mock
+async def test_tmdb_without_overview_has_no_clue_texts() -> None:
+    respx.get(f"{TMDB}/movie/157336").respond(200, json=fixture("tmdb_movie_157336.json"))
+    item = await TmdbClient(http(TMDB, "tmdb"), image_base_url="https://img.test/o").fetch_film(
+        "157336"
+    )
+    assert item.clue_texts is None
+    assert item.countries == ()

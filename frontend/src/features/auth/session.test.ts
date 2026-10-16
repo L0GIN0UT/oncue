@@ -4,7 +4,7 @@ import { api, unwrap } from "@/shared/api/client";
 import { ApiError } from "@/shared/api/errors";
 import { csrfToken } from "@/shared/lib/cookies";
 import { dropAccessCookie, setupMockBackend, signInAsGuest, world } from "@/test/msw";
-import { startGuestSession, withSession } from "./session";
+import { recoverSession, startGuestSession, withSession } from "./session";
 
 setupMockBackend();
 
@@ -50,5 +50,32 @@ describe("startGuestSession и 409", () => {
     const err = await startGuestSession().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).code).toBe("auth.already_authenticated");
+  });
+});
+
+describe("recoverSession — сессию не принял сервер, а 401 до браузера не дошёл", () => {
+  it("живая cookie gv_csrf — refresh той же сессии, гостевая не заводится", async () => {
+    const subject = signInAsGuest("e");
+    const s = world.startSession(subject, MODES[0]!, null);
+    dropAccessCookie();
+    await recoverSession();
+    expect(world.refreshCalls).toBe(1);
+    expect((await snapshot(s.id)).response.status).toBe(200);
+  });
+
+  it("refresh не удался — выдаётся новая гостевая сессия", async () => {
+    signInAsGuest("f");
+    world.revokedRefresh.add("guest.f");
+    dropAccessCookie();
+    const before = csrfToken();
+    await recoverSession();
+    expect(csrfToken()).toBeTruthy();
+    expect(csrfToken()).not.toBe(before);
+  });
+
+  it("без gv_csrf — сразу гостевая, без refresh", async () => {
+    await recoverSession();
+    expect(world.refreshCalls).toBe(0);
+    expect(csrfToken()).toBeTruthy();
   });
 });

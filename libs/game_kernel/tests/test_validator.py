@@ -26,6 +26,8 @@ SEEDS = sorted(
     p.stem for p in (Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml")
 )
 FACTORY = EngineFactory(register_builtin(PluginRegistry()))
+# Сиды game собираются реестром процесса game: встроенные плагины и ``collection`` (3b).
+SEED_FACTORY = EngineFactory(register_collection(register_builtin(PluginRegistry())))
 
 
 def _issues(body: dict[str, Any], factory: EngineFactory = FACTORY) -> list[ConfigIssue]:
@@ -35,10 +37,15 @@ def _issues(body: dict[str, Any], factory: EngineFactory = FACTORY) -> list[Conf
 @pytest.mark.parametrize("key", SEEDS)
 def test_seeds_are_valid_and_build(key: str, seed_body: SeedBody) -> None:
     config = parse_mode_config(seed_body(key))
-    assert FACTORY.validate(config) == []
-    engine = FACTORY.build(config)
-    assert engine.levels_count == 6
-    assert engine.max_score() == 6 * config.session.rounds
+    assert SEED_FACTORY.validate(config) == []
+    engine = SEED_FACTORY.build(config)
+    if engine.answer_format.single_answer:
+        # Формат pick (пара, сетка): один уровень и один ответ на раунд.
+        assert engine.levels_count == 1
+        assert engine.max_score() == engine.round_max_score() * config.session.rounds
+    else:
+        assert engine.levels_count == 6
+        assert engine.max_score() == 6 * config.session.rounds
 
 
 def _set(body: dict[str, Any], path: str, value: Any) -> dict[str, Any]:
@@ -55,13 +62,13 @@ BROKEN: list[tuple[str, str, Any, ConfigIssue]] = [
     (
         "music.daily.classic",
         "source.type",
-        "marathon",
+        "lottery",
         ConfigIssue("source.type", "config.unknown_plugin"),
     ),
     (
         "music.daily.classic",
         "clue.type",
-        "description",
+        "hologram",
         ConfigIssue("clue.type", "config.unknown_plugin"),
     ),
     (
@@ -197,6 +204,121 @@ BROKEN: list[tuple[str, str, Any, ConfigIssue]] = [
         {"from": 2015},
         ConfigIssue("source.params.presets[0].filters.years", "config.preset_filter_empty"),
     ),
+    # --------------------------------------------------------------- этап 3a (A6)
+    (
+        "film.pair.rating",
+        "answer.format",
+        "classic",
+        ConfigIssue("source.type", "config.answer_format_unsupported"),
+    ),
+    (
+        "film.pair.rating",
+        "answer.format",
+        "classic",
+        ConfigIssue("answer.matcher.type", "config.answer_format_unsupported"),
+    ),
+    (
+        "music.daily.classic",
+        "answer.format",
+        "pick",
+        ConfigIssue("source.type", "config.answer_format_unsupported"),
+    ),
+    (
+        "music.marathon.artist",
+        "answer.format",
+        "pick",
+        ConfigIssue("clue.params.levels", "config.single_answer_levels"),
+    ),
+    (
+        "film.pair.rating",
+        "session.attempts_per_level",
+        2,
+        ConfigIssue("session.attempts_per_level", "config.single_answer_levels"),
+    ),
+    (
+        "film.pair.rating",
+        "answer.partial",
+        ["artist"],
+        ConfigIssue("answer.partial", "config.partial_unsupported"),
+    ),
+    (
+        "film.bracket.weekly",
+        "answer.matcher.type",
+        "metric_compare",
+        ConfigIssue("answer.matcher.type", "config.comparison_required"),
+    ),
+    (
+        "film.pair.rating",
+        "session.end",
+        None,
+        ConfigIssue("session.end", "config.end_rule_required"),
+    ),
+    (
+        "film.pair.rating",
+        "session.end",
+        {"type": "all_rounds", "params": {}},
+        ConfigIssue("session.end", "config.end_rule_required"),
+    ),
+    (
+        "film.pair.rating",
+        "session.end",
+        {"type": "lives", "params": {"count": 0}},
+        ConfigIssue("session.end.params.count", "schema.greater_than_equal"),
+    ),
+    (
+        "film.pair.rating",
+        "source.params.metric",
+        "box_office",
+        ConfigIssue("source.params.metric", "schema.literal_error"),
+    ),
+    (
+        "film.random.blackout",
+        "clue.reveal",
+        {"type": "audio_intro", "params": {"levels": [{"seconds": 15}]}},
+        ConfigIssue("clue.reveal.type", "config.domain_unsupported"),
+    ),
+    (
+        "film.random.blackout",
+        "clue.reveal",
+        {"type": "hologram", "params": {}},
+        ConfigIssue("clue.reveal.type", "config.unknown_plugin"),
+    ),
+    (
+        "film.random.blackout",
+        "clue.reveal",
+        {"type": "frame_progressive", "params": {"levels": []}},
+        ConfigIssue("clue.reveal.params.levels", "schema.too_short"),
+    ),
+    (
+        "film.bracket.weekly",
+        "session.rounds",
+        30,
+        ConfigIssue("source.params.size", "config.rounds_mismatch"),
+    ),
+    (
+        "film.bracket.weekly",
+        "source.params.subject",
+        {"roles": ["director"], "min_items": 10},
+        ConfigIssue("source.params.subject.min_items", "config.subject_min_items_below_size"),
+    ),
+    (
+        "film.bracket.weekly",
+        "source.params.size",
+        12,
+        ConfigIssue("source.params.size", "schema.literal_error"),
+    ),
+    (
+        "music.marathon.artist",
+        "source.params.roles",
+        ["artist", "artist"],
+        ConfigIssue("source.params.roles", "schema.unique_items"),
+    ),
+    (
+        "music.marathon.artist",
+        "source.params.max_subjects",
+        11,
+        ConfigIssue("source.params.max_subjects", "schema.less_than_equal"),
+    ),
 ]
 
 
@@ -224,7 +346,53 @@ def test_every_rule_code_is_covered() -> None:
         "config.min_above_max",
         "config.duplicate_preset",
         "config.preset_filter_empty",
+        "config.answer_format_unsupported",
+        "config.single_answer_levels",
+        "config.partial_unsupported",
+        "config.comparison_required",
+        "config.end_rule_required",
+        "config.subject_min_items_below_size",
     }
+
+
+STAGE3A_MODES = sorted(p.stem for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml"))
+
+
+# Тестовые режимы 3a и шаблон сборника 3b (источник ``collection`` — ``register_collection``).
+FULL = EngineFactory(register_collection(register_builtin(PluginRegistry())))
+
+
+@pytest.mark.parametrize("key", STAGE3A_MODES)
+def test_stage3a_modes_are_valid_and_build(key: str, seed_body: SeedBody) -> None:
+    config = parse_mode_config(seed_body(key))
+    assert FULL.validate(config) == []
+    engine = FULL.build(config)
+    assert engine.planned_rounds() >= 1
+
+
+def test_metric_must_exist_in_domain(seed_body: SeedBody) -> None:
+    body = seed_body("film.pair.rating")
+    body.update(key="music.pair.revenue", domain="music")
+    body["clue"] = {"type": "audio_intro", "params": {"start_s": 0, "levels": [{"seconds": 15}]}}
+    body["source"]["params"]["metric"] = "revenue_usd"
+    assert _issues(body) == [ConfigIssue("source.params.metric", "config.metric_unsupported")]
+    body["source"]["params"]["metric"] = "popularity"
+    assert _issues(body) == []
+
+
+def test_compatibility_is_declared_by_plugins(seed_body: SeedBody) -> None:
+    """Новый источник с ``pick`` проходит без правок ядра: совместимость — атрибут плагина."""
+    from gv_game_kernel.builtin import RandomSource
+
+    class PickRandom(RandomSource):
+        key = "pick_random"
+        answer_formats = frozenset({"pick"})
+
+    registry = register_builtin(PluginRegistry())
+    registry.register_source(PickRandom())
+    body = seed_body("film.bracket.weekly")
+    body["source"] = {"type": "pick_random", "params": {"pool": {"kinds": ["film"]}}}
+    assert _issues(body, EngineFactory(registry)) == []
 
 
 def test_session_kind_must_be_supported(seed_body: SeedBody) -> None:
@@ -258,7 +426,7 @@ def test_collection_source_is_not_registered_by_default(seed_body: SeedBody) -> 
     body = _set(
         seed_body("music.random.classic"),
         "source",
-        {"type": "collection", "params": {"collection_id": "00000000-0000-0000-0000-000000000001"}},
+        {"type": "collection", "params": {"round_options": [5, "all"], "min_items": 5}},
     )
     assert ConfigIssue("source.type", "config.unknown_plugin") in _issues(body)
     with_collection = EngineFactory(register_collection(register_builtin(PluginRegistry())))

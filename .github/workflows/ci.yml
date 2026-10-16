@@ -142,6 +142,9 @@ jobs:
         run: pnpm -C frontend lint
       - if: steps.app.outputs.present == 'true'
         run: pnpm -C frontend typecheck
+      - name: Типы e2e полного стека (e2e/*.spec.ts, зависимости — из frontend)
+        if: steps.app.outputs.present == 'true' && hashFiles('e2e/tsconfig.json') != ''
+        run: pnpm -C frontend exec tsc -p ../e2e
       - if: steps.app.outputs.present == 'true'
         run: pnpm -C frontend test
       - if: steps.app.outputs.present == 'true'
@@ -186,14 +189,16 @@ jobs:
             nginx:1.28-alpine nginx -t
 
   e2e-smoke:
-    # Полный стек на compose: смоук (e2e/stack.spec.ts) и сценарий «дейлик»
-    # (e2e/daily.spec.ts — только при E2E_SEEDED=1, когда стек засеян), `pnpm test:e2e:stack`.
-    # На main и по метке PR `e2e`.
+    # Полный стек на compose: смоук (e2e/stack.spec.ts), сценарии «дейлик» (e2e/daily.spec.ts),
+    # режимы этапа 3a (e2e/modes.spec.ts) и сборники этапа 3b (e2e/collections.spec.ts) — все,
+    # кроме смоука, только при E2E_SEEDED=1, когда стек засеян, `pnpm test:e2e:stack`
+    # (testMatch e2e/playwright.config.ts подхватывает все *.spec.ts). На main и по метке PR `e2e`.
     name: E2E smoke (compose)
     needs: [lint]
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'e2e')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Засев режимов 3a (≈ 60 фильмов × 8 исходников) и сетка на 31 выбор — дольше этапа 2.
+    timeout-minutes: 45
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       E2E_BASE_URL: https://localhost
@@ -236,11 +241,13 @@ jobs:
         # seeds/media/generate.py делает синтетические аудио-тоны через ffmpeg; на
         # ubuntu-раннере его нет из коробки. Pillow (кадры) уже в окружении uv.
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Засев стека для дейлика (gv dev seed)
+      - name: Засев стека для дейлика, режимов 3a и сборников 3b (gv dev seed)
         if: steps.app.outputs.present == 'true'
         # Стек поднят с --wait (миграции завершены → bootstrap-админ создан). Сидер ходит
         # напрямую на опубликованные порты сервисов (compose.services.dev.yml) и грузит
-        # каталог/медиа/наборы дня. Успех → E2E_SEEDED=1 раскрывает e2e/daily.spec.ts.
+        # каталог (с синтетикой 3a), все виды исходников, наборы дня и недели, кураторские
+        # сборники seeds/collections (admin-API collections, ожидание проекций). Успех →
+        # E2E_SEEDED=1 раскрывает e2e/daily.spec.ts, e2e/modes.spec.ts и e2e/collections.spec.ts.
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
           export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
@@ -260,9 +267,18 @@ jobs:
           node-version: "24"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: E2E — смоук стека (и «дейлик» при E2E_SEEDED=1)
+      - name: E2E — смоук стека (и «дейлик», режимы 3a, сборники 3b при E2E_SEEDED=1)
         if: steps.app.outputs.present == 'true'
+        # modes.spec.ts и collections.spec.ts ходят в admin-API game/media/collections как
+        # `gv dev seed`: учётные данные админа — из .env, в лог не попадают. collections.spec.ts
+        # берёт ссылку подтверждения e-mail из `docker compose logs identity` (E2E_COMPOSE_FILES).
         run: |
+          env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
+          export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
+          export GV_BOOTSTRAP_ADMIN__PASSWORD="$(env_val GV_BOOTSTRAP_ADMIN__PASSWORD)"
+          export GV_SERVICE_SECRET_ADMIN="$(env_val GV_SERVICE_SECRET_ADMIN)"
+          echo "::add-mask::${GV_BOOTSTRAP_ADMIN__PASSWORD}"
+          echo "::add-mask::${GV_SERVICE_SECRET_ADMIN}"
           pnpm -C frontend install --frozen-lockfile
           pnpm -C frontend exec playwright install --with-deps chromium
           pnpm -C frontend test:e2e:stack
@@ -282,7 +298,7 @@ jobs:
         run: |
           echo "::group::game — наборы дня и проекция"
           docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color game \
-            | grep -E "daily_pool_too_small|daily_set_ready|daily_items_replaced|assets_ready|game\.daily" \
+            | grep -E "daily_pool_too_small|daily_set_ready|daily_items_replaced|assets_ready|game\.daily|pool_empty|theme" \
             || echo "(в логах game нет записей о наборах дня/ассетах)"
           echo "::endgroup::"
       - name: Логи стека при падении

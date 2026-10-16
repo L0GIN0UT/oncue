@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from referencing import Registry, Resource
 
 from gv_game_kernel import ConfigError, ModeConfig, params_hash, parse_mode_config
-from gv_game_kernel.spec import AnswerSpec, PluginSpec, SessionSpec
+from gv_game_kernel.spec import AnswerSpec, ClueSpec, PluginSpec, SessionSpec
 
 pytestmark = pytest.mark.contract
 
@@ -53,7 +53,7 @@ def _errors(path: Path, instance: object) -> list[str]:
 
 
 def _plugin_schema(section: str, plugin_type: str) -> Path:
-    if section == "clue":
+    if section in ("clue", "reveal"):
         return CLUES / f"{plugin_type}.params.v1.json"
     return MODES / "params" / f"{section}.{plugin_type}.v1.json"
 
@@ -73,8 +73,11 @@ def test_mode_config_model_matches_schema() -> None:
     _assert_model_matches(ModeConfig, schema, "ModeConfig")
     _assert_model_matches(SessionSpec, schema["properties"]["session"], "session")
     _assert_model_matches(AnswerSpec, schema["properties"]["answer"], "answer")
-    for section in ("source", "clue", "scoring"):
+    for section in ("source", "scoring"):
         _assert_model_matches(PluginSpec, schema["properties"][section], section)
+    _assert_model_matches(ClueSpec, schema["properties"]["clue"], "clue")
+    _assert_model_matches(PluginSpec, schema["properties"]["clue"]["properties"]["reveal"], "rev")
+    _assert_model_matches(PluginSpec, schema["properties"]["session"]["properties"]["end"], "end")
     _assert_model_matches(PluginSpec, schema["properties"]["answer"]["properties"]["matcher"], "m")
 
 
@@ -113,6 +116,10 @@ def test_seed_is_valid_by_schema_and_models(seed: Path) -> None:
         ("scorer", body["scoring"]),
         ("matcher", body["answer"]["matcher"]),
     ]
+    if "end" in body["session"]:
+        plugins.append(("end", body["session"]["end"]))
+    if "reveal" in body["clue"]:
+        plugins.append(("reveal", body["clue"]["reveal"]))
     for section, plugin in plugins:
         path = _plugin_schema(section, plugin["type"])
         assert path.is_file(), f"нет схемы параметров {path.relative_to(ROOT)}"
@@ -203,10 +210,16 @@ def _shape(schema: dict[str, Any], resolve: Any) -> dict[str, Any]:
         assert len(branches) == 1, schema
         return _shape(branches[0], resolve)
     shape: dict[str, Any] = {k: schema[k] for k in _KEYWORDS if k in schema}
+    if isinstance(shape.get("type"), list):
+        # ``type: [integer, null]`` контракта = ``X | None`` pydantic (``anyOf`` выше).
+        types = [t for t in shape["type"] if t != "null"]
+        assert len(types) == 1, schema
+        shape["type"] = types[0]
     if "const" in schema:
         shape["enum"] = [schema["const"]]
     if "enum" in shape:
-        shape["enum"] = sorted(shape["enum"])
+        # Перечисление может смешивать типы (``round_options``: 5, 10, 25, "all").
+        shape["enum"] = sorted(shape["enum"], key=json.dumps)
     if "items" in schema:
         shape["items"] = _shape(schema["items"], resolve)
     if schema.get("type") == "object" or "properties" in schema:
@@ -231,14 +244,30 @@ def _contract_shape(path: Path) -> dict[str, Any]:
 
 def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
     from gv_game_kernel.builtin import (
+        AllRoundsParams,
+        AudioBlackoutParams,
         AudioIntroParams,
+        AudioReverseParams,
+        BracketParams,
         ByLevelParams,
         BySpeedParams,
+        CollectionParams,
         DailyParams,
+        DescriptionParams,
+        EmojiParams,
         FrameProgressiveParams,
+        FrameSequenceParams,
+        LivesParams,
+        MarathonParams,
+        MetricCompareParams,
+        NoneParams,
+        PairParams,
         PoolParams,
         PosterMaskedParams,
+        PreferenceParams,
         RandomParams,
+        SoundtrackParams,
+        StreakParams,
         TitleAliasParams,
     )
 
@@ -247,12 +276,28 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         ("audio_intro", AudioIntroParams, CLUES / "audio_intro.params.v1.json"),
         ("frame_progressive", FrameProgressiveParams, CLUES / "frame_progressive.params.v1.json"),
         ("poster_masked", PosterMaskedParams, CLUES / "poster_masked.params.v1.json"),
+        ("audio_reverse", AudioReverseParams, CLUES / "audio_reverse.params.v1.json"),
+        ("soundtrack", SoundtrackParams, CLUES / "soundtrack.params.v1.json"),
+        ("audio_blackout", AudioBlackoutParams, CLUES / "audio_blackout.params.v1.json"),
+        ("frame_sequence", FrameSequenceParams, CLUES / "frame_sequence.params.v1.json"),
+        ("description", DescriptionParams, CLUES / "description.params.v1.json"),
+        ("emoji", EmojiParams, CLUES / "emoji.params.v1.json"),
         ("daily", DailyParams, params / "source.daily.v1.json"),
         ("random", RandomParams, params / "source.random.v1.json"),
+        ("marathon", MarathonParams, params / "source.marathon.v1.json"),
+        ("pair", PairParams, params / "source.pair.v1.json"),
+        ("bracket", BracketParams, params / "source.bracket.v1.json"),
+        ("collection", CollectionParams, params / "source.collection.v1.json"),
         ("pool", PoolParams, params / "pool.v1.json"),
         ("by_level", ByLevelParams, params / "scorer.by_level.v1.json"),
         ("by_speed", BySpeedParams, params / "scorer.by_speed.v1.json"),
+        ("streak", StreakParams, params / "scorer.streak.v1.json"),
+        ("none", NoneParams, params / "scorer.none.v1.json"),
         ("title_alias", TitleAliasParams, params / "matcher.title_alias.v1.json"),
+        ("metric_compare", MetricCompareParams, params / "matcher.metric_compare.v1.json"),
+        ("preference", PreferenceParams, params / "matcher.preference.v1.json"),
+        ("all_rounds", AllRoundsParams, params / "end.all_rounds.v1.json"),
+        ("lives", LivesParams, params / "end.lives.v1.json"),
     ]
 
 
@@ -264,15 +309,88 @@ def test_plugin_params_model_matches_contract(
     assert _model_shape(model) == _contract_shape(path), name
 
 
+CLUE_KEYS = (
+    "audio_intro",
+    "frame_progressive",
+    "poster_masked",
+    "audio_reverse",
+    "soundtrack",
+    "audio_blackout",
+    "frame_sequence",
+    "description",
+    "emoji",
+)
+SOURCE_KEYS = ("daily", "random", "marathon", "pair", "bracket", "collection")
+MATCHER_KEYS = ("title_alias", "metric_compare", "preference")
+SCORER_KEYS = ("by_level", "by_speed", "streak", "none")
+END_KEYS = ("all_rounds", "lives")
+
+
 def test_every_registered_plugin_has_a_contract() -> None:
+    from gv_game_kernel import PluginRegistry, register_builtin, register_collection
+
+    registry = register_collection(register_builtin(PluginRegistry()))
+    covered = {model for _, model, _ in _plugin_models()}
+    plugins = [
+        *(registry.clue(k) for k in CLUE_KEYS),
+        *(registry.source(k) for k in SOURCE_KEYS),
+        *(registry.matcher(k) for k in MATCHER_KEYS),
+        *(registry.scorer(k) for k in SCORER_KEYS),
+        *(registry.end_rule(k) for k in END_KEYS),
+    ]
+    missing = [p for p in plugins if p is None or p.params_schema not in covered]
+    assert missing == []
+    # Каждой схеме загадки и параметров режима соответствует зарегистрированный плагин.
+    clue_files = {p.name.removesuffix(".params.v1.json") for p in CLUES.glob("*.params.v1.json")}
+    assert clue_files == set(CLUE_KEYS)
+    sections = {"source": SOURCE_KEYS, "matcher": MATCHER_KEYS, "scorer": SCORER_KEYS}
+    sections["end"] = END_KEYS
+    for section, keys in sections.items():
+        files = {p.name.split(".")[1] for p in (MODES / "params").glob(f"{section}.*.v1.json")}
+        assert files == set(keys), section
+
+
+def test_answer_formats_are_registered() -> None:
     from gv_game_kernel import PluginRegistry, register_builtin
 
     registry = register_builtin(PluginRegistry())
-    covered = {model for _, model, _ in _plugin_models()}
-    plugins = [
-        *(registry.clue(k) for k in ("audio_intro", "frame_progressive", "poster_masked")),
-        *(registry.source(k) for k in ("daily", "random")),
-        registry.matcher("title_alias"),
-        *(registry.scorer(k) for k in ("by_level", "by_speed")),
-    ]
-    assert all(p is not None and p.params_schema in covered for p in plugins)
+    pick, classic = registry.answer_format("pick"), registry.answer_format("classic")
+    assert pick is not None and pick.input_kinds == frozenset({"option"}) and pick.needs_options
+    assert classic is not None and classic.input_kinds == frozenset({"item", "text"})
+
+
+def test_golden_profile_params_parse_by_clue_models() -> None:
+    """Параметры профилей media-pipeline из golden ``params_hash`` проходят модель загадки."""
+    from gv_game_kernel import PluginRegistry, register_builtin
+
+    registry = register_builtin(PluginRegistry())
+    vectors = _load(CLUES / "params_hash.golden.json")["vectors"]
+    profiles = [v for v in vectors if v["name"].startswith("profile:")]
+    assert {v["name"].split(":")[1] for v in profiles} == set(CLUE_KEYS)
+    for vector in profiles:
+        clue = registry.clue(vector["name"].split(":")[1])
+        assert clue is not None
+        clue.params_schema.model_validate(vector["params"])
+        assert params_hash(vector["params"]) == vector["params_hash"], vector["name"]
+
+
+TEST_MODES = sorted((Path(__file__).parent / "modes").glob("*.yaml"))
+
+
+@pytest.mark.parametrize("path", TEST_MODES, ids=lambda p: p.stem)
+def test_stage3a_test_modes_are_valid_by_schema(path: Path) -> None:
+    """Тестовые конфиги режимов 3a валидны по JSON Schema (как сиды game)."""
+    body = yaml.safe_load(path.read_text(encoding="utf-8"))
+    errors = _errors(MODES / "mode_config.v1.json", body)
+    errors += _errors(_plugin_schema("source", body["source"]["type"]), body["source"]["params"])
+    errors += _errors(_plugin_schema("clue", body["clue"]["type"]), body["clue"]["params"])
+    errors += _errors(_plugin_schema("scorer", body["scoring"]["type"]), body["scoring"]["params"])
+    matcher = body["answer"]["matcher"]
+    errors += _errors(_plugin_schema("matcher", matcher["type"]), matcher["params"])
+    if "end" in body["session"]:
+        end = body["session"]["end"]
+        errors += _errors(_plugin_schema("end", end["type"]), end["params"])
+    if "reveal" in body["clue"]:
+        reveal = body["clue"]["reveal"]
+        errors += _errors(_plugin_schema("reveal", reveal["type"]), reveal["params"])
+    assert errors == []

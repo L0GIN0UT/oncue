@@ -1,0 +1,22 @@
+# Кураторский музыкальный сборник по вступлению (`music.collection.intro`, профиль
+# audio_intro/default): треки сидов этапа 2 и синтетика 3a — у всех есть загруженное аудио.
+key: music-intro
+title: "Музыка · интро: рок-классика"
+description: "Узнайте трек по первым секундам вступления."
+domain: music
+default_mode_key: music.collection.intro
+tags: [rock, classic]
+cover: vinyl
+visibility: public
+featured_rank: 2
+items:
+  - track:bohemian-rhapsody
+  - track:we-will-rock-you
+  - track:smells-like-teen-spirit
+  - track:hotel-california
+  - track:stairway-to-heaven
+  - track:back-in-black
+  - track:gruppa-krovi
+  - track:kukushka
+  - track:synthetic-01
+  - track:synthetic-02

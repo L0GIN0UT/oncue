@@ -1,0 +1,28 @@
+# Golden-таблица сверки ответов формата pick (ADR 0023): matcher-ы metric_compare и
+# preference. Контракт семантики для game: менять только осознанно, вместе с планом/ADR.
+#
+# metric_compare: anchor — метрика опорной единицы (shown[0]), target — загаданной;
+# null — у единицы нет метрики. pick — выбранный option_id (higher | lower).
+# expect: exact | miss | unplayable (единица без метрики: источник её не разыгрывает,
+# а matcher считает такой раунд ошибкой сборки).
+# preference: options — варианты раунда сетки, pick — выбор; любой вариант верен.
+
+metric: vote_average
+ties: both_correct
+
+metric_compare:
+  - { id: higher_right, anchor: 6.1, target: 7.4, pick: higher, expect: exact }
+  - { id: higher_wrong, anchor: 7.4, target: 6.1, pick: higher, expect: miss }
+  - { id: lower_right, anchor: 8.0, target: 5.5, pick: lower, expect: exact }
+  - { id: lower_wrong, anchor: 5.5, target: 8.0, pick: lower, expect: miss }
+  - { id: tie_higher_both_correct, anchor: 7.0, target: 7.0, pick: higher, expect: exact }
+  - { id: tie_lower_both_correct, anchor: 7.0, target: 7.0, pick: lower, expect: exact }
+  - { id: tiny_difference_counts, anchor: 7.0, target: 7.01, pick: higher, expect: exact }
+  - { id: integers_revenue_style, anchor: 1000000, target: 999999, pick: lower, expect: exact }
+  - { id: zero_anchor, anchor: 0, target: 0.1, pick: higher, expect: exact }
+  - { id: target_without_metric, anchor: 7.0, target: null, pick: higher, expect: unplayable }
+  - { id: anchor_without_metric, anchor: null, target: 7.0, pick: lower, expect: unplayable }
+
+preference:
+  - { id: first_option, options: [a, b], pick: a, expect: exact }
+  - { id: second_option, options: [a, b], pick: b, expect: exact }

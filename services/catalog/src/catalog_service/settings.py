@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
-from gv_service import ServiceSettings
+from gv_service import Environment, ServiceSettings
+
+# Окружения, где разрешён синтетический засев с сразу одобренными текстами загадок.
+SEED_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
 
 
 class OpenSearchSettings(BaseModel):
@@ -96,6 +99,23 @@ class ImportSettings(BaseModel):
     max_file_lines: int = Field(default=10_000, ge=1)
 
 
+class CatalogSettings(BaseModel):
+    """Каталог этапа 3a: тексты загадок, кадры TMDB, переопубликация (``GV_CATALOG__*``)."""
+
+    # Тексты файлового импорта сразу одобрены (синтетический засев). Только local/ci.
+    seed_texts_approved: bool = False
+    # Сколько backdrops TMDB брать как кадры frame_sequence (position 1..N).
+    tmdb_frames_max: int = Field(default=6, ge=1, le=20)
+    # Основание использования изображений TMDB в source_media[].license_note (D6).
+    tmdb_license_note: str = Field(
+        default="TMDB API: изображения и тексты TMDB, атрибуция обязательна (ADR 0014)",
+        min_length=1,
+        max_length=500,
+    )
+    # Единиц в одной порции задачи переопубликации (POST /admin/v1/items/republish).
+    republish_batch: int = Field(default=200, ge=1, le=5_000)
+
+
 class NormalizerSettings(BaseModel):
     """Нормализация названий."""
 
@@ -116,3 +136,13 @@ class Settings(ServiceSettings):
     autocomplete: AutocompleteSettings = AutocompleteSettings()
     imports: ImportSettings = ImportSettings()
     normalizer: NormalizerSettings = NormalizerSettings()
+    catalog: CatalogSettings = CatalogSettings()
+
+    @model_validator(mode="after")
+    def _seed_texts_only_in_dev(self) -> Settings:
+        if self.catalog.seed_texts_approved and self.environment not in SEED_ENVIRONMENTS:
+            raise ValueError(
+                "GV_CATALOG__SEED_TEXTS_APPROVED допустим только в local/ci: "
+                "вне них тексты загадок одобряет модератор (ADR 0024)"
+            )
+        return self

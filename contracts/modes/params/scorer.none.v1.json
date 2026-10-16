@@ -1,0 +1,10 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:scorer.none:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Без очков (сетка предпочтений)",
+  "properties": {},
+  "required": [],
+  "title": "scorer.none params v1",
+  "type": "object"
+}

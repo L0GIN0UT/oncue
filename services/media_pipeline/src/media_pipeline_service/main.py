@@ -8,11 +8,11 @@ from fastapi import APIRouter
 
 from gv_messaging import EventHandlerRegistry
 from gv_messaging.ports import TaskHandler
-from gv_service import Infrastructure, ServiceDefinition, ServiceSettings, main
+from gv_service import Infrastructure, PeriodicJob, ServiceDefinition, ServiceSettings, main
 from media_pipeline_service.api.admin import build_admin_router
 from media_pipeline_service.api.internal import build_internal_router
 from media_pipeline_service.api.public import build_public_router
-from media_pipeline_service.infrastructure import messaging
+from media_pipeline_service.infrastructure import jobs, messaging
 from media_pipeline_service.infrastructure.container import MediaAdapters, container_for
 from media_pipeline_service.infrastructure.db.tables import TABLES
 from media_pipeline_service.infrastructure.storage import prepare_storage
@@ -30,8 +30,11 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
         build_internal_router(c.issue_link, c.list_sets),
         build_admin_router(
             upload=c.upload,
+            set_position=c.set_position,
             regenerate=c.regenerate,
             list_sets=c.list_sets,
+            list_profiles=c.list_profiles,
+            list_sources=c.list_sources,
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,
         ),
     ]
@@ -40,7 +43,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
 def build_event_handlers(
     infra: Infrastructure, adapters: MediaAdapters | None = None
 ) -> EventHandlerRegistry:
-    """Обработчики событий catalog."""
+    """Обработчики событий catalog, game и collections."""
     return messaging.build_event_handlers(container_for(infra, adapters))
 
 
@@ -49,6 +52,13 @@ def build_task_handlers(
 ) -> dict[str, TaskHandler]:
     """Обработчики задач RabbitMQ."""
     return messaging.build_task_handlers(container_for(infra, adapters))
+
+
+def build_periodic_jobs(
+    infra: Infrastructure, adapters: MediaAdapters | None = None
+) -> list[PeriodicJob]:
+    """Периодические задачи (relay)."""
+    return jobs.build_jobs(container_for(infra, adapters))
 
 
 async def prepare_resources(settings: ServiceSettings) -> None:
@@ -71,6 +81,7 @@ DEFINITION = ServiceDefinition(
     consumer_topics=messaging.CONSUMED_TOPICS,
     build_routers=build_routers,
     build_task_handlers=build_task_handlers,
+    build_periodic_jobs=build_periodic_jobs,
     prepare_resources=prepare_resources,
 )
 

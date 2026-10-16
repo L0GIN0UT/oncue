@@ -36,6 +36,10 @@ class MediaSettings(BaseModel):
     link_max_per_window: int = Field(default=10, ge=1)
     link_window_s: int = Field(default=60, ge=1)
     link_issuance_retention_days: int = Field(default=7, ge=1)
+    # Задача relay ``media.link_issuance.purge``: пауза между запусками, джиттер, порция.
+    link_purge_interval_s: float = Field(default=600, gt=0)
+    link_purge_jitter_s: float = Field(default=60, ge=0)
+    link_purge_batch: int = Field(default=1000, ge=1, le=100_000)
     # Через сколько секунд повторить выдачу ссылки, если лимитер (Redis) недоступен (503).
     link_limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
     # Пусто — относительные ссылки (тот же origin, что у сайта).
@@ -54,6 +58,19 @@ class MediaSettings(BaseModel):
     profiles_path: Path | None = None
     # Не больше числа ретраев очереди + 1 (gv_messaging.rabbit.DEFAULT_RETRY_DELAYS: 4).
     generate_max_attempts: int = Field(default=4, ge=1, le=5)
+    # Динамические профили по game.ClueAssetsRequested (ADR 0025): лимит неотклонённых,
+    # предел размера params (канонический JSON) и досоздание наборов задачей relay
+    # media.profiles.backfill — порция единиц за запуск, пауза и джиттер.
+    max_dynamic_profiles: int = Field(default=50, ge=0, le=1000)
+    dynamic_params_max_bytes: int = Field(default=16_384, ge=256, le=262_144)
+    backfill_batch: int = Field(default=200, ge=1, le=10_000)
+    backfill_interval_s: float = Field(default=60, gt=0)
+    backfill_jitter_s: float = Field(default=10, ge=0)
+    # Свои загадки сборников (ADR 0029): лимит графем эмодзи (как у collections,
+    # GV_COLLECTIONS__LIMITS__EMOJI_MAX_GRAPHEMES) и типы загадок, по профилям которых строятся
+    # наборы со scope сборника (в 3b — только emoji).
+    collection_emoji_max_graphemes: int = Field(default=12, ge=1, le=64)
+    scoped_clue_types: frozenset[str] = frozenset({"emoji"})
 
     @property
     def source_host_list(self) -> frozenset[str]:
@@ -75,6 +92,9 @@ class Settings(ServiceSettings):
     """Настройки сервиса. Новые поля добавлять здесь с безопасными значениями по умолчанию."""
 
     service_name: str = "media_pipeline"
+    # Генерация — ffmpeg и Pillow по исходнику: при prefetch 10 параллельные задачи засева
+    # (8 исходников на фильм) выводили процесс за лимит памяти контейнера (OOM, рестарт).
+    task_prefetch: int = Field(default=2, ge=1, le=100)
     s3: S3Settings = S3Settings()
     media: MediaSettings = MediaSettings()
     ffmpeg: FfmpegSettings = FfmpegSettings()

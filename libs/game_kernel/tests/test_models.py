@@ -31,13 +31,16 @@ def test_errors_map_to_expected_http_classes() -> None:
     assert finished.code == "game.round_finished"
 
 
-def test_answer_is_either_item_or_text() -> None:
-    assert AnswerInput(media_item_id=uuid4()).text is None
-    assert AnswerInput(text="Интерстеллар").media_item_id is None
-    with pytest.raises(ValueError, match="либо"):
+def test_answer_is_exactly_one_of_item_text_option() -> None:
+    assert AnswerInput(media_item_id=uuid4()).input_kind == "item"
+    assert AnswerInput(text="Интерстеллар").input_kind == "text"
+    assert AnswerInput(option_id="higher").input_kind == "option"
+    with pytest.raises(ValueError, match="ровно одно"):
         AnswerInput()
-    with pytest.raises(ValueError, match="либо"):
+    with pytest.raises(ValueError, match="ровно одно"):
         AnswerInput(media_item_id=uuid4(), text="x")
+    with pytest.raises(ValueError, match="ровно одно"):
+        AnswerInput(text="x", option_id="a")
 
 
 def test_round_state_starts_on_first_level() -> None:

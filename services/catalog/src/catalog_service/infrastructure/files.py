@@ -1,4 +1,8 @@
-"""Импорт из файла JSONL (``FileImportProvider``). Формат — ``seeds/catalog/README.md``."""
+"""Импорт из файла JSONL (``FileImportProvider``). Формат — ``seeds/catalog/README.md``.
+
+Этап 3a: строка может содержать ``countries``, ``clue_texts`` (тексты загадок, ADR 0024) и
+``source_media`` (исходники с ``position``/``source_url``/``license_note``, D6).
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from catalog_service.application.dto import ImportedItem, PersonRef
+from catalog_service.application.dto import ImportedClueTexts, ImportedItem, PersonRef
 from catalog_service.domain.model import (
     AliasDraft,
     AliasKind,
@@ -19,8 +23,11 @@ from catalog_service.domain.model import (
     MediaKind,
     MediaMetrics,
     PersonRole,
+    SourceMediaDraft,
+    SourceMediaKind,
+    SourceMediaOrigin,
 )
-from gv_core.errors import InvalidInputError, NotFoundError
+from gv_core.errors import AppError, InvalidInputError, NotFoundError
 
 FILE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,62}\.jsonl$")
 MAX_LINE_BYTES = 64 * 1024
@@ -50,6 +57,24 @@ class _Metrics(BaseModel):
     duration_ms: int | None = Field(default=None, ge=0)
 
 
+class _ClueTexts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plot_raw: str | None = Field(default=None, min_length=1, max_length=5000)
+    plot_masked: str | None = Field(default=None, min_length=1, max_length=2000)
+    tagline: str | None = Field(default=None, min_length=1, max_length=300)
+    emoji: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class _SourceMedia(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["audio", "frame", "poster", "soundtrack", "audio_clip"]
+    origin: Literal["upload", "tmdb"]
+    uri: str = Field(min_length=1, max_length=2000, pattern=r"^https://")
+    position: int = Field(default=1, ge=1, le=100)
+    source_url: str | None = Field(default=None, min_length=1, max_length=2000)
+    license_note: str | None = Field(default=None, min_length=1, max_length=500)
+
+
 class FileLine(BaseModel):
     """Строка файла импорта."""
 
@@ -67,9 +92,16 @@ class FileLine(BaseModel):
         Field(default_factory=dict)
     )
     metrics: _Metrics = Field(default_factory=_Metrics)
+    countries: list[str] = Field(default_factory=list, max_length=20)
+    clue_texts: _ClueTexts | None = None
+    source_media: list[_SourceMedia] = Field(default_factory=list, max_length=20)
 
-    def to_imported(self) -> ImportedItem:
-        """В DTO импорта. Ключ строки становится внешним id ``seed``."""
+    def to_imported(self, *, texts_approved: bool = False) -> ImportedItem:
+        """В DTO импорта. Ключ строки становится внешним id ``seed``.
+
+        Args:
+            texts_approved: Тексты загадок сразу одобрены (засев local/ci).
+        """
         role_order: dict[str, int] = {}
         persons: list[PersonRef] = []
         for p in self.persons:
@@ -89,7 +121,27 @@ class FileLine(BaseModel):
             genres=tuple(self.genres),
             external_refs=refs,
             metrics=MediaMetrics(**self.metrics.model_dump()),
+            countries=tuple(self.countries),
+            clue_texts=ImportedClueTexts(**self.clue_texts.model_dump())
+            if self.clue_texts
+            else None,
+            texts_authoritative=texts_approved and self.clue_texts is not None,
+            source_media=tuple(
+                SourceMediaDraft(
+                    SourceMediaKind(m.kind),
+                    SourceMediaOrigin(m.origin),
+                    m.uri,
+                    position=m.position,
+                    source_url=m.source_url,
+                    license_note=m.license_note,
+                )
+                for m in self.source_media
+            ),
         )
+
+    def missing_provenance(self) -> bool:
+        """У какого-то исходника нет ``source_url`` или ``license_note`` (D6)."""
+        return any(not (m.source_url and m.license_note) for m in self.source_media)
 
 
 class FileImportProvider:
@@ -99,9 +151,18 @@ class FileImportProvider:
     невозможен (проверка формата и ``resolve`` родителя).
     """
 
-    def __init__(self, files_dir: Path, *, max_lines: int = 10_000) -> None:
+    def __init__(
+        self,
+        files_dir: Path,
+        *,
+        max_lines: int = 10_000,
+        texts_approved: bool = False,
+        require_provenance: bool = False,
+    ) -> None:
         self._dir = files_dir
         self._max_lines = max_lines
+        self._texts_approved = texts_approved
+        self._require_provenance = require_provenance
 
     def _path(self, file_id: str) -> Path:
         if not FILE_ID_RE.match(file_id):
@@ -123,17 +184,36 @@ class FileImportProvider:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            yield parse_line(line, number)
+            yield parse_line(
+                line,
+                number,
+                texts_approved=self._texts_approved,
+                require_provenance=self._require_provenance,
+            )
 
 
-def parse_line(line: str, number: int) -> ImportedItem | ValueError:
-    """Разобрать строку; ошибка — ``ValueError`` с номером строки (без содержимого)."""
+def parse_line(
+    line: str, number: int, *, texts_approved: bool = False, require_provenance: bool = False
+) -> ImportedItem | ValueError:
+    """Разобрать строку; ошибка — ``ValueError`` с номером строки (без содержимого).
+
+    Args:
+        texts_approved: Тексты загадок строки сразу одобрены (``GV_CATALOG__SEED_TEXTS_APPROVED``).
+        require_provenance: Исходник без ``source_url``/``license_note`` — ошибка строки
+            (вне local/ci, D6).
+    """
     if len(line.encode()) > MAX_LINE_BYTES:
         return ValueError(f"строка {number}: слишком длинная")
     try:
-        return FileLine.model_validate(json.loads(line)).to_imported()
+        parsed = FileLine.model_validate(json.loads(line))
     except json.JSONDecodeError:
         return ValueError(f"строка {number}: не JSON")
     except ValidationError as exc:
         fields = sorted({".".join(map(str, e["loc"])) for e in exc.errors()})
         return ValueError(f"строка {number}: неверные поля {fields}")
+    if require_provenance and parsed.missing_provenance():
+        return ValueError(f"строка {number}: у исходника нет source_url или license_note")
+    try:
+        return parsed.to_imported(texts_approved=texts_approved)
+    except AppError as exc:  # позиция/страна вне домена — ошибка строки, а не импорта
+        return ValueError(f"строка {number}: {exc.code}")

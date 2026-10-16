@@ -17,6 +17,8 @@ from gv_game_kernel import (
     ModeEngine,
     PluginRegistry,
 )
+from gv_game_kernel.builtin import AllRoundsEnd, ClassicFormat
+from gv_game_kernel.registry import DOMAIN_UNSUPPORTED
 
 pytestmark = pytest.mark.unit
 
@@ -44,6 +46,7 @@ class FakeClue:
 class FakeSource:
     key: ClassVar[str] = "daily"
     params_schema: ClassVar[type[BaseModel]] = _Params
+    answer_formats: ClassVar[frozenset[str]] = frozenset({"classic"})
 
     async def draw(self, ctx: Any, params: BaseModel, n: int) -> list[Any]:
         return []
@@ -64,6 +67,8 @@ class FakeSource:
 class FakeMatcher:
     key: ClassVar[str] = "title_alias"
     params_schema: ClassVar[type[BaseModel]] = _Params
+    answer_formats: ClassVar[frozenset[str]] = frozenset({"classic"})
+    requires_comparison: ClassVar[bool] = False
 
     def match(self, answer: Any, item: Any, params: BaseModel, ctx: Any) -> Any:
         raise NotImplementedError
@@ -80,6 +85,8 @@ class FakePartial:
 class FakeScorer:
     key: ClassVar[str] = "by_level"
     params_schema: ClassVar[type[BaseModel]] = _Params
+    presentation: ClassVar[str] = "score"
+    requires_early_end: ClassVar[bool] = False
 
     def score(self, outcome: Any, params: BaseModel) -> int:
         return 0
@@ -98,6 +105,8 @@ def _registry() -> PluginRegistry:
     r.register_matcher(FakeMatcher())
     r.register_partial(FakePartial())
     r.register_scorer(FakeScorer())
+    r.register_answer_format(ClassicFormat())
+    r.register_end_rule(AllRoundsEnd())
     return r
 
 
@@ -177,6 +186,41 @@ def test_unknown_keys_are_reported_with_paths() -> None:
         ConfigIssue("scoring.type", UNKNOWN_PLUGIN),
         ConfigIssue("answer.partial[1]", UNKNOWN_PLUGIN),
     ]
+
+
+def test_unknown_answer_format_end_rule_and_reveal_are_reported() -> None:
+    base = _config()
+    config = _config(
+        answer={"format": "lite", "matcher": {"type": "title_alias", "params": {}}},
+        session={**base.session.model_dump(), "end": {"type": "lives", "params": {"count": 3}}},
+        clue={"type": "audio_intro", "params": {}, "reveal": {"type": "emoji", "params": {}}},
+    )
+    issues = EngineFactory(_registry()).validate(config)
+    assert ConfigIssue("answer.format", UNKNOWN_PLUGIN) in issues
+    assert ConfigIssue("session.end.type", UNKNOWN_PLUGIN) in issues
+    assert ConfigIssue("clue.reveal.type", UNKNOWN_PLUGIN) in issues
+
+
+def test_end_rule_params_and_reveal_domain_are_checked() -> None:
+    base = _config()
+    config = _config(
+        session={**base.session.model_dump(), "end": {"type": "all_rounds", "params": {"x": 1}}},
+        clue={"type": "audio_intro", "params": {}, "reveal": {"type": "audio_intro", "params": {}}},
+        domain="film",
+        key="film.daily.frame",
+    )
+    issues = EngineFactory(_registry()).validate(config)
+    assert ConfigIssue("session.end.params.x", "schema.extra_forbidden") in issues
+    assert ConfigIssue("clue.reveal.type", DOMAIN_UNSUPPORTED) in issues
+
+
+def test_engine_defaults_to_all_rounds_and_exposes_presentation() -> None:
+    engine = EngineFactory(_registry()).build(_config())
+    assert engine.end_rule.key == "all_rounds"
+    assert engine.should_end([]) is False
+    assert engine.lives_left([]) is None
+    assert engine.presentation == "score"
+    assert engine.reveal_params_hash is None
 
 
 def test_build_refuses_unknown_clue() -> None:

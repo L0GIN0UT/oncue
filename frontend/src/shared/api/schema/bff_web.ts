@@ -19,6 +19,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Каталог сборников
+         * @description Без `q` и `cursor` — витрины `featured`, `popular`, `new` с общими фильтрами (`results: null`; публично, `public, max-age`). С `q` или `cursor` — только `results` в сортировке `sort` (витрины `null`); с `q` — `private, no-store`. Поиск — по названию, описанию и тегам. Упавший collections — блоки `unavailable`, страница 200; курсор не от этой сортировки — 422 от collections.
+         */
+        get: operations["collections_page_v1_pages_collections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница сборника
+         * @description Карточка (collections; `items` — только автору, админу и прошедшему, D6), режимы с играбельностью (game; недоступен — `modes: unavailable`, карточка отдаётся), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`. С токеном — `private, no-store`.
+         */
+        get: operations["collection_page_v1_pages_collections__collection_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/home": {
         parameters: {
             query?: never;
@@ -28,6 +68,46 @@ export interface paths {
         };
         /** Главная: дейлики и режимы */
         get: operations["home_page_v1_pages_home_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Медиатека: полки
+         * @description Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Упавший library — `shelves: unavailable`, страница 200. Всегда `private, no-store`.
+         */
+        get: operations["library_page_v1_pages_library_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/library/{shelf_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Медиатека: полка
+         * @description `shelf_ref` — `system:<key>` или uuid своей полки; чужая и несуществующая — 404 `library.shelf_not_found`; без токена — 401, гость — 403. Упавший library — `shelf: unavailable`. Всегда `private, no-store`.
+         */
+        get: operations["library_shelf_page_v1_pages_library__shelf_ref__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -63,7 +143,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Хаб соло-режимов */
+        /**
+         * Хаб соло-режимов
+         * @description Блоки: дейлики и недельная сетка субъекта, витрина режимов по группам (`source_type`, `presentation`), личные рекорды (только пользователю; гостю и анониму — `records: null`). Ответ с токеном — `private, no-store`.
+         */
         get: operations["solo_page_v1_pages_solo_get"];
         put?: never;
         post?: never;
@@ -97,6 +180,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Block[CollectionDetail] */
+        Block_CollectionDetail_: {
+            data?: components["schemas"]["CollectionDetail"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[CollectionResults] */
+        Block_CollectionResults_: {
+            data?: components["schemas"]["CollectionResults"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[CollectionModeCard]] */
+        Block_list_CollectionModeCard__: {
+            /** Data */
+            data?: components["schemas"]["CollectionModeCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[DailyCard]] */
         Block_list_DailyCard__: {
             /** Data */
@@ -127,6 +238,36 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[ModeGroup]] */
+        Block_list_ModeGroup__: {
+            /** Data */
+            data?: components["schemas"]["ModeGroup"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[RecordCard]] */
+        Block_list_RecordCard__: {
+            /** Data */
+            data?: components["schemas"]["RecordCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[ShelfCard]] */
+        Block_list_ShelfCard__: {
+            /** Data */
+            data?: components["schemas"]["ShelfCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[ResultSummary] */
         Block_ResultSummary_: {
             data?: components["schemas"]["ResultSummary"] | null;
@@ -136,9 +277,298 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[ShelfItems] */
+        Block_ShelfItems_: {
+            data?: components["schemas"]["ShelfItems"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /**
+         * BracketPick
+         * @description Выбор в сетке: тур и названия победителя и проигравшего.
+         */
+        BracketPick: {
+            /** Loser */
+            loser: string;
+            /** Stage */
+            stage: number;
+            /** Winner */
+            winner: string;
+        };
+        /**
+         * BracketSummary
+         * @description Итог сетки: чемпион и выборы по турам.
+         */
+        BracketSummary: {
+            /** Champion */
+            champion: string;
+            /** Picks */
+            picks: components["schemas"]["BracketPick"][];
+        };
+        /**
+         * CollectionAuthor
+         * @description Автор сборника (``collections``): пользователь, «Guessverse» или удалённый.
+         */
+        CollectionAuthor: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "user" | "curator" | "deleted";
+            /** Nickname */
+            nickname?: string | null;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /**
+         * CollectionBlocks
+         * @description Блоки страницы сборника: недоступный game даёт ``modes: unavailable``.
+         */
+        CollectionBlocks: {
+            collection: components["schemas"]["Block_CollectionDetail_"];
+            modes: components["schemas"]["Block_list_CollectionModeCard__"];
+        };
+        /**
+         * CollectionCard
+         * @description Карточка сборника в каталоге (``collections /v1/collections``), без состава.
+         */
+        CollectionCard: {
+            author: components["schemas"]["CollectionAuthor"];
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            cover?: components["schemas"]["CollectionCover"] | null;
+            /** Default Mode Key */
+            default_mode_key: string;
+            /** Difficulty */
+            difficulty?: ("easy" | "medium" | "hard") | null;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+            /** Items Count */
+            items_count: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ugc" | "curated";
+            /** Likes Count */
+            likes_count: number;
+            /** Plays Count */
+            plays_count: number;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Tags */
+            tags: string[];
+            /** Title */
+            title: string;
+        };
+        /**
+         * CollectionCover
+         * @description Обложка — пресет (градиент и эмодзи из ``collections /v1/meta``).
+         */
+        CollectionCover: {
+            /** Preset */
+            preset: string;
+        };
+        /**
+         * CollectionDetail
+         * @description Сборник целиком (``collections /v1/collections/{id}``).
+         */
+        CollectionDetail: {
+            author: components["schemas"]["CollectionAuthor"];
+            /**
+             * Collection Id
+             * Format: uuid
+             */
+            collection_id: string;
+            cover?: components["schemas"]["CollectionCover"] | null;
+            /** Default Mode Key */
+            default_mode_key: string;
+            /** Description */
+            description?: string | null;
+            /** Difficulty */
+            difficulty?: ("easy" | "medium" | "hard") | null;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /**
+             * Featured
+             * @default false
+             */
+            featured: boolean;
+            /** Items */
+            items?: components["schemas"]["CollectionItemCard"][] | null;
+            /** Items Count */
+            items_count: number;
+            /** Items Visible */
+            items_visible: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ugc" | "curated";
+            /** Likes Count */
+            likes_count: number;
+            /** Plays Count */
+            plays_count: number;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "published" | "hidden";
+            /** Tags */
+            tags: string[];
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "public" | "unlisted";
+        };
+        /**
+         * CollectionItemCard
+         * @description Единица состава: только если состав открыт субъекту (D6).
+         */
+        CollectionItemCard: {
+            /** Available */
+            available: boolean;
+            /** @description Только автору */
+            custom?: components["schemas"]["CustomClueCard"] | null;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /** Position */
+            position: number;
+            /** Title */
+            title: string;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * CollectionMe
+         * @description Отношение пользователя к сборнику; гостю и анониму — ``me: null``.
+         */
+        CollectionMe: {
+            /** Completed */
+            completed: boolean;
+            /** Favorite */
+            favorite: boolean;
+            /**
+             * Is Author
+             * @default false
+             */
+            is_author: boolean;
+            /** Liked */
+            liked: boolean;
+        };
+        /**
+         * CollectionModeCard
+         * @description Режим сборника (``game /v1/collections/{id}/modes``).
+         */
+        CollectionModeCard: {
+            /** Allow Guest */
+            allow_guest: boolean;
+            /** Available */
+            available: boolean;
+            /** Clue Type */
+            clue_type: string;
+            /** Mode Key */
+            mode_key: string;
+            /** Playable */
+            playable: number;
+            /** Round Options */
+            round_options: (5 | 10 | 25 | "all")[];
+            /** Title Key */
+            title_key: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * CollectionPage
+         * @description ``GET /v1/pages/collections/{id}``.
+         */
+        CollectionPage: {
+            blocks: components["schemas"]["CollectionBlocks"];
+            me?: components["schemas"]["CollectionMe"] | null;
+        };
+        /**
+         * CollectionResults
+         * @description Страница карточек по курсору; курсор привязан к сортировке блока.
+         */
+        CollectionResults: {
+            /** Items */
+            items: components["schemas"]["CollectionCard"][];
+            /**
+             * Next Cursor
+             * @description Продолжение: `GET /v1/pages/collections?sort=<сортировка блока>&cursor=…` (с теми же фильтрами) вернёт блок `results`; null — дальше пусто
+             */
+            next_cursor?: string | null;
+        };
+        /**
+         * CollectionsBlocks
+         * @description Блоки каталога: без ``q`` и ``cursor`` — витрины, иначе только ``results``.
+         *
+         *     Отсутствующий в этом виде страницы блок — ``null``.
+         */
+        CollectionsBlocks: {
+            /** @description Рекомендуемые (sort=featured) */
+            featured?: components["schemas"]["Block_CollectionResults_"] | null;
+            /** @description Новые (sort=new) */
+            new?: components["schemas"]["Block_CollectionResults_"] | null;
+            /** @description Популярные (sort=popular) */
+            popular?: components["schemas"]["Block_CollectionResults_"] | null;
+            /** @description Поиск (`q`) или продолжение по `cursor` в сортировке `sort` */
+            results?: components["schemas"]["Block_CollectionResults_"] | null;
+        };
+        /**
+         * CollectionsPage
+         * @description ``GET /v1/pages/collections``.
+         */
+        CollectionsPage: {
+            blocks: components["schemas"]["CollectionsBlocks"];
+        };
+        /**
+         * CustomClueCard
+         * @description Своя загадка единицы (эмодзи); приходит только автору и админу.
+         */
+        CustomClueCard: {
+            /** Emoji */
+            emoji?: string | null;
+        };
         /**
          * DailyCard
-         * @description Карточка дейлика: режим + статус субъекта (``game /v1/modes`` + ``/v1/daily``).
+         * @description Карточка планового режима периода + статус субъекта (``game /v1/modes`` + ``/v1/daily``).
+         *
+         *     Дейлик — период «день», недельная сетка — «неделя»; ``day`` — начало периода,
+         *     ``next_reset_at`` — его конец.
          */
         DailyCard: {
             /**
@@ -160,6 +590,12 @@ export interface components {
              * Format: date-time
              */
             next_reset_at: string;
+            /**
+             * Presentation
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
             /** Score */
             score?: number | null;
             /** Session Id */
@@ -187,8 +623,11 @@ export interface components {
          * @description Блоки главной.
          */
         HomeBlocks: {
+            /** @description Наборы дня (без недельной сетки) */
             dailies: components["schemas"]["Block_list_DailyCard__"];
             modes: components["schemas"]["Block_list_ModeCard__"];
+            /** @description Наборы недели (сетка) */
+            weekly: components["schemas"]["Block_list_DailyCard__"];
         };
         /**
          * HomePage
@@ -228,12 +667,47 @@ export interface components {
             year?: number | null;
         };
         /**
+         * LibraryBlocks
+         * @description Блоки медиатеки.
+         */
+        LibraryBlocks: {
+            shelves: components["schemas"]["Block_list_ShelfCard__"];
+        };
+        /**
+         * LibraryPage
+         * @description ``GET /v1/pages/library`` (только пользователь).
+         */
+        LibraryPage: {
+            blocks: components["schemas"]["LibraryBlocks"];
+        };
+        /**
+         * LibraryShelfBlocks
+         * @description Блоки страницы полки.
+         */
+        LibraryShelfBlocks: {
+            shelf: components["schemas"]["Block_ShelfItems_"];
+        };
+        /**
+         * LibraryShelfPage
+         * @description ``GET /v1/pages/library/{ref}`` (только пользователь).
+         */
+        LibraryShelfPage: {
+            blocks: components["schemas"]["LibraryShelfBlocks"];
+        };
+        /**
          * ModeCard
          * @description Карточка режима (из ``game /v1/modes``).
          */
         ModeCard: {
             /** Allow Guest */
             allow_guest: boolean;
+            /**
+             * Answer Format
+             * @description Реестр ответов фронта
+             * @default classic
+             * @enum {string}
+             */
+            answer_format: "classic" | "pick";
             /** Clue Type */
             clue_type: string;
             /**
@@ -243,14 +717,48 @@ export interface components {
             domain: "music" | "film";
             /** Key */
             key: string;
+            /**
+             * Presentation
+             * @description Реестр итогов фронта
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
             /** Presets */
             presets?: components["schemas"]["PresetCard"][] | null;
-            /** Rounds */
+            /**
+             * Rounds
+             * @description Число раундов; у марафона и пары — максимум
+             */
             rounds: number;
             /** Source Type */
             source_type: string;
+            /** @description null — выбирать нечего */
+            start?: components["schemas"]["ModeStartCard"] | null;
             /** Title Key */
             title_key: string;
+        };
+        /**
+         * ModeGroup
+         * @description Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``.
+         */
+        ModeGroup: {
+            /** Modes */
+            modes: components["schemas"]["ModeCard"][];
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** Source Type */
+            source_type: string;
+        };
+        /**
+         * ModeStartCard
+         * @description Что игрок выбирает перед стартом режима.
+         */
+        ModeStartCard: {
+            subject?: components["schemas"]["SubjectPickCard"] | null;
         };
         /**
          * PersonCard
@@ -312,6 +820,47 @@ export interface components {
             type: string;
         };
         /**
+         * RecordCard
+         * @description Личный рекорд режима (``game /v1/me/records``).
+         */
+        RecordCard: {
+            /**
+             * Achieved At
+             * Format: date-time
+             */
+            achieved_at: string;
+            /** Best */
+            best: number;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Mode Key */
+            mode_key: string;
+            /** Percentile */
+            percentile?: number | null;
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** Title Key */
+            title_key: string;
+        };
+        /**
+         * ResultRecord
+         * @description Рекорд в итоге (только пользователи, режимы с рекордами).
+         */
+        ResultRecord: {
+            /** Best */
+            best: number;
+            /** Is New */
+            is_new: boolean;
+            /** Percentile */
+            percentile?: number | null;
+        };
+        /**
          * ResultRoundCard
          * @description Раунд итога (из ``game /v1/sessions/{id}/result``).
          */
@@ -358,10 +907,21 @@ export interface components {
          * @description Итог сессии для экрана результатов.
          */
         ResultSummary: {
+            /** @description Только у сетки */
+            bracket?: components["schemas"]["BracketSummary"] | null;
             /** Max Score */
             max_score: number;
             /** Mode Key */
             mode_key?: string | null;
+            /**
+             * Presentation
+             * @description Реестр итогов фронта
+             * @default score
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** @description null — гость или без рекордов */
+            record?: components["schemas"]["ResultRecord"] | null;
             /** Rounds */
             rounds: components["schemas"]["ResultRoundCard"][];
             /** Score */
@@ -392,12 +952,99 @@ export interface components {
             subject: components["schemas"]["Subject"] | null;
         };
         /**
+         * ShelfCard
+         * @description Полка (``library /v1/shelves``).
+         */
+        ShelfCard: {
+            /** Domains */
+            domains: ("music" | "film")[];
+            /** Exclusive With */
+            exclusive_with?: string[];
+            /** Items Count */
+            items_count: number;
+            /** Key */
+            key?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "system" | "custom";
+            /** Ref */
+            ref: string;
+            /** Shelf Id */
+            shelf_id?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Title Key */
+            title_key?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * ShelfItemCard
+         * @description Единица на полке: карточка из проекции catalog в library.
+         */
+        ShelfItemCard: {
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Kind */
+            kind: string;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /** Persons */
+            persons?: string[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "reveal" | "results" | "card" | "collection" | "library";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "unavailable";
+            /** Title */
+            title: string;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * ShelfItems
+         * @description Полка и её единицы (страница по курсору).
+         */
+        ShelfItems: {
+            /** Items */
+            items: components["schemas"]["ShelfItemCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            shelf: components["schemas"]["ShelfCard"];
+        };
+        /**
          * SoloBlocks
          * @description Блоки хаба соло-режимов.
          */
         SoloBlocks: {
+            /** @description Наборы дня */
             daily: components["schemas"]["Block_list_DailyCard__"];
+            /** @description Витрина: неплановые режимы домена по группам (source_type, presentation) */
+            modes: components["schemas"]["Block_list_ModeGroup__"];
+            /** @description Случайные режимы (витрина этапа 2) */
             random: components["schemas"]["Block_list_ModeCard__"];
+            /** @description Личные рекорды; null — гость или аноним */
+            records?: components["schemas"]["Block_list_RecordCard__"] | null;
+            /** @description Наборы недели (сетка) */
+            weekly: components["schemas"]["Block_list_DailyCard__"];
         };
         /**
          * SoloPage
@@ -418,6 +1065,16 @@ export interface components {
              * @enum {string}
              */
             kind: "user" | "guest";
+        };
+        /**
+         * SubjectPickCard
+         * @description Выбор персон перед стартом (марафон): ``GET game /v1/modes/{key}/subjects``.
+         */
+        SubjectPickCard: {
+            /** Max */
+            max: number;
+            /** Roles */
+            roles: string[];
         };
     };
     responses: never;
@@ -448,6 +1105,106 @@ export interface operations {
             };
         };
     };
+    collections_page_v1_pages_collections_get: {
+        parameters: {
+            query?: {
+                curated?: boolean | null;
+                cursor?: string | null;
+                difficulty?: ("easy" | "medium" | "hard") | null;
+                domain?: ("music" | "film") | null;
+                mode?: string | null;
+                q?: string | null;
+                sort?: "featured" | "popular" | "new" | "likes" | "difficulty";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionsPage"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    collection_page_v1_pages_collections__collection_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     home_page_v1_pages_home_get: {
         parameters: {
             query?: never;
@@ -464,6 +1221,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomePage"];
+                };
+            };
+        };
+    };
+    library_page_v1_pages_library_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    library_shelf_page_v1_pages_library__shelf_ref__get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                shelf_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryShelfPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

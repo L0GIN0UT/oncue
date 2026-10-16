@@ -1,8 +1,10 @@
 /**
- * Шэр итога (D14): текст-сетка как у Wordle + ссылка на главную. Текст сетки формирует сервер
- * (`share_text`); клиент только добавляет ссылку, а при пустом тексте собирает сетку сам.
+ * Шэр итога (D14): текст + ссылка на главную. Текст зависит от подачи итога (`presentation`):
+ * у суммы очков — сетка попыток от сервера (`share_text`, при пустом клиент собирает её сам),
+ * у серии — длина серии и клетки раундов, у сетки — чемпион. Названий загаданных единиц в
+ * тексте нет (им можно делиться до того, как друзья сыграли); чемпион сетки — выбор игрока.
  */
-import type { ResultSummary } from "@/shared/api/types";
+import type { Presentation, ResultSummary } from "@/shared/api/types";
 
 const CELL: Record<ResultSummary["rounds"][number]["outcome"], string> = {
   exact: "🟩",
@@ -12,13 +14,73 @@ const CELL: Record<ResultSummary["rounds"][number]["outcome"], string> = {
   void: "⬜",
 };
 
-/** Текст для «Поделиться». `title` — название режима, `homeUrl` — адрес главной. */
-export function buildShareText(summary: ResultSummary, title: string, homeUrl: string): string {
+/** Перевод ключа i18n (`useTranslations()` или `createTranslator`). */
+export type Translate = (key: string, values?: Record<string, string | number>) => string;
+
+/** Сборник сессии (этап 3b, D7): в шэре — его название и ссылка вместо главной. */
+export type ShareCollection = { title: string; url: string };
+
+export type ShareContext = {
+  title: string;
+  homeUrl: string;
+  t: Translate;
+  collection?: ShareCollection | null;
+};
+
+const withLink = (body: string, homeUrl: string) =>
+  body.includes(homeUrl) ? body : `${body}\n${homeUrl}`;
+
+const cells = (summary: ResultSummary) => summary.rounds.map((r) => CELL[r.outcome]).join("");
+
+/** Сумма очков: текст сервера или сетка попыток. */
+export function scoreShareText(summary: ResultSummary, { title, homeUrl }: ShareContext): string {
   const server = summary.share_text.trim();
   const body = server
     ? server
-    : `${title} ${summary.score}/${summary.max_score}\n${summary.rounds.map((r) => CELL[r.outcome]).join("")}`;
-  return body.includes(homeUrl) ? body : `${body}\n${homeUrl}`;
+    : `${title} ${summary.score}/${summary.max_score}\n${cells(summary)}`;
+  return withLink(body, homeUrl);
+}
+
+/** Серия: длина, отметка нового рекорда и клетки раундов. */
+export function streakShareText(
+  summary: ResultSummary,
+  { title, homeUrl, t }: ShareContext,
+): string {
+  const lines = [title, t("results.shareText.streak", { streak: summary.score })];
+  if (summary.record?.is_new) lines.push(t("results.shareText.newRecord"));
+  if (summary.rounds.length) lines.push(cells(summary));
+  return withLink(lines.join("\n"), homeUrl);
+}
+
+/** Сетка: чемпион игрока (без чемпиона — как у суммы очков). */
+export function bracketShareText(summary: ResultSummary, ctx: ShareContext): string {
+  const champion = summary.bracket?.champion?.trim();
+  if (!champion) return scoreShareText(summary, ctx);
+  const lines = [ctx.title, ctx.t("results.shareText.champion", { champion })];
+  return withLink(lines.join("\n"), ctx.homeUrl);
+}
+
+/** Реестр шэр-текстов по подаче итога (D12). */
+export const shareTextRegistry: Record<
+  Presentation,
+  (summary: ResultSummary, ctx: ShareContext) => string
+> = {
+  score: scoreShareText,
+  streak: streakShareText,
+  bracket: bracketShareText,
+};
+
+/**
+ * Текст для «Поделиться» по `presentation` итога. Сессия по сборнику: ссылка ведёт на
+ * страницу сборника, первой строкой — его название (UGC-текст, в шэре — как есть, без разметки).
+ */
+export function buildShareText(summary: ResultSummary, ctx: ShareContext): string {
+  const collection = ctx.collection ?? null;
+  const build = shareTextRegistry[summary.presentation ?? "score"];
+  if (!collection) return build(summary, ctx);
+  const body = build(summary, { ...ctx, homeUrl: collection.url });
+  const line = ctx.t("results.shareText.collection", { title: collection.title });
+  return body.includes(line) ? body : `${line}\n${body}`;
 }
 
 export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";

@@ -1,0 +1,25 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+  "aggregate_type": "asset_set",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000901",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0014",
+  "event_type": "media_pipeline.AssetsFailed",
+  "event_version": 1,
+  "occurred_at": "2026-10-09T12:00:00Z",
+  "payload": {
+    "asset_set_id": "0192a3b4-c5d6-7e8f-9a0b-000000000403",
+    "attempts": 1,
+    "clue_type": "emoji",
+    "error_code": "emoji.not_strict",
+    "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+    "profile_key": "default",
+    "retryable": false,
+    "scope": {
+      "id": "0192a3b4-c5d6-7e8f-9a0b-000000000c01",
+      "kind": "collection"
+    },
+    "version": 5
+  },
+  "producer": "media_pipeline"
+}

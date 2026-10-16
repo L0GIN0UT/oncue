@@ -10,6 +10,18 @@
 загадкой; ``session.kind`` оркеструется сервисом; правила ``partial`` применимы к домену и
 не повторяются; перекрёстные правила плагинов (``Source.cross_check``,
 ``Scorer.cross_check``: ``len(points) == len(levels)``, ``size == rounds`` …).
+
+Правила этапа 3a (ADR 0023, 0026) — по возможностям, которые объявляют сами плагины:
+``answer.format`` поддерживают загадка, источник (``Source.answer_formats``) и matcher
+(``AnswerMatcher.answer_formats``); matcher сравнения требует ``ComparisonSource``;
+формат с одним ответом (``AnswerFormat.single_answer``) — один уровень, одна попытка и
+без ``partial``; Scorer с ``requires_early_end`` (серия) — правило ``EndRule.ends_early``;
+``clue.reveal`` — известная загадка того же домена.
+
+Правило этапа 3b (ADR 0028): у источника из сборника (``CollectionBasedSource``) число
+раундов зависит от сессии, поэтому ``features.records`` запрещён; формат ответа — только
+тот, что объявляет источник (у ``collection`` — ``classic``), варианты ``round_options`` —
+не больше ``session.rounds`` (``Source.cross_check``).
 """
 
 from __future__ import annotations
@@ -22,7 +34,17 @@ from pydantic import BaseModel, ValidationError
 
 from gv_game_kernel.engine import ModeEngine
 from gv_game_kernel.errors import ConfigError
-from gv_game_kernel.plugins import AnswerMatcher, ClueType, PartialRule, Scorer, Source
+from gv_game_kernel.plugins import (
+    AnswerFormat,
+    AnswerMatcher,
+    ClueType,
+    CollectionBasedSource,
+    ComparisonSource,
+    EndRule,
+    PartialRule,
+    Scorer,
+    Source,
+)
 from gv_game_kernel.spec import ModeConfig, error_path
 from gv_text import TitleNormalizer
 
@@ -43,6 +65,27 @@ PARTIAL_DOMAIN_UNSUPPORTED = "config.partial_domain_unsupported"
 
 DUPLICATE_PARTIAL = "config.duplicate_partial"
 """Код проблемы: правило частичного ответа указано дважды."""
+
+COMPARISON_REQUIRED = "config.comparison_required"
+"""Код проблемы: matcher сравнивает по метрике, а источник не объявляет сравнения."""
+
+END_RULE_REQUIRED = "config.end_rule_required"
+"""Код проблемы: Scorer (серия) требует правила досрочного завершения (``lives``)."""
+
+SINGLE_ANSWER_LEVELS = "config.single_answer_levels"
+"""Код проблемы: формат с одним ответом (``pick``) требует один уровень и одну попытку."""
+
+PARTIAL_UNSUPPORTED = "config.partial_unsupported"
+"""Код проблемы: частичный ответ при формате с одним ответом не имеет смысла."""
+
+RECORDS_UNSUPPORTED = "config.records_unsupported"
+"""Код проблемы: личные рекорды несравнимы у режима, где раунды выбирает игрок (сборник)."""
+
+RECORDS_FEATURE = "records"
+"""Флаг ``features.records`` — личные рекорды и процентиль режима (ADR 0027)."""
+
+DEFAULT_END_RULE = "all_rounds"
+"""Правило завершения, если ``session.end`` не задан (ADR 0023)."""
 
 
 class DuplicatePluginError(ValueError):
@@ -72,6 +115,8 @@ class PluginRegistry:
         self._matchers: dict[str, AnswerMatcher] = {}
         self._partials: dict[str, PartialRule] = {}
         self._scorers: dict[str, Scorer] = {}
+        self._formats: dict[str, AnswerFormat] = {}
+        self._end_rules: dict[str, EndRule] = {}
 
     @staticmethod
     def _add[P](bucket: dict[str, P], key: str, plugin: P, kind: str) -> None:
@@ -98,6 +143,22 @@ class PluginRegistry:
     def register_scorer(self, plugin: Scorer) -> None:
         """Зарегистрировать подсчёт очков. Raises: DuplicatePluginError."""
         self._add(self._scorers, plugin.key, plugin, "Scorer")
+
+    def register_answer_format(self, plugin: AnswerFormat) -> None:
+        """Зарегистрировать формат ответа. Raises: DuplicatePluginError."""
+        self._add(self._formats, plugin.key, plugin, "AnswerFormat")
+
+    def register_end_rule(self, plugin: EndRule) -> None:
+        """Зарегистрировать правило завершения сессии. Raises: DuplicatePluginError."""
+        self._add(self._end_rules, plugin.key, plugin, "EndRule")
+
+    def answer_format(self, key: str) -> AnswerFormat | None:
+        """Формат ответа по ключу или ``None``."""
+        return self._formats.get(key)
+
+    def end_rule(self, key: str) -> EndRule | None:
+        """Правило завершения по ключу или ``None``."""
+        return self._end_rules.get(key)
 
     def clue(self, key: str) -> ClueType | None:
         """Тип загадки по ключу или ``None``."""
@@ -153,33 +214,57 @@ class EngineFactory:
         source = r.source(config.source.type)
         matcher = r.matcher(config.answer.matcher.type)
         scorer = r.scorer(config.scoring.type)
+        answer_format = r.answer_format(config.answer.format)
+        end_spec = config.session.end
+        end_rule = r.end_rule(end_spec.type) if end_spec is not None else None
+        reveal_spec = config.clue.reveal
+        reveal = r.clue(reveal_spec.type) if reveal_spec is not None else None
         issues = [
             ConfigIssue(path, UNKNOWN_PLUGIN)
             for path, found in (
                 ("source.type", source),
                 ("clue.type", clue),
+                ("answer.format", answer_format),
                 ("answer.matcher.type", matcher),
                 ("scoring.type", scorer),
             )
             if found is None
         ]
+        if end_spec is not None and end_rule is None:
+            issues.append(ConfigIssue("session.end.type", UNKNOWN_PLUGIN))
+        if reveal_spec is not None and reveal is None:
+            issues.append(ConfigIssue("clue.reveal.type", UNKNOWN_PLUGIN))
         issues.extend(self._partial_issues(config))
 
         clue_params = _parse(clue, config.clue.params, "clue.params", issues)
         source_params = _parse(source, config.source.params, "source.params", issues)
         _parse(matcher, config.answer.matcher.params, "answer.matcher.params", issues)
         scorer_params = _parse(scorer, config.scoring.params, "scoring.params", issues)
+        if end_spec is not None:
+            _parse(end_rule, end_spec.params, "session.end.params", issues)
+        if reveal_spec is not None:
+            _parse(reveal, reveal_spec.params, "clue.reveal.params", issues)
+            if reveal is not None and config.domain not in reveal.domains:
+                issues.append(ConfigIssue("clue.reveal.type", DOMAIN_UNSUPPORTED))
 
-        if clue is not None:
-            if config.domain not in clue.domains:
-                issues.append(ConfigIssue("domain", DOMAIN_UNSUPPORTED))
-            if config.answer.format not in clue.supported_answer_formats:
-                issues.append(ConfigIssue("answer.format", ANSWER_FORMAT_UNSUPPORTED))
         if config.session.kind not in self._supported_sessions:
             issues.append(ConfigIssue("session.kind", SESSION_UNSUPPORTED))
+        issues.extend(
+            _compatibility_issues(
+                config,
+                clue=clue,
+                source=source,
+                matcher=matcher,
+                scorer=scorer,
+                answer_format=answer_format,
+                end_rule=end_rule if end_spec is not None else r.end_rule(DEFAULT_END_RULE),
+            )
+        )
 
         if clue is not None and clue_params is not None:
             levels_count = len(clue.levels(clue_params))
+            if answer_format is not None and answer_format.single_answer:
+                issues.extend(_single_answer_issues(config, levels_count))
             for plugin, params, prefix in (
                 (source, source_params, "source.params"),
                 (scorer, scorer_params, "scoring.params"),
@@ -221,8 +306,18 @@ class EngineFactory:
         r = self._registry
         clue, source = r.clue(config.clue.type), r.source(config.source.type)
         matcher, scorer = r.matcher(config.answer.matcher.type), r.scorer(config.scoring.type)
+        answer_format = r.answer_format(config.answer.format)
+        end_rule = r.end_rule(config.session.end.type if config.session.end else DEFAULT_END_RULE)
+        reveal = r.clue(config.clue.reveal.type) if config.clue.reveal else None
         partials = tuple(r.partial(kind) for kind in config.answer.partial)
-        if clue is None or source is None or matcher is None or scorer is None:
+        if (
+            clue is None
+            or source is None
+            or matcher is None
+            or scorer is None
+            or answer_format is None
+            or end_rule is None
+        ):
             raise AssertionError("validate пропустил неизвестный плагин")  # pragma: no cover
         return ModeEngine(
             config,
@@ -231,12 +326,72 @@ class EngineFactory:
             matcher=matcher,
             partials=tuple(p for p in partials if p is not None),
             scorer=scorer,
+            answer_format=answer_format,
+            end_rule=end_rule,
+            reveal=reveal,
             normalizer=self._normalizer,
         )
 
 
+def _compatibility_issues(
+    config: ModeConfig,
+    *,
+    clue: ClueType | None,
+    source: Source | None,
+    matcher: AnswerMatcher | None,
+    scorer: Scorer | None,
+    answer_format: AnswerFormat | None,
+    end_rule: EndRule | None,
+) -> list[ConfigIssue]:
+    """Совместимость плагинов по объявленным ими возможностям (не по ключам)."""
+    issues: list[ConfigIssue] = []
+    fmt = config.answer.format
+    if clue is not None:
+        if config.domain not in clue.domains:
+            issues.append(ConfigIssue("domain", DOMAIN_UNSUPPORTED))
+        if fmt not in clue.supported_answer_formats:
+            issues.append(ConfigIssue("answer.format", ANSWER_FORMAT_UNSUPPORTED))
+    if (
+        scorer is not None
+        and scorer.requires_early_end
+        and (end_rule is None or not end_rule.ends_early)
+    ):
+        issues.append(ConfigIssue("session.end", END_RULE_REQUIRED))
+    if answer_format is not None:
+        if source is not None and fmt not in source.answer_formats:
+            issues.append(ConfigIssue("source.type", ANSWER_FORMAT_UNSUPPORTED))
+        if matcher is not None and fmt not in matcher.answer_formats:
+            issues.append(ConfigIssue("answer.matcher.type", ANSWER_FORMAT_UNSUPPORTED))
+    if (
+        matcher is not None
+        and source is not None
+        and matcher.requires_comparison
+        and not isinstance(source, ComparisonSource)
+    ):
+        issues.append(ConfigIssue("answer.matcher.type", COMPARISON_REQUIRED))
+    if answer_format is not None and answer_format.single_answer and config.answer.partial:
+        issues.append(ConfigIssue("answer.partial", PARTIAL_UNSUPPORTED))
+    if (
+        source is not None
+        and isinstance(source, CollectionBasedSource)
+        and config.features.get(RECORDS_FEATURE)
+    ):
+        issues.append(ConfigIssue(f"features.{RECORDS_FEATURE}", RECORDS_UNSUPPORTED))
+    return issues
+
+
+def _single_answer_issues(config: ModeConfig, levels_count: int) -> list[ConfigIssue]:
+    """Формат с одним ответом на раунд: один уровень загадки и одна попытка."""
+    issues: list[ConfigIssue] = []
+    if levels_count != 1:
+        issues.append(ConfigIssue("clue.params.levels", SINGLE_ANSWER_LEVELS))
+    if config.session.attempts_per_level != 1:
+        issues.append(ConfigIssue("session.attempts_per_level", SINGLE_ANSWER_LEVELS))
+    return issues
+
+
 def _parse(
-    plugin: ClueType | Source | AnswerMatcher | Scorer | None,
+    plugin: ClueType | Source | AnswerMatcher | Scorer | EndRule | None,
     params: Mapping[str, Any],  # Any: params плагина — произвольный JSON-объект
     prefix: str,
     issues: list[ConfigIssue],
@@ -263,10 +418,17 @@ def _join(prefix: str, path: str) -> str:
 
 __all__ = [
     "ANSWER_FORMAT_UNSUPPORTED",
+    "COMPARISON_REQUIRED",
+    "DEFAULT_END_RULE",
     "DOMAIN_UNSUPPORTED",
     "DUPLICATE_PARTIAL",
+    "END_RULE_REQUIRED",
     "PARTIAL_DOMAIN_UNSUPPORTED",
+    "PARTIAL_UNSUPPORTED",
+    "RECORDS_FEATURE",
+    "RECORDS_UNSUPPORTED",
     "SESSION_UNSUPPORTED",
+    "SINGLE_ANSWER_LEVELS",
     "UNKNOWN_PLUGIN",
     "ConfigIssue",
     "DuplicatePluginError",

@@ -40,6 +40,58 @@ _MESSAGES: Mapping[str, str] = {
     "game.daily_locked": "Набор дня уже заблокирован (день начался) — менять его нельзя",
     "game.item_not_playable": "У этой единицы нет готовых ассетов под режим",
     "game.item_duplicate": "Эта единица уже есть в наборе дня",
+    # game, этап 3a (docs/plans/stage-3a.md §5, §9)
+    "game.draft_not_found": "Черновика этой ревизии уже нет — обновите страницу",
+    "game.assets_already_available": (
+        "Ассеты под параметры загадки черновика уже есть — запрашивать нечего"
+    ),
+    "game.theme_not_playable": (
+        "У выбранной темы не хватает играбельных единиц для набора — выберите другую"
+    ),
+    "game.daily_set_not_found": "Набора на этот период нет",
+    # catalog, этап 3a: тексты загадок и переопубликация
+    "catalog.clue_texts_revision_mismatch": (
+        "Тексты загадок уже изменил кто-то другой — ваша правка не сохранена, "
+        "обновите страницу и повторите"
+    ),
+    "catalog.clue_text_invalid_emoji": "Эмодзи: без пробелов и не больше 12 знаков",
+    "catalog.clue_text_too_long": "Текст загадки длиннее допустимого",
+    "catalog.clue_texts_empty": "Одобрять нечего: тексты загадок пусты",
+    "catalog.tasks_unavailable": "Очередь задач catalog недоступна — повторите позже",
+    # media-pipeline, этап 3a: исходники новых видов
+    "source.provenance_required": (
+        "Укажите происхождение исходника, ссылку на источник и лицензию"
+    ),
+    "source.kind_not_applicable": "Этот вид исходника не используется для домена единицы",
+    "source.position": "Порядок исходника — от 1 до 100",
+    "source.not_found": "Исходник не найден",
+    # game, этап 3b: темы сетки и сборники (docs/plans/stage-3b.md §2.5, §7)
+    "game.subjects_not_supported": "Этот режим не выбирает тему-персону",
+    "game.collection_not_found": "Сборник не найден, скрыт или удалён",
+    "game.collection_required": "Режим играется только по сборнику",
+    "game.collection_not_supported": "Режим не играется по сборнику",
+    "game.collection_domain_mismatch": "Домен сборника не совпадает с доменом режима",
+    "game.rounds_not_allowed": "Такое число раундов режим не допускает",
+    "game.pool_too_small": "В сборнике мало играбельных единиц для этого режима",
+    # collections, этап 3b (docs/plans/stage-3b.md §2.5, §5)
+    "collections.not_found": "Сборник не найден",
+    "collections.version_conflict": (
+        "Сборник уже изменил кто-то другой — ваша правка не сохранена, сравните её с текущей"
+    ),
+    "collections.not_curated": "Это пользовательский сборник: его правит только автор",
+    "collections.not_published": "Сборник ещё не опубликован — действие недоступно",
+    "collections.hidden": "Сборник скрыт модератором",
+    "collections.deleted": "Сборник удалён",
+    "collections.publish_invalid": "Сборник не прошёл проверку — исправьте ошибки и повторите",
+    "collections.draft_invalid": "Сборник нарушает лимиты — исправьте ошибки и повторите",
+    "collections.title_invalid": "Название не подходит (ссылки, @, e-mail или запрещённые слова)",
+    "collections.draft_conflict": "Черновик уже изменили — обновите страницу",
+    "collections.drafts_limit": "У автора слишком много черновиков",
+    "collections.author_restricted": "Автору запрещено создавать и править сборники",
+    "collections.own_collection": "Свой сборник лайкнуть нельзя",
+    "collections.publish_limit": "Слишком много публикаций за сутки — повторите позже",
+    "collections.rate_limited": "Слишком много запросов — повторите позже",
+    "collections.limiter_unavailable": "Лимитер публикаций недоступен — повторите позже",
 }
 
 
@@ -51,14 +103,28 @@ class ServiceError(Exception):
         status: HTTP-статус; ``None`` — ответа нет (сеть, таймаут).
         code: Машинный код (``code`` из Problem Details или ``service.unavailable``).
         message: Сообщение для модератора.
+        details: ``details`` Problem Details (например, ``errors`` с путями полей у
+            ``collections.publish_invalid``); пусто — сервис их не прислал.
+        errors: ``errors`` Problem Details (ошибки валидации запроса: ``loc``, ``msg``).
     """
 
-    def __init__(self, service: str, status: int | None, code: str, message: str) -> None:
+    def __init__(
+        self,
+        service: str,
+        status: int | None,
+        code: str,
+        message: str,
+        *,
+        details: Mapping[str, Any] | None = None,
+        errors: list[dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__(f"{service}: {code}")
         self.service = service
         self.status = status
         self.code = code
         self.message = message
+        self.details: Mapping[str, Any] = details or {}
+        self.errors: list[dict[str, Any]] = errors or []
 
 
 class SessionExpiredError(Exception):
@@ -86,7 +152,15 @@ def problem_to_error(service: str, response: httpx.Response) -> ServiceError:
             if isinstance(e, dict)
         )
         message = f"{message}: {details}"
-    return ServiceError(service, response.status_code, code, message)
+    raw_details = body.get("details")
+    return ServiceError(
+        service,
+        response.status_code,
+        code,
+        message,
+        details=raw_details if isinstance(raw_details, dict) else None,
+        errors=[e for e in errors if isinstance(e, dict)] if isinstance(errors, list) else None,
+    )
 
 
 class ServiceClient:
@@ -160,6 +234,10 @@ class ServiceClient:
     def put(self, path: str, *, idempotency_key: str, json: Any) -> Any:
         """PUT-мутация."""
         return self._send("PUT", path, idempotency_key=idempotency_key, json=json)
+
+    def delete(self, path: str, *, idempotency_key: str, json: Any = None) -> Any:
+        """DELETE-мутация (тело — причина действия, если сервис её требует)."""
+        return self._send("DELETE", path, idempotency_key=idempotency_key, json=json)
 
     def _send(
         self,

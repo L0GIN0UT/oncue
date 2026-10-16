@@ -304,15 +304,19 @@ def dev_seed(
     game_url: Annotated[
         str, typer.Option(envvar="GV_SEED__GAME_URL", help="Базовый адрес game")
     ] = "http://127.0.0.1:8103",
+    collections_url: Annotated[
+        str, typer.Option(envvar="GV_SEED__COLLECTIONS_URL", help="Базовый адрес collections")
+    ] = "http://127.0.0.1:8106",
     service_client_id: Annotated[
         str, typer.Option(envvar="GV_SEED__SERVICE_CLIENT_ID", help="Сервисный клиент")
     ] = "admin",
     date_: Annotated[
         str | None,
-        typer.Option("--date", help="День дейликов YYYY-MM-DD (по умолчанию — сегодня)"),
+        typer.Option("--date", help="День плановых наборов YYYY-MM-DD (по умолчанию — сегодня)"),
     ] = None,
 ) -> None:
-    """Наполнить запущенный стек для e2e-сценария daily (только local/ci, идемпотентно).
+    """Наполнить запущенный стек для e2e (дейлики, режимы 3a, кураторские сборники 3b; только
+    local/ci, идемпотентно).
 
     Учётные данные администратора — из окружения ``GV_BOOTSTRAP_ADMIN__LOGIN`` и
     ``GV_BOOTSTRAP_ADMIN__PASSWORD``; секрет сервисного клиента — из
@@ -343,6 +347,7 @@ def dev_seed(
         catalog_url=catalog_url,
         media_url=media_url,
         game_url=game_url,
+        collections_url=collections_url,
         admin_login=login or "",
         admin_password=password or "",
         service_client_id=service_client_id,

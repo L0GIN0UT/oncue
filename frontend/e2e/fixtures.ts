@@ -1,12 +1,13 @@
 /** Общие фикстуры e2e на моках: сброс мок-бэкенда, управление сценариями, проверка axe. */
 import AxeBuilder from "@axe-core/playwright";
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 import type { Scenario } from "./mocks/world";
+import type { UgcScenario } from "./mocks/ugc";
 
 const MOCK_URL = `http://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 3101}`;
 
 type Fixtures = {
-  scenario: (s: Scenario) => Promise<void>;
+  scenario: (s: Scenario & { ugc?: UgcScenario }) => Promise<void>;
   expectAccessible: (page: Page) => Promise<void>;
 };
 
@@ -54,6 +55,39 @@ export async function answerWithSuggestion(
   await page.getByRole("button", { name: "Ответить" }).click();
 }
 
+/** Ход клиента: POST ответа, пропуска или сдачи (как в ../e2e/modes.spec.ts). */
+export function isMove(url: string, method: string): boolean {
+  return (
+    method === "POST" &&
+    /\/api\/game\/v1\/sessions\/[^/]+\/(guesses|skips|rounds\/\d+\/give-up)$/.test(url)
+  );
+}
+
+/**
+ * Довести сессию до итога: «Дальше»/«К итогам» (`reveal-next`), иначе — действие раунда
+ * (`give-up` или первый `pick-option-*`). Каждый ход ждёт ответ сервера.
+ */
+export async function playUntilResults(page: Page, action: Locator, maxSteps = 80) {
+  const next = page.getByTestId("reveal-next");
+  const done = page.getByTestId("final-score");
+  for (let step = 0; step < maxSteps; step++) {
+    await expect(done.or(next).or(action).first()).toBeVisible();
+    if (await done.isVisible()) return;
+    if (await next.isVisible()) {
+      await next.click();
+      continue;
+    }
+    await Promise.all([
+      page.waitForResponse((r) => isMove(r.url(), r.request().method())),
+      action.first().click(),
+    ]);
+  }
+  throw new Error(`сессия не дошла до итога за ${maxSteps} шагов`);
+}
+
+export const giveUpButton = (page: Page) => page.locator("[data-testid=give-up]:enabled");
+export const pickButton = (page: Page) => page.locator("[data-testid^=pick-option-]:enabled");
+
 /** Сдать все оставшиеся раунды (быстрое завершение сессии). */
 export async function giveUpRemaining(page: Page): Promise<void> {
   for (;;) {
@@ -71,4 +105,26 @@ export async function giveUpRemaining(page: Page): Promise<void> {
     }
     await giveUp.click();
   }
+}
+
+/** Войти через форму (мок identity: `player` и `author`, пароль `correct-horse`). */
+export async function login(page: Page, nickname = "player"): Promise<void> {
+  await page.goto("/login");
+  await page.getByLabel("E-mail или ник").fill(nickname);
+  await page.getByLabel("Пароль").fill("correct-horse");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page.getByTestId("user-name")).toHaveText(nickname);
+}
+
+/** Мутация API от имени страницы (cookie + CSRF + Origin + Idempotency-Key), как у клиента. */
+export async function apiPut(page: Page, path: string, data?: unknown) {
+  const csrf = (await page.context().cookies()).find((c) => c.name === "gv_csrf")?.value ?? "";
+  return page.request.put(path, {
+    data,
+    headers: {
+      "X-CSRF-Token": csrf,
+      Origin: new URL(page.url()).origin,
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+  });
 }

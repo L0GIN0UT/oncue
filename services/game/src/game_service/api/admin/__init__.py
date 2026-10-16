@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from game_service.api.admin.schemas import (
     ArchiveRequest,
+    AssetRequestCreate,
+    AssetRequestOut,
     ConfigStatus,
     DailySet,
     DraftOut,
@@ -30,7 +32,7 @@ from game_service.api.admin.schemas import (
     ValidationResult,
 )
 from game_service.api.common import ApiServices, NoStoreRoute
-from game_service.api.public.schemas import Domain
+from game_service.api.public.schemas import Domain, SubjectOut
 from game_service.application.commands.modes import AdminContext
 from gv_auth import Principal, require_perm
 from gv_service import IdempotencyKey, problem_responses
@@ -167,6 +169,46 @@ def build_admin_router(c: ApiServices) -> APIRouter:
         return ModeConfigVersion.model_validate(version)
 
     @router.post(
+        "/mode-configs/{mode_key}/asset-requests",
+        response_model=AssetRequestOut,
+        status_code=201,
+        summary="Запросить ассеты под загадку черновика",
+        description=(
+            "Если под `params_hash(clue.params)` (и `clue.reveal.params`) черновика в проекции "
+            "нет ассетов — событие `game.ClueAssetsRequested` (ADR 0025). Повтор с тем же "
+            "ключом — тот же ответ; пока запрос `pending`, повтор тех же параметров отвечает "
+            "им же без нового события. 409 `game.assets_already_available` — ассеты уже есть; "
+            "422 `game.config_invalid` — параметры не проходят схему загадки."
+        ),
+        responses=problem_responses(401, 403, 404, 409, 422, 503),
+    )
+    async def request_assets(
+        mode_key: ModeKeyPath,
+        body: AssetRequestCreate,
+        principal: ConfigPublisher,
+        idempotency_key: IdempotencyKey,
+    ) -> AssetRequestOut:
+        request = await c.asset_requests.execute(
+            mode_key,
+            draft_revision=body.draft_revision,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+        )
+        return AssetRequestOut.model_validate(request)
+
+    @router.get(
+        "/mode-configs/{mode_key}/asset-requests",
+        response_model=list[AssetRequestOut],
+        summary="Запросы ассетов режима",
+        responses=problem_responses(401, 403, 404, 422),
+    )
+    async def list_asset_requests(
+        mode_key: ModeKeyPath, principal: ConfigViewer
+    ) -> list[AssetRequestOut]:
+        return [
+            AssetRequestOut.model_validate(r) for r in await c.asset_requests.for_mode(mode_key)
+        ]
+
+    @router.post(
         "/mode-configs/{mode_key}/rollback",
         response_model=ModeConfigVersion,
         summary="Откатить к версии",
@@ -199,6 +241,27 @@ def build_admin_router(c: ApiServices) -> APIRouter:
             mode_key, ctx=_ctx(principal, body.reason, idempotency_key)
         )
         return ModeConfigSummary.model_validate(summary)
+
+    @router.get(
+        "/mode-configs/{mode_key}/subjects",
+        response_model=list[SubjectOut],
+        summary="Темы периода сетки: поиск персон",
+        description=(
+            "Хвост 3a (план этапа 3b §2.5): админ выбирает тему недели поиском, а не UUID. "
+            "Роли и `min_items` — из конфига сетки (`source.params.subject`); по убыванию "
+            "числа играбельных единиц. Режим без темы-персоны — 422 "
+            "`game.subjects_not_supported`."
+        ),
+        responses=problem_responses(401, 403, 404, 422),
+    )
+    async def admin_subjects(
+        mode_key: ModeKeyPath,
+        principal: DailyViewer,
+        q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+        limit: Annotated[int, Query(ge=1, le=20)] = 20,
+    ) -> list[SubjectOut]:
+        rows = await c.queries.theme_subjects(mode_key, q, limit)
+        return [SubjectOut.model_validate(r) for r in rows]
 
     # ------------------------------------------------------------------ наборы дня
     @router.get(
@@ -258,7 +321,10 @@ def build_admin_router(c: ApiServices) -> APIRouter:
         idempotency_key: IdempotencyKey,
     ) -> DailySet:
         daily = await c.daily_admin.regenerate(
-            mode_key, day, ctx=_ctx(principal, body.reason, idempotency_key)
+            mode_key,
+            day,
+            ctx=_ctx(principal, body.reason, idempotency_key),
+            subject_id=body.subject_id,
         )
         return DailySet.model_validate(daily)
 

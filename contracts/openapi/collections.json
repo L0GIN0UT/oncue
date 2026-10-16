@@ -1,9 +1,854 @@
 {
   "components": {
     "schemas": {
-      "ServiceMeta": {
-        "description": "Сведения о сервисе.",
+      "AdminCollectionDetail": {
+        "description": "Карточка в админке с составом и текстами.",
         "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorOut"
+          },
+          "author_restricted": {
+            "title": "Author Restricted",
+            "type": "boolean"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_mode_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Mode Key"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "draft_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Revision"
+          },
+          "featured": {
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "featured_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Featured Rank"
+          },
+          "hidden": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HiddenOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "plays_count": {
+            "minimum": 0.0,
+            "title": "Plays Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "status",
+          "visibility",
+          "title",
+          "author",
+          "author_restricted",
+          "featured",
+          "items_count",
+          "likes_count",
+          "plays_count",
+          "created_at",
+          "updated_at",
+          "tags",
+          "items"
+        ],
+        "title": "AdminCollectionDetail",
+        "type": "object"
+      },
+      "AdminCollectionOut": {
+        "description": "Сборник в админке (включая скрытые и черновики).",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorOut"
+          },
+          "author_restricted": {
+            "title": "Author Restricted",
+            "type": "boolean"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "featured": {
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "featured_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Featured Rank"
+          },
+          "hidden": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HiddenOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "plays_count": {
+            "minimum": 0.0,
+            "title": "Plays Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "status",
+          "visibility",
+          "title",
+          "author",
+          "author_restricted",
+          "featured",
+          "items_count",
+          "likes_count",
+          "plays_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdminCollectionOut",
+        "type": "object"
+      },
+      "AdminCollectionPage": {
+        "description": "Список в админке.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCollectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdminCollectionPage",
+        "type": "object"
+      },
+      "AuthorOut": {
+        "description": "Автор: пользователь (ник из проекции identity), «Guessverse» или удалённый.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "user",
+              "curator",
+              "deleted"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AuthorOut",
+        "type": "object"
+      },
+      "CollectionCard": {
+        "description": "Карточка в каталоге и списках (без состава).",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorOut"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "title": "Default Mode Key",
+            "type": "string"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — завершений меньше min_plays (D9)",
+            "title": "Difficulty"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "plays_count": {
+            "description": "Завершений пользователями (не автором)",
+            "minimum": 0.0,
+            "title": "Plays Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "title",
+          "tags",
+          "author",
+          "default_mode_key",
+          "items_count",
+          "likes_count",
+          "plays_count",
+          "published_at"
+        ],
+        "title": "CollectionCard",
+        "type": "object"
+      },
+      "CollectionDetail": {
+        "description": "Страница сборника. ``items`` — ``null``, если состав текущему субъекту не открыт.",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/AuthorOut"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CoverOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "title": "Default Mode Key",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — завершений меньше min_plays (D9)",
+            "title": "Difficulty"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CollectionItemOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "items_visible": {
+            "title": "Items Visible",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "me": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plays_count": {
+            "description": "Завершений пользователями (не автором)",
+            "minimum": 0.0,
+            "title": "Plays Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "published",
+              "hidden"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "description": "content_version",
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "title",
+          "tags",
+          "author",
+          "default_mode_key",
+          "items_count",
+          "likes_count",
+          "plays_count",
+          "published_at",
+          "visibility",
+          "status",
+          "version",
+          "items_visible"
+        ],
+        "title": "CollectionDetail",
+        "type": "object"
+      },
+      "CollectionItemOut": {
+        "description": "Единица состава: только по D6 (автор, админ, прошедший игрок).",
+        "properties": {
+          "available": {
+            "description": "false — единица заблокирована или удалена в catalog",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomClueOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "position": {
+            "minimum": 0.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "position",
+          "media_item_id",
+          "title",
+          "available"
+        ],
+        "title": "CollectionItemOut",
+        "type": "object"
+      },
+      "CollectionPage": {
+        "description": "Страница каталога (keyset-курсор).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CollectionPage",
+        "type": "object"
+      },
+      "CollectionsMeta": {
+        "description": "Сведения о сервисе и словари конструктора (``limits``, ``cover_presets``, ``tags``).",
+        "properties": {
+          "cover_presets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CoverPresetOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Presets"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetaLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "service": {
             "title": "Service",
             "type": "string"
@@ -11,13 +856,1073 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TagOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
           }
         },
         "required": [
           "service",
           "status"
         ],
-        "title": "ServiceMeta",
+        "title": "CollectionsMeta",
+        "type": "object"
+      },
+      "Cover": {
+        "additionalProperties": false,
+        "description": "Обложка — пресет из ``GET /v1/meta`` (градиент и эмодзи из конфига), D6.",
+        "properties": {
+          "preset": {
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "title": "Cover",
+        "type": "object"
+      },
+      "CoverOut": {
+        "description": "Обложка сборника.",
+        "properties": {
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "title": "CoverOut",
+        "type": "object"
+      },
+      "CoverPresetOut": {
+        "description": "Пресет обложки.",
+        "properties": {
+          "emoji": {
+            "title": "Emoji",
+            "type": "string"
+          },
+          "gradient": {
+            "description": "Цвета CSS (#rrggbb) по порядку",
+            "items": {
+              "type": "string"
+            },
+            "title": "Gradient",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "gradient",
+          "emoji"
+        ],
+        "title": "CoverPresetOut",
+        "type": "object"
+      },
+      "CreateCollectionRequest": {
+        "additionalProperties": false,
+        "description": "Новый сборник: создаётся черновик ``revision = 1`` с этим названием.",
+        "properties": {
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "title"
+        ],
+        "title": "CreateCollectionRequest",
+        "type": "object"
+      },
+      "CuratedCollectionIn": {
+        "additionalProperties": false,
+        "description": "Кураторский сборник из YAML-редактора админки (D14): публикуется сразу.\n\nАвтор отображается как «Guessverse» (``kind = curated``, ``author_id = null``);\nединицы — по ``media_item_id``, проверяются как при публикации UGC.",
+        "properties": {
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cover"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "maxLength": 100,
+            "pattern": "^(music|film)\\.collection\\.[a-z0-9_]+$",
+            "title": "Default Mode Key",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DraftItem"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "public",
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "title",
+          "default_mode_key",
+          "items",
+          "reason"
+        ],
+        "title": "CuratedCollectionIn",
+        "type": "object"
+      },
+      "CuratedCollectionUpdate": {
+        "additionalProperties": false,
+        "description": "Новая версия кураторского сборника (оптимистичная блокировка по ``base_version``).",
+        "properties": {
+          "base_version": {
+            "minimum": 1.0,
+            "title": "Base Version",
+            "type": "integer"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cover"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "maxLength": 100,
+            "pattern": "^(music|film)\\.collection\\.[a-z0-9_]+$",
+            "title": "Default Mode Key",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DraftItem"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "public",
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_version",
+          "title",
+          "default_mode_key",
+          "items",
+          "reason"
+        ],
+        "title": "CuratedCollectionUpdate",
+        "type": "object"
+      },
+      "CustomClue": {
+        "additionalProperties": false,
+        "description": "Свои загадки автора к единице (ADR 0029): в 3b только эмодзи.\n\nЭмодзи — строго RGI (``gv_text.emoji.is_strict_emoji``), не больше\n``limits.emoji_max_graphemes`` графем, без текста и пробелов; иначе при публикации —\n``collections.emoji_invalid``. Меньше ``limits.emoji_min_graphemes`` графем —\n``collections.emoji_too_short``: профиль ``emoji`` media-pipeline открывает до 6 эмодзи\nи из меньшего числа набор не строит.",
+        "properties": {
+          "emoji": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          }
+        },
+        "title": "CustomClue",
+        "type": "object"
+      },
+      "CustomClueOut": {
+        "description": "Свои загадки единицы (видит только автор и админ).",
+        "properties": {
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          }
+        },
+        "title": "CustomClueOut",
+        "type": "object"
+      },
+      "DraftBody": {
+        "additionalProperties": false,
+        "description": "Тело черновика: всё, что автор правит в конструкторе (домен фиксирован при создании).\n\nЧерновик сохраняется и неполным (меньше ``items_min`` единиц, без режима); полная\nпроверка — при публикации.",
+        "properties": {
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Cover"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "pattern": "^(music|film)\\.collection\\.[a-z0-9_]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Mode Key"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DraftItem"
+            },
+            "maxItems": 200,
+            "title": "Items",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "public",
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "DraftBody",
+        "type": "object"
+      },
+      "DraftItem": {
+        "additionalProperties": false,
+        "description": "Единица черновика в порядке автора.",
+        "properties": {
+          "custom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomClue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "media_item_id"
+        ],
+        "title": "DraftItem",
+        "type": "object"
+      },
+      "DraftOut": {
+        "description": "Черновик сборника (виден только автору; чужой — 404 ``collections.not_found``).",
+        "properties": {
+          "base_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "content_version, поверх которой начат черновик",
+            "title": "Base Version"
+          },
+          "body": {
+            "$ref": "#/components/schemas/DraftBody"
+          },
+          "client_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Подпись устройства последнего сохранения (экран конфликта)",
+            "title": "Client Label"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "revision": {
+            "description": "0 — черновика нет, тело взято из опубликованной версии",
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "status",
+          "revision",
+          "updated_at",
+          "body"
+        ],
+        "title": "DraftOut",
+        "type": "object"
+      },
+      "FavoriteOut": {
+        "description": "Состояние избранного после запроса.",
+        "properties": {
+          "favorite": {
+            "title": "Favorite",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "favorite"
+        ],
+        "title": "FavoriteOut",
+        "type": "object"
+      },
+      "FeaturedRequest": {
+        "additionalProperties": false,
+        "description": "Отметка «рекомендуемое» (кураторские и UGC, D14).",
+        "properties": {
+          "featured": {
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Порядок в блоке, меньше — выше",
+            "title": "Rank"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "featured",
+          "reason"
+        ],
+        "title": "FeaturedRequest",
+        "type": "object"
+      },
+      "HiddenOut": {
+        "description": "Кто и почему скрыл сборник (аудит; автору показывается только факт скрытия).",
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "at"
+        ],
+        "title": "HiddenOut",
+        "type": "object"
+      },
+      "LikeOut": {
+        "description": "Состояние лайка после запроса (повтор — тот же ответ, D13).",
+        "properties": {
+          "liked": {
+            "title": "Liked",
+            "type": "boolean"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "liked",
+          "likes_count"
+        ],
+        "title": "LikeOut",
+        "type": "object"
+      },
+      "MeOut": {
+        "description": "Отношение текущего пользователя к сборнику (гостю и анониму — ``me: null``).",
+        "properties": {
+          "completed": {
+            "description": "Есть завершение текущей версии (открывает состав)",
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "favorite": {
+            "title": "Favorite",
+            "type": "boolean"
+          },
+          "is_author": {
+            "default": false,
+            "title": "Is Author",
+            "type": "boolean"
+          },
+          "liked": {
+            "title": "Liked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "liked",
+          "favorite",
+          "completed"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
+      "MetaLimits": {
+        "description": "Лимиты конструктора (``GV_COLLECTIONS__LIMITS__*``).",
+        "properties": {
+          "description_max": {
+            "title": "Description Max",
+            "type": "integer"
+          },
+          "drafts_max": {
+            "title": "Drafts Max",
+            "type": "integer"
+          },
+          "emoji_max_graphemes": {
+            "title": "Emoji Max Graphemes",
+            "type": "integer"
+          },
+          "emoji_min_graphemes": {
+            "description": "Минимум графем своих эмодзи (иначе `collections.emoji_too_short`)",
+            "title": "Emoji Min Graphemes",
+            "type": "integer"
+          },
+          "items_max": {
+            "title": "Items Max",
+            "type": "integer"
+          },
+          "items_min": {
+            "title": "Items Min",
+            "type": "integer"
+          },
+          "publish_per_day": {
+            "title": "Publish Per Day",
+            "type": "integer"
+          },
+          "tags_max": {
+            "title": "Tags Max",
+            "type": "integer"
+          },
+          "title_max": {
+            "title": "Title Max",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title_max",
+          "description_max",
+          "items_min",
+          "items_max",
+          "tags_max",
+          "emoji_max_graphemes",
+          "emoji_min_graphemes",
+          "drafts_max",
+          "publish_per_day"
+        ],
+        "title": "MetaLimits",
+        "type": "object"
+      },
+      "MyCollectionOut": {
+        "description": "Сборник в «моих сборниках».",
+        "properties": {
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "draft_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Revision"
+          },
+          "has_draft": {
+            "title": "Has Draft",
+            "type": "boolean"
+          },
+          "hidden_by_moderator": {
+            "description": "Плашка «скрыт модератором»",
+            "title": "Hidden By Moderator",
+            "type": "boolean"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "hidden"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Опубликованная content_version",
+            "title": "Version"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "status",
+          "title",
+          "visibility",
+          "has_draft",
+          "items_count",
+          "likes_count",
+          "hidden_by_moderator",
+          "updated_at"
+        ],
+        "title": "MyCollectionOut",
+        "type": "object"
+      },
+      "MyCollectionsPage": {
+        "description": "Мои сборники (keyset-курсор по ``updated_at``).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MyCollectionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MyCollectionsPage",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).\n\nAttributes:\n    type: URN проблемы ``urn:guessverse:problem:<code>``.\n    title: Человекочитаемый заголовок.\n    status: HTTP-статус.\n    code: Машинный код ошибки — на него опираются клиенты.\n    detail: Пояснение.\n    correlation_id: Идентификатор цепочки запроса (для поиска в логах).\n    details: Безопасные для клиента подробности (``AppError.details``).\n    errors: Ошибки валидации полей запроса.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ошибки валидации: loc, msg, type",
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "description": "Опубликовать ревизию черновика (новая ``content_version``).",
+        "properties": {
+          "draft_revision": {
+            "minimum": 1.0,
+            "title": "Draft Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft_revision"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
+      },
+      "ReasonRequest": {
+        "additionalProperties": false,
+        "description": "Действие модератора с причиной (аудит).",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ReasonRequest",
+        "type": "object"
+      },
+      "RestrictionOut": {
+        "description": "Ограничение автора: не может создавать, править и публиковать сборники.",
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "restricted": {
+            "title": "Restricted",
+            "type": "boolean"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "restricted"
+        ],
+        "title": "RestrictionOut",
+        "type": "object"
+      },
+      "SaveDraftRequest": {
+        "additionalProperties": false,
+        "description": "Сохранить черновик с оптимистичной блокировкой (D2).\n\n``base_revision`` — ревизия, которую клиент правил; не совпала с текущей — 409\n``collections.draft_conflict``, ``details.current`` — актуальный ``DraftOut``.",
+        "properties": {
+          "base_revision": {
+            "minimum": 0.0,
+            "title": "Base Revision",
+            "type": "integer"
+          },
+          "body": {
+            "$ref": "#/components/schemas/DraftBody"
+          },
+          "client_label": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Label"
+          }
+        },
+        "required": [
+          "base_revision",
+          "body"
+        ],
+        "title": "SaveDraftRequest",
+        "type": "object"
+      },
+      "TagOut": {
+        "description": "Тег из словаря (свободных тегов нет).",
+        "properties": {
+          "domains": {
+            "items": {
+              "enum": [
+                "music",
+                "film"
+              ],
+              "type": "string"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title_key",
+          "domains"
+        ],
+        "title": "TagOut",
         "type": "object"
       }
     }
@@ -29,22 +1934,3088 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/v1/authors/{user_id}/restriction": {
+      "delete": {
+        "description": "Идемпотентно: без ограничения — тот же ответ `restricted: false`.",
+        "operationId": "unrestrict_author_admin_v1_authors__user_id__restriction_delete",
+        "parameters": [
+          {
+            "description": "Пользователь-автор",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Пользователь-автор",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Снять ограничение автора",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Не может создавать, править и публиковать сборники (опубликованные остаются).",
+        "operationId": "restrict_author_admin_v1_authors__user_id__restriction_post",
+        "parameters": [
+          {
+            "description": "Пользователь-автор",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Пользователь-автор",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Ограничить автора",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/collections": {
+      "get": {
+        "description": "Поиск по названию и автору (нику); удалённые не показываются.",
+        "operationId": "admin_list_admin_v1_collections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "draft",
+                    "published",
+                    "hidden"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ugc",
+                    "curated"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Сборники (включая черновики и скрытые)",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Публикуется сразу (`collections.CollectionPublished`, `kind = curated`). Ошибки — как у публикации UGC: 422 `collections.publish_invalid` (`details.errors`).",
+        "operationId": "admin_create_admin_v1_collections_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CuratedCollectionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Создать кураторский сборник",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/collections/{collection_id}": {
+      "get": {
+        "description": "Опубликованный состав; у ни разу не опубликованного — состав черновика.",
+        "operationId": "admin_get_admin_v1_collections__collection_id__get",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Сборник с составом",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "409 `collections.version_conflict` — `base_version` устарела (`details.current_version`); 409 `collections.not_curated` — UGC правит только автор; 422 `collections.publish_invalid`.",
+        "operationId": "admin_update_admin_v1_collections__collection_id__put",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CuratedCollectionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Новая версия кураторского сборника",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/collections/{collection_id}/featured": {
+      "put": {
+        "description": "Кураторские и UGC (D14); только опубликованные (409 `collections.not_published`). Без `rank` — в конце блока (1000). Событий нет; каталог `sort=featured`.",
+        "operationId": "admin_featured_admin_v1_collections__collection_id__featured_put",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeaturedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Отметка «рекомендуемое»",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/collections/{collection_id}/hide": {
+      "post": {
+        "description": "Пропадает из каталога, старт сессии в game — 404; автор видит плашку. Событие `collections.CollectionUpdated` (`status: hidden`); повтор — без события. 409 `collections.not_published` — сборник ещё не публиковался.",
+        "operationId": "admin_hide_admin_v1_collections__collection_id__hide_post",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Скрыть сборник",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/collections/{collection_id}/unhide": {
+      "post": {
+        "description": "Событие `collections.CollectionUpdated` (`status: published`).",
+        "operationId": "admin_unhide_admin_v1_collections__collection_id__unhide_post",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCollectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Показать скрытый сборник",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/collections": {
+      "get": {
+        "description": "Только опубликованные публичные (не скрытые) сборники. Поиск — по названию, описанию и словам тегов, не по единицам (D6). Сортировки: `popular` (лайки и завершения за окно), `new`, `likes`, `difficulty` (сложные раньше, без сложности — в конце), `featured` (только «рекомендуемые» по порядку). Без `q` — `Cache-Control: public, max-age=30`. 429 `collections.rate_limited` — лимит поиска с `q`.",
+        "operationId": "catalog_v1_collections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "music",
+                    "film"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "pattern": "^(music|film)\\.collection\\.[a-z0-9_]+$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "difficulty",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "easy",
+                    "medium",
+                    "hard"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Difficulty"
+            }
+          },
+          {
+            "in": "query",
+            "name": "curated",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Curated"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "popular",
+              "enum": [
+                "popular",
+                "new",
+                "likes",
+                "difficulty",
+                "featured"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          }
+        },
+        "summary": "Каталог сборников",
+        "tags": [
+          "collections"
+        ]
+      },
+      "post": {
+        "description": "Ошибки: 409 `collections.drafts_limit` (`details.max`), 422 `collections.title_invalid` (`details.reason` — код `ugc.*`), 403 `collections.author_restricted`.",
+        "operationId": "create_collection_v1_collections_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCollectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Создать сборник (черновик)",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/collections/{collection_id}": {
+      "delete": {
+        "description": "Повтор — 204. Опубликованный — событие `collections.CollectionDeleted`.",
+        "operationId": "delete_collection_v1_collections__collection_id__delete",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Удалить сборник",
+        "tags": [
+          "collections"
+        ]
+      },
+      "get": {
+        "description": "Публичный и unlisted (по ссылке). `items` — только автору, админу и игроку со статусом «пройден» текущей версии (D6), иначе `items: null`, `items_visible: false`; свои эмодзи единиц (`custom`) — только автору и админу. Скрытый — только автору и админу (`status: hidden`), остальным 404; гостю и анониму `me: null`.",
+        "operationId": "get_collection_v1_collections__collection_id__get",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Сборник",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/collections/{collection_id}/draft": {
+      "get": {
+        "description": "Нет черновика — тело опубликованной версии и `revision = 0`.",
+        "operationId": "get_draft_v1_collections__collection_id__draft_get",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Черновик сборника",
+        "tags": [
+          "collections"
+        ]
+      },
+      "put": {
+        "description": "Оптимистичная блокировка (D2): `base_revision` ≠ текущей — 409 `collections.draft_conflict`, `details.current` — актуальный `DraftOut` (`revision`, `updated_at`, `client_label`, `body`). 409 `collections.hidden` — сборник скрыт модератором; 409 `collections.deleted` — удалён; 422 `collections.draft_invalid` (`details.errors` — `[{path, code}]`: `collections.items_too_many`, `collections.tags_too_many`).",
+        "operationId": "save_draft_v1_collections__collection_id__draft_put",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Сохранить черновик",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/collections/{collection_id}/favorite": {
+      "delete": {
+        "operationId": "unfavorite_v1_collections__collection_id__favorite_delete",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FavoriteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Убрать из избранного",
+        "tags": [
+          "collections"
+        ]
+      },
+      "put": {
+        "operationId": "favorite_v1_collections__collection_id__favorite_put",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FavoriteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Добавить в избранное",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/collections/{collection_id}/like": {
+      "delete": {
+        "description": "Идемпотентно, событие не публикуется (D13).",
+        "operationId": "unlike_v1_collections__collection_id__like_delete",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LikeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Снять лайк",
+        "tags": [
+          "collections"
+        ]
+      },
+      "put": {
+        "description": "Идемпотентно. Новый лайк — событие `collections.CollectionLiked`. 403 `collections.own_collection` — свой сборник; 429 `collections.rate_limited`.",
+        "operationId": "like_v1_collections__collection_id__like_put",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LikeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Лайкнуть сборник",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/collections/{collection_id}/publish": {
+      "post": {
+        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, reason?}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.emoji_too_short` (`min`), `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).",
+        "operationId": "publish_v1_collections__collection_id__publish_post",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Опубликовать черновик",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/me/collections": {
+      "get": {
+        "operationId": "my_collections_v1_me_collections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "draft",
+                    "published",
+                    "hidden"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCollectionsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Мои сборники",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/me/favorites": {
+      "get": {
+        "description": "Опубликованные сборники по времени добавления (новые раньше).",
+        "operationId": "my_favorites_v1_me_favorites_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Избранные сборники",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
     "/v1/meta": {
       "get": {
+        "description": "Лимиты (`GV_COLLECTIONS__LIMITS__*`), пресеты обложек, словарь тегов.",
         "operationId": "meta_v1_meta_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceMeta"
+                  "$ref": "#/components/schemas/CollectionsMeta"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Сведения о сервисе",
+        "summary": "Сведения о сервисе и словари конструктора",
         "tags": [
           "collections"
         ]

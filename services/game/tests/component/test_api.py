@@ -102,6 +102,12 @@ async def test_answer_is_item_or_text(
             {"media_item_id": SESSION, "reason": "надпись на кадре"},
         ),
         ("GET", "/admin/v1/projection/items?q=инте&domain=film", None),
+        (
+            "POST",
+            "/admin/v1/mode-configs/film.random.description/asset-requests",
+            {"draft_revision": 1, "reason": "новые уровни"},
+        ),
+        ("GET", "/admin/v1/mode-configs/film.random.description/asset-requests", None),
     ],
 )
 async def test_admin_requires_specific_perm(
@@ -127,3 +133,96 @@ async def test_schema_endpoint_lists_mode_config(
     )
     assert response.status_code == 200
     assert "properties" in response.json()["mode_config"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/v1/modes/film.marathon.director/subjects?q=нолан"),
+        ("POST", f"/v1/sessions/{SESSION}/rounds/0/final-clue"),
+        ("GET", "/v1/me/records"),
+    ],
+)
+async def test_stage3a_public_routes_require_subject(
+    client: httpx.AsyncClient, method: str, path: str
+) -> None:
+    """Ручки этапа 3a — только для субъекта (пользователь или гость), ответы no-store."""
+    response = await client.request(method, path)
+    assert_problem(response, 401, "auth.unauthenticated")
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        (
+            f"/v1/sessions/{SESSION}/guesses",
+            {"round_index": 0, "expected_version": 1, "answer": {"option_id": "Higher!"}},
+        ),
+        ("/v1/sessions", {"mode_key": "film.marathon.director", "subject_ids": []}),
+        (
+            "/v1/sessions",
+            {"mode_key": "film.marathon.director", "subject_ids": [SESSION] * 11},
+        ),
+        ("/v1/modes/film.marathon.director/subjects?limit=21", None),
+    ],
+)
+async def test_stage3a_inputs_are_bounded_by_schema(
+    *, client: httpx.AsyncClient, token_issuer: TestTokenIssuer, path: str, body: object
+) -> None:
+    """``option_id`` — непрозрачный короткий id, персон 1..10, подсказок ≤ 20 (§11 п. 4)."""
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    method = "GET" if body is None else "POST"
+    response = await client.request(method, path, json=body, headers=headers)
+    assert response.status_code == 422, response.text
+
+
+async def test_round_index_accepts_long_sessions(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer
+) -> None:
+    """``session.rounds`` ≤ 200: номер раунда до 199 проходит схему, 200 — нет."""
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    body = {"round_index": 200, "expected_version": 1}
+    response = await client.post(f"/v1/sessions/{SESSION}/skips", json=body, headers=headers)
+    assert response.status_code == 422
+
+
+COLLECTION = "0192a3b4-c5d6-7e8f-9a0b-000000000c01"
+
+
+async def test_playability_is_for_users_only(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer
+) -> None:
+    path = "/v1/modes/film.collection.frame/playability"
+    body = {"media_item_ids": [SESSION]}
+    assert_problem(await client.post(path, json=body), 401, "auth.unauthenticated")
+    guest = {"Authorization": f"Bearer {token_issuer.issue_guest()}"}
+    assert_problem(await client.post(path, json=body, headers=guest), 403, "auth.guest_forbidden")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"media_item_ids": []},
+        {"media_item_ids": [SESSION] * 201},
+        {"media_item_ids": [SESSION], "titles": True},
+    ],
+)
+async def test_playability_request_is_bounded(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer, body: dict[str, object]
+) -> None:
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}"}
+    response = await client.post(
+        "/v1/modes/film.collection.frame/playability", json=body, headers=headers
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("rounds", [7, "5", "все", 0])
+async def test_rounds_is_one_of_options(
+    client: httpx.AsyncClient, token_issuer: TestTokenIssuer, rounds: object
+) -> None:
+    headers = {"Authorization": f"Bearer {token_issuer.issue()}", **KEY}
+    body = {"mode_key": "film.collection.frame", "collection_id": COLLECTION, "rounds": rounds}
+    response = await client.post("/v1/sessions", json=body, headers=headers)
+    assert response.status_code == 422

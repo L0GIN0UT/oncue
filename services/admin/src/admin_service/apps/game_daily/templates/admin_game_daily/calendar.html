@@ -9,7 +9,8 @@
 <p>Сегодня: {{ today|date:"Y-m-d" }}. Набор блокируется в начале своего дня — после этого менять его нельзя.</p>
 {% for s in sets %}
 <div class="module">
-  <h2>{{ s.day }} — {{ s.status }}{% if s.locked %} (только чтение){% endif %} · версия режима v{{ s.mode_version }}</h2>
+  <h2>{% if s.period != "day" %}{{ s.period_label }} {% endif %}{{ s.day }} — {{ s.status }}{% if s.locked %} (только чтение){% endif %} · версия режима v{{ s.mode_version }}</h2>
+  {% if s.themed %}<p>Период: {{ s.period_label }} {{ s.day }} · тема: {% if s.subject_id %}<code>{{ s.subject_id }}</code>{% else %}не выбрана{% endif %}</p>{% endif %}
   <table>
     <thead><tr><th>Раунд</th><th>Единица</th><th>Год</th><th>Играбельна</th><th></th></tr></thead>
     {% for i in s.items %}
@@ -25,8 +26,12 @@
   </table>
   {% if s.regenerate_url %}
   <form method="post" action="{{ s.regenerate_url }}">
-    {% csrf_token %}{{ regenerate_form.as_p }}<input type="submit" value="Перегенерировать набор">
+    {% csrf_token %}
+    <p>{{ regenerate_form.reason.label_tag }}<br>{{ regenerate_form.reason }}</p>
+    {{ regenerate_form.idempotency_key }}
+    <input type="submit" value="{% if s.themed %}Перегенерировать (тему выберет генератор){% else %}Перегенерировать набор{% endif %}">
   </form>
+  {% if s.themed and s.theme_url %}<p><a href="{{ s.theme_url }}">Сменить тему (поиск персоны)…</a></p>{% endif %}
   {% endif %}
 </div>
 {% empty %}

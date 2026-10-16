@@ -9,16 +9,27 @@ from uuid import UUID
 
 import pytest
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
-from media_pipeline_service.application.ports import AdminAction
+from media_pipeline_service.application.ports import ANY_SCOPE, AdminAction
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
 from media_pipeline_service.domain.clues import FrameProgressiveParams
+from media_pipeline_service.domain.collections import CollectionState, CollectionStatus
 from media_pipeline_service.domain.errors import MediaItemNotFoundError
 from media_pipeline_service.domain.links import LinkPolicy, asset_object_key
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfile
-from media_pipeline_service.domain.sources import SourceKind, SourceMedia, SourceOrigin
+from media_pipeline_service.domain.sources import (
+    AssetScope,
+    SourceKind,
+    SourceMedia,
+    SourceOrigin,
+)
 from media_pipeline_service.infrastructure.db.repositories import SqlMediaUnitOfWork
-from media_pipeline_service.infrastructure.db.tables import TABLES, admin_actions, link_issuance
+from media_pipeline_service.infrastructure.db.tables import (
+    TABLES,
+    admin_actions,
+    asset_levels,
+    link_issuance,
+)
 from media_pipeline_service.main import DEFINITION
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -96,7 +107,7 @@ async def test_asset_set_lifecycle_persists_levels_and_events(
 ) -> None:
     item, source_id = await seed(sessions)
     aggregate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     async with uow(sessions) as u:
         await u.asset_sets.add(aggregate)
@@ -143,7 +154,7 @@ async def test_optimistic_lock_and_unique_profile(
 ) -> None:
     item, source_id = await seed(sessions)
     aggregate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     async with uow(sessions) as u:
         await u.asset_sets.add(aggregate)
@@ -159,7 +170,7 @@ async def test_optimistic_lock_and_unique_profile(
         with pytest.raises(ConflictError):
             await second.asset_sets.save(b)
     duplicate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     with pytest.raises(Exception, match="uq_asset_sets"):
         async with uow(sessions) as u:
@@ -309,7 +320,7 @@ async def test_regenerate_failure_after_mutation_does_not_stick_idempotency_key(
     """
     item, source_id = await seed(sessions)
     aggregate = AssetSet.plan(
-        uuid7(), media_item_id=item, profile=profile(), source_media_id=source_id, now=NOW
+        uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
     )
     async with uow(sessions) as u:
         await u.asset_sets.add(aggregate)
@@ -398,3 +409,217 @@ async def test_uow_requires_exactly_one_session_source(
         SqlMediaUnitOfWork(producer="p", clock=FakeClock())
     async with sessions() as session:
         assert (await session.execute(select(1))).scalar() == 1
+
+
+async def test_stage3a_source_fields_and_multi_source_sets_roundtrip(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """0005: позиция, происхождение, текстовое содержимое и все исходники набора."""
+    item, frame_id = await seed(sessions)
+    text_id, second_frame = uuid7(), uuid7()
+    content = {"version": 1, "emoji": "🎬🚀", "genres": ["драма"], "year": 2014}
+    async with uow(sessions) as u:
+        await u.sources.add(
+            SourceMedia(
+                second_frame,
+                media_item_id=item,
+                kind=SourceKind.FRAME,
+                origin=SourceOrigin.SEED,
+                uri=None,
+                created_at=NOW,
+                position=2,
+                source_url="https://example.org/frame-2",
+                license_note="синтетика",
+            )
+        )
+        await u.sources.add(
+            SourceMedia.text(
+                text_id,
+                media_item_id=item,
+                content=content,
+                sha256="a" * 64,
+                size_bytes=12,
+                created_at=NOW,
+            )
+        )
+        aggregate = AssetSet.plan(
+            uuid7(),
+            media_item_id=item,
+            profile=profile(),
+            source_media_ids=(frame_id, second_frame),
+            now=NOW,
+        )
+        await u.asset_sets.add(aggregate)
+        await u.commit()
+    async with uow(sessions) as u:
+        stored = {s.id: s for s in await u.sources.list_for_item(item)}
+        loaded = await u.asset_sets.get(aggregate.id)
+        await u.sources.delete([text_id])
+        await u.commit()
+    assert stored[second_frame].position == 2
+    assert stored[second_frame].origin is SourceOrigin.SEED
+    assert (stored[second_frame].source_url, stored[second_frame].license_note) == (
+        "https://example.org/frame-2",
+        "синтетика",
+    )
+    assert stored[frame_id].position == 1 and stored[frame_id].text_content is None
+    assert stored[text_id].text_content == content and stored[text_id].is_usable
+    assert loaded is not None
+    assert loaded.source_media_ids == (frame_id, second_frame)
+    assert loaded.source_media_id == frame_id
+    async with uow(sessions) as u:
+        assert await u.sources.get(text_id) is None
+
+
+async def test_dynamic_profiles_repository(sessions: async_sessionmaker[AsyncSession]) -> None:
+    from media_pipeline_service.domain.dynamic_profiles import (
+        DynamicProfile,
+        DynamicProfileStatus,
+    )
+
+    item, source_id = await seed(sessions)
+
+    def dynamic(hash_: str, status: DynamicProfileStatus, code: str | None) -> DynamicProfile:
+        return DynamicProfile(
+            uuid7(),
+            clue_type="description",
+            domain="film",
+            params={"levels": [{"fields": ["year"]}]},
+            params_hash=hash_,
+            status=status,
+            error_code=code,
+            request_id=uuid7(),
+            mode_key="film.random.description",
+            actor_id=uuid7(),
+            backfill_cursor=None,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+    usable = dynamic("a" * 64, DynamicProfileStatus.BACKFILLING, None)
+    rejected = dynamic("b" * 64, DynamicProfileStatus.REJECTED, "profile.limit_reached")
+    async with uow(sessions) as u:
+        await u.profiles.lock()
+        await u.profiles.add(usable)
+        await u.profiles.add(rejected)
+        aggregate = AssetSet.plan(
+            uuid7(), media_item_id=item, profile=profile(), source_media_ids=(source_id,), now=NOW
+        )
+        await u.asset_sets.add(aggregate)
+        await u.commit()
+    async with uow(sessions) as u:
+        assert await u.profiles.count_usable() == 1
+        assert [p.id for p in await u.profiles.list_usable("film")] == [usable.id]
+        assert await u.profiles.list_usable("music") == []
+        assert [p.id for p in await u.profiles.list_backfilling(10)] == [usable.id]
+        assert len(await u.profiles.list_all("description")) == 2
+        assert [p.id for p in await u.profiles.list_all(params_hash="b" * 64)] == [rejected.id]
+        loaded = await u.profiles.get("description", "a" * 64, "film", for_update=True)
+        assert loaded is not None and loaded.params == usable.params
+        loaded.advance(item, done=True, now=NOW)
+        await u.profiles.save(loaded)
+        assert await u.items.list_active_ids("film", after=None, limit=10) == [item]
+        assert await u.items.list_active_ids("film", after=item, limit=10) == []
+        counts = await u.asset_sets.count_by_profile("frame_progressive")
+        await u.commit()
+    assert [(c.profile_key, c.status, c.count) for c in counts] == [("default", "pending", 1)]
+    async with uow(sessions) as u:
+        stored = await u.profiles.get("description", "a" * 64, "film")
+        assert stored is not None
+        assert (stored.status, stored.backfill_cursor) == (DynamicProfileStatus.ACTIVE, item)
+    with pytest.raises(IntegrityError):
+        async with uow(sessions) as u:
+            await u.profiles.add(dynamic("a" * 64, DynamicProfileStatus.BACKFILLING, None))
+            await u.commit()
+
+
+async def test_scoped_sources_and_sets_are_separated_by_owner(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """ADR 0029: набор сборника живёт рядом с каталожным того же профиля, фильтры по
+    владельцу, удаление по scope; проекция сборника отбрасывает старые версии."""
+    item, source_id = await seed(sessions)
+    scope, other = AssetScope.collection(uuid7()), AssetScope.collection(uuid7())
+    content = {"version": 1, "emoji": "🚢🧊💔"}
+    scoped_source = SourceMedia.text(
+        uuid7(),
+        media_item_id=item,
+        content=content,
+        sha256="0" * 64,
+        size_bytes=10,
+        created_at=NOW,
+        scope=scope,
+    )
+    sets = {
+        owner: AssetSet.plan(
+            uuid7(),
+            media_item_id=item,
+            profile=profile(),
+            source_media_ids=(source_id,),
+            now=NOW,
+            scope=owner,
+        )
+        for owner in (None, scope, other)
+    }
+    level = AssetLevel(
+        level=1, object_key=asset_object_key(uuid7().hex, "json"), mime="x", size_bytes=1
+    )
+    sets[scope].levels = (level,)
+    async with uow(sessions) as u:
+        await u.sources.add(scoped_source)
+        for aggregate in sets.values():
+            await u.asset_sets.add(aggregate)
+        await u.commit()
+
+    async with uow(sessions) as u:
+        assert [s.id for s in await u.sources.list_for_item(item)] == [source_id]
+        (loaded_source,) = await u.sources.list_for_item(item, scope=scope)
+        assert (loaded_source.scope, loaded_source.origin) == (scope, SourceOrigin.COLLECTION)
+        assert loaded_source.text_content == content
+        assert [s.id for s in await u.sources.list_for_scope(scope)] == [scoped_source.id]
+        assert await u.sources.list_for_scope(other) == []
+        assert await u.sources.scopes_for_item(item) == [scope]
+        (catalog,) = await u.asset_sets.list_for_item(item, scope=None)
+        assert catalog.id == sets[None].id and catalog.scope is None
+        (mine,) = await u.asset_sets.list_for_scope(scope, for_update=True)
+        assert (mine.id, mine.scope, mine.levels) == (sets[scope].id, scope, (level,))
+        everything = await u.asset_sets.list_for_item(item, scope=ANY_SCOPE)
+        assert {a.id for a in everything} == {a.id for a in sets.values()}
+        assert list(await u.items.get_many([item, uuid7()], for_update=True)) == [item]
+        await u.asset_sets.delete([mine.id])
+        await u.commit()
+
+    async with uow(sessions) as u:
+        assert await u.asset_sets.list_for_scope(scope) == []
+        assert [a.id for a in await u.asset_sets.list_for_scope(other)] == [sets[other].id]
+    async with sessions() as session:
+        query = select(asset_levels.c.level).where(asset_levels.c.asset_set_id == sets[scope].id)
+        assert (await session.execute(query)).all() == []  # уровни — каскадом
+
+    # второй исходник того же владельца у единицы запрещён схемой
+    with pytest.raises(IntegrityError):
+        async with uow(sessions) as u:
+            await u.sources.add(
+                SourceMedia.text(
+                    uuid7(),
+                    media_item_id=item,
+                    content={"version": 1, "emoji": "🎬"},
+                    sha256="1" * 64,
+                    size_bytes=5,
+                    created_at=NOW,
+                    scope=scope,
+                )
+            )
+    async with uow(sessions) as u:
+        state = CollectionState(
+            scope.id, version=3, status=CollectionStatus.PUBLISHED, updated_at=NOW
+        )
+        assert await u.collections.advance(state)
+        assert not await u.collections.advance(state)  # та же версия
+        stale = CollectionState(scope.id, version=2, status=CollectionStatus.HIDDEN, updated_at=NOW)
+        assert not await u.collections.advance(stale)
+        newer = CollectionState(
+            scope.id, version=4, status=CollectionStatus.DELETED, updated_at=NOW
+        )
+        assert await u.collections.advance(newer)
+        await u.commit()

@@ -3,6 +3,10 @@
 Набор фиксирует версию конфига, с которой создан: сегодняшний дейлик играется на ней,
 даже если режим уже переопубликован. Заменять единицы можно только в ``scheduled`` и до
 начала дня; в начале дня набор блокируется (``locked``) и дальше только читается.
+
+Этап 3a (ADR 0027): набор дня обобщён до набора периода — ``period`` (``day`` | ``week``),
+``day`` — начало периода в зоне режима; у сетки есть тема (``subject_id`` — персона).
+Все правила (курация до начала периода, блокировка) — те же.
 """
 
 from __future__ import annotations
@@ -78,6 +82,8 @@ class DailySet(AggregateRoot[tuple[str, date]]):
         generated_by: Кто создал набор.
         locked_at: Момент блокировки.
         replaced: Индексы, заменённые в этой транзакции (для репозитория).
+        period: Период набора (``day`` | ``week``); ``day`` — его начало.
+        subject_id: Тема периода (персона сетки) или ``None``.
     """
 
     mode_key: str
@@ -90,6 +96,8 @@ class DailySet(AggregateRoot[tuple[str, date]]):
     locked_at: datetime | None = None
     replaced: set[int] = field(default_factory=set)
     items_rewritten: bool = False
+    period: str = "day"
+    subject_id: UUID | None = None
 
     def __post_init__(self) -> None:
         AggregateRoot.__init__(self, (self.mode_key, self.day))
@@ -103,8 +111,10 @@ class DailySet(AggregateRoot[tuple[str, date]]):
         mode_version: int,
         items: list[UUID],
         generated_by: GeneratedBy,
+        period: str = "day",
+        subject_id: UUID | None = None,
     ) -> DailySet:
-        """Новый набор с разыгранными единицами."""
+        """Новый набор с разыгранными единицами (и темой периода, если она есть)."""
         if len(set(items)) != len(items):
             raise ItemDuplicateError("единицы набора повторяются")
         return cls(
@@ -115,6 +125,8 @@ class DailySet(AggregateRoot[tuple[str, date]]):
             list(items),
             generated_by=generated_by,
             items_rewritten=True,
+            period=period,
+            subject_id=subject_id if items else None,
         )
 
     # ------------------------------------------------------------------ проверки
@@ -165,7 +177,13 @@ class DailySet(AggregateRoot[tuple[str, date]]):
         self.replaced.add(index)
 
     def regenerate(
-        self, items: list[UUID], *, mode_version: int, generated_by: GeneratedBy, today: date
+        self,
+        items: list[UUID],
+        *,
+        mode_version: int,
+        generated_by: GeneratedBy,
+        today: date,
+        subject_id: UUID | None = None,
     ) -> None:
         """Новый розыгрыш набора.
 
@@ -179,9 +197,18 @@ class DailySet(AggregateRoot[tuple[str, date]]):
         """
         if self.status is not DailySetStatus.FAILED:
             self._require_editable(today)
-        self.reroll(items, mode_version=mode_version, generated_by=generated_by)
+        self.reroll(
+            items, mode_version=mode_version, generated_by=generated_by, subject_id=subject_id
+        )
 
-    def reroll(self, items: list[UUID], *, mode_version: int, generated_by: GeneratedBy) -> None:
+    def reroll(
+        self,
+        items: list[UUID],
+        *,
+        mode_version: int,
+        generated_by: GeneratedBy,
+        subject_id: UUID | None = None,
+    ) -> None:
         """Перегенерация без проверки дня (повтор ``failed`` планировщиком)."""
         if self.status is DailySetStatus.LOCKED:
             raise DailyLockedError("набор заблокирован")
@@ -192,6 +219,7 @@ class DailySet(AggregateRoot[tuple[str, date]]):
         self.mode_version = mode_version
         self.generated_by = generated_by
         self.status = DailySetStatus.SCHEDULED if items else DailySetStatus.FAILED
+        self.subject_id = subject_id if items else None
         self.items_rewritten = True
 
     def lock(self, now: datetime) -> None:

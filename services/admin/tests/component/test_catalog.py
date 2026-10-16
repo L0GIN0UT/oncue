@@ -98,6 +98,7 @@ def test_detail_survives_media_pipeline_outage(
     login()
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     media.route("GET", "/admin/v1/asset-sets").respond(503, json={"status": 503})
+    media.route("GET", "/admin/v1/sources").respond(503, json={"status": 503})
     response = client.get(f"/catalog/items/{ITEM}/")
     assert response.status_code == 200
     body = response.content.decode()
@@ -112,6 +113,7 @@ def test_detail_lists_asset_sets_via_admin_api(
     asset_set = uuid7()
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     sets = media.route("GET", "/admin/v1/asset-sets").respond(200, json=[_asset_set(asset_set)])
+    media.route("GET", "/admin/v1/sources").respond(200, json=[])
     response = client.get(f"/catalog/items/{ITEM}/")
     assert response.status_code == 200
     request = sets.calls.last.request
@@ -169,6 +171,7 @@ def test_empty_reason_is_form_error_without_call(
     login()
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     media.route("GET", "/admin/v1/asset-sets").respond(200, json=[])
+    media.route("GET", "/admin/v1/sources").respond(200, json=[])
     block = catalog.route("POST", f"/admin/v1/items/{ITEM}/block").respond(200, json=ITEM_JSON)
     response = client.post(
         f"/catalog/items/{ITEM}/block/", {"reason": reason, "idempotency_key": _key()}
@@ -184,6 +187,7 @@ def test_missing_idempotency_key_is_form_error(
     login()
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     media.route("GET", "/admin/v1/asset-sets").respond(200, json=[])
+    media.route("GET", "/admin/v1/sources").respond(200, json=[])
     block = catalog.route("POST", f"/admin/v1/items/{ITEM}/block").respond(200, json=ITEM_JSON)
     response = client.post(f"/catalog/items/{ITEM}/block/", {"reason": "причина"})
     assert response.status_code == 400
@@ -195,6 +199,7 @@ def test_service_problem_is_shown_and_audited_as_failed(
 ) -> None:
     login()
     media.route("GET", "/admin/v1/asset-sets").respond(200, json=[])
+    media.route("GET", "/admin/v1/sources").respond(200, json=[])
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     catalog.route("POST", f"/admin/v1/items/{ITEM}/block").respond(
         403,
@@ -251,6 +256,7 @@ def test_bad_alias_kind_is_form_error(client: Any, login: Any, catalog: Any, med
     login()
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     media.route("GET", "/admin/v1/asset-sets").respond(200, json=[])
+    media.route("GET", "/admin/v1/sources").respond(200, json=[])
     response = client.post(
         f"/catalog/items/{ITEM}/aliases/",
         {"aliases": "X | ru | nickname", "reason": "причина", "idempotency_key": _key()},
@@ -328,6 +334,8 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
             "bytes": 7,
             "mime": "audio/mp4",
             "scheduled_asset_set_ids": [str(uuid7())],
+            "position": 1,
+            "origin": "upload",
         },
     )
     key = _key()
@@ -335,6 +343,7 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
         f"/catalog/items/{ITEM}/sources/",
         {
             "kind": "audio",
+            "position": "1",
             "reason": "аудио правообладателя",
             "idempotency_key": key,
             "file": SimpleUploadedFile("tone.m4a", b"\x00\x01audio", content_type="audio/mp4"),
@@ -347,7 +356,14 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
     assert str(ITEM).encode() in body and b'name="kind"' in body and b"\x00\x01audio" in body
     entry = AuditEntry.objects.get()
     assert entry.action == "media.upload_source"
-    assert entry.after == {"kind": "audio", "file_name": "tone.m4a", "bytes": 7}
+    assert entry.after == {
+        "kind": "audio",
+        "position": 1,
+        "origin": None,
+        "source_url": None,
+        "file_name": "tone.m4a",
+        "bytes": 7,
+    }
 
 
 def test_regenerate_asset_set(client: Any, login: Any, media: Any) -> None:

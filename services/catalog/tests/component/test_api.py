@@ -15,6 +15,7 @@ import httpx
 import pytest
 import respx
 from catalog_service.application.commands.imports import IMPORT_TASK
+from catalog_service.application.commands.republish import REPUBLISH_TASK
 from catalog_service.infrastructure.clients.resilience import CircuitBreaker, ResilientHttp
 from catalog_service.infrastructure.clients.tmdb import TmdbClient
 from catalog_service.infrastructure.container import CatalogContainer
@@ -23,7 +24,7 @@ from catalog_service.main import DEFINITION
 from catalog_service.settings import Settings
 
 from gv_core.ids import uuid7
-from gv_messaging import EventProcessor, Inbox
+from gv_messaging import EventEnvelope, EventProcessor, Inbox
 from gv_service import Infrastructure, create_app
 from gv_testkit import (
     FakeClock,
@@ -361,3 +362,164 @@ async def test_autocomplete_rate_limited(
         assert limited.headers["Retry-After"] == "1"
     finally:
         await infra.close()
+
+
+async def _first_film(
+    client: httpx.AsyncClient, infra: Infrastructure, issuer: TestTokenIssuer
+) -> str:
+    await run_import(
+        client, infra, issuer, {"source": "file", "file_id": "films.jsonl", "reason": "сиды"}
+    )
+    listed = await client.get(
+        "/admin/v1/items",
+        params={"domain": "film", "limit": 1},
+        headers=auth(issuer, "admin.access"),
+    )
+    item_id: str = listed.json()["items"][0]["id"]
+    return item_id
+
+
+async def _outbox(infra: Infrastructure) -> list[EventEnvelope]:
+    assert infra.sessions is not None and infra.tables is not None
+    async with infra.sessions() as session:
+        return await outbox_envelopes(session, infra.tables.outbox)
+
+
+async def test_clue_texts_edit_approve_publishes_only_approved(
+    client: httpx.AsyncClient, catalog_infra: Infrastructure, token_issuer: TestTokenIssuer
+) -> None:
+    """M9: правка → черновик (без события), одобрение → MediaItemUpdated.clue_texts."""
+    item_id = await _first_film(client, catalog_infra, token_issuer)
+    url = f"/admin/v1/items/{item_id}/clue-texts"
+    editor = auth(token_issuer, "admin.access", "catalog.edit_aliases")
+
+    empty = await client.get(url, headers=auth(token_issuer, "admin.access"))
+    assert empty.status_code == 200, empty.text
+    assert empty.json() == {
+        "plot_raw": None, "plot_masked": None, "tagline": None, "emoji": None,
+        "status": "draft", "revision": 0, "approved_revision": None,
+    }  # fmt: skip
+
+    body = {"plot_masked": "Сюжет …", "tagline": "Слоган", "emoji": "🚀🌌", "base_revision": 0}
+    events_before = len(await _outbox(catalog_infra))
+    put_key = key()
+    edited = await client.put(url, json={**body, "reason": "черновик"}, headers=editor | put_key)
+    assert edited.status_code == 200, edited.text
+    assert (edited.json()["status"], edited.json()["revision"]) == ("draft", 1)
+    replay = await client.put(url, json={**body, "reason": "черновик"}, headers=editor | put_key)
+    assert replay.json() == edited.json()
+    assert len(await _outbox(catalog_infra)) == events_before  # черновик не публикуется
+
+    assert_problem(
+        await client.put(url, json={**body, "reason": "устарело"}, headers=editor | key()),
+        409,
+        "catalog.clue_texts_revision_mismatch",
+    )
+    assert_problem(
+        await client.put(
+            url,
+            json={**body, "base_revision": 1, "emoji": "🚀" * 13, "reason": "много"},
+            headers=editor | key(),
+        ),
+        422,
+        "catalog.clue_text_invalid_emoji",
+    )
+    approve = f"{url}/approve"
+    assert_problem(
+        await client.post(approve, json={"revision": 2, "reason": "не та"}, headers=editor | key()),
+        409,
+        "catalog.clue_texts_revision_mismatch",
+    )
+    approved = await client.post(
+        approve, json={"revision": 1, "reason": "проверено"}, headers=editor | key()
+    )
+    assert approved.status_code == 200, approved.text
+    assert (approved.json()["status"], approved.json()["approved_revision"]) == ("approved", 1)
+
+    last = (await _outbox(catalog_infra))[-1]
+    assert_event_matches_schema(last)
+    assert last.event_type == "catalog.MediaItemUpdated"
+    assert last.payload["clue_texts"] == {
+        "plot_masked": "Сюжет …", "tagline": "Слоган", "emoji": "🚀🌌",
+    }  # fmt: skip
+    assert last.payload["changed_fields"] == ["clue_texts"]
+
+
+async def test_clue_texts_permissions_and_missing_item(
+    client: httpx.AsyncClient, catalog_infra: Infrastructure, token_issuer: TestTokenIssuer
+) -> None:
+    item_id = await _first_film(client, catalog_infra, token_issuer)
+    url = f"/admin/v1/items/{item_id}/clue-texts"
+    body = {"plot_masked": "x", "base_revision": 0, "reason": "без права"}
+    assert_problem(await client.get(url), 401, "auth.unauthenticated")
+    for perms in (("admin.access",), ("catalog.edit_aliases",), ("admin.access", "catalog.import")):
+        assert_problem(
+            await client.put(url, json=body, headers=auth(token_issuer, *perms) | key()),
+            403,
+            "auth.forbidden",
+        )
+    editor = auth(token_issuer, "admin.access", "catalog.edit_aliases")
+    assert_problem(
+        await client.put(url, json=body, headers=editor), 422, "idempotency.key_required"
+    )
+    assert_problem(
+        await client.get(f"/admin/v1/items/{uuid7()}/clue-texts", headers=editor),
+        404,
+        "catalog.item_not_found",
+    )
+    assert_problem(
+        await client.post(
+            f"{url}/approve", json={"revision": 0, "reason": "пусто"}, headers=editor | key()
+        ),
+        422,
+        "request.validation_failed",
+    )
+
+
+async def test_republish_publishes_version_plus_one_in_batches(
+    client: httpx.AsyncClient,
+    catalog_infra: Infrastructure,
+    container: CatalogContainer,
+    token_issuer: TestTokenIssuer,
+) -> None:
+    await _first_film(client, catalog_infra, token_issuer)
+    importer = auth(token_issuer, "admin.access", "catalog.import")
+    assert_problem(
+        await client.post(
+            "/admin/v1/items/republish",
+            json={"domain": "film", "reason": "без права"},
+            headers=auth(token_issuer, "admin.access", "catalog.edit_aliases") | key(),
+        ),
+        403,
+        "auth.forbidden",
+    )
+    before = {e.aggregate_id: e.payload["version"] for e in await _outbox(catalog_infra)}
+    queue = container.tasks
+    assert isinstance(queue, InMemoryTaskQueue)
+    queue.tasks.clear()
+    republish_key = key()
+    body = {"domain": "film", "reason": "заполнить новые поля"}
+    response = await client.post(
+        "/admin/v1/items/republish", json=body, headers=importer | republish_key
+    )
+    assert response.status_code == 202, response.text
+    replay = await client.post(
+        "/admin/v1/items/republish", json=body, headers=importer | republish_key
+    )
+    assert replay.json() == response.json()
+
+    handler = build_task_handlers(catalog_infra)[REPUBLISH_TASK]
+    batches = 0
+    while queue.tasks:
+        task = queue.tasks.pop(0)
+        await handler(task["payload"])
+        batches += 1
+    assert batches == 1  # 22 фильма < порции по умолчанию (200)
+
+    republished = [
+        e for e in await _outbox(catalog_infra) if e.payload.get("changed_fields") == ["republish"]
+    ]
+    assert len(republished) == 22
+    for event in republished:
+        assert_event_matches_schema(event)
+        assert event.payload["version"] == before[event.aggregate_id] + 1

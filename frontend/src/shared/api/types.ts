@@ -3,6 +3,8 @@ import type { components as Game } from "./schema/game";
 import type { components as Bff } from "./schema/bff_web";
 import type { components as Catalog } from "./schema/catalog";
 import type { components as Identity } from "./schema/identity";
+import type { components as Collections, operations as CollectionsOps } from "./schema/collections";
+import type { components as Library } from "./schema/library";
 
 type G = Game["schemas"];
 type B = Bff["schemas"];
@@ -22,6 +24,17 @@ export type SessionResult = G["SessionResult"];
 export type DailyStatus = G["DailyStatus"];
 export type Answer = G["GuessRequest"]["answer"];
 export type Domain = ModeOut["domain"];
+export type FinalClue = G["FinalClue"];
+export type ShownItem = G["ShownItem"];
+export type OptionOut = G["OptionOut"];
+export type RoundProgress = G["RoundProgress"];
+export type MoveStats = G["MoveStats"];
+export type SubjectOut = G["SubjectOut"];
+export type ModeStart = G["ModeStart"];
+/** Формат ответа режима — ключ реестра ответов фронта (D12). */
+export type AnswerFormat = NonNullable<ModeOut["answer_format"]>;
+/** Подача итога (`Scorer.presentation`) — ключ реестра презентеров итога (D12). */
+export type Presentation = NonNullable<ModeOut["presentation"]>;
 
 export type HomePage = B["HomePage"];
 export type SoloPage = B["SoloPage"];
@@ -32,7 +45,53 @@ export type ItemCard = B["ItemCard"];
 export type DailyCard = B["DailyCard"];
 export type ModeCard = B["ModeCard"];
 export type SessionInfo = B["SessionInfo"];
+export type ModeGroup = B["ModeGroup"];
+export type RecordCard = B["RecordCard"];
+export type ResultRecord = B["ResultRecord"];
+export type BracketSummary = B["BracketSummary"];
 
 export type Suggestion = Catalog["schemas"]["SuggestionOut"];
 export type LoginRequest = Identity["schemas"]["LoginRequest"];
 export type RegisterRequest = Identity["schemas"]["RegisterRequest"];
+
+// ------------------------------------------------------------------ этап 3b: сборники и медиатека
+type C = Collections["schemas"];
+type L = Library["schemas"];
+
+export type CollectionsPage = B["CollectionsPage"];
+export type CollectionCardOut = B["CollectionCard"];
+export type CollectionPageOut = B["CollectionPage"];
+export type CollectionDetailOut = B["CollectionDetail"];
+export type CollectionItemCard = B["CollectionItemCard"];
+export type CollectionModeCard = B["CollectionModeCard"];
+export type CollectionMe = B["CollectionMe"];
+export type RoundOption = CollectionModeCard["round_options"][number];
+export type LibraryPage = B["LibraryPage"];
+export type LibraryShelfPage = B["LibraryShelfPage"];
+export type ShelfCard = B["ShelfCard"];
+export type ShelfItemCard = B["ShelfItemCard"];
+
+export type CollectionsMeta = C["CollectionsMeta"];
+export type MetaLimits = C["MetaLimits"];
+export type CoverPreset = C["CoverPresetOut"];
+export type TagOut = C["TagOut"];
+export type DraftOut = C["DraftOut"];
+export type DraftBody = C["DraftBody"];
+export type DraftItem = C["DraftItem"];
+export type CollectionCatalogPage = C["CollectionPage"];
+export type CollectionCard = C["CollectionCard"];
+export type CollectionDetail = C["CollectionDetail"];
+export type MyCollection = C["MyCollectionOut"];
+export type MyCollectionsPage = C["MyCollectionsPage"];
+export type LikeOut = C["LikeOut"];
+export type FavoriteOut = C["FavoriteOut"];
+export type CatalogQuery = NonNullable<
+  CollectionsOps["catalog_v1_collections_get"]["parameters"]["query"]
+>;
+export type CollectionSort = NonNullable<CatalogQuery["sort"]>;
+
+export type ShelfOut = L["ShelfOut"];
+export type SaveResult = L["SaveResult"];
+export type ItemShelves = L["ItemShelvesOut"];
+export type SaveSource = L["SaveItemRequest"]["source"];
+export type CatalogItem = Catalog["schemas"]["ItemCard"];

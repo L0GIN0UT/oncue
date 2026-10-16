@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get">
+  {{ form.q.label_tag }} {{ form.q }} {{ form.status.label_tag }} {{ form.status }} {{ form.kind.label_tag }} {{ form.kind }}
+  <input type="submit" value="Найти">
+  {{ form.errors }}
+</form>
+{% if new_form %}
+<form method="get" action="{% url 'collections:new' %}">
+  <p>Новый кураторский сборник: {{ new_form.domain.label_tag }} {{ new_form.domain }} <input type="submit" value="Создать…"></p>
+</form>
+{% endif %}
+<table>
+  <thead><tr><th>Название</th><th>Домен</th><th>Вид</th><th>Статус</th><th>Автор</th><th>Рекомендуемое</th><th>Единиц</th><th>Лайки</th><th>Прохождения</th><th>Опубликован</th></tr></thead>
+  {% for c in collections %}
+  <tr>
+    <td>{% if c.admin_url %}<a href="{{ c.admin_url }}">{{ c.title }}</a>{% else %}{{ c.title }}{% endif %}</td>
+    <td>{{ c.domain }}</td>
+    <td>{{ c.kind }}</td>
+    <td>{% if c.status == "hidden" %}<strong>скрыт</strong>{% else %}{{ c.status }}{% endif %}</td>
+    <td>{{ c.author_label }}{% if c.author_restricted %} <strong>(ограничен)</strong>{% endif %}</td>
+    <td>{% if c.featured %}да{% if c.featured_rank %}, порядок {{ c.featured_rank }}{% endif %}{% else %}—{% endif %}</td>
+    <td>{{ c.items_count }}</td>
+    <td>{{ c.likes_count }}</td>
+    <td>{{ c.plays_count }}</td>
+    <td>{{ c.published_at|default:"—" }}</td>
+  </tr>
+  {% empty %}
+  {% if not error %}<tr><td colspan="10">Сборников нет</td></tr>{% endif %}
+  {% endfor %}
+</table>
+{% if next_url %}<p><a href="{{ next_url }}">Дальше →</a></p>{% endif %}
+{% endblock %}

@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
@@ -15,26 +15,39 @@ from pydantic import BaseModel
 
 from game_service.api.common import ApiServices, NoStoreRoute, player_of
 from game_service.api.public.schemas import (
+    MAX_ROUND_INDEX,
     ClueOut,
     ClueRequest,
+    CollectionModeOut,
     DailyStatus,
     Domain,
     GiveUpRequest,
     GuessRequest,
     ItemAnswer,
+    ModeKey,
     ModeOut,
     MoveResult,
+    OptionAnswer,
+    PlayabilityOut,
+    PlayabilityRequest,
+    RecordOut,
     SessionResult,
     SessionSnapshot,
     SkipRequest,
     StartSessionRequest,
+    SubjectOut,
+    TextAnswer,
 )
-from gv_auth import Principal, current_principal
+from gv_auth import Principal, current_principal, optional_principal, require_user
 from gv_service import IdempotencyKey, problem_responses
 
 Subject = Annotated[Principal, Depends(current_principal)]
+OptionalSubject = Annotated[Principal | None, Depends(optional_principal)]
+User = Annotated[Principal, Depends(require_user)]
+CollectionId = Annotated[UUID, Path(description="Идентификатор сборника")]
 SessionId = Annotated[UUID, Path(description="Идентификатор сессии")]
-RoundIndex = Annotated[int, Path(ge=0, le=49, description="Номер раунда с 0")]
+RoundIndex = Annotated[int, Path(ge=0, le=MAX_ROUND_INDEX, description="Номер раунда с 0")]
+PathModeKey = Annotated[ModeKey, Path(description="Ключ режима")]
 MODES_CACHE = "public, max-age=30"
 
 
@@ -57,14 +70,23 @@ def build_public_router(c: ApiServices) -> APIRouter:
         "/modes",
         response_model=list[ModeOut],
         summary="Опубликованные режимы",
-        description="Публичный, `Cache-Control: public, max-age=30`.",
+        description=(
+            "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — "
+            "режимы, которые играются сами по себе, без шаблонов сборника (source "
+            "`collection`); `kind=collection` — только шаблоны сборника (конструктор, экран "
+            "сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность "
+            "конкретного сборника — `GET /v1/collections/{collection_id}/modes`."
+        ),
         responses=problem_responses(422, 503),
     )
     async def list_modes(
-        response: Response, domain: Annotated[Domain | None, Query()] = None
+        response: Response,
+        domain: Annotated[Domain | None, Query()] = None,
+        kind: Annotated[Literal["play", "collection"], Query()] = "play",
     ) -> list[ModeOut]:
         response.headers["Cache-Control"] = MODES_CACHE
-        return [ModeOut.model_validate(m) for m in await c.queries.modes(domain)]
+        rows = await c.queries.modes(domain, collection=kind == "collection")
+        return [ModeOut.model_validate(m) for m in rows]
 
     @router.post(
         "/sessions",
@@ -75,7 +97,16 @@ def build_public_router(c: ApiServices) -> APIRouter:
             "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. "
             "Ошибки: 409 `game.daily_already_played` (`details.session_id`), "
             "403 `game.guest_not_allowed`, 404 `game.mode_not_found`, "
-            "503 `game.daily_not_ready`."
+            "503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. "
+            "Марафон: `subject_ids` обязательны — 422 `game.subject_required`, "
+            "`game.too_many_subjects`; режим без выбора персон — 422 "
+            "`game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — "
+            "409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 "
+            "`game.collection_not_found` (нет, скрыт или удалён), 422 "
+            "`game.collection_required` (режим с source `collection` без сборника), 422 "
+            "`game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в "
+            "`round_options`), 422 `game.collection_not_supported` (`collection_id` у режима "
+            "без source `collection`), 422 `game.pool_too_small`."
         ),
         responses={
             200: {"model": SessionSnapshot, "description": "Незавершённая сессия дейлика"},
@@ -90,7 +121,13 @@ def build_public_router(c: ApiServices) -> APIRouter:
         response: Response,
     ) -> SessionSnapshot:
         snapshot, created = await c.play.start(
-            player_of(subject, request), body.mode_key, body.preset_id, key
+            player_of(subject, request),
+            body.mode_key,
+            body.preset_id,
+            key,
+            subject_ids=body.subject_ids or (),
+            collection_id=body.collection_id,
+            rounds=body.rounds,
         )
         if not created:
             response.status_code = status.HTTP_200_OK
@@ -127,23 +164,26 @@ def build_public_router(c: ApiServices) -> APIRouter:
         response_model=MoveResult,
         summary="Ответ",
         description=(
-            "Ошибки: 409 `game.desync` (`details.session` — актуальный `SessionSnapshot`), "
-            "409 `game.round_finished`, 429."
+            "Ответ — `{media_item_id}`, `{text}` (формат `classic`) или `{option_id}` "
+            "(формат `pick`). Ошибки: 409 `game.desync` (`details.session` — актуальный "
+            "`SessionSnapshot`), 409 `game.round_finished`, 422 "
+            "`game.answer_kind_unsupported` (вид ответа не для формата режима), 422 "
+            "`game.option_unknown`, 429. У сетки — `stats.agree_pct`."
         ),
         responses=problem_responses(401, 404, 409, 422, 429, 503),
     )
     async def submit_guess(
         session_id: SessionId, body: GuessRequest, subject: Subject, key: IdempotencyKey
     ) -> MoveResult:
-        item = body.answer.media_item_id if isinstance(body.answer, ItemAnswer) else None
-        text = None if isinstance(body.answer, ItemAnswer) else body.answer.text
+        answer = body.answer
         result = await c.play.guess(
             player_of(subject),
             session_id,
             round_index=body.round_index,
             expected_version=body.expected_version,
-            media_item_id=item,
-            text=text,
+            media_item_id=answer.media_item_id if isinstance(answer, ItemAnswer) else None,
+            text=answer.text if isinstance(answer, TextAnswer) else None,
+            option_id=answer.option_id if isinstance(answer, OptionAnswer) else None,
             idempotency_key=key,
         )
         return MoveResult.model_validate(result)
@@ -204,6 +244,90 @@ def build_public_router(c: ApiServices) -> APIRouter:
     )
     async def get_result(session_id: SessionId, subject: Subject) -> SessionResult:
         return SessionResult.model_validate(await c.queries.result(player_of(subject), session_id))
+
+    @router.get(
+        "/modes/{mode_key}/subjects",
+        response_model=list[SubjectOut],
+        summary="Персоны для марафона",
+        description=(
+            "Поиск по имени среди персон с ролью режима и не меньше `min_items` "
+            "играбельных единиц; по убыванию числа единиц. 422 "
+            "`game.subjects_not_supported` — режим не выбирает персон; 429."
+        ),
+        responses=problem_responses(401, 404, 422, 429),
+    )
+    async def list_subjects(
+        mode_key: PathModeKey,
+        subject: Subject,
+        q: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+        limit: Annotated[int, Query(ge=1, le=20)] = 20,
+    ) -> list[SubjectOut]:
+        rows = await c.queries.subjects(player_of(subject), mode_key, q, limit)
+        return [SubjectOut.model_validate(r) for r in rows]
+
+    @router.post(
+        "/sessions/{session_id}/rounds/{index}/final-clue",
+        response_model=ClueOut,
+        summary="Свежая ссылка на ассет ревила",
+        description=(
+            "Только для завершённого не-void раунда своей сессии; ограничена лимитом. "
+            "Ошибки: 409 `game.round_not_finished`, 410 `game.asset_unavailable`, 429."
+        ),
+        responses=problem_responses(401, 404, 409, 410, 422, 429, 503),
+    )
+    async def final_clue(session_id: SessionId, index: RoundIndex, subject: Subject) -> ClueOut:
+        clue = await c.play.final_clue(player_of(subject), session_id, index)
+        return ClueOut.model_validate(clue)
+
+    @router.get(
+        "/me/records",
+        response_model=list[RecordOut],
+        summary="Личные рекорды",
+        description="Только для пользователей; гостю — пустой список.",
+        responses=problem_responses(401, 422),
+    )
+    async def my_records(
+        subject: Subject, mode_key: Annotated[ModeKey | None, Query()] = None
+    ) -> list[RecordOut]:
+        rows = await c.queries.records(player_of(subject), mode_key)
+        return [RecordOut.model_validate(r) for r in rows]
+
+    @router.get(
+        "/collections/{collection_id}/modes",
+        response_model=list[CollectionModeOut],
+        summary="Режимы сборника",
+        description=(
+            "Опубликованные режимы с source `collection` домена сборника и сколько единиц "
+            "в каждом играбельно. Только опубликованный, не скрытый сборник (по проекции "
+            "`collections.collection.v1`), иначе 404 `game.collection_not_found`. Без "
+            "названий и `media_item_id` (D6). Субъект не обязателен."
+        ),
+        responses=problem_responses(401, 404, 422, 503),
+    )
+    async def collection_modes(
+        collection_id: CollectionId,
+        subject: OptionalSubject,  # noqa: ARG001 — токен необязателен, но проверяется
+    ) -> list[CollectionModeOut]:
+        rows = await c.queries.collection_modes(collection_id)
+        return [CollectionModeOut.model_validate(r) for r in rows]
+
+    @router.post(
+        "/modes/{mode_key}/playability",
+        response_model=PlayabilityOut,
+        summary="Играбельность единиц черновика сборника",
+        description=(
+            "Для конструктора: какие из ≤ 200 единиц играбельны в режиме (активны в "
+            "каталоге и есть каталожный набор ассетов). Только пользователи (гость — 403 "
+            "`auth.guest_forbidden`), лимит `GV_GAME_LIMITS__PLAYABILITY_PER_MIN` (429). "
+            "Режим без source `collection` — 422 `game.collection_not_supported`."
+        ),
+        responses=problem_responses(401, 403, 404, 422, 429, 503),
+    )
+    async def playability(
+        mode_key: PathModeKey, body: PlayabilityRequest, subject: User
+    ) -> PlayabilityOut:
+        result = await c.queries.playability(player_of(subject), mode_key, body.media_item_ids)
+        return PlayabilityOut.model_validate(result)
 
     @router.get(
         "/daily",

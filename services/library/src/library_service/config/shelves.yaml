@@ -1,0 +1,28 @@
+# Полки медиатеки (D11, ADR 0031). Свой файл — GV_LIBRARY__SHELVES_CONFIG (заменяет этот целиком).
+#
+# system — системные полки в порядке показа; создаются лениво при первом сохранении:
+#   key            — ключ (ссылка в API: system:<key>), [a-z][a-z0-9_]{0,63};
+#   title_key      — ключ i18n названия (переводит фронтенд);
+#   domains        — домены единиц, которые можно сохранить (music, film);
+#   exclusive_with — ключи полок, откуда единица уходит при сохранении сюда.
+# custom.domains — домены своих полок. card — карточка единицы на полке (персоны).
+# Ключ полки нельзя удалять или переименовывать без миграции данных: полка с ключом,
+# которого нет в конфиге, пропадает из выдачи (строки остаются в БД).
+version: 1
+system:
+  - key: watch_later
+    title_key: library.shelf.watch_later
+    domains: [film]
+    exclusive_with: [watched]
+  - key: watched
+    title_key: library.shelf.watched
+    domains: [film]
+    exclusive_with: [watch_later]
+  - key: favorite
+    title_key: library.shelf.favorite
+    domains: [music, film]
+custom:
+  domains: [music, film]
+card:
+  person_roles: [artist, director]
+  persons_max: 3

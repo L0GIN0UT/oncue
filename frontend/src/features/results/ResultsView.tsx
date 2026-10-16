@@ -1,7 +1,11 @@
 "use client";
 /**
- * Итог сессии (через bff, личный блок — CSR): счёт, строки по раундам с долей угадавших,
- * «Поделиться», «Случайный режим», у гостя — предложение войти.
+ * Итог сессии (через bff, личный блок — CSR). Главная цифра и разбор — по `presentation`
+ * (реестр презентеров: очки, серия, чемпион сетки, D12), затем «Поделиться» (текст тоже по
+ * `presentation`), «Другие режимы», у гостя — предложение войти.
+ *
+ * Сессия по сборнику (этап 3b, D7): `collection` итога game → название сборника в заголовке и в
+ * шэре, ссылка шэра и «Сыграть ещё» ведут на страницу сборника.
  */
 import Link from "next/link";
 import { useEffect } from "react";
@@ -11,21 +15,39 @@ import { useTranslations } from "next-intl";
 import { Share2 } from "lucide-react";
 import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
-import type { ItemCard, ResultRoundCard, ResultsPage } from "@/shared/api/types";
+import type { ItemCard, ResultsPage } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
-import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useSessionInfo } from "@/features/auth/session";
-import { buildShareText, shareResult } from "./share";
+import { presenterRegistry } from "./presenters/registry";
+import { fetchCollection } from "@/features/collections/api";
+import { buildShareText, shareResult, type ShareCollection, type Translate } from "./share";
 
-const OUTCOME_TONE: Record<ResultRoundCard["outcome"], string> = {
-  exact: "bg-exact",
-  partial: "bg-partial",
-  miss: "bg-miss",
-  gave_up: "bg-miss",
-  void: "bg-skip",
-};
+/** Сборник сессии: ref из итога game, название — из collections (оба запроса не обязательны). */
+function useSessionCollection(sessionId: string, enabled: boolean) {
+  const ref = useQuery({
+    queryKey: ["game", "result", sessionId, "collection"],
+    queryFn: async () =>
+      unwrap(
+        await api().game.GET("/v1/sessions/{session_id}/result", {
+          params: { path: { session_id: sessionId } },
+        }),
+      ).collection ?? null,
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const id = ref.data?.id ?? null;
+  const detail = useQuery({
+    queryKey: ["collections", "detail", id],
+    queryFn: () => fetchCollection(id!),
+    enabled: Boolean(id),
+    staleTime: 60_000,
+    retry: false,
+  });
+  return id ? { id, title: detail.data?.title ?? null } : null;
+}
 
 export function ResultsView({ sessionId }: { sessionId: string }) {
   const t = useTranslations();
@@ -44,6 +66,7 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
   });
 
   const unfinished = isApiError(error) && error.status === 409;
+  const collection = useSessionCollection(sessionId, Boolean(data));
   useEffect(() => {
     if (unfinished) router.replace(`/play/s/${sessionId}`);
   }, [unfinished, router, sessionId]);
@@ -82,9 +105,18 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
   const domain = summary.mode_key?.split(".")[0] === "film" ? "film" : "music";
   const modeTitle = dt(`modes.${summary.mode_key ?? ""}.title`, t(`domain.${domain}`));
   const isGuest = session.data?.subject?.kind !== "user";
+  const { Header, Body } = presenterRegistry[summary.presentation ?? "score"];
 
   const onShare = async () => {
-    const text = buildShareText(summary, modeTitle, `${window.location.origin}/`);
+    const shareCollection: ShareCollection | null = collection?.title
+      ? { title: collection.title, url: `${window.location.origin}/collections/${collection.id}` }
+      : null;
+    const text = buildShareText(summary, {
+      title: modeTitle,
+      homeUrl: `${window.location.origin}/`,
+      t: t as unknown as Translate,
+      collection: shareCollection,
+    });
     const outcome = await shareResult(text);
     if (outcome === "copied") toast(t("results.copied"));
     else if (outcome === "failed") toast(t("results.shareFailed"));
@@ -92,61 +124,39 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
 
   return (
     <div data-domain={domain} className="flex flex-col gap-10 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-2">
+      <header className="flex flex-col items-start gap-3">
         <p className="text-[var(--accent)]">{modeTitle}</p>
-        <h1 className="flex items-baseline gap-3 font-display font-bold" data-testid="final-score">
-          <span className="sr-only">{t("results.scoreLabel")}</span>
-          <span className="tabular text-7xl leading-none sm:text-8xl">{summary.score}</span>
-          <span className="tabular text-3xl text-ink-faint">/ {summary.max_score}</span>
-        </h1>
+        {collection?.title && (
+          <p className="text-ink-muted" data-testid="results-collection">
+            {t("results.collection")}{" "}
+            <Link
+              href={`/collections/${collection.id}`}
+              dir="auto"
+              className="text-ink underline-offset-4 hover:underline"
+            >
+              {collection.title}
+            </Link>
+          </p>
+        )}
+        <Header summary={summary} items={items} modeTitle={modeTitle} />
       </header>
 
-      <ol className="flex flex-col gap-2" aria-label={t("results.roundsLabel")}>
-        {summary.rounds.map((r) => {
-          const item = r.media_item_id ? items.get(r.media_item_id) : undefined;
-          return (
-            <li
-              key={r.index}
-              data-testid="result-row"
-              className="grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
-            >
-              <span aria-hidden className={cn("size-3 rounded-full", OUTCOME_TONE[r.outcome])} />
-              <div className="min-w-0">
-                <p className="truncate font-medium">{item?.title ?? t("results.unknownItem")}</p>
-                <p className="truncate text-sm text-ink-muted">
-                  {t(`results.outcome.${r.outcome}`, { level: r.level ?? 0 })}
-                  {item
-                    ? `, ${[item.year, ...item.persons.map((p) => p.name)].filter(Boolean).join(", ")}`
-                    : ""}
-                </p>
-              </div>
-              <span className="tabular font-display text-lg font-semibold">+{r.points}</span>
-              {r.exact_pct !== null && r.exact_pct !== undefined && (
-                <div className="col-span-3 col-start-1 mt-1 flex items-center gap-3 text-xs text-ink-muted sm:col-span-2 sm:col-start-2">
-                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-rule">
-                    <span
-                      className="block h-full rounded-full bg-[var(--accent)]"
-                      style={{ width: `${Math.round(r.exact_pct)}%` }}
-                    />
-                  </span>
-                  <span className="tabular">
-                    {t("results.exactPct", { pct: Math.round(r.exact_pct) })}
-                  </span>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+      <Body summary={summary} items={items} modeTitle={modeTitle} />
 
       <div className="flex flex-wrap gap-3">
         <Button size="lg" onClick={onShare} data-testid="share">
           <Share2 aria-hidden />
           {t("results.share")}
         </Button>
-        <Button asChild size="lg" variant="secondary">
-          <Link href="/solo">{t("results.random")}</Link>
-        </Button>
+        {collection ? (
+          <Button asChild size="lg" variant="secondary">
+            <Link href={`/collections/${collection.id}`}>{t("results.toCollection")}</Link>
+          </Button>
+        ) : (
+          <Button asChild size="lg" variant="secondary">
+            <Link href="/solo">{t("results.random")}</Link>
+          </Button>
+        )}
       </div>
 
       {isGuest && (

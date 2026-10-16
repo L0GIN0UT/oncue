@@ -1,0 +1,29 @@
+# Кураторский сборник со своими эмодзи (ADR 0029). У реальных фильмов сидов нет эмодзи в
+# каталоге, поэтому в режиме `film.collection.emoji` они играбельны только через набор
+# media-pipeline со `scope = collection:<id>`: засев ждёт его готовности (`AssetsReady`).
+# Свои эмодзи — строго RGI, 6..12 графем (GV_COLLECTIONS__LIMITS__EMOJI_MIN|MAX_GRAPHEMES).
+key: film-emoji
+title: "Кино · эмодзи: угадай по смайлам"
+description: "Фильм зашифрован эмодзи куратора: с каждым уровнем подсказок больше."
+domain: film
+default_mode_key: film.collection.emoji
+tags: [scifi, comedy]
+cover: popcorn
+visibility: public
+items:
+  - item: film:interstellar
+    emoji: "🚀🌌⏳🌽🪐📚"
+  - item: film:inception
+    emoji: "💤🌀🏙️🔝🎲⏰"
+  - item: film:the-matrix
+    emoji: "💊🕶️🐇💻🥄🔫"
+  - item: film:back-to-the-future
+    emoji: "🚗⚡⏰🎸👴🔙"
+  - item: film:titanic
+    emoji: "🚢🧊💑🎨💎🌊"
+  - item: film:spirited-away
+    emoji: "🐉👧🛁🐷👻🍙"
+  - item: film:ivan-vasilievich
+    emoji: "👑⏳🔧🏰🎭🥂"
+  - film:synthetic-09
+  - film:synthetic-10

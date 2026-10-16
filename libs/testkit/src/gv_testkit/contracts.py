@@ -77,7 +77,9 @@ def assert_event_matches_schema(envelope: EventEnvelope) -> None:
     assert not errors, f"{envelope.event_type} v{envelope.event_version}: " + "; ".join(errors)
 
 
-def load_example(event_type: str, version: int = 1, *, fresh_id: bool = True) -> EventEnvelope:
+def load_example(
+    event_type: str, version: int = 1, *, fresh_id: bool = True, variant: str | None = None
+) -> EventEnvelope:
     """Пример события из ``contracts/events/<service>/examples`` — вход для тестов потребителя.
 
     Args:
@@ -86,9 +88,12 @@ def load_example(event_type: str, version: int = 1, *, fresh_id: bool = True) ->
         fresh_id: ``True`` — новый ``event_id`` (UUID v7) на каждый вызов: два загруженных
             примера — разные события, и inbox не примет второй за дубль. ``False`` —
             ``event_id`` из файла (для проверки дедупликации одного и того же события).
+        variant: Вариант примера той же схемы: файл ``<Event>.<variant>.v<N>.json``
+            (например ``GameFinished.collection.v1.json`` — сессия по сборнику).
     """
     producer, _, event = event_type.partition(".")
-    path = contracts_dir() / "events" / producer / "examples" / f"{event}.v{version}.json"
+    name = f"{event}.{variant}" if variant else event
+    path = contracts_dir() / "events" / producer / "examples" / f"{name}.v{version}.json"
     envelope = EventEnvelope.model_validate_json(path.read_text(encoding="utf-8"))
     if fresh_id:
         envelope = envelope.model_copy(update={"event_id": uuid7()})

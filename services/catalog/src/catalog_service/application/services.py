@@ -8,8 +8,16 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from catalog_service.application.commands.admin import BlockItem, ReplaceAliases, UnblockItem
+from catalog_service.application.commands.admin import (
+    ApproveClueTexts,
+    BlockItem,
+    EditClueTexts,
+    GetClueTexts,
+    ReplaceAliases,
+    UnblockItem,
+)
 from catalog_service.application.commands.imports import RequestImport
+from catalog_service.application.commands.republish import RequestRepublish
 from catalog_service.application.ports import RateLimiter
 from catalog_service.application.queries.search import (
     Autocomplete,
@@ -76,4 +84,24 @@ class CatalogServices(Protocol):
     @property
     def request_import(self) -> RequestImport:
         """Постановка импорта."""
+        ...
+
+    @property
+    def get_clue_texts(self) -> GetClueTexts:
+        """Тексты загадок (чтение)."""
+        ...
+
+    @property
+    def edit_clue_texts(self) -> EditClueTexts:
+        """Правка текстов загадок."""
+        ...
+
+    @property
+    def approve_clue_texts(self) -> ApproveClueTexts:
+        """Одобрение текстов загадок."""
+        ...
+
+    @property
+    def request_republish(self) -> RequestRepublish:
+        """Постановка переопубликации."""
         ...

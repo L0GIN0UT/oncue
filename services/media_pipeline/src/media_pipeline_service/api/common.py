@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from media_pipeline_service.application.dto import AssetSetView
+
+
+class AssetScopeOut(BaseModel):
+    """Владелец набора (ADR 0029): свои загадки сборника."""
+
+    kind: Literal["collection"]
+    id: UUID = Field(description="collection_id")
 
 
 class AssetSetItem(BaseModel):
@@ -21,6 +29,10 @@ class AssetSetItem(BaseModel):
     levels_count: int
     generation: int
     error_code: str | None
+    scope: AssetScopeOut | None = Field(
+        default=None,
+        description="null — каталожный набор; collection — свои загадки сборника (ADR 0029)",
+    )
 
     @classmethod
     def of(cls, view: AssetSetView) -> AssetSetItem:
@@ -35,4 +47,7 @@ class AssetSetItem(BaseModel):
             levels_count=view.levels_count,
             generation=view.generation,
             error_code=view.error_code,
+            scope=(
+                AssetScopeOut(kind=view.scope.kind.value, id=view.scope.id) if view.scope else None
+            ),
         )

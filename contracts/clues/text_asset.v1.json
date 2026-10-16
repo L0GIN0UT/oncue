@@ -1,0 +1,73 @@
+{
+  "$id": "urn:guessverse:contracts:clues:text_asset:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "JSON-ассет текстовых загадок (description, emoji) одного уровня: блоки для показа. Пишет media-pipeline, читает фронтенд (ADR 0024).",
+  "properties": {
+    "blocks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "field": {
+                  "enum": [
+                    "year",
+                    "genres",
+                    "country",
+                    "director",
+                    "cast_top3"
+                  ],
+                  "type": "string"
+                },
+                "value": {
+                  "maxLength": 500,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "value"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "plot",
+              "tagline",
+              "fields",
+              "emoji"
+            ],
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "type": "array"
+    },
+    "version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "blocks"
+  ],
+  "title": "text_asset v1",
+  "type": "object"
+}

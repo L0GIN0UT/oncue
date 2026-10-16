@@ -340,6 +340,37 @@ class TestRuntime:
         infra = Infrastructure(settings=runtime.settings, tables=None)
         assert "metrics" in runtime._components(infra, tracing=False)
 
+    async def test_worker_consumes_with_configured_prefetch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Регресс засева 3a: число одновременных задач задаётся настройкой, а не константой 10."""
+        seen: list[tuple[str, int]] = []
+
+        class FakeQueue:
+            def __init__(self, url: str, service: str) -> None: ...
+            async def start(self) -> None: ...
+            async def stop(self) -> None: ...
+            async def consume(
+                self, task_type: str, handler: object, stop: object, prefetch: int
+            ) -> None:
+                seen.append((task_type, prefetch))
+
+        async def handler(payload: dict[str, object]) -> None: ...
+
+        monkeypatch.setattr("gv_service.runner.RabbitTaskQueue", FakeQueue)
+        definition = ServiceDefinition(
+            name="demo",
+            settings_cls=ServiceSettings,
+            build_task_handlers=lambda _infra: {"demo.work": handler},
+        )
+        settings = _settings(rabbitmq_url=SecretStr("amqp://x"), task_prefetch=2)
+        runtime = Runtime(definition, Command.WORKER, settings)
+        run = runtime._worker_factory(Infrastructure(settings=settings, tables=None))
+        assert run is not None
+        await run()
+        assert seen == [("demo.work", 2)]
+        assert ServiceSettings(service_name="demo").task_prefetch == 10
+
     def test_metrics_port_none_disables_metrics_server(self) -> None:
         runtime = Runtime(DEFINITION, Command.API, _settings(metrics_port=None))
         infra = Infrastructure(settings=runtime.settings, tables=None)
@@ -381,3 +412,21 @@ def test_environment_defaults_to_production(monkeypatch: pytest.MonkeyPatch) -> 
     """Забытая GV_ENVIRONMENT не должна включать /docs и отладочное поведение."""
     monkeypatch.delenv("GV_ENVIRONMENT", raising=False)
     assert ServiceSettings(service_name="demo").is_production
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("raw", "expected"), [("", None), ("/etc/deny.txt", "/etc/deny.txt")])
+def test_ugc_denylist_path_empty_means_builtin(
+    monkeypatch: pytest.MonkeyPatch, raw: str, expected: str | None
+) -> None:
+    """compose передаёт пустую строку, если свой denylist не задан (ADR 0030)."""
+    from pathlib import Path
+
+    from gv_service import UgcSettings
+
+    class Demo(ServiceSettings):
+        ugc: UgcSettings = UgcSettings()
+
+    monkeypatch.setenv("GV_UGC__DENYLIST_PATH", raw)
+    path = Demo(service_name="demo").ugc.denylist_path
+    assert path == (Path(expected) if expected else None)

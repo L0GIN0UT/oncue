@@ -8,7 +8,7 @@ from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import ColumnElement, Table, delete, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
@@ -22,17 +22,26 @@ from gv_db.idempotency import IdempotencyStore, SqlIdempotencyStore
 from gv_messaging.envelope import EventEnvelope
 from gv_messaging.outbox import OutboxWriter
 from media_pipeline_service.application.ports import (
+    ANY_SCOPE,
     AdminAction,
     AdminAuditLog,
     AssetSetRepository,
+    CollectionStateRepository,
+    DynamicProfileRepository,
     LinkIssuanceJournal,
     MediaItemStateRepository,
+    ProfileSetCount,
+    ScopeFilter,
     SourceMediaRepository,
 )
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
+from media_pipeline_service.domain.collections import CollectionState
+from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
 from media_pipeline_service.domain.errors import MediaItemNotFoundError
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.sources import (
+    AssetScope,
+    ScopeKind,
     SourceKind,
     SourceMedia,
     SourceOrigin,
@@ -42,12 +51,33 @@ from media_pipeline_service.infrastructure.db.tables import (
     TABLES,
     admin_actions,
     asset_levels,
+    asset_profiles_dynamic,
     asset_sets,
+    collections_state,
     idempotency_keys,
     link_issuance,
     media_items_state,
     source_media,
 )
+
+
+# ---------------------------------------------------------------- владелец набора и исходника
+def _scope_columns(scope: AssetScope | None) -> dict[str, Any]:
+    if scope is None:
+        return {"scope_kind": None, "scope_id": None}
+    return {"scope_kind": scope.kind.value, "scope_id": scope.id}
+
+
+def _scope_of(row: RowMapping) -> AssetScope | None:
+    if row["scope_id"] is None:
+        return None
+    return AssetScope(ScopeKind(row["scope_kind"]), row["scope_id"])
+
+
+def _scope_condition(table: Table, scope: AssetScope | None) -> ColumnElement[bool]:
+    if scope is None:
+        return table.c.scope_id.is_(None)
+    return (table.c.scope_kind == scope.kind.value) & (table.c.scope_id == scope.id)
 
 
 # ---------------------------------------------------------------- наборы ассетов
@@ -73,6 +103,7 @@ def _set_row(aggregate: AssetSet) -> dict[str, Any]:
         "params_hash": aggregate.params_hash,
         "levels_count": aggregate.levels_count,
         "source_media_id": aggregate.source_media_id,
+        "source_media_ids": list(aggregate.source_media_ids),
         "status": aggregate.status.value,
         "generation": aggregate.generation,
         "attempts": aggregate.attempts,
@@ -80,7 +111,17 @@ def _set_row(aggregate: AssetSet) -> dict[str, Any]:
         "version": aggregate.version,
         "created_at": aggregate.created_at,
         "updated_at": aggregate.updated_at,
+        **_scope_columns(aggregate.scope),
     }
+
+
+def _source_ids(row: RowMapping) -> tuple[UUID, ...]:
+    # Наборы до 0005: только source_media_id (может стать NULL по ON DELETE SET NULL).
+    ids = row["source_media_ids"]
+    if ids:
+        return tuple(ids)
+    single = row["source_media_id"]
+    return (single,) if single is not None else ()
 
 
 def _to_set(row: RowMapping, levels: Sequence[RowMapping]) -> AssetSet:
@@ -92,7 +133,7 @@ def _to_set(row: RowMapping, levels: Sequence[RowMapping]) -> AssetSet:
         params=row["params"],
         params_hash=row["params_hash"],
         levels_count=row["levels_count"],
-        source_media_id=row["source_media_id"],
+        source_media_ids=_source_ids(row),
         status=AssetSetStatus(row["status"]),
         generation=row["generation"],
         attempts=row["attempts"],
@@ -112,6 +153,7 @@ def _to_set(row: RowMapping, levels: Sequence[RowMapping]) -> AssetSet:
         version=row["version"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        scope=_scope_of(row),
     )
 
 
@@ -149,9 +191,14 @@ class SqlAssetSetRepository:
         return loaded[0] if loaded else None
 
     async def list_for_item(
-        self, media_item_id: UUID, clue_type: str | None = None, *, for_update: bool = False
+        self,
+        media_item_id: UUID,
+        clue_type: str | None = None,
+        *,
+        for_update: bool = False,
+        scope: ScopeFilter = ANY_SCOPE,
     ) -> list[AssetSet]:
-        """Наборы единицы по времени создания."""
+        """Наборы единицы по времени создания (индекс ``media_item_id``)."""
         query = (
             select(asset_sets)
             .where(asset_sets.c.media_item_id == media_item_id)
@@ -159,9 +206,29 @@ class SqlAssetSetRepository:
         )
         if clue_type is not None:
             query = query.where(asset_sets.c.clue_type == clue_type)
+        if scope is not ANY_SCOPE:
+            query = query.where(_scope_condition(asset_sets, scope))
         if for_update:
             query = query.with_for_update()
         return await self._load((await self._s.execute(query)).mappings().all())
+
+    async def list_for_scope(
+        self, scope: AssetScope, *, for_update: bool = False
+    ) -> list[AssetSet]:
+        """Наборы владельца (индекс ``uq_asset_sets_scope_profile``), по единицам."""
+        query = (
+            select(asset_sets)
+            .where(_scope_condition(asset_sets, scope))
+            .order_by(asset_sets.c.media_item_id, asset_sets.c.id)
+        )
+        if for_update:
+            query = query.with_for_update()
+        return await self._load((await self._s.execute(query)).mappings().all())
+
+    async def delete(self, asset_set_ids: Sequence[UUID]) -> None:
+        """Удалить наборы (уровни — ``ON DELETE CASCADE``)."""
+        if asset_set_ids:
+            await self._s.execute(delete(asset_sets).where(asset_sets.c.id.in_(asset_set_ids)))
 
     async def add(self, aggregate: AssetSet) -> None:
         """Вставить новый набор."""
@@ -187,6 +254,30 @@ class SqlAssetSetRepository:
         await self._replace_levels(aggregate)
         aggregate.persisted_version = aggregate.version
 
+    async def count_by_profile(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[ProfileSetCount]:
+        """Группировка наборов по профилю и состоянию (индекс ``(clue_type, params_hash)``)."""
+        c = asset_sets.c
+        query = select(
+            c.clue_type, c.profile_key, c.params_hash, c.status, func.count().label("n")
+        ).group_by(c.clue_type, c.profile_key, c.params_hash, c.status)
+        if clue_type is not None:
+            query = query.where(c.clue_type == clue_type)
+        if params_hash is not None:
+            query = query.where(c.params_hash == params_hash)
+        rows = (await self._s.execute(query)).all()
+        return [
+            ProfileSetCount(
+                clue_type=r.clue_type,
+                profile_key=r.profile_key,
+                params_hash=r.params_hash,
+                status=r.status,
+                count=int(r.n),
+            )
+            for r in rows
+        ]
+
     async def _replace_levels(self, aggregate: AssetSet) -> None:
         await self._s.execute(
             delete(asset_levels).where(asset_levels.c.asset_set_id == aggregate.id)
@@ -211,6 +302,11 @@ def _to_source(row: RowMapping) -> SourceMedia:
         sha256=row["sha256"],
         size_bytes=row["bytes"],
         mime=row["mime"],
+        position=row["position"],
+        source_url=row["source_url"],
+        license_note=row["license_note"],
+        text_content=row["text_content"],
+        scope=_scope_of(row),
     )
 
 
@@ -226,6 +322,11 @@ def _source_row(source: SourceMedia) -> dict[str, Any]:
         "bytes": source.size_bytes,
         "mime": source.mime,
         "created_at": source.created_at,
+        "position": source.position,
+        "source_url": source.source_url,
+        "license_note": source.license_note,
+        "text_content": source.text_content,
+        **_scope_columns(source.scope),
     }
 
 
@@ -244,20 +345,47 @@ class SqlSourceMediaRepository:
         )
         return _to_source(row) if row else None
 
-    async def list_for_item(self, media_item_id: UUID) -> list[SourceMedia]:
-        """Исходники единицы."""
+    async def list_for_item(
+        self, media_item_id: UUID, *, scope: AssetScope | None = None
+    ) -> list[SourceMedia]:
+        """Исходники единицы одного владельца."""
         rows = (
             (
                 await self._s.execute(
                     select(source_media)
-                    .where(source_media.c.media_item_id == media_item_id)
-                    .order_by(source_media.c.created_at)
+                    .where(
+                        source_media.c.media_item_id == media_item_id,
+                        _scope_condition(source_media, scope),
+                    )
+                    .order_by(source_media.c.created_at, source_media.c.id)
                 )
             )
             .mappings()
             .all()
         )
         return [_to_source(r) for r in rows]
+
+    async def list_for_scope(self, scope: AssetScope) -> list[SourceMedia]:
+        """Исходники владельца (индекс ``uq_source_media_scope_item``)."""
+        query = (
+            select(source_media)
+            .where(_scope_condition(source_media, scope))
+            .order_by(source_media.c.media_item_id)
+        )
+        return [_to_source(r) for r in (await self._s.execute(query)).mappings().all()]
+
+    async def scopes_for_item(self, media_item_id: UUID) -> list[AssetScope]:
+        """Владельцы своих исходников единицы (индекс ``media_item_id``)."""
+        c = source_media.c
+        rows = (
+            await self._s.execute(
+                select(c.scope_kind, c.scope_id)
+                .where(c.media_item_id == media_item_id, c.scope_id.is_not(None))
+                .distinct()
+                .order_by(c.scope_kind, c.scope_id)
+            )
+        ).all()
+        return [AssetScope(ScopeKind(r.scope_kind), r.scope_id) for r in rows]
 
     async def add(self, source: SourceMedia) -> None:
         """Вставить (повтор того же id — не ошибка: события приходят повторно)."""
@@ -273,8 +401,24 @@ class SqlSourceMediaRepository:
             update(source_media).where(source_media.c.id == source.id).values(**_source_row(source))
         )
 
+    async def delete(self, source_ids: Sequence[UUID]) -> None:
+        """Удалить исходники (наборы теряют ссылку: ``ON DELETE SET NULL``)."""
+        if source_ids:
+            await self._s.execute(delete(source_media).where(source_media.c.id.in_(source_ids)))
+
 
 # ---------------------------------------------------------------- проекция единиц
+def _to_state(row: RowMapping) -> MediaItemState:
+    return MediaItemState(
+        row["media_item_id"],
+        domain=row["domain"],
+        kind=row["kind"],
+        status=ItemStatus(row["status"]),
+        version=row["version"],
+        updated_at=row["updated_at"],
+    )
+
+
 class SqlMediaItemStateRepository:
     """Проекция единиц каталога."""
 
@@ -287,16 +431,24 @@ class SqlMediaItemStateRepository:
         if for_update:
             query = query.with_for_update()
         row = (await self._s.execute(query)).mappings().first()
-        if row is None:
-            return None
-        return MediaItemState(
-            row["media_item_id"],
-            domain=row["domain"],
-            kind=row["kind"],
-            status=ItemStatus(row["status"]),
-            version=row["version"],
-            updated_at=row["updated_at"],
+        return _to_state(row) if row is not None else None
+
+    async def get_many(
+        self, media_item_ids: Sequence[UUID], *, for_update: bool = False
+    ) -> dict[UUID, MediaItemState]:
+        """Проекции единиц одним запросом; блокировка строк — по возрастанию id."""
+        if not media_item_ids:
+            return {}
+        c = media_items_state.c
+        query = (
+            select(media_items_state)
+            .where(c.media_item_id.in_(sorted(set(media_item_ids))))
+            .order_by(c.media_item_id)
         )
+        if for_update:
+            query = query.with_for_update()
+        rows = (await self._s.execute(query)).mappings().all()
+        return {row["media_item_id"]: _to_state(row) for row in rows}
 
     async def upsert(self, state: MediaItemState) -> None:
         """Создать или обновить; на гонке применяется только большая версия."""
@@ -317,6 +469,19 @@ class SqlMediaItemStateRepository:
             )
         )
 
+    async def list_active_ids(self, domain: str, *, after: UUID | None, limit: int) -> list[UUID]:
+        """id активных единиц домена после ``after`` (по первичному ключу)."""
+        c = media_items_state.c
+        query = (
+            select(c.media_item_id)
+            .where(c.domain == domain, c.status == ItemStatus.ACTIVE.value)
+            .order_by(c.media_item_id)
+            .limit(limit)
+        )
+        if after is not None:
+            query = query.where(c.media_item_id > after)
+        return list((await self._s.execute(query)).scalars().all())
+
     async def next_event_version(self, media_item_id: UUID) -> int:
         """Увеличить счётчик версий событий единицы и вернуть новое значение.
 
@@ -333,6 +498,146 @@ class SqlMediaItemStateRepository:
         if value is None:
             raise MediaItemNotFoundError("медиа-единица не найдена")
         return int(value)
+
+
+# ---------------------------------------------------------------- динамические профили
+# Фиксированный ключ advisory lock заведения динамических профилей (ASCII «mP_D»).
+_PROFILES_LOCK_KEY = 0x6D505F44
+
+
+def _to_profile(row: RowMapping) -> DynamicProfile:
+    return DynamicProfile(
+        row["id"],
+        clue_type=row["clue_type"],
+        domain=row["domain"],
+        params=row["params"],
+        params_hash=row["params_hash"],
+        status=DynamicProfileStatus(row["status"]),
+        error_code=row["error_code"],
+        request_id=row["request_id"],
+        mode_key=row["mode_key"],
+        actor_id=row["actor_id"],
+        backfill_cursor=row["backfill_cursor"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _profile_row(profile: DynamicProfile) -> dict[str, Any]:
+    return {
+        "clue_type": profile.clue_type,
+        "domain": profile.domain,
+        "params": profile.params,
+        "params_hash": profile.params_hash,
+        "status": profile.status.value,
+        "error_code": profile.error_code,
+        "request_id": profile.request_id,
+        "mode_key": profile.mode_key,
+        "actor_id": profile.actor_id,
+        "backfill_cursor": profile.backfill_cursor,
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+    }
+
+
+class SqlDynamicProfileRepository:
+    """Динамические профили."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def lock(self) -> None:
+        """``pg_advisory_xact_lock``: проверка лимита и вставка — без гонки реплик."""
+        await self._s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _PROFILES_LOCK_KEY})
+
+    async def get(
+        self, clue_type: str, params_hash: str, domain: str, *, for_update: bool = False
+    ) -> DynamicProfile | None:
+        """Профиль по ключу дедупликации."""
+        c = asset_profiles_dynamic.c
+        query = select(asset_profiles_dynamic).where(
+            c.clue_type == clue_type, c.params_hash == params_hash, c.domain == domain
+        )
+        if for_update:
+            query = query.with_for_update()
+        row = (await self._s.execute(query)).mappings().first()
+        return _to_profile(row) if row else None
+
+    async def count_usable(self) -> int:
+        """Неотклонённые профили."""
+        c = asset_profiles_dynamic.c
+        query = select(func.count()).where(c.status != DynamicProfileStatus.REJECTED.value)
+        return int((await self._s.execute(query)).scalar_one())
+
+    async def add(self, profile: DynamicProfile) -> None:
+        """Вставить."""
+        await self._s.execute(
+            insert(asset_profiles_dynamic).values(id=profile.id, **_profile_row(profile))
+        )
+
+    async def save(self, profile: DynamicProfile) -> None:
+        """Обновить."""
+        await self._s.execute(
+            update(asset_profiles_dynamic)
+            .where(asset_profiles_dynamic.c.id == profile.id)
+            .values(**_profile_row(profile))
+        )
+
+    async def _list(self, *conditions: Any, limit: int | None = None) -> list[DynamicProfile]:
+        c = asset_profiles_dynamic.c
+        query = select(asset_profiles_dynamic).where(*conditions).order_by(c.created_at, c.id)
+        if limit is not None:
+            query = query.limit(limit)
+        return [_to_profile(r) for r in (await self._s.execute(query)).mappings().all()]
+
+    async def list_usable(self, domain: str) -> list[DynamicProfile]:
+        """Неотклонённые профили домена."""
+        c = asset_profiles_dynamic.c
+        return await self._list(c.domain == domain, c.status != DynamicProfileStatus.REJECTED.value)
+
+    async def list_backfilling(self, limit: int) -> list[DynamicProfile]:
+        """Профили на досоздании."""
+        c = asset_profiles_dynamic.c
+        return await self._list(c.status == DynamicProfileStatus.BACKFILLING.value, limit=limit)
+
+    async def list_all(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[DynamicProfile]:
+        """Все профили с фильтрами."""
+        c = asset_profiles_dynamic.c
+        conditions: list[Any] = []
+        if clue_type is not None:
+            conditions.append(c.clue_type == clue_type)
+        if params_hash is not None:
+            conditions.append(c.params_hash == params_hash)
+        return await self._list(*conditions)
+
+
+# ---------------------------------------------------------------- проекция сборников
+class SqlCollectionStateRepository:
+    """Версия и статус сборников (ADR 0029)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def advance(self, state: CollectionState) -> bool:
+        """``INSERT … ON CONFLICT DO UPDATE WHERE version < excluded.version``: проверка
+        версии и запись — один оператор без гонки; строка блокируется до коммита."""
+        values = {
+            "collection_id": state.id,
+            "version": state.version,
+            "status": state.status.value,
+            "updated_at": state.updated_at,
+        }
+        stmt = pg_insert(collections_state).values(**values)
+        result = await self._s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[collections_state.c.collection_id],
+                set_={k: stmt.excluded[k] for k in values if k != "collection_id"},
+                where=collections_state.c.version < stmt.excluded.version,
+            ).returning(collections_state.c.collection_id)
+        )
+        return result.first() is not None
 
 
 # ---------------------------------------------------------------- журнал и аудит
@@ -416,6 +721,8 @@ class SqlMediaUnitOfWork:
     sources: SourceMediaRepository
     items: MediaItemStateRepository
     links: LinkIssuanceJournal
+    profiles: DynamicProfileRepository
+    collections: CollectionStateRepository
     idempotency: IdempotencyStore
     audit: AdminAuditLog
 
@@ -454,6 +761,8 @@ class SqlMediaUnitOfWork:
         self.sources = SqlSourceMediaRepository(s)
         self.items = SqlMediaItemStateRepository(s)
         self.links = SqlLinkIssuanceJournal(s)
+        self.profiles = SqlDynamicProfileRepository(s)
+        self.collections = SqlCollectionStateRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         self.audit = SqlAdminAuditLog(s)
         return self

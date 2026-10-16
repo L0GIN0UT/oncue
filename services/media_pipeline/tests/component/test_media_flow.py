@@ -11,6 +11,7 @@ import dataclasses
 import functools
 import hashlib
 import io
+import json
 import subprocess
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -34,6 +35,7 @@ from media_pipeline_service.infrastructure.storage import S3Storage
 from media_pipeline_service.main import (
     DEFINITION,
     build_event_handlers,
+    build_periodic_jobs,
     build_routers,
     build_task_handlers,
 )
@@ -44,7 +46,7 @@ from redis.asyncio import Redis
 
 from gv_core import uuid7
 from gv_messaging import EventEnvelope, EventProcessor, Inbox, Outcome
-from gv_service import Infrastructure, create_app
+from gv_service import Environment, Infrastructure, JobResult, ServiceDefinition, create_app
 from gv_testkit import (
     FakeDeadLetterSink,
     InfraProvider,
@@ -56,6 +58,7 @@ from gv_testkit import (
     assert_problem,
     load_example,
     outbox_envelopes,
+    run_periodic_job,
     service_client,
 )
 
@@ -65,6 +68,12 @@ SECRET = "component-test-secret-0123456789abcdef"
 TMDB_IP = "93.184.216.34"
 POSTER_PATH = "/t/p/original/abc.jpg"
 ADMIN_PERMS = ("admin.access", "media.upload_source", "media.regenerate")
+# Происхождение исходника (D6); обязательно вне local/ci.
+PROVENANCE = {
+    "origin": "upload",
+    "source_url": "https://example.org/track",
+    "license_note": "синтетический тон, без прав третьих лиц",
+}
 
 
 def _jpeg(width: int = 600, height: int = 900) -> bytes:
@@ -91,6 +100,10 @@ class Service:
     processor: EventProcessor
     tasks: dict[str, Any]
     issuer: TestTokenIssuer
+    definition: ServiceDefinition
+
+    async def run_job(self, name: str) -> JobResult:
+        return await run_periodic_job(self.definition, name, self.infra)
 
     async def deliver(self, envelope: EventEnvelope) -> Outcome:
         return await self.processor.process(envelope.to_bytes(), source="test")
@@ -123,13 +136,15 @@ async def service(
 ) -> AsyncIterator[Service]:
     """Сервис на реальной инфраструктуре.
 
-    ``indirect``-параметр ``{"redis_down": True}`` — лимитер ссылок смотрит в недоступный Redis.
+    ``indirect``-параметры: ``{"redis_down": True}`` — лимитер ссылок смотрит в недоступный
+    Redis; ``{"environment": "production"}`` — окружение сервиса (по умолчанию ``ci``).
     """
     options: dict[str, Any] = getattr(request, "param", {})
     assert DEFINITION.migrations_path is not None
     await apply_migrations(database_url, DEFINITION.migrations_path)
     suffix = uuid7().hex[-12:]
     settings = Settings(
+        environment=Environment(options.get("environment", "ci")),
         database_url=SecretStr(database_url),
         redis_url=SecretStr(infra.redis_url()),
         s3=S3Settings(
@@ -173,7 +188,9 @@ async def service(
     assert isinstance(adapters.storage, S3Storage)
     await adapters.storage.ensure_buckets()
     definition = dataclasses.replace(
-        DEFINITION, build_routers=functools.partial(build_routers, adapters=adapters)
+        DEFINITION,
+        build_routers=functools.partial(build_routers, adapters=adapters),
+        build_periodic_jobs=functools.partial(build_periodic_jobs, adapters=adapters),
     )
     assert runtime.sessions is not None
     processor = EventProcessor(
@@ -207,7 +224,7 @@ async def service(
                 client.event_hooks["request"].append(add_service_token)
                 yield Service(
                     client, runtime, queue, adapters.storage, processor,
-                    build_task_handlers(runtime, adapters), token_issuer,
+                    build_task_handlers(runtime, adapters), token_issuer, definition,
                 )  # fmt: skip
     finally:
         await runtime.close()
@@ -395,42 +412,55 @@ def _music_item_event() -> tuple[EventEnvelope, str]:
 async def test_admin_upload_audio_generates_audio_levels(service: Service) -> None:
     event, item_id = _music_item_event()
     await service.deliver(event)
-    form = {"media_item_id": item_id, "kind": "audio", "reason": "лицензированный превью"}
-    files = {"file": ("track.wav", _wav(), "audio/wav")}
+    form = {
+        "media_item_id": item_id,
+        "kind": "audio",
+        "reason": "лицензированный превью",
+        **PROVENANCE,
+    }
+    # 50 с: хватает на audio_reverse/default (start_s = 30, до 15 с).
+    files = {"file": ("track.wav", _wav(50), "audio/wav")}
     headers = {**service.admin(), "Idempotency-Key": f"upload-{uuid7().hex}"}
     response = await service.client.post(
         "/admin/v1/sources", data=form, files=files, headers=headers
     )
     assert response.status_code == 201, response.text
     body = response.json()
-    assert body["mime"] == "audio/flac" and len(body["scheduled_asset_set_ids"]) == 1
+    # audio_intro/default, audio_intro/preview, audio_reverse/default — все от одного аудио
+    assert body["mime"] == "audio/flac" and len(body["scheduled_asset_set_ids"]) == 3
+    assert (body["position"], body["origin"]) == (1, "upload")
     # повтор с тем же ключом — тот же ответ, без новой загрузки
     again = await service.client.post("/admin/v1/sources", data=form, files=files, headers=headers)
     assert (again.status_code, again.json()) == (201, body)
-    assert len(service.queue.tasks) == 1
+    assert len(service.queue.tasks) == 3
 
     await service.run_tasks()
-    (asset_set,) = (
+    sets = (
         await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
     ).json()
-    assert (asset_set["clue_type"], asset_set["status"], asset_set["levels_count"]) == (
-        "audio_intro",
-        "ready",
-        6,
-    )
-    link = await service.client.post(
-        "/internal/v1/asset-links",
-        json={"asset_set_id": asset_set["asset_set_id"], "level": 6, "subject": "s"},
-    )
-    assert link.json()["mime"] == "audio/mp4"
-    (event_out,) = await service.outbox()
-    assert_event_matches_schema(event_out)
+    assert sorted(
+        (s["clue_type"], s["profile_key"], s["status"], s["levels_count"]) for s in sets
+    ) == [
+        ("audio_intro", "default", "ready", 6),
+        ("audio_intro", "preview", "ready", 1),
+        ("audio_reverse", "default", "ready", 6),
+    ]
+    for asset_set in sets:
+        link = await service.client.post(
+            "/internal/v1/asset-links",
+            json={"asset_set_id": asset_set["asset_set_id"], "level": 1, "subject": "s"},
+        )
+        assert link.json()["mime"] == "audio/mp4"
+    events = await service.outbox()
+    assert len(events) == 3
+    for event_out in events:
+        assert_event_matches_schema(event_out)
 
 
 async def test_admin_upload_validation(service: Service) -> None:
     event, item_id = _music_item_event()
     await service.deliver(event)
-    form = {"media_item_id": item_id, "kind": "audio", "reason": "причина"}
+    form = {"media_item_id": item_id, "kind": "audio", "reason": "причина", **PROVENANCE}
     wav = {"file": ("a.wav", _wav(1), "audio/wav")}
 
     def key() -> dict[str, str]:
@@ -596,6 +626,69 @@ async def test_admin_asset_sets_requires_admin_access(service: Service) -> None:
     assert [s["asset_set_id"] for s in listed.json()] == [asset_set["asset_set_id"]]
 
 
+async def test_admin_sources_lists_catalog_sources_by_kind_and_position(
+    service: Service,
+) -> None:
+    """Хвост 3a (план 3b, M3): исходники единицы для карточки в админке — `admin.access`."""
+    created, item_id = _film_with_texts(1, "Учёные … ищут новый дом.")
+    frame = {
+        "source_media_ref": str(uuid7()),
+        "kind": "frame",
+        "origin": "tmdb",
+        "uri": f"https://image.tmdb.org{POSTER_PATH}",
+        "position": 2,
+    }
+    poster = {**frame, "source_media_ref": str(uuid7()), "kind": "poster", "position": 1}
+    first_frame = {**frame, "source_media_ref": str(uuid7()), "position": 1}
+    created = created.model_copy(
+        update={"payload": {**created.payload, "source_media": [frame, poster, first_frame]}}
+    )
+    assert await service.deliver(created) is Outcome.PROCESSED
+    # свои эмодзи сборника — исходник со scope: в списке админки его нет
+    collection, _ = _collection_event(1, {item_id: SIX_EMOJI})
+    assert await service.deliver(collection) is Outcome.PROCESSED
+
+    params = {"media_item_id": item_id}
+    response = await service.client.get(
+        "/admin/v1/sources", params=params, headers=service.admin("admin.access")
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [(s["kind"], s["position"]) for s in body] == [
+        ("frame", 1), ("frame", 2), ("poster", 1), ("text", 1),
+    ]  # fmt: skip
+    assert [s["source_media_id"] for s in body[:3]] == [
+        first_frame["source_media_ref"], frame["source_media_ref"], poster["source_media_ref"],
+    ]  # fmt: skip
+    assert {s["origin"] for s in body} == {"tmdb", "catalog"}
+    assert set(body[0]) == {
+        "source_media_id", "kind", "position", "origin", "status", "created_at",
+    }  # fmt: skip
+    assert "uri" not in json.dumps(body)
+
+    unknown = await service.client.get(
+        "/admin/v1/sources",
+        params={"media_item_id": str(uuid7())},
+        headers=service.admin("admin.access"),
+    )
+    assert unknown.status_code == 200 and unknown.json() == []
+    assert_problem(
+        await service.client.get("/admin/v1/sources", params=params), 401, "auth.unauthenticated"
+    )
+    assert_problem(
+        await service.client.get(
+            "/admin/v1/sources", params=params, headers=service.admin("media.regenerate")
+        ),
+        403,
+        "auth.forbidden",
+    )
+    assert_problem(
+        await service.client.get("/admin/v1/sources", headers=service.admin("admin.access")),
+        422,
+        "request.validation_failed",
+    )
+
+
 async def test_asset_sets_requires_media_item_id(service: Service) -> None:
     assert_problem(
         await service.client.get("/internal/v1/asset-sets"), 422, "request.validation_failed"
@@ -657,3 +750,417 @@ async def test_link_issuance_journal_records_client_id(service: Service) -> None
     assert [(r.client_id, r.subject_hash) for r in rows] == [
         ("game", hashlib.sha256(b"sess:journal").hexdigest())
     ]
+
+
+async def test_clue_assets_requested_creates_dynamic_profile_and_backfills(
+    service: Service,
+) -> None:
+    """ADR 0025: событие game → динамический профиль → досоздание задачей relay → AssetsReady
+    с params_hash из события; повтор события и повтор запроса ничего не дублируют."""
+    film, item_id = _film_with_texts(1, "Учёные … ищут новый дом.")
+    await service.deliver(film)
+    await service.run_tasks()  # description/default и emoji/default
+
+    requested = load_example("game.ClueAssetsRequested", fresh_id=False)
+    assert await service.deliver(requested) is Outcome.PROCESSED
+    assert await service.deliver(requested) is Outcome.DUPLICATE
+    again = requested.model_copy(
+        update={"event_id": uuid7(), "payload": {**requested.payload, "request_id": str(uuid7())}}
+    )
+    assert await service.deliver(again) is Outcome.PROCESSED
+    published = load_example("game.ModeConfigPublished")
+    assert await service.deliver(published) is Outcome.SKIPPED
+
+    hash_ = requested.payload["params_hash"]
+    url = "/admin/v1/profiles"
+    query = {"clue_type": "description", "params_hash": hash_}
+    (profile,) = (await service.client.get(url, params=query, headers=service.admin())).json()
+    assert (profile["origin"], profile["status"], profile["profile_key"]) == (
+        "dynamic",
+        "backfilling",
+        None,
+    )
+    assert profile["sets"] == {"ready": 0, "pending": 0, "failed": 0}
+
+    assert await service.run_job("media.profiles.backfill") is JobResult.OK
+    assert await service.run_tasks() == 1
+    (profile,) = (await service.client.get(url, params=query, headers=service.admin())).json()
+    assert (profile["status"], profile["sets"]) == (
+        "active",
+        {"ready": 1, "pending": 0, "failed": 0},
+    )
+    ready = [
+        e
+        for e in await service.outbox()
+        if e.event_type == "media_pipeline.AssetsReady" and e.payload["params_hash"] == hash_
+    ]
+    assert len(ready) == 1
+    assert_event_matches_schema(ready[0])
+    assert ready[0].payload["media_item_id"] == item_id
+    assert ready[0].payload["profile_key"] == f"dyn_{hash_[:16]}"
+    assert ready[0].payload["levels_count"] == 2
+
+
+async def test_admin_profiles_lists_static_and_requires_admin_access(service: Service) -> None:
+    url = "/admin/v1/profiles"
+    assert_problem(await service.client.get(url), 401, "auth.unauthenticated")
+    assert_problem(
+        await service.client.get(url, headers=service.admin("media.regenerate")),
+        403,
+        "auth.forbidden",
+    )
+    listed = await service.client.get(url, headers=service.admin("admin.access"))
+    assert listed.status_code == 200, listed.text
+    keys = {(p["clue_type"], p["profile_key"]) for p in listed.json() if p["origin"] == "static"}
+    assert {
+        ("frame_progressive", "still"),
+        ("audio_intro", "preview"),
+        ("emoji", "default"),
+    } <= keys
+    assert_problem(
+        await service.client.get(
+            url, params={"params_hash": "nothex"}, headers=service.admin("admin.access")
+        ),
+        422,
+        "request.validation_failed",
+    )
+
+
+async def test_admin_source_position(service: Service) -> None:
+    created = load_example("catalog.MediaItemCreated")
+    await service.deliver(created)
+    (source_ref,) = [s["source_media_ref"] for s in created.payload["source_media"]]
+    url = f"/admin/v1/sources/{source_ref}/position"
+    headers = {**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"}
+    response = await service.client.put(
+        url, json={"position": 3, "reason": "порядок кадров"}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["position"], body["kind"], body["origin"]) == (3, "poster", "tmdb")
+    replay = await service.client.put(
+        url, json={"position": 3, "reason": "порядок кадров"}, headers=headers
+    )
+    assert replay.json() == body
+    assert_problem(
+        await service.client.put(
+            url, json={"position": 4, "reason": "порядок кадров"}, headers=headers
+        ),
+        409,
+        "idempotency.key_reused",
+    )
+    assert_problem(
+        await service.client.put(
+            f"/admin/v1/sources/{uuid7()}/position",
+            json={"position": 2, "reason": "нет такого"},
+            headers={**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"},
+        ),
+        404,
+        "source.not_found",
+    )
+    assert_problem(
+        await service.client.put(
+            url,
+            json={"position": 0, "reason": "вне диапазона"},
+            headers={**service.admin(), "Idempotency-Key": f"pos-{uuid7().hex}"},
+        ),
+        422,
+        "request.validation_failed",
+    )
+    assert_problem(
+        await service.client.put(
+            url,
+            json={"position": 2, "reason": "без права"},
+            headers={**service.admin("admin.access"), "Idempotency-Key": f"pos-{uuid7().hex}"},
+        ),
+        403,
+        "auth.forbidden",
+    )
+    assert_problem(
+        await service.client.put(
+            url, json={"position": 2, "reason": "без ключа"}, headers=service.admin()
+        ),
+        422,
+        "idempotency.key_required",
+    )
+
+
+@pytest.mark.parametrize("service", [{"environment": "production"}], indirect=True)
+async def test_admin_upload_requires_provenance_outside_local(service: Service) -> None:
+    """Вне local/ci D6 требует происхождения исходника."""
+    event, item_id = _music_item_event()
+    await service.deliver(event)
+    form = {"media_item_id": item_id, "kind": "audio", "reason": "лицензированный превью"}
+    files = {"file": ("track.wav", _wav(1), "audio/wav")}
+    headers = {**service.admin(), "Idempotency-Key": f"upload-{uuid7().hex}"}
+    assert_problem(
+        await service.client.post("/admin/v1/sources", data=form, files=files, headers=headers),
+        422,
+        "source.provenance_required",
+    )
+    assert_problem(
+        await service.client.post(
+            "/admin/v1/sources", data={**form, "kind": "text"}, files=files, headers=headers
+        ),
+        422,
+        "request.validation_failed",
+    )
+
+
+# ---------------------------------------------------------------- тексты загадок (ADR 0024)
+def _film_with_texts(version: int, plot: str) -> tuple[EventEnvelope, str]:
+    created = load_example("catalog.MediaItemCreated")
+    item_id = str(uuid7())
+    payload = {
+        **created.payload,
+        "media_item_id": item_id,
+        "version": version,
+        "source_media": [],
+        "persons": [
+            {"person_id": str(uuid7()), "name": "Режиссёр Синтетический", "role": "director",
+             "order": 0},
+            *[
+                {"person_id": str(uuid7()), "name": f"Актёр {i}", "role": "actor", "order": i}
+                for i in range(1, 5)
+            ],
+        ],
+        "countries": ["US", "GB"],
+        "clue_texts": {"plot_masked": plot, "tagline": "Слоган", "emoji": "🚀🌌⏳🕳️👨‍🚀🌽🧑‍🔬"},
+    }  # fmt: skip
+    envelope = created.model_copy(
+        update={"payload": payload, "event_id": uuid7(), "aggregate_id": item_id}
+    )
+    return envelope, item_id
+
+
+async def test_clue_texts_become_json_assets_and_edit_regenerates(service: Service) -> None:
+    created, item_id = _film_with_texts(1, "Учёные … ищут новый дом.")
+    assert await service.deliver(created) is Outcome.PROCESSED
+    assert await service.run_tasks() == 2
+    sets = {
+        s["clue_type"]: s
+        for s in (
+            await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
+        ).json()
+    }
+    assert set(sets) == {"description", "emoji"}
+    assert all(s["status"] == "ready" and s["levels_count"] == 6 for s in sets.values())
+
+    link = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": sets["description"]["asset_set_id"], "level": 2, "subject": "s"},
+    )
+    body = link.json()
+    assert body["mime"] == "application/json"
+    path = urlsplit(body["url"]).path
+    assert path.startswith("/media/a/") and path.endswith(".json")
+    document = json.loads(
+        await service.storage.get(
+            StorageArea.ASSETS, path.removeprefix("/media/"), max_bytes=100_000
+        )
+    )
+    assert document == {
+        "version": 1,
+        "blocks": [
+            {"kind": "tagline", "text": "Слоган"},
+            {"kind": "plot", "text": "Учёные … ищут новый дом."},
+        ],
+    }
+    assert "Интерстеллар" not in json.dumps(document, ensure_ascii=False)
+
+    # Правка одобренного текста → новый текстовый исходник → новое поколение наборов.
+    edited, _ = _film_with_texts(2, "Исследователи … летят сквозь червоточину.")
+    payload = {**edited.payload, "media_item_id": item_id}
+    update = edited.model_copy(
+        update={
+            "payload": payload,
+            "aggregate_id": item_id,
+            "event_type": "catalog.MediaItemUpdated",
+        }
+    )
+    assert await service.deliver(update) is Outcome.PROCESSED
+    assert await service.run_tasks() == 2
+    regenerated = {
+        s["clue_type"]: s
+        for s in (
+            await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
+        ).json()
+    }
+    assert {s["generation"] for s in regenerated.values()} == {2}
+    assert {s["asset_set_id"] for s in regenerated.values()} == {
+        s["asset_set_id"] for s in sets.values()
+    }
+    ready = [e for e in await service.outbox() if e.event_type == "media_pipeline.AssetsReady"]
+    assert len(ready) == 4
+    for event in ready:
+        assert_event_matches_schema(event)
+
+
+# ---------------------------------------------------------------- свои загадки сборников (ADR 0029)
+# Встроенный профиль emoji открывает до 6 эмодзи: короче — набора нет (как у каталожных).
+SIX_EMOJI = "🚢🧊💔🎻🌊🚪"
+
+
+def _collection_event(
+    version: int,
+    items: dict[str, str | None],
+    *,
+    collection_id: str | None = None,
+    event_type: str = "collections.CollectionPublished",
+    status: str = "published",
+) -> tuple[EventEnvelope, str]:
+    example = load_example("collections.CollectionPublished")
+    collection_id = collection_id or str(uuid7())
+    payload = {
+        **example.payload,
+        "collection_id": collection_id,
+        "version": version,
+        "status": status,
+        "items": [
+            {"media_item_id": item, "position": i, **({"custom": {"emoji": e}} if e else {})}
+            for i, (item, e) in enumerate(items.items())
+        ],
+    }
+    envelope = example.model_copy(
+        update={
+            "payload": payload,
+            "aggregate_id": collection_id,
+            "event_type": event_type,
+            "event_id": uuid7(),
+        }
+    )
+    assert_event_matches_schema(envelope)
+    return envelope, collection_id
+
+
+async def _plain_film(service: Service) -> str:
+    created = load_example("catalog.MediaItemCreated")
+    item_id = str(uuid7())
+    payload = {**created.payload, "media_item_id": item_id, "source_media": []}
+    payload.pop("clue_texts", None)
+    envelope = created.model_copy(
+        update={"payload": payload, "event_id": uuid7(), "aggregate_id": item_id}
+    )
+    assert await service.deliver(envelope) is Outcome.PROCESSED
+    return item_id
+
+
+async def _sets(service: Service, item_id: str) -> list[dict[str, Any]]:
+    response = await service.client.get(
+        "/internal/v1/asset-sets", params={"media_item_id": item_id}
+    )
+    assert response.status_code == 200, response.text
+    return list(response.json())
+
+
+async def test_collection_emoji_to_assets_ready_with_scope(service: Service) -> None:
+    item_id, plain_id = await _plain_film(service), await _plain_film(service)
+    published, collection_id = _collection_event(3, {item_id: SIX_EMOJI, plain_id: None})
+    assert await service.deliver(published) is Outcome.PROCESSED
+    assert await service.run_tasks() == 1
+
+    (scoped,) = await _sets(service, item_id)
+    assert scoped["scope"] == {"kind": "collection", "id": collection_id}
+    assert (scoped["clue_type"], scoped["status"], scoped["levels_count"]) == ("emoji", "ready", 6)
+    assert await _sets(service, plain_id) == []
+
+    (ready,) = [e for e in await service.outbox() if e.event_type == "media_pipeline.AssetsReady"]
+    assert_event_matches_schema(ready)
+    assert ready.aggregate_id == item_id
+    assert ready.payload["scope"] == {"kind": "collection", "id": collection_id}
+    assert ready.payload["asset_set_id"] == scoped["asset_set_id"]
+
+    link = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": scoped["asset_set_id"], "level": 2, "subject": "game:c1"},
+    )
+    assert link.status_code == 200, link.text
+    key = urlsplit(link.json()["url"]).path.removeprefix("/media/")
+    document = json.loads(await service.storage.get(StorageArea.ASSETS, key, max_bytes=10_000))
+    assert document == {"version": 1, "blocks": [{"kind": "emoji", "text": "🚢🧊"}]}
+
+    # повтор того же события — дубль inbox; та же версия новым событием — устарело, no-op
+    assert await service.deliver(published) is Outcome.DUPLICATE
+    again = published.model_copy(update={"event_id": uuid7()})
+    assert await service.deliver(again) is Outcome.PROCESSED
+    assert service.queue.tasks == []
+    assert await _sets(service, item_id) == [scoped]
+
+
+async def test_collection_emoji_edit_regenerates_and_hide_delete_drop_sets(
+    service: Service,
+) -> None:
+    item_id = await _plain_film(service)
+    first, collection_id = _collection_event(1, {item_id: SIX_EMOJI})
+    assert await service.deliver(first) is Outcome.PROCESSED
+    await service.run_tasks()
+    (initial,) = await _sets(service, item_id)
+
+    edited, _ = _collection_event(
+        2,
+        {item_id: "🎬🍿🎥🎞️📽️🎟️"},
+        collection_id=collection_id,
+        event_type="collections.CollectionUpdated",
+    )
+    assert await service.deliver(edited) is Outcome.PROCESSED
+    assert await service.run_tasks() == 1
+    (regenerated,) = await _sets(service, item_id)
+    assert regenerated["asset_set_id"] == initial["asset_set_id"]
+    assert (regenerated["generation"], regenerated["status"]) == (2, "ready")
+
+    hidden, _ = _collection_event(
+        3,
+        {item_id: "🎬🍿🎥🎞️📽️🎟️"},
+        collection_id=collection_id,
+        event_type="collections.CollectionUpdated",
+        status="hidden",
+    )
+    assert await service.deliver(hidden) is Outcome.PROCESSED
+    assert await _sets(service, item_id) == []
+    gone = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": initial["asset_set_id"], "level": 1, "subject": "game:c1"},
+    )
+    assert_problem(gone, 404, "asset.not_found")
+
+    republished, _ = _collection_event(4, {item_id: SIX_EMOJI}, collection_id=collection_id)
+    assert await service.deliver(republished) is Outcome.PROCESSED
+    await service.run_tasks()
+    assert len(await _sets(service, item_id)) == 1
+
+    deleted = load_example("collections.CollectionDeleted")
+    deleted = deleted.model_copy(
+        update={
+            "payload": {**deleted.payload, "collection_id": collection_id, "version": 5},
+            "aggregate_id": collection_id,
+            "event_id": uuid7(),
+        }
+    )
+    assert_event_matches_schema(deleted)
+    assert await service.deliver(deleted) is Outcome.PROCESSED
+    assert await _sets(service, item_id) == []
+    assert service.infra.sessions is not None
+    async with service.infra.sessions() as session:
+        scoped_sources = (
+            await session.execute(
+                sa.text("SELECT count(*) FROM source_media WHERE scope_id = :id"),
+                {"id": UUID(collection_id)},
+            )
+        ).scalar_one()
+        state = (
+            await session.execute(
+                sa.text("SELECT status, version FROM collections_state WHERE collection_id = :id"),
+                {"id": UUID(collection_id)},
+            )
+        ).one()
+    assert scoped_sources == 0
+    assert tuple(state) == ("deleted", 5)
+
+
+async def test_collection_with_invalid_emoji_goes_to_dlq(service: Service) -> None:
+    item_id = await _plain_film(service)
+    # по схеме события допустимо (строка 1..128), но вне строгого набора RGI
+    published, _ = _collection_event(1, {item_id: "abc🚢"})
+    assert await service.deliver(published) is Outcome.DEAD
+    assert await _sets(service, item_id) == []
+    assert service.queue.tasks == []

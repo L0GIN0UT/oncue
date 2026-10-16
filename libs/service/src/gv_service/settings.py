@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -88,6 +89,26 @@ class ServiceAuthSettings(BaseModel):
     retry_backoff_s: float = Field(default=5.0, ge=0, le=300)
 
 
+class UgcSettings(BaseModel):
+    """Пользовательский текст (ADR 0030): ``GV_UGC__*`` сервисов с UGC (collections, library).
+
+    Attributes:
+        denylist_path: Свой файл denylist (формат ``gv_text.ugc.UgcPolicy``), заменяет
+            встроенный целиком (``GV_UGC__DENYLIST_PATH``); пусто или ``None`` — встроенный
+            ``gv_text/data/ugc_denylist.txt``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    denylist_path: Path | None = None
+
+    @field_validator("denylist_path", mode="before")
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        # compose передаёт `${GV_UGC__DENYLIST_PATH:-}`: пустая строка = «не задан».
+        return None if value == "" else value
+
+
 class ServiceSettings(BaseSettings):
     """Общие настройки процесса сервиса.
 
@@ -122,6 +143,10 @@ class ServiceSettings(BaseSettings):
     redis_url: SecretStr | None = None
     kafka_bootstrap: str | None = None
     rabbitmq_url: SecretStr | None = None
+    # Сколько задач RabbitMQ воркер обрабатывает одновременно (prefetch на очередь). Тяжёлым
+    # задачам (ffmpeg в media-pipeline) нужно меньше, иначе пик памяти выходит за лимит
+    # контейнера и процесс убивает OOM: GV_TASK_PREFETCH.
+    task_prefetch: int = Field(default=10, ge=1, le=100)
 
     retention: RetentionSettings = RetentionSettings()
     idempotency: IdempotencySettings = IdempotencySettings()

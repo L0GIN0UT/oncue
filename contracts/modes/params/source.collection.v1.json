@@ -1,0 +1,40 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:source.collection:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сборник (ADR 0028): шаблон режима, сам сборник приходит в POST /v1/sessions (collection_id) и попадает в DrawContext.collection_id. Число раундов выбирает игрок из round_options; \"all\" — все играбельные единицы сборника",
+  "properties": {
+    "min_items": {
+      "description": "Минимум играбельных единиц сборника, чтобы режим был доступен",
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "round_options": {
+      "description": "Из чего выбирает игрок перед стартом: подмножество {5, 10, 25, \"all\"} без повторов",
+      "items": {
+        "enum": [
+          5,
+          10,
+          25,
+          "all"
+        ]
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "shuffle": {
+      "default": true,
+      "description": "Перемешать единицы по seed сессии (иначе — первые n в порядке автора)",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "round_options",
+    "min_items"
+  ],
+  "title": "source.collection params v1",
+  "type": "object"
+}

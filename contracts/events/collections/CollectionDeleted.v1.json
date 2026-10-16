@@ -1,0 +1,30 @@
+{
+  "$id": "urn:guessverse:contracts:events:collections:CollectionDeleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сборник удалён автором или вместе с аккаунтом (черновик не публикует ничего). Потребитель удаляет проекцию и ассеты со scope сборника. aggregate_id — collection_id.",
+  "properties": {
+    "collection_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "deleted_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата сборника (общая для публикации, правок, скрытия, лайков и удаления): потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "collection_id",
+    "version",
+    "deleted_at"
+  ],
+  "title": "collections.CollectionDeleted v1",
+  "type": "object",
+  "x-aggregate-type": "collection",
+  "x-topic": "collections.collection.v1"
+}

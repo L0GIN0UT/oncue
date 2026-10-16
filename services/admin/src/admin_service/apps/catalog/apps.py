@@ -23,4 +23,10 @@ class CatalogConfig(AppConfig):
             "catalog.import",
             "TMDB, файл, MusicBrainz, Spotify, Яндекс Музыка",
         ),
+        MenuEntry(
+            "Переопубликация",
+            "catalog:republish",
+            "catalog.import",
+            "заново отправить единицы потребителям (после выкладки новых полей)",
+        ),
     )

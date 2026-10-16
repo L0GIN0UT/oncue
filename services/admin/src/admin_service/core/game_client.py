@@ -93,6 +93,34 @@ class GameAdminClient:
             json={"reason": reason},
         )
 
+    def subjects(self, mode_key: str, *, q: str | None = None, limit: int | None = None) -> Any:
+        """Темы-персоны режима с темой периода (``game.daily.view``, этап 3b).
+
+        По убыванию числа играбельных единиц; режим без темы-персоны — 422
+        ``game.subjects_not_supported``.
+        """
+        return self._client.get(
+            f"{_CONFIGS}/{_key(mode_key)}/subjects", params={"q": q, "limit": limit}
+        )
+
+    # ------------------------------------------------------------------ запросы ассетов
+    def asset_requests(self, mode_key: str) -> Any:
+        """Запросы ассетов режима (``config.modes.view``), статусы ``pending|sent``."""
+        return self._client.get(f"{_CONFIGS}/{_key(mode_key)}/asset-requests")
+
+    def request_assets(
+        self, mode_key: str, *, draft_revision: int, reason: str, idempotency_key: str
+    ) -> Any:
+        """Запросить ассеты под загадку черновика (``config.modes.publish``, ADR 0025).
+
+        409 ``game.assets_already_available`` — ассеты под параметры уже есть.
+        """
+        return self._client.post(
+            f"{_CONFIGS}/{_key(mode_key)}/asset-requests",
+            idempotency_key=idempotency_key,
+            json={"draft_revision": draft_revision, "reason": reason},
+        )
+
     # ------------------------------------------------------------------ наборы дня
     def daily_sets(self, mode_key: str, start: date, end: date) -> Any:
         """Наборы дня режима за ``start..end`` включительно (``game.daily.view``)."""
@@ -118,12 +146,27 @@ class GameAdminClient:
             json={"media_item_id": str(media_item_id), "reason": reason},
         )
 
-    def regenerate(self, mode_key: str, day: date, *, reason: str, idempotency_key: str) -> Any:
-        """Перегенерировать набор (``scheduled`` / ``failed``)."""
+    def regenerate(
+        self,
+        mode_key: str,
+        day: date,
+        *,
+        reason: str,
+        idempotency_key: str,
+        subject_id: UUID | None = None,
+    ) -> Any:
+        """Перегенерировать набор (``scheduled`` / ``failed``).
+
+        ``subject_id`` — новая тема периода (сетка недели); без него тему выбирает генератор.
+        ``day`` — начало периода.
+        """
+        body: dict[str, Any] = {"reason": reason}
+        if subject_id is not None:
+            body["subject_id"] = str(subject_id)
         return self._client.post(
             f"{_DAILY}/{_key(mode_key)}/{day.isoformat()}/regenerate",
             idempotency_key=idempotency_key,
-            json={"reason": reason},
+            json=body,
         )
 
     def projection_items(

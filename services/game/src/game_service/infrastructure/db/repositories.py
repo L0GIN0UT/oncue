@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 from datetime import date, datetime
 from types import TracebackType
 from typing import Any, Self
@@ -11,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import (
     Select,
     and_,
+    column,
     delete,
     exists,
     func,
@@ -19,8 +21,10 @@ from sqlalchemy import (
     or_,
     select,
     text,
+    true,
     update,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
@@ -28,27 +32,50 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_
 from game_service.application.ports import (
     AdminAction,
     AdminAuditLog,
+    AssetRequestRepository,
+    BracketStatsRepository,
+    CollectionRepository,
     DailySetRepository,
     DailyStatsRepository,
     ModeConfigRepository,
+    PlayerRecord,
     ProjectionRepository,
+    RecordsRepository,
     SessionRepository,
+    SubjectRow,
 )
+from game_service.domain.asset_requests import AssetRequest, AssetRequestStatus
 from game_service.domain.daily import DailySet, DailySetStatus, GeneratedBy
-from game_service.domain.modes import ConfigVersion, Draft, ModeLine, VersionStatus
-from game_service.domain.projection import AssetStatus, CatalogItem, ClueAssets, ItemStatus
+from game_service.domain.modes import ConfigVersion, Draft, ModeLine, VersionStatus, domain_of
+from game_service.domain.projection import (
+    AssetStatus,
+    CatalogItem,
+    ClueAssets,
+    CollectionItem,
+    CollectionProj,
+    CollectionStatus,
+    ItemStatus,
+)
 from game_service.domain.session import (
+    STATE_SCHEMA,
     GameSession,
+    PlannedRound,
     PlayerKind,
     PlayerRef,
     Round,
+    RoundOption,
     SessionStatus,
+    ShownItem,
 )
 from game_service.infrastructure.db.tables import (
     TABLES,
     admin_actions,
+    asset_requests,
+    bracket_pick_stats,
     catalog_items,
     clue_assets,
+    collection_items_proj,
+    collection_proj,
     daily_round_stats,
     daily_set_items,
     daily_sets,
@@ -56,6 +83,8 @@ from game_service.infrastructure.db.tables import (
     idempotency_keys,
     mode_config_drafts,
     mode_configs,
+    player_records,
+    score_histogram,
 )
 from gv_core.clock import Clock
 from gv_core.domain import AggregateRoot
@@ -64,14 +93,17 @@ from gv_db.idempotency import IdempotencyStore, SqlIdempotencyStore
 from gv_game_kernel import (
     AssetRef,
     CandidatePort,
+    CollectionPort,
     Guess,
     GuessKind,
     MatchVerdict,
     MediaItemRef,
     PersonRef,
+    PlayableFor,
     PoolQuery,
     RoundResult,
     RoundState,
+    SubjectQuery,
 )
 from gv_messaging.envelope import EventEnvelope
 from gv_messaging.outbox import OutboxWriter
@@ -301,6 +333,8 @@ class SqlDailySetRepository:
             generation=row["generation"],
             generated_by=GeneratedBy(row["generated_by"]),
             locked_at=row["locked_at"],
+            period=row["period"],
+            subject_id=row["subject_id"],
         )
 
     async def get(self, mode_key: str, day: date, *, for_update: bool = False) -> DailySet | None:
@@ -329,6 +363,8 @@ class SqlDailySetRepository:
                 locked_at=daily.locked_at,
                 created_at=now,
                 updated_at=now,
+                period=daily.period,
+                subject_id=daily.subject_id,
             )
             .on_conflict_do_nothing()
             .returning(daily_sets.c.mode_key)
@@ -367,6 +403,7 @@ class SqlDailySetRepository:
                 generated_by=str(daily.generated_by),
                 locked_at=daily.locked_at,
                 updated_at=self._clock.now(),
+                subject_id=daily.subject_id,
             )
         )
         if daily.items_rewritten:
@@ -457,6 +494,7 @@ def _to_item(row: RowMapping) -> CatalogItem:
         ),
         genres=tuple(row["genres"] or ()),
         popularity=row["popularity"],
+        metrics=tuple(sorted((str(k), float(v)) for k, v in (row["metrics"] or {}).items())),
     )
 
 
@@ -469,6 +507,7 @@ def _to_assets(row: RowMapping) -> ClueAssets:
         levels_count=row["levels_count"],
         status=AssetStatus(row["status"]),
         version=row["version"],
+        scope_id=row["scope_id"],
     )
 
 
@@ -488,16 +527,45 @@ def _pool_filter(query: PoolQuery) -> list[Any]:
     if query.exclude_ids:
         conditions.append(c.media_item_id.not_in(sorted(query.exclude_ids)))
     if query.playable_for is not None:
-        a = clue_assets.c
-        conditions.append(
-            exists().where(
-                a.media_item_id == c.media_item_id,
-                a.clue_type == query.playable_for.clue_type,
-                a.params_hash == query.playable_for.params_hash,
-                a.status == str(AssetStatus.READY),
-            )
-        )
+        conditions.append(_ready_for(query.playable_for))
+    if query.person_ids_any:
+        conditions.append(c.person_ids.overlap(sorted(query.person_ids_any)))
+    if query.has_metric is not None:
+        conditions.append(c.metrics.has_key(query.has_metric))
     return conditions
+
+
+def _scope_filter(scope: UUID | None) -> Any:
+    """Чьи наборы годятся: каталожные и, если задан сборник, его свои (ADR 0029)."""
+    a = clue_assets.c
+    if scope is None:
+        return a.scope_id.is_(None)
+    return or_(a.scope_id.is_(None), a.scope_id == scope)
+
+
+def _ready_for(playable: PlayableFor) -> Any:
+    """Есть готовый набор ассетов под параметры загадки (D7): каталожный или, при
+    ``playable.scope``, набор этого сборника. Наборы сборников в каталожный пул не входят."""
+    a, c = clue_assets.c, catalog_items.c
+    return exists().where(
+        a.media_item_id == c.media_item_id,
+        a.clue_type == playable.clue_type,
+        a.params_hash == playable.params_hash,
+        a.status == str(AssetStatus.READY),
+        _scope_filter(playable.scope),
+    )
+
+
+def _candidate_filter(query: PoolQuery, also: PlayableFor | None) -> list[Any]:
+    """Фильтр пула и, если задан, второй набор ассетов (ревил другого типа, ADR 0026)."""
+    conditions = _pool_filter(query)
+    if also is not None:
+        conditions.append(_ready_for(also))
+    return conditions
+
+
+def _like(text_: str) -> str:
+    return "%" + text_.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
 class SqlProjectionRepository:
@@ -541,6 +609,8 @@ class SqlProjectionRepository:
             "persons": [{"id": str(p.id), "name": p.name, "role": p.role} for p in item.persons],
             "genres": list(item.genres),
             "popularity": item.popularity,
+            "metrics": dict(item.metrics),
+            "person_ids": list(item.person_ids),
         }
         await self._s.execute(
             pg_insert(catalog_items)
@@ -572,7 +642,7 @@ class SqlProjectionRepository:
         return int(value) if value is not None else None
 
     async def upsert_assets(self, assets: ClueAssets) -> None:
-        """Набор под ``(media_item_id, clue_type, params_hash)``."""
+        """Набор под ``(media_item_id, clue_type, params_hash, scope_id)``."""
         values = {
             "asset_set_id": assets.asset_set_id,
             "levels_count": assets.levels_count,
@@ -585,6 +655,7 @@ class SqlProjectionRepository:
                 media_item_id=assets.media_item_id,
                 clue_type=assets.clue_type,
                 params_hash=assets.params_hash,
+                scope_id=assets.scope_id,
                 **values,
             )
             .on_conflict_do_update(
@@ -592,10 +663,19 @@ class SqlProjectionRepository:
                     clue_assets.c.media_item_id,
                     clue_assets.c.clue_type,
                     clue_assets.c.params_hash,
+                    clue_assets.c.scope_id,
                 ],
                 set_=values,
             )
         )
+
+    async def delete_scoped_assets(self, scope_id: UUID, keep: Collection[UUID]) -> int:
+        """Убрать наборы сборника ``scope_id``, кроме наборов единиц ``keep``; число строк."""
+        query = delete(clue_assets).where(clue_assets.c.scope_id == scope_id)
+        if keep:
+            query = query.where(clue_assets.c.media_item_id.not_in(sorted(keep)))
+        result = await self._s.execute(query.returning(clue_assets.c.asset_set_id))
+        return len(result.all())
 
     async def fail_assets(self, asset_set_id: UUID, version: int) -> bool:
         """Отметить набор ``failed``."""
@@ -608,9 +688,15 @@ class SqlProjectionRepository:
         return result.first() is not None
 
     async def ready_assets(
-        self, ids: Sequence[UUID], clue_type: str, params_hash: str
+        self,
+        ids: Sequence[UUID],
+        clue_type: str,
+        params_hash: str,
+        *,
+        scope: UUID | None = None,
     ) -> dict[UUID, ClueAssets]:
-        """Готовые наборы активных единиц."""
+        """Готовые наборы активных единиц: при ``scope`` набор сборника берётся первым,
+        иначе каталожный (ADR 0029); без ``scope`` — только каталожные."""
         if not ids:
             return {}
         a, c = clue_assets.c, catalog_items.c
@@ -624,29 +710,90 @@ class SqlProjectionRepository:
                     a.params_hash == params_hash,
                     a.status == str(AssetStatus.READY),
                     c.status == str(ItemStatus.ACTIVE),
+                    _scope_filter(scope),
                 )
             )
         ).mappings()
-        return {r["media_item_id"]: _to_assets(r) for r in rows}
+        found: dict[UUID, ClueAssets] = {}
+        for row in rows:
+            assets = _to_assets(row)
+            current = found.get(assets.media_item_id)
+            if current is None or current.scope_id is None:
+                found[assets.media_item_id] = assets
+        return found
 
-    async def count_candidates(self, query: PoolQuery) -> int:
-        """Размер пула."""
+    async def count_candidates(self, query: PoolQuery, *, also: PlayableFor | None = None) -> int:
+        """Размер пула (``also`` — второй набор ассетов, ревил другого типа)."""
         value = await self._s.scalar(
-            select(func.count()).select_from(catalog_items).where(*_pool_filter(query))
+            select(func.count()).select_from(catalog_items).where(*_candidate_filter(query, also))
         )
         return int(value or 0)
 
-    async def candidates(self, query: PoolQuery, limit: int) -> list[MediaItemRef]:
+    async def candidates(
+        self, query: PoolQuery, limit: int, *, also: PlayableFor | None = None
+    ) -> list[MediaItemRef]:
         """``CandidatePort``: кандидаты пула в порядке ``id`` (детерминизм ``draw``)."""
         rows = (
             await self._s.execute(
                 select(catalog_items)
-                .where(*_pool_filter(query))
+                .where(*_candidate_filter(query, also))
                 .order_by(catalog_items.c.media_item_id)
                 .limit(limit)
             )
         ).mappings()
         return [_to_item(r).to_ref() for r in rows]
+
+    async def has_assets(self, clue_type: str, params_hash: str) -> bool:
+        """Есть ли в проекции хоть один каталожный набор под параметры загадки (профиль
+        media есть)."""
+        a = clue_assets.c
+        found = await self._s.scalar(
+            select(literal(1))
+            .where(a.clue_type == clue_type, a.params_hash == params_hash, a.scope_id.is_(None))
+            .limit(1)
+        )
+        return found is not None
+
+    async def subjects(
+        self,
+        query: SubjectQuery,
+        *,
+        text_: str | None,
+        limit: int,
+        also: PlayableFor | None = None,
+    ) -> list[SubjectRow]:
+        """Персоны с ролью из ``query.roles`` и ≥ ``min_items`` играбельных единиц домена.
+
+        Семантика — ``gv_testkit.game.FakeCandidatePort.subjects``: персона считается в
+        своей роли, имя ищется подстрокой без учёта регистра, порядок — по числу единиц
+        (убывание), имени и id. Индекс — GIN по ``person_ids`` (поиск по имени без
+        trigram, лимит ≤ 20 — хвост этапа 2).
+        """
+        c = catalog_items.c
+        elems = (
+            func.jsonb_array_elements(c.persons).table_valued(column("value", JSONB)).lateral("p")
+        )
+        pid = elems.c.value["id"].astext
+        role = elems.c.value["role"].astext
+        name = elems.c.value["name"].astext
+        conditions = _candidate_filter(
+            PoolQuery(domain=query.domain, playable_for=query.playable_for), also
+        )
+        conditions.append(role.in_(sorted(query.roles)))
+        if text_:
+            conditions.append(name.ilike(_like(text_), escape="\\"))
+        items = func.count(func.distinct(c.media_item_id))
+        first_name = func.min(name.collate("C"))
+        rows = await self._s.execute(
+            select(pid, role, first_name, items)
+            .select_from(catalog_items.join(elems, true()))
+            .where(*conditions)
+            .group_by(pid, role)
+            .having(items >= query.min_items)
+            .order_by(items.desc(), first_name, pid)
+            .limit(limit)
+        )
+        return [SubjectRow(person_id=UUID(p), name=n, role=r, items=int(k)) for p, r, n, k in rows]
 
     async def search(self, *, q: str | None, domain: str | None, limit: int) -> list[CatalogItem]:
         """Поиск по подстроке названия (без учёта регистра)."""
@@ -654,8 +801,7 @@ class SqlProjectionRepository:
         if domain is not None:
             query = query.where(catalog_items.c.domain == domain)
         if q:
-            pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-            query = query.where(catalog_items.c.title.ilike(pattern, escape="\\"))
+            query = query.where(catalog_items.c.title.ilike(_like(q), escape="\\"))
         rows = (
             await self._s.execute(query.order_by(catalog_items.c.title).limit(limit))
         ).mappings()
@@ -663,15 +809,158 @@ class SqlProjectionRepository:
 
 
 class SqlCandidatePort:
-    """``CandidatePort`` ядра поверх проекции (ограничение — ``candidate_limit``)."""
+    """``CandidatePort`` ядра поверх проекции (ограничение — ``candidate_limit``).
 
-    def __init__(self, projection: SqlProjectionRepository, limit: int) -> None:
+    ``also`` — второй набор ассетов, без которого единица не играбельна (ревил другого
+    типа, ADR 0026): ядро о нём не знает, фильтр добавляет адаптер.
+    """
+
+    def __init__(
+        self, projection: SqlProjectionRepository, limit: int, also: PlayableFor | None = None
+    ) -> None:
         self._projection = projection
         self._limit = limit
+        self._also = also
 
     async def candidates(self, query: PoolQuery, limit: int) -> list[MediaItemRef]:
         """Кандидаты пула (не больше ``candidate_limit`` процесса)."""
-        return await self._projection.candidates(query, min(limit, self._limit))
+        return await self._projection.candidates(query, min(limit, self._limit), also=self._also)
+
+
+# ---------------------------------------------------------------- сборники
+def _to_collection(row: RowMapping) -> CollectionProj:
+    return CollectionProj(
+        collection_id=row["collection_id"],
+        version=row["version"],
+        content_version=row["content_version"],
+        domain=row["domain"],
+        status=CollectionStatus(row["status"]),
+        visibility=row["visibility"],
+        author_id=row["author_id"],
+        updated_at=row["updated_at"],
+    )
+
+
+class SqlCollectionRepository:
+    """Проекция сборников (``collection_proj``, ``collection_items_proj``, ADR 0028)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, collection_id: UUID, *, for_update: bool = False) -> CollectionProj | None:
+        """Сборник (в том числе надгробие удалённого)."""
+        query = select(collection_proj).where(collection_proj.c.collection_id == collection_id)
+        if for_update:
+            query = query.with_for_update()
+        row = (await self._s.execute(query)).mappings().first()
+        return _to_collection(row) if row else None
+
+    async def save(self, proj: CollectionProj, items: Sequence[CollectionItem]) -> None:
+        """Записать снимок сборника и заменить его состав."""
+        values = {
+            "version": proj.version,
+            "content_version": proj.content_version,
+            "domain": proj.domain,
+            "status": str(proj.status),
+            "visibility": proj.visibility,
+            "author_id": proj.author_id,
+            "updated_at": proj.updated_at,
+        }
+        await self._s.execute(
+            pg_insert(collection_proj)
+            .values(collection_id=proj.collection_id, **values)
+            .on_conflict_do_update(index_elements=[collection_proj.c.collection_id], set_=values)
+        )
+        await self._s.execute(
+            delete(collection_items_proj).where(
+                collection_items_proj.c.collection_id == proj.collection_id
+            )
+        )
+        if items:
+            await self._s.execute(
+                insert(collection_items_proj),
+                [
+                    {
+                        "collection_id": proj.collection_id,
+                        "position": i.position,
+                        "media_item_id": i.media_item_id,
+                    }
+                    for i in items
+                ],
+            )
+
+    async def total(self, collection_id: UUID) -> int:
+        """Различных единиц сборника, активных в каталоге."""
+        ci, c = collection_items_proj.c, catalog_items.c
+        value = await self._s.scalar(
+            select(func.count(func.distinct(ci.media_item_id)))
+            .select_from(
+                collection_items_proj.join(catalog_items, c.media_item_id == ci.media_item_id)
+            )
+            .where(ci.collection_id == collection_id, c.status == str(ItemStatus.ACTIVE))
+        )
+        return int(value or 0)
+
+    async def items(
+        self,
+        collection_id: UUID,
+        limit: int,
+        *,
+        playable_for: PlayableFor | None,
+        also: PlayableFor | None = None,
+    ) -> list[MediaItemRef]:
+        """Единицы опубликованного сборника по ``position``: активные в каталоге и, при
+        ``playable_for``, с готовым набором (со ``scope`` из требования — сначала свой
+        набор сборника, иначе каталожный). Семантика —
+        ``gv_testkit.game.FakeCollectionPort.matches``; ``also`` — второй набор (ревил
+        другого типа, ADR 0026)."""
+        ci, c, p = collection_items_proj.c, catalog_items.c, collection_proj.c
+        conditions: list[Any] = [
+            ci.collection_id == collection_id,
+            p.status == str(CollectionStatus.PUBLISHED),
+            c.status == str(ItemStatus.ACTIVE),
+        ]
+        conditions += [_ready_for(need) for need in (playable_for, also) if need is not None]
+        rows = (
+            await self._s.execute(
+                select(catalog_items)
+                .select_from(
+                    collection_items_proj.join(
+                        collection_proj, p.collection_id == ci.collection_id
+                    ).join(catalog_items, c.media_item_id == ci.media_item_id)
+                )
+                .where(*conditions)
+                .order_by(ci.position)
+                .limit(limit)
+            )
+        ).mappings()
+        return [_to_item(r).to_ref() for r in rows]
+
+
+class SqlCollectionPort:
+    """``CollectionPort`` ядра поверх проекции сборников (ограничение — ``candidate_limit``).
+
+    ``also`` — второй набор ассетов ревила другого типа (ядро о нём не знает, как у
+    ``SqlCandidatePort``); для него свой набор сборника тоже учитывается первым.
+    """
+
+    def __init__(
+        self, collections: SqlCollectionRepository, limit: int, also: PlayableFor | None = None
+    ) -> None:
+        self._collections = collections
+        self._limit = limit
+        self._also = also
+
+    async def items(
+        self, collection_id: UUID, limit: int, *, playable_for: PlayableFor | None
+    ) -> list[MediaItemRef]:
+        """До ``limit`` единиц сборника в его порядке."""
+        also = self._also
+        if also is not None and playable_for is not None:
+            also = PlayableFor(also.clue_type, also.params_hash, scope=playable_for.scope)
+        return await self._collections.items(
+            collection_id, min(limit, self._limit), playable_for=playable_for, also=also
+        )
 
 
 # ---------------------------------------------------------------- сессии
@@ -715,54 +1004,142 @@ def _state_of(raw: dict[str, Any]) -> RoundState:
     )
 
 
-def _rounds_json(rounds: Sequence[Round]) -> dict[str, Any]:
+def _asset_json(asset: AssetRef | None) -> dict[str, Any] | None:
+    if asset is None:
+        return None
+    return {"asset_set_id": str(asset.asset_set_id), "levels_count": asset.levels_count}
+
+
+def _asset_of(raw: dict[str, Any] | None) -> AssetRef | None:
+    if not raw:
+        return None
+    return AssetRef(asset_set_id=UUID(raw["asset_set_id"]), levels_count=raw["levels_count"])
+
+
+def _option_json(o: RoundOption) -> dict[str, Any]:
     return {
-        "rounds": [
-            {
-                "index": r.index,
-                "media_item_id": str(r.media_item_id),
-                "asset": (
-                    {
-                        "asset_set_id": str(r.asset.asset_set_id),
-                        "levels_count": r.asset.levels_count,
-                    }
-                    if r.asset
-                    else None
-                ),
-                "levels_count": r.levels_count,
-                "max_points": r.max_points,
-                "points": r.points,
-                "started_at": r.started_at.isoformat() if r.started_at else None,
-                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
-                "state": _state_json(r.state),
-            }
-            for r in rounds
-        ]
+        "id": o.id,
+        "label_key": o.label_key,
+        "media_item_id": str(o.media_item_id) if o.media_item_id else None,
     }
 
 
-def _rounds_of(raw: dict[str, Any]) -> list[Round]:
-    return [
-        Round(
-            index=r["index"],
-            media_item_id=UUID(r["media_item_id"]),
-            asset=(
-                AssetRef(
-                    asset_set_id=UUID(r["asset"]["asset_set_id"]),
-                    levels_count=r["asset"]["levels_count"],
-                )
-                if r["asset"]
-                else None
-            ),
-            levels_count=r["levels_count"],
-            max_points=r["max_points"],
-            state=_state_of(r["state"]),
-            points=r["points"],
-            started_at=_dt(r["started_at"]),
-            finished_at=_dt(r["finished_at"]),
-        )
-        for r in raw["rounds"]
-    ]
+def _option_of(raw: dict[str, Any]) -> RoundOption:
+    item = raw.get("media_item_id")
+    return RoundOption(
+        id=raw["id"], label_key=raw.get("label_key"), media_item_id=UUID(item) if item else None
+    )
+
+
+def _round_json(r: Round) -> dict[str, Any]:
+    return {
+        "index": r.index,
+        "media_item_id": str(r.media_item_id),
+        "asset": _asset_json(r.asset),
+        "levels_count": r.levels_count,
+        "max_points": r.max_points,
+        "points": r.points,
+        "started_at": r.started_at.isoformat() if r.started_at else None,
+        "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+        "state": _state_json(r.state),
+        "shown": [
+            {"media_item_id": str(x.media_item_id), "asset": _asset_json(x.asset)} for x in r.shown
+        ],
+        "options": [_option_json(o) for o in r.options],
+        "choice": r.choice,
+        "stage": r.stage,
+        "reveal_asset": _asset_json(r.reveal_asset),
+    }
+
+
+def _round_of(r: dict[str, Any]) -> Round:
+    """Раунд из ``state``; поля этапа 3a у снимков v1 отсутствуют — значения по умолчанию."""
+    return Round(
+        index=r["index"],
+        media_item_id=UUID(r["media_item_id"]),
+        asset=_asset_of(r["asset"]),
+        levels_count=r["levels_count"],
+        max_points=r["max_points"],
+        state=_state_of(r["state"]),
+        points=r["points"],
+        started_at=_dt(r["started_at"]),
+        finished_at=_dt(r["finished_at"]),
+        shown=tuple(
+            ShownItem(UUID(x["media_item_id"]), _asset_of(x.get("asset")))
+            for x in r.get("shown", ())
+        ),
+        options=tuple(_option_of(o) for o in r.get("options", ())),
+        choice=r.get("choice"),
+        stage=r.get("stage"),
+        reveal_asset=_asset_of(r.get("reveal_asset")),
+    )
+
+
+def _planned_json(p: PlannedRound) -> dict[str, Any]:
+    return {
+        "target": str(p.target),
+        "shown": [str(x) for x in p.shown],
+        "options": [_option_json(o) for o in p.options],
+    }
+
+
+def _planned_of(raw: dict[str, Any]) -> PlannedRound:
+    return PlannedRound(
+        target=UUID(raw["target"]),
+        shown=tuple(UUID(x) for x in raw.get("shown", ())),
+        options=tuple(_option_of(o) for o in raw.get("options", ())),
+    )
+
+
+def session_state_json(s: GameSession) -> dict[str, Any]:
+    """``game_sessions.state`` схемы ``STATE_SCHEMA`` (план скрыт от клиента, D4).
+
+    ``collection`` (этап 3b) — необязательное поле той же схемы: без него сессия не по
+    сборнику.
+    """
+    state: dict[str, Any] = {
+        "state_schema": STATE_SCHEMA,
+        "rounds": [_round_json(r) for r in s.rounds],
+        "plan": [_planned_json(p) for p in s.plan],
+        "progressive": s.progressive,
+        "round_max": s.round_max,
+    }
+    if s.collection_id is not None:
+        state["collection"] = {"id": str(s.collection_id), "version": s.collection_version}
+    return state
+
+
+@dataclass(frozen=True, slots=True)
+class SessionState:
+    """Разобранный ``game_sessions.state`` любой поддерживаемой версии схемы."""
+
+    rounds: list[Round]
+    plan: list[PlannedRound]
+    progressive: bool
+    round_max: int | None
+    collection_id: UUID | None = None
+    collection_version: int | None = None
+
+
+def session_state_of(raw: dict[str, Any]) -> SessionState:
+    """Разобрать ``state``: без ``state_schema`` — v1 этапа 2 (все раунды выданы, плана нет).
+
+    Raises:
+        ValueError: неизвестная (более новая) версия схемы.
+    """
+    schema = int(raw.get("state_schema", 1))
+    if schema > STATE_SCHEMA:
+        raise ValueError(f"неизвестная версия схемы состояния сессии: {schema}")
+    rounds = [_round_of(r) for r in raw["rounds"]]
+    collection = raw.get("collection")
+    return SessionState(
+        rounds=rounds,
+        plan=[_planned_of(p) for p in raw.get("plan", ())],
+        progressive=bool(raw.get("progressive", False)),
+        round_max=raw.get("round_max"),
+        collection_id=UUID(collection["id"]) if collection else None,
+        collection_version=int(collection["version"]) if collection else None,
+    )
 
 
 def _session_values(s: GameSession) -> dict[str, Any]:
@@ -771,7 +1148,7 @@ def _session_values(s: GameSession) -> dict[str, Any]:
         "score": s.score,
         "max_score": s.max_score,
         "version": s.version,
-        "state": _rounds_json(s.rounds),
+        "state": session_state_json(s),
         "finished_at": s.finished_at,
         "last_move_at": s.last_move_at,
     }
@@ -785,6 +1162,7 @@ class SqlSessionRepository:
 
     @staticmethod
     def _to_session(row: RowMapping) -> GameSession:
+        state = session_state_of(row["state"])
         return GameSession(
             row["id"],
             player=PlayerRef(PlayerKind(row["player_kind"]), row["player_id"]),
@@ -797,12 +1175,17 @@ class SqlSessionRepository:
             preset_id=row["preset_id"],
             seed=bytes(row["seed"]),
             status=SessionStatus(row["status"]),
-            rounds=_rounds_of(row["state"]),
+            rounds=state.rounds,
             started_at=row["started_at"],
             last_move_at=row["last_move_at"],
             idle_timeout_s=row["idle_timeout_s"],
             finished_at=row["finished_at"],
             version=row["version"],
+            plan=state.plan,
+            progressive=state.progressive,
+            round_max=state.round_max,
+            collection_id=state.collection_id,
+            collection_version=state.collection_version,
         )
 
     async def get(self, session_id: UUID, *, for_update: bool = False) -> GameSession | None:
@@ -944,6 +1327,217 @@ class SqlDailyStatsRepository:
         return {idx: (played, exact) for idx, played, exact in rows}
 
 
+# ---------------------------------------------------------------- этап 3a: рекорды, сетка
+class SqlRecordsRepository:
+    """Личные рекорды и гистограмма результатов режима."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def save_result(
+        self, user_id: UUID, mode_key: str, score: int, *, session_id: UUID, at: datetime
+    ) -> bool:
+        """Гистограмма +1; рекорд обновляется, только если результат лучше прежнего."""
+        hist = pg_insert(score_histogram).values(mode_key=mode_key, score=score, sessions=1)
+        await self._s.execute(
+            hist.on_conflict_do_update(
+                index_elements=[score_histogram.c.mode_key, score_histogram.c.score],
+                set_={"sessions": score_histogram.c.sessions + 1},
+            )
+        )
+        stmt = pg_insert(player_records).values(
+            user_id=user_id, mode_key=mode_key, best=score, session_id=session_id, achieved_at=at
+        )
+        result = await self._s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[player_records.c.user_id, player_records.c.mode_key],
+                set_={
+                    "best": stmt.excluded.best,
+                    "session_id": stmt.excluded.session_id,
+                    "achieved_at": stmt.excluded.achieved_at,
+                },
+                where=player_records.c.best < stmt.excluded.best,
+            ).returning(player_records.c.best)
+        )
+        return result.first() is not None
+
+    @staticmethod
+    def _to_record(row: RowMapping) -> PlayerRecord:
+        return PlayerRecord(
+            mode_key=row["mode_key"],
+            best=row["best"],
+            session_id=row["session_id"],
+            achieved_at=row["achieved_at"],
+        )
+
+    async def get(self, user_id: UUID, mode_key: str) -> PlayerRecord | None:
+        """Рекорд пользователя в режиме."""
+        row = (
+            (
+                await self._s.execute(
+                    select(player_records).where(
+                        player_records.c.user_id == user_id, player_records.c.mode_key == mode_key
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return self._to_record(row) if row else None
+
+    async def for_user(self, user_id: UUID, mode_key: str | None) -> list[PlayerRecord]:
+        """Рекорды пользователя по ключу режима."""
+        query = select(player_records).where(player_records.c.user_id == user_id)
+        if mode_key is not None:
+            query = query.where(player_records.c.mode_key == mode_key)
+        rows = (await self._s.execute(query.order_by(player_records.c.mode_key))).mappings()
+        return [self._to_record(r) for r in rows]
+
+    async def percentile(self, mode_key: str, score: int) -> float | None:
+        """Доля результатов строго ниже ``score`` среди всех результатов режима, %."""
+        h = score_histogram.c
+        below = func.coalesce(func.sum(h.sessions).filter(h.score < score), 0)
+        total = func.coalesce(func.sum(h.sessions), 0)
+        row = (await self._s.execute(select(below, total).where(h.mode_key == mode_key))).one()
+        lower, all_ = int(row[0]), int(row[1])
+        return round(100.0 * lower / all_, 1) if all_ else None
+
+
+class SqlBracketStatsRepository:
+    """Статистика выборов сетки по паре ``(winner, loser)``."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add_pick(
+        self, mode_key: str, period_start: date, winner_id: UUID, loser_id: UUID
+    ) -> None:
+        """+1 к паре (upsert в транзакции хода)."""
+        stmt = pg_insert(bracket_pick_stats).values(
+            mode_key=mode_key,
+            period_start=period_start,
+            winner_id=winner_id,
+            loser_id=loser_id,
+            picks=1,
+        )
+        b = bracket_pick_stats.c
+        await self._s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[b.mode_key, b.period_start, b.winner_id, b.loser_id],
+                set_={"picks": b.picks + 1},
+            )
+        )
+
+    async def agree_pct(
+        self, mode_key: str, period_start: date, winner_id: UUID, loser_id: UUID
+    ) -> float | None:
+        """Доля выборов ``winner`` среди выборов этой пары в обе стороны, %."""
+        b = bracket_pick_stats.c
+        rows = await self._s.execute(
+            select(b.winner_id, b.picks).where(
+                b.mode_key == mode_key,
+                b.period_start == period_start,
+                or_(
+                    and_(b.winner_id == winner_id, b.loser_id == loser_id),
+                    and_(b.winner_id == loser_id, b.loser_id == winner_id),
+                ),
+            )
+        )
+        counts = {w: int(n) for w, n in rows}
+        total = sum(counts.values())
+        return round(100.0 * counts.get(winner_id, 0) / total, 1) if total else None
+
+
+class SqlAssetRequestRepository:
+    """Запросы ассетов (ADR 0025)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    @staticmethod
+    def _to_request(row: RowMapping) -> AssetRequest:
+        return AssetRequest(
+            row["request_id"],
+            mode_key=row["mode_key"],
+            draft_revision=row["draft_revision"],
+            domain=domain_of(row["mode_key"]),
+            clue_type=row["clue_type"],
+            params=dict(row["params"]),
+            params_hash=row["params_hash"],
+            status=AssetRequestStatus(row["status"]),
+            actor_id=row["actor_id"],
+            reason=row["reason"],
+            requested_at=row["requested_at"],
+        )
+
+    async def pending(self, clue_type: str, params_hash: str) -> AssetRequest | None:
+        """Ожидающий запрос под эти параметры."""
+        a = asset_requests.c
+        row = (
+            (
+                await self._s.execute(
+                    select(asset_requests).where(
+                        a.clue_type == clue_type,
+                        a.params_hash == params_hash,
+                        a.status == str(AssetRequestStatus.PENDING),
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return self._to_request(row) if row else None
+
+    async def add(self, request: AssetRequest) -> bool:
+        """Вставить; ``False`` — ожидающий запрос под хэш уже есть."""
+        result = await self._s.execute(
+            pg_insert(asset_requests)
+            .values(
+                request_id=request.id,
+                mode_key=request.mode_key,
+                draft_revision=request.draft_revision,
+                clue_type=request.clue_type,
+                params_hash=request.params_hash,
+                params=request.params,
+                status=str(request.status),
+                actor_id=request.actor_id,
+                reason=request.reason,
+                requested_at=request.requested_at,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["clue_type", "params_hash"],
+                index_where=text("status = 'pending'"),
+            )
+            .returning(asset_requests.c.request_id)
+        )
+        return result.first() is not None
+
+    async def for_mode(self, mode_key: str) -> list[AssetRequest]:
+        """Запросы режима, новые первыми."""
+        rows = (
+            await self._s.execute(
+                select(asset_requests)
+                .where(asset_requests.c.mode_key == mode_key)
+                .order_by(asset_requests.c.requested_at.desc(), asset_requests.c.request_id.desc())
+            )
+        ).mappings()
+        return [self._to_request(r) for r in rows]
+
+    async def mark_sent(self, clue_type: str, params_hash: str) -> int:
+        """Ожидающие запросы под параметры → ``sent``."""
+        a = asset_requests.c
+        result = await self._s.execute(
+            update(asset_requests)
+            .where(
+                a.clue_type == clue_type,
+                a.params_hash == params_hash,
+                a.status == str(AssetRequestStatus.PENDING),
+            )
+            .values(status=str(AssetRequestStatus.SENT))
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
+
+
 class SqlAdminAuditLog:
     """Аудит admin-действий."""
 
@@ -981,6 +1575,10 @@ class SqlGameUnitOfWork:
     stats: DailyStatsRepository
     idempotency: IdempotencyStore
     audit: AdminAuditLog
+    records: RecordsRepository
+    bracket_stats: BracketStatsRepository
+    asset_requests: AssetRequestRepository
+    collections: CollectionRepository
 
     def __init__(
         self,
@@ -1024,7 +1622,23 @@ class SqlGameUnitOfWork:
         self.stats = SqlDailyStatsRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         self.audit = SqlAdminAuditLog(s)
+        self.records = SqlRecordsRepository(s)
+        self.bracket_stats = SqlBracketStatsRepository(s)
+        self.asset_requests = SqlAssetRequestRepository(s)
+        self._collections = SqlCollectionRepository(s)
+        self.collections = self._collections
+        self._projection = projection
         return self
+
+    def candidates_for(self, also: PlayableFor | None) -> CandidatePort:
+        """``CandidatePort`` с требованием второго набора ассетов (ревил, ADR 0026)."""
+        if also is None:
+            return self.candidates
+        return SqlCandidatePort(self._projection, self._candidate_limit, also)
+
+    def collection_port(self, also: PlayableFor | None) -> CollectionPort:
+        """``CollectionPort`` ядра (ADR 0028) с требованием второго набора ассетов."""
+        return SqlCollectionPort(self._collections, self._candidate_limit, also)
 
     async def __aexit__(
         self,

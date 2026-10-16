@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from catalog_service.application.commands.admin import AdminContext
+from catalog_service.application.commands.admin import AdminContext, ClueTextsEdit
 from catalog_service.application.commands.imports import ImportCommand
 from catalog_service.application.services import CatalogServices
 from catalog_service.domain.import_job import ImportSource
@@ -58,6 +58,7 @@ class AdminItem(BaseModel):
     external_refs: dict[str, str]
     metrics: dict[str, float | int]
     source_media: list[dict[str, Any]]
+    countries: list[str] = Field(default_factory=list)
 
 
 class AdminItemSummary(BaseModel):
@@ -137,6 +138,50 @@ class ImportView(BaseModel):
     error: str | None
 
 
+class ClueTextsOut(BaseModel):
+    """Тексты загадок единицы (ADR 0024): в событие уходят только одобренные."""
+
+    plot_raw: str | None = Field(description="Исходный сюжет (TMDB или ввод модератора)")
+    plot_masked: str | None
+    tagline: str | None
+    emoji: str | None
+    status: Literal["draft", "approved"]
+    revision: int = Field(ge=0)
+    approved_revision: int | None = Field(
+        default=None, description="Последняя одобренная ревизия (её тексты сейчас в событиях)"
+    )
+
+
+class ClueTextsIn(BaseModel):
+    """Правка текстов загадок: после правки тексты снова требуют одобрения."""
+
+    plot_masked: str | None = Field(default=None, min_length=1, max_length=2000)
+    tagline: str | None = Field(default=None, min_length=1, max_length=300)
+    emoji: str | None = Field(default=None, min_length=1, max_length=64)
+    base_revision: int = Field(ge=0)
+    reason: Reason
+
+
+class ApproveClueTextsRequest(BaseModel):
+    """Одобрить тексты ревизии ``revision``."""
+
+    revision: int = Field(ge=1)
+    reason: Reason
+
+
+class RepublishRequest(BaseModel):
+    """Переопубликовать единицы (заполнить новые поля у потребителей)."""
+
+    domain: MediaDomain | None = None
+    reason: Reason
+
+
+class RepublishOut(BaseModel):
+    """Задача переопубликации поставлена."""
+
+    job_id: uuid.UUID
+
+
 # Права проверяются на каждой ручке; aliases на уровне модуля — FastAPI разрешает
 # отложенные аннотации (from __future__ import annotations) только по глобальным именам.
 Viewer = Annotated[Principal, Depends(require_perm("admin.access"))]
@@ -209,6 +254,69 @@ def build_admin_router(c: CatalogServices) -> APIRouter:
         ctx = AdminContext(principal.user_id, key, body.reason)
         drafts = [AliasDraft(a.text, a.kind, a.lang) for a in body.aliases]
         return AdminItem.model_validate(await c.replace_aliases(item_id, drafts, ctx))
+
+    @router.get(
+        "/items/{item_id}/clue-texts",
+        response_model=ClueTextsOut,
+        summary="Тексты загадок единицы",
+        responses=_READ_ONE,
+    )
+    async def get_clue_texts(item_id: uuid.UUID, _: Viewer) -> ClueTextsOut:
+        return ClueTextsOut.model_validate(await c.get_clue_texts(item_id))
+
+    @router.put(
+        "/items/{item_id}/clue-texts",
+        response_model=ClueTextsOut,
+        summary="Изменить тексты загадок",
+        description=(
+            "Все три поля целиком (null — очистить); `base_revision` — ревизия, которую "
+            "видел модератор (иначе 409 `catalog.clue_texts_revision_mismatch`). После правки "
+            "тексты в статусе draft: в событиях остаётся прошлый одобренный снимок. "
+            "emoji — до 12 графем (422 `catalog.clue_text_invalid_emoji`)."
+        ),
+        responses=_MUTATE,
+    )
+    async def put_clue_texts(
+        item_id: uuid.UUID, body: ClueTextsIn, principal: Editor, key: IdempotencyKey
+    ) -> ClueTextsOut:
+        ctx = AdminContext(principal.user_id, key, body.reason)
+        edit = ClueTextsEdit(body.plot_masked, body.tagline, body.emoji, body.base_revision)
+        return ClueTextsOut.model_validate(await c.edit_clue_texts(item_id, edit, ctx))
+
+    @router.post(
+        "/items/{item_id}/clue-texts/approve",
+        response_model=ClueTextsOut,
+        summary="Одобрить тексты загадок",
+        description=(
+            "Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts` (version+1). "
+            "409 `catalog.clue_texts_revision_mismatch` — одобряется не текущая ревизия; "
+            "422 `catalog.clue_texts_empty` — одобрять нечего."
+        ),
+        responses=_MUTATE,
+    )
+    async def approve_clue_texts(
+        item_id: uuid.UUID, body: ApproveClueTextsRequest, principal: Editor, key: IdempotencyKey
+    ) -> ClueTextsOut:
+        ctx = AdminContext(principal.user_id, key, body.reason)
+        return ClueTextsOut.model_validate(await c.approve_clue_texts(item_id, body.revision, ctx))
+
+    @router.post(
+        "/items/republish",
+        response_model=RepublishOut,
+        status_code=202,
+        summary="Переопубликовать единицы",
+        description=(
+            "Фоновая задача RabbitMQ порциями `GV_CATALOG__REPUBLISH_BATCH`: "
+            "`MediaItemUpdated` с `version+1` (`changed_fields: [republish]`) для всех единиц "
+            "домена (без `domain` — всех). Повтор с тем же `Idempotency-Key` — то же задание."
+        ),
+        responses=problem_responses(*_AUTH, 409, 503),
+    )
+    async def republish_items(
+        body: RepublishRequest, principal: Importer, key: IdempotencyKey
+    ) -> RepublishOut:
+        ctx = AdminContext(principal.user_id, key, body.reason)
+        return RepublishOut.model_validate(await c.request_republish(body.domain, ctx))
 
     @router.post(
         "/imports",

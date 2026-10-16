@@ -1,0 +1,47 @@
+# Тестовый конфиг ядра: звук фильма с ревилом кадром (ADR 0026). Сиды game — поток B.
+key: film.random.blackout
+title_i18n: modes.film.random.blackout.title
+domain: film
+source:
+  type: random
+  params:
+    pool:
+      kinds: [film]
+      min_playable: 5
+clue:
+  type: audio_blackout
+  params:
+    start_s: 0
+    levels:
+      - { seconds: 0.5 }
+      - { seconds: 1 }
+      - { seconds: 2 }
+      - { seconds: 4 }
+      - { seconds: 8 }
+      - { seconds: 15 }
+  reveal:
+    type: frame_progressive
+    params:
+      levels:
+        - { blur_px: 0, crop: 1, max_width: 960 }
+answer:
+  format: classic
+  matcher:
+    type: title_alias
+    params:
+      typo:
+        - { min_len: 5, max_distance: 1 }
+      accept_same_title: true
+scoring:
+  type: by_level
+  params:
+    points: [6, 5, 4, 3, 2, 1]
+    partial_ratio: 0.5
+session:
+  kind: solo
+  rounds: 5
+  attempts_per_level: 1
+  skip_allowed: true
+  give_up_allowed: true
+  allow_guest: true
+  abandon_after_min: 120

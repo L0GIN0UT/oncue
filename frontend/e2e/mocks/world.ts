@@ -1,5 +1,6 @@
 /**
- * Состояние мок-бэкенда по контрактам (contracts/openapi/{game,bff_web,catalog,identity}.json).
+ * Состояние мок-бэкенда по контрактам (contracts/openapi/{game,bff_web,catalog,identity}.json;
+ * сборники и медиатека этапа 3b — e2e/mocks/ugc.ts).
  *
  * Общий для unit-тестов (MSW в jsdom) и Playwright (HTTP-сервер e2e/mocks/server.ts).
  * Логика игры упрощена, но соблюдает инварианты контракта: до ревила в снимке нет
@@ -17,6 +18,7 @@ import type {
   Suggestion,
 } from "@/shared/api/types";
 import { dayIn, nextMidnight } from "@/features/daily/countdown";
+import { COLLECTION_MODES, UgcWorld } from "./ugc";
 
 export type Domain = "music" | "film";
 
@@ -161,9 +163,47 @@ export const ITEMS: MockItem[] = [
     person: { name: "Эльдар Рязанов", role: "director" },
     genres: ["comedy"],
   },
+  // Ещё фильмы Тарковского: марафон режиссёра (≥ 5 фильмов персоны).
+  {
+    id: uuid(209),
+    domain: "film",
+    title: "Зеркало",
+    year: 1974,
+    person: { name: "Андрей Тарковский", role: "director" },
+    genres: ["drama"],
+  },
+  {
+    id: uuid(210),
+    domain: "film",
+    title: "Андрей Рублёв",
+    year: 1966,
+    person: { name: "Андрей Тарковский", role: "director" },
+    genres: ["drama"],
+  },
+  {
+    id: uuid(211),
+    domain: "film",
+    title: "Иваново детство",
+    year: 1962,
+    person: { name: "Андрей Тарковский", role: "director" },
+    genres: ["war"],
+  },
 ];
 
 export const itemById = (id: string) => ITEMS.find((i) => i.id === id);
+
+/** Метрика сравнения «больше/меньше» (рейтинг фильма, популярность трека): разная у всех. */
+export function metricOf(item: MockItem): number {
+  const n = Number(item.id.slice(-3));
+  return Math.round((5 + ((n * 37) % 41) / 10) * 10) / 10;
+}
+
+/** Идентификатор персоны (как `subject_id` проекции game): по имени, детерминированно. */
+export function personId(name: string): string {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 1_000_000;
+  return `00000000-0000-4000-9000-${String(h).padStart(12, "0")}`;
+}
 
 const AUDIO_LEVELS = [0.5, 1, 2, 4, 8, 15].map((seconds, i) => ({
   index: i + 1,
@@ -173,67 +213,127 @@ const FRAME_LEVELS = [48, 32, 20, 12, 6, 0].map((blur_px, i) => ({
   index: i + 1,
   hint: { blur_px, crop: [0.35, 0.5, 0.7, 1, 1, 1][i] ?? 1 },
 }));
+const SEQUENCE_LEVELS = [1, 2, 3, 4, 5, 6].map((frame, i) => ({ index: i + 1, hint: { frame } }));
+/** Поля описания накапливаются от уровня к уровню (как `description.params`). */
+const DESCRIPTION_FIELDS = [
+  ["tagline"],
+  ["plot_masked"],
+  ["year", "genres"],
+  ["country"],
+  ["director"],
+  ["cast_top3"],
+];
+const DESCRIPTION_LEVELS = DESCRIPTION_FIELDS.map((_, i) => ({
+  index: i + 1,
+  hint: { fields: DESCRIPTION_FIELDS.slice(0, i + 1).flat() },
+}));
+const EMOJI_COUNTS = [1, 2, 3, 4, 6, null];
+const EMOJI_LEVELS = EMOJI_COUNTS.map((count, i) => ({ index: i + 1, hint: { count } }));
+const STILL_LEVELS = [{ index: 1, hint: { blur_px: 0, crop: 1 } }];
 const POINTS = [6, 5, 4, 3, 2, 1];
 const PARTIAL_RATIO = 0.5;
+/** Размер сетки мок-мира (в game — из конфига режима, засев — 32). */
+export const BRACKET_SIZE = 8;
+
+type ModeExtra = Pick<ModeOut, "answer_format" | "presentation" | "start" | "presets">;
+const classic: ModeExtra = {
+  answer_format: "classic",
+  presentation: "score",
+  start: null,
+  presets: null,
+};
+
+const mode = (
+  key: string,
+  source_type: string,
+  clue_type: string,
+  levels: ModeOut["levels"],
+  rounds: number,
+  extra: Partial<ModeExtra> = {},
+): ModeOut => ({
+  key,
+  version: 1,
+  domain: key.startsWith("music.") ? "music" : "film",
+  title_key: `modes.${key}.title`,
+  source_type,
+  clue_type,
+  rounds,
+  levels,
+  allow_guest: true,
+  ...classic,
+  ...extra,
+});
 
 export const MODES: ModeOut[] = [
-  {
-    key: "music.daily.classic",
-    version: 1,
-    domain: "music",
-    title_key: "modes.music.daily.classic.title",
-    source_type: "daily",
-    clue_type: "audio_intro",
-    rounds: 5,
-    levels: AUDIO_LEVELS,
-    allow_guest: true,
-    presets: null,
-  },
-  {
-    key: "film.daily.frame",
-    version: 1,
-    domain: "film",
-    title_key: "modes.film.daily.frame.title",
-    source_type: "daily",
-    clue_type: "frame_progressive",
-    rounds: 5,
-    levels: FRAME_LEVELS,
-    allow_guest: true,
-    presets: null,
-  },
-  {
-    key: "music.random.classic",
-    version: 1,
-    domain: "music",
-    title_key: "modes.music.random.classic.title",
-    source_type: "random",
-    clue_type: "audio_intro",
-    rounds: 10,
-    levels: AUDIO_LEVELS,
-    allow_guest: true,
+  mode("music.daily.classic", "daily", "audio_intro", AUDIO_LEVELS, 5),
+  mode("film.daily.frame", "daily", "frame_progressive", FRAME_LEVELS, 5),
+  mode("music.random.classic", "random", "audio_intro", AUDIO_LEVELS, 10, {
     presets: [
       { id: "y2000s", title_key: "modes.presets.y2000s" },
       { id: "y2010s", title_key: "modes.presets.y2010s" },
       { id: "rock", title_key: "modes.presets.rock" },
     ],
-  },
-  {
-    key: "film.random.frame",
-    version: 1,
-    domain: "film",
-    title_key: "modes.film.random.frame.title",
-    source_type: "random",
-    clue_type: "frame_progressive",
-    rounds: 10,
-    levels: FRAME_LEVELS,
-    allow_guest: true,
+  }),
+  mode("film.random.frame", "random", "frame_progressive", FRAME_LEVELS, 10, {
     presets: [
       { id: "y1990s", title_key: "modes.presets.y1990s" },
       { id: "y2000s", title_key: "modes.presets.y2000s" },
       { id: "comedy", title_key: "modes.presets.comedy" },
     ],
-  },
+  }),
+  // ------------------------------------------------------------- этап 3a
+  mode("music.random.reverse", "random", "audio_reverse", AUDIO_LEVELS, 5),
+  mode("film.random.description", "random", "description", DESCRIPTION_LEVELS, 5),
+  mode("film.random.emoji", "random", "emoji", EMOJI_LEVELS, 5),
+  mode("film.random.soundtrack", "random", "soundtrack", AUDIO_LEVELS, 5),
+  mode("film.random.blackout", "random", "audio_blackout", AUDIO_LEVELS, 5),
+  mode("film.random.sequence", "random", "frame_sequence", SEQUENCE_LEVELS, 5),
+  mode("film.marathon.director", "marathon", "frame_progressive", FRAME_LEVELS, 200, {
+    start: { subject: { roles: ["director"], max: 3 } },
+  }),
+  mode("music.marathon.artist", "marathon", "audio_intro", AUDIO_LEVELS, 200, {
+    start: { subject: { roles: ["artist"], max: 3 } },
+  }),
+  mode("film.pair.rating", "pair", "frame_progressive", STILL_LEVELS, 200, {
+    answer_format: "pick",
+    presentation: "streak",
+  }),
+  mode("music.pair.popularity", "pair", "audio_intro", [AUDIO_LEVELS[5]!], 200, {
+    answer_format: "pick",
+    presentation: "streak",
+  }),
+  mode("film.bracket.weekly", "bracket", "frame_progressive", STILL_LEVELS, BRACKET_SIZE - 1, {
+    answer_format: "pick",
+    presentation: "bracket",
+  }),
 ];
+
+/** Правила мок-режимов по `source_type` (в game — плагины ядра; мок упрощает). */
+const SCHEDULED = new Set(["daily", "bracket"]);
+const WEEKLY = new Set(["bracket"]);
+/** Жизни режима (`session.end: lives`). */
+const LIVES: Record<string, number> = { marathon: 3, pair: 1 };
+
+/** Вид выдачи по типу загадки (как `ClueView.kind` плагинов ядра). */
+const CLUE_KIND: Record<string, "audio" | "image" | "text"> = {
+  audio_intro: "audio",
+  audio_reverse: "audio",
+  soundtrack: "audio",
+  audio_blackout: "audio",
+  frame_progressive: "image",
+  frame_sequence: "image",
+  poster_masked: "image",
+  description: "text",
+  emoji: "text",
+};
+/** Ревил ассетом другого вида (`clue.reveal`, ADR 0026): звук в темноте → кадр. */
+const REVEAL_KIND: Record<string, "audio" | "image"> = { audio_blackout: "image" };
+
+const clueKindOf = (m: ModeOut) => CLUE_KIND[m.clue_type] ?? "image";
+const revealKindOf = (m: ModeOut): "audio" | "image" => {
+  const kind = REVEAL_KIND[m.clue_type] ?? clueKindOf(m);
+  return kind === "text" ? "image" : kind;
+};
 
 /** Наборы дня: фиксированные пять единиц на режим. */
 export const DAILY_SETS: Record<string, string[]> = {
@@ -252,6 +352,19 @@ const PRESET_FILTERS: Record<string, (i: MockItem) => boolean> = {
 /** Доля угадавших по раундам дейлика (для экрана итога). */
 const DAILY_EXACT_PCT = [62.5, 41, 18.2, 33, 7.5];
 
+/** Эмодзи фильма для загадки `emoji` (по жанру; уровень открывает первые `count`). */
+const EMOJI: Record<string, string[]> = {
+  crime: ["🔫", "🚗", "💰", "🧥", "🎸", "🏙️"],
+  comedy: ["❄️", "🛁", "✈️", "🥂", "🎄", "😂"],
+  drama: ["🌊", "🚀", "🧠", "🌌", "👁️", "🕯️"],
+  fantasy: ["🌃", "🧛", "🔦", "⚔️", "🌀", "🌆"],
+  war: ["🪖", "⛰️", "💥", "📻", "🎖️", "🚁"],
+  rock: ["🎸", "🥁", "🎤", "🔥", "🌙", "⭐"],
+  pop: ["💃", "🎶", "🌆", "💖", "🕺", "✨"],
+};
+
+type Option = { option_id: string; label_key: string | null; itemId: string | null };
+
 type Round = {
   index: number;
   itemId: string;
@@ -261,6 +374,13 @@ type Round = {
   partialLevel: number | null;
   outcome: "exact" | "partial" | "miss" | "gave_up" | "void" | null;
   points: number | null;
+  /** Открыто показанные единицы (опорная единица пары, варианты сетки). */
+  shown: string[];
+  options: Option[];
+  /** Размер тура сетки. */
+  stage: number | null;
+  /** Выбранный вариант (сетка: победитель пары). */
+  picked: string | null;
 };
 
 export type MockSession = {
@@ -272,6 +392,9 @@ export type MockSession = {
   status: SessionSnapshot["status"];
   current: number;
   rounds: Round[];
+  lives: number | null;
+  /** Сессия по сборнику (этап 3b): `collection` итога. */
+  collection: { id: string; version: number } | null;
 };
 
 export type MockUser = {
@@ -291,30 +414,69 @@ export type Scenario = {
   dailyNotReady?: boolean;
   /** bff: блок дейликов недоступен. */
   dailiesUnavailable?: boolean;
+  /**
+   * Ссылки ревила в снимках «протухли»: файл по ним отвечает 403 (как истёкшая подпись),
+   * свежую ссылку даёт только `POST .../final-clue`.
+   */
+  staleRevealLinks?: boolean;
 };
+
+type Asset =
+  | { kind: "audio" | "image"; seconds: number; blur: number; seed: number }
+  | { kind: "text"; body: unknown };
+
+const blank = (index: number, itemId: string): Round => ({
+  index,
+  itemId,
+  status: index === 0 ? "active" : "pending",
+  level: 1,
+  guesses: [],
+  partialLevel: null,
+  outcome: null,
+  points: null,
+  shown: [],
+  options: [],
+  stage: null,
+  picked: null,
+});
+
+const LOST = new Set(["miss", "gave_up"]);
+
+/** Пользователи мок-мира: игрок и автор сборников (этап 3b). */
+const BASE_USERS: MockUser[] = [
+  {
+    id: uuid(901),
+    nickname: "player",
+    email: "player@example.com",
+    password: "correct-horse",
+    verified: true,
+  },
+  {
+    id: uuid(902),
+    nickname: "author",
+    email: "author@example.com",
+    password: "correct-horse",
+    verified: true,
+  },
+];
 
 export class MockWorld {
   sessions = new Map<string, MockSession>();
   idempotency = new Map<string, { status: number; body: unknown }>();
-  users: MockUser[] = [
-    {
-      id: uuid(901),
-      nickname: "player",
-      email: "player@example.com",
-      password: "correct-horse",
-      verified: true,
-    },
-  ];
+  users: MockUser[] = BASE_USERS.map((u) => ({ ...u }));
+  /** Сборники и медиатека (этап 3b). */
+  ugc = new UgcWorld();
   scenario: Scenario = {};
   /** Субъекты, чья refresh-сессия отозвана (refresh отвечает 401). */
   revokedRefresh = new Set<string>();
   /** Сколько раз сессия обновлялась через refresh. */
   refreshCalls = 0;
+  /** Сколько раз выдавалась свежая ссылка ревила (`final-clue`). */
+  finalClueCalls = 0;
   /** Журнал выданных ссылок на ассеты: путь → параметры (для отдачи «файла»). */
-  assets = new Map<
-    string,
-    { kind: "audio" | "image"; seconds: number; blur: number; seed: number }
-  >();
+  assets = new Map<string, Asset>();
+  /** Лучшие результаты пользователей по режимам (рекорды, D11). */
+  records = new Map<string, number>();
   private seq = 0;
   now: () => Date = () => new Date();
 
@@ -322,10 +484,13 @@ export class MockWorld {
     this.sessions.clear();
     this.idempotency.clear();
     this.assets.clear();
+    this.records.clear();
     this.scenario = {};
     this.revokedRefresh.clear();
     this.refreshCalls = 0;
-    this.users = this.users.slice(0, 1);
+    this.finalClueCalls = 0;
+    this.users = BASE_USERS.map((u) => ({ ...u }));
+    this.ugc.reset();
     this.seq = 0;
   }
 
@@ -342,8 +507,18 @@ export class MockWorld {
     return nextMidnight(this.now()).toISOString();
   }
 
+  /** Конец недели периода сетки (мок: через 7 дней после ближайшей полуночи). */
+  nextWeekResetAt(): string {
+    return new Date(nextMidnight(this.now()).getTime() + 6 * 86_400_000).toISOString();
+  }
+
+  /** Режим по ключу, включая шаблоны сборников (`GET /v1/modes?kind=collection`). */
   mode(key: string): ModeOut | undefined {
-    return MODES.find((m) => m.key === key);
+    return MODES.find((m) => m.key === key) ?? COLLECTION_MODES.find((m) => m.key === key);
+  }
+
+  isScheduled(m: ModeOut): boolean {
+    return SCHEDULED.has(m.source_type);
   }
 
   dailyFor(subject: string, modeKey: string): MockSession | undefined {
@@ -353,54 +528,160 @@ export class MockWorld {
     );
   }
 
-  startSession(subject: string, mode: ModeOut, presetId: string | null): MockSession {
-    let ids: string[];
-    if (mode.source_type === "daily") {
-      ids = DAILY_SETS[mode.key] ?? [];
-    } else {
-      const filter = presetId ? PRESET_FILTERS[presetId] : undefined;
-      const pool = ITEMS.filter((i) => i.domain === mode.domain && (!filter || filter(i)));
-      ids = Array.from({ length: mode.rounds }, (_, k) => pool[k % pool.length]!.id);
+  // ------------------------------------------------------------------ персоны (марафон)
+
+  /** Персоны режима с ролью из `start.subject.roles` (как `GET /v1/modes/{key}/subjects`). */
+  subjects(m: ModeOut, q: string, limit: number) {
+    const roles = m.start?.subject?.roles ?? [];
+    const byPerson = new Map<string, { name: string; role: string; items: number }>();
+    for (const i of ITEMS) {
+      if (i.domain !== m.domain || !roles.includes(i.person.role)) continue;
+      const p = byPerson.get(i.person.name) ?? {
+        name: i.person.name,
+        role: i.person.role,
+        items: 0,
+      };
+      p.items += 1;
+      byPerson.set(i.person.name, p);
     }
+    const needle = q.trim().toLowerCase();
+    return [...byPerson.values()]
+      .filter((p) => !needle || p.name.toLowerCase().includes(needle))
+      .sort((a, b) => b.items - a.items || a.name.localeCompare(b.name))
+      .slice(0, limit)
+      .map((p) => ({ subject_id: personId(p.name), name: p.name, role: p.role, items: p.items }));
+  }
+
+  // ------------------------------------------------------------------ старт
+
+  startSession(
+    subject: string,
+    m: ModeOut,
+    presetId: string | null,
+    subjectIds: string[] = [],
+    collection: { id: string; version: number; itemIds: string[] } | null = null,
+  ): MockSession {
+    const pool = ITEMS.filter((i) => i.domain === m.domain);
     const session: MockSession = {
       id: this.nextId(1),
       subject,
-      mode,
-      day: mode.source_type === "daily" ? this.today() : null,
+      mode: m,
+      day: this.isScheduled(m) ? this.today() : null,
       version: 0,
       status: "active",
       current: 0,
-      rounds: ids.map((itemId, index) => ({
-        index,
-        itemId,
-        status: index === 0 ? "active" : "pending",
-        level: 1,
-        guesses: [],
-        partialLevel: null,
-        outcome: null,
-        points: null,
-      })),
+      rounds: [],
+      lives: LIVES[m.source_type] ?? null,
+      collection: collection ? { id: collection.id, version: collection.version } : null,
     };
+    if (collection) {
+      session.rounds = collection.itemIds.map((id, k) => blank(k, id));
+    } else if (m.source_type === "daily") {
+      session.rounds = (DAILY_SETS[m.key] ?? []).map((id, i) => blank(i, id));
+    } else if (m.source_type === "marathon") {
+      const names = new Set(subjectIds);
+      session.rounds = pool
+        .filter((i) => names.has(personId(i.person.name)))
+        .sort((a, b) => a.year - b.year)
+        .map((i, k) => blank(k, i.id));
+    } else if (m.source_type === "pair") {
+      // Цепочка: опорная единица раунда — загаданная прошлого.
+      session.rounds = pool.slice(1).map((target, k) => {
+        const r = blank(k, target.id);
+        r.shown = [pool[k]!.id];
+        r.options = [
+          { option_id: "higher", label_key: "game.options.higher", itemId: null },
+          { option_id: "lower", label_key: "game.options.lower", itemId: null },
+        ];
+        return r;
+      });
+    } else if (m.source_type === "bracket") {
+      const seeds = pool.slice(0, BRACKET_SIZE);
+      session.rounds = Array.from({ length: BRACKET_SIZE - 1 }, (_, k) => blank(k, ""));
+      for (let k = 0; k < BRACKET_SIZE / 2; k++)
+        this.fillPair(session.rounds[k]!, seeds[2 * k]!.id, seeds[2 * k + 1]!.id, BRACKET_SIZE);
+    } else {
+      const filter = presetId ? PRESET_FILTERS[presetId] : undefined;
+      const picked = pool.filter((i) => !filter || filter(i));
+      session.rounds = Array.from({ length: m.rounds }, (_, k) =>
+        blank(k, picked[k % picked.length]!.id),
+      );
+    }
     this.sessions.set(session.id, session);
     return session;
   }
 
+  private fillPair(r: Round, a: string, b: string, stage: number): void {
+    r.itemId = a;
+    r.stage = stage;
+    r.shown = [a, b];
+    r.options = [
+      { option_id: "a", label_key: null, itemId: a },
+      { option_id: "b", label_key: null, itemId: b },
+    ];
+  }
+
   // ------------------------------------------------------------------ ходы
+
+  lostLives(s: MockSession, untilIndex = Infinity): number {
+    return s.rounds.filter((r) => r.index <= untilIndex && r.outcome && LOST.has(r.outcome)).length;
+  }
 
   private closeRound(s: MockSession, r: Round, outcome: NonNullable<Round["outcome"]>): void {
     r.status = outcome === "void" ? "void" : "finished";
     r.outcome = outcome;
-    if (outcome === "exact") r.points = POINTS[r.level - 1] ?? 0;
+    const streak = s.mode.presentation === "streak";
+    const bracket = s.mode.presentation === "bracket";
+    if (bracket) r.points = 0;
+    else if (outcome === "exact") r.points = streak ? 1 : (POINTS[r.level - 1] ?? 0);
     else if (outcome === "partial" && r.partialLevel)
       r.points = Math.floor((POINTS[r.partialLevel - 1] ?? 0) * PARTIAL_RATIO);
     else r.points = 0;
+    const outOfLives = s.lives !== null && this.lostLives(s) >= s.lives;
     const next = s.rounds.find((x) => x.index === r.index + 1);
-    if (next) {
+    if (next && !outOfLives) {
+      if (bracket && next.options.length === 0) this.advanceBracket(s, r, next);
       next.status = "active";
       s.current = next.index;
     } else {
+      // Ранний конец (жизни кончились): невыданный план отбрасывается (D4).
+      s.rounds = s.rounds.filter((x) => x.status !== "pending");
       s.status = "finished";
+      this.saveRecord(s);
+      this.markCompleted(s);
     }
+  }
+
+  /**
+   * Следующий тур сетки целиком: победители завершённого тура парами по порядку
+   * (`ProgressiveSource.followups`). Вызывается, когда сыгран последний раунд тура.
+   */
+  private advanceBracket(s: MockSession, closed: Round, next: Round): void {
+    const winners = s.rounds
+      .filter((x) => x.stage === closed.stage)
+      .map((x) => x.picked ?? x.itemId);
+    const stage = winners.length;
+    for (let k = 0; k < stage / 2; k++) {
+      const round = s.rounds.find((x) => x.index === next.index + k);
+      if (round) this.fillPair(round, winners[2 * k]!, winners[2 * k + 1]!, stage);
+    }
+  }
+
+  /** «Пройден» (как consumer `GameFinished` в collections): только пользователь и не автор. */
+  private markCompleted(s: MockSession): void {
+    const c = s.collection ? this.ugc.find(s.collection.id) : undefined;
+    if (!c || !s.subject.startsWith("user.") || this.ugc.isAuthor(c, s.subject)) return;
+    if (c.version !== s.collection!.version) return;
+    if (!c.completed.has(s.subject)) c.plays += 1;
+    c.completed.add(s.subject);
+  }
+
+  private saveRecord(s: MockSession): void {
+    if (!s.subject.startsWith("user.") || s.mode.presentation === "bracket") return;
+    const key = `${s.subject}:${s.mode.key}`;
+    const best = this.records.get(key);
+    const score = this.score(s);
+    if (best === undefined || score > best) this.records.set(key, score);
   }
 
   private advanceLevel(s: MockSession, r: Round): void {
@@ -414,8 +695,9 @@ export class MockWorld {
   guess(
     s: MockSession,
     r: Round,
-    answer: { media_item_id?: string; text?: string },
+    answer: { media_item_id?: string; text?: string; option_id?: string },
   ): "exact" | "partial" | "miss" {
+    if (answer.option_id !== undefined) return this.pick(s, r, answer.option_id);
     const target = itemById(r.itemId)!;
     const picked = answer.media_item_id ? itemById(answer.media_item_id) : undefined;
     const display = picked ? `${picked.title}` : (answer.text ?? "");
@@ -440,6 +722,31 @@ export class MockWorld {
     return result;
   }
 
+  /** Ответ выбором (`pick`): сравнение метрик (пара) или предпочтение (сетка — всегда верно). */
+  private pick(s: MockSession, r: Round, optionId: string): "exact" | "miss" {
+    const option = r.options.find((o) => o.option_id === optionId)!;
+    let result: "exact" | "miss" = "exact";
+    let display = option.label_key ?? optionId;
+    if (option.itemId) {
+      r.picked = option.itemId;
+      display = itemById(option.itemId)?.title ?? optionId;
+    } else {
+      const shown = itemById(r.shown[0]!)!;
+      const target = itemById(r.itemId)!;
+      const higher = metricOf(target) >= metricOf(shown);
+      result = (optionId === "higher") === higher ? "exact" : "miss";
+    }
+    r.guesses.push({ kind: "option", display, result });
+    this.closeRound(s, r, result);
+    s.version += 1;
+    return result;
+  }
+
+  /** Доля согласных с выбором (сетка): детерминированно по раунду. */
+  agreePct(r: Round): number {
+    return 35 + ((r.index * 17) % 50);
+  }
+
   skip(s: MockSession, r: Round): void {
     r.guesses.push({ kind: "skip", display: "", result: null });
     this.advanceLevel(s, r);
@@ -456,24 +763,113 @@ export class MockWorld {
     s.version += 1;
   }
 
-  // ------------------------------------------------------------------ представления
+  // ------------------------------------------------------------------ ассеты
 
-  assetUrl(kind: "audio" | "image", seconds: number, blur: number, seed: number): string {
+  private register(asset: Asset, seed: number, ext: string): string {
     const hex = (this.seq * 7919 + seed * 104729 + this.assets.size).toString(16).padStart(16, "0");
-    const path = `/media/a/${hex}.${kind === "audio" ? "wav" : "svg"}`;
-    this.assets.set(path, { kind, seconds, blur, seed });
+    const path = `/media/a/${hex}.${ext}`;
+    this.assets.set(path, asset);
     const expires = Math.floor(this.now().getTime() / 1000) + 60;
     return `${path}?md5=mock&expires=${expires}`;
   }
 
-  finalClue(s: MockSession, r: Round) {
-    const kind = s.mode.domain === "music" ? ("audio" as const) : ("image" as const);
+  assetUrl(kind: "audio" | "image", seconds: number, blur: number, seed: number): string {
+    return this.register({ kind, seconds, blur, seed }, seed, kind === "audio" ? "wav" : "svg");
+  }
+
+  /** Ссылка, которая уже не работает (подпись истекла): файл по ней — 403. */
+  staleUrl(kind: "audio" | "image", seed: number): string {
+    const expires = Math.floor(this.now().getTime() / 1000) - 1;
+    return `/media/a/stale${seed}.${kind === "audio" ? "wav" : "svg"}?md5=mock&expires=${expires}`;
+  }
+
+  /** JSON-ассет текстовой загадки уровня (`text_asset.v1`). */
+  textAsset(m: ModeOut, item: MockItem, level: number): unknown {
+    const n = Number(item.id.slice(-3));
+    if (m.clue_type === "emoji") {
+      const count = EMOJI_COUNTS[level - 1];
+      const all = EMOJI[item.genres[0] ?? ""] ?? ["🎬"];
+      return {
+        version: 1,
+        blocks: [{ kind: "emoji", text: all.slice(0, count ?? undefined).join("") }],
+      };
+    }
+    const fields = DESCRIPTION_FIELDS.slice(0, level).flat();
+    const blocks: unknown[] = [];
+    const items: { field: string; value: string }[] = [];
+    for (const f of fields) {
+      if (f === "tagline") blocks.push({ kind: "tagline", text: `Синтетическая история №${n}` });
+      else if (f === "plot_masked")
+        blocks.push({ kind: "plot", text: `Герой ███ отправляется туда, откуда не возвращаются.` });
+      else if (f === "year") items.push({ field: "year", value: String(item.year) });
+      else if (f === "genres") items.push({ field: "genres", value: item.genres.join(", ") });
+      else if (f === "country") items.push({ field: "country", value: "СССР" });
+      else if (f === "director") items.push({ field: "director", value: item.person.name });
+      else if (f === "cast_top3") items.push({ field: "cast_top3", value: "А. Актёр, Б. Актриса" });
+    }
+    if (items.length) blocks.push({ kind: "fields", items });
+    return { version: 1, blocks };
+  }
+
+  /** Выдача ассета уровня (`POST .../clue`). */
+  levelClue(s: MockSession, r: Round, level: number) {
+    const hint = s.mode.levels[level - 1]?.hint ?? {};
+    const kind = clueKindOf(s.mode);
+    const expires_at = new Date(this.now().getTime() + 60_000).toISOString();
+    if (kind === "text") {
+      const item = itemById(r.itemId)!;
+      return {
+        level,
+        kind,
+        url: this.register(
+          { kind: "text", body: this.textAsset(s.mode, item, level) },
+          r.index + 1,
+          "json",
+        ),
+        expires_at,
+        mime: "application/json",
+        meta:
+          s.mode.clue_type === "emoji"
+            ? { count: (hint.count as number | null) ?? null }
+            : { fields: (hint.fields as string[]) ?? [] },
+      };
+    }
+    const seconds = Number(hint.seconds ?? 0);
+    const blur = Number(hint.blur_px ?? 0);
+    // Последовательность кадров: каждый уровень — другой кадр (другой «сид» картинки).
+    const seed = r.index + 1 + (hint.frame ? Number(hint.frame) * 11 : 0);
+    // Поля meta — hint_fields загадки ядра (как отдаёт game).
+    const meta =
+      kind === "audio"
+        ? { seconds }
+        : hint.frame
+          ? { frame: Number(hint.frame) }
+          : { blur_px: blur, crop: hint.crop == null ? null : Number(hint.crop) };
+    return {
+      level,
+      kind,
+      url: this.assetUrl(kind, seconds, blur, seed),
+      expires_at,
+      mime: kind === "audio" ? "audio/wav" : "image/svg+xml",
+      meta,
+    };
+  }
+
+  finalClue(s: MockSession, r: Round, fresh = false) {
+    const kind = revealKindOf(s.mode);
+    const stale = this.scenario.staleRevealLinks && !fresh;
     return {
       kind,
-      url: this.assetUrl(kind, 15, 0, r.index + 1),
+      url: stale ? this.staleUrl(kind, r.index + 1) : this.assetUrl(kind, 15, 0, r.index + 1),
       expires_at: new Date(this.now().getTime() + 60_000).toISOString(),
       mime: kind === "audio" ? "audio/wav" : "image/svg+xml",
     };
+  }
+
+  /** Свежая ссылка ревила (`POST .../rounds/{i}/final-clue`). */
+  freshFinalClue(s: MockSession, r: Round) {
+    this.finalClueCalls += 1;
+    return { level: r.level, ...this.finalClue(s, r, true), meta: {} };
   }
 
   reveal(s: MockSession, r: Round) {
@@ -483,12 +879,52 @@ export class MockWorld {
       title: item.title,
       year: item.year,
       persons: [{ name: item.person.name, role: item.person.role }],
+      metric: s.mode.source_type === "pair" ? metricOf(item) : null,
       final_clue: this.finalClue(s, r),
+    };
+  }
+
+  // ------------------------------------------------------------------ представления
+
+  private shownOut(s: MockSession, r: Round) {
+    return r.shown.map((id) => {
+      const item = itemById(id)!;
+      const option = r.options.find((o) => o.itemId === id);
+      return {
+        option_id: option?.option_id ?? null,
+        title: item.title,
+        year: item.year,
+        // Метрика — только у опорной единицы пары (без варианта).
+        metric: s.mode.source_type === "pair" && !option ? metricOf(item) : null,
+        clue: {
+          kind: "image" as const,
+          url: this.assetUrl("image", 0, 0, Number(id.slice(-3))),
+          expires_at: new Date(this.now().getTime() + 60_000).toISOString(),
+          mime: "image/svg+xml",
+        },
+      };
+    });
+  }
+
+  private progress(s: MockSession, r: Round): RoundOut["progress"] {
+    const closed = r.status === "finished" || r.status === "void";
+    const until = closed ? r.index : r.index - 1;
+    const streakOf = () => {
+      let n = 0;
+      for (const x of s.rounds.filter((x) => x.index <= until))
+        n = x.outcome === "exact" ? n + 1 : 0;
+      return n;
+    };
+    return {
+      lives_left: s.lives === null ? null : Math.max(0, s.lives - this.lostLives(s, until)),
+      streak: s.mode.presentation === "streak" ? streakOf() : null,
+      stage: r.stage,
     };
   }
 
   roundOut(s: MockSession, r: Round): RoundOut {
     const closed = r.status === "finished" || r.status === "void";
+    const pending = r.status === "pending";
     return {
       index: r.index,
       status: r.status,
@@ -497,14 +933,31 @@ export class MockWorld {
       guesses: r.guesses,
       points: closed ? r.points : null,
       reveal: closed && r.status !== "void" ? this.reveal(s, r) : null,
+      // Невыданный раунд — без состава (D4).
+      shown: pending ? [] : this.shownOut(s, r),
+      options: pending
+        ? []
+        : r.options.map((o) => ({
+            option_id: o.option_id,
+            label_key: o.label_key,
+            title: o.itemId ? (itemById(o.itemId)?.title ?? null) : null,
+          })),
+      progress: pending ? null : this.progress(s, r),
     };
   }
 
   maxScore(s: MockSession): number {
+    if (s.mode.presentation === "bracket") return 0;
+    if (s.mode.presentation === "streak") return this.score(s);
     return s.rounds.filter((r) => r.status !== "void").length * (POINTS[0] ?? 0);
   }
 
   score(s: MockSession): number {
+    if (s.mode.presentation === "streak") {
+      let n = 0;
+      for (const r of s.rounds) if (r.outcome) n = r.outcome === "exact" ? n + 1 : 0;
+      return n;
+    }
     return s.rounds.reduce((acc, r) => acc + (r.points ?? 0), 0);
   }
 
@@ -540,8 +993,28 @@ export class MockWorld {
     return `OnCue ${s.mode.key} ${s.day ?? ""}\n${this.score(s)}/${this.maxScore(s)}\n${lines.join("\n")}`;
   }
 
+  record(s: MockSession) {
+    if (!s.subject.startsWith("user.") || s.mode.presentation === "bracket") return null;
+    const best = this.records.get(`${s.subject}:${s.mode.key}`) ?? this.score(s);
+    return { best, is_new: this.score(s) >= best && this.score(s) > 0, percentile: 72.5 };
+  }
+
+  bracket(s: MockSession) {
+    if (s.mode.presentation !== "bracket") return null;
+    const title = (id: string) => itemById(id)?.title ?? "";
+    const picks = s.rounds
+      .filter((r) => r.picked && r.stage)
+      .map((r) => ({
+        stage: r.stage!,
+        winner: title(r.picked!),
+        loser: title(r.shown.find((id) => id !== r.picked) ?? ""),
+      }));
+    return picks.length ? { champion: picks.at(-1)!.winner, picks } : null;
+  }
+
   result(s: MockSession): SessionResult {
     return {
+      presentation: s.mode.presentation ?? "score",
       score: this.score(s),
       max_score: this.maxScore(s),
       rounds: s.rounds.map((r) => ({
@@ -552,31 +1025,39 @@ export class MockWorld {
         reveal: r.status === "void" ? null : this.reveal(s, r),
       })),
       share: { text: this.shareText(s) },
-      daily_stats: s.day
-        ? s.rounds.map((r) => ({ index: r.index, exact_pct: DAILY_EXACT_PCT[r.index] ?? 0 }))
-        : null,
+      daily_stats:
+        s.day && s.mode.source_type === "daily"
+          ? s.rounds.map((r) => ({ index: r.index, exact_pct: DAILY_EXACT_PCT[r.index] ?? 0 }))
+          : null,
+      record: this.record(s),
+      bracket: this.bracket(s),
+      collection: s.collection,
     };
   }
 
-  dailyStatus(subject: string | null, mode: ModeOut): DailyStatus {
-    const s = subject ? this.dailyFor(subject, mode.key) : undefined;
+  dailyStatus(subject: string | null, m: ModeOut): DailyStatus {
+    const s = subject ? this.dailyFor(subject, m.key) : undefined;
     return {
-      mode_key: mode.key,
+      mode_key: m.key,
       day: this.today(),
       status: !s ? "not_started" : s.status === "finished" ? "finished" : "in_progress",
       session_id: s?.id ?? null,
       score: s && s.status === "finished" ? this.score(s) : null,
-      max_score: mode.rounds * (POINTS[0] ?? 0),
-      next_reset_at: this.nextResetAt(),
+      max_score: m.presentation === "bracket" ? 0 : m.rounds * (POINTS[0] ?? 0),
+      next_reset_at: WEEKLY.has(m.source_type) ? this.nextWeekResetAt() : this.nextResetAt(),
     };
   }
 
-  dailyCards(subject: string | null): DailyCard[] {
-    return MODES.filter((m) => m.source_type === "daily").map((m) => ({
-      ...this.dailyStatus(subject, m),
-      domain: m.domain,
-      title_key: m.title_key,
-    }));
+  /** Плановые режимы: `weekly` — сетка (bff кладёт её в блок `weekly`), иначе — дейлики. */
+  dailyCards(subject: string | null, weekly = false): DailyCard[] {
+    return MODES.filter((m) => this.isScheduled(m) && WEEKLY.has(m.source_type) === weekly).map(
+      (m) => ({
+        ...this.dailyStatus(subject, m),
+        domain: m.domain,
+        title_key: m.title_key,
+        presentation: m.presentation ?? "score",
+      }),
+    );
   }
 
   modeCards(filter: (m: ModeOut) => boolean = () => true) {
@@ -589,12 +1070,51 @@ export class MockWorld {
       rounds: m.rounds,
       allow_guest: m.allow_guest,
       presets: m.presets ?? null,
+      answer_format: m.answer_format ?? "classic",
+      presentation: m.presentation ?? "score",
+      start: m.start ?? null,
     }));
+  }
+
+  /** Витрина bff: неплановые режимы группами по `(source_type, presentation)`. */
+  modeGroups(domain: string | null) {
+    const groups = new Map<string, ReturnType<MockWorld["modeCards"]>>();
+    for (const card of this.modeCards(
+      (m) => !this.isScheduled(m) && (!domain || m.domain === domain),
+    )) {
+      const key = `${card.source_type}|${card.presentation}`;
+      groups.set(key, [...(groups.get(key) ?? []), card]);
+    }
+    return [...groups.entries()].map(([key, modes]) => {
+      const [source_type, presentation] = key.split("|") as [
+        string,
+        "score" | "streak" | "bracket",
+      ];
+      return { source_type, presentation, modes };
+    });
+  }
+
+  /** Личные рекорды (bff `records`): только пользователю. */
+  recordCards(subject: string) {
+    return [...this.records.entries()]
+      .filter(([key]) => key.startsWith(`${subject}:`))
+      .map(([key, best]) => {
+        const m = this.mode(key.slice(subject.length + 1))!;
+        return {
+          mode_key: m.key,
+          domain: m.domain,
+          title_key: m.title_key,
+          presentation: m.presentation ?? "score",
+          best,
+          percentile: 72.5,
+          achieved_at: this.now().toISOString(),
+        };
+      });
   }
 
   resultsPage(s: MockSession): ResultsPage {
     const res = this.result(s);
-    const ids = [...new Set(s.rounds.map((r) => r.itemId))];
+    const ids = [...new Set(s.rounds.map((r) => r.itemId).filter(Boolean))];
     return {
       blocks: {
         result: {
@@ -605,6 +1125,9 @@ export class MockWorld {
             score: res.score,
             max_score: res.max_score,
             share_text: res.share.text,
+            presentation: res.presentation ?? "score",
+            record: res.record ?? null,
+            bracket: res.bracket ?? null,
             rounds: res.rounds.map((r) => ({
               index: r.index,
               outcome: r.outcome,
@@ -652,5 +1175,10 @@ export class MockWorld {
         year: i.year,
         subtitle: i.person.name,
       }));
+  }
+
+  /** Ассет по пути ссылки (для обработчика `/media/a/...`). */
+  asset(path: string): Asset | undefined {
+    return this.assets.get(path);
   }
 }

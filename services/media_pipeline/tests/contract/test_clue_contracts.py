@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from uuid import UUID
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -59,8 +60,74 @@ def test_builtin_profiles_match_clue_contracts() -> None:
         assert not list(clue_schema(profile.clue_type).iter_errors(profile.params_json()))
 
 
+def test_builtin_profiles_match_golden_params_hash() -> None:
+    """Профили ``profile:<clue>:<profile>`` из golden-файла есть в конфиге с тем же хэшем:
+    по этим хэшам game (сиды режимов) находит ассеты."""
+    golden = json.loads((contracts_dir() / "clues" / "params_hash.golden.json").read_text())
+    expected = {
+        v["name"].removeprefix("profile:"): v["params_hash"]
+        for v in golden["vectors"]
+        if v["name"].startswith("profile:")
+    }
+    catalog = registry().build_catalog(read_profiles_document())
+    actual = {f"{p.clue_type}:{p.profile_key}": p.params_hash for p in catalog}
+    assert actual == expected
+
+
+def test_every_new_clue_type_has_default_profile() -> None:
+    catalog = registry().build_catalog(read_profiles_document())
+    with_default = {p.clue_type for p in catalog if p.profile_key == "default"}
+    assert with_default == registry().clue_types
+
+
 # Одноуровневые примеры: монотонность (правило домена сверх контракта) не участвует.
+_AUDIO_SAMPLES: list[Any] = [
+    {"levels": [{"seconds": 1}]},
+    {"levels": [{"seconds": 0.5}], "start_s": 30},
+    {"levels": [{"seconds": 60.01}]},
+    {"levels": [{"seconds": 0}]},
+    {"levels": [{"seconds": 1}], "start_s": -1},
+    {"levels": [{"seconds": 1}] * 21},
+    {"levels": [], "start_s": 0},
+    {"levels": [{"seconds": 1}], "x": 1},
+]
 SAMPLES: dict[str, list[Any]] = {
+    "audio_reverse": _AUDIO_SAMPLES,
+    "soundtrack": _AUDIO_SAMPLES,
+    "audio_blackout": _AUDIO_SAMPLES,
+    "frame_sequence": [
+        {"levels": [{"frame": 1, "max_width": 960}]},
+        {"levels": [{"frame": 6, "max_width": 64}]},
+        {"levels": [{"frame": 0, "max_width": 960}]},
+        {"levels": [{"frame": 7, "max_width": 960}]},
+        {"levels": [{"frame": 1, "max_width": 63}]},
+        {"levels": [{"frame": 1}]},
+        {"levels": [{"frame": 1.5, "max_width": 960}]},
+        {"levels": [{"frame": 1, "max_width": 960, "blur_px": 1}]},
+        {"levels": []},
+    ],
+    "description": [
+        {"levels": [{"fields": ["plot_masked"]}]},
+        {"levels": [{"fields": ["year", "genres", "country", "director", "cast_top3"]}]},
+        {"levels": [{"fields": ["tagline"]}]},
+        {"levels": [{"fields": []}]},
+        {"levels": [{"fields": ["title"]}]},
+        {"levels": [{"fields": ["year", "year"]}]},
+        {"levels": [{"fields": "year"}]},
+        {"levels": [{"fields": ["year"]}] * 11},
+        {"levels": [{"fields": ["year"], "x": 1}]},
+    ],
+    "emoji": [
+        {"levels": [{"count": 1}]},
+        {"levels": [{"count": 12}]},
+        {"levels": [{"count": None}]},
+        {"levels": [{"count": 0}]},
+        {"levels": [{"count": 13}]},
+        {"levels": [{"count": 1.5}]},
+        {"levels": [{}]},
+        {"levels": [{"count": "2"}]},
+        {"levels": []},
+    ],
     "audio_intro": [
         {"levels": [{"seconds": 1}]},
         {"levels": [{"seconds": 0.5}], "start_s": 12.5},
@@ -117,7 +184,11 @@ def test_params_models_agree_with_json_schema(clue_type: str, sample: Any) -> No
 
 # ---------------------------------------------------------------- события
 def test_consumes_catalog_topic_and_examples() -> None:
-    assert CONSUMED_TOPICS == ("catalog.media_item.v1",)
+    assert CONSUMED_TOPICS == (
+        "catalog.media_item.v1",
+        "game.mode_config.v1",
+        "collections.collection.v1",
+    )
     for event_type in (ITEM_CREATED, ITEM_UPDATED):
         envelope = load_example(event_type)
         assert envelope.topic in CONSUMED_TOPICS
@@ -127,6 +198,22 @@ def test_consumes_catalog_topic_and_examples() -> None:
         envelope = load_example(event_type)
         assert envelope.topic in CONSUMED_TOPICS
         _StatusPayload.model_validate(envelope.payload)
+
+
+def test_consumes_clue_assets_requested_example() -> None:
+    from media_pipeline_service.domain.params import params_hash
+    from media_pipeline_service.infrastructure.messaging import (
+        CLUE_ASSETS_REQUESTED,
+        _ClueAssetsRequestedPayload,
+    )
+
+    envelope = load_example(CLUE_ASSETS_REQUESTED)
+    assert envelope.topic in CONSUMED_TOPICS
+    parsed = _ClueAssetsRequestedPayload.model_validate(envelope.payload)
+    schema = load_event_schema(CLUE_ASSETS_REQUESTED)
+    assert set(schema["required"]) <= set(type(parsed).model_fields)
+    # хэш примера считается тем же алгоритмом, что и у media (golden params_hash)
+    assert params_hash(parsed.params) == parsed.params_hash
 
 
 def test_snapshot_parser_covers_schema_enums() -> None:
@@ -153,6 +240,82 @@ def test_snapshot_parser_covers_schema_enums() -> None:
         _SnapshotPayload.model_validate({**load_example(ITEM_CREATED).payload, "domain": domain})
 
 
+def test_unknown_source_kinds_are_skipped_not_rejected() -> None:
+    """Виды исходников, которые catalog начнёт публиковать раньше, чем media их научится
+    обрабатывать, пропускаются; новые поля этапа 3a (position, source_url, license_note)
+    разбираются."""
+    from media_pipeline_service.infrastructure.messaging import known_sources
+
+    payload = {
+        **load_example(ITEM_CREATED).payload,
+        "source_media": [
+            {
+                "source_media_ref": f"0192a3b4-c5d6-7e8f-9a0b-00000000030{i}",
+                "kind": kind,
+                "origin": "upload",
+                "uri": "https://image.tmdb.org/x.jpg",
+                "position": i + 1,
+                "source_url": "https://example.org/a",
+                "license_note": "CC BY 4.0",
+            }
+            for i, kind in enumerate(("frame", "soundtrack", "audio_clip", "hologram"))
+        ],
+    }
+    parsed = _SnapshotPayload.model_validate(payload)
+    sources = known_sources(parsed.source_media)
+    assert [s.kind for s in sources] == ["frame", "soundtrack", "audio_clip"]
+    assert [s.position for s in sources] == [1, 2, 3]
+    assert {(s.source_url, s.license_note) for s in sources} == {
+        ("https://example.org/a", "CC BY 4.0")
+    }
+
+
+def test_consumes_collection_examples() -> None:
+    """``collections.collection.v1`` (ADR 0029): снимок сборника и удаление разбираются,
+    ``CollectionLiked`` сервису не нужен; разбор знает все значения перечислений схемы."""
+    from media_pipeline_service.infrastructure.messaging import (
+        COLLECTION_DELETED,
+        COLLECTION_PUBLISHED,
+        COLLECTION_UPDATED,
+        _CollectionDeletedPayload,
+        _CollectionSnapshotPayload,
+        build_event_handlers,
+    )
+
+    for event_type in (COLLECTION_PUBLISHED, COLLECTION_UPDATED):
+        envelope = load_example(event_type)
+        assert envelope.topic in CONSUMED_TOPICS
+        parsed = _CollectionSnapshotPayload.model_validate(envelope.payload)
+        snapshot = parsed.snapshot()
+        assert snapshot.collection_id == UUID(envelope.aggregate_id)
+        assert [i.media_item_id for i in snapshot.items] == [
+            UUID(i["media_item_id"])
+            for i in sorted(envelope.payload["items"], key=lambda i: i["position"])
+        ]
+        emoji = {
+            i["media_item_id"]: i["custom"]["emoji"]
+            for i in envelope.payload["items"]
+            if "custom" in i
+        }
+        assert {str(i.media_item_id): i.emoji for i in snapshot.items if i.emoji} == emoji
+        schema = load_event_schema(event_type)
+        assert set(schema["required"]) >= {"collection_id", "version", "domain", "status", "items"}
+        for status in schema["properties"]["status"]["enum"]:
+            for domain in schema["properties"]["domain"]["enum"]:
+                _CollectionSnapshotPayload.model_validate(
+                    {**envelope.payload, "status": status, "domain": domain}
+                )
+    deleted = load_example(COLLECTION_DELETED)
+    assert deleted.topic in CONSUMED_TOPICS
+    _CollectionDeletedPayload.model_validate(deleted.payload)
+
+    container = MediaContainer(Infrastructure(settings=Settings(), tables=TABLES))
+    registry = build_event_handlers(container)
+    handled = {COLLECTION_PUBLISHED, COLLECTION_UPDATED, COLLECTION_DELETED}
+    assert all(registry.get(t) is not None for t in handled)
+    assert registry.get("collections.CollectionLiked") is None
+
+
 def test_produced_event_fields_are_declared() -> None:
     from dataclasses import fields
 
@@ -161,5 +324,75 @@ def test_produced_event_fields_are_declared() -> None:
     for event_cls, name in ((AssetsReady, "AssetsReady"), (AssetsFailed, "AssetsFailed")):
         schema = load_event_schema(f"media_pipeline.{name}")
         declared = {f.name for f in fields(event_cls)} - {"aggregate_id"}
-        assert declared == set(schema["required"]) == set(schema["properties"])
+        # Все поля схемы публикуются (включая необязательный `scope`, ADR 0029), лишних нет.
+        assert set(schema["required"]) <= declared == set(schema["properties"])
         assert event_cls.aggregate_type == schema["x-aggregate-type"]
+
+
+@pytest.mark.parametrize("scoped", [False, True])
+def test_produced_events_with_and_without_scope_match_schema(scoped: bool) -> None:
+    """``AssetsReady``/``AssetsFailed`` каталожного набора (``scope: null``) и набора сборника
+    проходят схему; пример `collection` совпадает по форме ``scope``."""
+    from media_pipeline_service.domain.asset_set import AssetsFailed, AssetsReady
+    from media_pipeline_service.domain.sources import AssetScope
+
+    from gv_core import uuid7
+
+    scope = AssetScope.collection(uuid7()) if scoped else None
+    common = {
+        "aggregate_id": str(uuid7()),
+        "asset_set_id": uuid7(),
+        "media_item_id": uuid7(),
+        "clue_type": "emoji",
+        "profile_key": "default",
+        "version": 7,
+        "scope": scope,
+    }
+    events = (
+        ("AssetsReady", AssetsReady(**common, params_hash="a" * 64, levels_count=6)),
+        (
+            "AssetsFailed",
+            AssetsFailed(**common, error_code="text.field_missing", retryable=False, attempts=1),
+        ),
+    )
+    for name, event in events:
+        validator = Draft202012Validator(load_event_schema(f"media_pipeline.{name}"))
+        payload = event.payload()
+        errors = [e.message for e in validator.iter_errors(payload)]
+        assert not errors, (name, errors)
+        example = load_example(f"media_pipeline.{name}", variant="collection").payload
+        if scoped:
+            assert set(payload["scope"]) == set(example["scope"]) == {"kind", "id"}
+            assert payload["scope"]["kind"] == example["scope"]["kind"]
+        else:
+            assert payload["scope"] is None
+
+
+# ---------------------------------------------------------------- JSON-ассеты текстов (ADR 0024)
+async def test_text_assets_match_text_asset_contract() -> None:
+    from media_pipeline_service.application.generators import DescriptionGenerator, EmojiGenerator
+    from media_pipeline_service.domain.texts import text_content
+
+    schema = json.loads((contracts_dir() / "clues" / "text_asset.v1.json").read_text())
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+    content = text_content(
+        clue_texts={"plot_masked": "Сюжет " * 500, "tagline": "Слоган", "emoji": "🚀🌌⏳🇷🇺🎬🧑‍🚀🕳️"},
+        year=2014,
+        genres=["фантастика"] * 200,
+        countries=["US"],
+        directors=["Режиссёр"],
+        cast=["А", "Б", "В"],
+    )
+    source = [json.dumps(content).encode()]
+    catalog = registry().build_catalog(read_profiles_document())
+    for generator, clue_type in (
+        (DescriptionGenerator(), "description"),
+        (EmojiGenerator(), "emoji"),
+    ):
+        for profile in catalog:
+            if profile.clue_type != clue_type:
+                continue
+            for asset in await generator.generate(source, profile.params):
+                errors = [e.message for e in validator.iter_errors(json.loads(asset.data))]
+                assert not errors, (clue_type, profile.profile_key, errors)

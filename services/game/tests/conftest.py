@@ -133,17 +133,27 @@ class GameService:
         artist: tuple[UUID, str] | None = None,
         ready_for: str | None = None,
         version: int = 1,
+        persons: Sequence[tuple[UUID, str, str]] = (),
+        metrics: dict[str, float] | None = None,
+        reveal: bool = False,
     ) -> UUID:
-        """Единица каталога (событие catalog) и, если задан режим, готовые ассеты под него."""
+        """Единица каталога (событие catalog) и, если задан режим, готовые ассеты под него.
+
+        Args:
+            persons: Персоны ``(person_id, имя, роль)`` сверх ``artist``.
+            metrics: ``metrics`` события catalog (``vote_average`` …).
+            reveal: Готовы и ассеты ревила другого типа (``clue.reveal`` режима).
+        """
         item_id = uuid7()
         title = title or f"Тестовая единица {item_id.hex[-6:]}"
         base = load_example("catalog.MediaItemCreated")
         kind = "track" if domain == "music" else "film"
-        persons = (
-            [{"person_id": str(artist[0]), "name": artist[1], "role": "artist", "order": 0}]
-            if artist
-            else []
-        )
+        people = [(*artist, "artist")] if artist else []
+        people += list(persons)
+        person_list = [
+            {"person_id": str(pid), "name": name, "role": role, "order": i}
+            for i, (pid, name, role) in enumerate(people)
+        ]
         payload = {
             **base.payload,
             "media_item_id": str(item_id),
@@ -160,20 +170,31 @@ class GameService:
                     "kind": "title",
                 }
             ],
-            "persons": persons,
+            "persons": person_list,
             "genres": list(genres),
+            "metrics": dict(metrics) if metrics is not None else base.payload.get("metrics", {}),
         }
         envelope = base.model_copy(update={"aggregate_id": str(item_id), "payload": payload})
         assert await self.deliver(envelope) is Outcome.PROCESSED
         if ready_for is not None:
             await self.ready_assets(item_id, ready_for)
+            if reveal:
+                await self.ready_assets(item_id, ready_for, version=2, reveal=True)
         return item_id
 
     async def ready_assets(
-        self, item_id: UUID, mode_key: str, *, version: int = 1, body: dict[str, Any] | None = None
+        self,
+        item_id: UUID,
+        mode_key: str,
+        *,
+        version: int = 1,
+        body: dict[str, Any] | None = None,
+        reveal: bool = False,
     ) -> UUID:
-        """``AssetsReady`` под ``clue.params`` режима (D7)."""
+        """``AssetsReady`` под ``clue.params`` режима (D7) или ``clue.reveal.params``."""
         clue = (body or seed_body(mode_key))["clue"]
+        if reveal:
+            clue = clue["reveal"]
         base = load_example("media_pipeline.AssetsReady")
         asset_set_id = uuid7()
         payload = {

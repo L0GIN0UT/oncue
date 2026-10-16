@@ -1,6 +1,60 @@
 {
   "components": {
     "schemas": {
+      "Block_CollectionDetail_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[CollectionDetail]",
+        "type": "object"
+      },
+      "Block_CollectionResults_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionResults"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[CollectionResults]",
+        "type": "object"
+      },
       "Block_ResultSummary_": {
         "properties": {
           "data": {
@@ -26,6 +80,64 @@
           "status"
         ],
         "title": "Block[ResultSummary]",
+        "type": "object"
+      },
+      "Block_ShelfItems_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShelfItems"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[ShelfItems]",
+        "type": "object"
+      },
+      "Block_list_CollectionModeCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CollectionModeCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[CollectionModeCard]]",
         "type": "object"
       },
       "Block_list_DailyCard__": {
@@ -121,8 +233,769 @@
         "title": "Block[list[ModeCard]]",
         "type": "object"
       },
+      "Block_list_ModeGroup__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ModeGroup"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[ModeGroup]]",
+        "type": "object"
+      },
+      "Block_list_RecordCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RecordCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[RecordCard]]",
+        "type": "object"
+      },
+      "Block_list_ShelfCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ShelfCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[ShelfCard]]",
+        "type": "object"
+      },
+      "BracketPick": {
+        "description": "Выбор в сетке: тур и названия победителя и проигравшего.",
+        "properties": {
+          "loser": {
+            "title": "Loser",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "integer"
+          },
+          "winner": {
+            "title": "Winner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "winner",
+          "loser"
+        ],
+        "title": "BracketPick",
+        "type": "object"
+      },
+      "BracketSummary": {
+        "description": "Итог сетки: чемпион и выборы по турам.",
+        "properties": {
+          "champion": {
+            "title": "Champion",
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/BracketPick"
+            },
+            "title": "Picks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "champion",
+          "picks"
+        ],
+        "title": "BracketSummary",
+        "type": "object"
+      },
+      "CollectionAuthor": {
+        "description": "Автор сборника (``collections``): пользователь, «Guessverse» или удалённый.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "user",
+              "curator",
+              "deleted"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "CollectionAuthor",
+        "type": "object"
+      },
+      "CollectionBlocks": {
+        "description": "Блоки страницы сборника: недоступный game даёт ``modes: unavailable``.",
+        "properties": {
+          "collection": {
+            "$ref": "#/components/schemas/Block_CollectionDetail_"
+          },
+          "modes": {
+            "$ref": "#/components/schemas/Block_list_CollectionModeCard__"
+          }
+        },
+        "required": [
+          "collection",
+          "modes"
+        ],
+        "title": "CollectionBlocks",
+        "type": "object"
+      },
+      "CollectionCard": {
+        "description": "Карточка сборника в каталоге (``collections /v1/collections``), без состава.",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/CollectionAuthor"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionCover"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "title": "Default Mode Key",
+            "type": "string"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "plays_count": {
+            "minimum": 0.0,
+            "title": "Plays Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "title",
+          "tags",
+          "author",
+          "default_mode_key",
+          "items_count",
+          "likes_count",
+          "plays_count",
+          "published_at"
+        ],
+        "title": "CollectionCard",
+        "type": "object"
+      },
+      "CollectionCover": {
+        "description": "Обложка — пресет (градиент и эмодзи из ``collections /v1/meta``).",
+        "properties": {
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "title": "CollectionCover",
+        "type": "object"
+      },
+      "CollectionDetail": {
+        "description": "Сборник целиком (``collections /v1/collections/{id}``).",
+        "properties": {
+          "author": {
+            "$ref": "#/components/schemas/CollectionAuthor"
+          },
+          "collection_id": {
+            "format": "uuid",
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionCover"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_mode_key": {
+            "title": "Default Mode Key",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "difficulty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difficulty"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CollectionItemCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "items_visible": {
+            "title": "Items Visible",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "ugc",
+              "curated"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "likes_count": {
+            "minimum": 0.0,
+            "title": "Likes Count",
+            "type": "integer"
+          },
+          "plays_count": {
+            "minimum": 0.0,
+            "title": "Plays Count",
+            "type": "integer"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "published",
+              "hidden"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "unlisted"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection_id",
+          "domain",
+          "kind",
+          "title",
+          "tags",
+          "author",
+          "default_mode_key",
+          "items_count",
+          "likes_count",
+          "plays_count",
+          "published_at",
+          "visibility",
+          "status",
+          "version",
+          "items_visible"
+        ],
+        "title": "CollectionDetail",
+        "type": "object"
+      },
+      "CollectionItemCard": {
+        "description": "Единица состава: только если состав открыт субъекту (D6).",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "custom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CustomClueCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только автору"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "position": {
+            "minimum": 0.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "position",
+          "media_item_id",
+          "title",
+          "available"
+        ],
+        "title": "CollectionItemCard",
+        "type": "object"
+      },
+      "CollectionMe": {
+        "description": "Отношение пользователя к сборнику; гостю и анониму — ``me: null``.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "favorite": {
+            "title": "Favorite",
+            "type": "boolean"
+          },
+          "is_author": {
+            "default": false,
+            "title": "Is Author",
+            "type": "boolean"
+          },
+          "liked": {
+            "title": "Liked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "liked",
+          "favorite",
+          "completed"
+        ],
+        "title": "CollectionMe",
+        "type": "object"
+      },
+      "CollectionModeCard": {
+        "description": "Режим сборника (``game /v1/collections/{id}/modes``).",
+        "properties": {
+          "allow_guest": {
+            "title": "Allow Guest",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "playable": {
+            "minimum": 0.0,
+            "title": "Playable",
+            "type": "integer"
+          },
+          "round_options": {
+            "items": {
+              "enum": [
+                5,
+                10,
+                25,
+                "all"
+              ]
+            },
+            "title": "Round Options",
+            "type": "array"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode_key",
+          "title_key",
+          "clue_type",
+          "allow_guest",
+          "playable",
+          "total",
+          "available",
+          "round_options"
+        ],
+        "title": "CollectionModeCard",
+        "type": "object"
+      },
+      "CollectionPage": {
+        "description": "``GET /v1/pages/collections/{id}``.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/CollectionBlocks"
+          },
+          "me": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CollectionMe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "CollectionPage",
+        "type": "object"
+      },
+      "CollectionResults": {
+        "description": "Страница карточек по курсору; курсор привязан к сортировке блока.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CollectionCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Продолжение: `GET /v1/pages/collections?sort=<сортировка блока>&cursor=…` (с теми же фильтрами) вернёт блок `results`; null — дальше пусто",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CollectionResults",
+        "type": "object"
+      },
+      "CollectionsBlocks": {
+        "description": "Блоки каталога: без ``q`` и ``cursor`` — витрины, иначе только ``results``.\n\nОтсутствующий в этом виде страницы блок — ``null``.",
+        "properties": {
+          "featured": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_CollectionResults_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Рекомендуемые (sort=featured)"
+          },
+          "new": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_CollectionResults_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Новые (sort=new)"
+          },
+          "popular": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_CollectionResults_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Популярные (sort=popular)"
+          },
+          "results": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_CollectionResults_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Поиск (`q`) или продолжение по `cursor` в сортировке `sort`"
+          }
+        },
+        "title": "CollectionsBlocks",
+        "type": "object"
+      },
+      "CollectionsPage": {
+        "description": "``GET /v1/pages/collections``.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/CollectionsBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "CollectionsPage",
+        "type": "object"
+      },
+      "CustomClueCard": {
+        "description": "Своя загадка единицы (эмодзи); приходит только автору и админу.",
+        "properties": {
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          }
+        },
+        "title": "CustomClueCard",
+        "type": "object"
+      },
       "DailyCard": {
-        "description": "Карточка дейлика: режим + статус субъекта (``game /v1/modes`` + ``/v1/daily``).",
+        "description": "Карточка планового режима периода + статус субъекта (``game /v1/modes`` + ``/v1/daily``).\n\nДейлик — период «день», недельная сетка — «неделя»; ``day`` — начало периода,\n``next_reset_at`` — его конец.",
         "properties": {
           "day": {
             "format": "date",
@@ -148,6 +1021,16 @@
           "next_reset_at": {
             "format": "date-time",
             "title": "Next Reset At",
+            "type": "string"
+          },
+          "presentation": {
+            "default": "score",
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
             "type": "string"
           },
           "score": {
@@ -222,15 +1105,21 @@
         "description": "Блоки главной.",
         "properties": {
           "dailies": {
-            "$ref": "#/components/schemas/Block_list_DailyCard__"
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы дня (без недельной сетки)"
           },
           "modes": {
             "$ref": "#/components/schemas/Block_list_ModeCard__"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы недели (сетка)"
           }
         },
         "required": [
           "dailies",
-          "modes"
+          "modes",
+          "weekly"
         ],
         "title": "HomeBlocks",
         "type": "object"
@@ -327,12 +1216,74 @@
         "title": "ItemCard",
         "type": "object"
       },
+      "LibraryBlocks": {
+        "description": "Блоки медиатеки.",
+        "properties": {
+          "shelves": {
+            "$ref": "#/components/schemas/Block_list_ShelfCard__"
+          }
+        },
+        "required": [
+          "shelves"
+        ],
+        "title": "LibraryBlocks",
+        "type": "object"
+      },
+      "LibraryPage": {
+        "description": "``GET /v1/pages/library`` (только пользователь).",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/LibraryBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "LibraryPage",
+        "type": "object"
+      },
+      "LibraryShelfBlocks": {
+        "description": "Блоки страницы полки.",
+        "properties": {
+          "shelf": {
+            "$ref": "#/components/schemas/Block_ShelfItems_"
+          }
+        },
+        "required": [
+          "shelf"
+        ],
+        "title": "LibraryShelfBlocks",
+        "type": "object"
+      },
+      "LibraryShelfPage": {
+        "description": "``GET /v1/pages/library/{ref}`` (только пользователь).",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/LibraryShelfBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "LibraryShelfPage",
+        "type": "object"
+      },
       "ModeCard": {
         "description": "Карточка режима (из ``game /v1/modes``).",
         "properties": {
           "allow_guest": {
             "title": "Allow Guest",
             "type": "boolean"
+          },
+          "answer_format": {
+            "default": "classic",
+            "description": "Реестр ответов фронта",
+            "enum": [
+              "classic",
+              "pick"
+            ],
+            "title": "Answer Format",
+            "type": "string"
           },
           "clue_type": {
             "title": "Clue Type",
@@ -350,6 +1301,17 @@
             "title": "Key",
             "type": "string"
           },
+          "presentation": {
+            "default": "score",
+            "description": "Реестр итогов фронта",
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
           "presets": {
             "anyOf": [
               {
@@ -365,12 +1327,24 @@
             "title": "Presets"
           },
           "rounds": {
+            "description": "Число раундов; у марафона и пары — максимум",
             "title": "Rounds",
             "type": "integer"
           },
           "source_type": {
             "title": "Source Type",
             "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeStartCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — выбирать нечего"
           },
           "title_key": {
             "title": "Title Key",
@@ -387,6 +1361,55 @@
           "allow_guest"
         ],
         "title": "ModeCard",
+        "type": "object"
+      },
+      "ModeGroup": {
+        "description": "Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``.",
+        "properties": {
+          "modes": {
+            "items": {
+              "$ref": "#/components/schemas/ModeCard"
+            },
+            "title": "Modes",
+            "type": "array"
+          },
+          "presentation": {
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_type",
+          "presentation",
+          "modes"
+        ],
+        "title": "ModeGroup",
+        "type": "object"
+      },
+      "ModeStartCard": {
+        "description": "Что игрок выбирает перед стартом режима.",
+        "properties": {
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectPickCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ModeStartCard",
         "type": "object"
       },
       "PersonCard": {
@@ -506,6 +1529,100 @@
         "title": "Problem",
         "type": "object"
       },
+      "RecordCard": {
+        "description": "Личный рекорд режима (``game /v1/me/records``).",
+        "properties": {
+          "achieved_at": {
+            "format": "date-time",
+            "title": "Achieved At",
+            "type": "string"
+          },
+          "best": {
+            "title": "Best",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          },
+          "presentation": {
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode_key",
+          "domain",
+          "title_key",
+          "presentation",
+          "best",
+          "achieved_at"
+        ],
+        "title": "RecordCard",
+        "type": "object"
+      },
+      "ResultRecord": {
+        "description": "Рекорд в итоге (только пользователи, режимы с рекордами).",
+        "properties": {
+          "best": {
+            "title": "Best",
+            "type": "integer"
+          },
+          "is_new": {
+            "title": "Is New",
+            "type": "boolean"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          }
+        },
+        "required": [
+          "best",
+          "is_new"
+        ],
+        "title": "ResultRecord",
+        "type": "object"
+      },
       "ResultRoundCard": {
         "description": "Раунд итога (из ``game /v1/sessions/{id}/result``).",
         "properties": {
@@ -580,6 +1697,17 @@
       "ResultSummary": {
         "description": "Итог сессии для экрана результатов.",
         "properties": {
+          "bracket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BracketSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у сетки"
+          },
           "max_score": {
             "title": "Max Score",
             "type": "integer"
@@ -594,6 +1722,28 @@
               }
             ],
             "title": "Mode Key"
+          },
+          "presentation": {
+            "default": "score",
+            "description": "Реестр итогов фронта",
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultRecord"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — гость или без рекордов"
           },
           "rounds": {
             "items": {
@@ -695,19 +1845,258 @@
         "title": "SessionInfo",
         "type": "object"
       },
+      "ShelfCard": {
+        "description": "Полка (``library /v1/shelves``).",
+        "properties": {
+          "domains": {
+            "items": {
+              "enum": [
+                "music",
+                "film"
+              ],
+              "type": "string"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "exclusive_with": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclusive With",
+            "type": "array"
+          },
+          "items_count": {
+            "minimum": 0.0,
+            "title": "Items Count",
+            "type": "integer"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "kind": {
+            "enum": [
+              "system",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "shelf_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shelf Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "title_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Key"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "ref",
+          "kind",
+          "domains",
+          "items_count"
+        ],
+        "title": "ShelfCard",
+        "type": "object"
+      },
+      "ShelfItemCard": {
+        "description": "Единица на полке: карточка из проекции catalog в library.",
+        "properties": {
+          "added_at": {
+            "format": "date-time",
+            "title": "Added At",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "persons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Persons",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "reveal",
+              "results",
+              "card",
+              "collection",
+              "library"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "domain",
+          "kind",
+          "title",
+          "status",
+          "source",
+          "added_at"
+        ],
+        "title": "ShelfItemCard",
+        "type": "object"
+      },
+      "ShelfItems": {
+        "description": "Полка и её единицы (страница по курсору).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShelfItemCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "shelf": {
+            "$ref": "#/components/schemas/ShelfCard"
+          }
+        },
+        "required": [
+          "shelf",
+          "items"
+        ],
+        "title": "ShelfItems",
+        "type": "object"
+      },
       "SoloBlocks": {
         "description": "Блоки хаба соло-режимов.",
         "properties": {
           "daily": {
-            "$ref": "#/components/schemas/Block_list_DailyCard__"
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы дня"
+          },
+          "modes": {
+            "$ref": "#/components/schemas/Block_list_ModeGroup__",
+            "description": "Витрина: неплановые режимы домена по группам (source_type, presentation)"
           },
           "random": {
-            "$ref": "#/components/schemas/Block_list_ModeCard__"
+            "$ref": "#/components/schemas/Block_list_ModeCard__",
+            "description": "Случайные режимы (витрина этапа 2)"
+          },
+          "records": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_list_RecordCard__"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Личные рекорды; null — гость или аноним"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/Block_list_DailyCard__",
+            "description": "Наборы недели (сетка)"
           }
         },
         "required": [
           "daily",
-          "random"
+          "random",
+          "modes",
+          "weekly"
         ],
         "title": "SoloBlocks",
         "type": "object"
@@ -753,6 +2142,29 @@
         ],
         "title": "Subject",
         "type": "object"
+      },
+      "SubjectPickCard": {
+        "description": "Выбор персон перед стартом (марафон): ``GET game /v1/modes/{key}/subjects``.",
+        "properties": {
+          "max": {
+            "minimum": 1.0,
+            "title": "Max",
+            "type": "integer"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "max"
+        ],
+        "title": "SubjectPickCard",
+        "type": "object"
       }
     }
   },
@@ -784,6 +2196,266 @@
         ]
       }
     },
+    "/v1/pages/collections": {
+      "get": {
+        "description": "Без `q` и `cursor` — витрины `featured`, `popular`, `new` с общими фильтрами (`results: null`; публично, `public, max-age`). С `q` или `cursor` — только `results` в сортировке `sort` (витрины `null`); с `q` — `private, no-store`. Поиск — по названию, описанию и тегам. Упавший collections — блоки `unavailable`, страница 200; курсор не от этой сортировки — 422 от collections.",
+        "operationId": "collections_page_v1_pages_collections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "music",
+                    "film"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,4}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "difficulty",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "easy",
+                    "medium",
+                    "hard"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Difficulty"
+            }
+          },
+          {
+            "in": "query",
+            "name": "curated",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Curated"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "popular",
+              "enum": [
+                "featured",
+                "popular",
+                "new",
+                "likes",
+                "difficulty"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Каталог сборников",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/collections/{collection_id}": {
+      "get": {
+        "description": "Карточка (collections; `items` — только автору, админу и прошедшему, D6), режимы с играбельностью (game; недоступен — `modes: unavailable`, карточка отдаётся), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`. С токеном — `private, no-store`.",
+        "operationId": "collection_page_v1_pages_collections__collection_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Страница сборника",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
     "/v1/pages/home": {
       "get": {
         "operationId": "home_page_v1_pages_home_get",
@@ -800,6 +2472,169 @@
           }
         },
         "summary": "Главная: дейлики и режимы",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/library": {
+      "get": {
+        "description": "Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Упавший library — `shelves: unavailable`, страница 200. Всегда `private, no-store`.",
+        "operationId": "library_page_v1_pages_library_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Медиатека: полки",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/library/{shelf_ref}": {
+      "get": {
+        "description": "`shelf_ref` — `system:<key>` или uuid своей полки; чужая и несуществующая — 404 `library.shelf_not_found`; без токена — 401, гость — 403. Упавший library — `shelf: unavailable`. Всегда `private, no-store`.",
+        "operationId": "library_shelf_page_v1_pages_library__shelf_ref__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shelf_ref",
+            "required": true,
+            "schema": {
+              "pattern": "^(system:[a-z][a-z0-9_]{0,63}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+              "title": "Shelf Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryShelfPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Медиатека: полка",
         "tags": [
           "bff_web"
         ]
@@ -916,6 +2751,7 @@
     },
     "/v1/pages/solo": {
       "get": {
+        "description": "Блоки: дейлики и недельная сетка субъекта, витрина режимов по группам (`source_type`, `presentation`), личные рекорды (только пользователю; гостю и анониму — `records: null`). Ответ с токеном — `private, no-store`.",
         "operationId": "solo_page_v1_pages_solo_get",
         "parameters": [
           {

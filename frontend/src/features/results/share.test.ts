@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { createTranslator } from "next-intl";
+import messages from "../../../messages/ru.json";
 import type { ResultSummary } from "@/shared/api/types";
-import { buildShareText, shareResult } from "./share";
+import { buildShareText, shareResult, type ShareContext, type Translate } from "./share";
+
+const t = createTranslator({ locale: "ru", messages }) as unknown as Translate;
+const ctx = (title: string, homeUrl: string): ShareContext => ({ title, homeUrl, t });
 
 const summary = (patch: Partial<ResultSummary> = {}): ResultSummary => ({
   session_id: "s1",
@@ -8,6 +13,7 @@ const summary = (patch: Partial<ResultSummary> = {}): ResultSummary => ({
   score: 14,
   max_score: 30,
   share_text: "",
+  presentation: "score",
   rounds: [
     { index: 0, outcome: "exact", level: 1, points: 6, media_item_id: null },
     { index: 1, outcome: "partial", level: 3, points: 2, media_item_id: null },
@@ -18,18 +24,86 @@ const summary = (patch: Partial<ResultSummary> = {}): ResultSummary => ({
   ...patch,
 });
 
+describe("buildShareText — сессия по сборнику (этап 3b)", () => {
+  const collection = { title: "Тарковский и компания", url: "https://o.example/collections/c1" };
+
+  it("первой строкой — название сборника, ссылка — на сборник, а не на главную", () => {
+    const text = buildShareText(summary(), {
+      ...ctx("Сборник по кадрам", "https://o.example/"),
+      collection,
+    });
+    expect(text).toBe(
+      "Сборник «Тарковский и компания»\nСборник по кадрам 14/30\n🟩🟨🟥🟥⬜\nhttps://o.example/collections/c1",
+    );
+  });
+
+  it("текст сервера со ссылкой на главную дополняется ссылкой на сборник", () => {
+    const text = buildShareText(summary({ share_text: "OnCue 14/30\nhttps://o.example/" }), {
+      ...ctx("x", "https://o.example/"),
+      collection,
+    });
+    expect(text.split("\n")[0]).toBe("Сборник «Тарковский и компания»");
+    expect(text.endsWith("https://o.example/collections/c1")).toBe(true);
+  });
+});
+
 describe("buildShareText", () => {
   it("без текста сервера собирает сетку по исходам и добавляет ссылку", () => {
-    expect(buildShareText(summary(), "Трек дня", "https://oncue.example/")).toBe(
+    expect(buildShareText(summary(), ctx("Трек дня", "https://oncue.example/"))).toBe(
       "Трек дня 14/30\n🟩🟨🟥🟥⬜\nhttps://oncue.example/",
     );
   });
 
   it("берёт текст сервера и не дублирует ссылку", () => {
     const withLink = summary({ share_text: "OnCue 14/30\n🟩🟨\nhttps://oncue.example/" });
-    expect(buildShareText(withLink, "x", "https://oncue.example/")).toBe(withLink.share_text);
-    expect(buildShareText(summary({ share_text: "OnCue 14/30" }), "x", "https://o.example/")).toBe(
-      "OnCue 14/30\nhttps://o.example/",
+    expect(buildShareText(withLink, ctx("x", "https://oncue.example/"))).toBe(withLink.share_text);
+    expect(
+      buildShareText(summary({ share_text: "OnCue 14/30" }), ctx("x", "https://o.example/")),
+    ).toBe("OnCue 14/30\nhttps://o.example/");
+  });
+});
+
+describe("buildShareText по presentation", () => {
+  it("серия: длина серии, новый рекорд и клетки; текст сервера-сетки не используется", () => {
+    const streak = summary({
+      presentation: "streak",
+      score: 7,
+      max_score: 7,
+      share_text: "OnCue film.pair.rating\n7/7\n🟩",
+      record: { best: 7, is_new: true, percentile: 91 },
+      rounds: [
+        { index: 0, outcome: "exact", level: 1, points: 1, media_item_id: null },
+        { index: 1, outcome: "miss", level: null, points: 0, media_item_id: null },
+      ],
+    });
+    expect(buildShareText(streak, ctx("Больше или меньше", "https://o.example/"))).toBe(
+      "Больше или меньше\nМоя серия: 7 🔥\nНовый личный рекорд!\n🟩🟥\nhttps://o.example/",
+    );
+  });
+
+  it("серия без рекорда — без строки рекорда", () => {
+    const streak = summary({ presentation: "streak", score: 0, rounds: [], record: null });
+    expect(buildShareText(streak, ctx("Пара", "https://o.example/"))).toBe(
+      "Пара\nМоя серия: 0 🔥\nhttps://o.example/",
+    );
+  });
+
+  it("сетка: чемпион игрока", () => {
+    const bracket = summary({
+      presentation: "bracket",
+      score: 0,
+      max_score: 0,
+      bracket: { champion: "Сталкер", picks: [] },
+    });
+    expect(buildShareText(bracket, ctx("Сетка недели", "https://o.example/"))).toBe(
+      "Сетка недели\nМой чемпион: «Сталкер» 🏆\nhttps://o.example/",
+    );
+  });
+
+  it("сетка без чемпиона — как сумма очков", () => {
+    const bracket = summary({ presentation: "bracket", bracket: null, share_text: "OnCue" });
+    expect(buildShareText(bracket, ctx("x", "https://o.example/"))).toBe(
+      "OnCue\nhttps://o.example/",
     );
   });
 });

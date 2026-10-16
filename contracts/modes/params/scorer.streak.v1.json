@@ -1,0 +1,18 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:scorer.streak:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Серия: очки за каждый верный раунд",
+  "properties": {
+    "points_per_round": {
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "points_per_round"
+  ],
+  "title": "scorer.streak params v1",
+  "type": "object"
+}

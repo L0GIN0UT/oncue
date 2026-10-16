@@ -1,0 +1,33 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p>{% if collection_id %}<a href="{% url 'collections:detail' collection_id=collection_id %}">← к сборнику</a>{% else %}<a href="{% url 'collections:list' %}">← к списку</a>{% endif %}</p>
+<p>Сохранение публикует {% if collection_id %}новую версию{% else %}сборник{% endif %} сразу. Единица — <code>media_item_id</code> из каталога (строкой или <code>{media_item_id, custom: {emoji}}</code>); комментарии после <code>#</code> не сохраняются.</p>
+{% if field_errors %}
+<ul class="messagelist"><li class="error">Ошибки проверки: {{ field_errors|length }}</li></ul>
+<table>
+  <thead><tr><th>Строка</th><th>Поле</th><th>Ошибка</th></tr></thead>
+  {% for e in field_errors %}
+  <tr><td>{{ e.line|default:"—" }}</td><td><code>{{ e.path }}</code></td><td>{{ e.message }}</td></tr>
+  {% endfor %}
+</table>
+<div class="gv-lines">{% for l in lines %}<div{% if l.error %} class="err"{% endif %}><span class="num">{{ l.number }}</span>{{ l.text }}</div>{% endfor %}</div>
+{% endif %}
+{% if conflict_diff %}
+<h2>Сборник изменили, пока вы его правили</h2>
+<p>Ваш текст не сохранён и остался в поле ниже. Изменения относительно текущей версии:</p>
+{% include "admin_game_config/_diff.html" with diff=conflict_diff %}
+<p>Чтобы сохранить поверх, откройте редактор заново и перенесите правку.</p>
+{% endif %}
+{% if form %}
+<form method="post">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.text.errors }}{{ form.text }}
+  {{ form.base_version }}{{ form.idempotency_key }}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  <button type="submit">{% if collection_id %}Опубликовать новую версию{% else %}Опубликовать сборник{% endif %}</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -4,6 +4,16 @@
 Воркер читает их из каталога `GV_IMPORTS__FILES_DIR` (по умолчанию `seeds/catalog`).
 
 - `films.jsonl` — фильмы (~20), `tracks.jsonl` — треки (~20). Только метаданные: **аудио здесь нет** и не будет — аудио загружается в media-pipeline правообладателем или администратором (ADR 0014).
+- `synthetic-films.jsonl`, `synthetic-tracks.jsonl` — синтетика этапа 3a (план §10): 40 фильмов
+  «Синтетического режиссёра» и 40 треков «Синтетического артиста» для марафона, сетки и
+  «больше/меньше». Год и метрики пары (`vote_average`, `popularity` и др.) у всех единиц разные
+  (без ничьих), у фильмов — `clue_texts` (слоган, сюжет, 7 эмодзи), страна, режиссёр и 3 актёра
+  (профиль `description/default`), у треков — 6 эмодзи. Названия начинаются с «Синтетика:» —
+  по этой подстроке `gv dev seed` ищет их в проекции game. Все тексты выдуманы, прав третьих
+  лиц нет (ADR 0014); одобряются при импорте только в local/ci (`GV_CATALOG__SEED_TEXTS_APPROVED`,
+  в dev-оверлее compose по умолчанию `true`). Подкаталогов нет: `file_id` — только имя файла.
+- Засев целиком: `uv run gv dev seed` (импорт всех файлов, исходники, наборы периода — см.
+  `seeds/media/README.md`).
 - `file_id` — только имя файла вида `<имя>.jsonl` (`^[a-z0-9][a-z0-9_-]{0,62}\.jsonl$`), без путей.
 
 ## Формат JSONL
@@ -22,6 +32,9 @@
 | `genres` | `[string]` ≤ 20 | нет | Жанры (приводятся к slug в нижнем регистре) |
 | `external_refs` | `{tmdb?, musicbrainz?, isrc?, spotify?, yandex_music?}` | нет | Внешние id (строки). Если единица с таким id уже есть — она обновляется |
 | `metrics` | `{popularity?, vote_average?, vote_count?, revenue_usd?, runtime_min?, duration_ms?}` | нет | Неотрицательные числа, `vote_average` 0..10 |
+| `countries` | `[string]` ≤ 20 | нет | Страны производства, ISO 3166-1 alpha-2 (`US`, `ru` → `RU`) |
+| `clue_texts` | `{plot_raw?, plot_masked?, tagline?, emoji?}` | нет | Тексты загадок `description`/`emoji` (ADR 0024): `plot_raw` ≤ 5000 (маскируется автоматически, если нет `plot_masked`), `plot_masked` ≤ 2000, `tagline` ≤ 300, `emoji` ≤ 12 графем. Попадают в черновик; с `GV_CATALOG__SEED_TEXTS_APPROVED=true` (только local/ci) — сразу одобрены и публикуются |
+| `source_media` | `[{kind, origin, uri, position?, source_url?, license_note?}]` ≤ 20 | нет | Исходники по адресу: `kind` — `audio`/`frame`/`poster`/`soundtrack`/`audio_clip`, `origin` — `upload`/`tmdb`, `uri` — `https://…`, `position` 1..100 (кадры `frame_sequence`). Вне local/ci без `source_url` и `license_note` строка отклоняется (D6) |
 
 Неизвестные поля — ошибка строки (опечатки не теряются молча).
 Транслит-алиасы (`interstellar` ↔ `интерстеллар`) строятся автоматически.

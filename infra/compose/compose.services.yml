@@ -112,6 +112,10 @@ services:
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+      GV_CATALOG__TMDB_FRAMES_MAX: ${GV_CATALOG__TMDB_FRAMES_MAX:-6}
+      GV_CATALOG__REPUBLISH_BATCH: ${GV_CATALOG__REPUBLISH_BATCH:-200}
+      # Только local/ci: вне них catalog отказывается стартовать с true.
+      GV_CATALOG__SEED_TEXTS_APPROVED: ${GV_CATALOG__SEED_TEXTS_APPROVED:-false}
     depends_on:
       catalog-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -166,6 +170,9 @@ services:
       GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
       GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
       GV_MEDIA__SIGNING_SECRET: ${GV_MEDIA__SIGNING_SECRET:?задайте GV_MEDIA__SIGNING_SECRET}
+      GV_MEDIA__MAX_DYNAMIC_PROFILES: ${GV_MEDIA__MAX_DYNAMIC_PROFILES:-50}
+      GV_MEDIA__BACKFILL_BATCH: ${GV_MEDIA__BACKFILL_BATCH:-200}
+      GV_MEDIA__LINK_PURGE_INTERVAL_S: ${GV_MEDIA__LINK_PURGE_INTERVAL_S:-600}
     depends_on:
       media-pipeline-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -174,7 +181,7 @@ services:
       s3: {condition: service_healthy}
     deploy:
       resources:
-        limits: {memory: 512M}
+        limits: {memory: 768M}
   # ---------------------------------------------------------------- game
   # Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32
   game-migrate:
@@ -215,6 +222,7 @@ services:
       GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
       GV_GAME__DAILY_SEED_SECRET: ${GV_GAME__DAILY_SEED_SECRET:?задайте GV_GAME__DAILY_SEED_SECRET}
       GV_GAME__MEDIA_URL: http://media-pipeline:8000
+      GV_GAME_LIMITS__PLAYABILITY_PER_MIN: ${GV_GAME_LIMITS__PLAYABILITY_PER_MIN:-30}
       GV_SERVICE_AUTH__TOKEN_URL: http://identity:8000/internal/v1/service-tokens
       GV_SERVICE_AUTH__CLIENT_ID: game
       GV_SERVICE_AUTH__CLIENT_SECRET: ${GV_SERVICE_SECRET_GAME:?задайте GV_SERVICE_SECRET_GAME}
@@ -348,9 +356,23 @@ services:
       GV_SERVICE_NAME: collections
       GV_DATABASE_URL: postgresql+asyncpg://collections:${PG_PASSWORD_COLLECTIONS:?задайте PG_PASSWORD_COLLECTIONS}@postgres:5432/collections
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
+      GV_COLLECTIONS__LIMITS__DRAFTS_MAX: ${GV_COLLECTIONS__LIMITS__DRAFTS_MAX:-20}
+      GV_COLLECTIONS__LIMITS__PUBLISH_PER_DAY: ${GV_COLLECTIONS__LIMITS__PUBLISH_PER_DAY:-5}
+      GV_COLLECTIONS__LIMITS__ITEMS_MIN: ${GV_COLLECTIONS__LIMITS__ITEMS_MIN:-5}
+      GV_COLLECTIONS__LIMITS__ITEMS_MAX: ${GV_COLLECTIONS__LIMITS__ITEMS_MAX:-200}
+      GV_COLLECTIONS__LIMITS__TAGS_MAX: ${GV_COLLECTIONS__LIMITS__TAGS_MAX:-5}
+      GV_COLLECTIONS__DIFFICULTY__PRIOR: ${GV_COLLECTIONS__DIFFICULTY__PRIOR:-0.5}
+      GV_COLLECTIONS__DIFFICULTY__M: ${GV_COLLECTIONS__DIFFICULTY__M:-10}
+      GV_COLLECTIONS__DIFFICULTY__MIN_PLAYS: ${GV_COLLECTIONS__DIFFICULTY__MIN_PLAYS:-10}
+      GV_COLLECTIONS__DIFFICULTY__THRESHOLDS: ${GV_COLLECTIONS__DIFFICULTY__THRESHOLDS:-[0.4,0.7]}
+      # Пусто — встроенный denylist gv_text; свой файл нужно смонтировать в контейнер.
+      GV_UGC__DENYLIST_PATH: ${GV_UGC__DENYLIST_PATH:-}
     depends_on:
       collections-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
     deploy:
       resources:
@@ -390,9 +412,18 @@ services:
       GV_SERVICE_NAME: library
       GV_DATABASE_URL: postgresql+asyncpg://library:${PG_PASSWORD_LIBRARY:?задайте PG_PASSWORD_LIBRARY}@postgres:5432/library
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
+      # Пусто — встроенный config/shelves.yaml; свой файл нужно смонтировать в контейнер.
+      GV_LIBRARY__SHELVES_CONFIG: ${GV_LIBRARY__SHELVES_CONFIG:-}
+      GV_LIBRARY__LIMITS__CUSTOM_SHELVES_MAX: ${GV_LIBRARY__LIMITS__CUSTOM_SHELVES_MAX:-50}
+      GV_LIBRARY__LIMITS__SAVES_PER_MIN: ${GV_LIBRARY__LIMITS__SAVES_PER_MIN:-60}
+      # Пусто — встроенный denylist gv_text; свой файл нужно смонтировать в контейнер.
+      GV_UGC__DENYLIST_PATH: ${GV_UGC__DENYLIST_PATH:-}
     depends_on:
       library-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
     deploy:
       resources:

@@ -131,3 +131,9 @@ class RollbackForm(MutationForm):
 
 class ArchiveForm(MutationForm):
     """Архив режима (из каталога пропадает, начатые сессии доигрываются)."""
+
+
+class AssetRequestForm(MutationForm):
+    """«Запросить ассеты» под загадку черновика ревизии ``draft_revision`` (ADR 0025)."""
+
+    draft_revision = forms.IntegerField(min_value=1, widget=forms.HiddenInput)

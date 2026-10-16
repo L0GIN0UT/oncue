@@ -96,7 +96,10 @@ async def test_generator_rejects_foreign_params(media: Any) -> None:
 
 # ---------------------------------------------------------------- реестр и профили
 def test_registry_resolves_by_clue_type_without_branches(media: Any) -> None:
-    assert media.registry.clue_types == {"audio_intro", "frame_progressive", "poster_masked"}
+    assert media.registry.clue_types == {
+        "audio_intro", "frame_progressive", "frame_sequence", "poster_masked", "description",
+        "emoji",
+    }  # fmt: skip
     assert media.registry.get("audio_intro").source_kind is SourceKind.AUDIO
     assert media.registry.get("unknown") is None
     with pytest.raises(ValueError, match="уже зарегистрирован"):

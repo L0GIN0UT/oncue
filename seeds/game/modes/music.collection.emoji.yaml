@@ -1,0 +1,49 @@
+# Треки сборника в эмодзи: шаблон режима сборника (ADR 0028), сборник и число раундов — при старте.
+# clue.params = профиль emoji/default media-pipeline (D7);
+# свои эмодзи автора собираются тем же профилем со scope сборника (ADR 0029).
+# session.rounds — потолок для «all»; features.records выключен (план 3b, D4).
+key: music.collection.emoji
+title_i18n: modes.music.collection.emoji.title
+description_i18n: modes.music.collection.emoji.description
+domain: music
+source:
+  type: collection
+  params:
+    round_options: [5, 10, 25, all]
+    min_items: 5
+    shuffle: true
+clue:
+  type: emoji
+  params:
+    levels:
+      - { count: 1 }
+      - { count: 2 }
+      - { count: 3 }
+      - { count: 4 }
+      - { count: 6 }
+      - { count: null }
+answer:
+  format: classic
+  matcher:
+    type: title_alias
+    params:
+      typo:
+        - { min_len: 5, max_distance: 1 }
+        - { min_len: 10, max_distance: 2 }
+      accept_same_title: true
+  partial: [artist]
+scoring:
+  type: by_level
+  params:
+    points: [6, 5, 4, 3, 2, 1]
+    partial_ratio: 0.5
+session:
+  kind: solo
+  rounds: 200
+  attempts_per_level: 1
+  skip_allowed: true
+  give_up_allowed: true
+  allow_guest: true
+  abandon_after_min: 120
+features:
+  share: true

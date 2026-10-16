@@ -1,0 +1,75 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:source.bracket:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Топ-N: сетка на период по теме-персоне (D10)",
+  "properties": {
+    "period": {
+      "enum": [
+        "week"
+      ],
+      "type": "string"
+    },
+    "pool": {
+      "$ref": "urn:guessverse:contracts:modes:params:pool:v1"
+    },
+    "schedule_ahead_periods": {
+      "maximum": 8,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "size": {
+      "enum": [
+        8,
+        16,
+        32
+      ],
+      "type": "integer"
+    },
+    "subject": {
+      "additionalProperties": false,
+      "properties": {
+        "min_items": {
+          "maximum": 1000,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "roles": {
+          "items": {
+            "enum": [
+              "artist",
+              "director",
+              "actor"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "roles",
+        "min_items"
+      ],
+      "type": "object"
+    },
+    "timezone": {
+      "description": "IANA-зона смены периода, например Europe/Moscow",
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "size",
+    "period",
+    "timezone",
+    "schedule_ahead_periods",
+    "subject",
+    "pool"
+  ],
+  "title": "source.bracket params v1",
+  "type": "object"
+}

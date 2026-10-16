@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from gv_core.clock import Clock
 from gv_core.errors import DependencyUnavailableError
 from gv_messaging.ports import TaskQueue
-from gv_service import Infrastructure
+from gv_service import Environment, Infrastructure
 from media_pipeline_service.application.commands.catalog import (
     DisableItemAssets,
     PlanAssetSets,
@@ -23,17 +23,28 @@ from media_pipeline_service.application.commands.catalog import (
     RestoreItemAssets,
     SyncMediaItem,
 )
+from media_pipeline_service.application.commands.collections import SyncCollectionAssets
 from media_pipeline_service.application.commands.generation import (
     GenerateAssetSet,
     RegenerateAssetSet,
 )
-from media_pipeline_service.application.commands.links import IssueAssetLink
-from media_pipeline_service.application.commands.sources import UploadSource
+from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
+from media_pipeline_service.application.commands.profiles import (
+    ApplyClueAssetsRequested,
+    BackfillDynamicProfiles,
+)
+from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.generators import (
+    AudioBlackoutGenerator,
     AudioIntroGenerator,
+    AudioReverseGenerator,
+    DescriptionGenerator,
+    EmojiGenerator,
     FrameProgressiveGenerator,
+    FrameSequenceGenerator,
     GeneratorRegistry,
     PosterMaskedGenerator,
+    SoundtrackGenerator,
 )
 from media_pipeline_service.application.ports import (
     ImageProcessor,
@@ -45,7 +56,10 @@ from media_pipeline_service.application.ports import (
     UnitOfWorkFactory,
     UrlSigner,
 )
+from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+from media_pipeline_service.application.queries.profiles import ListProfiles
+from media_pipeline_service.application.queries.sources import ListSources
 from media_pipeline_service.application.sources import SourceIngestor
 from media_pipeline_service.domain.links import LinkPolicy
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
@@ -67,6 +81,8 @@ from media_pipeline_service.infrastructure.tasks import LazyRabbitTaskQueue
 from media_pipeline_service.settings import Settings
 
 _MB = 1024 * 1024
+# Окружения, где загрузка без происхождения (D6) допустима: синтетика засева и тесты.
+DEV_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
 
 
 class _NoRedisLimiter:
@@ -150,8 +166,14 @@ class MediaContainer:
         return GeneratorRegistry(
             [
                 AudioIntroGenerator(a.transcoder),
+                AudioReverseGenerator(a.transcoder),
+                SoundtrackGenerator(a.transcoder),
+                AudioBlackoutGenerator(a.transcoder),
                 FrameProgressiveGenerator(a.images),
+                FrameSequenceGenerator(a.images),
                 PosterMaskedGenerator(a.images, max_width=self.settings.media.poster_max_width),
+                DescriptionGenerator(),
+                EmojiGenerator(),
             ]
         )
 
@@ -159,6 +181,11 @@ class MediaContainer:
     def profiles(self) -> AssetProfileCatalog:
         """Профили уровней (проверяются при первом обращении — на старте процесса)."""
         return load_profiles(self.registry, self.settings.media.profiles_path)
+
+    @cached_property
+    def directory(self) -> ProfileDirectory:
+        """Статические ∪ динамические профили (ADR 0025)."""
+        return ProfileDirectory(self.profiles, self.registry)
 
     def uow_factory(self, session: AsyncSession | None = None) -> UnitOfWorkFactory:
         """Фабрика UoW: своя транзакция или SAVEPOINT в транзакции consumer."""
@@ -182,6 +209,8 @@ class MediaContainer:
             a.storage,
             {
                 SourceKind.AUDIO: a.transcoder,
+                SourceKind.SOUNDTRACK: a.transcoder,
+                SourceKind.AUDIO_CLIP: a.transcoder,
                 SourceKind.FRAME: a.images,
                 SourceKind.POSTER: a.images,
             },
@@ -194,7 +223,23 @@ class MediaContainer:
         """Планирование наборов."""
         a = self.adapters
         return PlanAssetSets(
-            uow or self.uow_factory(), self.clock, self.profiles, a.queue, a.storage
+            uow or self.uow_factory(),
+            self.clock,
+            self.directory,
+            a.queue,
+            a.storage,
+            registry=self.registry,
+            scoped_clue_types=self.settings.media.scoped_clue_types,
+        )
+
+    def sync_collection(self, uow: UnitOfWorkFactory) -> SyncCollectionAssets:
+        """Обработка событий collections (``uow`` привязан к сессии consumer)."""
+        return SyncCollectionAssets(
+            uow,
+            self.clock,
+            self.plan(uow),
+            self.adapters.storage,
+            emoji_max_graphemes=self.settings.media.collection_emoji_max_graphemes,
         )
 
     def sync_media_item(self, uow: UnitOfWorkFactory) -> SyncMediaItem:
@@ -238,14 +283,22 @@ class MediaContainer:
             self.uow_factory(),
             self.clock,
             self.ingestor,
-            self.profiles,
+            self.directory,
             self.plan(),
             storage=self.adapters.storage,
+            require_provenance=self.settings.environment not in DEV_ENVIRONMENTS,
+        )
+
+    @cached_property
+    def set_position(self) -> SetSourcePosition:
+        """Порядок исходника (admin)."""
+        return SetSourcePosition(
+            self.uow_factory(), self.clock, self.plan(), storage=self.adapters.storage
         )
 
     @cached_property
     def issue_link(self) -> IssueAssetLink:
-        """Выдача ссылок (один экземпляр на процесс: в нём таймер чистки журнала)."""
+        """Выдача ссылок."""
         m = self.settings.media
         return IssueAssetLink(
             self.uow_factory(),
@@ -255,13 +308,56 @@ class MediaContainer:
             LinkPolicy(
                 ttl_s=m.link_ttl_s, max_per_window=m.link_max_per_window, window_s=m.link_window_s
             ),
-            retention=timedelta(days=m.link_issuance_retention_days),
         )
+
+    @cached_property
+    def purge_links(self) -> PurgeLinkJournal:
+        """Очистка журнала выдачи ссылок (периодическая задача relay)."""
+        m = self.settings.media
+        return PurgeLinkJournal(
+            self.uow_factory(),
+            self.clock,
+            retention=timedelta(days=m.link_issuance_retention_days),
+            batch=m.link_purge_batch,
+        )
+
+    def apply_clue_assets_requested(self, uow: UnitOfWorkFactory) -> ApplyClueAssetsRequested:
+        """Заведение динамического профиля (``uow`` привязан к сессии consumer)."""
+        m = self.settings.media
+        return ApplyClueAssetsRequested(
+            uow,
+            self.clock,
+            self.directory,
+            max_profiles=m.max_dynamic_profiles,
+            max_params_bytes=m.dynamic_params_max_bytes,
+        )
+
+    @cached_property
+    def backfill(self) -> BackfillDynamicProfiles:
+        """Досоздание наборов динамических профилей (периодическая задача relay)."""
+        return BackfillDynamicProfiles(
+            self.uow_factory(),
+            self.clock,
+            self.directory,
+            self.plan(),
+            self.adapters.storage,
+            batch=self.settings.media.backfill_batch,
+        )
+
+    @cached_property
+    def list_profiles(self) -> ListProfiles:
+        """Профили для admin-API."""
+        return ListProfiles(self.uow_factory(), self.directory)
 
     @cached_property
     def list_sets(self) -> ListAssetSets:
         """Список наборов."""
         return ListAssetSets(self.uow_factory())
+
+    @cached_property
+    def list_sources(self) -> ListSources:
+        """Исходники единицы (admin)."""
+        return ListSources(self.uow_factory())
 
     async def close(self) -> None:
         """Закрыть клиенты, открытые лениво (соединение RabbitMQ очереди задач)."""

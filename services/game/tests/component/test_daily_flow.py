@@ -96,7 +96,8 @@ async def play_out(game: Any, token: str, snapshot: dict[str, Any]) -> dict[str,
 async def test_guest_daily_full_cycle(game: Any) -> None:  # noqa: PLR0915 — сценарий §0 п. 2 целиком
     await prepared(game)
     modes = (await game.client.get("/v1/modes", params={"domain": "music"})).json()
-    assert {m["key"] for m in modes} == {MUSIC_DAILY, "music.random.classic"}
+    assert {m["key"] for m in modes} >= {MUSIC_DAILY, "music.random.classic"}
+    assert all(m["domain"] == "music" for m in modes)
     daily_mode = next(m for m in modes if m["key"] == MUSIC_DAILY)
     assert daily_mode["levels"][0]["hint"] == {"seconds": 0.5}
     assert daily_mode["rounds"] == 5

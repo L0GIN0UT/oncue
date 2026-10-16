@@ -26,9 +26,21 @@ from game_service.domain.errors import (
     SessionNotActiveError,
     SessionNotFoundError,
 )
-from game_service.domain.events import DailyCompleted, GameFinished, ModeConfigPublished
+from game_service.domain.events import (
+    BracketCompleted,
+    DailyCompleted,
+    GameFinished,
+    ModeConfigPublished,
+)
 from game_service.domain.modes import ModeLine, ModeStatus
-from game_service.domain.session import GameSession, PlayerKind, PlayerRef, RoundPlan
+from game_service.domain.session import (
+    GameSession,
+    PlannedRound,
+    PlayerKind,
+    PlayerRef,
+    RoundAssets,
+    RoundOption,
+)
 from game_service.domain.share import CELL_EXACT, CELL_SKIP, CELL_VOID, share_text
 
 from gv_core.ids import uuid7
@@ -57,9 +69,9 @@ GUEST = PlayerRef(PlayerKind.GUEST, uuid7())
 def session(
     player: PlayerRef = USER, *, assets: int = 3, voids: int = 0, day: date | None = TODAY_DAY
 ) -> GameSession:
-    plan = [RoundPlan(uuid7(), AssetRef(uuid7(), 6)) for _ in range(assets)]
-    plan += [RoundPlan(uuid7(), None) for _ in range(voids)]
-    return GameSession.start(
+    """Сессия с планом и первым выданным раундом (как ``PlayService._settle``)."""
+    plan = [PlannedRound(uuid7()) for _ in range(assets + voids)]
+    s = GameSession.start(
         uuid7(),
         player=player,
         mode_key="music.daily.classic",
@@ -71,11 +83,33 @@ def session(
         preset_id=None,
         seed=b"seed",
         plan=plan,
-        levels_count=6,
-        max_points=6,
+        round_max=6,
         idle_timeout_s=60,
         now=NOW,
     )
+    ASSETS[s.id] = [True] * assets + [False] * voids
+    settle(s)
+    return s
+
+
+ASSETS: dict[object, list[bool]] = {}
+
+
+def settle(s: GameSession, now: datetime = NOW) -> None:
+    """Выдать следующий раунд или завершить сессию (правило завершения — все раунды)."""
+    flags = ASSETS[s.id]
+    while s.needs_next:
+        if not s.plan:
+            s.complete(now)
+            return
+        ready = flags.pop(0)
+        s.materialize_next(
+            RoundAssets(AssetRef(uuid7(), 6) if ready else None),
+            levels_count=6,
+            max_points=6,
+            stage=None,
+            now=now,
+        )
 
 
 def exact(level: int = 1) -> RoundState:
@@ -88,11 +122,20 @@ def envelope(event: object) -> EventEnvelope:
 
 
 # ---------------------------------------------------------------- сессия
-def test_rounds_without_assets_are_void_and_not_in_max_score() -> None:
-    s = session(assets=2, voids=1)
-    assert [r.is_void for r in s.rounds] == [False, False, True]
+def test_void_rounds_are_skipped_and_not_in_max_score() -> None:
+    s = session(assets=3)
+    ASSETS[s.id] = [False, True]  # у второго раунда ассетов нет — он аннулируется при выдаче
+    s.apply(0, exact(), points=6, now=NOW)
+    settle(s)
+    assert [r.is_void for r in s.rounds] == [False, True, False]
     assert s.max_score == 12
-    assert s.current_index == 0
+    assert s.current_index == 2
+
+
+def test_plan_counts_in_max_score_until_played() -> None:
+    s = session(assets=3)
+    assert len(s.rounds) == 1 and len(s.plan) == 2
+    assert s.max_score == 18  # выданный раунд + план (верхняя оценка)
 
 
 def test_moves_only_in_current_round_and_levels_locked() -> None:
@@ -102,6 +145,16 @@ def test_moves_only_in_current_round_and_levels_locked() -> None:
     with pytest.raises(LevelLockedError):
         s.clue_round(0, 2)
     assert s.clue_round(0, 1).index == 0
+
+
+def test_next_round_only_after_current_finished() -> None:
+    s = session()
+    with pytest.raises(ValueError, match="после завершения"):
+        s.materialize_next(
+            RoundAssets(AssetRef(uuid7(), 6)), levels_count=6, max_points=6, stage=None, now=NOW
+        )
+    with pytest.raises(ValueError, match="не доиграна"):
+        s.complete(NOW)
 
 
 def test_owner_check_hides_foreign_session() -> None:
@@ -115,7 +168,9 @@ def test_finishing_user_daily_records_both_events_valid_by_schema() -> None:
     s = session(assets=2, voids=1)
     s.mark_clue_issued(0, NOW)
     s.apply(0, exact(2), points=5, now=NOW + timedelta(seconds=3))
+    settle(s)
     s.apply(1, replace(RoundState(), outcome=RoundResult.GAVE_UP), points=0, now=NOW)
+    settle(s)
     assert s.status.value == "finished"
     assert s.version == 3
     events = s.pull_events()
@@ -131,9 +186,22 @@ def test_finishing_user_daily_records_both_events_valid_by_schema() -> None:
         s.active_round(0)
 
 
+def test_long_session_game_finished_is_valid_by_schema() -> None:
+    """Регресс: марафон (session.rounds ≤ 200) публиковал GameFinished вне схемы (≤ 50 раундов)."""
+    s = session(assets=60)
+    for i in range(60):
+        s.apply(i, replace(RoundState(), outcome=RoundResult.GAVE_UP), points=0, now=NOW)
+        settle(s)
+    assert s.status.value == "finished"
+    finished = next(e for e in s.pull_events() if isinstance(e, GameFinished))
+    assert len(finished.rounds) == 60
+    assert_event_matches_schema(envelope(finished))
+
+
 def test_guest_session_has_no_daily_completed() -> None:
     s = session(GUEST, assets=1)
     s.apply(0, exact(), points=6, now=NOW)
+    settle(s)
     (event,) = s.pull_events()
     assert isinstance(event, GameFinished) and event.is_guest and event.user_id is None
     assert not s.counts_in_daily_stats
@@ -142,11 +210,14 @@ def test_guest_session_has_no_daily_completed() -> None:
 def test_void_round_after_finish_is_noop_and_finished_round_rejects_moves() -> None:
     s = session(assets=2)
     s.apply(0, exact(), points=6, now=NOW)
+    settle(s)
     assert s.void_round(0, NOW) is None
     with pytest.raises(RoundFinishedError):
         s.active_round(0)
     r = s.void_round(1, NOW)
+    settle(s)
     assert r is not None and r.is_void and s.max_score == 6
+    assert s.status.value == "finished"
 
 
 def test_abandon_only_active() -> None:
@@ -158,6 +229,77 @@ def test_abandon_only_active() -> None:
 def test_all_void_session_finishes_at_start() -> None:
     s = session(assets=0, voids=2)
     assert s.status.value == "finished" and s.max_score == 0
+
+
+def test_end_by_rule_discards_plan() -> None:
+    """D4: досрочное завершение отбрасывает невыданный план — max_score по сыгранным."""
+    s = session(assets=5)
+    s.apply(0, replace(RoundState(), outcome=RoundResult.MISS), points=0, now=NOW)
+    s.end_by_rule(NOW)
+    assert s.status.value == "finished" and s.plan == []
+    assert s.max_score == 6 and len(s.rounds) == 1
+    (finished, _daily) = s.pull_events()
+    assert isinstance(finished, GameFinished) and finished.max_score == 6
+    s.end_by_rule(NOW)  # повтор — no-op
+    with pytest.raises(SessionNotActiveError):
+        s.extend_plan([PlannedRound(uuid7())])
+
+
+def _bracket_round(a: object, b: object) -> PlannedRound:
+    return PlannedRound(
+        target=a,  # type: ignore[arg-type]  # UUID
+        shown=(a, b),  # type: ignore[arg-type]
+        options=(RoundOption("a", media_item_id=a), RoundOption("b", media_item_id=b)),  # type: ignore[arg-type]
+    )
+
+
+def test_progressive_session_extends_plan_and_publishes_bracket_completed() -> None:
+    items = [uuid7() for _ in range(4)]
+    s = GameSession.start(
+        uuid7(),
+        player=GUEST,
+        mode_key="film.bracket.weekly",
+        mode_version=1,
+        domain="film",
+        source_type="bracket",
+        clue_type="frame_progressive",
+        day=date(2026, 10, 5),
+        preset_id=None,
+        seed=b"seed",
+        plan=[_bracket_round(items[0], items[1]), _bracket_round(items[2], items[3])],
+        round_max=0,
+        idle_timeout_s=60,
+        now=NOW,
+        progressive=True,
+    )
+    pick = replace(exact(), guesses=(Guess(GuessKind.OPTION, 1, MatchVerdict.EXACT, "x"),))
+
+    def materialize(stage: int) -> None:
+        s.materialize_next(
+            RoundAssets(AssetRef(uuid7(), 1)), levels_count=1, max_points=0, stage=stage, now=NOW
+        )
+
+    materialize(4)
+    with pytest.raises(ValueError, match="выбор не из вариантов"):
+        s.apply(0, pick, points=0, now=NOW, choice="z")
+    s.apply(0, pick, points=0, now=NOW, choice="b")
+    materialize(4)
+    s.apply(1, pick, points=0, now=NOW, choice="a")
+    assert s.needs_next and not s.plan
+    s.extend_plan([_bracket_round(items[1], items[2])])  # финал: победители тура
+    materialize(2)
+    s.apply(2, pick, points=0, now=NOW, choice="b")
+    s.complete(NOW)
+    assert s.bracket_picks() == [
+        (4, items[1], items[0]),
+        (4, items[2], items[3]),
+        (2, items[2], items[1]),
+    ]
+    assert not s.counts_in_daily_stats
+    (event,) = s.pull_events()
+    assert isinstance(event, BracketCompleted)
+    assert event.champion_id == items[2] and len(event.picks) == 3
+    assert_event_matches_schema(envelope(event))
 
 
 # ---------------------------------------------------------------- конфиги режимов

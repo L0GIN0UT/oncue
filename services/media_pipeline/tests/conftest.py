@@ -13,26 +13,35 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
 
 import pytest
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import (
+    ANY_SCOPE,
     AdminAction,
     FetchedSource,
     ImageOps,
     NormalizedMedia,
+    ProfileSetCount,
     RenderedImage,
+    ScopeFilter,
     StorageArea,
 )
 from media_pipeline_service.domain.asset_set import AssetSet
-from media_pipeline_service.domain.media_items import MediaItemState
-from media_pipeline_service.domain.sources import SourceMedia
+from media_pipeline_service.domain.collections import CollectionState
+from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
+from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
+from media_pipeline_service.domain.sources import AssetScope, SourceMedia
 
 from gv_core.domain import AggregateRoot, DomainEvent
 from gv_core.errors import ConflictError
 from gv_db.idempotency import IdempotencyRecord
+
+if TYPE_CHECKING:
+    from media_pipeline_service.application.commands.collections import SyncCollectionAssets
+    from media_pipeline_service.application.queries.sources import ListSources
 
 
 @dataclass
@@ -48,6 +57,8 @@ class MemoryDb:
     idempotency: dict[tuple[UUID, str], IdempotencyRecord] = field(default_factory=dict)
     audit: list[AdminAction] = field(default_factory=list)
     events: list[DomainEvent] = field(default_factory=list)
+    profiles: dict[UUID, DynamicProfile] = field(default_factory=dict)
+    collections: dict[UUID, CollectionState] = field(default_factory=dict)
 
 
 class _Repo:
@@ -65,22 +76,43 @@ class FakeAssetSets(_Repo):
         return copy.deepcopy(found) if found else None
 
     async def list_for_item(
-        self, media_item_id: UUID, clue_type: str | None = None, *, for_update: bool = False
+        self,
+        media_item_id: UUID,
+        clue_type: str | None = None,
+        *,
+        for_update: bool = False,
+        scope: ScopeFilter = ANY_SCOPE,
     ) -> list[AssetSet]:
         return [
             copy.deepcopy(s)
             for s in sorted(self.db.asset_sets.values(), key=lambda a: a.created_at)
-            if s.media_item_id == media_item_id and clue_type in (None, s.clue_type)
+            if s.media_item_id == media_item_id
+            and clue_type in (None, s.clue_type)
+            and (scope is ANY_SCOPE or s.scope == scope)
         ]
+
+    async def list_for_scope(
+        self, scope: AssetScope, *, for_update: bool = False
+    ) -> list[AssetSet]:
+        return [
+            copy.deepcopy(s)
+            for s in sorted(self.db.asset_sets.values(), key=lambda a: (a.media_item_id, a.id))
+            if s.scope == scope
+        ]
+
+    async def delete(self, asset_set_ids: Sequence[UUID]) -> None:
+        for asset_set_id in asset_set_ids:
+            self.db.asset_sets.pop(asset_set_id, None)
 
     async def add(self, aggregate: AssetSet) -> None:
         if any(
-            (s.media_item_id, s.clue_type, s.profile_key, s.params_hash)
+            (s.media_item_id, s.clue_type, s.profile_key, s.params_hash, s.scope)
             == (
                 aggregate.media_item_id,
                 aggregate.clue_type,
                 aggregate.profile_key,
                 aggregate.params_hash,
+                aggregate.scope,
             )
             for s in self.db.asset_sets.values()
         ):
@@ -101,22 +133,59 @@ class FakeAssetSets(_Repo):
         self.db.asset_sets[aggregate.id] = stored
         aggregate.persisted_version = aggregate.version
 
+    async def count_by_profile(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[ProfileSetCount]:
+        counts: dict[tuple[str, str, str, str], int] = {}
+        for s in self.db.asset_sets.values():
+            if clue_type not in (None, s.clue_type) or params_hash not in (None, s.params_hash):
+                continue
+            key = (s.clue_type, s.profile_key, s.params_hash, s.status.value)
+            counts[key] = counts.get(key, 0) + 1
+        return [ProfileSetCount(*key, count=n) for key, n in counts.items()]
+
 
 class FakeSources(_Repo):
     async def get(self, source_id: UUID) -> SourceMedia | None:
         found = self.db.sources.get(source_id)
         return copy.deepcopy(found) if found else None
 
-    async def list_for_item(self, media_item_id: UUID) -> list[SourceMedia]:
+    async def list_for_item(
+        self, media_item_id: UUID, *, scope: AssetScope | None = None
+    ) -> list[SourceMedia]:
         return [
-            copy.deepcopy(s) for s in self.db.sources.values() if s.media_item_id == media_item_id
+            copy.deepcopy(s)
+            for s in self.db.sources.values()
+            if s.media_item_id == media_item_id and s.scope == scope
         ]
 
+    async def list_for_scope(self, scope: AssetScope) -> list[SourceMedia]:
+        return [copy.deepcopy(s) for s in self.db.sources.values() if s.scope == scope]
+
+    async def scopes_for_item(self, media_item_id: UUID) -> list[AssetScope]:
+        scopes = {
+            s.scope
+            for s in self.db.sources.values()
+            if s.media_item_id == media_item_id and s.scope is not None
+        }
+        return sorted(scopes, key=lambda sc: (sc.kind.value, sc.id))
+
     async def add(self, source: SourceMedia) -> None:
+        if source.media_item_id not in self.db.items:
+            raise AssertionError("исходник без проекции единицы (в БД это FK)")
+        if source.scope is not None and any(
+            (s.scope, s.media_item_id) == (source.scope, source.media_item_id) and s.id != source.id
+            for s in self.db.sources.values()
+        ):
+            raise ConflictError("второй исходник владельца у единицы (uq_source_media_scope_item)")
         self.db.sources.setdefault(source.id, copy.deepcopy(source))
 
     async def save(self, source: SourceMedia) -> None:
         self.db.sources[source.id] = copy.deepcopy(source)
+
+    async def delete(self, source_ids: Sequence[UUID]) -> None:
+        for source_id in source_ids:
+            self.db.sources.pop(source_id, None)
 
 
 class FakeItems(_Repo):
@@ -124,8 +193,25 @@ class FakeItems(_Repo):
         found = self.db.items.get(media_item_id)
         return copy.deepcopy(found) if found else None
 
+    async def get_many(
+        self, media_item_ids: Sequence[UUID], *, for_update: bool = False
+    ) -> dict[UUID, MediaItemState]:
+        return {
+            i: copy.deepcopy(self.db.items[i]) for i in sorted(media_item_ids) if i in self.db.items
+        }
+
     async def upsert(self, state: MediaItemState) -> None:
         self.db.items[state.id] = copy.deepcopy(state)
+
+    async def list_active_ids(self, domain: str, *, after: UUID | None, limit: int) -> list[UUID]:
+        ids = sorted(
+            i.id
+            for i in self.db.items.values()
+            if i.domain == domain
+            and i.status is ItemStatus.ACTIVE
+            and (after is None or i.id > after)
+        )
+        return ids[:limit]
 
     async def next_event_version(self, media_item_id: UUID) -> int:
         if media_item_id not in self.db.items:
@@ -161,6 +247,59 @@ class FakeLinks(_Repo):
         before = len(self.db.links)
         self.db.links[:] = [r for r in self.db.links if r["issued_at"] >= cutoff]
         return before - len(self.db.links)
+
+
+class FakeProfiles(_Repo):
+    async def lock(self) -> None:
+        return None
+
+    async def get(
+        self, clue_type: str, params_hash: str, domain: str, *, for_update: bool = False
+    ) -> DynamicProfile | None:
+        for p in self.db.profiles.values():
+            if (p.clue_type, p.params_hash, p.domain) == (clue_type, params_hash, domain):
+                return copy.deepcopy(p)
+        return None
+
+    async def count_usable(self) -> int:
+        return sum(1 for p in self.db.profiles.values() if p.is_usable)
+
+    async def add(self, profile: DynamicProfile) -> None:
+        if await self.get(profile.clue_type, profile.params_hash, profile.domain):
+            raise ConflictError("дубль профиля")
+        self.db.profiles[profile.id] = copy.deepcopy(profile)
+
+    async def save(self, profile: DynamicProfile) -> None:
+        self.db.profiles[profile.id] = copy.deepcopy(profile)
+
+    def _sorted(self) -> list[DynamicProfile]:
+        return [
+            copy.deepcopy(p) for p in sorted(self.db.profiles.values(), key=lambda p: p.created_at)
+        ]
+
+    async def list_usable(self, domain: str) -> list[DynamicProfile]:
+        return [p for p in self._sorted() if p.domain == domain and p.is_usable]
+
+    async def list_backfilling(self, limit: int) -> list[DynamicProfile]:
+        return [p for p in self._sorted() if p.status is DynamicProfileStatus.BACKFILLING][:limit]
+
+    async def list_all(
+        self, clue_type: str | None = None, params_hash: str | None = None
+    ) -> list[DynamicProfile]:
+        return [
+            p
+            for p in self._sorted()
+            if clue_type in (None, p.clue_type) and params_hash in (None, p.params_hash)
+        ]
+
+
+class FakeCollections(_Repo):
+    async def advance(self, state: CollectionState) -> bool:
+        current = self.db.collections.get(state.id)
+        if current is not None and current.version >= state.version:
+            return False
+        self.db.collections[state.id] = copy.deepcopy(state)
+        return True
 
 
 class FakeIdempotency(_Repo):
@@ -227,6 +366,8 @@ class FakeMediaUnitOfWork:
         self.sources = FakeSources(self)
         self.items = FakeItems(self)
         self.links = FakeLinks(self)
+        self.profiles = FakeProfiles(self)
+        self.collections = FakeCollections(self)
         self.idempotency = FakeIdempotency(self)
         self.audit = FakeAudit(self)
 
@@ -252,7 +393,15 @@ class FakeMediaUnitOfWork:
             self._fail_commit(self.view)
         for aggregate in self._tracked:
             self.view.events.extend(aggregate.pull_events())
-        for name in ("asset_sets", "sources", "items", "event_versions", "idempotency"):
+        for name in (
+            "asset_sets",
+            "sources",
+            "items",
+            "event_versions",
+            "idempotency",
+            "profiles",
+            "collections",
+        ):
             setattr(self._db, name, getattr(self.view, name))
         self._db.links[:] = self.view.links
         self._db.audit[:] = self.view.audit
@@ -316,6 +465,7 @@ class FakeTranscoder:
 
     duration_ms: int | None = None
     cuts: list[tuple[float, float]] = field(default_factory=list)
+    reversed_cuts: list[tuple[float, float]] = field(default_factory=list)
 
     async def normalize(self, data: bytes) -> NormalizedMedia:
         if b"broken" in data:
@@ -325,10 +475,16 @@ class FakeTranscoder:
     async def probe_duration_ms(self, data: bytes) -> int:
         return self.duration_ms if self.duration_ms is not None else len(data) * 10
 
-    async def cut_audio(self, data: bytes, *, start_s: float, duration_s: float) -> bytes:
+    async def cut_audio(
+        self, data: bytes, *, start_s: float, duration_s: float, reverse: bool = False
+    ) -> bytes:
         self.cuts.append((start_s, duration_s))
         start = round(start_s * 100)
-        return data[start : start + round(duration_s * 100)]
+        cut = data[start : start + round(duration_s * 100)]
+        if reverse:
+            self.reversed_cuts.append((start_s, duration_s))
+            return cut[::-1]
+        return cut
 
 
 @dataclass
@@ -415,7 +571,16 @@ TEST_PROFILES: dict[str, Any] = {
 class MediaHarness:
     """Use-cases сервиса, собранные на фейках портов."""
 
-    def __init__(self, *, max_attempts: int = 3, link_max: int = 3) -> None:
+    def __init__(
+        self,
+        *,
+        max_attempts: int = 3,
+        link_max: int = 3,
+        require_provenance: bool = False,
+        max_profiles: int = 3,
+        backfill_batch: int = 2,
+        profiles: dict[str, Any] | None = None,
+    ) -> None:
         from datetime import timedelta
 
         from media_pipeline_service.application.commands.catalog import (
@@ -429,15 +594,30 @@ class MediaHarness:
             GenerateAssetSet,
             RegenerateAssetSet,
         )
-        from media_pipeline_service.application.commands.links import IssueAssetLink
-        from media_pipeline_service.application.commands.sources import UploadSource
+        from media_pipeline_service.application.commands.links import (
+            IssueAssetLink,
+            PurgeLinkJournal,
+        )
+        from media_pipeline_service.application.commands.profiles import (
+            ApplyClueAssetsRequested,
+            BackfillDynamicProfiles,
+        )
+        from media_pipeline_service.application.commands.sources import (
+            SetSourcePosition,
+            UploadSource,
+        )
         from media_pipeline_service.application.generators import (
             AudioIntroGenerator,
+            DescriptionGenerator,
+            EmojiGenerator,
             FrameProgressiveGenerator,
+            FrameSequenceGenerator,
             GeneratorRegistry,
             PosterMaskedGenerator,
         )
+        from media_pipeline_service.application.profiles import ProfileDirectory
         from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+        from media_pipeline_service.application.queries.profiles import ListProfiles
         from media_pipeline_service.application.sources import SourceIngestor
         from media_pipeline_service.domain.links import LinkPolicy
         from media_pipeline_service.domain.sources import SourceKind
@@ -457,10 +637,14 @@ class MediaHarness:
             [
                 AudioIntroGenerator(self.transcoder),
                 FrameProgressiveGenerator(self.images),
+                FrameSequenceGenerator(self.images),
                 PosterMaskedGenerator(self.images, max_width=480),
+                DescriptionGenerator(),
+                EmojiGenerator(),
             ]
         )
-        self.profiles = self.registry.build_catalog(TEST_PROFILES)
+        self.profiles = self.registry.build_catalog(profiles or TEST_PROFILES)
+        self.directory = ProfileDirectory(self.profiles, self.registry)
 
         # Тест может задать хуки сбоев коммита (см. ``FakeMediaUnitOfWork``).
         self.fail_commit: Callable[[MemoryDb], None] | None = None
@@ -476,13 +660,23 @@ class MediaHarness:
             self.storage,
             {
                 SourceKind.AUDIO: self.transcoder,
+                SourceKind.SOUNDTRACK: self.transcoder,
+                SourceKind.AUDIO_CLIP: self.transcoder,
                 SourceKind.FRAME: self.images,
                 SourceKind.POSTER: self.images,
             },
             self.tokens,
             max_bytes=10_000,
         )
-        self.plan = PlanAssetSets(uow, self.clock, self.profiles, self.queue, self.storage)
+        self.plan = PlanAssetSets(
+            uow,
+            self.clock,
+            self.directory,
+            self.queue,
+            self.storage,
+            registry=self.registry,
+            scoped_clue_types=frozenset({"emoji"}),
+        )
         self.disable = DisableItemAssets(uow, self.clock, self.storage)
         self.restore = RestoreItemAssets(uow, self.clock, self.queue)
         self.register = RegisterSourceFromCatalog(uow, self.clock)
@@ -507,8 +701,15 @@ class MediaHarness:
         )
         self.regenerate = RegenerateAssetSet(uow, self.clock, self.queue, self.storage)
         self.upload = UploadSource(
-            uow, self.clock, self.ingestor, self.profiles, self.plan, storage=self.storage
+            uow,
+            self.clock,
+            self.ingestor,
+            self.directory,
+            self.plan,
+            storage=self.storage,
+            require_provenance=require_provenance,
         )
+        self.set_position = SetSourcePosition(uow, self.clock, self.plan, storage=self.storage)
         self.policy = LinkPolicy(ttl_s=60, max_per_window=link_max, window_s=60)
         self.issue_link = IssueAssetLink(
             uow,
@@ -516,9 +717,34 @@ class MediaHarness:
             FakeSigner(),
             self.limiter,
             self.policy,
-            retention=timedelta(days=7),
         )
+        self.purge_links = PurgeLinkJournal(uow, self.clock, retention=timedelta(days=7), batch=2)
         self.list_sets = ListAssetSets(uow)
+        self.request_assets = ApplyClueAssetsRequested(
+            uow, self.clock, self.directory, max_profiles=max_profiles, max_params_bytes=4096
+        )
+        self.backfill = BackfillDynamicProfiles(
+            uow, self.clock, self.directory, self.plan, self.storage, batch=backfill_batch
+        )
+        self.list_profiles = ListProfiles(uow, self.directory)
+
+    @property
+    def sync_collection(self) -> SyncCollectionAssets:
+        """Свои загадки сборников (ADR 0029): лимит графем как в настройках по умолчанию."""
+        from media_pipeline_service.application.commands.collections import (
+            SyncCollectionAssets,
+        )
+
+        return SyncCollectionAssets(
+            self.uow, self.clock, self.plan, self.storage, emoji_max_graphemes=12
+        )
+
+    @property
+    def list_sources(self) -> ListSources:
+        """Исходники единицы для админки."""
+        from media_pipeline_service.application.queries.sources import ListSources
+
+        return ListSources(self.uow)
 
     async def run_tasks(self) -> int:
         """Выполнить все поставленные задачи генерации (повторы — как ретраи очереди)."""
@@ -541,5 +767,6 @@ def media() -> MediaHarness:
 
 @pytest.fixture
 def media_factory() -> type[MediaHarness]:
-    """Конструктор harness с параметрами (``max_attempts``, ``link_max``)."""
+    """Конструктор harness с параметрами (``max_attempts``, ``link_max``,
+    ``require_provenance``, ``max_profiles``, ``backfill_batch``, ``profiles``)."""
     return MediaHarness

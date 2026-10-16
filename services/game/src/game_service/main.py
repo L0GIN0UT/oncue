@@ -27,6 +27,7 @@ def build_routers(infra: Infrastructure, adapters: GameAdapters | None = None) -
             mode_commands=c.mode_commands,
             mode_queries=c.mode_queries,
             daily_admin=c.daily_admin,
+            asset_requests=c.asset_requests,
             editor_schema=c.adapters.registry.editor_schema,
         )
     )

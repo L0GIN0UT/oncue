@@ -71,7 +71,7 @@ def _levels(n: int) -> list[AssetLevel]:
 
 def _planned(levels: int = 3) -> AssetSet:
     return AssetSet.plan(
-        uuid7(), media_item_id=ITEM, profile=_profile(levels), source_media_id=uuid7(), now=NOW
+        uuid7(), media_item_id=ITEM, profile=_profile(levels), source_media_ids=(uuid7(),), now=NOW
     )
 
 
@@ -186,7 +186,7 @@ def test_restore_starts_new_generation() -> None:
 def test_regenerate_switches_source() -> None:
     aggregate = _planned()
     new_source = uuid7()
-    aggregate.regenerate(NOW, source_media_id=new_source)
+    aggregate.regenerate(NOW, source_media_ids=(new_source,))
     assert aggregate.source_media_id == new_source
 
 

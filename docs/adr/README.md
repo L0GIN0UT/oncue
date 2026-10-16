@@ -26,3 +26,12 @@
 | [0020](0020-mode-config-assets-by-params-hash.md) | ModeConfig ↔ ассеты по `params_hash`, очки в Scorer |
 | [0021](0021-s3-storage-seaweedfs.md) | S3-хранилище на VPS: SeaweedFS вместо MinIO |
 | [0022](0022-image-scan-reporting-not-gating.md) | Скан образов (trivy) — отчётный, не блокирующий |
+| [0023](0023-round-draw-answer-formats-end-rules.md) | Состав раунда, форматы ответа и правила завершения — плагины ядра |
+| [0024](0024-clue-texts-as-media-assets.md) | Тексты загадок — ассеты media-pipeline, курирование в catalog |
+| [0025](0025-dynamic-asset-profiles.md) | Динамические профили ассетов по `ClueAssetsRequested` |
+| [0026](0026-reveal-with-other-clue-type.md) | Ревил ассетом другого типа — `clue.reveal` |
+| [0027](0027-period-sets-preference-modes-records.md) | Плановые наборы с периодом, режимы предпочтения, рекорды |
+| [0028](0028-collections-versions-draft-projection.md) | Сборники: версии, черновик с оптимистичной блокировкой, проекция в game, сборник в параметрах старта |
+| [0029](0029-collection-assets-scoped-sets.md) | Ассеты сборников — наборы со `scope` |
+| [0030](0030-minimal-ugc-safety-before-moderation.md) | Минимальная безопасность UGC до модерации этапа 5 |
+| [0031](0031-library-config-shelves-private-catalog-projection.md) | Медиатека: системные полки из конфига, приватность, проекция каталога |

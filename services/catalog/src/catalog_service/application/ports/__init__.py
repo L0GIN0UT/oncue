@@ -16,9 +16,11 @@ from catalog_service.application.dto import (
     SearchQuery,
     Suggestion,
 )
+from catalog_service.domain.clue_texts import ClueTexts
 from catalog_service.domain.import_job import ImportJob
 from catalog_service.domain.media_item import MediaItem
-from catalog_service.domain.model import ExternalSource
+from catalog_service.domain.model import ExternalSource, MediaDomain
+from catalog_service.domain.republish import RepublishJob
 from gv_core.pagination import Page
 from gv_core.uow import UnitOfWork
 from gv_db.idempotency import IdempotencyStore
@@ -28,6 +30,7 @@ __all__ = [
     "AdminActionLog",
     "CatalogUnitOfWork",
     "ClueStatusRepository",
+    "ClueTextsRepository",
     "FilmMetadataProvider",
     "IdempotencyStore",
     "ImportEntrySource",
@@ -38,6 +41,7 @@ __all__ = [
     "PersonRepository",
     "PrefixCache",
     "RateLimiter",
+    "RepublishJobRepository",
     "SearchBackend",
     "SearchIndex",
     "TaskQueue",
@@ -78,6 +82,12 @@ class MediaItemRepository(Protocol):
         self, flt: AdminItemFilter, cursor: str | None, limit: int
     ) -> Page[ItemSummary]:
         """Страница списка для админки (новые первыми)."""
+        ...
+
+    async def list_ids_after(
+        self, domain: MediaDomain | None, after: uuid.UUID | None, limit: int
+    ) -> list[uuid.UUID]:
+        """id единиц по возрастанию после ``after`` (порции переопубликации)."""
         ...
 
 
@@ -138,6 +148,34 @@ class ClueStatusRepository(Protocol):
         ...
 
 
+class ClueTextsRepository(Protocol):
+    """Тексты загадок (черновики и ревизии, ADR 0024)."""
+
+    async def get(self, media_item_id: uuid.UUID) -> ClueTexts | None:
+        """Тексты единицы (строка блокируется до конца транзакции)."""
+        ...
+
+    async def save(self, texts: ClueTexts) -> None:
+        """Создать или обновить."""
+        ...
+
+
+class RepublishJobRepository(Protocol):
+    """Задания переопубликации."""
+
+    async def add(self, job: RepublishJob) -> None:
+        """Сохранить новое задание."""
+        ...
+
+    async def get(self, job_id: uuid.UUID) -> RepublishJob | None:
+        """Задание (строка блокируется до конца транзакции)."""
+        ...
+
+    async def save(self, job: RepublishJob) -> None:
+        """Сохранить состояние."""
+        ...
+
+
 class CatalogUnitOfWork(UnitOfWork, Protocol):
     """Транзакция каталога с репозиториями, привязанными к ней."""
 
@@ -170,6 +208,16 @@ class CatalogUnitOfWork(UnitOfWork, Protocol):
     @property
     def clue_status(self) -> ClueStatusRepository:
         """Готовность ассетов."""
+        ...
+
+    @property
+    def clue_texts(self) -> ClueTextsRepository:
+        """Тексты загадок."""
+        ...
+
+    @property
+    def republish(self) -> RepublishJobRepository:
+        """Задания переопубликации."""
         ...
 
 

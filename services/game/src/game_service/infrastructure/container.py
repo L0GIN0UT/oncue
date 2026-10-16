@@ -24,12 +24,14 @@ from game_service.application.commands.modes import (
     ConfigLimits,
     ModeConfigCommands,
     ModeConfigQueries,
+    RequestClueAssets,
     ValidateModeConfig,
 )
 from game_service.application.commands.play import PlayLimits, PlayService
 from game_service.application.commands.projection import (
     ApplyAssetsEvent,
     ApplyCatalogEvent,
+    ApplyCollectionEvent,
     ForgetUser,
 )
 from game_service.application.ports import (
@@ -238,16 +240,32 @@ class GameContainer:
                 guest_sessions_per_ip_per_hour=lim.guest_sessions_per_ip_per_hour,
                 fast_exact_ms=g.fast_exact_ms,
                 candidate_limit=g.candidate_limit,
+                final_clue_per_min=lim.final_clue_per_min,
             ),
         )
 
     @cached_property
     def queries(self) -> PlayQueries:
         """Запросы публичного API."""
-        return PlayQueries(self.uow_factory(), self.infra.clock, self.catalog, self.presenter)
+        return PlayQueries(
+            self.uow_factory(),
+            self.infra.clock,
+            self.catalog,
+            self.presenter,
+            self.adapters.limiter,
+            subjects_per_min=self.settings.game_limits.subjects_per_min,
+            playability_per_min=self.settings.game_limits.playability_per_min,
+            candidate_limit=self.settings.game.candidate_limit,
+        )
+
+    @cached_property
+    def asset_requests(self) -> RequestClueAssets:
+        """Запросы ассетов под загадки черновиков (ADR 0025)."""
+        return RequestClueAssets(self.uow_factory(), self.infra.clock, self.factory)
 
     catalog_events = ApplyCatalogEvent()
     assets_events = ApplyAssetsEvent()
+    collection_events = ApplyCollectionEvent()
     forget_user = ForgetUser()
 
 

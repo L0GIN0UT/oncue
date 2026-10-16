@@ -1,14 +1,22 @@
 """Соло-сессия (D12): источник истины в Postgres, ход — одна строка с ``version``.
 
-Правила раунда (переходы уровней, сверка ответа, очки) считает ядро движка; агрегат
-хранит результат и следит за инвариантами сессии: ход только в текущем активном раунде,
-уровень ассета не выше открытого, завершённая сессия не меняется. Каждый ход увеличивает
-``version`` — клиент передаёт её как ``expected_version`` (``game.desync``).
+Правила раунда (переходы уровней, сверка ответа, очки, правило завершения) считает ядро
+движка; агрегат хранит результат и следит за инвариантами сессии: ход только в текущем
+активном раунде, уровень ассета не выше открытого, завершённая сессия не меняется.
+Каждый ход увеличивает ``version`` — клиент передаёт её как ``expected_version``
+(``game.desync``).
+
+Этап 3a (ADR 0023, D4): раунды материализуются лениво. Разыгранный состав
+(``PlannedRound``: цель, показанные единицы, варианты) лежит в скрытом плане
+``plan``; раунд i+1 создаётся, когда завершён раунд i. Сетка дописывает план туров
+(``extend_plan``), правило ``session.end`` отбрасывает остаток плана (``end_by_rule``).
+Какие варианты за какими единицами стоят (``option_id → media_item_id``), знает только
+сервер. Версия схемы состояния — ``STATE_SCHEMA`` (снимки этапа 2 без поля — v1).
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
@@ -19,10 +27,19 @@ from game_service.domain.errors import (
     SessionNotActiveError,
     SessionNotFoundError,
 )
-from game_service.domain.events import DailyCompleted, GameFinished, RoundSummary
+from game_service.domain.events import (
+    BracketCompleted,
+    BracketPickSummary,
+    DailyCompleted,
+    GameFinished,
+    RoundSummary,
+)
 from gv_core.domain import AggregateRoot
 from gv_game_kernel import AssetRef, LevelLockedError, RoundFinishedError, RoundResult, RoundState
 from gv_game_kernel import round as kernel_round
+
+STATE_SCHEMA = 2
+"""Версия схемы ``game_sessions.state``: 1 — этап 2 (без плана и состава раунда), 2 — 3a."""
 
 
 class PlayerKind(StrEnum):
@@ -49,6 +66,11 @@ class PlayerRef:
         """Гость."""
         return self.kind is PlayerKind.GUEST
 
+    @property
+    def user_id(self) -> UUID | None:
+        """``user_id`` пользователя или ``None`` (гость, удалённый пользователь)."""
+        return None if self.is_guest else self.id
+
 
 class SessionStatus(StrEnum):
     """Статус сессии."""
@@ -58,6 +80,73 @@ class SessionStatus(StrEnum):
     ABANDONED = "abandoned"
 
 
+@dataclass(frozen=True, slots=True)
+class RoundOption:
+    """Вариант ответа раунда (формат ``pick``): клиент видит только ``id`` и подпись.
+
+    Attributes:
+        id: Непрозрачный ``option_id``.
+        label_key: Ключ i18n подписи или ``None``.
+        media_item_id: Единица за вариантом (сетка) или ``None`` («больше/меньше»).
+    """
+
+    id: str
+    label_key: str | None = None
+    media_item_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ShownItem:
+    """Единица, показанная открыто (опорная единица пары, единицы пары сетки).
+
+    Attributes:
+        media_item_id: Единица (клиенту — только название, год, метрика, подача).
+        asset: Набор ассетов подачи (кадр или отрывок) или ``None``.
+    """
+
+    media_item_id: UUID
+    asset: AssetRef | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedRound:
+    """Разыгранный, но ещё не выданный раунд (скрыт от клиента, D4).
+
+    Attributes:
+        target: Загаданная единица.
+        shown: Открыто показанные единицы.
+        options: Варианты ответа (пусто — классический ввод).
+    """
+
+    target: UUID
+    shown: tuple[UUID, ...] = ()
+    options: tuple[RoundOption, ...] = ()
+
+    def item_ids(self) -> list[UUID]:
+        """Все единицы раунда (цель, показанные, варианты) без повторов."""
+        ids = [
+            self.target,
+            *self.shown,
+            *(o.media_item_id for o in self.options if o.media_item_id),
+        ]
+        return list(dict.fromkeys(ids))
+
+
+@dataclass(frozen=True, slots=True)
+class RoundAssets:
+    """Наборы ассетов раунда на момент материализации.
+
+    Attributes:
+        asset: Набор загадки (``None`` — ассетов нет, раунд аннулируется).
+        reveal: Набор ревила другого типа (``clue.reveal``, ADR 0026) или ``None``.
+        shown: Наборы подачи показанных единиц.
+    """
+
+    asset: AssetRef | None
+    reveal: AssetRef | None = None
+    shown: Mapping[UUID, AssetRef] = field(default_factory=dict)
+
+
 @dataclass
 class Round:
     """Раунд сессии.
@@ -65,13 +154,18 @@ class Round:
     Attributes:
         index: Номер с 0.
         media_item_id: Загаданная единица (клиенту — только после ревила).
-        asset: Набор ассетов (``None`` — ассетов нет, раунд аннулирован при старте).
+        asset: Набор ассетов (``None`` — ассетов нет, раунд аннулирован при выдаче).
         levels_count: Число уровней загадки.
         max_points: Максимум очков за раунд (Scorer).
         state: Состояние раунда (ядро).
         points: Очки за завершённый раунд.
         started_at: Первая выдача ассета (отсчёт ``elapsed_ms``).
         finished_at: Момент итога.
+        shown: Открыто показанные единицы.
+        options: Варианты ответа (``option_id → media_item_id`` — только на сервере).
+        choice: Выбранный вариант (формат ``pick``).
+        stage: Этап раунда для UI (тур сетки) или ``None``.
+        reveal_asset: Набор ревила другого типа или ``None``.
     """
 
     index: int
@@ -83,6 +177,11 @@ class Round:
     points: int = 0
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    shown: tuple[ShownItem, ...] = ()
+    options: tuple[RoundOption, ...] = ()
+    choice: str | None = None
+    stage: int | None = None
+    reveal_asset: AssetRef | None = None
 
     @property
     def finished(self) -> bool:
@@ -110,17 +209,44 @@ class Round:
             return None
         return max(0, int((self.finished_at - self.started_at).total_seconds() * 1000))
 
+    def plan(self) -> PlannedRound:
+        """Состав раунда (для ``followups`` ядра и правил ответа)."""
+        return PlannedRound(
+            target=self.media_item_id,
+            shown=tuple(s.media_item_id for s in self.shown),
+            options=self.options,
+        )
 
-@dataclass(frozen=True, slots=True)
-class RoundPlan:
-    """Единица раунда при старте сессии."""
+    def option(self, option_id: str | None) -> RoundOption | None:
+        """Вариант по ``option_id`` (``None`` — нет такого или вариантов нет)."""
+        return next((o for o in self.options if o.id == option_id), None)
 
-    media_item_id: UUID
-    asset: AssetRef | None
+    def winner_loser(self) -> tuple[UUID, UUID] | None:
+        """Победитель и проигравший раунда предпочтения (оба варианта — единицы).
+
+        Без выбора (``void``) побеждает первый вариант — как у ``bracket`` ядра.
+        """
+        items = [o for o in self.options if o.media_item_id is not None]
+        if len(items) < 2:  # noqa: PLR2004 — пара вариантов
+            return None
+        chosen = self.option(self.choice) or items[0]
+        other = next(o for o in items if o.id != chosen.id)
+        assert chosen.media_item_id is not None and other.media_item_id is not None  # noqa: S101
+        return chosen.media_item_id, other.media_item_id
 
 
 class GameSession(AggregateRoot[UUID]):
-    """Соло-сессия режима ``mode_key@mode_version``."""
+    """Соло-сессия режима ``mode_key@mode_version``.
+
+    Attributes:
+        plan: Невыданные раунды (скрыты от клиента).
+        progressive: Раунды зависят от прошлых (сетка): итог — ``BracketCompleted``,
+            а не ``GameFinished``; в статистику дейлика не идёт.
+        round_max: Максимум очков за раунд (оценка ``max_score`` по плану).
+        collection_id: Сборник сессии (source ``collection``, ADR 0028) или ``None``.
+        collection_version: ``content_version`` сборника на старте: сессия доигрывается на
+            этом составе, даже если сборник правят или скрывают.
+    """
 
     def __init__(
         self,
@@ -142,8 +268,17 @@ class GameSession(AggregateRoot[UUID]):
         idle_timeout_s: int,
         finished_at: datetime | None = None,
         version: int = 1,
+        plan: list[PlannedRound] | None = None,
+        progressive: bool = False,
+        round_max: int | None = None,
+        collection_id: UUID | None = None,
+        collection_version: int | None = None,
     ) -> None:
         super().__init__(id, version)
+        if (collection_id is None) != (collection_version is None):
+            raise ValueError("сборник сессии задаётся вместе с версией состава")
+        self.collection_id = collection_id
+        self.collection_version = collection_version
         self.player = player
         self.mode_key = mode_key
         self.mode_version = mode_version
@@ -159,6 +294,11 @@ class GameSession(AggregateRoot[UUID]):
         self.last_move_at = last_move_at
         self.idle_timeout_s = idle_timeout_s
         self.finished_at = finished_at
+        self.plan: list[PlannedRound] = list(plan or [])
+        self.progressive = progressive
+        self.round_max = (
+            round_max if round_max is not None else (rounds[0].max_points if rounds else 0)
+        )
 
     # ------------------------------------------------------------------ создание
     @classmethod
@@ -175,23 +315,22 @@ class GameSession(AggregateRoot[UUID]):
         day: date | None,
         preset_id: str | None,
         seed: bytes,
-        plan: Sequence[RoundPlan],
-        levels_count: int,
-        max_points: int,
+        plan: Sequence[PlannedRound],
+        round_max: int,
         idle_timeout_s: int,
         now: datetime,
+        progressive: bool = False,
+        collection_id: UUID | None = None,
+        collection_version: int | None = None,
     ) -> GameSession:
-        """Новая сессия. Раунды без ассетов сразу аннулируются (``void``)."""
+        """Новая сессия с разыгранным планом; первый раунд выдаёт ``materialize_next``.
+
+        Raises:
+            ValueError: план пуст.
+        """
         if not plan:
             raise ValueError("в сессии должен быть хотя бы один раунд")
-        rounds = []
-        for i, item in enumerate(plan):
-            r = Round(i, item.media_item_id, item.asset, levels_count, max_points)
-            if item.asset is None:
-                r.state = kernel_round.void(r.state)
-                r.finished_at = now
-            rounds.append(r)
-        session = cls(
+        return cls(
             id,
             player=player,
             mode_key=mode_key,
@@ -203,14 +342,16 @@ class GameSession(AggregateRoot[UUID]):
             preset_id=preset_id,
             seed=seed,
             status=SessionStatus.ACTIVE,
-            rounds=rounds,
+            rounds=[],
             started_at=now,
             last_move_at=now,
             idle_timeout_s=idle_timeout_s,
+            plan=list(plan),
+            progressive=progressive,
+            round_max=round_max,
+            collection_id=collection_id,
+            collection_version=collection_version,
         )
-        if all(r.finished for r in rounds):
-            session._finish(now)
-        return session
 
     # ------------------------------------------------------------------ чтение
     @property
@@ -220,12 +361,14 @@ class GameSession(AggregateRoot[UUID]):
 
     @property
     def max_score(self) -> int:
-        """Максимум очков: раунды ``void`` не входят."""
-        return sum(r.max_points for r in self.rounds if not r.is_void)
+        """Максимум очков: выданные не-``void`` раунды плюс невыданный план (у идущей
+        сессии — верхняя оценка; после досрочного завершения план отброшен)."""
+        played = sum(r.max_points for r in self.rounds if not r.is_void)
+        return played + (self.round_max * len(self.plan) if self.is_active else 0)
 
     @property
     def current_index(self) -> int:
-        """Номер текущего раунда; ``len(rounds)`` — играть нечего."""
+        """Номер текущего раунда; ``len(rounds)`` — выданные раунды сыграны."""
         for r in self.rounds:
             if not r.finished:
                 return r.index
@@ -235,6 +378,16 @@ class GameSession(AggregateRoot[UUID]):
     def is_active(self) -> bool:
         """Сессия идёт."""
         return self.status is SessionStatus.ACTIVE
+
+    @property
+    def needs_next(self) -> bool:
+        """Сессия идёт, а все выданные раунды завершены: нужен следующий раунд или итог."""
+        return self.is_active and all(r.finished for r in self.rounds)
+
+    @property
+    def next_planned(self) -> PlannedRound | None:
+        """Следующий раунд плана или ``None``."""
+        return self.plan[0] if self.plan else None
 
     def require_owner(self, player: PlayerRef) -> None:
         """Чужая сессия неотличима от несуществующей (404, §9 п. 2).
@@ -249,7 +402,7 @@ class GameSession(AggregateRoot[UUID]):
         """Раунд по номеру.
 
         Raises:
-            RoundNotActiveError: номера нет.
+            RoundNotActiveError: номера нет (в том числе раунд ещё не выдан).
         """
         if not 0 <= index < len(self.rounds):
             raise RoundNotActiveError("нет такого раунда")
@@ -284,6 +437,69 @@ class GameSession(AggregateRoot[UUID]):
             raise LevelLockedError("уровень ещё не открыт", details={"level": r.state.level})
         return r
 
+    # ------------------------------------------------------------------ план
+    def materialize_next(
+        self,
+        assets: RoundAssets,
+        *,
+        levels_count: int,
+        max_points: int,
+        stage: int | None,
+        now: datetime,
+    ) -> Round:
+        """Выдать следующий раунд плана. Раунд без ассетов сразу аннулируется (``void``).
+
+        Raises:
+            SessionNotActiveError: сессия завершена.
+            ValueError: план пуст или текущий раунд не завершён.
+        """
+        if not self.is_active:
+            raise SessionNotActiveError("сессия завершена")
+        if not self.needs_next or not self.plan:
+            raise ValueError("следующий раунд выдаётся после завершения текущего")
+        planned = self.plan.pop(0)
+        r = Round(
+            index=len(self.rounds),
+            media_item_id=planned.target,
+            asset=assets.asset,
+            levels_count=levels_count,
+            max_points=max_points,
+            shown=tuple(ShownItem(i, assets.shown.get(i)) for i in planned.shown),
+            options=planned.options,
+            stage=stage,
+            reveal_asset=assets.reveal,
+        )
+        if assets.asset is None:
+            r.state = kernel_round.void(r.state)
+            r.finished_at = now
+        self.rounds.append(r)
+        return r
+
+    def extend_plan(self, rounds: Sequence[PlannedRound]) -> None:
+        """Дописать раунды в план (следующий тур сетки)."""
+        if rounds and not self.is_active:
+            raise SessionNotActiveError("сессия завершена")
+        self.plan.extend(rounds)
+
+    def end_by_rule(self, now: datetime) -> None:
+        """Досрочное завершение по правилу ``session.end``: невыданный план отбрасывается."""
+        if not self.is_active:
+            return
+        self.plan.clear()
+        self._finish(now)
+
+    def complete(self, now: datetime) -> None:
+        """Завершить сессию, когда все выданные раунды сыграны и план пуст.
+
+        Raises:
+            ValueError: есть несыгранные раунды или план не пуст.
+        """
+        if not self.is_active:
+            return
+        if not self.needs_next or self.plan:
+            raise ValueError("сессия не доиграна")
+        self._finish(now)
+
     # ------------------------------------------------------------------ изменения
     def mark_clue_issued(self, index: int, now: datetime) -> bool:
         """Отметить первую выдачу ассета раунда (старт отсчёта времени).
@@ -299,21 +515,35 @@ class GameSession(AggregateRoot[UUID]):
         r.started_at = now
         return True
 
-    def apply(self, index: int, state: RoundState, *, points: int, now: datetime) -> Round:
+    def apply(
+        self,
+        index: int,
+        state: RoundState,
+        *,
+        points: int,
+        now: datetime,
+        choice: str | None = None,
+    ) -> Round:
         """Применить новое состояние раунда после хода (ядро уже посчитало переход).
+
+        Сессию не завершает: следующий раунд или итог определяет application по правилам
+        режима (``materialize_next`` / ``end_by_rule`` / ``complete``).
 
         Raises:
             SessionNotActiveError, RoundFinishedError, RoundNotActiveError: см. ``active_round``.
+            ValueError: ``choice`` не из вариантов раунда.
         """
         r = self.active_round(index)
+        if choice is not None and r.option(choice) is None:
+            raise ValueError("выбор не из вариантов раунда")
         r.state = state
+        if choice is not None:
+            r.choice = choice
         if state.finished:
             r.points = 0 if r.is_void else points
             r.finished_at = now
         self.version += 1
         self.last_move_at = now
-        if all(x.finished for x in self.rounds):
-            self._finish(now)
         return r
 
     def void_round(self, index: int, now: datetime) -> Round | None:
@@ -346,6 +576,9 @@ class GameSession(AggregateRoot[UUID]):
     def _finish(self, now: datetime) -> None:
         self.status = SessionStatus.FINISHED
         self.finished_at = now
+        if self.progressive:
+            self._record_bracket()
+            return
         summaries = tuple(
             RoundSummary(
                 index=r.index,
@@ -358,7 +591,7 @@ class GameSession(AggregateRoot[UUID]):
             for r in self.rounds
         )
         is_guest = self.player.is_guest
-        user_id = None if is_guest else self.player.id
+        user_id = self.player.user_id
         day = self.day.isoformat() if self.day else None
         self.record(
             GameFinished(
@@ -378,6 +611,8 @@ class GameSession(AggregateRoot[UUID]):
                 started_at=self.started_at,
                 finished_at=now,
                 rounds=summaries,
+                collection_id=self.collection_id,
+                collection_version=self.collection_version,
             )
         )
         if day is not None and user_id is not None:
@@ -398,7 +633,45 @@ class GameSession(AggregateRoot[UUID]):
                 )
             )
 
+    def bracket_picks(self) -> list[tuple[int, UUID, UUID]]:
+        """Выборы сетки по порядку: ``(тур, победитель, проигравший)``."""
+        picks: list[tuple[int, UUID, UUID]] = []
+        for r in self.rounds:
+            pair = r.winner_loser()
+            if pair is not None and r.stage is not None:
+                picks.append((r.stage, *pair))
+        return picks
+
+    def _record_bracket(self) -> None:
+        picks = self.bracket_picks()
+        if not picks or self.day is None:
+            # Сетка без выборов или без периода — итог не публикуется (контракт: minItems 1).
+            return
+        self.record(
+            BracketCompleted(
+                aggregate_id=str(self.id),
+                session_id=self.id,
+                version=self.version,
+                user_id=self.player.user_id,
+                is_guest=self.player.is_guest,
+                mode_key=self.mode_key,
+                mode_version=self.mode_version,
+                period_start=self.day.isoformat(),
+                champion_id=picks[-1][1],
+                picks=tuple(
+                    BracketPickSummary(stage=stage, winner_id=w, loser_id=lo)
+                    for stage, w, lo in picks
+                ),
+            )
+        )
+
     @property
     def counts_in_daily_stats(self) -> bool:
-        """Результат идёт в статистику дня: пользователь и дейлик (гости — нет, D5)."""
-        return self.day is not None and not self.player.is_guest and self.player.id is not None
+        """Результат идёт в статистику дня: пользователь и дейлик (гости — нет, D5; сетка
+        считает свою статистику выборов)."""
+        return (
+            self.day is not None
+            and not self.progressive
+            and not self.player.is_guest
+            and self.player.id is not None
+        )

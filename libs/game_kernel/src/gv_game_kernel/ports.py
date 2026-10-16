@@ -52,10 +52,14 @@ class PlayableFor:
     Attributes:
         clue_type: Ключ ClueType.
         params_hash: ``params_hash(clue.params)``.
+        scope: Сборник, свои наборы которого учитываются первыми (ADR 0029): единица
+            играбельна, если есть набор со ``scope`` этого сборника, иначе — каталожный.
+            ``None`` — только каталожные наборы.
     """
 
     clue_type: str
     params_hash: str
+    scope: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +75,9 @@ class PoolQuery:
         min_popularity: Популярность не ниже.
         playable_for: Только единицы с готовыми ассетами под параметры загадки.
         exclude_ids: Исключить единицы (например, из недавних наборов дня).
+        person_ids_any: Хотя бы одна из персон (марафон и сетка по персоне; пусто — без
+            фильтра).
+        has_metric: Только единицы с этой метрикой каталога («больше/меньше»).
     """
 
     domain: str
@@ -81,6 +88,25 @@ class PoolQuery:
     min_popularity: float | None = None
     playable_for: PlayableFor | None = None
     exclude_ids: frozenset[UUID] = frozenset()
+    person_ids_any: frozenset[UUID] = frozenset()
+    has_metric: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectQuery:
+    """Какие персоны можно предложить игроку в марафоне (D14 плана этапа 3a).
+
+    Attributes:
+        domain: Домен режима.
+        roles: Роли персон (``artist``, ``director``, ``actor``).
+        min_items: Минимум играбельных единиц у персоны.
+        playable_for: Требование играбельности единиц.
+    """
+
+    domain: str
+    roles: frozenset[str]
+    min_items: int
+    playable_for: PlayableFor | None = None
 
 
 class CandidatePort(Protocol):
@@ -92,8 +118,15 @@ class CandidatePort(Protocol):
 
 
 class CollectionPort(Protocol):
-    """Единицы сборника (адаптер в game — этап 3, проекции сборников)."""
+    """Единицы сборника (адаптер в game — проекции ``collections.collection.v1``, ADR 0028)."""
 
-    async def items(self, collection_id: UUID, limit: int) -> list[MediaItemRef]:
-        """До ``limit`` единиц сборника в порядке сборника."""
+    async def items(
+        self, collection_id: UUID, limit: int, *, playable_for: PlayableFor | None
+    ) -> list[MediaItemRef]:
+        """До ``limit`` единиц сборника в порядке сборника (по ``position``).
+
+        Только активные в каталоге единицы; при ``playable_for`` — только играбельные
+        (набор со ``scope`` сборника, иначе каталожный). Неизвестный, скрытый или удалённый
+        сборник — пустой список (решение «404» принимает сервис до розыгрыша).
+        """
         ...

@@ -1,0 +1,41 @@
+{
+  "$id": "urn:guessverse:contracts:events:collections:CollectionLiked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Пользователь впервые лайкнул сборник (повтор и снятие лайка событий не публикуют, D13). aggregate_id — collection_id. Только пользователи, не автор.",
+  "properties": {
+    "collection_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "liked_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "likes_count": {
+      "description": "Число лайков после этого лайка",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия агрегата сборника (общая для публикации, правок, скрытия, лайков и удаления): потребитель отбрасывает событие с version не больше уже применённой",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "collection_id",
+    "version",
+    "user_id",
+    "likes_count",
+    "liked_at"
+  ],
+  "title": "collections.CollectionLiked v1",
+  "type": "object",
+  "x-aggregate-type": "collection",
+  "x-topic": "collections.collection.v1"
+}

@@ -1,0 +1,46 @@
+# Кадры фильма один за другим; clue.params = профиль frame_sequence/default media.
+key: film.random.sequence
+title_i18n: modes.film.random.sequence.title
+description_i18n: modes.film.random.sequence.description
+domain: film
+source:
+  type: random
+  params:
+    pool:
+      kinds: [film]
+      min_playable: 10
+clue:
+  type: frame_sequence
+  params:
+    levels:
+      - { frame: 1, max_width: 960 }
+      - { frame: 2, max_width: 960 }
+      - { frame: 3, max_width: 960 }
+      - { frame: 4, max_width: 960 }
+      - { frame: 5, max_width: 960 }
+      - { frame: 6, max_width: 960 }
+answer:
+  format: classic
+  matcher:
+    type: title_alias
+    params:
+      typo:
+        - { min_len: 5, max_distance: 1 }
+        - { min_len: 10, max_distance: 2 }
+      accept_same_title: true
+  partial: []
+scoring:
+  type: by_level
+  params:
+    points: [6, 5, 4, 3, 2, 1]
+    partial_ratio: 0.5
+session:
+  kind: solo
+  rounds: 5
+  attempts_per_level: 1
+  skip_allowed: true
+  give_up_allowed: true
+  allow_guest: true
+  abandon_after_min: 120
+features:
+  share: true

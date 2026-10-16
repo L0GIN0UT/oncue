@@ -10,18 +10,26 @@ from uuid import UUID
 import pytest
 from bff_web_service.application.dto import (
     ANONYMOUS,
+    Bracket,
+    BracketPick,
+    CollectionMode,
     DailyState,
     DailyStatus,
     Domain,
     Item,
     Me,
     Mode,
+    ModeStart,
     Person,
+    PersonalRecord,
+    Presentation,
+    ResultRecord,
     ResultRound,
     Reveal,
     SessionResult,
     Share,
     SubjectKind,
+    SubjectPick,
     Viewer,
 )
 from bff_web_service.application.ports import UpstreamRejectedError, UpstreamUnavailableError
@@ -31,7 +39,11 @@ from bff_web_service.application.queries import (
     GetSession,
     GetSoloPage,
     Limiter,
+    PageLayout,
     daily_cards,
+    mode_groups,
+    period_cards,
+    record_cards,
 )
 from bff_web_service.domain import Block, BlockStatus
 
@@ -54,7 +66,13 @@ USER = Viewer(token="user-token", kind=SubjectKind.USER, verified=True)
 GUEST = Viewer(token="guest-token", kind=SubjectKind.GUEST, verified=True)
 
 
-def mode(key: str, domain: Domain, source_type: str) -> Mode:
+def mode(
+    key: str,
+    domain: Domain,
+    source_type: str,
+    presentation: Presentation = "score",
+    start: ModeStart | None = None,
+) -> Mode:
     return Mode(
         key=key,
         version=1,
@@ -64,15 +82,24 @@ def mode(key: str, domain: Domain, source_type: str) -> Mode:
         clue_type="audio_intro" if domain == "music" else "frame_progressive",
         rounds=5,
         allow_guest=True,
+        answer_format="pick" if presentation != "score" else "classic",
+        presentation=presentation,
+        start=start,
     )
 
 
+DIRECTOR = ModeStart(subject=SubjectPick(["director"], 3))
 MODES = [
     mode("music.daily.classic", "music", "daily"),
     mode("film.daily.frame", "film", "daily"),
     mode("music.random.classic", "music", "random"),
     mode("film.random.frame", "film", "random"),
+    mode("film.marathon.director", "film", "marathon", "streak", DIRECTOR),
+    mode("film.pair.rating", "film", "pair", "streak"),
+    mode("film.random.emoji", "film", "random"),
+    mode("film.bracket.weekly", "film", "bracket", "bracket"),
 ]
+LAYOUT = PageLayout()
 
 
 def status(key: str, state: DailyState = "not_started") -> DailyStatus:
@@ -83,6 +110,10 @@ def status(key: str, state: DailyState = "not_started") -> DailyStatus:
         max_score=30,
         next_reset_at=RESET,
     )
+
+
+def record(key: str, best: int = 7) -> PersonalRecord:
+    return PersonalRecord(mode_key=key, best=best, achieved_at=RESET, percentile=81.5)
 
 
 def result(*reveals: UUID | None) -> SessionResult:
@@ -123,7 +154,13 @@ class FakeGame:
         default_factory=lambda: [status("music.daily.classic"), status("film.daily.frame")]
     )
     outcome: SessionResult | Exception = field(default_factory=lambda: result(ITEM_A))
+    best: list[PersonalRecord] | Exception = field(
+        default_factory=lambda: [record("film.pair.rating"), record("gone.pair.x")]
+    )
     daily_calls: list[tuple[str, Domain | None]] = field(default_factory=list)
+    records_calls: list[str] = field(default_factory=list)
+    collection: list[CollectionMode] | Exception = field(default_factory=list)
+    collection_calls: list[UUID] = field(default_factory=list)
 
     async def list_modes(self) -> list[Mode]:
         if isinstance(self.modes, Exception):
@@ -140,6 +177,18 @@ class FakeGame:
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return self.outcome
+
+    async def records(self, token: str) -> list[PersonalRecord]:
+        self.records_calls.append(token)
+        if isinstance(self.best, Exception):
+            raise self.best
+        return self.best
+
+    async def collection_modes(self, collection_id: UUID) -> list[CollectionMode]:
+        self.collection_calls.append(collection_id)
+        if isinstance(self.collection, Exception):
+            raise self.collection
+        return self.collection
 
 
 @dataclass
@@ -201,7 +250,7 @@ async def test_home_all_sources_ok() -> None:
     game = FakeGame()
     page = await GetHomePage(game, concurrency=10)(USER)
     assert page.personal is True
-    assert page.blocks.modes.data is not None and len(page.blocks.modes.data) == 4
+    assert page.blocks.modes.data is not None and len(page.blocks.modes.data) == len(MODES)
     dailies = page.blocks.dailies.data
     assert dailies is not None
     assert [(c.mode_key, c.domain, c.title_key) for c in dailies] == [
@@ -211,10 +260,22 @@ async def test_home_all_sources_ok() -> None:
     assert game.daily_calls == [("user-token", None)]
 
 
+async def test_home_weekly_bracket_is_separate_block_not_daily_card() -> None:
+    game = FakeGame(dailies=[status("film.daily.frame"), status("film.bracket.weekly")])
+    page = await GetHomePage(game, concurrency=10)(GUEST)
+    assert page.blocks.dailies.data is not None
+    assert [c.mode_key for c in page.blocks.dailies.data] == ["film.daily.frame"]
+    assert page.blocks.weekly.data is not None
+    assert [(c.mode_key, c.presentation) for c in page.blocks.weekly.data] == [
+        ("film.bracket.weekly", "bracket")
+    ]
+
+
 async def test_home_game_down_degrades_blocks_not_page() -> None:
     page = await GetHomePage(FakeGame(modes=DOWN, dailies=DOWN), concurrency=10)(GUEST)
     assert page.blocks.modes.status is BlockStatus.UNAVAILABLE
     assert page.blocks.dailies.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.weekly.status is BlockStatus.UNAVAILABLE
 
 
 async def test_home_daily_failure_keeps_modes() -> None:
@@ -241,23 +302,117 @@ def test_daily_cards_skip_statuses_of_unknown_modes() -> None:
 # ----------------------------------------------------------------------------- хаб
 async def test_solo_filters_by_domain_and_random_source_types() -> None:
     game = FakeGame(dailies=[status("film.daily.frame", "finished")])
-    page = await GetSoloPage(game, concurrency=10, random_source_types=["random"])(USER, "film")
+    page = await GetSoloPage(game, concurrency=10, layout=LAYOUT)(USER, "film")
     assert page.blocks.random.data is not None
-    assert [m.key for m in page.blocks.random.data] == ["film.random.frame"]
+    assert [m.key for m in page.blocks.random.data] == ["film.random.frame", "film.random.emoji"]
     assert page.blocks.daily.data is not None
     assert [c.status for c in page.blocks.daily.data] == ["finished"]
     assert game.daily_calls == [("user-token", "film")]
 
 
+async def test_solo_showcase_weekly_and_records_for_user() -> None:
+    game = FakeGame(dailies=[status("film.daily.frame"), status("film.bracket.weekly")])
+    page = await GetSoloPage(game, concurrency=10, layout=LAYOUT)(USER, "film")
+    groups = page.blocks.modes.data
+    assert groups is not None
+    assert [(g.source_type, g.presentation, [m.key for m in g.modes]) for g in groups] == [
+        ("random", "score", ["film.random.frame", "film.random.emoji"]),
+        ("marathon", "streak", ["film.marathon.director"]),
+        ("pair", "streak", ["film.pair.rating"]),
+    ]
+    assert groups[1].modes[0].start == DIRECTOR
+    assert groups[2].modes[0].answer_format == "pick"
+    assert page.blocks.weekly.data is not None
+    assert [c.mode_key for c in page.blocks.weekly.data] == ["film.bracket.weekly"]
+    assert page.blocks.daily.data is not None
+    assert [c.mode_key for c in page.blocks.daily.data] == ["film.daily.frame"]
+    assert page.blocks.records is not None and page.blocks.records.data is not None
+    assert [(r.mode_key, r.best, r.presentation) for r in page.blocks.records.data] == [
+        ("film.pair.rating", 7, "streak")
+    ]
+    assert game.records_calls == ["user-token"]
+
+
+@pytest.mark.parametrize("viewer", [GUEST, ANONYMOUS])
+async def test_solo_guest_and_anonymous_have_no_records(viewer: Viewer) -> None:
+    game = FakeGame()
+    page = await GetSoloPage(game, concurrency=10, layout=LAYOUT)(viewer, None)
+    assert page.blocks.records is None
+    assert page.blocks.modes.is_ok
+    assert game.records_calls == []
+
+
+async def test_solo_records_down_keeps_other_blocks() -> None:
+    page = await GetSoloPage(FakeGame(best=DOWN), concurrency=10, layout=LAYOUT)(USER, "film")
+    assert page.blocks.records is not None
+    assert page.blocks.records.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.modes.is_ok and page.blocks.daily.is_ok and page.blocks.weekly.is_ok
+
+
 async def test_solo_modes_down() -> None:
-    page = await GetSoloPage(FakeGame(modes=DOWN), concurrency=10, random_source_types=["random"])(
-        USER, None
+    page = await GetSoloPage(FakeGame(modes=DOWN), concurrency=10, layout=LAYOUT)(USER, None)
+    blocks = page.blocks
+    assert blocks.daily.status is BlockStatus.UNAVAILABLE
+    assert blocks.random.status is BlockStatus.UNAVAILABLE
+    assert blocks.modes.status is BlockStatus.UNAVAILABLE
+    assert blocks.weekly.status is BlockStatus.UNAVAILABLE
+    assert blocks.records is not None and blocks.records.status is BlockStatus.UNAVAILABLE
+
+
+def test_mode_groups_follow_game_order_and_skip_scheduled() -> None:
+    groups = mode_groups(MODES, exclude_source_types=LAYOUT.scheduled_source_types)
+    assert [(g.source_type, g.presentation) for g in groups] == [
+        ("random", "score"),
+        ("marathon", "streak"),
+        ("pair", "streak"),
+    ]
+    assert [m.key for m in groups[0].modes] == [
+        "music.random.classic",
+        "film.random.frame",
+        "film.random.emoji",
+    ]
+
+
+def test_period_cards_unknown_scheduled_type_stays_daily() -> None:
+    modes = [*MODES, mode("film.seasonal.x", "film", "seasonal")]
+    daily, weekly = period_cards(
+        modes,
+        [status("film.seasonal.x"), status("film.bracket.weekly")],
+        weekly_source_types=LAYOUT.weekly_source_types,
     )
-    assert page.blocks.daily.status is BlockStatus.UNAVAILABLE
-    assert page.blocks.random.status is BlockStatus.UNAVAILABLE
+    assert [c.mode_key for c in daily] == ["film.seasonal.x"]
+    assert [c.mode_key for c in weekly] == ["film.bracket.weekly"]
+
+
+def test_record_cards_skip_unknown_modes() -> None:
+    cards = record_cards(MODES, [record("gone.pair.x"), record("film.pair.rating", 3)])
+    assert [(c.mode_key, c.domain, c.title_key, c.percentile) for c in cards] == [
+        ("film.pair.rating", "film", "modes.film.pair.rating", 81.5)
+    ]
 
 
 # ----------------------------------------------------------------------------- итог
+async def test_results_pass_presentation_record_and_bracket() -> None:
+    outcome = SessionResult(
+        score=0,
+        max_score=0,
+        rounds=[],
+        share=Share("🏆"),
+        presentation="bracket",
+        record=ResultRecord(best=12, is_new=True, percentile=90.0),
+        bracket=Bracket("Брат", [BracketPick(5, "Брат", "Брат 2")]),
+    )
+    page = await GetResultsPage(FakeGame(outcome=outcome), FakeCatalog(), concurrency=10)(
+        USER, SESSION
+    )
+    summary = page.blocks.result.data
+    assert summary is not None
+    assert summary.presentation == "bracket"
+    assert summary.record == ResultRecord(best=12, is_new=True, percentile=90.0)
+    assert summary.bracket == Bracket("Брат", [BracketPick(5, "Брат", "Брат 2")])
+    assert page.blocks.items.data == []
+
+
 async def test_results_joins_catalog_cards_and_skips_blocked_items() -> None:
     game = FakeGame(outcome=result(ITEM_A, None, ITEM_B, ITEM_A))
     catalog = FakeCatalog({ITEM_A: item(ITEM_A)})  # ITEM_B заблокирован → 404
@@ -341,3 +496,18 @@ async def test_session_identity_failures(
     assert (subject.kind.value if subject else None) == expected
     if subject is not None:
         assert subject.display_name is None
+
+
+async def test_collection_modes_never_reach_solo_or_home_showcases() -> None:
+    """Режим сборника стартует только со страницы сборника (нужен ``collection_id``)."""
+    collection_mode = mode("film.collection.frame", "film", "collection")
+    game = FakeGame(modes=[*MODES, collection_mode])
+
+    solo = await GetSoloPage(game, concurrency=10, layout=LAYOUT)(USER, "film")
+    home = await GetHomePage(game, concurrency=10, layout=LAYOUT)(USER)
+
+    assert solo.blocks.modes.data is not None and home.blocks.modes.data is not None
+    showcase = [m.key for g in solo.blocks.modes.data for m in g.modes]
+    assert "film.collection.frame" not in showcase
+    assert "film.collection.frame" not in [m.key for m in home.blocks.modes.data]
+    assert LAYOUT.hidden_from_showcase == {"daily", "bracket", "collection"}

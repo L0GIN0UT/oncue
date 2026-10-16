@@ -9,6 +9,30 @@
       "pattern": "^[a-z][a-z0-9_]*$",
       "type": "string"
     },
+    "collection_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Сборник, по которому шла сессия (source collection); нет или null — не сборник"
+    },
+    "collection_version": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "content_version сборника, зафиксированный при старте сессии"
+    },
     "day": {
       "anyOf": [
         {
@@ -67,7 +91,7 @@
           },
           "index": {
             "description": "Номер раунда с 0",
-            "maximum": 49,
+            "maximum": 199,
             "minimum": 0,
             "type": "integer"
           },
@@ -113,7 +137,7 @@
         ],
         "type": "object"
       },
-      "maxItems": 50,
+      "maxItems": 200,
       "minItems": 1,
       "type": "array"
     },

@@ -23,6 +23,7 @@ from gv_testkit.stubs import ServiceStub
 pytestmark = pytest.mark.component
 
 GAME, CATALOG, IDENTITY = "http://game.test", "http://catalog.test", "http://identity.test"
+COLLECTIONS, LIBRARY = "http://collections.test", "http://library.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -114,11 +115,97 @@ ME = {
 }
 
 
+MODES_3A = [
+    *MODES,
+    {
+        "key": "film.marathon.director",
+        "version": 1,
+        "domain": "film",
+        "title_key": "modes.film.marathon.director.title",
+        "source_type": "marathon",
+        "clue_type": "frame_progressive",
+        "rounds": 200,
+        "levels": [{"index": 1, "hint": {"blur_px": 24, "crop": 0.4}}],
+        "allow_guest": True,
+        "presets": None,
+        "answer_format": "classic",
+        "presentation": "streak",
+        "start": {"subject": {"roles": ["director"], "max": 3}},
+    },
+    {
+        "key": "film.pair.rating",
+        "version": 1,
+        "domain": "film",
+        "title_key": "modes.film.pair.rating.title",
+        "source_type": "pair",
+        "clue_type": "frame_progressive",
+        "rounds": 200,
+        "levels": [{"index": 1, "hint": {"blur_px": 0, "crop": 1}}],
+        "allow_guest": True,
+        "presets": None,
+        "answer_format": "pick",
+        "presentation": "streak",
+        "start": None,
+    },
+    {
+        "key": "film.bracket.weekly",
+        "version": 1,
+        "domain": "film",
+        "title_key": "modes.film.bracket.weekly.title",
+        "source_type": "bracket",
+        "clue_type": "frame_progressive",
+        "rounds": 31,
+        "levels": [{"index": 1, "hint": {"blur_px": 0, "crop": 1}}],
+        "allow_guest": True,
+        "presets": None,
+        "answer_format": "pick",
+        "presentation": "bracket",
+        "start": None,
+    },
+]
+WEEKLY = {
+    "mode_key": "film.bracket.weekly",
+    "day": "2026-10-12",
+    "status": "in_progress",
+    "session_id": str(SESSION),
+    "score": None,
+    "max_score": 0,
+    "next_reset_at": "2026-10-18T21:00:00Z",
+}
+RECORDS = [
+    {
+        "mode_key": "film.pair.rating",
+        "best": 14,
+        "percentile": 87.5,
+        "achieved_at": "2026-10-11T18:00:00Z",
+    },
+    {"mode_key": "music.pair.popularity", "best": 3, "achieved_at": "2026-10-09T10:00:00Z"},
+]
+RESULT_BRACKET = {
+    "score": 0,
+    "max_score": 0,
+    "share": {"text": "OnCue Топ-32: Брат 🏆"},
+    "daily_stats": None,
+    "presentation": "bracket",
+    "record": None,
+    "bracket": {
+        "champion": "Брат",
+        "picks": [
+            {"stage": 1, "winner": "Брат", "loser": "Жмурки"},
+            {"stage": 5, "winner": "Брат", "loser": "Брат 2"},
+        ],
+    },
+    "rounds": [],
+}
+
+
 @dataclass
 class Stubs:
     game: ServiceStub
     catalog: ServiceStub
     identity: ServiceStub
+    collections: ServiceStub
+    library: ServiceStub
 
 
 @dataclass
@@ -138,6 +225,8 @@ def stubs() -> Iterator[Stubs]:
             game=stack.enter_context(stub_service(GAME, service="game")),
             catalog=stack.enter_context(stub_service(CATALOG, service="catalog")),
             identity=stack.enter_context(stub_service(IDENTITY, service="identity")),
+            collections=stack.enter_context(stub_service(COLLECTIONS, service="collections")),
+            library=stack.enter_context(stub_service(LIBRARY, service="library")),
         )
 
 
@@ -153,6 +242,8 @@ async def bff(
             "game_url": GAME,
             "catalog_url": CATALOG,
             "identity_url": IDENTITY,
+            "collections_url": COLLECTIONS,
+            "library_url": LIBRARY,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -215,9 +306,13 @@ async def test_home_for_user_all_ok(bff: Bff) -> None:
                 "score": 21,
                 "max_score": 30,
                 "next_reset_at": "2026-10-10T21:00:00Z",
+                "presentation": "score",
             }
         ],
     }
+    assert blocks["weekly"] == {"status": "ok", "data": []}
+    assert blocks["modes"]["data"][0]["answer_format"] == "classic"  # поле по умолчанию game
+    assert blocks["modes"]["data"][0]["start"] is None
     assert daily.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
 
@@ -245,6 +340,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
         "blocks": {
             "dailies": {"status": "unavailable", "data": None},
             "modes": {"status": "unavailable", "data": None},
+            "weekly": {"status": "unavailable", "data": None},
         }
     }
 
@@ -330,12 +426,175 @@ async def test_solo_page_by_domain(bff: Bff) -> None:
     blocks = response.json()["blocks"]
     assert [m["key"] for m in blocks["random"]["data"]] == ["film.random.frame"]
     assert blocks["daily"] == {"status": "ok", "data": []}
+    assert blocks["records"] is None  # гость: рекордов нет
     assert daily.calls.last.request.url.params["domain"] == "film"
     bad = await bff.client.get("/v1/pages/solo?domain=books")
     assert_problem(bad, 422, "request.validation_failed")
 
 
+async def test_solo_user_gets_showcase_weekly_and_records(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[WEEKLY])
+    records = bff.stubs.game.route("GET", "/v1/me/records").respond(200, json=RECORDS)
+
+    response = await bff.client.get("/v1/pages/solo?domain=film", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    blocks = response.json()["blocks"]
+    assert [
+        (g["source_type"], g["presentation"], [m["key"] for m in g["modes"]])
+        for g in blocks["modes"]["data"]
+    ] == [
+        ("random", "score", ["film.random.frame"]),
+        ("marathon", "streak", ["film.marathon.director"]),
+        ("pair", "streak", ["film.pair.rating"]),
+    ]
+    marathon = blocks["modes"]["data"][1]["modes"][0]
+    assert marathon["start"] == {"subject": {"roles": ["director"], "max": 3}}
+    assert marathon["rounds"] == 200
+    assert blocks["modes"]["data"][2]["modes"][0]["answer_format"] == "pick"
+    assert blocks["daily"] == {"status": "ok", "data": []}  # сетка — не дейлик
+    assert blocks["weekly"]["data"] == [
+        {
+            "mode_key": "film.bracket.weekly",
+            "domain": "film",
+            "title_key": "modes.film.bracket.weekly.title",
+            "day": "2026-10-12",
+            "status": "in_progress",
+            "session_id": str(SESSION),
+            "score": None,
+            "max_score": 0,
+            "next_reset_at": "2026-10-18T21:00:00Z",
+            "presentation": "bracket",
+        }
+    ]
+    # Рекорд музыкального режима отфильтрован доменом хаба.
+    assert blocks["records"] == {
+        "status": "ok",
+        "data": [
+            {
+                "mode_key": "film.pair.rating",
+                "domain": "film",
+                "title_key": "modes.film.pair.rating.title",
+                "presentation": "streak",
+                "best": 14,
+                "percentile": 87.5,
+                "achieved_at": "2026-10-11T18:00:00Z",
+            }
+        ],
+    }
+    assert records.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_solo_guest_has_no_records_and_game_is_not_asked(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[])
+    records = bff.stubs.game.route("GET", "/v1/me/records").respond(200, json=[])
+
+    guest = await bff.client.get("/v1/pages/solo", headers=bff.bearer(bff.issuer.issue_guest()))
+    anonymous = await bff.client.get("/v1/pages/solo")
+
+    assert guest.json()["blocks"]["records"] is None
+    assert guest.headers["cache-control"] == PRIVATE
+    assert anonymous.json()["blocks"]["records"] is None
+    assert anonymous.headers["cache-control"] == PUBLIC
+    assert records.call_count == 0
+
+
+async def test_solo_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(503)
+    bff.stubs.game.route("GET", "/v1/daily").mock(side_effect=httpx.ConnectError("refused"))
+    bff.stubs.game.route("GET", "/v1/me/records").respond(500)
+
+    response = await bff.client.get("/v1/pages/solo", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    unavailable = {"status": "unavailable", "data": None}
+    assert response.json() == {
+        "blocks": dict.fromkeys(("daily", "random", "modes", "weekly", "records"), unavailable)
+    }
+
+
+async def test_solo_records_down_keeps_other_blocks(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[*DAILY, WEEKLY])
+    bff.stubs.game.route("GET", "/v1/me/records").respond(429)
+
+    response = await bff.client.get("/v1/pages/solo", headers=bff.bearer(bff.issuer.issue()))
+
+    blocks = response.json()["blocks"]
+    assert response.status_code == 200
+    assert blocks["records"] == {"status": "unavailable", "data": None}
+    assert [c["mode_key"] for c in blocks["daily"]["data"]] == ["music.daily.classic"]
+    assert [c["mode_key"] for c in blocks["weekly"]["data"]] == ["film.bracket.weekly"]
+    assert blocks["modes"]["status"] == "ok"
+
+
+async def test_home_weekly_bracket_does_not_break_daily_cards(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES_3A)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[*DAILY, WEEKLY])
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue_guest()))
+
+    blocks = response.json()["blocks"]
+    assert [c["mode_key"] for c in blocks["dailies"]["data"]] == ["music.daily.classic"]
+    assert [(c["mode_key"], c["max_score"]) for c in blocks["weekly"]["data"]] == [
+        ("film.bracket.weekly", 0)
+    ]
+    assert len(blocks["modes"]["data"]) == len(MODES_3A)
+
+
 # ----------------------------------------------------------------------------- итог
+async def test_results_page_bracket_presentation_and_record(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT_BRACKET)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200, response.text
+    summary = response.json()["blocks"]["result"]["data"]
+    assert summary["presentation"] == "bracket"
+    assert summary["record"] is None
+    assert summary["bracket"] == RESULT_BRACKET["bracket"]
+    assert response.json()["blocks"]["items"] == {"status": "ok", "data": []}
+
+
+async def test_results_page_streak_record(bff: Bff) -> None:
+    streak = {
+        **RESULT,
+        "daily_stats": None,
+        "presentation": "streak",
+        "record": {"best": 14, "is_new": True, "percentile": 87.5},
+        "bracket": None,
+    }
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=streak)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    summary = response.json()["blocks"]["result"]["data"]
+    assert summary["presentation"] == "streak"
+    assert summary["record"] == {"best": 14, "is_new": True, "percentile": 87.5}
+    assert summary["bracket"] is None
+
+
+async def test_results_page_stage2_result_defaults_to_score(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    summary = response.json()["blocks"]["result"]["data"]
+    assert (summary["presentation"], summary["record"], summary["bracket"]) == ("score", None, None)
+
+
 async def test_results_page_joins_catalog_and_caches_card(bff: Bff) -> None:
     token = bff.issuer.issue()
     result = bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)
@@ -404,3 +663,358 @@ async def test_breaker_stops_calling_failed_service(bff: Bff) -> None:
     for _ in range(5):
         assert (await bff.client.get("/v1/pages/home")).status_code == 200
     assert modes.call_count == 3  # breaker_failures = 3, дальше цепь разомкнута
+
+
+# ----------------------------------------------------------------------------- этап 3b
+COLLECTION_ID = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000c01")
+SHELF_ID = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000d01")
+
+
+def collection_card(title: str, **extra: Any) -> dict[str, Any]:
+    return {
+        "collection_id": str(COLLECTION_ID),
+        "domain": "film",
+        "kind": "ugc",
+        "title": title,
+        "cover": {"preset": "sunset"},
+        "tags": ["cinema"],
+        "author": {"kind": "user", "user_id": str(SESSION), "nickname": "neo_2026"},
+        "default_mode_key": "film.collection.frame",
+        "items_count": 8,
+        "likes_count": 3,
+        "plays_count": 12,
+        "difficulty": None,
+        "featured": False,
+        "published_at": "2026-10-16T10:00:00Z",
+        **extra,
+    }
+
+
+COLLECTION_DETAIL = {
+    **collection_card("Кино · кадры"),
+    "description": "Восемь фильмов",
+    "visibility": "public",
+    "status": "published",
+    "version": 2,
+    "items_visible": True,
+    "items": [
+        {
+            "position": 0,
+            "media_item_id": str(ITEM),
+            "title": "Брат",
+            "year": 1997,
+            "available": True,
+            "custom": {"emoji": "🔫🧥🎸🚋❄️🇷🇺"},
+        }
+    ],
+    "me": {"liked": True, "favorite": False, "completed": True, "is_author": False},
+    "future_field": "игнорируется",
+}
+COLLECTION_MODES = [
+    {
+        "mode_key": "film.collection.frame",
+        "title_key": "modes.film.collection.frame.title",
+        "clue_type": "frame_progressive",
+        "allow_guest": True,
+        "playable": 7,
+        "total": 8,
+        "available": True,
+        "round_options": [5, "all"],
+    }
+]
+SHELF = {
+    "ref": "system:watch_later",
+    "shelf_id": None,
+    "kind": "system",
+    "key": "watch_later",
+    "title": None,
+    "title_key": "library.shelf.watch_later",
+    "domains": ["film"],
+    "exclusive_with": ["system:watched"],
+    "items_count": 1,
+    "updated_at": "2026-10-16T10:00:00Z",
+}
+CUSTOM_SHELF = {
+    **SHELF,
+    "ref": str(SHELF_ID),
+    "shelf_id": str(SHELF_ID),
+    "kind": "custom",
+    "key": None,
+    "title": "Ужасы 80-х",
+    "title_key": None,
+    "domains": ["music", "film"],
+    "exclusive_with": [],
+}
+SHELF_ITEMS = {
+    "shelf": SHELF,
+    "items": [
+        {
+            "media_item_id": str(ITEM),
+            "domain": "film",
+            "kind": "movie",
+            "title": "Брат",
+            "year": 1997,
+            "persons": ["Алексей Балабанов"],
+            "status": "unavailable",
+            "source": "reveal",
+            "added_at": "2026-10-16T10:00:00Z",
+        }
+    ],
+    "next_cursor": "c2",
+}
+
+
+def _by_sort(request: httpx.Request) -> httpx.Response:
+    sort = request.url.params["sort"]
+    return httpx.Response(
+        200, json={"items": [collection_card(sort)], "next_cursor": f"{sort}-next"}
+    )
+
+
+async def test_collections_page_showcases_are_public_and_cached(bff: Bff) -> None:
+    catalog = bff.stubs.collections.route("GET", "/v1/collections").mock(side_effect=_by_sort)
+
+    first = await bff.client.get(
+        "/v1/pages/collections?domain=film&curated=true", headers=bff.bearer(bff.issuer.issue())
+    )
+    second = await bff.client.get("/v1/pages/collections?domain=film&curated=true")
+
+    assert first.status_code == second.status_code == 200, first.text
+    assert first.headers["cache-control"] == PUBLIC  # каталог одинаков и для вошедшего
+    assert "Cookie" in first.headers["vary"]
+    blocks = first.json()["blocks"]
+    assert blocks["results"] is None
+    for name in ("featured", "popular", "new"):
+        assert blocks[name]["status"] == "ok"
+        assert blocks[name]["data"]["next_cursor"] == f"{name}-next"
+        assert blocks[name]["data"]["items"][0]["title"] == name
+    assert blocks["featured"]["data"]["items"][0]["author"] == {
+        "kind": "user",
+        "user_id": str(SESSION),
+        "nickname": "neo_2026",
+    }
+    assert first.json() == second.json()
+    assert catalog.call_count == 3  # второй раз — из Redis
+    sent = [dict(c.request.url.params) for c in catalog.calls]
+    assert sorted(p["sort"] for p in sent) == ["featured", "new", "popular"]
+    assert all(p["domain"] == "film" and p["curated"] == "true" for p in sent)
+    assert all(p["limit"] == "12" for p in sent)
+    assert all("authorization" not in c.request.headers for c in catalog.calls)
+
+
+async def test_collections_page_search_is_results_only_and_not_cached(bff: Bff) -> None:
+    catalog = bff.stubs.collections.route("GET", "/v1/collections").mock(side_effect=_by_sort)
+
+    for _ in range(2):
+        response = await bff.client.get("/v1/pages/collections?q=кадры&sort=new&domain=film")
+        assert response.status_code == 200, response.text
+        assert response.headers["cache-control"] == PRIVATE
+
+    body = response.json()["blocks"]
+    assert body["featured"] is None and body["popular"] is None and body["new"] is None
+    assert body["results"]["status"] == "ok"
+    assert body["results"]["data"]["items"][0]["title"] == "new"
+    assert catalog.call_count == 2
+    assert dict(catalog.calls.last.request.url.params) == {
+        "q": "кадры",
+        "sort": "new",
+        "domain": "film",
+        "limit": "20",
+    }
+
+
+async def test_collections_page_cursor_continues_showcase(bff: Bff) -> None:
+    catalog = bff.stubs.collections.route("GET", "/v1/collections").mock(side_effect=_by_sort)
+    response = await bff.client.get("/v1/pages/collections?sort=new&cursor=new-next")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == PUBLIC
+    assert response.json()["blocks"]["results"]["data"]["next_cursor"] == "new-next"
+    assert catalog.calls.last.request.url.params["cursor"] == "new-next"
+
+
+async def test_collections_page_collections_down_is_200_unavailable(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", "/v1/collections").respond(503)
+    response = await bff.client.get("/v1/pages/collections")
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert {blocks[n]["status"] for n in ("featured", "popular", "new")} == {"unavailable"}
+    searched = await bff.client.get("/v1/pages/collections?q=x")
+    assert searched.json()["blocks"]["results"] == {"status": "unavailable", "data": None}
+
+
+async def test_collections_page_foreign_cursor_is_422(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", "/v1/collections").respond(
+        422, json={"code": "collections.cursor_invalid", "title": "bad cursor", "status": 422}
+    )
+    response = await bff.client.get("/v1/pages/collections?sort=likes&cursor=new-next")
+    assert_problem(response, 422, "collections.cursor_invalid")
+
+
+async def test_collection_page_for_user(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    detail = bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").respond(
+        200, json=COLLECTION_DETAIL
+    )
+    modes = bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(
+        200, json=COLLECTION_MODES
+    )
+
+    response = await bff.client.get(
+        f"/v1/pages/collections/{COLLECTION_ID}", headers=bff.bearer(token)
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    body = response.json()
+    assert body["me"] == {"liked": True, "favorite": False, "completed": True, "is_author": False}
+    card = body["blocks"]["collection"]["data"]
+    assert body["blocks"]["collection"]["status"] == "ok"
+    assert (card["version"], card["items_visible"], card["status"]) == (2, True, "published")
+    assert card["items"][0]["custom"] == {"emoji": "🔫🧥🎸🚋❄️🇷🇺"}
+    assert "me" not in card and "future_field" not in card
+    assert body["blocks"]["modes"] == {"status": "ok", "data": COLLECTION_MODES}
+    assert detail.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert "authorization" not in modes.calls.last.request.headers  # режимы не личные
+
+
+async def test_collection_page_guest_and_anonymous_get_no_me(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").respond(
+        200, json={**COLLECTION_DETAIL, "items_visible": False, "items": None}
+    )
+    modes = bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(
+        200, json=COLLECTION_MODES
+    )
+
+    guest = await bff.client.get(
+        f"/v1/pages/collections/{COLLECTION_ID}", headers=bff.bearer(bff.issuer.issue_guest())
+    )
+    anonymous = await bff.client.get(f"/v1/pages/collections/{COLLECTION_ID}")
+
+    assert guest.status_code == anonymous.status_code == 200
+    assert guest.json()["me"] is None and anonymous.json()["me"] is None
+    assert guest.headers["cache-control"] == PRIVATE
+    assert anonymous.headers["cache-control"] == PUBLIC
+    assert anonymous.json()["blocks"]["collection"]["data"]["items"] is None
+    assert modes.call_count == 1  # второй раз режимы сборника — из Redis
+
+
+async def test_collection_page_game_down_keeps_card(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").respond(
+        200, json=COLLECTION_DETAIL
+    )
+    bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(503)
+
+    response = await bff.client.get(
+        f"/v1/pages/collections/{COLLECTION_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["collection"]["status"] == "ok"
+    assert blocks["modes"] == {"status": "unavailable", "data": None}
+    assert response.json()["me"]["completed"] is True
+
+
+async def test_collection_page_collections_down_is_200_unavailable(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").mock(
+        side_effect=httpx.ConnectError("refused")
+    )
+    bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(
+        200, json=COLLECTION_MODES
+    )
+    response = await bff.client.get(f"/v1/pages/collections/{COLLECTION_ID}")
+    assert response.status_code == 200
+    assert response.json()["blocks"]["collection"] == {"status": "unavailable", "data": None}
+    assert response.json()["blocks"]["modes"]["status"] == "ok"
+    assert response.json()["me"] is None
+
+
+async def test_collection_page_hidden_or_missing_is_404(bff: Bff) -> None:
+    bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").respond(
+        404, json={"code": "collections.not_found", "title": "Not found", "status": 404}
+    )
+    bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(
+        404, json={"code": "game.collection_not_found", "title": "Not found", "status": 404}
+    )
+    response = await bff.client.get(f"/v1/pages/collections/{COLLECTION_ID}")
+    assert_problem(response, 404, "collections.not_found")
+
+
+async def test_library_page_for_user(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    shelves = bff.stubs.library.route("GET", "/v1/shelves").respond(200, json=[SHELF, CUSTOM_SHELF])
+
+    response = await bff.client.get("/v1/pages/library", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json() == {
+        "blocks": {"shelves": {"status": "ok", "data": [SHELF, CUSTOM_SHELF]}}
+    }
+    assert shelves.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_library_pages_require_user(bff: Bff) -> None:
+    shelves = bff.stubs.library.route("GET", "/v1/shelves").respond(200, json=[SHELF])
+    items = bff.stubs.library.route("GET", "/v1/shelves/system:watched/items").respond(
+        200, json=SHELF_ITEMS
+    )
+    guest = bff.bearer(bff.issuer.issue_guest())
+
+    assert_problem(await bff.client.get("/v1/pages/library"), 401, "auth.unauthenticated")
+    assert_problem(
+        await bff.client.get("/v1/pages/library", headers=guest), 403, "auth.guest_forbidden"
+    )
+    assert_problem(
+        await bff.client.get("/v1/pages/library/system:watched", headers=guest),
+        403,
+        "auth.guest_forbidden",
+    )
+    assert shelves.call_count == 0 and items.call_count == 0
+
+
+async def test_library_down_is_200_unavailable(bff: Bff) -> None:
+    bff.stubs.library.route("GET", "/v1/shelves").respond(503)
+    response = await bff.client.get("/v1/pages/library", headers=bff.bearer(bff.issuer.issue()))
+    assert response.status_code == 200
+    assert response.json() == {"blocks": {"shelves": {"status": "unavailable", "data": None}}}
+
+
+async def test_library_shelf_page(bff: Bff) -> None:
+    items = bff.stubs.library.route("GET", "/v1/shelves/system:watch_later/items").respond(
+        200, json=SHELF_ITEMS
+    )
+
+    response = await bff.client.get(
+        "/v1/pages/library/system:watch_later?cursor=c1", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json() == {"blocks": {"shelf": {"status": "ok", "data": SHELF_ITEMS}}}
+    assert dict(items.calls.last.request.url.params) == {"cursor": "c1", "limit": "50"}
+
+
+async def test_library_foreign_shelf_is_404(bff: Bff) -> None:
+    bff.stubs.library.route("GET", f"/v1/shelves/{SHELF_ID}/items").respond(
+        404, json={"code": "library.shelf_not_found", "title": "Not found", "status": 404}
+    )
+    response = await bff.client.get(
+        f"/v1/pages/library/{SHELF_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    assert_problem(response, 404, "library.shelf_not_found")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/pages/library/system:Bad-Key",
+        "/v1/pages/library/123",
+        "/v1/pages/collections/not-a-uuid",
+        "/v1/pages/collections?sort=random",
+        "/v1/pages/collections?mode=../admin",
+        "/v1/pages/collections?cursor=a%20b",
+    ],
+)
+async def test_collection_and_library_page_params_are_strict(bff: Bff, path: str) -> None:
+    assert (await bff.client.get(path)).status_code == 422

@@ -36,9 +36,12 @@ class ValidationErrorItem(BaseModel):
 
 
 class ValidationWarning(BaseModel):
-    """Предупреждение (например, пул меньше рекомендуемого)."""
+    """Предупреждение (пул меньше нужного в bootstrap, ``assets.profile_missing``)."""
 
     code: str
+    path: str | None = Field(
+        default=None, description="Секция конфига: clue.params | clue.reveal.params"
+    )
 
 
 class PoolInfo(BaseModel):
@@ -144,6 +147,27 @@ class ArchiveRequest(_Request):
     reason: Reason
 
 
+class AssetRequestCreate(_Request):
+    """Запросить генерацию ассетов под параметры загадки черновика (ADR 0025)."""
+
+    draft_revision: int = Field(ge=1)
+    reason: Reason
+
+
+class AssetRequestOut(BaseModel):
+    """Запрос ассетов: статус профиля смотрится в media-pipeline (``/admin/v1/profiles``)."""
+
+    request_id: UUID
+    mode_key: str
+    draft_revision: int
+    clue_type: str
+    params_hash: str
+    status: Literal["pending", "sent"]
+    actor_id: UUID | None
+    reason: str
+    requested_at: datetime
+
+
 # ----------------------------------------------------------------------------- наборы дня
 class DailySetItem(BaseModel):
     """Единица набора дня."""
@@ -156,12 +180,14 @@ class DailySetItem(BaseModel):
 
 
 class DailySet(BaseModel):
-    """Набор дня режима."""
+    """Набор периода режима (дейлик — день, сетка — неделя; ``day`` — начало периода)."""
 
     mode_key: str
     day: date
     mode_version: int
     status: DailySetStatus
+    period: Literal["day", "week"] = "day"
+    subject_id: UUID | None = Field(default=None, description="Тема периода (персона сетки)")
     items: list[DailySetItem]
 
 
@@ -173,9 +199,11 @@ class ReplaceItemRequest(_Request):
 
 
 class RegenerateRequest(_Request):
-    """Перегенерировать набор (только ``scheduled`` / ``failed``)."""
+    """Перегенерировать набор (только ``scheduled`` / ``failed``); ``subject_id`` — новая тема
+    периода (сетка), иначе тему выбирает генератор."""
 
     reason: Reason
+    subject_id: UUID | None = None
 
 
 class ProjectionItem(BaseModel):

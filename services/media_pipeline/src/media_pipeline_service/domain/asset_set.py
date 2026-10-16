@@ -29,6 +29,7 @@ from media_pipeline_service.domain.errors import (
     LevelOutOfRangeError,
 )
 from media_pipeline_service.domain.profiles import AssetProfile
+from media_pipeline_service.domain.sources import AssetScope
 
 
 class AssetSetStatus(StrEnum):
@@ -70,6 +71,8 @@ class AssetsReady(DomainEvent):
 
     ``aggregate_id`` — id единицы; ``version`` монотонна по единице (а не по набору):
     потребитель хранит последнюю версию на ``media_item_id`` и отбрасывает не большие.
+    ``scope`` — владелец набора (ADR 0029): ``None`` — каталожный, сборник — свои загадки
+    автора (выдаются только в сессиях этого сборника).
     """
 
     aggregate_type: ClassVar[str] = "asset_set"
@@ -81,13 +84,14 @@ class AssetsReady(DomainEvent):
     params_hash: str
     levels_count: int
     version: int
+    scope: AssetScope | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
 class AssetsFailed(DomainEvent):
     """Генерация окончательно не удалась (``media_pipeline.AssetsFailed`` v1).
 
-    ``version`` — из того же счётчика единицы, что и у ``AssetsReady``.
+    ``version`` — из того же счётчика единицы, что и у ``AssetsReady``; ``scope`` — как там.
     """
 
     aggregate_type: ClassVar[str] = "asset_set"
@@ -100,6 +104,7 @@ class AssetsFailed(DomainEvent):
     retryable: bool
     attempts: int
     version: int
+    scope: AssetScope | None = None
 
 
 class AssetSet(AggregateRoot[UUID]):
@@ -108,6 +113,8 @@ class AssetSet(AggregateRoot[UUID]):
     ``version`` растёт на каждом изменении состояния; ``persisted_version`` — версия при
     загрузке, по ней репозиторий делает оптимистичную блокировку. В события идёт не она, а
     ``event_version`` — версия по единице (``MediaItemStateRepository.next_event_version``).
+    ``scope`` — владелец набора (ADR 0029); ``None`` — каталожный набор. Набор уникален по
+    ``(media_item_id, clue_type, profile_key, params_hash, scope)``.
     """
 
     def __init__(
@@ -120,7 +127,7 @@ class AssetSet(AggregateRoot[UUID]):
         params: Mapping[str, Any],
         params_hash: str,
         levels_count: int,
-        source_media_id: UUID | None,
+        source_media_ids: Sequence[UUID],
         status: AssetSetStatus,
         generation: int,
         attempts: int,
@@ -129,6 +136,7 @@ class AssetSet(AggregateRoot[UUID]):
         version: int,
         created_at: datetime,
         updated_at: datetime,
+        scope: AssetScope | None = None,
     ) -> None:
         super().__init__(id, version)
         self.media_item_id = media_item_id
@@ -137,7 +145,7 @@ class AssetSet(AggregateRoot[UUID]):
         self.params = dict(params)
         self.params_hash = params_hash
         self.levels_count = levels_count
-        self.source_media_id = source_media_id
+        self.source_media_ids: tuple[UUID, ...] = tuple(source_media_ids)
         self.status = status
         self.generation = generation
         self.attempts = attempts
@@ -145,7 +153,13 @@ class AssetSet(AggregateRoot[UUID]):
         self.levels: tuple[AssetLevel, ...] = tuple(levels)
         self.created_at = created_at
         self.updated_at = updated_at
+        self.scope = scope
         self.persisted_version = version
+
+    @property
+    def source_media_id(self) -> UUID | None:
+        """Первый (у большинства загадок — единственный) исходник набора."""
+        return self.source_media_ids[0] if self.source_media_ids else None
 
     # ------------------------------------------------------------------ создание
     @classmethod
@@ -155,10 +169,19 @@ class AssetSet(AggregateRoot[UUID]):
         *,
         media_item_id: UUID,
         profile: AssetProfile,
-        source_media_id: UUID,
+        source_media_ids: Sequence[UUID],
         now: datetime,
+        scope: AssetScope | None = None,
     ) -> AssetSet:
-        """Новый набор в состоянии ``pending`` (первое поколение)."""
+        """Новый набор в состоянии ``pending`` (первое поколение).
+
+        Args:
+            source_media_ids: Исходники в порядке, в котором их ждёт генератор
+                (``sources_for`` генератора, ``frame_sequence`` — кадр на уровень).
+            scope: Владелец набора (сборник); ``None`` — каталожный.
+        """
+        if not source_media_ids:
+            raise DomainError("набору нужен хотя бы один исходник", code="asset_set.no_sources")
         aggregate = cls(
             id,
             media_item_id=media_item_id,
@@ -167,7 +190,7 @@ class AssetSet(AggregateRoot[UUID]):
             params=profile.params_json(),
             params_hash=profile.params_hash,
             levels_count=profile.levels_count,
-            source_media_id=source_media_id,
+            source_media_ids=source_media_ids,
             status=AssetSetStatus.PENDING,
             generation=1,
             attempts=0,
@@ -176,6 +199,7 @@ class AssetSet(AggregateRoot[UUID]):
             version=1,
             created_at=now,
             updated_at=now,
+            scope=scope,
         )
         aggregate.persisted_version = 0  # ещё не сохранён
         return aggregate
@@ -256,6 +280,7 @@ class AssetSet(AggregateRoot[UUID]):
                 params_hash=self.params_hash,
                 levels_count=self.levels_count,
                 version=event_version,
+                scope=self.scope,
             )
         )
 
@@ -298,20 +323,26 @@ class AssetSet(AggregateRoot[UUID]):
                 retryable=retryable,
                 attempts=max(self.attempts, 1),
                 version=event_version,
+                scope=self.scope,
             )
         )
         return True
 
     # ------------------------------------------------------------------ управление
-    def regenerate(self, now: datetime, *, source_media_id: UUID | None = None) -> list[AssetLevel]:
-        """Новое поколение генерации (админ или смена исходника).
+    def regenerate(
+        self, now: datetime, *, source_media_ids: Sequence[UUID] | None = None
+    ) -> list[AssetLevel]:
+        """Новое поколение генерации (админ или смена исходников).
+
+        Args:
+            source_media_ids: Новые исходники; ``None`` — прежние.
 
         Returns:
             Объекты прошлого поколения — их нужно удалить из хранилища после коммита.
         """
         if self.status is AssetSetStatus.DISABLED:
             raise AssetBlockedError("ассеты единицы выключены")
-        return self._new_generation(now, source_media_id)
+        return self._new_generation(now, source_media_ids)
 
     def disable(self, now: datetime) -> list[AssetLevel]:
         """Выключить набор (единица заблокирована). Возвращает объекты к удалению."""
@@ -328,10 +359,12 @@ class AssetSet(AggregateRoot[UUID]):
             return
         self._new_generation(now, None)
 
-    def _new_generation(self, now: datetime, source_media_id: UUID | None) -> list[AssetLevel]:
+    def _new_generation(
+        self, now: datetime, source_media_ids: Sequence[UUID] | None
+    ) -> list[AssetLevel]:
         old, self.levels = list(self.levels), ()
-        if source_media_id is not None:
-            self.source_media_id = source_media_id
+        if source_media_ids:
+            self.source_media_ids = tuple(source_media_ids)
         self.generation += 1
         self.attempts = 0
         self.error_code = None

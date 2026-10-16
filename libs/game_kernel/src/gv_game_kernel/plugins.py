@@ -11,10 +11,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Any, ClassVar, Protocol
+from datetime import date, datetime
+from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -26,6 +26,7 @@ from gv_game_kernel.ports import (
     CollectionPort,
     PlayableFor,
     PoolQuery,
+    SubjectQuery,
 )
 from gv_game_kernel.refs import AssetRef, MediaItemRef
 from gv_game_kernel.round import MatchVerdict, RoundOutcome
@@ -69,7 +70,8 @@ class ClueView:
 
     Attributes:
         level: Уровень.
-        kind: Способ подачи: ``audio`` | ``image`` (клиент выбирает компонент по нему).
+        kind: Способ подачи: ``audio`` | ``image`` | ``text`` (клиент выбирает компонент по
+            нему; ``text`` — JSON-ассет ``contracts/clues/text_asset.v1.json``).
         asset: Выданная ссылка на ассет.
         meta: Параметры уровня для UI (``seconds`` или ``blur``).
     """
@@ -131,7 +133,10 @@ class DrawContext:
         preset_id: Выбранный пресет (случайный режим).
         exclude_ids: Единицы, которых следует избегать (недавние наборы дня): выбираются,
             только если свежих единиц не хватает на ``n``.
-        collections: Порт сборников (этап 3; в game на этапе 2 не передаётся).
+        collections: Порт сборников (источник ``collection``, ADR 0028).
+        subject_ids: Персоны, выбранные игроком (марафон) или темой периода (сетка).
+        collection_id: Сборник сессии (``POST /v1/sessions.collection_id``); обязателен
+            для источника ``collection``, остальные источники его не читают.
     """
 
     mode_key: str
@@ -145,6 +150,8 @@ class DrawContext:
     exclude_ids: frozenset[UUID] = frozenset()
     collections: CollectionPort | None = None
     candidate_limit: int = 5000
+    subject_ids: frozenset[UUID] = frozenset()
+    collection_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,16 +167,66 @@ class Preset:
     title_key: str
 
 
+@dataclass(frozen=True, slots=True)
+class OptionSpec:
+    """Вариант ответа раунда в формате ``pick`` (ADR 0023).
+
+    Клиент видит только ``id`` и подпись; какая единица за вариантом стоит, знает сервер.
+
+    Attributes:
+        id: Непрозрачный идентификатор варианта внутри раунда (``a``, ``b``, ``higher``).
+        label_key: Ключ i18n подписи (``higher``/``lower``) или ``None``.
+        item: Единица за вариантом (сетка — сама единица; «больше/меньше» — ``None``).
+    """
+
+    id: str
+    label_key: str | None = None
+    item: MediaItemRef | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RoundDraw:
+    """Состав раунда, разыгранный источником (ADR 0023).
+
+    Attributes:
+        target: Загаданная единица (по ней выдаётся загадка и считается ответ).
+        shown: Единицы, которые клиент видит открыто (опорная единица пары).
+        options: Варианты ответа формата ``pick`` (пусто — классический ввод).
+    """
+
+    target: MediaItemRef
+    shown: tuple[MediaItemRef, ...] = ()
+    options: tuple[OptionSpec, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RoundPick:
+    """Завершённый раунд для источников с продолжением (сетка) и правил завершения.
+
+    Attributes:
+        draw: Состав раунда.
+        outcome: Итог раунда.
+        option_id: Выбранный вариант (формат ``pick``) или ``None``.
+    """
+
+    draw: RoundDraw
+    outcome: RoundOutcome
+    option_id: str | None = None
+
+
 class Source(Protocol):
-    """Источник единиц раундов (``daily``, ``random``, ``collection``).
+    """Источник единиц раундов (``daily``, ``random``, ``marathon``, ``pair``, ``bracket`` …).
 
     Attributes:
         key: Ключ в реестре.
         params_schema: Модель параметров (``contracts/modes/params/source.<key>.v1.json``).
+        answer_formats: Форматы ответа, для которых источник строит раунды
+            (классические — ``classic``; пара и сетка — ``pick``: им нужны варианты).
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    answer_formats: ClassVar[frozenset[str]]
 
     async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
         """``n`` различных единиц; детерминированно при одинаковых ``ctx.seed`` и пуле.
@@ -213,25 +270,172 @@ class Source(Protocol):
         ...
 
 
+@runtime_checkable
+class RoundSource(Protocol):
+    """Источник, который сам составляет раунды (``RoundDraw`` с ``shown``/``options``).
+
+    Классические источники этого не умеют: ``ModeEngine`` оборачивает их единицы в
+    ``RoundDraw(target)`` (ADR 0023).
+    """
+
+    async def draw_rounds(self, ctx: DrawContext, params: BaseModel, n: int) -> list[RoundDraw]:
+        """Начальные раунды сессии (не больше ``n``), детерминированно по ``ctx.seed``.
+
+        Raises:
+            PoolTooSmallError: в пуле не хватает единиц даже на один раунд.
+        """
+        ...
+
+    def compose_rounds(self, params: BaseModel, items: Sequence[MediaItemRef]) -> list[RoundDraw]:
+        """Начальные раунды из уже разыгранных единиц (плановый набор периода)."""
+        ...
+
+
+@runtime_checkable
+class ProgressiveSource(Protocol):
+    """Источник, чьи раунды зависят от прошлых (сетка: пары победителей тура, ADR 0023).
+
+    Раунды материализуются лениво: сервис вызывает ``followups`` после каждого раунда и
+    дописывает новые раунды в план сессии.
+    """
+
+    def planned_rounds(self, params: BaseModel) -> int:
+        """Сколько раундов будет в сессии всего (сетка 32 — 31 выбор)."""
+        ...
+
+    def items_needed(self, params: BaseModel) -> int:
+        """Сколько единиц разыгрывается на всю сессию (сетка 32 — 32 единицы)."""
+        ...
+
+    def followups(self, params: BaseModel, history: Sequence[RoundPick]) -> list[RoundDraw]:
+        """Раунды, которые открываются после ``history`` (пусто — пока ничего нового)."""
+        ...
+
+    def stage(self, params: BaseModel, index: int) -> int:
+        """Этап раунда ``index`` (с 0) для UI — у сетки размер тура: 32, 16 … 2."""
+        ...
+
+
+@runtime_checkable
+class SubjectSource(Protocol):
+    """Источник по персонам, выбранным игроком (марафон, D14 плана этапа 3a)."""
+
+    def subject_query(
+        self, params: BaseModel, *, domain: str, playable_for: PlayableFor | None = None
+    ) -> SubjectQuery:
+        """Какие персоны можно предложить игроку (роли, минимум играбельных единиц)."""
+        ...
+
+    def max_subjects(self, params: BaseModel) -> int:
+        """Сколько персон игрок может выбрать за сессию."""
+        ...
+
+
+@runtime_checkable
+class PeriodSource(Protocol):
+    """Источник плановых наборов периода (дейлик — день, сетка — неделя; ADR 0027)."""
+
+    def period_start(self, params: BaseModel, at: datetime) -> date:
+        """Начало периода, в который попадает момент ``at`` (``day`` набора в game)."""
+        ...
+
+    def theme_query(
+        self, params: BaseModel, *, domain: str, playable_for: PlayableFor | None
+    ) -> SubjectQuery | None:
+        """Из каких персон генератор набора выбирает тему периода (``None`` — темы нет)."""
+        ...
+
+
+RoundOption = Literal[5, 10, 25, "all"]
+"""Вариант числа раундов сессии по сборнику: число или ``"all"`` — весь играбельный пул
+(``contracts/modes/params/source.collection.v1.json``)."""
+
+
+@runtime_checkable
+class CollectionBasedSource(Protocol):
+    """Источник, который берёт единицы из сборника сессии (``collection``, ADR 0028).
+
+    Конфиг такого режима — шаблон для всех сборников домена: сборник приходит при старте
+    (``DrawContext.collection_id``), а число раундов выбирает игрок из ``round_options``
+    и ограничивает размер играбельного пула сборника. Раунды у сессий одного режима
+    разные, поэтому личные рекорды (``features.records``) у таких режимов запрещены.
+    """
+
+    def round_options(self, params: BaseModel) -> list[RoundOption]:
+        """Варианты числа раундов, из которых выбирает игрок (в порядке конфига)."""
+        ...
+
+    def rounds_for(self, params: BaseModel, requested: RoundOption | None, pool: int) -> int:
+        """Число раундов по выбору игрока ``requested`` и размеру пула ``pool``.
+
+        Raises:
+            PoolTooSmallError: в пуле меньше ``min_items`` или меньше запрошенного числа.
+            RoundsNotAllowedError: запрошенного варианта нет в ``round_options``.
+        """
+        ...
+
+    async def pool_size(self, ctx: DrawContext, params: BaseModel) -> int:
+        """Сколько различных играбельных единиц в сборнике ``ctx.collection_id``.
+
+        Raises:
+            ValueError: в контексте нет ``CollectionPort``.
+            CollectionRequiredError: в контексте нет ``collection_id``.
+        """
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class Comparison:
+    """Правило сравнения раунда «больше/меньше» (объявляет источник пары).
+
+    Attributes:
+        metric: Метрика каталога (``vote_average`` …): у опорной единицы видна сразу, у
+            загаданной — только на ревиле.
+        ties: Как судить ничью (``both_correct`` — верен любой вариант).
+    """
+
+    metric: str
+    ties: str
+
+
+@runtime_checkable
+class ComparisonSource(Protocol):
+    """Источник, раунды которого сравнивают единицы по метрике (``pair``)."""
+
+    def comparison(self, params: BaseModel) -> Comparison:
+        """Метрика и правило ничьей."""
+        ...
+
+
 # ----------------------------------------------------------------------------- ответы
 @dataclass(frozen=True, slots=True)
 class AnswerInput:
-    """Ответ игрока: выбор из автокомплита или свободный текст (ровно одно из двух).
+    """Ответ игрока: выбор из автокомплита, свободный текст или вариант раунда (ровно одно).
 
     Attributes:
         media_item_id: Выбранная единица.
         text: Свободный текст (1..120 символов, ограничивает API).
         selected: Выбранная единица из проекции game (для ``accept_same_title`` и
             частичных ответов); ``None`` для текста или если единицы нет в проекции.
+        option_id: Выбранный вариант раунда (формат ``pick``, ADR 0023).
     """
 
     media_item_id: UUID | None = None
     text: str | None = None
     selected: MediaItemRef | None = None
+    option_id: str | None = None
+
+    @property
+    def input_kind(self) -> str:
+        """Вид ответа: ``item`` | ``text`` | ``option`` (сверяется с ``AnswerFormat``)."""
+        if self.option_id is not None:
+            return "option"
+        return "item" if self.media_item_id is not None else "text"
 
     def __post_init__(self) -> None:
-        if (self.media_item_id is None) == (self.text is None):
-            raise ValueError("ответ — либо media_item_id, либо text")
+        given = [v for v in (self.media_item_id, self.text, self.option_id) if v is not None]
+        if len(given) != 1:
+            raise ValueError("ответ — ровно одно из media_item_id, text, option_id")
         if self.selected is not None and self.selected.id != self.media_item_id:
             raise ValueError("selected должен быть единицей media_item_id")
 
@@ -273,29 +477,55 @@ class MatchContext:
         domain: Домен режима.
         normalizer: Нормализатор ``gv_text`` (тот же, что строит алиасы каталога).
         partial_rules: Правила частичного ответа из ``answer.partial`` (в порядке конфига).
+        draw: Состав текущего раунда (нужен matcher-ам формата ``pick``).
+        comparison: Правило сравнения источника (``metric_compare``) или ``None``.
     """
 
     domain: str
     normalizer: TitleNormalizer
     partial_rules: tuple[PartialRule, ...] = ()
+    draw: RoundDraw | None = None
+    comparison: Comparison | None = None
 
 
 class AnswerMatcher(Protocol):
-    """Сверка ответа с загаданной единицей (``title_alias``).
+    """Сверка ответа с загаданной единицей (``title_alias``, ``metric_compare``, ``preference``).
 
     Attributes:
         key: Ключ в реестре.
         params_schema: Модель параметров (``contracts/modes/params/matcher.<key>.v1.json``).
+        answer_formats: Форматы ответа, которые matcher умеет сверять.
+        requires_comparison: Нужен источник с правилом сравнения (``ComparisonSource``).
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    answer_formats: ClassVar[frozenset[str]]
+    requires_comparison: ClassVar[bool]
 
     def match(
         self, answer: AnswerInput, item: MediaItemRef, params: BaseModel, ctx: MatchContext
     ) -> MatchResult:
         """Точное попадание, частичное (по ``ctx.partial_rules``) или промах."""
         ...
+
+
+class AnswerFormat(Protocol):
+    """Формат ответа (``classic``, ``pick``; ADR 0023): какие ответы принимает раунд.
+
+    Attributes:
+        key: Ключ в реестре и значение ``answer.format``.
+        input_kinds: Допустимые виды ``AnswerInput.input_kind``.
+        needs_options: Нужны ли раунду варианты ответа от источника.
+        single_answer: В раунде ровно один ответ (варианты не меняются от уровня к уровню,
+            поэтому второй попытки быть не может): загадке нужен один уровень и
+            ``attempts_per_level = 1``.
+    """
+
+    key: ClassVar[str]
+    input_kinds: ClassVar[frozenset[str]]
+    needs_options: ClassVar[bool]
+    single_answer: ClassVar[bool]
 
 
 # ----------------------------------------------------------------------------- Scorer
@@ -305,10 +535,16 @@ class Scorer(Protocol):
     Attributes:
         key: Ключ в реестре.
         params_schema: Модель параметров (``contracts/modes/params/scorer.<key>.v1.json``).
+        presentation: Как показывать итог: ``score`` | ``streak`` | ``bracket`` (D12 плана
+            этапа 3a; клиент выбирает экран итога по нему).
+        requires_early_end: Нужно правило досрочного завершения (``EndRule.ends_early``):
+            серия без «жизней» не заканчивается на промахе.
     """
 
     key: ClassVar[str]
     params_schema: ClassVar[type[BaseModel]]
+    presentation: ClassVar[str]
+    requires_early_end: ClassVar[bool]
 
     def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
         """Очки за раунд (``void`` и ``gave_up`` без частичного — 0)."""
@@ -322,4 +558,27 @@ class Scorer(Protocol):
         self, params: BaseModel, *, config: ModeConfig, levels_count: int
     ) -> list[ParamIssue]:
         """Согласованность с загадкой (например, ``len(points) == levels_count``)."""
+        ...
+
+
+# ----------------------------------------------------------------------------- EndRule
+class EndRule(Protocol):
+    """Правило досрочного завершения сессии (``all_rounds``, ``lives``; ADR 0023).
+
+    Attributes:
+        key: Ключ в реестре и значение ``session.end.type``.
+        params_schema: Модель параметров (``contracts/modes/params/end.<key>.v1.json``).
+        ends_early: Может закончить сессию раньше ``session.rounds`` (по промахам).
+    """
+
+    key: ClassVar[str]
+    params_schema: ClassVar[type[BaseModel]]
+    ends_early: ClassVar[bool]
+
+    def should_end(self, history: Sequence[RoundOutcome], params: BaseModel) -> bool:
+        """Закончить ли сессию после ``history`` завершённых раундов."""
+        ...
+
+    def lives_left(self, history: Sequence[RoundOutcome], params: BaseModel) -> int | None:
+        """Сколько «жизней» осталось (для UI) или ``None``, если правило их не считает."""
         ...

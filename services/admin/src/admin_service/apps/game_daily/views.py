@@ -27,6 +27,8 @@ from admin_service.apps.game_daily.forms import (
     CandidateSearchForm,
     RegenerateForm,
     ReplaceItemForm,
+    SubjectSearchForm,
+    ThemeForm,
 )
 from admin_service.core.game_client import GAME, GameAdminClient
 from admin_service.core.permissions import has_perm, require_perm
@@ -37,6 +39,8 @@ MODES_VIEW = "config.modes.view"
 _EDITABLE = frozenset({"scheduled"})
 _REGENERABLE = frozenset({"scheduled", "failed"})
 _NOT_FOUND = 404
+# Периоды набора (DailySet.period в contracts/openapi/game.json); ``day`` — начало периода.
+_PERIOD_LABELS = {"day": "день", "week": "неделя с"}
 
 
 def today() -> date:
@@ -89,12 +93,20 @@ def _sets_view(key: str, rows: Any, *, curate: bool) -> list[dict[str, Any]]:
                 else None
             )
             items.append({**item, "replace_url": url})
+        period = str(row.get("period") or "day")
         result.append(
             {
                 **row,
                 "items": items,
+                "period": period,
+                "period_label": _PERIOD_LABELS.get(period, period),
+                # Тема есть у набора с темой периода (сетка недели); у дейлика её нет.
+                "themed": period != "day" or row.get("subject_id") is not None,
                 "locked": status not in _EDITABLE,
                 "regenerate_url": reverse("game_daily:regenerate", kwargs={"key": key, "day": day})
+                if curate and day is not None and status in _REGENERABLE
+                else None,
+                "theme_url": reverse("game_daily:theme", kwargs={"key": key, "day": day})
                 if curate and day is not None and status in _REGENERABLE
                 else None,
             }
@@ -222,22 +234,94 @@ def replace_item(request: HttpRequest, key: str, day: date, index: int) -> HttpR
 @require_POST
 @require_perm(CURATE)
 def regenerate(request: HttpRequest, key: str, day: date) -> HttpResponse:
-    """Перегенерировать набор (``scheduled`` или ``failed``) по правилам пула режима."""
+    """Перегенерировать набор (``scheduled`` или ``failed``) по правилам пула режима.
+
+    С ``subject_id`` — смена темы периода (сетка недели): набор собирается заново под новую
+    тему. ``day`` — начало периода.
+    """
     form = RegenerateForm(request.POST)
     if not form.is_valid():
-        messages.error(request, "Укажите причину перегенерации (от 3 символов)")
+        errors = "; ".join(
+            f"{field}: {', '.join(str(m) for m in e)}" for field, e in form.errors.items()
+        )
+        messages.error(request, f"Перегенерация не отправлена — {errors}")
         return redirect(_calendar_url(key, day))
     reason, idem = form.cleaned_data["reason"], str(form.cleaned_data["idempotency_key"])
+    subject: UUID | None = form.cleaned_data.get("subject_id")
+    before = None
+    if subject is not None:  # прошлая тема — в аудит (ошибка чтения не мешает: решает game)
+        rows, _ = read(request, GAME, lambda c: GameAdminClient(c).daily_sets(key, day, day))
+        current, _ = _find(rows, day, -1)
+        before = {"subject_id": (current or {}).get("subject_id")}
     mutate(
         request,
         service=GAME,
-        action="game.regenerate_daily_set",
+        action="game.change_daily_theme" if subject else "game.regenerate_daily_set",
         target_type="daily_set",
         target_id=f"{key}/{day.isoformat()}",
         reason=reason,
         idempotency_key=idem,
-        audit_fields=("status", "mode_version"),
-        call=lambda c: GameAdminClient(c).regenerate(key, day, reason=reason, idempotency_key=idem),
-        success="Набор перегенерирован",
+        before=before,
+        audit_fields=("status", "mode_version", "subject_id"),
+        call=lambda c: GameAdminClient(c).regenerate(
+            key, day, reason=reason, idempotency_key=idem, subject_id=subject
+        ),
+        success="Тема заменена, набор собран заново" if subject else "Набор перегенерирован",
     )
     return redirect(_calendar_url(key, day))
+
+
+def _subjects(rows: Any) -> list[dict[str, Any]]:
+    """Темы из ответа game: только с корректным ``subject_id`` (значение варианта списка)."""
+    return [
+        {**row, "subject_id": str(subject)}
+        for row in _list(rows)
+        if (subject := _uuid(row.get("subject_id"))) is not None
+    ]
+
+
+@require_GET
+@require_perm(CURATE)
+def theme(request: HttpRequest, key: str, day: date) -> HttpResponse:
+    """«Сменить тему»: поиск персоны по имени и выбор из списка вместо ввода UUID (хвост 3a).
+
+    Темы — ``GET /admin/v1/mode-configs/{key}/subjects?q=`` (роли и ``min_items`` — из
+    конфига сетки, по убыванию числа играбельных единиц); без ``q`` — самые «богатые».
+    Форма уходит в ``regenerate`` с ``subject_id``: там аудит ``game.change_daily_theme``.
+    """
+    rows, exc = read(request, GAME, lambda c: GameAdminClient(c).daily_sets(key, day, day))
+    daily_set, _ = _find(rows, day, -1)
+    search = SubjectSearchForm(request.GET or None)
+    q = search.cleaned_data["q"] if search.is_bound and search.is_valid() else None
+    found, search_exc = read(request, GAME, lambda c: GameAdminClient(c).subjects(key, q=q or None))
+    subjects = _subjects(found)
+    current = str((daily_set or {}).get("subject_id") or "")
+    status = 200
+    if exc is None and daily_set is None:
+        status = _NOT_FOUND
+    elif search.is_bound and search.errors:
+        status = 400
+    return render(
+        request,
+        "admin_game_daily/theme.html",
+        {
+            "title": f"Тема: {key}, {day.isoformat()}",
+            "key": key,
+            "day": day,
+            "daily_set": daily_set,
+            "current_subject": current,
+            "current_name": next(
+                (s.get("name") for s in subjects if s["subject_id"] == current), None
+            ),
+            "editable": daily_set is not None
+            and str(daily_set.get("status") or "") in _REGENERABLE,
+            "error": exc.message if exc else None,
+            "search": search,
+            "search_error": search_exc.message if search_exc else None,
+            "subjects": subjects,
+            "form": ThemeForm(subjects=subjects),
+            "regenerate_url": reverse("game_daily:regenerate", kwargs={"key": key, "day": day}),
+            "back_url": _calendar_url(key, day),
+        },
+        status=status,
+    )

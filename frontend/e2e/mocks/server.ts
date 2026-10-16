@@ -3,12 +3,14 @@
  *
  * Next в e2e переписывает `/api/*` и `/media/*` сюда (`GV_DEV_API_ORIGIN`, см. src/proxy.ts),
  * а SSR ходит в bff по `GV_BFF_INTERNAL_URL` — пути `/v1/...` сервер считает путями bff.
- * Управление сценариями: `POST /__mock/reset`, `POST /__mock/scenario {desyncOnce: true}`.
+ * Управление сценариями: `POST /__mock/reset`, `POST /__mock/scenario {desyncOnce: true}`;
+ * сборники и медиатека (этап 3b) — `POST /__mock/scenario {ugc: {draftConflictOnce: true}}`.
  */
 import { createServer, type IncomingMessage } from "node:http";
 import { getResponse } from "msw";
 import { createHandlers } from "./handlers";
 import { MockWorld, type Scenario } from "./world";
+import type { UgcScenario } from "./ugc";
 
 const port = Number(process.env.MOCK_PORT ?? 3101);
 const world = new MockWorld();
@@ -30,7 +32,11 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (path === "/__mock/scenario" && req.method === "POST") {
-      world.scenario = { ...world.scenario, ...(JSON.parse(body.toString() || "{}") as Scenario) };
+      const { ugc, ...rest } = JSON.parse(body.toString() || "{}") as Scenario & {
+        ugc?: UgcScenario;
+      };
+      world.scenario = { ...world.scenario, ...rest };
+      if (ugc) world.ugc.scenario = { ...world.ugc.scenario, ...ugc };
       res.writeHead(204).end();
       return;
     }

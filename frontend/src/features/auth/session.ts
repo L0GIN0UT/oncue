@@ -21,6 +21,16 @@ export function useSessionInfo() {
 }
 
 /**
+ * Вид зрителя для экранов этапа 3b: создавать сборники, лайкать и вести медиатеку может только
+ * пользователь (D7); гостю и анониму — ссылка на регистрацию. `pending` — сессия ещё грузится.
+ */
+export function useViewer(): { kind: "user" | "guest" | "anonymous"; pending: boolean } {
+  const { data, isPending } = useSessionInfo();
+  const kind = data?.subject?.kind ?? "anonymous";
+  return { kind, pending: isPending };
+}
+
+/**
  * Начать гостевую сессию.
  *
  * 409 `auth.already_authenticated` — у identity есть живая сессия, но браузер, раз уж дошёл
@@ -36,6 +46,19 @@ export async function startGuestSession(): Promise<void> {
 /** Перед стартом игры: без сессии — выдать гостевую (D5). */
 export async function ensureSession(): Promise<void> {
   if (!csrfToken()) await startGuestSession();
+}
+
+/**
+ * Восстановить сессию, которую сервер не принял: просроченный access при живой cookie
+ * `gv_csrf` лечится refresh-ом, без cookie или при неудачном refresh выдаётся гостевая.
+ *
+ * Нужна там, где 401 до браузера не доходит: bff отвечает 200 и прячет отказ game в блоке
+ * страницы (`unavailable`), поэтому общий refresh на 401 в `apiFetch` не срабатывает.
+ */
+export async function recoverSession(): Promise<void> {
+  const csrf = csrfToken();
+  if (csrf && (await refreshSession(csrf))) return;
+  await startGuestSession();
 }
 
 /**

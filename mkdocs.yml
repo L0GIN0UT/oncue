@@ -54,6 +54,8 @@ nav:
   - Планы:
       - Этап 1: plans/stage-1.md
       - Этап 2: plans/stage-2.md
+      - Этап 3a: plans/stage-3a.md
+      - Этап 3b: plans/stage-3b.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md
@@ -79,6 +81,15 @@ nav:
       - adr/0020-mode-config-assets-by-params-hash.md
       - adr/0021-s3-storage-seaweedfs.md
       - adr/0022-image-scan-reporting-not-gating.md
+      - adr/0023-round-draw-answer-formats-end-rules.md
+      - adr/0024-clue-texts-as-media-assets.md
+      - adr/0025-dynamic-asset-profiles.md
+      - adr/0026-reveal-with-other-clue-type.md
+      - adr/0027-period-sets-preference-modes-records.md
+      - adr/0028-collections-versions-draft-projection.md
+      - adr/0029-collection-assets-scoped-sets.md
+      - adr/0030-minimal-ugc-safety-before-moderation.md
+      - adr/0031-library-config-shelves-private-catalog-projection.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

@@ -104,6 +104,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/items/{item_id}/clue-texts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Тексты загадок единицы */
+        get: operations["get_clue_texts_admin_v1_items__item_id__clue_texts_get"];
+        /**
+         * Изменить тексты загадок
+         * @description Все три поля целиком (null — очистить); `base_revision` — ревизия, которую видел модератор (иначе 409 `catalog.clue_texts_revision_mismatch`). После правки тексты в статусе draft: в событиях остаётся прошлый одобренный снимок. emoji — до 12 графем (422 `catalog.clue_text_invalid_emoji`).
+         */
+        put: operations["put_clue_texts_admin_v1_items__item_id__clue_texts_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/items/{item_id}/clue-texts/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Одобрить тексты загадок
+         * @description Одобренные тексты уходят в `catalog.MediaItemUpdated.clue_texts` (version+1). 409 `catalog.clue_texts_revision_mismatch` — одобряется не текущая ревизия; 422 `catalog.clue_texts_empty` — одобрять нечего.
+         */
+        post: operations["approve_clue_texts_admin_v1_items__item_id__clue_texts_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/items/{item_id}/unblock": {
         parameters: {
             query?: never;
@@ -115,6 +156,26 @@ export interface paths {
         put?: never;
         /** Разблокировать */
         post: operations["unblock_admin_v1_items__item_id__unblock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/items/republish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Переопубликовать единицы
+         * @description Фоновая задача RabbitMQ порциями `GV_CATALOG__REPUBLISH_BATCH`: `MediaItemUpdated` с `version+1` (`changed_fields: [republish]`) для всех единиц домена (без `domain` — всех). Повтор с тем же `Idempotency-Key` — то же задание.
+         */
+        post: operations["republish_items_admin_v1_items_republish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -202,6 +263,8 @@ export interface components {
             aliases: components["schemas"]["AliasOut"][];
             /** Blocked Reason Code */
             blocked_reason_code: string | null;
+            /** Countries */
+            countries?: string[];
             domain: components["schemas"]["MediaDomain"];
             /** External Refs */
             external_refs: {
@@ -314,6 +377,16 @@ export interface components {
             text: string;
         };
         /**
+         * ApproveClueTextsRequest
+         * @description Одобрить тексты ревизии ``revision``.
+         */
+        ApproveClueTextsRequest: {
+            /** Reason */
+            reason: string;
+            /** Revision */
+            revision: number;
+        };
+        /**
          * BlockRequest
          * @description Блокировка.
          */
@@ -325,6 +398,51 @@ export interface components {
              * @default moderation
              */
             reason_code: string;
+        };
+        /**
+         * ClueTextsIn
+         * @description Правка текстов загадок: после правки тексты снова требуют одобрения.
+         */
+        ClueTextsIn: {
+            /** Base Revision */
+            base_revision: number;
+            /** Emoji */
+            emoji?: string | null;
+            /** Plot Masked */
+            plot_masked?: string | null;
+            /** Reason */
+            reason: string;
+            /** Tagline */
+            tagline?: string | null;
+        };
+        /**
+         * ClueTextsOut
+         * @description Тексты загадок единицы (ADR 0024): в событие уходят только одобренные.
+         */
+        ClueTextsOut: {
+            /**
+             * Approved Revision
+             * @description Последняя одобренная ревизия (её тексты сейчас в событиях)
+             */
+            approved_revision?: number | null;
+            /** Emoji */
+            emoji: string | null;
+            /** Plot Masked */
+            plot_masked: string | null;
+            /**
+             * Plot Raw
+             * @description Исходный сюжет (TMDB или ввод модератора)
+             */
+            plot_raw: string | null;
+            /** Revision */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "approved";
+            /** Tagline */
+            tagline: string | null;
         };
         /**
          * ImportCounters
@@ -482,6 +600,26 @@ export interface components {
         ReplaceAliasesRequest: {
             /** Aliases */
             aliases: components["schemas"]["AliasIn"][];
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * RepublishOut
+         * @description Задача переопубликации поставлена.
+         */
+        RepublishOut: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+        };
+        /**
+         * RepublishRequest
+         * @description Переопубликовать единицы (заполнить новые поля у потребителей).
+         */
+        RepublishRequest: {
+            domain?: components["schemas"]["MediaDomain"] | null;
             /** Reason */
             reason: string;
         };
@@ -953,6 +1091,226 @@ export interface operations {
             };
         };
     };
+    get_clue_texts_admin_v1_items__item_id__clue_texts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClueTextsOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_clue_texts_admin_v1_items__item_id__clue_texts_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClueTextsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClueTextsOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    approve_clue_texts_admin_v1_items__item_id__clue_texts_approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveClueTextsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClueTextsOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     unblock_admin_v1_items__item_id__unblock_post: {
         parameters: {
             query?: never;
@@ -1022,6 +1380,83 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    republish_items_admin_v1_items_republish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepublishOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

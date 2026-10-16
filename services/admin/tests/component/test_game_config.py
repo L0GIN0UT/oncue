@@ -81,6 +81,12 @@ def _key() -> str:
     return str(uuid.uuid4())
 
 
+@pytest.fixture(autouse=True)
+def _no_asset_requests(game: Any) -> None:
+    """Карточка режима читает запросы ассетов (этап 3a); по умолчанию их нет."""
+    game.route("GET", f"{BASE}/asset-requests").respond(200, json=[])
+
+
 def _body(route: Any) -> dict[str, Any]:
     data: dict[str, Any] = json.loads(route.calls.last.request.content)
     return data

@@ -1,0 +1,35 @@
+{
+  "$id": "urn:guessverse:contracts:clues:emoji:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Эмодзи-описание: каждый уровень открывает больше эмодзи (null — все), text_asset.v1.",
+  "properties": {
+    "levels": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "maximum": 12,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "levels"
+  ],
+  "title": "emoji params v1",
+  "type": "object"
+}

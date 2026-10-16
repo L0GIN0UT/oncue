@@ -1,0 +1,52 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:source.marathon:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Марафон: все играбельные единицы выбранных игроком персон (D14)",
+  "properties": {
+    "max_subjects": {
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "min_items": {
+      "description": "Минимум играбельных единиц у персоны, чтобы её можно было выбрать",
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "order": {
+      "enum": [
+        "shuffle",
+        "year"
+      ],
+      "type": "string"
+    },
+    "pool": {
+      "$ref": "urn:guessverse:contracts:modes:params:pool:v1"
+    },
+    "roles": {
+      "items": {
+        "enum": [
+          "artist",
+          "director",
+          "actor"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "roles",
+    "max_subjects",
+    "min_items",
+    "order",
+    "pool"
+  ],
+  "title": "source.marathon params v1",
+  "type": "object"
+}

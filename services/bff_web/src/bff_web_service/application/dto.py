@@ -1,4 +1,4 @@
-"""Данные источников (game, catalog, identity) и экраны, которые из них собираются.
+"""Данные источников (game, catalog, identity, collections, library) и экраны из них.
 
 Входные DTO повторяют поля контрактов ``contracts/openapi/<service>.json``, нужные экранам;
 лишние поля источника отбрасываются при разборе (инфраструктура). Выходные — схемы §2.6.
@@ -17,6 +17,11 @@ from bff_web_service.domain import Block
 Domain = Literal["music", "film"]
 DailyState = Literal["not_started", "in_progress", "finished"]
 RoundOutcome = Literal["exact", "partial", "miss", "gave_up", "void"]
+AnswerFormat = Literal["classic", "pick"]
+Presentation = Literal["score", "streak", "bracket"]
+Difficulty = Literal["easy", "medium", "hard"]
+CollectionSort = Literal["featured", "popular", "new", "likes", "difficulty"]
+RoundsChoice = Literal[5, 10, 25, "all"]
 
 
 # ----------------------------------------------------------------------------- зритель
@@ -61,8 +66,29 @@ class Preset:
 
 
 @dataclass(frozen=True, slots=True)
+class SubjectPick:
+    """Выбор персон перед стартом (марафон): допустимые роли и сколько можно выбрать."""
+
+    roles: list[str]
+    max: int
+
+
+@dataclass(frozen=True, slots=True)
+class ModeStart:
+    """Что игрок выбирает перед стартом режима (``None`` у полей — выбирать нечего)."""
+
+    subject: SubjectPick | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Mode:
-    """Опубликованный режим (``game GET /v1/modes``)."""
+    """Опубликованный режим (``game GET /v1/modes``).
+
+    Attributes:
+        answer_format: Формат ответа (плагин ``AnswerFormat``): поле ввода или выбор варианта.
+        presentation: Как показывать итог (объявляет Scorer): очки, серия, сетка.
+        start: Выбор перед стартом; ``None`` — стартовать сразу (или по пресету).
+    """
 
     key: str
     version: int
@@ -73,6 +99,9 @@ class Mode:
     rounds: int
     allow_guest: bool
     presets: list[Preset] | None = None
+    answer_format: AnswerFormat = "classic"
+    presentation: Presentation = "score"
+    start: ModeStart | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +151,32 @@ class Share:
 
 
 @dataclass(frozen=True, slots=True)
+class ResultRecord:
+    """Рекорд в итоге сессии (только пользователи, режимы с ``features.records``)."""
+
+    best: int
+    is_new: bool
+    percentile: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BracketPick:
+    """Выбор в сетке: тур и названия победителя и проигравшего."""
+
+    stage: int
+    winner: str
+    loser: str
+
+
+@dataclass(frozen=True, slots=True)
+class Bracket:
+    """Итог сетки: чемпион и выборы по турам."""
+
+    champion: str
+    picks: list[BracketPick]
+
+
+@dataclass(frozen=True, slots=True)
 class SessionResult:
     """Итог завершённой сессии (``game GET /v1/sessions/{id}/result``)."""
 
@@ -130,6 +185,19 @@ class SessionResult:
     rounds: list[ResultRound]
     share: Share
     daily_stats: list[DailyRoundStat] | None = None
+    presentation: Presentation = "score"
+    record: ResultRecord | None = None
+    bracket: Bracket | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PersonalRecord:
+    """Личный рекорд режима (``game GET /v1/me/records``; гостю — пустой список)."""
+
+    mode_key: str
+    best: int
+    achieved_at: datetime
+    percentile: float | None = None
 
 
 # ----------------------------------------------------------------------------- catalog
@@ -192,11 +260,26 @@ class ModeCard:
     rounds: int
     allow_guest: bool
     presets: list[Preset] | None = None
+    answer_format: AnswerFormat = "classic"
+    presentation: Presentation = "score"
+    start: ModeStart | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ModeGroup:
+    """Группа витрины: режимы с одинаковыми ``source_type`` и ``presentation``."""
+
+    source_type: str
+    presentation: Presentation
+    modes: list[ModeCard]
 
 
 @dataclass(frozen=True, slots=True)
 class DailyCard:
-    """Карточка дейлика: режим + статус субъекта."""
+    """Карточка планового режима периода (дейлик — день, сетка — неделя) + статус субъекта.
+
+    ``day`` — начало периода, ``next_reset_at`` — его конец.
+    """
 
     mode_key: str
     domain: Domain
@@ -207,14 +290,29 @@ class DailyCard:
     next_reset_at: datetime
     session_id: UUID | None = None
     score: int | None = None
+    presentation: Presentation = "score"
+
+
+@dataclass(frozen=True, slots=True)
+class RecordCard:
+    """Личный рекорд режима для витрины."""
+
+    mode_key: str
+    domain: Domain
+    title_key: str
+    presentation: Presentation
+    best: int
+    achieved_at: datetime
+    percentile: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class HomeBlocks:
-    """Блоки главной."""
+    """Блоки главной: ``dailies`` — наборы дня, ``weekly`` — наборы недели (сетка)."""
 
     dailies: Block[list[DailyCard]]
     modes: Block[list[ModeCard]]
+    weekly: Block[list[DailyCard]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,10 +325,21 @@ class HomePage:
 
 @dataclass(frozen=True, slots=True)
 class SoloBlocks:
-    """Блоки хаба соло-режимов."""
+    """Блоки хаба соло-режимов.
+
+    Attributes:
+        daily: Плановые режимы дня.
+        random: Режимы ``random_source_types`` (витрина этапа 2, оставлена для совместимости).
+        modes: Витрина: все неплановые режимы, сгруппированные по данным.
+        weekly: Плановые режимы недели (сетка).
+        records: Личные рекорды; ``None`` — гость или аноним (рекордов у них нет, D11).
+    """
 
     daily: Block[list[DailyCard]]
     random: Block[list[ModeCard]]
+    modes: Block[list[ModeGroup]]
+    weekly: Block[list[DailyCard]]
+    records: Block[list[RecordCard]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +372,9 @@ class ResultSummary:
     share_text: str
     rounds: list[ResultRoundCard]
     mode_key: str | None = None
+    presentation: Presentation = "score"
+    record: ResultRecord | None = None
+    bracket: Bracket | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,3 +413,230 @@ class ResultsPage:
     """``GET /v1/pages/results/{session_id}``."""
 
     blocks: ResultsBlocks
+
+
+# ----------------------------------------------------------------------------- collections
+@dataclass(frozen=True, slots=True)
+class CollectionAuthor:
+    """Автор сборника: пользователь, куратор («Guessverse») или удалённый."""
+
+    kind: Literal["user", "curator", "deleted"]
+    user_id: UUID | None = None
+    nickname: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionCover:
+    """Обложка-пресет (градиент и эмодзи — ``collections /v1/meta``)."""
+
+    preset: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CollectionCard:
+    """Карточка сборника в каталоге (``collections GET /v1/collections``), без состава."""
+
+    collection_id: UUID
+    domain: Domain
+    kind: Literal["ugc", "curated"]
+    title: str
+    cover: CollectionCover | None = None
+    tags: list[str]
+    author: CollectionAuthor
+    default_mode_key: str
+    items_count: int
+    likes_count: int
+    plays_count: int
+    difficulty: Difficulty | None = None
+    featured: bool = False
+    published_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionList:
+    """Страница каталога сборников по курсору (курсор привязан к сортировке)."""
+
+    items: list[CollectionCard]
+    next_cursor: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CustomClue:
+    """Своя загадка единицы (эмодзи); видят только автор и админ."""
+
+    emoji: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionItem:
+    """Единица состава сборника — только если состав открыт субъекту (D6)."""
+
+    position: int
+    media_item_id: UUID
+    title: str
+    available: bool
+    year: int | None = None
+    custom: CustomClue | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionMe:
+    """Отношение пользователя к сборнику (у гостя и анонима его нет)."""
+
+    liked: bool
+    favorite: bool
+    completed: bool
+    is_author: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CollectionDetail(CollectionCard):
+    """Сборник целиком (``collections GET /v1/collections/{id}``)."""
+
+    description: str | None = None
+    visibility: Literal["public", "unlisted"]
+    status: Literal["published", "hidden"]
+    version: int
+    items_visible: bool
+    items: list[CollectionItem] | None = None
+    me: CollectionMe | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogQuery:
+    """Параметры каталога сборников (``collections GET /v1/collections``)."""
+
+    q: str | None = None
+    domain: Domain | None = None
+    mode: str | None = None
+    difficulty: Difficulty | None = None
+    curated: bool | None = None
+    sort: CollectionSort = "popular"
+    cursor: str | None = None
+    limit: int = 20
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionMode:
+    """Режим сборника и его играбельность (``game GET /v1/collections/{id}/modes``)."""
+
+    mode_key: str
+    title_key: str
+    clue_type: str
+    allow_guest: bool
+    playable: int
+    total: int
+    available: bool
+    round_options: list[RoundsChoice]
+
+
+# ----------------------------------------------------------------------------- library
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Shelf:
+    """Полка медиатеки (``library GET /v1/shelves``)."""
+
+    ref: str
+    shelf_id: UUID | None = None
+    kind: Literal["system", "custom"]
+    key: str | None = None
+    title: str | None = None
+    title_key: str | None = None
+    domains: list[Domain]
+    exclusive_with: list[str] = field(default_factory=list)
+    items_count: int
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ShelfItem:
+    """Единица на полке (карточка из проекции catalog в library)."""
+
+    media_item_id: UUID
+    domain: Domain
+    kind: str
+    title: str
+    year: int | None = None
+    persons: list[str] = field(default_factory=list)
+    status: Literal["available", "unavailable"]
+    source: Literal["reveal", "results", "card", "collection", "library"]
+    added_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ShelfItems:
+    """Полка и страница её единиц (``library GET /v1/shelves/{ref}/items``)."""
+
+    shelf: Shelf
+    items: list[ShelfItem]
+    next_cursor: str | None = None
+
+
+# ----------------------------------------------------------------------------- экраны 3b
+@dataclass(frozen=True, slots=True)
+class CollectionsBlocks:
+    """Блоки каталога: без ``q`` и курсора — витрины, иначе только ``results``.
+
+    Блок, которого нет в этом виде страницы, — ``None``.
+    """
+
+    featured: Block[CollectionList] | None = None
+    popular: Block[CollectionList] | None = None
+    new: Block[CollectionList] | None = None
+    results: Block[CollectionList] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionsPage:
+    """``GET /v1/pages/collections``.
+
+    Attributes:
+        cacheable: Ответ можно отдавать общим кэшам (``public``): каталог без ``q``.
+    """
+
+    blocks: CollectionsBlocks
+    cacheable: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionBlocks:
+    """Блоки страницы сборника."""
+
+    collection: Block[CollectionDetail]
+    modes: Block[list[CollectionMode]]
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionPage:
+    """``GET /v1/pages/collections/{id}``: ``me`` — только пользователю."""
+
+    blocks: CollectionBlocks
+    personal: bool
+    me: CollectionMe | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryBlocks:
+    """Блоки медиатеки."""
+
+    shelves: Block[list[Shelf]]
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryPage:
+    """``GET /v1/pages/library``."""
+
+    blocks: LibraryBlocks
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryShelfBlocks:
+    """Блоки страницы полки."""
+
+    shelf: Block[ShelfItems]
+
+
+@dataclass(frozen=True, slots=True)
+class LibraryShelfPage:
+    """``GET /v1/pages/library/{ref}``."""
+
+    blocks: LibraryShelfBlocks

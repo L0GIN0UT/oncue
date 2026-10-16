@@ -1,4 +1,5 @@
-"""Обработчики событий catalog и задачи RabbitMQ.
+"""Обработчики событий catalog, game (``ClueAssetsRequested``) и collections (свои загадки
+сборников, ADR 0029) и задачи RabbitMQ.
 
 Обработчик события работает внутри транзакции ``EventProcessor`` (отметка inbox +
 изменения — атомарно); use-cases получают UoW, привязанный к этой сессии (SAVEPOINT).
@@ -7,29 +8,52 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+import structlog
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError, TaskHandler
+from media_pipeline_service.application.commands.collections import (
+    CollectionItemCustom,
+    CollectionSnapshot,
+)
+from media_pipeline_service.application.commands.profiles import ClueAssetsRequest
 from media_pipeline_service.application.dto import (
     GENERATE_TASK,
     CatalogSource,
+    CatalogTexts,
     MediaItemSnapshot,
 )
+from media_pipeline_service.domain.collections import CollectionStatus
+from media_pipeline_service.domain.errors import CollectionContentInvalidError
 from media_pipeline_service.domain.media_items import ItemStatus
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin
 from media_pipeline_service.infrastructure.container import MediaContainer
 
-CONSUMED_TOPICS: tuple[str, ...] = ("catalog.media_item.v1",)
+log = structlog.get_logger(__name__)
+
+CONSUMED_TOPICS: tuple[str, ...] = (
+    "catalog.media_item.v1",
+    "game.mode_config.v1",
+    "collections.collection.v1",
+)
 
 ITEM_CREATED = "catalog.MediaItemCreated"
 ITEM_UPDATED = "catalog.MediaItemUpdated"
 ITEM_BLOCKED = "catalog.MediaItemBlocked"
 ITEM_UNBLOCKED = "catalog.MediaItemUnblocked"
+# Остальные события топика game.mode_config.v1 (Published/Archived) сервису не нужны —
+# реестр их пропускает (Outcome.SKIPPED).
+CLUE_ASSETS_REQUESTED = "game.ClueAssetsRequested"
+# Топик collections.collection.v1: CollectionLiked сервису не нужен (пропускается реестром).
+COLLECTION_PUBLISHED = "collections.CollectionPublished"
+COLLECTION_UPDATED = "collections.CollectionUpdated"
+COLLECTION_DELETED = "collections.CollectionDeleted"
 
 
 class _Payload(BaseModel):
@@ -39,9 +63,27 @@ class _Payload(BaseModel):
 
 class _SourceMediaPayload(_Payload):
     source_media_ref: UUID
-    kind: SourceKind
+    # Строка, а не SourceKind: catalog добавляет виды раньше, чем их начинает обрабатывать
+    # media-pipeline (план этапа 3a, M2) — неизвестный вид пропускается, а не роняет событие.
+    kind: str = Field(min_length=1, max_length=32)
     origin: SourceOrigin
     uri: str = Field(min_length=1, max_length=2000)
+    position: int = Field(default=1, ge=1, le=100)
+    source_url: str | None = Field(default=None, max_length=2000)
+    license_note: str | None = Field(default=None, max_length=500)
+
+
+class _PersonPayload(_Payload):
+    name: str = Field(min_length=1, max_length=200)
+    # Строка: новые роли catalog не должны ронять событие (в текст идут director и actor).
+    role: str = Field(min_length=1, max_length=32)
+    order: int = Field(ge=0)
+
+
+class _ClueTextsPayload(_Payload):
+    plot_masked: str | None = Field(default=None, max_length=2000)
+    tagline: str | None = Field(default=None, max_length=300)
+    emoji: str | None = Field(default=None, max_length=64)
 
 
 class _SnapshotPayload(_Payload):
@@ -51,10 +93,78 @@ class _SnapshotPayload(_Payload):
     kind: Literal["track", "film"]
     status: ItemStatus
     source_media: list[_SourceMediaPayload]
+    # Этап 3a (ADR 0024): необязательные поля — старые события их не содержат.
+    year: int | None = None
+    genres: list[str] = Field(default_factory=list)
+    persons: list[_PersonPayload] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list, max_length=20)
+    clue_texts: _ClueTextsPayload | None = None
+
+    def texts(self) -> CatalogTexts:
+        """Тексты и метаданные для текстового исходника (без названия единицы)."""
+        by_order = sorted(self.persons, key=lambda p: p.order)
+        clue = self.clue_texts.model_dump(exclude_none=True) if self.clue_texts else {}
+        return CatalogTexts(
+            clue_texts=clue,
+            year=self.year,
+            genres=tuple(self.genres),
+            countries=tuple(self.countries),
+            directors=tuple(p.name for p in by_order if p.role == "director"),
+            cast=tuple(p.name for p in by_order if p.role == "actor"),
+        )
 
 
 class _StatusPayload(_Payload):
     media_item_id: UUID
+    version: int = Field(ge=1)
+
+
+class _ClueAssetsRequestedPayload(_Payload):
+    request_id: UUID
+    mode_key: str = Field(max_length=100, pattern=r"^(music|film)\.[a-z0-9_]+\.[a-z0-9_]+$")
+    draft_revision: int = Field(ge=1)
+    domain: Literal["music", "film"]
+    clue_type: str = Field(max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    params: dict[str, Any]
+    params_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    actor_id: UUID
+    requested_at: AwareDatetime
+
+
+class _CollectionCustomPayload(_Payload):
+    # Строгость RGI проверяет use-case (gv_text.emoji): здесь — только пределы контракта.
+    emoji: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class _CollectionItemPayload(_Payload):
+    media_item_id: UUID
+    position: int = Field(ge=0, le=199)
+    custom: _CollectionCustomPayload | None = None
+
+
+class _CollectionSnapshotPayload(_Payload):
+    collection_id: UUID
+    version: int = Field(ge=1)
+    domain: Literal["music", "film"]
+    status: Literal["published", "hidden"]
+    items: list[_CollectionItemPayload] = Field(max_length=200)
+
+    def snapshot(self) -> CollectionSnapshot:
+        """Снимок для use-case: единицы в порядке ``position`` и их эмодзи."""
+        return CollectionSnapshot(
+            collection_id=self.collection_id,
+            version=self.version,
+            domain=self.domain,
+            status=CollectionStatus(self.status),
+            items=tuple(
+                CollectionItemCustom(i.media_item_id, i.custom.emoji if i.custom else None)
+                for i in sorted(self.items, key=lambda i: i.position)
+            ),
+        )
+
+
+class _CollectionDeletedPayload(_Payload):
+    collection_id: UUID
     version: int = Field(ge=1)
 
 
@@ -68,8 +178,32 @@ def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
         ) from exc
 
 
+def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, ...]:
+    """Исходники известных сервису видов; неизвестные пропускаются с записью в лог."""
+    known = {k.value for k in SourceKind}
+    sources: list[CatalogSource] = []
+    for s in items:
+        if s.kind not in known:
+            log.info(
+                "media.source_kind_skipped", kind=s.kind, source_media_ref=str(s.source_media_ref)
+            )
+            continue
+        sources.append(
+            CatalogSource(
+                s.source_media_ref,
+                SourceKind(s.kind),
+                s.origin,
+                s.uri,
+                position=s.position,
+                source_url=s.source_url,
+                license_note=s.license_note,
+            )
+        )
+    return tuple(sources)
+
+
 def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
-    """Реестр обработчиков событий catalog."""
+    """Реестр обработчиков событий catalog, game и collections."""
     registry = EventHandlerRegistry()
 
     async def on_snapshot(envelope: EventEnvelope, session: AsyncSession) -> None:
@@ -80,9 +214,8 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
             domain=p.domain,
             kind=p.kind,
             status=p.status,
-            sources=tuple(
-                CatalogSource(s.source_media_ref, s.kind, s.origin, s.uri) for s in p.source_media
-            ),
+            sources=known_sources(p.source_media),
+            texts=p.texts(),
         )
         await container.sync_media_item(container.uow_factory(session)).apply_snapshot(snapshot)
 
@@ -94,6 +227,41 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
 
         return handler
 
+    async def on_clue_assets_requested(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_ClueAssetsRequestedPayload, envelope.payload)
+        use_case = container.apply_clue_assets_requested(container.uow_factory(session))
+        await use_case.execute(
+            ClueAssetsRequest(
+                request_id=p.request_id,
+                mode_key=p.mode_key,
+                draft_revision=p.draft_revision,
+                domain=p.domain,
+                clue_type=p.clue_type,
+                params=p.params,
+                params_hash=p.params_hash,
+                actor_id=p.actor_id,
+                requested_at=p.requested_at,
+            )
+        )
+
+    async def on_collection(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_CollectionSnapshotPayload, envelope.payload)
+        use_case = container.sync_collection(container.uow_factory(session))
+        try:
+            await use_case.apply_snapshot(p.snapshot())
+        except CollectionContentInvalidError as exc:
+            # Защита в глубину (ADR 0029): collections проверяет то же при публикации.
+            raise PermanentError(f"{exc.code}: {exc.details}") from exc
+
+    async def on_collection_deleted(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_CollectionDeletedPayload, envelope.payload)
+        use_case = container.sync_collection(container.uow_factory(session))
+        await use_case.apply_deleted(p.collection_id, p.version)
+
+    registry.register(CLUE_ASSETS_REQUESTED, on_clue_assets_requested)
+    registry.register(COLLECTION_PUBLISHED, on_collection)
+    registry.register(COLLECTION_UPDATED, on_collection)
+    registry.register(COLLECTION_DELETED, on_collection_deleted)
     registry.register(ITEM_CREATED, on_snapshot)
     registry.register(ITEM_UPDATED, on_snapshot)
     registry.register(ITEM_BLOCKED, on_status(ItemStatus.BLOCKED))

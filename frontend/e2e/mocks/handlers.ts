@@ -6,6 +6,8 @@ import { http, HttpResponse, type HttpHandler } from "msw";
 import type { MockWorld } from "./world";
 import { MODES, itemById } from "./world";
 import { audioWav, frameSvg } from "./media";
+import { createUgcHandlers } from "./handlers-3b";
+import { COLLECTION_MODES } from "./ugc";
 
 const CSRF = "gv_csrf";
 const ACCESS = "gv_access";
@@ -20,7 +22,7 @@ function cookiesOf(request: Request): Record<string, string> {
 }
 
 /** Субъект по cookie `gv_access` (`guest.<id>` или `user.<id>`) или Bearer. */
-function subjectOf(request: Request): string | null {
+export function subjectOf(request: Request): string | null {
   const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const token = bearer || cookiesOf(request)[ACCESS];
   return token && /^(guest|user)\.[\w-]+$/.test(token) ? token : null;
@@ -41,7 +43,7 @@ function refreshSubjectOf(request: Request, world: MockWorld): string | null {
   return world.revokedRefresh.has(subject) ? null : subject;
 }
 
-const csrfOk = (request: Request) => {
+export const csrfOk = (request: Request) => {
   const cookie = cookiesOf(request)[CSRF];
   return Boolean(cookie) && request.headers.get("x-csrf-token") === cookie;
 };
@@ -103,10 +105,13 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       const out = run({ body, sessionId, index });
       if (out instanceof Response) return out;
       const r = s.rounds.find((x) => x.index === out.roundIndex)!;
+      // Статистика выбора — только у сетки (ход выбором варианта с единицей).
+      const stats = r.picked ? { agree_pct: world.agreePct(r) } : null;
       const payload = {
         result: out.result,
         round: world.roundOut(s, r),
         session: world.snapshot(s),
+        stats,
       };
       world.idempotency.set(`${subject}:${key}`, { status: 200, body: payload });
       return HttpResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
@@ -122,8 +127,17 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
   return [
     // ---------------------------------------------------------------- game
     http.get(`${g}/modes`, ({ request }) => {
-      const domain = new URL(request.url).searchParams.get("domain");
-      return HttpResponse.json(MODES.filter((m) => !domain || m.domain === domain));
+      const params = new URL(request.url).searchParams;
+      const domain = params.get("domain");
+      const kind = params.get("kind") ?? "play";
+      if (kind !== "play" && kind !== "collection") return problem(422, "common.validation_failed");
+      const list = kind === "collection" ? COLLECTION_MODES : MODES;
+      return HttpResponse.json(
+        list.filter((m) => !domain || m.domain === domain),
+        {
+          headers: { "Cache-Control": "public, max-age=30" },
+        },
+      );
     }),
 
     http.get(`${g}/daily`, ({ request }) => {
@@ -131,8 +145,8 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       if (!subject) return problem(401, "auth.unauthenticated");
       const domain = new URL(request.url).searchParams.get("domain");
       return HttpResponse.json(
-        MODES.filter((m) => m.source_type === "daily" && (!domain || m.domain === domain)).map(
-          (m) => world.dailyStatus(subject, m),
+        MODES.filter((m) => world.isScheduled(m) && (!domain || m.domain === domain)).map((m) =>
+          world.dailyStatus(subject, m),
         ),
       );
     }),
@@ -142,20 +156,80 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       if (!subject) return problem(401, "auth.unauthenticated");
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       if (!request.headers.get("idempotency-key")) return problem(422, "idempotency.key_required");
-      const body = (await request.json()) as { mode_key: string; preset_id?: string | null };
+      const body = (await request.json()) as {
+        mode_key: string;
+        preset_id?: string | null;
+        subject_ids?: string[] | null;
+        collection_id?: string | null;
+        rounds?: number | "all" | null;
+      };
       const mode = world.mode(body.mode_key);
       if (!mode) return problem(404, "game.mode_not_found");
+      // Сборник (этап 3b, D4): режим с source `collection` и опубликованный сборник домена.
+      if (mode.source_type === "collection" || body.collection_id) {
+        if (mode.source_type !== "collection") return problem(422, "game.collection_not_supported");
+        if (!body.collection_id) return problem(422, "game.collection_required");
+        const c = world.ugc.find(body.collection_id);
+        if (!c || c.status !== "published") return problem(404, "game.collection_not_found");
+        if (c.domain !== mode.domain) return problem(422, "game.collection_domain_mismatch");
+        const options = [5, 10, 25, "all"] as const;
+        const rounds = body.rounds ?? options[0];
+        if (!options.includes(rounds as (typeof options)[number]))
+          return problem(422, "game.rounds_not_allowed", { requested: rounds, options });
+        const pool = world.ugc.playableItems(c, mode);
+        const count = rounds === "all" ? pool.length : rounds;
+        if (pool.length < 5 || count > pool.length) return problem(422, "game.pool_too_small");
+        const s = world.startSession(subject, mode, null, [], {
+          id: c.id,
+          version: c.version,
+          itemIds: pool.slice(0, count),
+        });
+        return HttpResponse.json(world.snapshot(s), { status: 201 });
+      }
       if (!mode.allow_guest && subject.startsWith("guest."))
         return problem(403, "game.guest_not_allowed");
-      if (mode.source_type === "daily") {
+      const subjectIds = body.subject_ids ?? [];
+      const pick = mode.start?.subject ?? null;
+      if (!pick && subjectIds.length) return problem(422, "game.subjects_not_supported");
+      if (pick && !subjectIds.length) return problem(422, "game.subject_required");
+      if (pick && subjectIds.length > pick.max) return problem(422, "game.too_many_subjects");
+      if (world.isScheduled(mode)) {
         if (world.scenario.dailyNotReady) return problem(503, "game.daily_not_ready");
         const existing = world.dailyFor(subject, mode.key);
         if (existing?.status === "finished")
           return problem(409, "game.daily_already_played", { session_id: existing.id });
         if (existing) return HttpResponse.json(world.snapshot(existing), { status: 200 });
       }
-      const s = world.startSession(subject, mode, body.preset_id ?? null);
+      const s = world.startSession(subject, mode, body.preset_id ?? null, subjectIds);
+      if (!s.rounds.length) return problem(503, "game.pool_empty");
       return HttpResponse.json(world.snapshot(s), { status: 201 });
+    }),
+
+    http.get(`${g}/modes/:mode_key/subjects`, ({ request, params }) => {
+      const subject = subjectOf(request);
+      if (!subject) return problem(401, "auth.unauthenticated");
+      const mode = world.mode(String(params.mode_key));
+      if (!mode) return problem(404, "game.mode_not_found");
+      if (!mode.start?.subject) return problem(422, "game.subjects_not_supported");
+      const p = new URL(request.url).searchParams;
+      const limit = Math.min(20, Math.max(1, Number(p.get("limit") ?? 20)));
+      return HttpResponse.json(world.subjects(mode, p.get("q") ?? "", limit));
+    }),
+
+    http.post(`${g}/sessions/:session_id/rounds/:index/final-clue`, ({ request, params }) => {
+      const subject = subjectOf(request);
+      if (!subject) return problem(401, "auth.unauthenticated");
+      if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
+      const s = world.sessions.get(String(params.session_id));
+      if (!s || s.subject !== subject) return problem(404, "game.session_not_found");
+      const r = s.rounds.find((x) => x.index === Number(params.index));
+      if (!r || r.status !== "finished") {
+        if (r?.status === "void") return problem(410, "game.asset_unavailable");
+        return problem(409, "game.round_not_finished");
+      }
+      return HttpResponse.json(world.freshFinalClue(s, r), {
+        headers: { "Cache-Control": "no-store" },
+      });
     }),
 
     http.get(`${g}/sessions/:session_id`, ({ request, params }) => {
@@ -189,25 +263,9 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
         world.voidRound(s, r);
         return problem(410, "game.asset_unavailable");
       }
-      const hint = s.mode.levels[level - 1]?.hint ?? {};
-      const kind = s.mode.domain === "music" ? ("audio" as const) : ("image" as const);
-      const seconds = Number(hint.seconds ?? 0);
-      const blur = Number(hint.blur_px ?? 0);
-      return HttpResponse.json(
-        {
-          level,
-          kind,
-          url: world.assetUrl(kind, seconds, blur, r.index + 1),
-          expires_at: new Date(world.now().getTime() + 60_000).toISOString(),
-          mime: kind === "audio" ? "audio/wav" : "image/svg+xml",
-          // Поля meta — hint_fields загадки ядра (как отдаёт game).
-          meta:
-            kind === "audio"
-              ? { seconds }
-              : { blur_px: blur, crop: hint.crop == null ? null : Number(hint.crop) },
-        },
-        { headers: { "Cache-Control": "no-store" } },
-      );
+      return HttpResponse.json(world.levelClue(s, r, level), {
+        headers: { "Cache-Control": "no-store" },
+      });
     }),
 
     http.post(
@@ -215,7 +273,15 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       move(({ body, sessionId, index }) => {
         const { s, r } = activeRound(sessionId, index);
         if (!r) return problem(409, "game.round_finished");
-        const answer = body.answer as { media_item_id?: string; text?: string };
+        const answer = body.answer as { media_item_id?: string; text?: string; option_id?: string };
+        const picks = (s.mode.answer_format ?? "classic") === "pick";
+        if (picks !== (answer.option_id !== undefined))
+          return problem(422, "game.answer_kind_unsupported");
+        if (
+          answer.option_id !== undefined &&
+          !r.options.some((o) => o.option_id === answer.option_id)
+        )
+          return problem(422, "game.option_unknown");
         if (answer.media_item_id && !itemById(answer.media_item_id))
           return problem(422, "game.answer_invalid");
         const result = world.guess(s, r, answer);
@@ -246,8 +312,12 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
     // ---------------------------------------------------------------- media (ассеты по ссылке)
     http.get("*/media/a/:file", ({ request }) => {
       const url = new URL(request.url);
-      const asset = world.assets.get(url.pathname);
+      const asset = world.asset(url.pathname);
       if (!asset) return new HttpResponse(null, { status: 403 });
+      if (asset.kind === "text")
+        return HttpResponse.json(asset.body as object, {
+          headers: { "Content-Type": "application/json" },
+        });
       if (asset.kind === "audio")
         return new HttpResponse(audioWav(asset.seconds, asset.seed), {
           headers: { "Content-Type": "audio/wav" },
@@ -285,6 +355,9 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
             ? { status: "unavailable", data: null }
             : { status: "ok", data: world.dailyCards(subject) },
           modes: { status: "ok", data: world.modeCards() },
+          weekly: world.scenario.dailiesUnavailable
+            ? { status: "unavailable", data: null }
+            : { status: "ok", data: world.dailyCards(subject, true) },
         },
       });
     }),
@@ -304,6 +377,14 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
               (m) => m.source_type === "random" && (!domain || m.domain === domain),
             ),
           },
+          modes: { status: "ok", data: world.modeGroups(domain) },
+          weekly: {
+            status: "ok",
+            data: world.dailyCards(subject, true).filter((d) => !domain || d.domain === domain),
+          },
+          records: subject?.startsWith("user.")
+            ? { status: "ok", data: world.recordCards(subject) }
+            : null,
         },
       });
     }),
@@ -317,6 +398,9 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
         headers: { "Cache-Control": "private, no-store" },
       });
     }),
+
+    // ---------------------------------------------------------------- этап 3b
+    ...createUgcHandlers(world),
 
     // ---------------------------------------------------------------- identity
     http.post("*/api/identity/v1/auth/guest", ({ request }) => {

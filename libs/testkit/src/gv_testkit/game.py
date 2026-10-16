@@ -2,20 +2,33 @@
 
 * ``FakeAssetPort`` — журнал выдач ссылок и управляемые сбои (410 ``GoneError``,
   503 ``DependencyUnavailableError``, 429 ``RateLimitedError``);
-* ``FakeCandidatePort`` — пул в памяти с фильтрацией по ``PoolQuery`` и журналом запросов;
-* ``FakeCollectionPort`` — сборники в памяти;
+* ``FakeCandidatePort`` — пул в памяти с фильтрацией по ``PoolQuery`` (включая персоны и
+  метрику) и журналом запросов; ``subjects`` — поиск персон для марафона и темы сетки;
+* ``FakeCollectionPort`` — сборники в памяти: порядок автора, блокировка единиц,
+  играбельность по ``PlayableFor`` с набором сборника (``scope``) или каталожным;
 * ``media_item(...)`` — единица каталога с разумными значениями по умолчанию;
 * ``given_mode(cfg)`` — DSL сценария игры поверх настоящих плагинов::
 
     (given_mode(cfg).with_items(track)
         .when_guess(text="неверно").when_skip().when_guess(item=track)
         .then_round(outcome="exact", level=3).then_score(4))
+
+    (given_mode(pair_cfg).with_draws(*draws)
+        .when_pick("higher").when_pick("lower")
+        .then_round(outcome="miss").then_session_ended())
+
+    (given_mode(collection_cfg).given_collection(items, rounds=5, seed=b"s")
+        .when_guess(item=items[0]).then_rounds(5))
+
+  Сценарий ведёт сессию как game: после каждого раунда спрашивает у движка ``followups``
+  (сетка дописывает туры) и ``should_end`` (правило ``session.end``). ``given_collection``
+  стартует сессию по сборнику через ядро: ``rounds_for`` → ``draw_rounds``.
 """
 
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -33,12 +46,18 @@ from gv_game_kernel import (
     ModeConfig,
     ModeEngine,
     PersonRef,
+    PlayableFor,
     PluginRegistry,
     PoolQuery,
+    RoundDraw,
+    RoundOption,
     RoundOutcome,
+    RoundPick,
     RoundState,
+    SubjectQuery,
     parse_mode_config,
     register_builtin,
+    register_collection,
 )
 
 _counter = itertools.count(1)
@@ -77,6 +96,7 @@ def media_item(
     artists: Iterable[str] = (),
     genres: Iterable[str] = (),
     popularity: float | None = 0.5,
+    metrics: Mapping[str, float] | None = None,
 ) -> MediaItemRef:
     """Единица каталога для тестов.
 
@@ -88,6 +108,7 @@ def media_item(
         title_aliases: Алиасы видов ``title``/``alt`` (по умолчанию — ``aliases``).
         persons: Персоны.
         artists: Имена исполнителей — короткая запись для ``persons`` с ролью ``artist``.
+        metrics: Метрики каталога (``{"vote_average": 7.5}``) для «больше/меньше».
     """
     alias_list = tuple(aliases)
     return MediaItemRef(
@@ -101,6 +122,7 @@ def media_item(
         persons=(*persons, *(person(name) for name in artists)),
         genres=tuple(genres),
         popularity=popularity,
+        metrics=tuple(sorted((metrics or {}).items())),
     )
 
 
@@ -208,6 +230,8 @@ class FakeCandidatePort:
             q.playable_for is None
             or self._playable is None
             or (item.id, q.playable_for.clue_type, q.playable_for.params_hash) in self._playable,
+            not q.person_ids_any or any(p.id in q.person_ids_any for p in item.persons),
+            q.has_metric is None or item.metric(q.has_metric) is not None,
         )
         return all(checks)
 
@@ -217,22 +241,125 @@ class FakeCandidatePort:
         found = sorted((i for i in self.items if self.matches(i, query)), key=lambda i: i.id)
         return found[:limit]
 
+    def subjects(self, query: SubjectQuery, text: str = "", limit: int = 20) -> list[SubjectHit]:
+        """Персоны для выбора в марафоне (и темы сетки) — семантика ``ListSubjects`` game.
+
+        Персона подходит, если у неё роль из ``query.roles``, имя содержит ``text`` (без
+        учёта регистра) и у неё не меньше ``query.min_items`` играбельных единиц домена
+        именно в этой роли. Порядок — по числу единиц (убывание), затем по имени и id.
+        """
+        pool = PoolQuery(domain=query.domain, playable_for=query.playable_for)
+        counts: dict[tuple[UUID, str], int] = {}
+        people: dict[tuple[UUID, str], PersonRef] = {}
+        needle = text.casefold()
+        for item in self.items:
+            if not self.matches(item, pool):
+                continue
+            for p in item.persons:
+                if p.role in query.roles and needle in p.name.casefold():
+                    counts[(p.id, p.role)] = counts.get((p.id, p.role), 0) + 1
+                    people[(p.id, p.role)] = p
+        hits = [SubjectHit(people[k], n) for k, n in counts.items() if n >= query.min_items]
+        hits.sort(key=lambda h: (-h.items, h.person.name, h.person.id))
+        return hits[:limit]
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectHit:
+    """Персона, найденная ``FakeCandidatePort.subjects``: сколько у неё играбельных единиц."""
+
+    person: PersonRef
+    items: int
+
 
 class FakeCollectionPort:
-    """``CollectionPort`` в памяти: ``{collection_id: [единицы в порядке сборника]}``."""
+    """``CollectionPort`` в памяти: ``{collection_id: [единицы в порядке сборника]}``.
 
-    def __init__(self, collections: Mapping[UUID, Sequence[MediaItemRef]] | None = None) -> None:
+    Семантика, которую ждут от адаптера game (проекции сборников ∩ активный каталог ∩
+    играбельность, ADR 0028/0029): единицы — в порядке сборника, без заблокированных
+    (``block``); при ``playable_for`` единица играбельна, если есть набор сборника
+    ``playable_for.scope`` (``scoped``) или каталожный набор (``playable``).
+
+    Args:
+        collections: Сборники и их единицы по порядку (неизвестный сборник — пусто).
+        playable: Каталожные наборы ``(media_item_id, clue_type, params_hash)``; ``None`` —
+            каталожный набор есть у всех единиц.
+        scoped: Наборы сборников ``(collection_id, media_item_id, clue_type, params_hash)``.
+    """
+
+    def __init__(
+        self,
+        collections: Mapping[UUID, Sequence[MediaItemRef]] | None = None,
+        *,
+        playable: Iterable[tuple[UUID, str, str]] | None = None,
+        scoped: Iterable[tuple[UUID, UUID, str, str]] = (),
+    ) -> None:
         self.collections = {k: list(v) for k, v in (collections or {}).items()}
+        self._playable = None if playable is None else set(playable)
+        self._scoped = set(scoped)
+        self._blocked: set[UUID] = set()
+        self.queries: list[tuple[UUID, int, PlayableFor | None]] = []
 
-    async def items(self, collection_id: UUID, limit: int) -> list[MediaItemRef]:
-        """До ``limit`` единиц сборника (неизвестный сборник — пусто)."""
-        return self.collections.get(collection_id, [])[:limit]
+    def add(self, collection_id: UUID, *items: MediaItemRef) -> None:
+        """Дописать единицы в конец сборника (создать сборник, если его нет)."""
+        self.collections.setdefault(collection_id, []).extend(items)
+
+    def remove(self, collection_id: UUID) -> None:
+        """Убрать сборник (скрыт или удалён: ``items`` вернёт пусто)."""
+        self.collections.pop(collection_id, None)
+
+    def block(self, *item_ids: UUID) -> None:
+        """Единицы больше не активны в каталоге (``MediaItemBlocked``)."""
+        self._blocked.update(item_ids)
+
+    def matches(self, item: MediaItemRef, pf: PlayableFor | None) -> bool:
+        """Входит ли единица сборника в выдачу (та же семантика ждётся от адаптера game)."""
+        if item.id in self._blocked:
+            return False
+        if pf is None:
+            return True
+        if pf.scope is not None and (pf.scope, item.id, pf.clue_type, pf.params_hash) in (
+            self._scoped
+        ):
+            return True
+        return self._playable is None or (item.id, pf.clue_type, pf.params_hash) in self._playable
+
+    async def items(
+        self, collection_id: UUID, limit: int, *, playable_for: PlayableFor | None
+    ) -> list[MediaItemRef]:
+        """До ``limit`` единиц сборника в его порядке (неизвестный сборник — пусто)."""
+        self.queries.append((collection_id, limit, playable_for))
+        found = [
+            item
+            for item in self.collections.get(collection_id, [])
+            if self.matches(item, playable_for)
+        ]
+        return found[:limit]
+
+
+def run_sync[T](awaitable: Coroutine[Any, Any, T]) -> T:
+    """Выполнить корутину, которая не ждёт IO (розыгрыш на фейках портов), синхронно.
+
+    DSL сценария синхронный, а ``Source.draw`` — асинхронный; фейки портов этого модуля
+    отвечают сразу, поэтому корутина завершается за один шаг.
+
+    Raises:
+        RuntimeError: корутина ждёт чего-то внешнего (настоящий порт вместо фейка).
+    """
+    try:
+        awaitable.send(None)
+    except StopIteration as done:
+        result: T = done.value
+        return result
+    awaitable.close()
+    raise RuntimeError("корутина ждёт IO: в DSL нужны фейки портов gv_testkit.game")
 
 
 # ----------------------------------------------------------------------------- движок
 def builtin_registry() -> PluginRegistry:
-    """Реестр со встроенными плагинами этапа 2."""
-    return register_builtin(PluginRegistry())
+    """Реестр со встроенными плагинами и источником ``collection``, как в game с этапа 3b
+    (``register_builtin`` + ``register_collection``)."""
+    return register_collection(register_builtin(PluginRegistry()))
 
 
 def build_engine(config: ModeConfig | Mapping[str, Any]) -> ModeEngine:
@@ -243,44 +370,149 @@ def build_engine(config: ModeConfig | Mapping[str, Any]) -> ModeEngine:
 
 @dataclass
 class PlayedRound:
-    """Раунд сценария: загаданная единица, состояние, ответы и очки."""
+    """Раунд сценария: состав раунда, состояние, ответы и очки."""
 
-    item: MediaItemRef
+    draw: RoundDraw
     state: RoundState = field(default_factory=RoundState)
     matches: list[MatchResult] = field(default_factory=list)
     elapsed_ms: int | None = None
+    option_id: str | None = None
+
+    @property
+    def item(self) -> MediaItemRef:
+        """Загаданная единица (``draw.target``)."""
+        return self.draw.target
 
     def outcome(self) -> RoundOutcome:
         """Итог завершённого раунда."""
         return ModeEngine.outcome(self.state, elapsed_ms=self.elapsed_ms)
 
+    def pick(self) -> RoundPick:
+        """Завершённый раунд для ``followups`` источника с продолжением."""
+        return RoundPick(draw=self.draw, outcome=self.outcome(), option_id=self.option_id)
+
 
 class GameScenario:
     """Сценарий соло-игры поверх ``ModeEngine`` (без IO, синхронный).
 
-    Раунды идут по порядку ``with_items``; ход после завершения раунда относится к
-    следующему. ``then_*`` проверяют последний тронутый раунд (или раунд ``index``).
+    Раунды идут по порядку ``with_items``/``with_draws``; ход после завершения раунда
+    относится к следующему. После каждого завершённого раунда сценарий, как game,
+    дописывает раунды ``engine.followups`` (сетка) и проверяет ``engine.should_end``.
+    ``then_*`` проверяют последний тронутый раунд (или раунд ``index``).
     """
 
     def __init__(self, engine: ModeEngine) -> None:
         self.engine = engine
+        self.collection_id: UUID | None = None
+        self.collections: FakeCollectionPort | None = None
         self.rounds: list[PlayedRound] = []
         self._current = 0
         self._last: PlayedRound | None = None
 
     def with_items(self, *items: MediaItemRef) -> GameScenario:
-        """Загаданные единицы раундов по порядку."""
-        self.rounds = [PlayedRound(item) for item in items]
+        """Загаданные единицы раундов по порядку (классические раунды ``RoundDraw(target)``)."""
+        return self.with_draws(*(RoundDraw(target=item) for item in items))
+
+    def with_draws(self, *draws: RoundDraw) -> GameScenario:
+        """Составы раундов по порядку (например, ``engine.draw_rounds(ctx)``)."""
+        self.rounds = [PlayedRound(draw) for draw in draws]
         self._current = 0
         return self
 
+    def given_collection(
+        self,
+        items: Sequence[MediaItemRef] = (),
+        *,
+        rounds: RoundOption | None = None,
+        seed: bytes = b"seed",
+        collection_id: UUID | None = None,
+        port: FakeCollectionPort | None = None,
+        exclude_ids: frozenset[UUID] = frozenset(),
+    ) -> GameScenario:
+        """Сессия по сборнику, как её стартует game: ``rounds_for`` → ``draw_rounds``.
+
+        Args:
+            items: Единицы сборника в порядке автора (добавляются в ``port``).
+            rounds: Выбор игрока (``5 | 10 | 25 | "all"``; ``None`` — первый вариант).
+            seed: Seed сессии (перемешивание при ``shuffle``).
+            collection_id: Сборник (по умолчанию — новый детерминированный UUID).
+            port: Готовый ``FakeCollectionPort`` (играбельность, блокировки, наборы
+                сборника); по умолчанию — пустой.
+            exclude_ids: ``DrawContext.exclude_ids``.
+
+        Raises:
+            CollectionRequiredError | RoundsNotAllowedError | PoolTooSmallError: как у game.
+        """
+        self.collection_id = collection_id or _uuid(next(_counter))
+        self.collections = port or FakeCollectionPort()
+        if items:
+            self.collections.add(self.collection_id, *items)
+        ctx = self.engine.draw_context(
+            seed=seed,
+            candidates=FakeCandidatePort(),
+            collections=self.collections,
+            collection_id=self.collection_id,
+            exclude_ids=exclude_ids,
+        )
+        n = run_sync(self.engine.rounds_for(ctx, rounds))
+        return self.with_draws(*run_sync(self.engine.draw_rounds(ctx, n)))
+
+    def then_rounds(self, expected: int) -> GameScenario:
+        """Проверить число раундов сессии (с дописанными ``followups``)."""
+        assert len(self.rounds) == expected, f"раундов {len(self.rounds)}, ожидалось {expected}"
+        return self
+
+    # ------------------------------------------------------------------------- сессия
+    def outcomes(self) -> list[RoundOutcome]:
+        """Итоги завершённых раундов по порядку."""
+        return [r.outcome() for r in self.rounds if r.state.finished]
+
+    @property
+    def ended_by_rule(self) -> bool:
+        """Сессию закончило правило ``session.end`` (кончились «жизни»)."""
+        return self.engine.should_end(self.outcomes())
+
+    @property
+    def session_ended(self) -> bool:
+        """Сессия окончена: по правилу или сыграны все раунды (и новых не открылось)."""
+        played_all = bool(self.rounds) and all(r.state.finished for r in self.rounds)
+        return self.ended_by_rule or played_all
+
+    def _after(self, rnd: PlayedRound) -> None:
+        """Ход сделан: запомнить раунд и, если он завершён, дописать продолжение."""
+        self._last = rnd
+        if rnd.state.finished and not self.ended_by_rule:
+            picks = [r.pick() for r in self.rounds if r.state.finished]
+            self.rounds.extend(PlayedRound(d) for d in self.engine.followups(picks))
+
     # ------------------------------------------------------------------------- ходы
     def _round(self) -> PlayedRound:
+        if self.ended_by_rule:
+            raise AssertionError("сессия завершена правилом session.end — ходов больше нет")
         while self._current < len(self.rounds) and self.rounds[self._current].state.finished:
             self._current += 1
         if self._current >= len(self.rounds):
             raise AssertionError("в сценарии не осталось раундов — добавьте with_items(...)")
         return self.rounds[self._current]
+
+    def current(self) -> PlayedRound:
+        """Текущий (первый незавершённый) раунд."""
+        return self._round()
+
+    def when_pick(self, option_id: str, *, elapsed_ms: int | None = None) -> GameScenario:
+        """Выбрать вариант раунда (формат ``pick``)."""
+        rnd = self._round()
+        step = self.engine.answer(
+            rnd.state,
+            AnswerInput(option_id=option_id),
+            rnd.item,
+            display=option_id,
+            draw=rnd.draw,
+        )
+        rnd.state, rnd.elapsed_ms, rnd.option_id = step.state, elapsed_ms, option_id
+        rnd.matches.append(step.match)
+        self._after(rnd)
+        return self
 
     def when_guess(
         self,
@@ -302,28 +534,28 @@ class GameScenario:
         step = self.engine.answer(rnd.state, answer, rnd.item, display=display)
         rnd.state, rnd.elapsed_ms = step.state, elapsed_ms
         rnd.matches.append(step.match)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     def when_skip(self) -> GameScenario:
         """Пропустить уровень."""
         rnd = self._round()
         rnd.state = self.engine.skip(rnd.state)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     def when_give_up(self) -> GameScenario:
         """Сдаться в текущем раунде."""
         rnd = self._round()
         rnd.state = self.engine.give_up(rnd.state)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     def when_void(self) -> GameScenario:
         """Аннулировать текущий раунд (ассет недоступен)."""
         rnd = self._round()
         rnd.state = self.engine.void(rnd.state)
-        self._last = rnd
+        self._after(rnd)
         return self
 
     # ------------------------------------------------------------------------- проверки
@@ -378,6 +610,25 @@ class GameScenario:
         assert self.score() == expected, f"очки {self.score()}, ожидалось {expected}"
         if max_score is not None:
             assert self.max_score() == max_score, f"максимум {self.max_score()}"
+        return self
+
+    def then_session_ended(self, *, ended: bool = True) -> GameScenario:
+        """Проверить, что сессия окончена (правилом ``session.end`` или сыграны все раунды)."""
+        assert self.session_ended == ended, (
+            f"сессия {'не ' if not self.session_ended else ''}окончена, ожидалось обратное"
+        )
+        return self
+
+    def then_lives(self, expected: int | None) -> GameScenario:
+        """Проверить оставшиеся «жизни» (``None`` — правило их не считает)."""
+        got = self.engine.lives_left(self.outcomes())
+        assert got == expected, f"жизней {got}, ожидалось {expected}"
+        return self
+
+    def then_streak(self, expected: int) -> GameScenario:
+        """Проверить текущую серию точных ответов."""
+        got = self.engine.streak(self.outcomes())
+        assert got == expected, f"серия {got}, ожидалась {expected}"
         return self
 
 

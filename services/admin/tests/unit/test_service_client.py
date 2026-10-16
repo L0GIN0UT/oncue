@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 from admin_service.core.service_client import ServiceClient, ServiceError
@@ -131,3 +133,60 @@ def test_game_error_codes_have_human_messages() -> None:
         client.put("/x", idempotency_key="k", json={})
     assert exc.value.code == "game.daily_locked"
     assert "заблокирован" in exc.value.message
+
+
+def test_problem_details_and_errors_are_kept() -> None:
+    """Пути ошибок публикации (``details.errors``) нужны редактору сборника для номеров строк."""
+    errors = [{"path": "items[2]", "code": "item_unavailable"}]
+    response = httpx.Response(
+        422,
+        json={
+            "status": 422,
+            "code": "collections.publish_invalid",
+            "title": "I",
+            "details": {"errors": errors},
+        },
+    )
+    with (
+        _client(httpx.MockTransport(lambda _: response)) as client,
+        pytest.raises(ServiceError) as exc,
+    ):
+        client.post("/x", idempotency_key="k", json={})
+    assert exc.value.details == {"errors": errors}
+    assert exc.value.errors == []
+    assert "не прошёл проверку" in exc.value.message
+
+
+def test_delete_sends_key_and_body() -> None:
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"ok": True})
+
+    with _client(httpx.MockTransport(handle)) as client:
+        assert client.delete("/r", idempotency_key="k9", json={"reason": "снять"}) == {"ok": True}
+        with pytest.raises(ValueError, match="Idempotency-Key"):
+            client.delete("/r", idempotency_key="")
+    assert (seen[0].method, seen[0].headers["Idempotency-Key"]) == ("DELETE", "k9")
+    assert json.loads(seen[0].content) == {"reason": "снять"}
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "game.subjects_not_supported",
+        "collections.version_conflict",
+        "collections.not_curated",
+        "collections.not_published",
+        "collections.publish_invalid",
+    ],
+)
+def test_stage3b_codes_have_human_messages(code: str) -> None:
+    response = httpx.Response(409, json={"status": 409, "code": code, "title": "raw-title"})
+    with (
+        _client(httpx.MockTransport(lambda _: response)) as client,
+        pytest.raises(ServiceError) as exc,
+    ):
+        client.get("/x")
+    assert exc.value.message != "raw-title"

@@ -85,16 +85,18 @@ clue:
 ```
 
 ```yaml
-# description (этап 3)
+# description (этап 3a, профиль description/default): уровень ДОБАВЛЯЕТ поля к открытым,
+# подсказка уровня (levels[].hint.fields) — все открытые к нему поля
 clue:
   type: description
   params:
     levels:
+      - { fields: [tagline] }
       - { fields: [plot_masked] }
-      - { fields: [plot_masked, year, genres] }
-      - { fields: [plot_masked, year, genres, country, director] }
-      - { fields: [plot_masked, year, genres, country, director, cast_top3] }
-      - { fields: [plot_masked, year, genres, country, director, cast_top3, tagline] }
+      - { fields: [year, genres] }
+      - { fields: [country] }
+      - { fields: [director] }
+      - { fields: [cast_top3] }
 ```
 
 Параметры описывает `params_schema` конкретного ClueType (контракты — `contracts/clues/*`); валидатор сверяет длину `scoring.params.points` с числом уровней.
@@ -166,6 +168,30 @@ features: { share: true }
 | Scorer | `by_speed` | Очки по времени от выдачи первого ассета раунда (считает сервер) | `params/scorer.by_speed.v1.json` |
 
 Source `collection` (`register_collection`) подключается в game на этапе 3. Розыгрыш детерминирован: кандидаты сортируются по `id`, затем `SeededRandom(seed).sample`.
+
+### 5.1a. Плагины ядра этапа 3a
+
+Тоже регистрирует `register_builtin` ([ADR 0023](adr/0023-round-draw-answer-formats-end-rules.md), [0026](adr/0026-reveal-with-other-clue-type.md), [0027](adr/0027-period-sets-preference-modes-records.md); план — [stage-3a](plans/stage-3a.md) §4). Параметры — `contracts/clues/<key>.params.v1.json` и `contracts/modes/params/<вид>.<key>.v1.json`.
+
+| Вид | Ключ | Что делает |
+|---|---|---|
+| ClueType | `audio_reverse` (музыка) | Отрывок с `start_s` задом наперёд; подсказка `seconds` |
+| ClueType | `soundtrack`, `audio_blackout` (кино) | Саундтрек / звук фильма; ревил `audio_blackout` — кадр через `clue.reveal` |
+| ClueType | `frame_sequence` (кино) | Разные кадры по позиции исходника; подсказка `frame` |
+| ClueType | `description` (кино), `emoji` (музыка, кино) | `kind = text`: JSON-ассет `text_asset.v1`; подсказки — накопленные `fields` / `count` (`null` — все) |
+| AnswerFormat | `classic`, `pick` | `pick`: ответ `{option_id}`, один ответ на раунд (загадке — один уровень, `attempts_per_level = 1`) |
+| Source | `marathon` | Единицы выбранных игроком персон (`subject_ids`, ≤ `max_subjects`), раундов `min(пул, rounds)`, порядок `shuffle`/`year` |
+| Source | `pair` | Цепочка «больше/меньше» по `metric`: соседи не равны и отличаются ≥ `min_gap`; `shown` — опорная, `options` — `higher`/`lower` |
+| Source | `bracket` | Сетка 8/16/32 на неделю (`period_start`), посев по seed периода; туры — `followups` из победителей, `size − 1` выборов |
+| AnswerMatcher | `metric_compare`, `preference` | Направление метрики против опорной (ничья — `both_correct`); любой выбор верен |
+| Scorer | `streak` (`presentation=streak`), `none` (`bracket`) | `points_per_round` за `exact`; без очков |
+| EndRule | `all_rounds`, `lives` | `lives {count}`: конец после `count` проигранных раундов (всё, кроме `exact` и `void`) |
+
+Возможности источника движок узнаёт по протоколам, а не по ключу: `RoundSource` (сам составляет `RoundDraw` с `shown`/`options`), `ProgressiveSource` (`followups`, `planned_rounds`, `stage`), `SubjectSource` (выбор персон), `ComparisonSource` (метрика сравнения), `PeriodSource` (начало периода, тема). Совместимость в `EngineFactory.validate` — тоже по атрибутам плагинов: `answer_formats` у источника и matcher, `single_answer` у формата, `requires_early_end` у Scorer и `ends_early` у EndRule.
+
+### 5.1b. Источник `collection` (этап 3b)
+
+Регистрируется отдельно (`register_collection`, [ADR 0028](adr/0028-collections-versions-draft-projection.md); план — [stage-3b](plans/stage-3b.md) §2.6, §4). Конфиг — шаблон режима домена (`<domain>.collection.<clue>`), параметры `contracts/modes/params/source.collection.v1.json`: `round_options ⊆ {5, 10, 25, "all"}`, `min_items`, `shuffle`. Сборник приходит в `POST /v1/sessions` (`collection_id`, `rounds`) и лежит в `DrawContext.collection_id`; единицы — `CollectionPort.items(collection_id, limit, *, playable_for)` в порядке автора, играбельность сначала по набору со `scope` сборника (`PlayableFor.scope`, [ADR 0029](adr/0029-collection-assets-scoped-sets.md)), затем по каталожному. Число раундов — `CollectionSource.rounds_for(params, requested, pool)`: `"all"` — весь пул, иначе запрошенное, если оно есть в `round_options` и не больше пула (`game.rounds_not_allowed`, `game.pool_too_small`); без сборника — `game.collection_required`.
 
 ### 5.2. Периодические задачи game
 

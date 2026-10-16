@@ -16,4 +16,5 @@ urlpatterns = [
     path("<modekey:key>/publish/", views.mode_publish, name="publish"),
     path("<modekey:key>/rollback/", views.mode_rollback, name="rollback"),
     path("<modekey:key>/archive/", views.mode_archive, name="archive"),
+    path("<modekey:key>/asset-requests/", views.mode_request_assets, name="request_assets"),
 ]

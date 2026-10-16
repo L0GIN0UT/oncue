@@ -3,7 +3,7 @@ name = "guessverse-collections"
 version = "0.1.0"
 description = "Пользовательские и кураторские сборники: конструктор, черновики, каталог, лайки, избранное"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-text", "pyyaml>=6"]
 
 [project.scripts]
 collections = "collections_service.main:run"

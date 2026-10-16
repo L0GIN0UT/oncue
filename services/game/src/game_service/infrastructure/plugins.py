@@ -1,8 +1,8 @@
 """Реестр плагинов процесса game и сводная JSON Schema конфига для редактора админки.
 
-Встроенные плагины регистрирует ядро (``gv_game_kernel.builtin.register_builtin``).
-``collection`` в game на этапе 2 не регистрируется (проекции сборников — этап 3), поэтому
-конфиг с ним не проходит валидацию.
+Встроенные плагины регистрирует ядро (``gv_game_kernel.builtin.register_builtin``),
+источник ``collection`` — ``register_collection`` (этап 3b, ADR 0028): единицы сборника
+даёт адаптер ``CollectionPort`` поверх проекции ``collections.collection.v1``.
 """
 
 from __future__ import annotations
@@ -14,15 +14,16 @@ from pydantic import BaseModel
 from gv_game_kernel import (
     AnswerMatcher,
     ClueType,
+    EndRule,
     ModeConfig,
     PartialRule,
     PluginRegistry,
     Scorer,
     Source,
 )
-from gv_game_kernel.builtin import register_builtin
+from gv_game_kernel.builtin import register_builtin, register_collection
 
-EXCLUDED_SOURCES = frozenset({"collection"})
+EXCLUDED_SOURCES: frozenset[str] = frozenset()
 
 
 class CatalogRegistry(PluginRegistry):
@@ -36,6 +37,7 @@ class CatalogRegistry(PluginRegistry):
             "source": {},
             "matcher": {},
             "scoring": {},
+            "end": {},
         }
         self.partial_kinds: list[str] = []
 
@@ -66,6 +68,11 @@ class CatalogRegistry(PluginRegistry):
         super().register_scorer(plugin)
         self.schemas["scoring"][plugin.key] = plugin.params_schema
 
+    def register_end_rule(self, plugin: EndRule) -> None:
+        """Правило завершения сессии (``session.end``)."""
+        super().register_end_rule(plugin)
+        self.schemas["end"][plugin.key] = plugin.params_schema
+
     def editor_schema(self) -> dict[str, Any]:
         """Сводная схема: модель конфига + схемы ``params`` каждого плагина по секциям."""
         return {
@@ -79,7 +86,8 @@ class CatalogRegistry(PluginRegistry):
 
 
 def build_registry() -> CatalogRegistry:
-    """Реестр процесса со встроенными плагинами ядра."""
+    """Реестр процесса со встроенными плагинами ядра и источником ``collection``."""
     registry = CatalogRegistry()
     register_builtin(registry)
+    register_collection(registry)
     return registry
