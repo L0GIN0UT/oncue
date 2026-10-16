@@ -8,16 +8,12 @@ import { useEffect } from "react";
 import { api, unwrap } from "@/shared/api/client";
 import { NetworkError } from "@/shared/api/errors";
 import type { ClueOut } from "@/shared/api/types";
+import { AssetLoadError, downloadAsset } from "./assets";
 
-export type LoadedClue = ClueOut & { objectUrl: string };
+export { AssetLoadError };
 
-/** Ссылка выдана, но файл не скачался (истекла, обрыв): нужна новая выдача. */
-export class AssetLoadError extends Error {
-  constructor(readonly status: number | null) {
-    super(`asset load failed: ${status ?? "network"}`);
-    this.name = "AssetLoadError";
-  }
-}
+/** Выданный ассет уровня: `blob:`-адрес для показа и сам `Blob` (текстовые загадки читают JSON). */
+export type LoadedClue = ClueOut & { objectUrl: string; blob: Blob };
 
 export const MAX_CLUE_RETRIES = 2;
 
@@ -32,18 +28,8 @@ export async function loadClue(
       body: { level },
     }),
   );
-  let res: Response;
-  try {
-    res = await fetch(new URL(clue.url, globalThis.location.origin), {
-      credentials: "omit",
-      cache: "no-store",
-    });
-  } catch {
-    throw new AssetLoadError(null);
-  }
-  if (!res.ok) throw new AssetLoadError(res.status);
-  const blob = await res.blob();
-  return { ...clue, objectUrl: URL.createObjectURL(blob) };
+  const blob = await downloadAsset(clue.url);
+  return { ...clue, objectUrl: URL.createObjectURL(blob), blob };
 }
 
 export const clueKey = (sessionId: string, roundIndex: number, level: number) =>

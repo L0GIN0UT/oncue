@@ -12,6 +12,7 @@ const clue = (meta: LoadedClue["meta"]): LoadedClue => ({
   mime: "image/webp",
   meta,
   objectUrl: "blob:frame-1",
+  blob: new Blob(),
 });
 
 describe("ImageClue", () => {
@@ -26,5 +27,11 @@ describe("ImageClue", () => {
     expect(imageHintParts({ pixel_block: 16 })).toEqual([{ key: "game.posterPixels", px: 16 }]);
     renderWithProviders(<ImageClue clue={clue({ blur_px: 0, crop: 1 })} />);
     expect(screen.queryByTestId("clue-image-hint")).not.toBeInTheDocument();
+  });
+
+  it("последовательность кадров — уровень открывает другой кадр (meta.frame)", () => {
+    expect(imageHintParts({ frame: 3 })).toEqual([{ key: "game.frameNumber", frame: 3 }]);
+    renderWithProviders(<ImageClue clue={clue({ frame: 2 })} />);
+    expect(screen.getByTestId("clue-image-hint")).toHaveTextContent("Кадр 2");
   });
 });
