@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -343,6 +343,44 @@ class PeriodSource(Protocol):
         self, params: BaseModel, *, domain: str, playable_for: PlayableFor | None
     ) -> SubjectQuery | None:
         """Из каких персон генератор набора выбирает тему периода (``None`` — темы нет)."""
+        ...
+
+
+RoundOption = Literal[5, 10, 25, "all"]
+"""Вариант числа раундов сессии по сборнику: число или ``"all"`` — весь играбельный пул
+(``contracts/modes/params/source.collection.v1.json``)."""
+
+
+@runtime_checkable
+class CollectionBasedSource(Protocol):
+    """Источник, который берёт единицы из сборника сессии (``collection``, ADR 0028).
+
+    Конфиг такого режима — шаблон для всех сборников домена: сборник приходит при старте
+    (``DrawContext.collection_id``), а число раундов выбирает игрок из ``round_options``
+    и ограничивает размер играбельного пула сборника. Раунды у сессий одного режима
+    разные, поэтому личные рекорды (``features.records``) у таких режимов запрещены.
+    """
+
+    def round_options(self, params: BaseModel) -> list[RoundOption]:
+        """Варианты числа раундов, из которых выбирает игрок (в порядке конфига)."""
+        ...
+
+    def rounds_for(self, params: BaseModel, requested: RoundOption | None, pool: int) -> int:
+        """Число раундов по выбору игрока ``requested`` и размеру пула ``pool``.
+
+        Raises:
+            PoolTooSmallError: в пуле меньше ``min_items`` или меньше запрошенного числа.
+            RoundsNotAllowedError: запрошенного варианта нет в ``round_options``.
+        """
+        ...
+
+    async def pool_size(self, ctx: DrawContext, params: BaseModel) -> int:
+        """Сколько различных играбельных единиц в сборнике ``ctx.collection_id``.
+
+        Raises:
+            ValueError: в контексте нет ``CollectionPort``.
+            CollectionRequiredError: в контексте нет ``collection_id``.
+        """
         ...
 
 

@@ -356,11 +356,15 @@ def test_every_rule_code_is_covered() -> None:
 STAGE3A_MODES = sorted(p.stem for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml"))
 
 
+# Тестовые режимы 3a и шаблон сборника 3b (источник ``collection`` — ``register_collection``).
+FULL = EngineFactory(register_collection(register_builtin(PluginRegistry())))
+
+
 @pytest.mark.parametrize("key", STAGE3A_MODES)
 def test_stage3a_modes_are_valid_and_build(key: str, seed_body: SeedBody) -> None:
     config = parse_mode_config(seed_body(key))
-    assert FACTORY.validate(config) == []
-    engine = FACTORY.build(config)
+    assert FULL.validate(config) == []
+    engine = FULL.build(config)
     assert engine.planned_rounds() >= 1
 
 
@@ -420,7 +424,7 @@ def test_collection_source_is_not_registered_by_default(seed_body: SeedBody) -> 
     body = _set(
         seed_body("music.random.classic"),
         "source",
-        {"type": "collection", "params": {"round_options": [5, 10, "all"], "min_items": 5}},
+        {"type": "collection", "params": {"round_options": [5, "all"], "min_items": 5}},
     )
     assert ConfigIssue("source.type", "config.unknown_plugin") in _issues(body)
     with_collection = EngineFactory(register_collection(register_builtin(PluginRegistry())))
