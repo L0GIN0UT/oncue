@@ -186,6 +186,18 @@ def test_finishing_user_daily_records_both_events_valid_by_schema() -> None:
         s.active_round(0)
 
 
+def test_long_session_game_finished_is_valid_by_schema() -> None:
+    """Регресс: марафон (session.rounds ≤ 200) публиковал GameFinished вне схемы (≤ 50 раундов)."""
+    s = session(assets=60)
+    for i in range(60):
+        s.apply(i, replace(RoundState(), outcome=RoundResult.GAVE_UP), points=0, now=NOW)
+        settle(s)
+    assert s.status.value == "finished"
+    finished = next(e for e in s.pull_events() if isinstance(e, GameFinished))
+    assert len(finished.rounds) == 60
+    assert_event_matches_schema(envelope(finished))
+
+
 def test_guest_session_has_no_daily_completed() -> None:
     s = session(GUEST, assets=1)
     s.apply(0, exact(), points=6, now=NOW)

@@ -67,7 +67,7 @@
           },
           "index": {
             "description": "Номер раунда с 0",
-            "maximum": 49,
+            "maximum": 199,
             "minimum": 0,
             "type": "integer"
           },
@@ -113,7 +113,7 @@
         ],
         "type": "object"
       },
-      "maxItems": 50,
+      "maxItems": 200,
       "minItems": 1,
       "type": "array"
     },
