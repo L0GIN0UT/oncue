@@ -17,6 +17,7 @@ from uuid import UUID
 
 from media_pipeline_service.domain.clues import DescriptionField, DescriptionParams, EmojiParams
 from media_pipeline_service.domain.params import canonical_json
+from media_pipeline_service.domain.sources import AssetScope
 
 TEXT_CONTENT_VERSION = 1
 TEXT_ASSET_VERSION = 1
@@ -133,15 +134,24 @@ def has_text_facts(content: Mapping[str, Any]) -> bool:
 _TEXT_SOURCE_NAMESPACE = UUID("0192a3b4-c5d6-7e8f-9a0b-7e4700000000")
 
 
-def text_source_identity(media_item_id: UUID, content: Mapping[str, Any]) -> tuple[UUID, str, int]:
+def text_source_identity(
+    media_item_id: UUID, content: Mapping[str, Any], *, scope: AssetScope | None = None
+) -> tuple[UUID, str, int]:
     """id, sha256 и размер текстового исходника.
 
     id зависит от хэша содержимого: изменение текста или метаданных даёт новый исходник, а
     наборы, построенные на старом, перепланируются в новое поколение (как при смене кадра).
+
+    Args:
+        scope: Владелец своих загадок (сборник, ADR 0029) входит в id: одинаковые эмодзи
+            в каталоге и в двух сборниках — три разных исходника.
     """
     data = canonical_json(content).encode()
     digest = hashlib.sha256(data).hexdigest()
-    source_id = uuid.uuid5(_TEXT_SOURCE_NAMESPACE, f"{media_item_id}:{digest}")
+    name = f"{media_item_id}:{digest}"
+    if scope is not None:
+        name = f"{scope.kind.value}:{scope.id}:{name}"
+    source_id = uuid.uuid5(_TEXT_SOURCE_NAMESPACE, name)
     return source_id, digest, len(data)
 
 

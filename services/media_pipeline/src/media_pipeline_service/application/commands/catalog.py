@@ -36,7 +36,12 @@ from media_pipeline_service.application.sources import delete_quietly
 from media_pipeline_service.domain.asset_set import AssetSet, AssetSetStatus
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfile
-from media_pipeline_service.domain.sources import SourceKind, SourceMedia, SourceStatus
+from media_pipeline_service.domain.sources import (
+    AssetScope,
+    SourceKind,
+    SourceMedia,
+    SourceStatus,
+)
 from media_pipeline_service.domain.texts import has_text_facts, text_content, text_source_identity
 
 log = structlog.get_logger(__name__)
@@ -155,6 +160,10 @@ class PlanAssetSets:
     Какие исходники нужны набору, решает генератор типа загадки (``sources_for``): кадр,
     N кадров по позициям или текст — use-case по типу не ветвится. Нет нужных исходников —
     набор не планируется.
+
+    Наборы владельца (``scope`` сборника, ADR 0029) строятся только из его исходников и только
+    по профилям типов загадок из ``scoped_clue_types`` (``GV_MEDIA__SCOPED_CLUE_TYPES``, в 3b —
+    ``emoji``): статическим и динамическим профилям домена единицы.
     """
 
     def __init__(
@@ -166,6 +175,7 @@ class PlanAssetSets:
         storage: ObjectStorage,
         *,
         registry: GeneratorRegistry,
+        scoped_clue_types: frozenset[str] = frozenset(),
     ) -> None:
         self._uow = uow
         self._clock = clock
@@ -173,6 +183,7 @@ class PlanAssetSets:
         self._queue = queue
         self._storage = storage
         self._registry = registry
+        self._scoped_clue_types = scoped_clue_types
 
     async def execute(self, media_item_id: UUID) -> list[UUID]:
         """Запланировать генерацию в своей транзакции. Возвращает id поставленных наборов."""
@@ -183,7 +194,12 @@ class PlanAssetSets:
         return list(planned.asset_set_ids)
 
     async def plan_in(
-        self, uow: MediaUnitOfWork, media_item_id: UUID, *, only: AssetProfile | None = None
+        self,
+        uow: MediaUnitOfWork,
+        media_item_id: UUID,
+        *,
+        only: AssetProfile | None = None,
+        scope: AssetScope | None = None,
     ) -> PlannedSets:
         """Запланировать внутри открытого UoW вызывающего (коммит — его забота).
 
@@ -192,20 +208,23 @@ class PlanAssetSets:
 
         Args:
             only: Только этот профиль (досоздание наборов динамического профиля).
+            scope: Наборы этого владельца из его исходников; ``None`` — каталожные.
         """
         stale_keys: list[str] = []
         scheduled: list[AssetSet] = []
         state = await uow.items.get(media_item_id)
         if state is None or state.is_blocked or state.domain is None:
             return PlannedSets((), ())
-        sources = await uow.sources.list_for_item(media_item_id)
-        existing = await uow.asset_sets.list_for_item(media_item_id, for_update=True)
+        sources = await uow.sources.list_for_item(media_item_id, scope=scope)
+        existing = await uow.asset_sets.list_for_item(media_item_id, for_update=True, scope=scope)
         by_key = {(s.clue_type, s.profile_key, s.params_hash): s for s in existing}
         now = self._clock.now()
         if only is not None:
             profiles = [only] if state.domain in only.domains else []
         else:
             profiles = await self._profiles.for_domain(uow, state.domain)
+        if scope is not None:
+            profiles = [p for p in profiles if p.clue_type in self._scoped_clue_types]
         for profile in profiles:
             generator = self._registry.get(profile.clue_type)
             if generator is None:  # профиль без генератора отсекается при загрузке конфига
@@ -222,6 +241,7 @@ class PlanAssetSets:
                     profile=profile,
                     source_media_ids=source_ids,
                     now=now,
+                    scope=scope,
                 )
                 await uow.asset_sets.add(created)
                 scheduled.append(created)
@@ -236,7 +256,12 @@ class PlanAssetSets:
         for aggregate in scheduled:
             await schedule_generation(self._queue, aggregate)
         if scheduled:
-            log.info("asset_sets.planned", media_item_id=str(media_item_id), count=len(scheduled))
+            log.info(
+                "asset_sets.planned",
+                media_item_id=str(media_item_id),
+                count=len(scheduled),
+                scope_id=str(scope.id) if scope else None,
+            )
         return PlannedSets(tuple(a.id for a in scheduled), tuple(stale_keys))
 
 

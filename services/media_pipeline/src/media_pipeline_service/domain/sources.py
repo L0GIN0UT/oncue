@@ -34,10 +34,37 @@ class SourceOrigin(StrEnum):
     TMDB = "tmdb"
     SEED = "seed"
     CATALOG = "catalog"
+    # Свои загадки автора сборника (ADR 0029): текстовый исходник со ``scope`` сборника.
+    COLLECTION = "collection"
 
 
 # Происхождения файлов, которые админ загрузил сам: они важнее каталожных при выборе.
 _ADMIN_ORIGINS = frozenset({SourceOrigin.UPLOAD, SourceOrigin.SEED})
+
+
+class ScopeKind(StrEnum):
+    """Чей набор: в 3b — только сборник (ADR 0029). Новый владелец — новая строка."""
+
+    COLLECTION = "collection"
+
+
+@dataclass(frozen=True, slots=True)
+class AssetScope:
+    """Владелец исходника и наборов (``AssetsReady.scope``); ``None`` вместо него —
+    каталожные исходники и наборы.
+
+    Attributes:
+        kind: Вид владельца.
+        id: Его идентификатор (``collection_id``).
+    """
+
+    kind: ScopeKind
+    id: UUID
+
+    @classmethod
+    def collection(cls, collection_id: UUID) -> AssetScope:
+        """Scope сборника."""
+        return cls(ScopeKind.COLLECTION, collection_id)
 
 
 class SourceStatus(StrEnum):
@@ -134,6 +161,8 @@ class SourceMedia(Entity[UUID]):
         license_note: Основание использования (D6).
         text_content: Содержимое текстового исходника (``kind = text``) — JSON-объект без
             названия единицы; у остальных видов ``None``.
+        scope: Владелец (сборник) у своих загадок автора; ``None`` — каталожный исходник.
+            Scope бывает только у текстового исходника (ADR 0029).
     """
 
     def __init__(
@@ -154,6 +183,7 @@ class SourceMedia(Entity[UUID]):
         source_url: str | None = None,
         license_note: str | None = None,
         text_content: dict[str, Any] | None = None,
+        scope: AssetScope | None = None,
     ) -> None:
         super().__init__(id)
         if not MIN_POSITION <= position <= MAX_POSITION:
@@ -164,6 +194,8 @@ class SourceMedia(Entity[UUID]):
             raise DomainError(
                 "содержимое есть только у текстового исходника", code="source.text_content"
             )
+        if scope is not None and kind is not SourceKind.TEXT:
+            raise DomainError("scope бывает только у текстового исходника", code="source.scope")
         self.media_item_id = media_item_id
         self.kind = kind
         self.origin = origin
@@ -178,6 +210,7 @@ class SourceMedia(Entity[UUID]):
         self.source_url = source_url
         self.license_note = license_note
         self.text_content = text_content
+        self.scope = scope
 
     @property
     def is_stored(self) -> bool:
@@ -199,15 +232,21 @@ class SourceMedia(Entity[UUID]):
         sha256: str,
         size_bytes: int,
         created_at: datetime,
+        scope: AssetScope | None = None,
     ) -> SourceMedia:
-        """Текстовый исходник из события catalog: сразу ``ready``, без объекта в хранилище."""
+        """Текстовый исходник: сразу ``ready``, без объекта в хранилище.
+
+        Args:
+            scope: ``None`` — тексты из события catalog (``origin = catalog``); сборник —
+                свои загадки автора из события collections (``origin = collection``).
+        """
         if size_bytes <= 0:
             raise DomainError("пустой исходник", code="source.empty")
         return cls(
             id,
             media_item_id=media_item_id,
             kind=SourceKind.TEXT,
-            origin=SourceOrigin.CATALOG,
+            origin=SourceOrigin.CATALOG if scope is None else SourceOrigin.COLLECTION,
             uri=None,
             created_at=created_at,
             status=SourceStatus.READY,
@@ -215,6 +254,7 @@ class SourceMedia(Entity[UUID]):
             size_bytes=size_bytes,
             mime="application/json",
             text_content=content,
+            scope=scope,
         )
 
     def move_to(self, position: int) -> None:

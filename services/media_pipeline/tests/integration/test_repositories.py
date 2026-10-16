@@ -9,16 +9,27 @@ from uuid import UUID
 
 import pytest
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
-from media_pipeline_service.application.ports import AdminAction
+from media_pipeline_service.application.ports import ANY_SCOPE, AdminAction
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
 from media_pipeline_service.domain.clues import FrameProgressiveParams
+from media_pipeline_service.domain.collections import CollectionState, CollectionStatus
 from media_pipeline_service.domain.errors import MediaItemNotFoundError
 from media_pipeline_service.domain.links import LinkPolicy, asset_object_key
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.profiles import AssetProfile
-from media_pipeline_service.domain.sources import SourceKind, SourceMedia, SourceOrigin
+from media_pipeline_service.domain.sources import (
+    AssetScope,
+    SourceKind,
+    SourceMedia,
+    SourceOrigin,
+)
 from media_pipeline_service.infrastructure.db.repositories import SqlMediaUnitOfWork
-from media_pipeline_service.infrastructure.db.tables import TABLES, admin_actions, link_issuance
+from media_pipeline_service.infrastructure.db.tables import (
+    TABLES,
+    admin_actions,
+    asset_levels,
+    link_issuance,
+)
 from media_pipeline_service.main import DEFINITION
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -520,3 +531,95 @@ async def test_dynamic_profiles_repository(sessions: async_sessionmaker[AsyncSes
         async with uow(sessions) as u:
             await u.profiles.add(dynamic("a" * 64, DynamicProfileStatus.BACKFILLING, None))
             await u.commit()
+
+
+async def test_scoped_sources_and_sets_are_separated_by_owner(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """ADR 0029: набор сборника живёт рядом с каталожным того же профиля, фильтры по
+    владельцу, удаление по scope; проекция сборника отбрасывает старые версии."""
+    item, source_id = await seed(sessions)
+    scope, other = AssetScope.collection(uuid7()), AssetScope.collection(uuid7())
+    content = {"version": 1, "emoji": "🚢🧊💔"}
+    scoped_source = SourceMedia.text(
+        uuid7(),
+        media_item_id=item,
+        content=content,
+        sha256="0" * 64,
+        size_bytes=10,
+        created_at=NOW,
+        scope=scope,
+    )
+    sets = {
+        owner: AssetSet.plan(
+            uuid7(),
+            media_item_id=item,
+            profile=profile(),
+            source_media_ids=(source_id,),
+            now=NOW,
+            scope=owner,
+        )
+        for owner in (None, scope, other)
+    }
+    level = AssetLevel(
+        level=1, object_key=asset_object_key(uuid7().hex, "json"), mime="x", size_bytes=1
+    )
+    sets[scope].levels = (level,)
+    async with uow(sessions) as u:
+        await u.sources.add(scoped_source)
+        for aggregate in sets.values():
+            await u.asset_sets.add(aggregate)
+        await u.commit()
+
+    async with uow(sessions) as u:
+        assert [s.id for s in await u.sources.list_for_item(item)] == [source_id]
+        (loaded_source,) = await u.sources.list_for_item(item, scope=scope)
+        assert (loaded_source.scope, loaded_source.origin) == (scope, SourceOrigin.COLLECTION)
+        assert loaded_source.text_content == content
+        assert [s.id for s in await u.sources.list_for_scope(scope)] == [scoped_source.id]
+        assert await u.sources.list_for_scope(other) == []
+        assert await u.sources.scopes_for_item(item) == [scope]
+        (catalog,) = await u.asset_sets.list_for_item(item, scope=None)
+        assert catalog.id == sets[None].id and catalog.scope is None
+        (mine,) = await u.asset_sets.list_for_scope(scope, for_update=True)
+        assert (mine.id, mine.scope, mine.levels) == (sets[scope].id, scope, (level,))
+        everything = await u.asset_sets.list_for_item(item, scope=ANY_SCOPE)
+        assert {a.id for a in everything} == {a.id for a in sets.values()}
+        assert list(await u.items.get_many([item, uuid7()], for_update=True)) == [item]
+        await u.asset_sets.delete([mine.id])
+        await u.commit()
+
+    async with uow(sessions) as u:
+        assert await u.asset_sets.list_for_scope(scope) == []
+        assert [a.id for a in await u.asset_sets.list_for_scope(other)] == [sets[other].id]
+    async with sessions() as session:
+        query = select(asset_levels.c.level).where(asset_levels.c.asset_set_id == sets[scope].id)
+        assert (await session.execute(query)).all() == []  # уровни — каскадом
+
+    # второй исходник того же владельца у единицы запрещён схемой
+    with pytest.raises(IntegrityError):
+        async with uow(sessions) as u:
+            await u.sources.add(
+                SourceMedia.text(
+                    uuid7(),
+                    media_item_id=item,
+                    content={"version": 1, "emoji": "🎬"},
+                    sha256="1" * 64,
+                    size_bytes=5,
+                    created_at=NOW,
+                    scope=scope,
+                )
+            )
+    async with uow(sessions) as u:
+        state = CollectionState(
+            scope.id, version=3, status=CollectionStatus.PUBLISHED, updated_at=NOW
+        )
+        assert await u.collections.advance(state)
+        assert not await u.collections.advance(state)  # та же версия
+        stale = CollectionState(scope.id, version=2, status=CollectionStatus.HIDDEN, updated_at=NOW)
+        assert not await u.collections.advance(stale)
+        newer = CollectionState(
+            scope.id, version=4, status=CollectionStatus.DELETED, updated_at=NOW
+        )
+        assert await u.collections.advance(newer)
+        await u.commit()
