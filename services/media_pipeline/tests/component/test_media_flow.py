@@ -626,9 +626,52 @@ async def test_admin_asset_sets_requires_admin_access(service: Service) -> None:
     assert [s["asset_set_id"] for s in listed.json()] == [asset_set["asset_set_id"]]
 
 
-async def test_stage3b_admin_sources_is_declared_but_not_implemented(service: Service) -> None:
-    """Шаг 0a этапа 3b (хвост 3a): список исходников — `admin.access`, реализация — поток M."""
-    params = {"media_item_id": str(UUID(int=1))}
+async def test_admin_sources_lists_catalog_sources_by_kind_and_position(
+    service: Service,
+) -> None:
+    """Хвост 3a (план 3b, M3): исходники единицы для карточки в админке — `admin.access`."""
+    created, item_id = _film_with_texts(1, "Учёные … ищут новый дом.")
+    frame = {
+        "source_media_ref": str(uuid7()),
+        "kind": "frame",
+        "origin": "tmdb",
+        "uri": f"https://image.tmdb.org{POSTER_PATH}",
+        "position": 2,
+    }
+    poster = {**frame, "source_media_ref": str(uuid7()), "kind": "poster", "position": 1}
+    first_frame = {**frame, "source_media_ref": str(uuid7()), "position": 1}
+    created = created.model_copy(
+        update={"payload": {**created.payload, "source_media": [frame, poster, first_frame]}}
+    )
+    assert await service.deliver(created) is Outcome.PROCESSED
+    # свои эмодзи сборника — исходник со scope: в списке админки его нет
+    collection, _ = _collection_event(1, {item_id: SIX_EMOJI})
+    assert await service.deliver(collection) is Outcome.PROCESSED
+
+    params = {"media_item_id": item_id}
+    response = await service.client.get(
+        "/admin/v1/sources", params=params, headers=service.admin("admin.access")
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [(s["kind"], s["position"]) for s in body] == [
+        ("frame", 1), ("frame", 2), ("poster", 1), ("text", 1),
+    ]  # fmt: skip
+    assert [s["source_media_id"] for s in body[:3]] == [
+        first_frame["source_media_ref"], frame["source_media_ref"], poster["source_media_ref"],
+    ]  # fmt: skip
+    assert {s["origin"] for s in body} == {"tmdb", "catalog"}
+    assert set(body[0]) == {
+        "source_media_id", "kind", "position", "origin", "status", "created_at",
+    }  # fmt: skip
+    assert "uri" not in json.dumps(body)
+
+    unknown = await service.client.get(
+        "/admin/v1/sources",
+        params={"media_item_id": str(uuid7())},
+        headers=service.admin("admin.access"),
+    )
+    assert unknown.status_code == 200 and unknown.json() == []
     assert_problem(
         await service.client.get("/admin/v1/sources", params=params), 401, "auth.unauthenticated"
     )
@@ -640,11 +683,9 @@ async def test_stage3b_admin_sources_is_declared_but_not_implemented(service: Se
         "auth.forbidden",
     )
     assert_problem(
-        await service.client.get(
-            "/admin/v1/sources", params=params, headers=service.admin("admin.access")
-        ),
-        501,
-        "common.not_implemented",
+        await service.client.get("/admin/v1/sources", headers=service.admin("admin.access")),
+        422,
+        "request.validation_failed",
     )
 
 
@@ -953,3 +994,173 @@ async def test_clue_texts_become_json_assets_and_edit_regenerates(service: Servi
     assert len(ready) == 4
     for event in ready:
         assert_event_matches_schema(event)
+
+
+# ---------------------------------------------------------------- свои загадки сборников (ADR 0029)
+# Встроенный профиль emoji открывает до 6 эмодзи: короче — набора нет (как у каталожных).
+SIX_EMOJI = "🚢🧊💔🎻🌊🚪"
+
+
+def _collection_event(
+    version: int,
+    items: dict[str, str | None],
+    *,
+    collection_id: str | None = None,
+    event_type: str = "collections.CollectionPublished",
+    status: str = "published",
+) -> tuple[EventEnvelope, str]:
+    example = load_example("collections.CollectionPublished")
+    collection_id = collection_id or str(uuid7())
+    payload = {
+        **example.payload,
+        "collection_id": collection_id,
+        "version": version,
+        "status": status,
+        "items": [
+            {"media_item_id": item, "position": i, **({"custom": {"emoji": e}} if e else {})}
+            for i, (item, e) in enumerate(items.items())
+        ],
+    }
+    envelope = example.model_copy(
+        update={
+            "payload": payload,
+            "aggregate_id": collection_id,
+            "event_type": event_type,
+            "event_id": uuid7(),
+        }
+    )
+    assert_event_matches_schema(envelope)
+    return envelope, collection_id
+
+
+async def _plain_film(service: Service) -> str:
+    created = load_example("catalog.MediaItemCreated")
+    item_id = str(uuid7())
+    payload = {**created.payload, "media_item_id": item_id, "source_media": []}
+    payload.pop("clue_texts", None)
+    envelope = created.model_copy(
+        update={"payload": payload, "event_id": uuid7(), "aggregate_id": item_id}
+    )
+    assert await service.deliver(envelope) is Outcome.PROCESSED
+    return item_id
+
+
+async def _sets(service: Service, item_id: str) -> list[dict[str, Any]]:
+    response = await service.client.get(
+        "/internal/v1/asset-sets", params={"media_item_id": item_id}
+    )
+    assert response.status_code == 200, response.text
+    return list(response.json())
+
+
+async def test_collection_emoji_to_assets_ready_with_scope(service: Service) -> None:
+    item_id, plain_id = await _plain_film(service), await _plain_film(service)
+    published, collection_id = _collection_event(3, {item_id: SIX_EMOJI, plain_id: None})
+    assert await service.deliver(published) is Outcome.PROCESSED
+    assert await service.run_tasks() == 1
+
+    (scoped,) = await _sets(service, item_id)
+    assert scoped["scope"] == {"kind": "collection", "id": collection_id}
+    assert (scoped["clue_type"], scoped["status"], scoped["levels_count"]) == ("emoji", "ready", 6)
+    assert await _sets(service, plain_id) == []
+
+    (ready,) = [e for e in await service.outbox() if e.event_type == "media_pipeline.AssetsReady"]
+    assert_event_matches_schema(ready)
+    assert ready.aggregate_id == item_id
+    assert ready.payload["scope"] == {"kind": "collection", "id": collection_id}
+    assert ready.payload["asset_set_id"] == scoped["asset_set_id"]
+
+    link = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": scoped["asset_set_id"], "level": 2, "subject": "game:c1"},
+    )
+    assert link.status_code == 200, link.text
+    key = urlsplit(link.json()["url"]).path.removeprefix("/media/")
+    document = json.loads(await service.storage.get(StorageArea.ASSETS, key, max_bytes=10_000))
+    assert document == {"version": 1, "blocks": [{"kind": "emoji", "text": "🚢🧊"}]}
+
+    # повтор того же события — дубль inbox; та же версия новым событием — устарело, no-op
+    assert await service.deliver(published) is Outcome.DUPLICATE
+    again = published.model_copy(update={"event_id": uuid7()})
+    assert await service.deliver(again) is Outcome.PROCESSED
+    assert service.queue.tasks == []
+    assert await _sets(service, item_id) == [scoped]
+
+
+async def test_collection_emoji_edit_regenerates_and_hide_delete_drop_sets(
+    service: Service,
+) -> None:
+    item_id = await _plain_film(service)
+    first, collection_id = _collection_event(1, {item_id: SIX_EMOJI})
+    assert await service.deliver(first) is Outcome.PROCESSED
+    await service.run_tasks()
+    (initial,) = await _sets(service, item_id)
+
+    edited, _ = _collection_event(
+        2,
+        {item_id: "🎬🍿🎥🎞️📽️🎟️"},
+        collection_id=collection_id,
+        event_type="collections.CollectionUpdated",
+    )
+    assert await service.deliver(edited) is Outcome.PROCESSED
+    assert await service.run_tasks() == 1
+    (regenerated,) = await _sets(service, item_id)
+    assert regenerated["asset_set_id"] == initial["asset_set_id"]
+    assert (regenerated["generation"], regenerated["status"]) == (2, "ready")
+
+    hidden, _ = _collection_event(
+        3,
+        {item_id: "🎬🍿🎥🎞️📽️🎟️"},
+        collection_id=collection_id,
+        event_type="collections.CollectionUpdated",
+        status="hidden",
+    )
+    assert await service.deliver(hidden) is Outcome.PROCESSED
+    assert await _sets(service, item_id) == []
+    gone = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": initial["asset_set_id"], "level": 1, "subject": "game:c1"},
+    )
+    assert_problem(gone, 404, "asset.not_found")
+
+    republished, _ = _collection_event(4, {item_id: SIX_EMOJI}, collection_id=collection_id)
+    assert await service.deliver(republished) is Outcome.PROCESSED
+    await service.run_tasks()
+    assert len(await _sets(service, item_id)) == 1
+
+    deleted = load_example("collections.CollectionDeleted")
+    deleted = deleted.model_copy(
+        update={
+            "payload": {**deleted.payload, "collection_id": collection_id, "version": 5},
+            "aggregate_id": collection_id,
+            "event_id": uuid7(),
+        }
+    )
+    assert_event_matches_schema(deleted)
+    assert await service.deliver(deleted) is Outcome.PROCESSED
+    assert await _sets(service, item_id) == []
+    assert service.infra.sessions is not None
+    async with service.infra.sessions() as session:
+        scoped_sources = (
+            await session.execute(
+                sa.text("SELECT count(*) FROM source_media WHERE scope_id = :id"),
+                {"id": UUID(collection_id)},
+            )
+        ).scalar_one()
+        state = (
+            await session.execute(
+                sa.text("SELECT status, version FROM collections_state WHERE collection_id = :id"),
+                {"id": UUID(collection_id)},
+            )
+        ).one()
+    assert scoped_sources == 0
+    assert tuple(state) == ("deleted", 5)
+
+
+async def test_collection_with_invalid_emoji_goes_to_dlq(service: Service) -> None:
+    item_id = await _plain_film(service)
+    # по схеме события допустимо (строка 1..128), но вне строгого набора RGI
+    published, _ = _collection_event(1, {item_id: "abc🚢"})
+    assert await service.deliver(published) is Outcome.DEAD
+    assert await _sets(service, item_id) == []
+    assert service.queue.tasks == []

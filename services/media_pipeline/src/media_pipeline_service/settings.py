@@ -66,6 +66,11 @@ class MediaSettings(BaseModel):
     backfill_batch: int = Field(default=200, ge=1, le=10_000)
     backfill_interval_s: float = Field(default=60, gt=0)
     backfill_jitter_s: float = Field(default=10, ge=0)
+    # Свои загадки сборников (ADR 0029): лимит графем эмодзи (как у collections,
+    # GV_COLLECTIONS__LIMITS__EMOJI_MAX_GRAPHEMES) и типы загадок, по профилям которых строятся
+    # наборы со scope сборника (в 3b — только emoji).
+    collection_emoji_max_graphemes: int = Field(default=12, ge=1, le=64)
+    scoped_clue_types: frozenset[str] = frozenset({"emoji"})
 
     @property
     def source_host_list(self) -> frozenset[str]:

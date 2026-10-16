@@ -34,6 +34,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
             regenerate=c.regenerate,
             list_sets=c.list_sets,
             list_profiles=c.list_profiles,
+            list_sources=c.list_sources,
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,
         ),
     ]
@@ -42,7 +43,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
 def build_event_handlers(
     infra: Infrastructure, adapters: MediaAdapters | None = None
 ) -> EventHandlerRegistry:
-    """Обработчики событий catalog."""
+    """Обработчики событий catalog, game и collections."""
     return messaging.build_event_handlers(container_for(infra, adapters))
 
 

@@ -3,7 +3,7 @@ name = "guessverse-media-pipeline"
 version = "0.1.0"
 description = "Генерация ассетов загадок по уровням, хранение в S3, подписанные ссылки, проверка UGC-изображений"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "Pillow>=11", "aioboto3>=13", "pyyaml>=6", "httpx>=0.28", "python-multipart>=0.0.12"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-text", "Pillow>=11", "aioboto3>=13", "pyyaml>=6", "httpx>=0.28", "python-multipart>=0.0.12"]
 
 [project.scripts]
 media_pipeline = "media_pipeline_service.main:run"

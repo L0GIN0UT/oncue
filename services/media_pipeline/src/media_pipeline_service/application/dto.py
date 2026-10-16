@@ -9,7 +9,14 @@ from uuid import UUID
 
 from media_pipeline_service.domain.asset_set import AssetSet
 from media_pipeline_service.domain.media_items import ItemStatus
-from media_pipeline_service.domain.sources import SourceKind, SourceOrigin
+from media_pipeline_service.domain.sources import (
+    AssetScope,
+    ScopeKind,
+    SourceKind,
+    SourceMedia,
+    SourceOrigin,
+    SourceStatus,
+)
 
 GENERATE_TASK = "media.generate_asset_set"
 """Тип задачи RabbitMQ генерации набора; ``task_id = <asset_set_id>:<generation>``."""
@@ -28,6 +35,8 @@ class AssetSetView:
     levels_count: int
     generation: int
     error_code: str | None
+    # Владелец набора (ADR 0029); None — каталожный.
+    scope: AssetScope | None = None
 
     @classmethod
     def of(cls, aggregate: AssetSet) -> AssetSetView:
@@ -42,6 +51,7 @@ class AssetSetView:
             levels_count=aggregate.levels_count,
             generation=aggregate.generation,
             error_code=aggregate.error_code,
+            scope=aggregate.scope,
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -56,6 +66,9 @@ class AssetSetView:
             "levels_count": self.levels_count,
             "generation": self.generation,
             "error_code": self.error_code,
+            "scope": (
+                {"kind": self.scope.kind.value, "id": str(self.scope.id)} if self.scope else None
+            ),
         }
 
     @classmethod
@@ -71,6 +84,12 @@ class AssetSetView:
             levels_count=int(data["levels_count"]),
             generation=int(data["generation"]),
             error_code=data["error_code"],
+            # Ответы, сохранённые до этапа 3b, поля не содержат.
+            scope=(
+                AssetScope(ScopeKind(scope["kind"]), UUID(scope["id"]))
+                if (scope := data.get("scope"))
+                else None
+            ),
         )
 
 
@@ -183,6 +202,30 @@ class SourceView:
             position=int(data["position"]),
             status=data["status"],
             scheduled_asset_set_ids=tuple(UUID(i) for i in data["scheduled_asset_set_ids"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceListView:
+    """Исходник в списке админки (``GET /admin/v1/sources``)."""
+
+    source_media_id: UUID
+    kind: SourceKind
+    origin: SourceOrigin
+    position: int
+    status: SourceStatus
+    created_at: datetime
+
+    @classmethod
+    def of(cls, source: SourceMedia) -> SourceListView:
+        """Из сущности."""
+        return cls(
+            source_media_id=source.id,
+            kind=source.kind,
+            origin=source.origin,
+            position=source.position,
+            status=source.status,
+            created_at=source.created_at,
         )
 
 

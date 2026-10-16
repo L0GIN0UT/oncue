@@ -8,17 +8,18 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import StrEnum
-from typing import Any, Protocol
+from enum import Enum, StrEnum
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from gv_core.uow import UnitOfWork
 from gv_db.idempotency import IdempotencyStore
 from media_pipeline_service.domain.asset_set import AssetSet
 from media_pipeline_service.domain.clues import MaskRegion
+from media_pipeline_service.domain.collections import CollectionState
 from media_pipeline_service.domain.dynamic_profiles import DynamicProfile
 from media_pipeline_service.domain.media_items import MediaItemState
-from media_pipeline_service.domain.sources import SourceMedia
+from media_pipeline_service.domain.sources import AssetScope, SourceMedia
 
 
 # ---------------------------------------------------------------- хранилище
@@ -162,6 +163,17 @@ class TokenSource(Protocol):
 
 
 # ---------------------------------------------------------------- репозитории
+class _AnyScope(Enum):
+    ANY = "any"
+
+
+ANY_SCOPE = _AnyScope.ANY
+"""Фильтр «наборы любого владельца»: и каталожные, и со ``scope`` (блокировка единицы)."""
+
+ScopeFilter = AssetScope | None | Literal[_AnyScope.ANY]
+"""``None`` — только каталожные, ``AssetScope`` — только этого владельца, ``ANY_SCOPE`` — все."""
+
+
 class AssetSetRepository(Protocol):
     """Наборы ассетов."""
 
@@ -170,9 +182,24 @@ class AssetSetRepository(Protocol):
         ...
 
     async def list_for_item(
-        self, media_item_id: UUID, clue_type: str | None = None, *, for_update: bool = False
+        self,
+        media_item_id: UUID,
+        clue_type: str | None = None,
+        *,
+        for_update: bool = False,
+        scope: ScopeFilter = ANY_SCOPE,
     ) -> list[AssetSet]:
-        """Наборы единицы (опционально одного типа загадки), по времени создания."""
+        """Наборы единицы (опционально одного типа загадки и владельца), по времени создания."""
+        ...
+
+    async def list_for_scope(
+        self, scope: AssetScope, *, for_update: bool = False
+    ) -> list[AssetSet]:
+        """Все наборы владельца (сборника) по единицам."""
+        ...
+
+    async def delete(self, asset_set_ids: Sequence[UUID]) -> None:
+        """Удалить наборы вместе со строками уровней (объекты S3 удаляет вызывающий)."""
         ...
 
     async def add(self, aggregate: AssetSet) -> None:
@@ -208,8 +235,18 @@ class SourceMediaRepository(Protocol):
         """Исходник по id."""
         ...
 
-    async def list_for_item(self, media_item_id: UUID) -> list[SourceMedia]:
-        """Исходники единицы."""
+    async def list_for_item(
+        self, media_item_id: UUID, *, scope: AssetScope | None = None
+    ) -> list[SourceMedia]:
+        """Исходники единицы одного владельца (``None`` — каталожные), по времени создания."""
+        ...
+
+    async def list_for_scope(self, scope: AssetScope) -> list[SourceMedia]:
+        """Все исходники владельца (сборника)."""
+        ...
+
+    async def scopes_for_item(self, media_item_id: UUID) -> list[AssetScope]:
+        """Владельцы, у которых есть свои исходники единицы (досоздание наборов)."""
         ...
 
     async def add(self, source: SourceMedia) -> None:
@@ -230,6 +267,13 @@ class MediaItemStateRepository(Protocol):
 
     async def get(self, media_item_id: UUID, *, for_update: bool = False) -> MediaItemState | None:
         """Проекция по id."""
+        ...
+
+    async def get_many(
+        self, media_item_ids: Sequence[UUID], *, for_update: bool = False
+    ) -> dict[UUID, MediaItemState]:
+        """Проекции нескольких единиц одним запросом; ``for_update`` блокирует строки по
+        возрастанию id (порядок блокировок «единица → набор», как у воркера)."""
         ...
 
     async def upsert(self, state: MediaItemState) -> None:
@@ -317,6 +361,20 @@ class DynamicProfileRepository(Protocol):
         ...
 
 
+class CollectionStateRepository(Protocol):
+    """Проекция сборников (версия и статус, ADR 0029)."""
+
+    async def advance(self, state: CollectionState) -> bool:
+        """Записать состояние, если его версия больше сохранённой (или строки нет).
+
+        Строка остаётся заблокированной до конца транзакции.
+
+        Returns:
+            ``False`` — событие устарело или повторное, ничего не изменилось.
+        """
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class AdminAction:
     """Запись аудита admin-действия (§8 п.7)."""
@@ -345,6 +403,7 @@ class MediaUnitOfWork(UnitOfWork, Protocol):
     items: MediaItemStateRepository
     links: LinkIssuanceJournal
     profiles: DynamicProfileRepository
+    collections: CollectionStateRepository
     # Ключи admin-мутаций в транзакции этого UoW (``gv_db.idempotency``).
     idempotency: IdempotencyStore
     audit: AdminAuditLog

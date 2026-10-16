@@ -175,7 +175,8 @@ class BackfillDynamicProfiles:
     нагрузка на ffmpeg и S3 растёт постепенно. Курсор — ``media_item_id`` последней
     обработанной единицы; порция и курсор фиксируются в одной транзакции, поэтому повтор
     после сбоя продолжает с того же места (наборы уникальны — дублей нет). Новые единицы
-    планируются событиями catalog по общему каталогу профилей.
+    планируются событиями catalog по общему каталогу профилей. Наборы сборников (ADR 0029)
+    досоздаются вместе с каталожными: по каждому владельцу своих исходников единицы.
     """
 
     def __init__(
@@ -235,6 +236,12 @@ class BackfillDynamicProfiles:
             for media_item_id in ids:
                 planned = await self._plan.plan_in(uow, media_item_id, only=profile)
                 stale.extend(planned.stale_keys)
+                # Свои загадки сборников (ADR 0029): тот же профиль по исходникам владельца.
+                for scope in await uow.sources.scopes_for_item(media_item_id):
+                    planned = await self._plan.plan_in(
+                        uow, media_item_id, only=profile, scope=scope
+                    )
+                    stale.extend(planned.stale_keys)
             fresh.advance(ids[-1] if ids else None, done=len(ids) < budget, now=now)
             await uow.profiles.save(fresh)
             await uow.commit()

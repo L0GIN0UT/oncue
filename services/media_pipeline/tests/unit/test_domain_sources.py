@@ -8,7 +8,9 @@ from uuid import UUID
 import pytest
 from media_pipeline_service.domain.sources import (
     FAMILY_BY_KIND,
+    AssetScope,
     MediaFamily,
+    ScopeKind,
     SourceKind,
     SourceMedia,
     SourceOrigin,
@@ -76,6 +78,31 @@ def test_text_content_only_for_text_kind() -> None:
             uuid7(), media_item_id=ITEM, kind=SourceKind.TEXT, origin=SourceOrigin.TMDB,
             uri=None, created_at=NOW,
         )  # fmt: skip
+
+
+def test_scope_only_for_text_source_and_sets_collection_origin() -> None:
+    """ADR 0029: свои загадки сборника — только текстовый исходник с ``origin=collection``."""
+    scope = AssetScope.collection(uuid7())
+    with pytest.raises(DomainError, match="scope"):
+        SourceMedia(
+            uuid7(), media_item_id=ITEM, kind=SourceKind.FRAME, origin=SourceOrigin.TMDB,
+            uri=None, created_at=NOW, scope=scope,
+        )  # fmt: skip
+    scoped, catalog = (
+        SourceMedia.text(
+            uuid7(),
+            media_item_id=ITEM,
+            content={"emoji": "🚢"},
+            sha256="0" * 64,
+            size_bytes=1,
+            created_at=NOW,
+            scope=owner,
+        )
+        for owner in (scope, None)
+    )
+    assert (scoped.scope, scoped.origin) == (scope, SourceOrigin.COLLECTION)
+    assert (catalog.scope, catalog.origin) == (None, SourceOrigin.CATALOG)
+    assert scope.kind is ScopeKind.COLLECTION
 
 
 def test_best_source_prefers_admin_upload_then_fresh_then_lower_position() -> None:
