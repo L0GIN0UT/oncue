@@ -12,6 +12,7 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from gv_game_kernel import (
+    CollectionRequiredError,
     DrawContext,
     MediaItemRef,
     PlayableFor,
@@ -19,6 +20,7 @@ from gv_game_kernel import (
     PoolTooSmallError,
     Preset,
     PresetNotFoundError,
+    RoundsNotAllowedError,
     daily_seed,
 )
 from gv_game_kernel.builtin import (
@@ -286,10 +288,10 @@ async def test_collection_draw() -> None:
     cid = UUID(int=42)
     items = _pool(5)
     port = FakeCollectionPort({cid: [*items, items[0]]})
-    shuffled = CollectionParams(collection_id=cid)
-    ordered = CollectionParams(collection_id=cid, shuffle=False)
+    shuffled = CollectionParams(round_options=(5, "all"), min_items=1)
+    ordered = CollectionParams(round_options=(5,), min_items=1, shuffle=False)
     src = CollectionSource()
-    ctx = _ctx(FakeCandidatePort(), collections=port)
+    ctx = _ctx(FakeCandidatePort(), collections=port, collection_id=cid)
     assert await src.draw(ctx, ordered, 2) == items[:2]
     picked = await src.draw(ctx, shuffled, 5)
     assert sorted(i.id for i in picked) == sorted(i.id for i in items)
@@ -297,10 +299,50 @@ async def test_collection_draw() -> None:
     with pytest.raises(PoolTooSmallError):
         await src.draw(ctx, shuffled, 6)
     with pytest.raises(ValueError, match="CollectionPort"):
-        await src.draw(_ctx(FakeCandidatePort()), shuffled, 1)
+        await src.draw(_ctx(FakeCandidatePort(), collection_id=cid), shuffled, 1)
+    with pytest.raises(CollectionRequiredError):
+        await src.draw(_ctx(FakeCandidatePort(), collections=port), shuffled, 1)
     assert src.presets(shuffled) == []
     assert src.pool_query(shuffled, domain="music", playable_for=None) is None
     assert src.min_playable(shuffled, rounds=7) == 7
+
+
+@pytest.mark.parametrize(
+    ("requested", "pool", "rounds"),
+    [(None, 30, 5), (5, 30, 5), (25, 30, 25), ("all", 30, 30), ("all", 3, 3)],
+)
+def test_collection_rounds_for(requested: Any, pool: int, rounds: int) -> None:
+    params = CollectionParams(round_options=(5, 25, "all"), min_items=3)
+    assert CollectionSource().rounds_for(params, requested, pool) == rounds
+
+
+def test_collection_rounds_for_rejects() -> None:
+    params = CollectionParams(round_options=(5, 25), min_items=3)
+    src = CollectionSource()
+    with pytest.raises(RoundsNotAllowedError):
+        src.rounds_for(params, 10, 30)
+    with pytest.raises(RoundsNotAllowedError):
+        src.rounds_for(params, "all", 30)
+    with pytest.raises(PoolTooSmallError):
+        src.rounds_for(params, 25, 20)
+    with pytest.raises(PoolTooSmallError):
+        src.rounds_for(params, None, 2)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"round_options": [], "min_items": 1},
+        {"round_options": [5, 5], "min_items": 1},
+        {"round_options": [7], "min_items": 1},
+        {"round_options": ["5"], "min_items": 1},
+        {"round_options": [5], "min_items": 0},
+        {"round_options": [5], "min_items": 1, "collection_id": str(UUID(int=1))},
+    ],
+)
+def test_collection_params_are_strict(body: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        CollectionParams.model_validate(body)
 
 
 # ----------------------------------------------------------------------------- свойства

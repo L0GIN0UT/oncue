@@ -12,8 +12,9 @@
 * ``bracket`` — плановая сетка периода (``RoundSource``, ``ProgressiveSource``): первый
   тур из посева, следующие — пары победителей прошлого тура.
 
-``collection`` реализован на ``CollectionPort``, но в game на этапе 2 не регистрируется
-(проекции сборников — этап 3): ``register_builtin`` его не включает.
+``collection`` реализован на ``CollectionPort`` (ADR 0028: шаблон режима, сборник — в
+``DrawContext.collection_id``) и регистрируется отдельно (``register_collection``):
+``register_builtin`` его не включает.
 """
 
 # ruff: noqa: ARG002 — методы реализуют протоколы плагинов, не всем нужны все аргументы
@@ -52,8 +53,10 @@ from gv_game_kernel.builtin.pool import (
     min_playable_issues,
 )
 from gv_game_kernel.errors import (
+    CollectionRequiredError,
     PoolTooSmallError,
     PresetNotFoundError,
+    RoundsNotAllowedError,
     SubjectRequiredError,
     TooManySubjectsError,
 )
@@ -353,37 +356,86 @@ class RandomSource:
 
 
 # ----------------------------------------------------------------------------- collection
+RoundOption = Literal[5, 10, 25, "all"]
+"""Вариант числа раундов сессии по сборнику: число или ``"all"`` — весь играбельный пул."""
+
+RoundOptions = Annotated[
+    tuple[RoundOption, ...],
+    Field(min_length=1, max_length=4, json_schema_extra={"uniqueItems": True}),
+    AfterValidator(unique),
+]
+
+
 class CollectionParams(PluginParams):
-    """Параметры ``collection`` (схема в ``contracts/modes`` — этап 3).
+    """Параметры ``collection`` (``contracts/modes/params/source.collection.v1.json``).
+
+    Конфиг — шаблон режима для всех сборников домена (ADR 0028): сам сборник приходит при
+    старте сессии и лежит в ``DrawContext.collection_id``.
 
     Attributes:
-        collection_id: Сборник.
+        round_options: Из чего выбирает игрок: подмножество ``{5, 10, 25, "all"}``.
+        min_items: Минимум играбельных единиц сборника, чтобы режим был доступен.
         shuffle: Перемешать единицы (иначе — первые ``n`` в порядке сборника).
     """
 
-    collection_id: UUID
+    round_options: RoundOptions
+    min_items: Annotated[StrictInt, Field(ge=1, le=200)]
     shuffle: StrictBool = True
 
 
 class CollectionSource:
-    """Единицы сборника через ``CollectionPort`` (этап 3; в game на этапе 2 не регистрируется)."""
+    """Единицы сборника через ``CollectionPort`` (ADR 0028; в game — ``register_collection``)."""
 
     key: ClassVar[str] = "collection"
     params_schema: ClassVar[type[BaseModel]] = CollectionParams
     answer_formats: ClassVar[frozenset[str]] = CLASSIC_ONLY
 
+    def rounds_for(self, params: BaseModel, requested: RoundOption | None, pool: int) -> int:
+        """Сколько раундов разыграть по выбору игрока и размеру играбельного пула сборника.
+
+        ``"all"`` — весь пул; число — ровно столько, если оно есть в ``round_options`` и
+        не больше пула; ``None`` — первый вариант ``round_options``.
+
+        Raises:
+            PoolTooSmallError: в пуле меньше ``min_items`` или меньше запрошенного числа.
+            RoundsNotAllowedError: запрошенного варианта нет в ``round_options``.
+        """
+        p = typed(params, CollectionParams)
+        choice = p.round_options[0] if requested is None else requested
+        if choice not in p.round_options:
+            raise RoundsNotAllowedError(
+                "такого числа раундов у режима нет",
+                details={"requested": choice, "options": list(p.round_options)},
+            )
+        if pool < p.min_items:
+            raise _pool_too_small(pool, p.min_items)
+        if choice == "all":
+            return pool
+        if pool < choice:
+            raise _pool_too_small(pool, choice)
+        return choice
+
     async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
-        """``n`` единиц сборника (перемешанных по ``ctx.seed`` или по порядку).
+        """``n`` единиц сборника ``ctx.collection_id`` (по ``ctx.seed`` или по порядку).
 
         Raises:
             ValueError: в контексте нет ``CollectionPort``.
+            CollectionRequiredError: в контексте нет ``collection_id``.
             PoolTooSmallError: в сборнике меньше ``n`` единиц.
         """
         _require_n(n)
         p = typed(params, CollectionParams)
         if ctx.collections is None:
             raise ValueError("источнику collection нужен CollectionPort")
-        items = await ctx.collections.items(p.collection_id, ctx.candidate_limit)
+        if ctx.collection_id is None:
+            raise CollectionRequiredError("источнику collection нужен сборник")
+        items = await ctx.collections.items(
+            ctx.collection_id,
+            ctx.candidate_limit,
+            playable_for=PlayableFor(
+                clue_type=ctx.clue_type, params_hash=ctx.params_hash, scope=ctx.collection_id
+            ),
+        )
         seen: set[UUID] = set()
         ordered: list[MediaItemRef] = []
         for item in items:

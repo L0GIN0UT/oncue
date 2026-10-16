@@ -420,7 +420,7 @@ def test_collection_source_is_not_registered_by_default(seed_body: SeedBody) -> 
     body = _set(
         seed_body("music.random.classic"),
         "source",
-        {"type": "collection", "params": {"collection_id": "00000000-0000-0000-0000-000000000001"}},
+        {"type": "collection", "params": {"round_options": [5, 10, "all"], "min_items": 5}},
     )
     assert ConfigIssue("source.type", "config.unknown_plugin") in _issues(body)
     with_collection = EngineFactory(register_collection(register_builtin(PluginRegistry())))

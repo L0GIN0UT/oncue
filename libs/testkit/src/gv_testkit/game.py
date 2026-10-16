@@ -41,6 +41,7 @@ from gv_game_kernel import (
     ModeConfig,
     ModeEngine,
     PersonRef,
+    PlayableFor,
     PluginRegistry,
     PoolQuery,
     RoundDraw,
@@ -270,8 +271,15 @@ class FakeCollectionPort:
     def __init__(self, collections: Mapping[UUID, Sequence[MediaItemRef]] | None = None) -> None:
         self.collections = {k: list(v) for k, v in (collections or {}).items()}
 
-    async def items(self, collection_id: UUID, limit: int) -> list[MediaItemRef]:
-        """До ``limit`` единиц сборника (неизвестный сборник — пусто)."""
+    async def items(
+        self, collection_id: UUID, limit: int, *, playable_for: PlayableFor | None
+    ) -> list[MediaItemRef]:
+        """До ``limit`` единиц сборника (неизвестный сборник — пусто).
+
+        ``playable_for`` пока не фильтрует (фильтр играбельности и ``scope`` — поток A
+        этапа 3b): все единицы фейка считаются играбельными.
+        """
+        del playable_for
         return self.collections.get(collection_id, [])[:limit]
 
 

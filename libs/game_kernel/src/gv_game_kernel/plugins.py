@@ -133,8 +133,10 @@ class DrawContext:
         preset_id: Выбранный пресет (случайный режим).
         exclude_ids: Единицы, которых следует избегать (недавние наборы дня): выбираются,
             только если свежих единиц не хватает на ``n``.
-        collections: Порт сборников (этап 3; в game на этапе 2 не передаётся).
+        collections: Порт сборников (источник ``collection``, ADR 0028).
         subject_ids: Персоны, выбранные игроком (марафон) или темой периода (сетка).
+        collection_id: Сборник сессии (``POST /v1/sessions.collection_id``); обязателен
+            для источника ``collection``, остальные источники его не читают.
     """
 
     mode_key: str
@@ -149,6 +151,7 @@ class DrawContext:
     collections: CollectionPort | None = None
     candidate_limit: int = 5000
     subject_ids: frozenset[UUID] = frozenset()
+    collection_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

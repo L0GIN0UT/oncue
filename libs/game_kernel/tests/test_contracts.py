@@ -218,7 +218,8 @@ def _shape(schema: dict[str, Any], resolve: Any) -> dict[str, Any]:
     if "const" in schema:
         shape["enum"] = [schema["const"]]
     if "enum" in shape:
-        shape["enum"] = sorted(shape["enum"])
+        # Перечисление может смешивать типы (``round_options``: 5, 10, 25, "all").
+        shape["enum"] = sorted(shape["enum"], key=json.dumps)
     if "items" in schema:
         shape["items"] = _shape(schema["items"], resolve)
     if schema.get("type") == "object" or "properties" in schema:
@@ -250,6 +251,7 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         BracketParams,
         ByLevelParams,
         BySpeedParams,
+        CollectionParams,
         DailyParams,
         DescriptionParams,
         EmojiParams,
@@ -285,6 +287,7 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         ("marathon", MarathonParams, params / "source.marathon.v1.json"),
         ("pair", PairParams, params / "source.pair.v1.json"),
         ("bracket", BracketParams, params / "source.bracket.v1.json"),
+        ("collection", CollectionParams, params / "source.collection.v1.json"),
         ("pool", PoolParams, params / "pool.v1.json"),
         ("by_level", ByLevelParams, params / "scorer.by_level.v1.json"),
         ("by_speed", BySpeedParams, params / "scorer.by_speed.v1.json"),
@@ -317,16 +320,16 @@ CLUE_KEYS = (
     "description",
     "emoji",
 )
-SOURCE_KEYS = ("daily", "random", "marathon", "pair", "bracket")
+SOURCE_KEYS = ("daily", "random", "marathon", "pair", "bracket", "collection")
 MATCHER_KEYS = ("title_alias", "metric_compare", "preference")
 SCORER_KEYS = ("by_level", "by_speed", "streak", "none")
 END_KEYS = ("all_rounds", "lives")
 
 
 def test_every_registered_plugin_has_a_contract() -> None:
-    from gv_game_kernel import PluginRegistry, register_builtin
+    from gv_game_kernel import PluginRegistry, register_builtin, register_collection
 
-    registry = register_builtin(PluginRegistry())
+    registry = register_collection(register_builtin(PluginRegistry()))
     covered = {model for _, model, _ in _plugin_models()}
     plugins = [
         *(registry.clue(k) for k in CLUE_KEYS),

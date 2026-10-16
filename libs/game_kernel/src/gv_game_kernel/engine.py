@@ -348,6 +348,7 @@ class ModeEngine:
         collections: CollectionPort | None = None,
         candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
         subject_ids: frozenset[UUID] = frozenset(),
+        collection_id: UUID | None = None,
     ) -> DrawContext:
         """Контекст розыгрыша с полями режима (ключ, домен, загадка, ``params_hash``)."""
         return DrawContext(
@@ -363,6 +364,7 @@ class ModeEngine:
             collections=collections,
             candidate_limit=candidate_limit,
             subject_ids=subject_ids,
+            collection_id=collection_id,
         )
 
     def _require_own(self, ctx: DrawContext) -> None:

@@ -23,6 +23,8 @@ ANSWER_KIND_UNSUPPORTED = "game.answer_kind_unsupported"
 OPTION_UNKNOWN = "game.option_unknown"
 SUBJECT_REQUIRED = "game.subject_required"
 TOO_MANY_SUBJECTS = "game.too_many_subjects"
+COLLECTION_REQUIRED = "game.collection_required"
+ROUNDS_NOT_ALLOWED = "game.rounds_not_allowed"
 
 
 class ConfigError(InvalidInputError):
@@ -119,3 +121,18 @@ class TooManySubjectsError(InvalidInputError):
     """
 
     default_code = TOO_MANY_SUBJECTS
+
+
+class CollectionRequiredError(InvalidInputError):
+    """Источнику ``collection`` не передан сборник (422 ``game.collection_required``)."""
+
+    default_code = COLLECTION_REQUIRED
+
+
+class RoundsNotAllowedError(InvalidInputError):
+    """Запрошенного числа раундов нет в ``round_options`` режима (422 ``game.rounds_not_allowed``).
+
+    ``details = {"requested": int | "all", "options": [...]}``.
+    """
+
+    default_code = ROUNDS_NOT_ALLOWED
