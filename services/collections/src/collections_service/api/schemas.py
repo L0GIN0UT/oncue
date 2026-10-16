@@ -52,7 +52,9 @@ class CustomClue(_Request):
 
     Эмодзи — строго RGI (``gv_text.emoji.is_strict_emoji``), не больше
     ``limits.emoji_max_graphemes`` графем, без текста и пробелов; иначе при публикации —
-    ``collections.emoji_invalid``.
+    ``collections.emoji_invalid``. Меньше ``limits.emoji_min_graphemes`` графем —
+    ``collections.emoji_too_short``: профиль ``emoji`` media-pipeline открывает до 6 эмодзи
+    и из меньшего числа набор не строит.
     """
 
     emoji: EmojiIn | None = None
@@ -261,6 +263,9 @@ class MetaLimits(BaseModel):
     items_max: int
     tags_max: int
     emoji_max_graphemes: int
+    emoji_min_graphemes: int = Field(
+        description="Минимум графем своих эмодзи (иначе `collections.emoji_too_short`)"
+    )
     drafts_max: int
     publish_per_day: int
 

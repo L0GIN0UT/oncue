@@ -10,7 +10,7 @@ from gv_testkit import assert_problem
 
 pytestmark = pytest.mark.component
 
-EMOJI = "🎬🍿"
+EMOJI = "🎬🍿🎥🎭🌟🎻"
 
 
 @pytest.fixture

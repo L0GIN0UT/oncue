@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 from uuid import UUID
 
@@ -153,6 +154,33 @@ def test_item_status_and_domain() -> None:
         ("items[0]", "collections.item_unavailable"),
         ("items[1]", "collections.item_domain_mismatch"),
     }
+
+
+def test_emoji_shorter_than_media_profile_is_rejected() -> None:
+    """Профиль ``emoji`` media открывает до 6 эмодзи: из меньшего числа набор не строится,
+    поэтому короткие свои эмодзи отклоняются при публикации (графемы, не кодовые точки)."""
+    limits = dataclasses.replace(LIMITS, emoji_max_graphemes=12, emoji_min_graphemes=6)
+    policy = CollectionPolicy(limits, UgcPolicy.from_entries([]), META)
+    family = "👨‍👩‍👧"  # одна графема из пяти кодовых точек
+    body = draft(items=(Item(A, "🎬🍿🎥🎭🌟"), Item(B, family * 5), Item(C, "кот")))
+    with pytest.raises(PublishInvalidError) as exc:
+        policy.publishable(Domain.FILM, body, KNOWN)
+    assert exc.value.details["errors"] == [
+        {"path": "items[0].custom.emoji", "code": "collections.emoji_too_short", "min": 6},
+        {"path": "items[1].custom.emoji", "code": "collections.emoji_too_short", "min": 6},
+        {"path": "items[2].custom.emoji", "code": "collections.emoji_invalid"},
+    ]
+    ok = draft(items=(Item(A, "🎬🍿🎥🎭🌟🎻"), Item(B, family * 6)))
+    assert policy.publishable(Domain.FILM, ok, KNOWN).items == ok.items
+
+
+def test_emoji_min_not_above_max() -> None:
+    from collections_service.settings import CollectionsLimits
+    from pydantic import ValidationError
+
+    assert CollectionsLimits().emoji_min_graphemes == 6
+    with pytest.raises(ValidationError):
+        CollectionsLimits(emoji_max_graphemes=4, emoji_min_graphemes=6)
 
 
 def test_title_reason_is_kept_in_errors() -> None:

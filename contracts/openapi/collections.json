@@ -1142,7 +1142,7 @@
       },
       "CustomClue": {
         "additionalProperties": false,
-        "description": "Свои загадки автора к единице (ADR 0029): в 3b только эмодзи.\n\nЭмодзи — строго RGI (``gv_text.emoji.is_strict_emoji``), не больше\n``limits.emoji_max_graphemes`` графем, без текста и пробелов; иначе при публикации —\n``collections.emoji_invalid``.",
+        "description": "Свои загадки автора к единице (ADR 0029): в 3b только эмодзи.\n\nЭмодзи — строго RGI (``gv_text.emoji.is_strict_emoji``), не больше\n``limits.emoji_max_graphemes`` графем, без текста и пробелов; иначе при публикации —\n``collections.emoji_invalid``. Меньше ``limits.emoji_min_graphemes`` графем —\n``collections.emoji_too_short``: профиль ``emoji`` media-pipeline открывает до 6 эмодзи\nи из меньшего числа набор не строит.",
         "properties": {
           "emoji": {
             "anyOf": [
@@ -1505,6 +1505,11 @@
             "title": "Emoji Max Graphemes",
             "type": "integer"
           },
+          "emoji_min_graphemes": {
+            "description": "Минимум графем своих эмодзи (иначе `collections.emoji_too_short`)",
+            "title": "Emoji Min Graphemes",
+            "type": "integer"
+          },
           "items_max": {
             "title": "Items Max",
             "type": "integer"
@@ -1533,6 +1538,7 @@
           "items_max",
           "tags_max",
           "emoji_max_graphemes",
+          "emoji_min_graphemes",
           "drafts_max",
           "publish_per_day"
         ],
@@ -4610,7 +4616,7 @@
     },
     "/v1/collections/{collection_id}/publish": {
       "post": {
-        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, reason?}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).",
+        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, reason?}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.emoji_too_short` (`min`), `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).",
         "operationId": "publish_v1_collections__collection_id__publish_post",
         "parameters": [
           {

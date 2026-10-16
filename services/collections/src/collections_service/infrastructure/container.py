@@ -84,6 +84,7 @@ class CollectionsContainer:
                 items_max=lim.items_max,
                 tags_max=lim.tags_max,
                 emoji_max_graphemes=lim.emoji_max_graphemes,
+                emoji_min_graphemes=lim.emoji_min_graphemes,
             ),
             UgcPolicy.from_file(self.settings.ugc.denylist_path),
             self.meta,
