@@ -13,6 +13,7 @@ from admin_service.core.forms import MutationForm
 
 SEARCH_MAX = 64  # q в GET /admin/v1/projection/items
 CANDIDATES_LIMIT = 20  # limit там же (по умолчанию 20, максимум 50)
+SUBJECT_SEARCH_MAX = 100  # q в GET /admin/v1/mode-configs/{key}/subjects
 
 
 class CalendarForm(forms.Form):
@@ -61,15 +62,39 @@ class ReplaceItemForm(MutationForm):
     media_item_id = forms.UUIDField(label="Новая единица (id)")
 
 
+class SubjectSearchForm(forms.Form):
+    """Поиск темы-персоны по имени (``q`` в ``GET …/mode-configs/{key}/subjects``)."""
+
+    q = forms.CharField(label="Имя", max_length=SUBJECT_SEARCH_MAX, required=False, strip=True)
+
+
+class ThemeForm(MutationForm):
+    """Смена темы периода: персона из найденных (выпадающий список) и причина.
+
+    Варианты списка — подсказка из поиска: играбельность темы всё равно проверяет game
+    (409 ``game.theme_not_playable``), поэтому выбор не сверяется со списком ещё раз.
+    """
+
+    subject_id = forms.UUIDField(label="Новая тема", widget=forms.Select)
+
+    def __init__(
+        self, *args: Any, subjects: list[dict[str, Any]] | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        widget = self.fields["subject_id"].widget
+        assert isinstance(widget, forms.Select)  # noqa: S101 — объявлено выше
+        widget.choices = [
+            (s["subject_id"], f"{s.get('name')} — {s.get('role')}, единиц: {s.get('items')}")
+            for s in subjects or []
+        ]
+
+
 class RegenerateForm(MutationForm):
     """Перегенерация набора: причина и (для набора с темой — сетки недели) новая тема.
 
     Пустая тема — генератор выберет её сам; играбельность темы проверяет game
-    (409 ``game.theme_not_playable``).
+    (409 ``game.theme_not_playable``). Тему выбирают поиском на странице «Сменить тему»
+    (``ThemeForm``), сюда она приходит скрытым полем той же формы.
     """
 
-    subject_id = forms.UUIDField(
-        label="Новая тема (id персоны)",
-        required=False,
-        help_text="только для набора с темой; пусто — тему выберет генератор",
-    )
+    subject_id = forms.UUIDField(required=False, widget=forms.HiddenInput)

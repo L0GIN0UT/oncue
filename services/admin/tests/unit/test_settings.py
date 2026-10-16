@@ -58,3 +58,7 @@ def test_unknown_daily_timezone_fails_at_startup() -> None:
 
 def test_game_is_in_default_service_urls() -> None:
     assert AdminConfig().service_urls["game"].startswith("http://game")
+
+
+def test_collections_is_in_default_service_urls() -> None:
+    assert AdminConfig().service_urls["collections"].startswith("http://collections")

@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{{ back_url }}">← к календарю</a></p>
+{% if daily_set %}
+<div class="module">
+  <table>
+    <tr><th>Режим</th><td>{{ key }}</td></tr>
+    <tr><th>{% if daily_set.period == "week" %}Неделя с{% else %}День{% endif %}</th><td>{{ day|date:"Y-m-d" }} — {{ daily_set.status }}</td></tr>
+    <tr><th>Тема сейчас</th><td>{% if current_name %}{{ current_name }} {% endif %}{% if current_subject %}<code>{{ current_subject }}</code>{% else %}не выбрана{% endif %}</td></tr>
+  </table>
+</div>
+{% elif not error %}
+<p>Набора на этот период нет.</p>
+{% endif %}
+
+{% if daily_set and not editable %}
+<p><strong>Набор заблокирован (период начался) — менять тему нельзя.</strong></p>
+{% elif daily_set %}
+<h2>Найти персону</h2>
+<form method="get">{{ search.as_p }}<input type="submit" value="Искать"></form>
+{% if search_error %}<ul class="messagelist"><li class="error">{{ search_error }}</li></ul>{% endif %}
+{% if subjects %}
+<form method="post" action="{{ regenerate_url }}">
+  {% csrf_token %}
+  <p>{{ form.subject_id.label_tag }} {{ form.subject_id }}</p>
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  {{ form.idempotency_key }}
+  <input type="submit" value="Сменить тему и собрать набор заново">
+</form>
+{% elif not search_error %}
+<p>Подходящих персон не найдено — уточните имя.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

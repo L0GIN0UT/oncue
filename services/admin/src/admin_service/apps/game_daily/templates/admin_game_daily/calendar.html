@@ -28,10 +28,10 @@
   <form method="post" action="{{ s.regenerate_url }}">
     {% csrf_token %}
     <p>{{ regenerate_form.reason.label_tag }}<br>{{ regenerate_form.reason }}</p>
-    {% if s.themed %}<p>{{ regenerate_form.subject_id.label_tag }} {{ regenerate_form.subject_id }} <small>{{ regenerate_form.subject_id.help_text }}</small></p>{% endif %}
     {{ regenerate_form.idempotency_key }}
-    <input type="submit" value="{% if s.themed %}Перегенерировать / сменить тему{% else %}Перегенерировать набор{% endif %}">
+    <input type="submit" value="{% if s.themed %}Перегенерировать (тему выберет генератор){% else %}Перегенерировать набор{% endif %}">
   </form>
+  {% if s.themed and s.theme_url %}<p><a href="{{ s.theme_url }}">Сменить тему (поиск персоны)…</a></p>{% endif %}
   {% endif %}
 </div>
 {% empty %}

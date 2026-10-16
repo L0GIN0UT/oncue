@@ -93,6 +93,16 @@ class GameAdminClient:
             json={"reason": reason},
         )
 
+    def subjects(self, mode_key: str, *, q: str | None = None, limit: int | None = None) -> Any:
+        """Темы-персоны режима с темой периода (``game.daily.view``, этап 3b).
+
+        По убыванию числа играбельных единиц; режим без темы-персоны — 422
+        ``game.subjects_not_supported``.
+        """
+        return self._client.get(
+            f"{_CONFIGS}/{_key(mode_key)}/subjects", params={"q": q, "limit": limit}
+        )
+
     # ------------------------------------------------------------------ запросы ассетов
     def asset_requests(self, mode_key: str) -> Any:
         """Запросы ассетов режима (``config.modes.view``), статусы ``pending|sent``."""

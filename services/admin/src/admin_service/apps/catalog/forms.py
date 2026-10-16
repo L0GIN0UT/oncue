@@ -175,7 +175,7 @@ class SourceUploadForm(MutationForm):
 class SourcePositionForm(MutationForm):
     """Смена порядка исходника среди своего вида (кадры ``frame_sequence``)."""
 
-    source_media_id = forms.UUIDField(label="Исходник (source_media_id)")
+    source_media_id = forms.UUIDField(widget=forms.HiddenInput)
     position = forms.IntegerField(
         label="Новый порядок", min_value=POSITION_MIN, max_value=POSITION_MAX
     )

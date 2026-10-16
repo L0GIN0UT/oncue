@@ -79,9 +79,21 @@ def _form(**kw: Any) -> dict[str, Any]:
     } | kw
 
 
-def _open(catalog: Any, media: Any) -> None:
+def _listed(source: uuid.UUID = SOURCE, position: int = 3, kind: str = "frame") -> dict[str, Any]:
+    return {
+        "source_media_id": str(source),
+        "kind": kind,
+        "position": position,
+        "origin": "upload",
+        "status": "ready",
+        "created_at": "2026-10-16T10:00:00Z",
+    }
+
+
+def _open(catalog: Any, media: Any, sources: list[dict[str, Any]] | None = None) -> None:
     catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
     media.route("GET", "/admin/v1/asset-sets").respond(200, json=[])
+    media.route("GET", "/admin/v1/sources").respond(200, json=sources or [])
 
 
 def test_item_page_offers_new_kinds_and_reorder(
@@ -93,7 +105,6 @@ def test_item_page_offers_new_kinds_and_reorder(
     for kind in ("soundtrack", "audio_clip", "frame"):
         assert f'value="{kind}"' in page
     assert 'name="position"' in page and 'name="license_note"' in page
-    assert f'action="/catalog/items/{ITEM}/sources/position/"' in page
     assert f'href="/catalog/items/{ITEM}/clue-texts/"' in page
 
 
@@ -173,8 +184,37 @@ def test_bad_position_and_url_are_form_errors(
     assert not route.called
 
 
+def test_sources_table_has_row_forms_with_current_position(
+    client: Any, login: Any, catalog: Any, media: Any
+) -> None:
+    login()
+    other = uuid7()
+    route_sources = [_listed(position=2), _listed(other, position=5)]
+    _open(catalog, media, route_sources)
+    page = client.get(f"/catalog/items/{ITEM}/").content.decode()
+    assert page.count(f'action="/catalog/items/{ITEM}/sources/position/"') == 2
+    assert f'name="source_media_id" value="{SOURCE}"' in page
+    assert f'name="source_media_id" value="{other}"' in page
+    assert 'name="position" value="5"' in page  # текущий порядок — в поле
+    assert 'id="src1_position"' in page and 'id="src2_position"' in page
+    assert "Исходник (source_media_id)" not in page  # id руками больше не вводится
+
+
+def test_sources_list_error_does_not_break_page(
+    client: Any, login: Any, catalog: Any, media: Any, problem: Any
+) -> None:
+    login()
+    catalog.route("GET", f"/admin/v1/items/{ITEM}").respond(200, json=ITEM_JSON)
+    media.route("GET", "/admin/v1/asset-sets").respond(200, json=[])
+    media.route("GET", "/admin/v1/sources").respond(403, json=problem(403, "auth.forbidden"))
+    response = client.get(f"/catalog/items/{ITEM}/")
+    assert response.status_code == 200
+    assert "Недостаточно прав" in response.content.decode()
+
+
 def test_reorder_frame_sends_position_and_audits(client: Any, login: Any, media: Any) -> None:
     login(perms=("admin.access", "media.upload_source"), roles=("content",))
+    media.route("GET", "/admin/v1/sources").respond(200, json=[_listed(position=3)])
     key = _key()
     route = media.route("PUT", f"/admin/v1/sources/{SOURCE}/position").respond(
         200, json=_source_out(1)
@@ -194,11 +234,13 @@ def test_reorder_frame_sends_position_and_audits(client: Any, login: Any, media:
     assert json.loads(request.content) == {"position": 1, "reason": "самый сложный кадр"}
     entry = AuditEntry.objects.get(action="media.set_source_position")
     assert (entry.target_type, entry.target_id) == ("source_media", str(SOURCE))
+    assert entry.before == {"media_item_id": str(ITEM), "position": 3}
     assert entry.after == {"position": 1, "kind": "frame", "media_item_id": str(ITEM)}
 
 
 def test_reorder_refusal_is_audited(client: Any, login: Any, media: Any, problem: Any) -> None:
     login()
+    media.route("GET", "/admin/v1/sources").respond(200, json=[])
     media.route("PUT", f"/admin/v1/sources/{SOURCE}/position").respond(
         404, json=problem(404, "source.not_found")
     )
@@ -220,12 +262,13 @@ def test_without_upload_perm_forms_are_hidden_and_forbidden(
     client: Any, login: Any, catalog: Any, media: Any, moderator_perms: tuple[str, ...]
 ) -> None:
     login(perms=moderator_perms, roles=("moderator",))
-    _open(catalog, media)
+    _open(catalog, media, [_listed()])
     route = media.route("PUT", f"/admin/v1/sources/{SOURCE}/position").respond(
         200, json=_source_out(1)
     )
     page = client.get(f"/catalog/items/{ITEM}/").content.decode()
     assert "/sources/position/" not in page and f"/catalog/items/{ITEM}/sources/" not in page
+    assert str(SOURCE) in page  # таблица исходников видна и без права загрузки
     response = client.post(
         f"/catalog/items/{ITEM}/sources/position/",
         {
