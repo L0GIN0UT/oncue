@@ -402,6 +402,35 @@ async def test_deleted_collection_drops_own_sets(game: Any) -> None:
     assert await scoped_rows(game, cid) == 0
 
 
+# ============================================================== каталог шаблонов сборника
+async def test_modes_kind_splits_play_modes_and_collection_templates(game: Any) -> None:
+    await bootstrap(game)
+    play = await game.client.get("/v1/modes", params={"domain": "film"})
+    default = {m["key"]: m for m in play.json()}
+    assert RANDOM_EMOJI in default and not {FRAME, EMOJI} & set(default)
+    assert default[RANDOM_EMOJI]["round_options"] is None
+    assert default[RANDOM_EMOJI]["min_items"] is None
+    explicit = await game.client.get("/v1/modes", params={"domain": "film", "kind": "play"})
+    assert explicit.json() == play.json()
+
+    r = await game.client.get("/v1/modes", params={"domain": "film", "kind": "collection"})
+    assert r.status_code == 200, r.text
+    assert r.headers["cache-control"] == play.headers["cache-control"]
+    templates = {m["key"]: m for m in r.json()}
+    assert set(templates) == {FRAME, EMOJI}  # только source collection и только домен
+    frame = templates[FRAME]
+    assert (frame["source_type"], frame["clue_type"]) == ("collection", "frame_progressive")
+    assert frame["title_key"] == "modes.film.collection.frame.title"
+    assert frame["round_options"] == [5, 10, 25, "all"]  # из конфига, без учёта сборника
+    assert frame["min_items"] == 5
+    assert [lvl["index"] for lvl in frame["levels"]] == list(range(1, 7))
+
+    everything = (await game.client.get("/v1/modes", params={"kind": "collection"})).json()
+    assert {FRAME, EMOJI, INTRO} <= {m["key"] for m in everything}
+    assert all(m["source_type"] == "collection" for m in everything)
+    assert (await game.client.get("/v1/modes", params={"kind": "other"})).status_code == 422
+
+
 # ============================================================== играбельность черновика
 async def test_playability_returns_only_playable_ids(game: Any) -> None:
     await bootstrap(game)

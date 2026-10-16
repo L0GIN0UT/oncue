@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
@@ -71,17 +71,22 @@ def build_public_router(c: ApiServices) -> APIRouter:
         response_model=list[ModeOut],
         summary="Опубликованные режимы",
         description=(
-            "Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника "
-            "(source `collection`) не входят: они приходят из "
-            "`GET /v1/collections/{collection_id}/modes`."
+            "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — "
+            "режимы, которые играются сами по себе, без шаблонов сборника (source "
+            "`collection`); `kind=collection` — только шаблоны сборника (конструктор, экран "
+            "сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность "
+            "конкретного сборника — `GET /v1/collections/{collection_id}/modes`."
         ),
         responses=problem_responses(422, 503),
     )
     async def list_modes(
-        response: Response, domain: Annotated[Domain | None, Query()] = None
+        response: Response,
+        domain: Annotated[Domain | None, Query()] = None,
+        kind: Annotated[Literal["play", "collection"], Query()] = "play",
     ) -> list[ModeOut]:
         response.headers["Cache-Control"] = MODES_CACHE
-        return [ModeOut.model_validate(m) for m in await c.queries.modes(domain)]
+        rows = await c.queries.modes(domain, collection=kind == "collection")
+        return [ModeOut.model_validate(m) for m in rows]
 
     @router.post(
         "/sessions",

@@ -359,7 +359,7 @@ export interface paths {
         };
         /**
          * Опубликованные режимы
-         * @description Публичный, `Cache-Control: public, max-age=30`. Шаблоны режимов сборника (source `collection`) не входят: они приходят из `GET /v1/collections/{collection_id}/modes`.
+         * @description Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`.
          */
         get: operations["list_modes_v1_modes_get"];
         put?: never;
@@ -1103,6 +1103,11 @@ export interface components {
             /** Levels */
             levels: components["schemas"]["LevelOut"][];
             /**
+             * Min Items
+             * @description Только у шаблона сборника: минимум играбельных единиц для игры
+             */
+            min_items?: number | null;
+            /**
              * Presentation
              * @default score
              * @enum {string}
@@ -1110,6 +1115,11 @@ export interface components {
             presentation: "score" | "streak" | "bracket";
             /** Presets */
             presets?: components["schemas"]["PresetOut"][] | null;
+            /**
+             * Round Options
+             * @description Только у шаблона сборника (`kind=collection`): варианты числа раундов из конфига, без учёта конкретного сборника
+             */
+            round_options?: (5 | 10 | 25 | "all")[] | null;
             /** Rounds */
             rounds: number;
             /** Source Type */
@@ -3054,6 +3064,7 @@ export interface operations {
         parameters: {
             query?: {
                 domain?: ("music" | "film") | null;
+                kind?: "play" | "collection";
             };
             header?: never;
             path?: never;

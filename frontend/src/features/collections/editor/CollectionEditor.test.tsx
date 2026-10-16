@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { server, setupMockBackend, signInAsUser, world } from "@/test/msw";
 import { renderWithProviders } from "@/test/render";
 import { ITEMS } from "../../../../e2e/mocks/world";
@@ -122,6 +123,33 @@ describe("CollectionEditor", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith(`/collections/${c.id}`));
     expect(c.status).toBe("published");
     expect(c.items[0]!.emoji).toBe("🚀🌌⏳🌽🪐📚");
+  });
+
+  it("режимы домена — из GET /v1/modes?kind=collection, переводы — только названия", async () => {
+    const c = playerDraft(5, "film.collection.retired");
+    const frame = world.mode("film.collection.frame")!;
+    server.use(
+      http.get("*/api/game/v1/modes", ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        expect(params.get("kind")).toBe("collection");
+        expect(params.get("domain")).toBe("film");
+        // Шаблона нет в переводах — он всё равно в списке, с ключом вместо названия.
+        return HttpResponse.json([frame, { ...frame, key: "film.collection.new", title_key: "x" }]);
+      }),
+    );
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={30} />);
+    const select = screen.getByTestId("editor-mode");
+    await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(4));
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual([
+      "Не выбран",
+      "Сборник по кадрам",
+      "film.collection.new",
+      "film.collection.retired", // режим черновика, которого больше нет в списке
+    ]);
   });
 
   it("играбельность в режиме — отметка у каждой единицы", async () => {

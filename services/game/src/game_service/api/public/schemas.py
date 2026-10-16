@@ -88,6 +88,18 @@ class ModeOut(BaseModel):
     answer_format: AnswerFormatLiteral = "classic"
     presentation: Presentation = "score"
     start: ModeStart | None = Field(default=None, description="null — выбирать нечего")
+    round_options: list[RoundsChoice] | None = Field(
+        default=None,
+        description=(
+            "Только у шаблона сборника (`kind=collection`): варианты числа раундов из "
+            "конфига, без учёта конкретного сборника"
+        ),
+    )
+    min_items: int | None = Field(
+        default=None,
+        ge=0,
+        description="Только у шаблона сборника: минимум играбельных единиц для игры",
+    )
 
 
 class SubjectOut(BaseModel):

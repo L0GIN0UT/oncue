@@ -17,7 +17,7 @@ import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
 import { collectionKeys, fetchCatalogPage, fetchShowcase } from "../api";
-import { modeTitleKey, useCollectionModes } from "../modes";
+import { useCollectionModes } from "../modes";
 import { CollectionCard } from "./CollectionCard";
 
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -146,10 +146,7 @@ function FilterBar({
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const film = useCollectionModes("film");
-  const music = useCollectionModes("music");
-  const modes =
-    filters.domain === "film" ? film : filters.domain === "music" ? music : [...film, ...music];
+  const modes = useCollectionModes(filters.domain, filters.mode);
   const sortId = useId();
   const difficultyId = useId();
   const modeId = useId();
@@ -221,8 +218,8 @@ function FilterBar({
         >
           <option value="">{t("collections.filters.any")}</option>
           {modes.map((m) => (
-            <option key={m} value={m}>
-              {dt(modeTitleKey(m), m)}
+            <option key={m.key} value={m.key}>
+              {m.titleKey ? dt(m.titleKey, m.key) : m.key}
             </option>
           ))}
         </select>
