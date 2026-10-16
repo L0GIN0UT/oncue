@@ -1,8 +1,10 @@
 """Запросы публичного API: каталог режимов, итог сессии, статус плановых наборов
-субъекта, персоны марафона (D14), личные рекорды (D11)."""
+субъекта, персоны марафона (D14), личные рекорды (D11); этап 3b — режимы сборника и
+играбельность единиц черновика (ADR 0028), темы сетки для админки (хвост 3a)."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from game_service.application.catalog import ModeCatalog
@@ -11,12 +13,15 @@ from game_service.application.ports import Json, RateLimiter, UnitOfWorkFactory
 from game_service.application.rules import ModeRules
 from game_service.application.views import RecordView, SessionPresenter
 from game_service.domain.errors import (
+    CollectionNotFoundError,
+    CollectionNotSupportedError,
     SessionNotFinishedError,
     SessionNotFoundError,
     SubjectsNotSupportedError,
 )
 from game_service.domain.session import SessionStatus
 from gv_core.clock import Clock
+from gv_game_kernel import PlayableFor, SubjectQuery
 
 
 def mode_json(rules: ModeRules) -> Json:
@@ -46,8 +51,29 @@ def mode_json(rules: ModeRules) -> Json:
     }
 
 
+def _collection_mode_json(rules: ModeRules, playable: int, total: int) -> Json:
+    """Режим для ``GET /v1/collections/{id}/modes``: варианты числа раундов — только те,
+    что ``rounds_for`` ядра примет при текущем ``playable`` (иначе старт ответит 422)."""
+    available = playable >= rules.min_playable()
+    ceiling = min(playable, rules.config.session.rounds)
+    options = [
+        o for o in rules.engine.round_options() or [] if available and (o == "all" or o <= ceiling)
+    ]
+    return {
+        "mode_key": rules.key,
+        "title_key": rules.config.title_i18n,
+        "clue_type": rules.clue_type,
+        "allow_guest": rules.config.session.allow_guest,
+        "playable": playable,
+        "total": total,
+        "available": available,
+        "round_options": options,
+    }
+
+
 class PlayQueries:
-    """``ListModes``, ``GetResult``, ``GetDailyStatus``, ``ListSubjects``, ``ListRecords``."""
+    """``ListModes``, ``GetResult``, ``GetDailyStatus``, ``ListSubjects``, ``ListRecords``,
+    ``CollectionModes``, ``Playability``, ``ListThemeSubjects`` (админка)."""
 
     def __init__(
         self,
@@ -58,6 +84,8 @@ class PlayQueries:
         limiter: RateLimiter,
         *,
         subjects_per_min: int,
+        playability_per_min: int = 30,
+        candidate_limit: int = 5000,
     ) -> None:
         self._uow = uow
         self._clock = clock
@@ -65,6 +93,8 @@ class PlayQueries:
         self._presenter = presenter
         self._limiter = limiter
         self._subjects_per_min = subjects_per_min
+        self._playability_per_min = playability_per_min
+        self._candidate_limit = candidate_limit
 
     async def modes(self, domain: str | None) -> list[Json]:
         """Опубликованные режимы."""
@@ -152,6 +182,25 @@ class PlayQueries:
         query = rules.subject_query()
         if query is None:
             raise SubjectsNotSupportedError("режим не выбирает персон")
+        return await self._subject_rows(rules, query, q, limit)
+
+    async def theme_subjects(self, mode_key: str, q: str | None, limit: int) -> list[Json]:
+        """Темы периода сетки для админки: персоны с ролями и ``min_items`` из
+        ``source.params.subject`` конфига (тот же поиск, что ``ListSubjects``).
+
+        Raises:
+            ModeNotFoundError: режима нет.
+            SubjectsNotSupportedError: у режима нет темы-персоны (422).
+        """
+        _, rules = await self._catalog.latest(mode_key)
+        query = rules.theme_query()
+        if query is None:
+            raise SubjectsNotSupportedError("у режима нет темы периода")
+        return await self._subject_rows(rules, query, q, limit)
+
+    async def _subject_rows(
+        self, rules: ModeRules, query: SubjectQuery, q: str | None, limit: int
+    ) -> list[Json]:
         async with self._uow() as uow:
             rows = await uow.projection.subjects(
                 query, text_=q, limit=limit, also=rules.reveal_playable_for
@@ -160,6 +209,70 @@ class PlayQueries:
             {"subject_id": str(r.person_id), "name": r.name, "role": r.role, "items": r.items}
             for r in rows
         ]
+
+    # ------------------------------------------------------------------ сборники
+    async def collection_modes(self, collection_id: UUID) -> list[Json]:
+        """Режимы сборника: опубликованные режимы с источником из сборника домена сборника и
+        сколько его единиц играбельно в каждом (тот же адаптер, что при старте).
+
+        Без названий и ``media_item_id`` (D6).
+
+        Raises:
+            CollectionNotFoundError: сборника нет, он скрыт или удалён.
+        """
+        async with self._uow() as uow:
+            collection = await uow.collections.get(collection_id)
+        if collection is None or not collection.is_playable:
+            raise CollectionNotFoundError("сборник не найден")
+        modes = [
+            r
+            for r in await self._catalog.published()
+            if r.engine.uses_collection and r.domain == collection.domain
+        ]
+        async with self._uow() as uow:
+            total = await uow.collections.total(collection_id)
+            result = []
+            for rules in modes:
+                port = uow.collection_port(rules.reveal_playable_for)
+                items = await port.items(
+                    collection_id,
+                    self._candidate_limit,
+                    playable_for=PlayableFor(
+                        rules.clue_type, rules.params_hash, scope=collection_id
+                    ),
+                )
+                result.append(_collection_mode_json(rules, len({i.id for i in items}), total))
+        return result
+
+    async def playability(
+        self, player: Player, mode_key: str, media_item_ids: Sequence[UUID]
+    ) -> Json:
+        """Какие единицы черновика играбельны в режиме сборника: активны в каталоге, домена
+        режима и с каталожным набором ассетов (свои эмодзи автора появятся только после
+        публикации). Без названий (D6).
+
+        Raises:
+            GameRateLimitedError: лимит ``GV_GAME_LIMITS__PLAYABILITY_PER_MIN``.
+            ModeNotFoundError: режима нет.
+            CollectionNotSupportedError: режим не играется по сборнику (422).
+        """
+        await self._limiter.hit(
+            "playability", str(player.actor_id), limit=self._playability_per_min, window_s=60
+        )
+        _, rules = await self._catalog.latest(mode_key)
+        if not rules.engine.uses_collection:
+            raise CollectionNotSupportedError("режим не играется по сборнику")
+        ids = list(dict.fromkeys(media_item_ids))
+        async with self._uow() as uow:
+            items = await uow.projection.get_items(ids)
+            ready = set(await uow.projection.ready_assets(ids, rules.clue_type, rules.params_hash))
+            reveal = rules.reveal_playable_for
+            if reveal is not None:
+                ready &= set(
+                    await uow.projection.ready_assets(ids, reveal.clue_type, reveal.params_hash)
+                )
+        playable = [i for i in ids if i in ready and items[i].domain == rules.domain]
+        return {"mode_key": rules.key, "playable_ids": [str(i) for i in playable]}
 
     async def records(self, player: Player, mode_key: str | None) -> list[Json]:
         """Личные рекорды пользователя (гость — пусто; чужих рекордов не видно)."""

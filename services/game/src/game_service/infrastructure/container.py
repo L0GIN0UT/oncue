@@ -31,6 +31,7 @@ from game_service.application.commands.play import PlayLimits, PlayService
 from game_service.application.commands.projection import (
     ApplyAssetsEvent,
     ApplyCatalogEvent,
+    ApplyCollectionEvent,
     ForgetUser,
 )
 from game_service.application.ports import (
@@ -253,6 +254,8 @@ class GameContainer:
             self.presenter,
             self.adapters.limiter,
             subjects_per_min=self.settings.game_limits.subjects_per_min,
+            playability_per_min=self.settings.game_limits.playability_per_min,
+            candidate_limit=self.settings.game.candidate_limit,
         )
 
     @cached_property
@@ -262,6 +265,7 @@ class GameContainer:
 
     catalog_events = ApplyCatalogEvent()
     assets_events = ApplyAssetsEvent()
+    collection_events = ApplyCollectionEvent()
     forget_user = ForgetUser()
 
 

@@ -74,9 +74,7 @@ def upgrade() -> None:
         sa.Column("collection_id", sa.Uuid(), nullable=False),
         sa.Column("position", sa.SmallInteger(), nullable=False),
         sa.Column("media_item_id", sa.Uuid(), nullable=False),
-        sa.PrimaryKeyConstraint(
-            "collection_id", "position", name=op.f("pk_collection_items_proj")
-        ),
+        sa.PrimaryKeyConstraint("collection_id", "position", name=op.f("pk_collection_items_proj")),
         sa.ForeignKeyConstraint(
             ["collection_id"],
             ["collection_proj.collection_id"],

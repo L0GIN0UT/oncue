@@ -243,6 +243,9 @@ class GameSession(AggregateRoot[UUID]):
         progressive: Раунды зависят от прошлых (сетка): итог — ``BracketCompleted``,
             а не ``GameFinished``; в статистику дейлика не идёт.
         round_max: Максимум очков за раунд (оценка ``max_score`` по плану).
+        collection_id: Сборник сессии (source ``collection``, ADR 0028) или ``None``.
+        collection_version: ``content_version`` сборника на старте: сессия доигрывается на
+            этом составе, даже если сборник правят или скрывают.
     """
 
     def __init__(
@@ -268,8 +271,14 @@ class GameSession(AggregateRoot[UUID]):
         plan: list[PlannedRound] | None = None,
         progressive: bool = False,
         round_max: int | None = None,
+        collection_id: UUID | None = None,
+        collection_version: int | None = None,
     ) -> None:
         super().__init__(id, version)
+        if (collection_id is None) != (collection_version is None):
+            raise ValueError("сборник сессии задаётся вместе с версией состава")
+        self.collection_id = collection_id
+        self.collection_version = collection_version
         self.player = player
         self.mode_key = mode_key
         self.mode_version = mode_version
@@ -311,6 +320,8 @@ class GameSession(AggregateRoot[UUID]):
         idle_timeout_s: int,
         now: datetime,
         progressive: bool = False,
+        collection_id: UUID | None = None,
+        collection_version: int | None = None,
     ) -> GameSession:
         """Новая сессия с разыгранным планом; первый раунд выдаёт ``materialize_next``.
 
@@ -338,6 +349,8 @@ class GameSession(AggregateRoot[UUID]):
             plan=list(plan),
             progressive=progressive,
             round_max=round_max,
+            collection_id=collection_id,
+            collection_version=collection_version,
         )
 
     # ------------------------------------------------------------------ чтение
@@ -598,6 +611,8 @@ class GameSession(AggregateRoot[UUID]):
                 started_at=self.started_at,
                 finished_at=now,
                 rounds=summaries,
+                collection_id=self.collection_id,
+                collection_version=self.collection_version,
             )
         )
         if day is not None and user_id is not None:

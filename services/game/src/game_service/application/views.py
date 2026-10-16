@@ -438,6 +438,11 @@ class SessionPresenter:
                 else None
             ),
             "bracket": self._bracket(session, items),
+            "collection": (
+                {"id": str(session.collection_id), "version": session.collection_version}
+                if session.collection_id is not None
+                else None
+            ),
         }
 
 

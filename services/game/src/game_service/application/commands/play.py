@@ -11,6 +11,11 @@
 тур), затем выдаёт следующий раунд плана (``_settle``). В той же транзакции: рекорд и
 гистограмма при завершении (``features.records``, только пользователи) и статистика
 выбора сетки (только пользователи).
+
+Этап 3b (ADR 0028): сессия по сборнику — ``collection_id`` и ``rounds`` при старте.
+Сборник берётся из проекции (опубликован и не скрыт), число раундов выбирает ядро
+(``rounds_for``), в сессии фиксируются ``collection_id`` и ``content_version``. Ассет
+раунда — сначала набор сборника, затем каталожный (ADR 0029).
 """
 
 from __future__ import annotations
@@ -37,6 +42,9 @@ from game_service.application.views import (
 from game_service.domain.daily import DailySet, GeneratedBy
 from game_service.domain.errors import (
     AssetUnavailableError,
+    CollectionDomainMismatchError,
+    CollectionNotFoundError,
+    CollectionNotSupportedError,
     DailyAlreadyPlayedError,
     DailyNotReadyError,
     GuestNotAllowedError,
@@ -46,7 +54,7 @@ from game_service.domain.errors import (
     SubjectsNotSupportedError,
     desync,
 )
-from game_service.domain.projection import CatalogItem
+from game_service.domain.projection import CatalogItem, CollectionProj
 from game_service.domain.session import (
     GameSession,
     PlannedRound,
@@ -63,6 +71,7 @@ from gv_db.idempotency import request_fingerprint, run_idempotent
 from gv_game_kernel import (
     AnswerInput,
     AssetPort,
+    CollectionRequiredError,
     MediaItemRef,
     ModeEngine,
     OptionSpec,
@@ -71,8 +80,10 @@ from gv_game_kernel import (
     RoundOutcome,
     RoundPick,
     RoundResult,
+    RoundsNotAllowedError,
     RoundState,
 )
+from gv_game_kernel import RoundOption as RoundsChoice
 
 log = structlog.get_logger(__name__)
 
@@ -226,8 +237,16 @@ class PlayService:
         preset_id: str | None,
         idempotency_key: str,
         subject_ids: Sequence[UUID] = (),
+        *,
+        collection_id: UUID | None = None,
+        rounds: RoundsChoice | None = None,
     ) -> tuple[Json, bool]:
         """Начать сессию.
+
+        Args:
+            collection_id: Сборник для режима с источником из сборника (ADR 0028).
+            rounds: Число раундов из ``round_options`` режима сборника; ``None`` — первый
+                вариант.
 
         Returns:
             Снимок и признак «создана сейчас» (``False`` — незавершённая сессия периода, 200).
@@ -235,7 +254,9 @@ class PlayService:
         Raises:
             ModeNotFoundError, GuestNotAllowedError, DailyAlreadyPlayedError,
             DailyNotReadyError, PoolEmptyError, PresetNotFoundError, SubjectsNotSupportedError,
-            SubjectRequiredError, TooManySubjectsError, GameRateLimitedError.
+            SubjectRequiredError, TooManySubjectsError, GameRateLimitedError,
+            CollectionNotFoundError, CollectionRequiredError, CollectionNotSupportedError,
+            CollectionDomainMismatchError, RoundsNotAllowedError, PoolTooSmallError (сборник).
         """
         version, rules = await self._catalog.latest(mode_key)
         if player.ref.is_guest and not rules.config.session.allow_guest:
@@ -243,6 +264,7 @@ class PlayService:
         subjects = sorted(set(subject_ids))
         if subjects and rules.subject_query() is None:
             raise SubjectsNotSupportedError("режим не выбирает персон")
+        collection = await self._collection(rules, collection_id, rounds)
         await self._limiter.hit(
             "sessions", str(player.actor_id), limit=self._limits.sessions_per_hour, window_s=3600
         )
@@ -269,14 +291,26 @@ class PlayService:
         fingerprint = request_fingerprint(
             "session.start",
             mode_key,
-            {"preset_id": preset_id, "subject_ids": [str(s) for s in subjects]},
+            {
+                "preset_id": preset_id,
+                "subject_ids": [str(s) for s in subjects],
+                "collection_id": str(collection_id) if collection_id else None,
+                "rounds": rounds,
+            },
         )
         try:
             async with self._uow() as uow:
 
                 async def perform() -> Json:
                     return await self._create(
-                        uow, player, rules, daily=daily, preset_id=preset_id, subjects=subjects
+                        uow,
+                        player,
+                        rules,
+                        daily=daily,
+                        preset_id=preset_id,
+                        subjects=subjects,
+                        collection=collection,
+                        rounds=rounds,
                     )
 
                 response, _ = await run_idempotent(
@@ -291,6 +325,37 @@ class PlayService:
                 raise
             return await self._resume(existing, rules), False
         return response["snapshot"], bool(response["created"])
+
+    async def _collection(
+        self, rules: ModeRules, collection_id: UUID | None, rounds: RoundsChoice | None
+    ) -> CollectionProj | None:
+        """Сборник сессии из проекции (до лимитов: ошибка входа не тратит попытку).
+
+        Raises:
+            CollectionNotSupportedError: сборник передан режиму без источника из сборника.
+            CollectionRequiredError: режиму из сборника не передан сборник.
+            RoundsNotAllowedError: ``rounds`` у режима без выбора числа раундов.
+            CollectionNotFoundError: сборника нет, он скрыт или удалён.
+            CollectionDomainMismatchError: домен сборника не равен домену режима.
+        """
+        uses = rules.engine.uses_collection
+        if collection_id is not None and not uses:
+            raise CollectionNotSupportedError("режим не играется по сборнику")
+        if uses and collection_id is None:
+            raise CollectionRequiredError("режиму нужен сборник")
+        if rounds is not None and not uses:
+            raise RoundsNotAllowedError(
+                "у режима нет выбора числа раундов", details={"requested": rounds, "options": []}
+            )
+        if collection_id is None:
+            return None
+        async with self._uow() as uow:
+            found = await uow.collections.get(collection_id)
+        if found is None or not found.is_playable:
+            raise CollectionNotFoundError("сборник не найден")
+        if found.domain != rules.domain:
+            raise CollectionDomainMismatchError("сборник другого домена")
+        return found
 
     async def _resume(self, existing: GameSession, rules: ModeRules) -> Json:
         if not existing.is_active:
@@ -310,6 +375,8 @@ class PlayService:
         daily: DailySet | None,
         preset_id: str | None,
         subjects: Sequence[UUID],
+        collection: CollectionProj | None = None,
+        rounds: RoundsChoice | None = None,
     ) -> Json:
         if daily is not None:
             existing = await uow.sessions.find_daily(rules.key, daily.day, player.ref)
@@ -325,7 +392,14 @@ class PlayService:
                 }
         seed = bytes(self._random.randrange(256) for _ in range(SEED_BYTES))
         plan = await self._plan(
-            uow, rules, seed=seed, daily=daily, preset_id=preset_id, subjects=subjects
+            uow,
+            rules,
+            seed=seed,
+            daily=daily,
+            preset_id=preset_id,
+            subjects=subjects,
+            collection=collection,
+            rounds=rounds,
         )
         now = self._clock.now()
         session = GameSession.start(
@@ -344,6 +418,8 @@ class PlayService:
             idle_timeout_s=rules.config.session.abandon_after_min * 60,
             now=now,
             progressive=rules.is_progressive,
+            collection_id=collection.collection_id if collection else None,
+            collection_version=collection.content_version if collection else None,
         )
         await self._settle(uow, session, rules, now)
         if not await uow.sessions.add(session):
@@ -355,6 +431,7 @@ class PlayService:
             mode_key=rules.key,
             mode_version=rules.version,
             guest=player.ref.is_guest,
+            collection_id=str(collection.collection_id) if collection else None,
         )
         items = await items_for(uow, session)
         return {"created": True, "snapshot": await self._presenter.snapshot(session, rules, items)}
@@ -368,11 +445,27 @@ class PlayService:
         daily: DailySet | None,
         preset_id: str | None,
         subjects: Sequence[UUID],
+        collection: CollectionProj | None = None,
+        rounds: RoundsChoice | None = None,
     ) -> list[PlannedRound]:
-        """Разыграть начальные раунды: из набора периода или источником режима."""
+        """Разыграть начальные раунды: из набора периода, сборника или источником режима.
+
+        У сборника нехватка единиц — 422 ``game.pool_too_small`` ядра (игрок выбрал
+        вариант), у остальных режимов — 503 ``game.pool_empty``.
+        """
         if daily is not None:
             items = await uow.projection.get_items(daily.items)
             draws = rules.engine.compose_rounds([_ref(items, i, rules.domain) for i in daily.items])
+        elif collection is not None:
+            ctx = rules.engine.draw_context(
+                seed=seed,
+                candidates=uow.candidates_for(rules.reveal_playable_for),
+                collections=uow.collection_port(rules.reveal_playable_for),
+                collection_id=collection.collection_id,
+                candidate_limit=self._limits.candidate_limit,
+            )
+            count = await rules.engine.rounds_for(ctx, rounds)
+            draws = await rules.engine.draw_rounds(ctx, count)
         else:
             ctx = rules.engine.draw_context(
                 seed=seed,
@@ -393,15 +486,22 @@ class PlayService:
 
     # ------------------------------------------------------------------ ход сессии
     async def _round_assets(
-        self, uow: GameUnitOfWork, rules: ModeRules, planned: PlannedRound
+        self,
+        uow: GameUnitOfWork,
+        rules: ModeRules,
+        planned: PlannedRound,
+        scope: UUID | None = None,
     ) -> RoundAssets:
+        """Наборы раунда; ``scope`` — сборник сессии: его свой набор первым (ADR 0029)."""
         ids = [planned.target, *planned.shown]
-        ready = await uow.projection.ready_assets(ids, rules.clue_type, rules.params_hash)
+        ready = await uow.projection.ready_assets(
+            ids, rules.clue_type, rules.params_hash, scope=scope
+        )
         reveal = None
         reveal_for = rules.reveal_playable_for
         if reveal_for is not None:
             found = await uow.projection.ready_assets(
-                [planned.target], reveal_for.clue_type, reveal_for.params_hash
+                [planned.target], reveal_for.clue_type, reveal_for.params_hash, scope=scope
             )
             reveal = found[planned.target].to_ref() if planned.target in found else None
         target = ready.get(planned.target)
@@ -446,7 +546,7 @@ class PlayService:
                 session.complete(now)
                 break
             session.materialize_next(
-                await self._round_assets(uow, rules, planned),
+                await self._round_assets(uow, rules, planned, session.collection_id),
                 levels_count=rules.levels_count,
                 max_points=rules.round_max,
                 stage=rules.engine.round_stage(len(session.rounds)),

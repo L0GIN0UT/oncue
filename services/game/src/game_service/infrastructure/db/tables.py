@@ -158,9 +158,7 @@ collection_items_proj = Table(
     Column("position", SmallInteger, nullable=False),
     Column("media_item_id", Uuid, nullable=False),
     PrimaryKeyConstraint("collection_id", "position"),
-    ForeignKeyConstraint(
-        ["collection_id"], ["collection_proj.collection_id"], ondelete="CASCADE"
-    ),
+    ForeignKeyConstraint(["collection_id"], ["collection_proj.collection_id"], ondelete="CASCADE"),
     CheckConstraint("position >= 0 AND position < 200", name="position_valid"),
 )
 

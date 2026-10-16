@@ -41,7 +41,11 @@ class RoundSummary:
 
 @dataclass(frozen=True, kw_only=True)
 class GameFinished(DomainEvent):
-    """Соло-сессия завершена (все игроки, включая гостей)."""
+    """Соло-сессия завершена (все игроки, включая гостей).
+
+    ``collection_id``/``collection_version`` — у сессии по сборнику (этап 3b, D9: «пройден»
+    и сложность считает collections), иначе ``None``.
+    """
 
     aggregate_type: ClassVar[str] = SESSION_AGGREGATE
 
@@ -60,6 +64,8 @@ class GameFinished(DomainEvent):
     started_at: datetime
     finished_at: datetime
     rounds: tuple[RoundSummary, ...]
+    collection_id: UUID | None = None
+    collection_version: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
