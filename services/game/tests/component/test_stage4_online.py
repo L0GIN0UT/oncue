@@ -157,6 +157,50 @@ async def test_admin_validates_and_publishes_online_configs(game: Any) -> None:
     assert detail.json()["published_version"] == 1
 
 
+async def test_admin_list_has_session_kind_and_filter(game: Any) -> None:
+    """Админка (поток E): вид сессии в списке режимов и фильтр ``session``."""
+    await bootstrap(game)
+    view = game.admin("config.modes.view")
+    # Неопубликованный онлайн-режим — по черновику.
+    draft = seed(DUEL)
+    draft["key"] = "film.duel.draftonly"
+    saved = await game.client.put(
+        "/admin/v1/mode-configs/film.duel.draftonly/draft",
+        json={"body": draft, "base_revision": None, "reason": "черновик дуэли"},
+        headers={**game.admin("config.modes.edit"), "Idempotency-Key": f"k-{uuid7().hex}"},
+    )
+    assert saved.status_code == 200, saved.text
+
+    rows = (await game.client.get("/admin/v1/mode-configs", headers=view)).json()
+    kinds = {r["key"]: r["session_kind"] for r in rows}
+    assert kinds[DUEL] == "online" and kinds[MUSIC_DUEL] == "online"
+    assert kinds["film.duel.draftonly"] == "online" and kinds[SOLO] == "solo"
+
+    online = (
+        await game.client.get("/admin/v1/mode-configs", params={"session": "online"}, headers=view)
+    ).json()
+    solo = (
+        await game.client.get("/admin/v1/mode-configs", params={"session": "solo"}, headers=view)
+    ).json()
+    assert {r["session_kind"] for r in online} == {"online"}
+    assert {r["session_kind"] for r in solo} == {"solo"}
+    assert {r["key"] for r in online} | {r["key"] for r in solo} == set(kinds)
+    bad = await game.client.get("/admin/v1/mode-configs", params={"session": "duel"}, headers=view)
+    assert bad.status_code == 422
+
+
+async def test_editor_schema_has_contest_section(game: Any) -> None:
+    schema = (
+        await game.client.get(
+            "/admin/v1/mode-configs/schema", headers=game.admin("config.modes.view")
+        )
+    ).json()
+    contest = schema["plugins"]["contest"]
+    assert set(contest) == {"parallel", "race"}
+    assert "lock_on_first_correct" in contest["race"]["properties"]
+    assert "end_when_all_answered" in contest["parallel"]["properties"]
+
+
 async def _session_rows(game: Any) -> int:
     async with game.infra.sessions() as s:
         return int(await s.scalar(select(func.count()).select_from(game_sessions)) or 0)

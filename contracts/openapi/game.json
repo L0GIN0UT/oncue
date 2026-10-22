@@ -1083,6 +1083,16 @@
             ],
             "title": "Published Version"
           },
+          "session_kind": {
+            "default": "solo",
+            "description": "По последней опубликованной версии (у неопубликованного — по черновику): online — duel/party/lobby, играет match (ADR 0032)",
+            "enum": [
+              "solo",
+              "online"
+            ],
+            "title": "Session Kind",
+            "type": "string"
+          },
           "status": {
             "description": "draft — режим ещё ни разу не опубликован",
             "enum": [
@@ -3725,6 +3735,28 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "description": "Фильтр по `session_kind`; не задан — все режимы",
+            "in": "query",
+            "name": "session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "solo",
+                    "online"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Фильтр по `session_kind`; не задан — все режимы",
+              "title": "Session"
             }
           }
         ],

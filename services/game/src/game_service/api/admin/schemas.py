@@ -74,6 +74,13 @@ class ModeConfigSummary(BaseModel):
     status: ConfigStatus = Field(description="draft — режим ещё ни разу не опубликован")
     published_version: int | None
     has_draft: bool
+    session_kind: Literal["solo", "online"] = Field(
+        default="solo",
+        description=(
+            "По последней опубликованной версии (у неопубликованного — по черновику): "
+            "online — duel/party/lobby, играет match (ADR 0032)"
+        ),
+    )
     updated_at: datetime
 
 
