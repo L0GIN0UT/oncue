@@ -5,6 +5,7 @@ import type { components as Catalog } from "./schema/catalog";
 import type { components as Identity } from "./schema/identity";
 import type { components as Collections, operations as CollectionsOps } from "./schema/collections";
 import type { components as Library } from "./schema/library";
+import type { components as Match } from "./schema/match";
 
 type G = Game["schemas"];
 type B = Bff["schemas"];
@@ -95,3 +96,38 @@ export type SaveResult = L["SaveResult"];
 export type ItemShelves = L["ItemShelvesOut"];
 export type SaveSource = L["SaveItemRequest"]["source"];
 export type CatalogItem = Catalog["schemas"]["ItemCard"];
+
+// ------------------------------------------------------------------ этап 4a: онлайн (match)
+type M = Match["schemas"];
+
+export type RoomView = M["RoomView"];
+export type RoomState = M["RoomState"];
+export type RoomPhase = RoomView["phase"];
+export type RoomSettings = M["RoomSettings"];
+export type SettingsOptions = M["SettingsOptions"];
+export type SettingsOverride = M["SettingsOverride"];
+export type PlayerSlot = M["PlayerSlot"];
+export type MatchView = M["MatchView"];
+export type MatchPlayerView = M["MatchPlayerView"];
+export type PlayerStatus = NonNullable<MatchPlayerView["status"]>;
+export type MyRoundView = M["MyRoundView"];
+export type LevelClue = M["LevelClue"];
+export type RoundRevealView = M["RoundReveal"];
+export type GuessResult = M["GuessResult"];
+export type MatchAnswer = M["GuessRequest"]["answer"];
+export type RoomCommandResult = M["RoomCommandResult"];
+export type MatchCommandResult = M["MatchCommandResult"];
+export type CommandAccepted = M["CommandAccepted"];
+export type RematchResult = M["RematchResult"];
+export type TickResult = M["TickResult"];
+export type RealtimeSubscription = M["RealtimeSubscription"];
+export type ChatOptions = M["ChatOptions"];
+export type MatchModeRef = M["ModeRef"];
+export type OpenRoomCard = M["OpenRoomCard"];
+export type MyMatchCard = M["MyMatchCard"];
+export type MyMatchesPage = M["MyMatchesPage"];
+export type MatchResult = M["MatchResult"];
+export type MatchResultPlayer = M["ResultPlayer"];
+export type MatchResultRound = M["ResultRound"];
+export type RateKind = M["RateRequest"]["kind"];
+export type RealtimeToken = Identity["schemas"]["RealtimeTokenResponse"];

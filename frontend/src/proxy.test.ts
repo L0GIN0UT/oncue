@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildCsp, proxy } from "./proxy";
+import { buildCsp, proxy, wsSourceOf } from "./proxy";
 import { DevApiConfigError, devApiOrigin } from "./shared/lib/dev-api";
 
 describe("CSP страниц", () => {
@@ -17,6 +17,27 @@ describe("CSP страниц", () => {
 
   it("unsafe-eval — только в разработке", () => {
     expect(buildCsp("n", true)).toContain("'unsafe-eval'");
+  });
+
+  it("connect-src явно разрешает wss:// своего хоста (realtime комнат)", () => {
+    const csp = buildCsp("n", false, "OnCue.example:8443");
+    expect(csp).toContain("connect-src 'self' wss://oncue.example:8443;");
+    expect(csp).not.toMatch(/connect-src[^;]* ws:/);
+  });
+
+  it("хост с подозрительными символами в CSP не попадает", () => {
+    for (const host of ["evil.com; script-src *", "a b", "*.example", "x/y", "", null]) {
+      expect(wsSourceOf(host)).toBeNull();
+      expect(buildCsp("n", false, host)).toContain("connect-src 'self';");
+    }
+  });
+
+  it("proxy берёт хост запроса", async () => {
+    const { NextRequest } = await import("next/server");
+    const res = proxy(new NextRequest("https://play.example/room/ABCDEFGH"));
+    expect(res.headers.get("Content-Security-Policy")).toContain(
+      "connect-src 'self' wss://play.example",
+    );
   });
 });
 

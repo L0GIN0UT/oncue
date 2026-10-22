@@ -276,6 +276,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/modes/{mode_key}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Тело опубликованной версии конфига
+         * @description Для проверки шаблона и переопределений лобби в match; версии неизменяемы (кэшируется вызывающим без срока). Ошибки: 404 `game.mode_not_found` (нет такой опубликованной или архивной версии).
+         */
+        get: operations["get_mode_version_internal_v1_modes__mode_key__versions__version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/round-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * План раундов матча
+         * @description Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`).
+         */
+        post: operations["create_round_plan_internal_v1_round_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/collections/{collection_id}/modes": {
         parameters: {
             query?: never;
@@ -568,6 +608,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswerKey
+         * @description Ключ ответа раунда: всё, что нужно ядру для `answer.check` без вызова game.
+         *
+         *     Повторяет ``gv_game_kernel.MediaItemRef`` (алиасы — уже нормализованные).
+         */
+        AnswerKey: {
+            /**
+             * Aliases
+             * @description Нормализованные алиасы всех видов
+             */
+            aliases: string[];
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Kind */
+            kind: string;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /**
+             * Partial
+             * @description Ключи partial-matcher-ов режима (`answer.partial`), по которым есть данные
+             */
+            partial: string[];
+            /** Persons */
+            persons: components["schemas"]["PersonKey"][];
+            /** Title */
+            title: string;
+            /**
+             * Title Aliases
+             * @description Алиасы видов `title`/`alt` (подмножество)
+             */
+            title_aliases: string[];
+            /** Year */
+            year: number | null;
+        };
         /**
          * ArchiveRequest
          * @description Убрать режим из каталога (сессии доигрываются).
@@ -958,6 +1039,19 @@ export interface components {
             media_item_id: string;
         };
         /**
+         * LevelAsset
+         * @description Набор ассетов уровня: ссылку match запрашивает у media-pipeline при открытии (D11).
+         */
+        LevelAsset: {
+            /**
+             * Asset Set Id
+             * Format: uuid
+             */
+            asset_set_id: string;
+            /** Level */
+            level: number;
+        };
+        /**
          * LevelOut
          * @description Уровень загадки для UI.
          */
@@ -971,6 +1065,28 @@ export interface components {
             };
             /** Index */
             index: number;
+        };
+        /**
+         * ModeConfigBody
+         * @description Опубликованная версия конфига режима: тело — по ``contracts/modes/mode_config.v1.json``.
+         */
+        ModeConfigBody: {
+            /**
+             * Body
+             * @description Тело конфига (`ModeConfig`), включая `session`
+             */
+            body: {
+                [key: string]: unknown;
+            };
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Key */
+            key: string;
+            /** Version */
+            version: number;
         };
         /**
          * ModeConfigDetail
@@ -1198,6 +1314,26 @@ export interface components {
             title?: string | null;
         };
         /**
+         * PersonKey
+         * @description Персона единицы (для partial-ключей matcher-а: исполнитель, режиссёр).
+         */
+        PersonKey: {
+            /** Name */
+            name: string;
+            /**
+             * Normalized
+             * @description Нормализованное имя (`gv_text`)
+             */
+            normalized: string;
+            /**
+             * Person Id
+             * Format: uuid
+             */
+            person_id: string;
+            /** Role */
+            role: string;
+        };
+        /**
          * PersonOut
          * @description Персона в ревиле.
          */
@@ -1206,6 +1342,57 @@ export interface components {
             name: string;
             /** Role */
             role: string;
+        };
+        /**
+         * PlanCollection
+         * @description Сборник плана: версия состава фиксируется (ADR 0028).
+         */
+        PlanCollection: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Version
+             * @description content_version сборника
+             */
+            version: number;
+        };
+        /**
+         * PlannedRound
+         * @description Раунд плана: загаданная единица, ключ ответа, ассеты по уровням.
+         */
+        PlannedRound: {
+            answer: components["schemas"]["AnswerKey"];
+            /** Index */
+            index: number;
+            /** Levels */
+            levels: components["schemas"]["LevelAsset"][];
+            /**
+             * Options
+             * @description Только формат `pick`
+             */
+            options?: components["schemas"]["PlanOption"][];
+            /**
+             * Reveal Asset Set Id
+             * @description Набор ассетов ревила (`clue.reveal`), если задан
+             */
+            reveal_asset_set_id?: string | null;
+        };
+        /**
+         * PlanOption
+         * @description Вариант ответа ``pick``: ``option_id`` непрозрачен, за ним — единица (только для match).
+         */
+        PlanOption: {
+            /** Label Key */
+            label_key?: string | null;
+            /** Media Item Id */
+            media_item_id?: string | null;
+            /** Option Id */
+            option_id: string;
+            /** Title */
+            title?: string | null;
         };
         /**
          * PlayabilityOut
@@ -1459,6 +1646,46 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "active" | "finished" | "void";
+        };
+        /**
+         * RoundPlan
+         * @description План матча: версия и тело конфига плюс разыгранные раунды.
+         */
+        RoundPlan: {
+            /** Collections */
+            collections?: components["schemas"]["PlanCollection"][];
+            mode: components["schemas"]["ModeConfigBody"];
+            /** Rounds */
+            rounds: components["schemas"]["PlannedRound"][];
+            /** Seed */
+            seed: string;
+        };
+        /**
+         * RoundPlanRequest
+         * @description Запрос плана матча (D5): детерминирован по ``seed`` при том же пуле.
+         */
+        RoundPlanRequest: {
+            /** Collection Ids */
+            collection_ids?: string[];
+            /**
+             * Exclude Ids
+             * @description Единицы, которые не должны выпасть (память лобби)
+             */
+            exclude_ids?: string[];
+            /** Mode Key */
+            mode_key: string;
+            /** Rounds */
+            rounds: number;
+            /**
+             * Seed
+             * @description Сид розыгрыша (match: от `match_id`)
+             */
+            seed: string;
+            /**
+             * Version
+             * @description Версия шаблона; null — текущая опубликованная
+             */
+            version?: number | null;
         };
         /**
          * RoundProgress
@@ -2883,6 +3110,163 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_mode_version_internal_v1_modes__mode_key__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mode_key: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModeConfigBody"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_round_plan_internal_v1_round_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoundPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoundPlan"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
