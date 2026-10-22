@@ -1,8 +1,8 @@
-"""Контракт шага 0a этапа 4 (§2.5): ручки match объявлены, авторизация до заглушки 501.
+"""Авторизация ручек match (§12 п. 2, D13): проверяется до обращения к комнатам.
 
-Каждая публичная ручка: без токена — 401, гость — 403 ``auth.guest_forbidden`` (D13),
-пользователь — 501. Admin: нужны ``admin.access`` + ``match.manage``. Неверный код
-комнаты — 422 (D12).
+Каждая публичная ручка: без токена — 401, гость — 403 ``auth.guest_forbidden`` (онлайн
+только с аккаунтом). Admin: нужны ``admin.access`` + ``match.manage``. Неверный код
+комнаты — 422 (D12). Сервис собран без Redis и Postgres: запрос до них не доходит.
 """
 
 from __future__ import annotations
@@ -99,21 +99,18 @@ async def _call(
 
 
 @pytest.mark.parametrize("case", PUBLIC, ids=_ids(PUBLIC))
-async def test_public_requires_user_then_stub(
+async def test_public_requires_user_and_rejects_guest(
     client: httpx.AsyncClient, token_issuer: TestTokenIssuer, case: Any
 ) -> None:
     assert_problem(await _call(client, case, None), 401, "auth.unauthenticated")
     guest = await _call(client, case, token_issuer.issue_guest())
+
     assert_problem(guest, 403, "auth.guest_forbidden")
-
-    response = await _call(client, case, token_issuer.issue())
-
-    assert_problem(response, 501, "common.not_implemented")
-    assert response.headers["cache-control"] == "no-store"
+    assert guest.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.parametrize("case", ADMIN, ids=_ids(ADMIN))
-async def test_admin_requires_match_manage_then_stub(
+async def test_admin_requires_match_manage(
     client: httpx.AsyncClient, token_issuer: TestTokenIssuer, case: Any
 ) -> None:
     assert_problem(await _call(client, case, None), 401, "auth.unauthenticated")
@@ -123,10 +120,6 @@ async def test_admin_requires_match_manage_then_stub(
         token_issuer.issue(perms=["match.manage"]),
     ):
         assert_problem(await _call(client, case, token), 403, "auth.forbidden")
-
-    admin = token_issuer.issue(perms=["admin.access", "match.manage"])
-
-    assert_problem(await _call(client, case, admin), 501, "common.not_implemented")
 
 
 @pytest.mark.parametrize(

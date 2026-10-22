@@ -162,6 +162,13 @@ class RoomView(BaseModel):
     memory_size: int = Field(
         default=0, ge=0, description="Сколько единиц в памяти сыгранного лобби (`exclude_ids`)"
     )
+    rematch_code: RoomCode | None = Field(
+        default=None,
+        description=(
+            "Код комнаты реванша, когда согласились все (у кастомного лобби — свой код: "
+            "комната возвращается в лобби); старая комната дуэли и party закрывается"
+        ),
+    )
     version: int = Field(ge=0)
     server_now: datetime
 

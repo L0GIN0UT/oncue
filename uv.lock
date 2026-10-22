@@ -1759,8 +1759,12 @@ dependencies = [
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
+    { name = "gv-game-kernel" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "gv-text" },
+    { name = "httpx" },
+    { name = "pyjwt" },
 ]
 
 [package.metadata]
@@ -1768,8 +1772,12 @@ requires-dist = [
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
+    { name = "gv-game-kernel", editable = "libs/game_kernel" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "gv-text", editable = "libs/text" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "pyjwt", specifier = ">=2.10" },
 ]
 
 [[package]]
