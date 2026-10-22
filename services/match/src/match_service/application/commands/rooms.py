@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -18,6 +19,7 @@ import structlog
 
 from gv_core.clock import Clock
 from gv_core.errors import ConflictError
+from gv_core.ids import uuid7
 from gv_core.random import Random
 from gv_db.idempotency import request_fingerprint
 from gv_game_kernel import ConfigError
@@ -31,7 +33,7 @@ from gv_text.ugc import (
     UgcPolicy,
     UgcViolation,
 )
-from match_service.application.owner import new_code, replay
+from match_service.application.owner import claim_room, new_code, replay
 from match_service.application.ports import (
     AdminAction,
     AdminAudit,
@@ -56,7 +58,7 @@ from match_service.domain.errors import (
     MatchUnavailableError,
     error_for_status,
 )
-from match_service.domain.model import Presence, RoomSettings
+from match_service.domain.model import RoomSettings
 from match_service.domain.room import Room, SettingsChange, apply_settings, default_settings
 
 log = structlog.get_logger(__name__)
@@ -103,6 +105,7 @@ class RoomLimits:
     join_by_code_per_user_per_min: int = 20
     emote_per_min: int = 30
     create_lock_ms: int = 5000
+    pending_room_ms: int = 10_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,19 +175,60 @@ class RoomService:
             MatchRateLimitedError: лимит создания.
         """
         fingerprint = request_fingerprint("room.create", None, request)
-        saved = await self._creates.get(actor.user_id, key)
-        if saved is not None:
-            if saved[0] != fingerprint:
+        replayed = await self._replay_create(actor, key, fingerprint)
+        if replayed is not None:
+            return replayed
+        # Замок до лимита и проверок (аудит Н9): параллельные создания одним игроком
+        # (проверка «одна активная комната» читает указатель, а комнаты по нему ещё нет).
+        # Токен — отпечаток ключа и случайный хвост: снимаем только свой замок, а повтор
+        # с тем же ключом во время создания узнаём по отпечатку.
+        owner = hashlib.sha256(key.encode()).hexdigest()[:16]
+        token = f"{owner}:{uuid7().hex}"
+        if not await self._player_rooms.lock_create(
+            actor.user_id, token, self._limits.create_lock_ms
+        ):
+            holder = await self._player_rooms.create_holder(actor.user_id)
+            if holder is not None and holder.partition(":")[0] == owner:
                 raise ConflictError(
-                    "Idempotency-Key уже использован с другим запросом",
-                    code="idempotency.key_reused",
+                    "запрос с этим Idempotency-Key ещё выполняется",
+                    code="idempotency.in_progress",
                 )
-            existing = await self._store.load(saved[1])
-            if existing is not None:
-                return room_view(existing, self._now_ms())
-        await self._limiter.hit(
-            "create", str(actor.user_id), limit=self._limits.create_per_hour, window_s=3600
-        )
+            raise MatchConflictError("комната уже создаётся", code=errors.ACTIVE_ROOM_CONFLICT)
+        try:
+            replayed = await self._replay_create(actor, key, fingerprint)
+            if replayed is not None:
+                return replayed
+            await self._limiter.hit(
+                "create", str(actor.user_id), limit=self._limits.create_per_hour, window_s=3600
+            )
+            tpl = await self._template(mode_key)
+            settings = apply_settings(tpl.template, default_settings(tpl.template), change)
+            nickname = await self._users.nickname(actor.user_id) or ""
+            return await self._create_room(
+                actor,
+                tpl=tpl,
+                settings=settings,
+                nickname=nickname,
+                key=key,
+                fingerprint=fingerprint,
+            )
+        finally:
+            await self._player_rooms.unlock_create(actor.user_id, token)
+
+    async def _replay_create(self, actor: Actor, key: str, fingerprint: str) -> Json | None:
+        """Повтор ``Idempotency-Key``: та же комната или 409 при другом теле."""
+        saved = await self._creates.get(actor.user_id, key)
+        if saved is None:
+            return None
+        if saved[0] != fingerprint:
+            raise ConflictError(
+                "Idempotency-Key уже использован с другим запросом",
+                code="idempotency.key_reused",
+            )
+        existing = await self._store.load(saved[1])
+        return room_view(existing, self._now_ms()) if existing is not None else None
+
+    async def _template(self, mode_key: str) -> ModeTemplate:
         version = await self._modes.current(mode_key)
         body = await self._modes.body(mode_key, version) if version is not None else None
         if version is None or body is None:
@@ -200,24 +244,7 @@ class RoomService:
             raise MatchForbiddenError(
                 "рейтинговые комнаты — только из очереди", code=errors.RANKED_FORBIDDEN
             )
-        settings = apply_settings(tpl.template, default_settings(tpl.template), change)
-        nickname = await self._users.nickname(actor.user_id) or ""
-        # Параллельные создания одним игроком (аудит §11): проверка «одна активная
-        # комната» читает указатель, а комнаты по нему ещё нет — без замка оба запроса
-        # создали бы по комнате.
-        if not await self._player_rooms.lock_create(actor.user_id, self._limits.create_lock_ms):
-            raise MatchConflictError("комната уже создаётся", code=errors.ACTIVE_ROOM_CONFLICT)
-        try:
-            return await self._create_room(
-                actor,
-                tpl=tpl,
-                settings=settings,
-                nickname=nickname,
-                key=key,
-                fingerprint=fingerprint,
-            )
-        finally:
-            await self._player_rooms.unlock_create(actor.user_id)
+        return tpl
 
     async def _create_room(
         self,
@@ -256,25 +283,15 @@ class RoomService:
         raise MatchUnavailableError("не удалось выдать код комнаты")
 
     async def _claim(self, user_id: UUID, code: str) -> None:
-        """Занять ``player:{id}:room`` под новую комнату (D10).
-
-        Raises:
-            MatchConflictError: ``match.active_room_conflict`` — есть другая активная комната.
-        """
-        if await self._player_rooms.claim(user_id, code):
-            return
-        current = await self._player_rooms.get(user_id)
-        if current is not None and current != code:
-            room = await self._store.load(current)
-            seat = room.seat_of(user_id) if room is not None else None
-            active = room is not None and not room.is_closed
-            if active and seat is not None and seat.presence is not Presence.LEFT:
-                raise MatchConflictError(
-                    "у вас уже есть активная комната",
-                    code=errors.ACTIVE_ROOM_CONFLICT,
-                    details={"code": current},
-                )
-        await self._player_rooms.assign(user_id, code)
+        """Занять ``player:{id}:room`` под новую комнату (D10, ``claim_room``)."""
+        await claim_room(
+            self._player_rooms,
+            self._store,
+            user_id,
+            code,
+            now_ms=self._now_ms(),
+            pending_ms=self._limits.pending_room_ms,
+        )
 
     # ------------------------------------------------------------------ команды
     async def command(
@@ -365,23 +382,36 @@ class RoomService:
         Raises:
             MatchNotFoundError: ``match.room_not_found``.
             MatchConflictError: ``match.room_closed``.
+            ConflictError: ``idempotency.key_reused`` — ключ уже потрачен на другое действие.
+            MatchUnavailableError: аудит недоступен (без БД abort не выполняется).
         """
         room = await self._store.load(code)
         if room is None:
             raise MatchNotFoundError("комнаты нет", code=errors.ROOM_NOT_FOUND)
         if room.is_closed:
             raise MatchConflictError("комната уже закрыта", code=errors.ROOM_CLOSED)
-        if self._audit is not None:
-            await self._audit.record(
-                AdminAction(
-                    actor_id=admin_id,
-                    action="room.abort",
-                    room_code=code,
-                    match_id=room.match.match_id if room.match is not None else None,
-                    reason=reason,
-                    idempotency_key=op_id,
-                    at=self._clock.now(),
-                )
+        if self._audit is None:
+            # Без аудита админское действие не выполняется (fail-closed, аудит Н4).
+            raise MatchUnavailableError("аудит недоступен: база данных не настроена")
+        requested = AdminAction(
+            actor_id=admin_id,
+            action="room.abort",
+            room_code=code,
+            match_id=room.match.match_id if room.match is not None else None,
+            reason=reason,
+            idempotency_key=op_id,
+            at=self._clock.now(),
+        )
+        stored = await self._audit.record(requested)
+        if (stored.action, stored.room_code, stored.reason) != (
+            requested.action,
+            requested.room_code,
+            requested.reason,
+        ):
+            # Ключ уже использован для другого действия: иначе abort прошёл бы без аудита.
+            raise ConflictError(
+                "Idempotency-Key уже использован с другим запросом",
+                code="idempotency.key_reused",
             )
         log.info("match.admin_abort", room=code, admin_id=str(admin_id))
         outcome = await self.command(Actor(admin_id), code, "abort", op_id, {})

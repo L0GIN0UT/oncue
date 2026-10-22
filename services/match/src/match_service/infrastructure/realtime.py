@@ -81,6 +81,14 @@ class CentrifugoPublisher:
         if response.status_code != httpx.codes.OK:
             REALTIME_PUBLISH.labels("unsubscribe_error").inc()
             log.warning("match.realtime_unsubscribe_rejected", status=response.status_code)
+            return
+        # Centrifugo отвечает 200 и при ошибке API: она — в теле (``{"error": {...}}``).
+        body = response.json() if response.content else {}
+        if isinstance(body, dict) and body.get("error"):
+            REALTIME_PUBLISH.labels("unsubscribe_api_error").inc()
+            log.warning("match.realtime_unsubscribe_api_error", code=body["error"].get("code"))
+            return
+        REALTIME_PUBLISH.labels("unsubscribe_ok").inc()
 
 
 class NullPublisher:

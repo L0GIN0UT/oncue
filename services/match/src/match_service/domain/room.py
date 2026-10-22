@@ -498,10 +498,26 @@ class Room:
         return self.ops.get(str(user_id), {}).get(op_id)
 
     def remember_op(
-        self, user_id: UUID, op_id: str, outcome: dict[str, Any], window: int
+        self, user_id: UUID, op_id: str, outcome: dict[str, Any], window: int, users_max: int
     ) -> None:  # Any: компактный итог
-        """Запомнить итог команды; окно — последние ``window`` команд этого игрока."""
-        own = self.ops.setdefault(str(user_id), {})
+        """Запомнить итог команды; окно — последние ``window`` команд этого игрока.
+
+        Окна хранятся не больше чем для ``users_max`` игроков (давно молчавшие вытесняются).
+        """
+        key = str(user_id)
+        own = self.ops.pop(key, {})
+        self.ops[key] = own  # в конец: самый свежий игрок
         own[op_id] = outcome
         while len(own) > window:
             own.pop(next(iter(own)))
+        while len(self.ops) > users_max:
+            self.ops.pop(next(iter(self.ops)))
+
+    def forget_ops(self, user_id: UUID) -> None:
+        """Игрок вышел (выход, кик, удаление аккаунта): его окно ``op_id`` не нужно."""
+        self.ops.pop(str(user_id), None)
+
+    def is_member(self, user_id: UUID) -> bool:
+        """Игрок занимает место (не вышел)."""
+        seat = self.seat_of(user_id)
+        return seat is not None and seat.presence is not Presence.LEFT

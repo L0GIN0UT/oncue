@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -131,6 +131,10 @@ class SqlMatchRecords(_Events):
             "created_at": self._clock.now(),
         }
         async with self._sessions() as session, session.begin():
+            # Сериализация с UserDeleted (аудит Н5): consumer держит исключительный замок
+            # пользователя до конца своей транзакции — итог ждёт и видит deleted; если итог
+            # успел первым, обезличивание consumer'а увидит уже записанные строки матча.
+            await lock_users(session, match.players, shared=True)
             hidden = frozenset(
                 await session.scalars(
                     select(users_proj.c.user_id).where(
@@ -354,14 +358,29 @@ class SqlMatchRecords(_Events):
             return executed
 
 
+_LOCK_SHARED = text("SELECT pg_advisory_xact_lock_shared(hashtextextended(:key, 0))")
+_LOCK_EXCLUSIVE = text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+
+
+async def lock_users(session: AsyncSession, user_ids: Iterable[UUID], *, shared: bool) -> None:
+    """Транзакционный advisory-замок пользователей (в порядке id — без взаимоблокировок).
+
+    Замок, а не ``SELECT … FOR SHARE``: строки ``users_proj`` может ещё не быть (удаление
+    вставляет её), а замок по ключу не зависит от наличия строки.
+    """
+    stmt = _LOCK_SHARED if shared else _LOCK_EXCLUSIVE
+    for user_id in sorted(user_ids):
+        await session.execute(stmt, {"key": f"match.users_proj:{user_id}"})
+
+
 class SqlAdminAudit:
     """``AdminAudit``: ``admin_actions`` (повтор запроса с тем же ключом — без новой строки)."""
 
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
 
-    async def record(self, action: AdminAction) -> bool:
-        """Записать действие одной транзакцией."""
+    async def record(self, action: AdminAction) -> AdminAction:
+        """Записать действие одной транзакцией; повтор ключа — прежняя запись."""
         async with self._sessions() as session, session.begin():
             row = (
                 await session.execute(
@@ -382,7 +401,29 @@ class SqlAdminAudit:
                     .returning(admin_actions.c.id)
                 )
             ).first()
-            return row is not None
+            if row is not None:
+                return action
+            stored = (
+                (
+                    await session.execute(
+                        select(admin_actions).where(
+                            admin_actions.c.actor_id == action.actor_id,
+                            admin_actions.c.idempotency_key == action.idempotency_key,
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            return AdminAction(
+                actor_id=stored["actor_id"],
+                action=stored["action"],
+                room_code=stored["room_code"],
+                match_id=stored["match_id"],
+                reason=stored["reason"],
+                idempotency_key=stored["idempotency_key"],
+                at=stored["created_at"],
+            )
 
 
 class SqlUsers:
@@ -427,6 +468,7 @@ class SqlUsers:
     @staticmethod
     async def forget(session: AsyncSession, user_id: UUID, version: int) -> None:
         """``UserDeleted``: ник стёрт, история обезличена, оценки удалены."""
+        await lock_users(session, [user_id], shared=False)
         await session.execute(
             insert(users_proj)
             .values(user_id=user_id, nickname=None, version=version, deleted=True)

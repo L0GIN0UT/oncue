@@ -12,6 +12,7 @@ import pytest
 from match_harness import Harness
 from match_service.application.ports import RoomCommand
 from match_service.application.views import match_view, messages, room_state, room_view
+from match_service.domain import match_fsm
 from match_service.domain.events import ANONYMOUS
 from match_service.domain.model import MatchFinish, Phase, Presence
 from match_service.infrastructure.rooms.codec import dumps, encode, loads
@@ -78,24 +79,85 @@ async def test_a1_seed_is_secret_and_differs_between_starts_with_same_match_id()
     assert seeds[0] != seeds[1]
 
 
-# ----------------------------------------------------------------------------- A2 / B2
-async def test_a2_poison_command_does_not_hang_room_and_series_aborts() -> None:
+# ----------------------------------------------------------------------------- A2 / B2 / Н1 / Н2
+async def test_n1_crash_after_mutation_rolls_back_and_poison_is_skipped() -> None:
     h = Harness(poison_limit=3)
     room, host = await h.room()
     (b,) = await h.join(room, 1)
+    await h.start(room, host)
+    original = h.owner._handlers["guess"]
 
-    async def crash(room: Any, cmd: RoomCommand, now: int) -> Any:
-        raise RuntimeError("баг обработчика")
+    async def guess_then_crash(room: Any, cmd: RoomCommand, now: int) -> Any:
+        await original(room, cmd, now)  # попытка уже засчитана в комнате…
+        raise RuntimeError("баг после мутации")  # …и тут обработчик падает
 
-    h.owner._handlers["transfer_host"] = crash
-    reply = await h.cmd(room, host, "transfer_host", user_id=str(b))
+    h.owner._handlers["guess"] = guess_then_crash
+    data = h.guess_data(room, "мимо")
+    version = room.version
+    # Runner перечитывает снимок и повторяет запись: две попытки — проброс, третья — 503.
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            await h.cmd(room, b, "guess", op_id="op-poison-1", **data)
+        await h.ok(room, host, "away", away=False)  # прежние команды пакета не сбрасывают серию
+    reply = await h.cmd(room, b, "guess", op_id="op-poison-1", **data)
     assert reply["status"] == 503 and _code(reply) == "match.unavailable"
-    # Комната продолжает принимать команды, успех обнуляет серию.
-    await h.ok(room, b, "ready", ready=False)
-    assert room.phase is Phase.LOBBY
-    for _ in range(3):
-        await h.cmd(room, host, "transfer_host", user_id=str(b))
-    assert room.phase is Phase.CLOSED and room.close_reason == "internal_error"
+    match = room.match
+    assert match is not None and match.contest is not None
+    assert match.contest.players[str(b)].state.attempts_on_level == 0  # откат
+    assert room.op_reply(b, "op-poison-1") is None and room.version >= version
+    assert room.phase is Phase.LEVEL_OPEN  # комната цела, команда пропущена
+    # Тот же op_id после починки применяется ровно один раз.
+    h.owner._handlers["guess"] = original
+    first = await h.cmd(room, b, "guess", op_id="op-poison-1", **data)
+    again = await h.cmd(room, b, "guess", op_id="op-poison-1", **data)
+    assert first == again
+    assert match.contest is not None
+    assert match.contest.players[str(b)].state.attempts_on_level == 1
+
+
+async def test_n2_infrastructure_failures_are_retried_not_counted() -> None:
+    h = Harness(poison_limit=2)
+    room, host = await h.room()
+    (b,) = await h.join(room, 1)
+
+    async def redis_down(room: Any, cmd: RoomCommand, now: int) -> Any:
+        raise ConnectionError("redis недоступен")
+
+    h.owner._handlers["transfer_host"] = redis_down
+    for _ in range(5):
+        with pytest.raises(ConnectionError):
+            await h.cmd(room, host, "transfer_host", op_id="op-infra-1", user_id=str(b))
+    assert not room.is_closed and h.owner._failures == {}
+
+
+async def test_n2_tick_series_resets_on_success_and_forget_clears_counters() -> None:
+    h = Harness(poison_limit=3)
+    room, host = await h.room()
+    await h.join(room, 1)
+    await h.start(room, host)
+    calls = {"fail": True}
+    original = match_fsm.presence
+
+    def flaky(*args: Any, **kwargs: Any) -> Any:
+        if calls["fail"]:
+            raise RuntimeError("баг тика")
+        return original(*args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(match_fsm, "presence", flaky)
+        for _ in range(2):
+            await h.tick(room, 0)
+        calls["fail"] = False
+        await h.tick(room, 0)  # успех обнуляет серию
+        calls["fail"] = True
+        for _ in range(2):
+            await h.tick(room, 0)
+        assert not room.is_closed
+        h.owner.forget(room)
+        assert room.code not in h.owner._tick_failures
+        for _ in range(3):
+            await h.tick(room, 0)
+    assert room.is_closed and room.close_reason == "internal_error"
 
 
 async def test_a2_resolve_crash_voids_round_instead_of_crashing_tick() -> None:
@@ -133,6 +195,48 @@ async def test_a12_op_window_is_per_player() -> None:
     assert again["status"] == first["status"] == 200
     chats = [c for c in room.changes if c.kind == "chat" and c.data["user_id"] == str(host)]
     assert len(chats) == 1
+
+
+# ----------------------------------------------------------------------------- Н8
+async def test_n8_op_window_only_for_members_and_bounded() -> None:
+    h = Harness()
+    room, host = await h.room("film.lobby.collection", collection_ids=(uuid7(),))
+    (b,) = await h.join(room, 1)
+    for _ in range(5):  # посторонние не попадают в окно
+        await h.cmd(room, uuid7(), "chat", text="спам")
+    assert str(b) in room.ops and set(room.ops) <= {str(host), str(b)}
+    await h.ok(room, b, "leave")
+    assert str(b) not in room.ops
+
+    capped = Harness(op_users_max=2)
+    lobby, owner = await capped.room("film.lobby.collection", collection_ids=(uuid7(),))
+    users = await capped.join(lobby, 3)
+    assert len(lobby.ops) == 2 and str(users[-1]) in lobby.ops
+    del owner
+
+
+# ----------------------------------------------------------------------------- Н7
+async def test_n7_one_active_room_join_join_and_pending_pointer() -> None:
+    h = Harness()
+    first, _ = await h.room("film.lobby.collection", code="AAAAAAAA", collection_ids=(uuid7(),))
+    second, _ = await h.room("film.lobby.collection", code="BBBBBBBB", collection_ids=(uuid7(),))
+    p = uuid7()
+    # Вход в первую ещё идёт (указатель есть, места нет) — во вторую нельзя.
+    assert await h.player_rooms.claim(p, first.code, h.now_ms())
+    busy = await h.cmd(second, p, "join", nickname="p")
+    assert busy["status"] == 409 and _code(busy) == "match.active_room_conflict"
+    await h.ok(first, p, "join", nickname="p")
+    again = await h.cmd(second, p, "join", nickname="p")
+    assert _code(again) == "match.active_room_conflict"
+
+    # Свежий указатель на ещё не созданную комнату — занято; устаревший — заменяется.
+    q = uuid7()
+    assert await h.player_rooms.claim(q, "ZZZZZZZZ", h.now_ms())
+    pending = await h.cmd(second, q, "join", nickname="q")
+    assert _code(pending) == "match.active_room_conflict"
+    h.clock.advance(seconds=11)
+    await h.ok(second, q, "join", nickname="q")
+    assert await h.player_rooms.get(q) == second.code
 
 
 # ----------------------------------------------------------------------------- A5

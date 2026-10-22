@@ -16,7 +16,12 @@ from typing import Any
 from uuid import UUID
 
 import yaml
-from match_service.application.ports import MatchRow, MyMatchRow, RoundPlanRequest
+from match_service.application.ports import (
+    MatchRow,
+    MyMatchRow,
+    RoomPointer,
+    RoundPlanRequest,
+)
 from match_service.application.rules import RulesFactory
 from match_service.domain.events import MatchStarted, PlayerRated, match_finished
 from match_service.domain.model import (
@@ -151,32 +156,50 @@ class MemoryStore:
 
 @dataclass
 class MemoryPlayerRooms:
-    """``PlayerRooms`` в памяти."""
+    """``PlayerRooms`` в памяти (значение — ``code|ms``, как в Redis)."""
 
     rooms: dict[UUID, str] = field(default_factory=dict)
-    creating: set[UUID] = field(default_factory=set)
+    creating: dict[UUID, str] = field(default_factory=dict)
 
     async def get(self, user_id: UUID) -> str | None:
-        return self.rooms.get(user_id)
+        found = await self.pointer(user_id)
+        return found.code if found is not None else None
 
-    async def claim(self, user_id: UUID, code: str) -> bool:
-        return self.rooms.setdefault(user_id, code) == code
+    async def pointer(self, user_id: UUID) -> RoomPointer | None:
+        raw = self.rooms.get(user_id)
+        return RoomPointer.parse(raw) if raw is not None else None
 
-    async def assign(self, user_id: UUID, code: str) -> None:
-        self.rooms[user_id] = code
+    async def claim(self, user_id: UUID, code: str, now_ms: int) -> bool:
+        if user_id not in self.rooms:
+            self.rooms[user_id] = f"{code}|{now_ms}"
+            return True
+        return await self.get(user_id) == code
 
-    async def release(self, user_id: UUID, code: str) -> None:
-        if self.rooms.get(user_id) == code:
-            del self.rooms[user_id]
-
-    async def lock_create(self, user_id: UUID, ttl_ms: int) -> bool:
-        if user_id in self.creating:
+    async def replace(self, user_id: UUID, old: RoomPointer, code: str, now_ms: int) -> bool:
+        if self.rooms.get(user_id) != old.raw:
             return False
-        self.creating.add(user_id)
+        self.rooms[user_id] = f"{code}|{now_ms}"
         return True
 
-    async def unlock_create(self, user_id: UUID) -> None:
-        self.creating.discard(user_id)
+    async def assign(self, user_id: UUID, code: str, now_ms: int) -> None:
+        self.rooms[user_id] = f"{code}|{now_ms}"
+
+    async def release(self, user_id: UUID, code: str) -> None:
+        if await self.get(user_id) == code:
+            del self.rooms[user_id]
+
+    async def lock_create(self, user_id: UUID, token: str, ttl_ms: int) -> bool:
+        if user_id in self.creating:
+            return False
+        self.creating[user_id] = token
+        return True
+
+    async def create_holder(self, user_id: UUID) -> str | None:
+        return self.creating.get(user_id)
+
+    async def unlock_create(self, user_id: UUID, token: str) -> None:
+        if self.creating.get(user_id) == token:
+            del self.creating[user_id]
 
 
 @dataclass
