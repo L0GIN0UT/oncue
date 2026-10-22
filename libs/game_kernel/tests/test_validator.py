@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from gv_game_kernel import (
     ALL_SESSIONS,
@@ -23,9 +24,14 @@ from gv_game_kernel.builtin import AudioIntroParams
 pytestmark = pytest.mark.unit
 
 SeedBody = Callable[[str], dict[str, Any]]
-SEEDS = sorted(
-    p.stem for p in (Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml")
-)
+_SEED_FILES = sorted((Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml"))
+# Сиды делятся по ``session.kind``: соло (game) и онлайн-шаблоны 4a (match, ADR 0032).
+SEEDS = [
+    p.stem
+    for p in _SEED_FILES
+    if yaml.safe_load(p.read_text(encoding="utf-8"))["session"]["kind"] == "solo"
+]
+ONLINE_SEEDS = [p.stem for p in _SEED_FILES if p.stem not in SEEDS]
 FACTORY = EngineFactory(register_builtin(PluginRegistry()))
 # Сиды game собираются реестром процесса game: встроенные плагины и ``collection`` (3b).
 SEED_FACTORY = EngineFactory(register_collection(register_builtin(PluginRegistry())))

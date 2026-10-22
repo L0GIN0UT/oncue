@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from gv_game_kernel import (
     ALL_SESSIONS,
@@ -31,9 +32,14 @@ MATCH = EngineFactory(REGISTRY, supported_sessions=ONLINE_SESSIONS)
 GAME = EngineFactory(REGISTRY, supported_sessions=ALL_SESSIONS)
 SOLO = EngineFactory(REGISTRY)
 ONLINE = ("film.duel.frame", "film.party.frame", "film.lobby.collection")
-SEEDS = sorted(
-    p.stem for p in (Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml")
-)
+_SEED_FILES = sorted((Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml"))
+# Сиды делятся по ``session.kind``: соло (game) и онлайн-шаблоны 4a (match, ADR 0032).
+SEEDS = [
+    p.stem
+    for p in _SEED_FILES
+    if yaml.safe_load(p.read_text(encoding="utf-8"))["session"]["kind"] == "solo"
+]
+ONLINE_SEEDS = [p.stem for p in _SEED_FILES if p.stem not in SEEDS]
 
 FRAME_LEVELS = [
     {"blur_px": 48, "crop": 0.35, "max_width": 960},
@@ -74,6 +80,24 @@ def test_online_templates_valid_for_match_and_game(key: str, seed_body: SeedBody
     engine = MATCH.build(config)
     assert engine.contest is not None
     assert engine.round_rules.give_up_allowed is False
+
+
+def test_online_seeds_of_stage4a_exist() -> None:
+    assert set(ONLINE_SEEDS) >= {
+        "music.duel.classic",
+        "film.duel.frame",
+        "film.party.frame",
+        "music.lobby.classic",
+        "film.lobby.collection",
+    }
+
+
+@pytest.mark.parametrize("key", ONLINE_SEEDS)
+def test_online_seeds_valid_for_match_and_game(key: str, seed_body: SeedBody) -> None:
+    config = parse_mode_config(seed_body(key))
+    assert MATCH.validate(config) == []
+    assert GAME.validate(config) == []
+    assert MATCH.build(config).contest is not None
 
 
 @pytest.mark.parametrize("key", SEEDS)
