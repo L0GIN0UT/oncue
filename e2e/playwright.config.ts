@@ -18,7 +18,11 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   // В CI: github — аннотации падений в check run (видны через API без доступа к логам).
   reporter: process.env.CI
-    ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    ? [
+        ["list"],
+        ["github"],
+        ["html", { open: "never", outputFolder: "playwright-report" }],
+      ]
     : "list",
   outputDir: "test-results",
   use: {
