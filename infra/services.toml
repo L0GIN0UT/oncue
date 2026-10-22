@@ -19,6 +19,8 @@
 #   kafka        — публикует/читает доменные события (relay + consumer)
 #   rabbitmq     — фоновые задачи
 #   s3           — объектное хранилище (S3 API): GV_S3__* и бакеты в job migrate
+#   realtime     — публикует в Centrifugo / выдаёт его токены: GV_REALTIME__API_URL и API_KEY
+#                  (+ секрет токенов: identity — connection, match — subscription; D9 этапа 4)
 #   memory_mb    — лимит памяти контейнера
 #   framework    — fastapi (по умолчанию) | django (admin)
 #   apt          — системные пакеты образа (например ffmpeg), ставятся при сборке
@@ -30,6 +32,7 @@ database = true
 redis = true
 kafka = true
 rabbitmq = false
+realtime = true
 memory_mb = 256
 
 [services.catalog]
@@ -68,6 +71,7 @@ database = true
 redis = true
 kafka = true
 rabbitmq = false
+realtime = true
 memory_mb = 320
 
 [services.rating]

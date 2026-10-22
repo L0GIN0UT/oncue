@@ -36,6 +36,8 @@ class Service:
     framework: str = "fastapi"
     apt: tuple[str, ...] = ()
     s3: bool = False
+    realtime: bool = False
+    """Сервис работает с Centrifugo (публикация через server API, выдача токенов; D9 этапа 4)."""
 
     @property
     def is_django(self) -> bool:
@@ -123,6 +125,7 @@ def load_services(root: Path) -> list[Service]:
                 framework=_framework(name, raw),
                 apt=_apt(name, raw),
                 s3=bool(raw.get("s3", False)),
+                realtime=bool(raw.get("realtime", False)),
             )
         )
     return services

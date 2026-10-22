@@ -109,6 +109,78 @@ class UgcSettings(BaseModel):
         return None if value == "" else value
 
 
+_MIN_SECRET_LEN = 32
+
+
+class RealtimeSettings(BaseModel):
+    """Centrifugo (D9 этапа 4): ``GV_REALTIME__*`` сервисов с ``realtime = true`` в реестре.
+
+    Публикует только бэкенд (server API с ключом), клиенты в каналы не пишут. Секреты токенов
+    у сервисов разные: identity подписывает connection-токены, match — subscription-токены
+    каналов комнат; поэтому оба поля необязательны, а нужное проверяет сам сервис.
+
+    Attributes:
+        api_url: Адрес server API, ``http://centrifugo:8000/api`` (``GV_REALTIME__API_URL``).
+        api_key: Ключ server API (``GV_REALTIME__API_KEY``).
+        connection_token_secret: HMAC-секрет connection-токенов (только identity,
+            ``GV_REALTIME__CONNECTION_TOKEN_SECRET``).
+        subscription_token_secret: HMAC-секрет subscription-токенов (только match,
+            ``GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET``).
+        token_audience: ``aud`` токенов; совпадает с ``client.token.audience`` и
+            ``client.subscription_token.audience`` в ``infra/centrifugo/config.json``.
+        token_ttl_s: Время жизни выдаваемых токенов.
+        timeout_s: Таймаут запроса к server API.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    api_url: str = Field(pattern=r"^https?://")
+    api_key: SecretStr
+    connection_token_secret: SecretStr | None = None
+    subscription_token_secret: SecretStr | None = None
+    token_audience: str = Field(default="centrifugo", min_length=1, max_length=64)
+    token_ttl_s: int = Field(default=600, ge=60, le=3600)
+    timeout_s: float = Field(default=2.0, gt=0, le=30)
+
+    @field_validator("api_key", "connection_token_secret", "subscription_token_secret")
+    @classmethod
+    def _strong_secret(cls, value: SecretStr | None) -> SecretStr | None:
+        # Короткий HMAC-секрет подбирается офлайн по любому перехваченному токену.
+        if value is not None and len(value.get_secret_value()) < _MIN_SECRET_LEN:
+            raise ValueError(f"секрет Centrifugo короче {_MIN_SECRET_LEN} символов")
+        return value
+
+    @model_validator(mode="after")
+    def _secrets_differ(self) -> RealtimeSettings:
+        conn, sub = self.connection_token_secret, self.subscription_token_secret
+        if (
+            conn is not None
+            and sub is not None
+            and conn.get_secret_value() == sub.get_secret_value()
+        ):
+            raise ValueError("секреты connection- и subscription-токенов должны различаться (D9)")
+        return self
+
+
+class RunnersSettings(BaseModel):
+    """Остановка долгоживущих компонентов процесса ``rooms`` (``GV_RUNNERS__*``, D6 этапа 4).
+
+    Сумма таймаутов должна укладываться в ``shutdown_timeout_s`` и ``stop_grace_period``
+    контейнера, иначе handoff оборвёт SIGKILL.
+
+    Attributes:
+        stop_timeout_s: Сколько ждать, пока ``Runner.run`` вернётся после сигнала остановки;
+            дальше задача отменяется.
+        handoff_timeout_s: Сколько ждать ``Runner.handoff``; дальше хук отменяется, а
+            незавершённую передачу добирает механизм аренды (TTL lease).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    stop_timeout_s: float = Field(default=5.0, gt=0, le=60)
+    handoff_timeout_s: float = Field(default=10.0, gt=0, le=60)
+
+
 class ServiceSettings(BaseSettings):
     """Общие настройки процесса сервиса.
 
@@ -159,6 +231,9 @@ class ServiceSettings(BaseSettings):
     jwt_audience: str = "guessverse"
     internal_auth: InternalAuthSettings = InternalAuthSettings()
     service_auth: ServiceAuthSettings = ServiceAuthSettings()
+    # None — сервис не работает с Centrifugo (в реестре realtime = false).
+    realtime: RealtimeSettings | None = None
+    runners: RunnersSettings = RunnersSettings()
 
     @property
     def internal_audience(self) -> str:
@@ -171,6 +246,16 @@ class ServiceSettings(BaseSettings):
             raise ValueError(
                 "GV_INTERNAL_AUTH__AUDIENCE не может совпадать с GV_JWT_AUDIENCE "
                 "(пользовательские токены прошли бы internal-ручки по aud)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _runners_fit_shutdown(self) -> ServiceSettings:
+        budget = self.runners.stop_timeout_s + self.runners.handoff_timeout_s
+        if budget >= self.shutdown_timeout_s:
+            raise ValueError(
+                "GV_RUNNERS__STOP_TIMEOUT_S + GV_RUNNERS__HANDOFF_TIMEOUT_S должны быть меньше "
+                "GV_SHUTDOWN_TIMEOUT_S (остановка комнат не успеет до SIGKILL)"
             )
         return self
 

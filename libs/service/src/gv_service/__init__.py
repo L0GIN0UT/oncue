@@ -7,10 +7,13 @@ from gv_service.mutations import IdempotencyKey, Reason, idempotency_key
 from gv_service.periodic import JobResult, PeriodicJob, PeriodicJobRunner
 from gv_service.problems import Problem, problem_responses
 from gv_service.runner import main
+from gv_service.runners import Runner, RunnerFailedError, supervise_runners
 from gv_service.service_auth import ServiceAuthNotConfiguredError, build_service_token_provider
 from gv_service.settings import (
     Environment,
     InternalAuthSettings,
+    RealtimeSettings,
+    RunnersSettings,
     ServiceAuthSettings,
     ServiceSettings,
     UgcSettings,
@@ -26,7 +29,11 @@ __all__ = [
     "PeriodicJobRunner",
     "Problem",
     "ReadinessCheck",
+    "RealtimeSettings",
     "Reason",
+    "Runner",
+    "RunnerFailedError",
+    "RunnersSettings",
     "ServiceAuthNotConfiguredError",
     "ServiceAuthSettings",
     "ServiceDefinition",
@@ -37,4 +44,5 @@ __all__ = [
     "idempotency_key",
     "main",
     "problem_responses",
+    "supervise_runners",
 ]

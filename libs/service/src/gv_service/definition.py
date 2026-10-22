@@ -1,7 +1,7 @@
 """Описание сервиса и его инфраструктурные ресурсы.
 
 Сервис объявляет, ИЗ ЧЕГО он состоит (``ServiceDefinition``), а ``gv_service.runner``
-решает, КАК это запустить: api, consumer, worker, relay или всё в одном процессе.
+решает, КАК это запустить: api, consumer, worker, relay, rooms или всё в одном процессе.
 Так у всех 15 сервисов одинаковые процессы, health, метрики и graceful shutdown.
 """
 
@@ -25,6 +25,7 @@ from gv_messaging.outbox import OutboxWriter
 from gv_messaging.ports import TaskHandler
 from gv_service.health import ReadinessCheck, postgres_check, redis_check
 from gv_service.periodic import PeriodicJob
+from gv_service.runners import Runner
 from gv_service.settings import ServiceSettings
 
 log = structlog.get_logger(__name__)
@@ -138,6 +139,10 @@ class ServiceDefinition:
         prepare_resources: Подготовка внешних ресурсов сервиса (бакеты S3, их политики и
             т.п.), выполняется командой ``migrate`` после миграций БД — тем же job, что и
             выкат схемы, до старта процессов сервиса. Обязана быть идемпотентной.
+        build_runners: Фабрика долгоживущих фоновых компонентов (``gv_service.runners``):
+            работа, которую процесс удерживает дольше одного сообщения (владельцы комнат
+            match, D6 этапа 4). Запускаются командой ``rooms`` и в ``all``; при остановке
+            проходят handoff.
     """
 
     name: str
@@ -151,3 +156,4 @@ class ServiceDefinition:
     build_task_handlers: Callable[[Infrastructure], dict[str, TaskHandler]] | None = None
     build_periodic_jobs: Callable[[Infrastructure], list[PeriodicJob]] | None = None
     prepare_resources: Callable[[ServiceSettings], Awaitable[None]] | None = None
+    build_runners: Callable[[Infrastructure], list[Runner]] | None = None

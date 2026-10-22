@@ -112,3 +112,38 @@ async def test_0007_seeds_collections_perms_and_is_reversible(database_url: str)
     assert after["admin"] >= GAME_PERMS  # права 0005 откат не трогает
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["admin"] >= COLLECTIONS_PERMS
+
+
+ONLINE_PERMS = {
+    "match.spectate",
+    "match.manage",
+    "rating.ladders.publish",
+    "rating.seasons.manage",
+}
+
+
+async def test_0008_seeds_online_perms_and_is_reversible(database_url: str) -> None:
+    """План этапа 4, §2.7 и D19: admin — все 4 права, moderator — только наблюдение."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= ONLINE_PERMS
+    assert grants["admin"] >= ONLINE_PERMS
+    assert grants["moderator"] & ONLINE_PERMS == {"match.spectate"}
+    assert not grants.get("user", set()) & ONLINE_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0007")
+    after = await _grants(database_url)
+    assert not after["*"] & ONLINE_PERMS
+    assert not after["admin"] & ONLINE_PERMS
+    assert after["admin"] >= COLLECTIONS_PERMS | GAME_PERMS  # права 0005 и 0007 откат не трогает
+    # Повторный upgrade идемпотентен по отношению к уже существующей матрице.
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["moderator"] & ONLINE_PERMS == {"match.spectate"}

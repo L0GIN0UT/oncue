@@ -1,0 +1,47 @@
+{
+  "client": {
+    "allow_anonymous_connect_without_token": false,
+    "user_connection_limit": 10,
+    "token": {
+      "audience": "centrifugo"
+    },
+    "subscription_token": {
+      "enabled": true,
+      "audience": "centrifugo"
+    }
+  },
+  "http_stream": {
+    "enabled": true
+  },
+  "channel": {
+    "max_length": 64,
+    "namespaces": [
+      {
+        "name": "room",
+        "history_size": 100,
+        "history_ttl": "600s",
+        "force_recovery": true,
+        "allow_publish_for_client": false,
+        "allow_publish_for_subscriber": false,
+        "allow_subscribe_for_client": false,
+        "allow_subscribe_for_anonymous": false,
+        "allow_presence_for_client": false,
+        "allow_presence_for_subscriber": false,
+        "allow_history_for_client": false,
+        "allow_history_for_subscriber": false
+      },
+      {
+        "name": "personal",
+        "allow_user_limited_channels": true,
+        "allow_publish_for_client": false,
+        "allow_publish_for_subscriber": false,
+        "allow_subscribe_for_client": false,
+        "allow_subscribe_for_anonymous": false,
+        "allow_presence_for_client": false,
+        "allow_presence_for_subscriber": false,
+        "allow_history_for_client": false,
+        "allow_history_for_subscriber": false
+      }
+    ]
+  }
+}

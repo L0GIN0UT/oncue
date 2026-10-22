@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -196,9 +197,14 @@ def test_fill_secrets_hashes_service_client_secrets() -> None:
     out = fill_secrets(template)
     values = dict(line.split("=", 1) for line in out.splitlines())
     clients = {c["client_id"]: c for c in json.loads(values["GV_SERVICE_CLIENTS"])}
-    assert set(clients) == {"game", "admin"}
+    assert set(clients) == {"game", "admin", "match"}
     assert clients["game"]["audiences"] == {"media_pipeline": ["assets.link"]}
     assert clients["admin"]["audiences"] == {"identity": ["admin_sessions"]}
+    # Этап 4a §2.7: план раундов у game (D5) и ссылки ассетов у media_pipeline.
+    assert clients["match"]["audiences"] == {
+        "game": ["rounds.plan"],
+        "media_pipeline": ["assets.link"],
+    }
     secrets_seen = set()
     for client_id, client in clients.items():
         secret = values[service_secret_env(client_id)]
@@ -206,7 +212,7 @@ def test_fill_secrets_hashes_service_client_secrets() -> None:
         assert client["secret_sha256"] == hashlib.sha256(secret.encode()).hexdigest()
         assert secret not in values["GV_SERVICE_CLIENTS"]
         secrets_seen.add(secret)
-    assert len(secrets_seen) == 2
+    assert len(secrets_seen) == 3
 
 
 def test_generated_compose_passes_service_credentials() -> None:
@@ -296,3 +302,96 @@ def test_public_origins_for_cookie_mutation_services() -> None:
     assert json.loads(values["GV_PUBLIC_ORIGINS"]) == ["https://localhost"]
     assert len(values["GV_GAME__DAILY_SEED_SECRET"]) >= 32
     assert json.loads(values["GV_JWT__SIGNING_KEYS"])[0]["active"] is True
+
+
+class TestRealtime:
+    """Поле реестра ``realtime`` и env Centrifugo (план этапа 4, §2.1, D9, §12 п.5)."""
+
+    def test_registry_flags(self) -> None:
+        realtime = {s.name for s in load_services(ROOT) if s.realtime}
+        assert realtime == {"identity", "match"}  # rating — в 4b
+
+    def test_flag_defaults_to_false(self, tmp_path: Path) -> None:
+        (service,) = load_services(_registry(tmp_path, '[services.a]\ndescription="x"\n'))
+        assert service.realtime is False
+
+    def test_compose_env_only_for_realtime_services_with_separate_secrets(self) -> None:
+        rendered = generate.render_all(load_services(ROOT))
+        services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
+        identity = services["identity"]["environment"]
+        match = services["match"]["environment"]
+        for env in (identity, match):
+            assert env["GV_REALTIME__API_URL"] == "http://centrifugo:8000/api"
+            assert env["GV_REALTIME__API_KEY"].startswith("${CENTRIFUGO_API_KEY:?")
+        # D9: connection-токены — только identity, subscription — только match.
+        assert identity["GV_REALTIME__CONNECTION_TOKEN_SECRET"].startswith(
+            "${CENTRIFUGO_TOKEN_HMAC_SECRET:?"
+        )
+        assert "GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET" not in identity
+        assert match["GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET"].startswith(
+            "${CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET:?"
+        )
+        assert "GV_REALTIME__CONNECTION_TOKEN_SECRET" not in match
+        # API-ключ — только у сервисов с realtime = true.
+        for name, svc in services.items():
+            if name not in {"identity", "match"}:
+                env = svc.get("environment", {})
+                assert not any(k.startswith("GV_REALTIME__") for k in env), name
+
+    def test_secret_for_service_without_realtime_is_rejected(self) -> None:
+        services = [
+            s if s.name != "match" else replace(s, realtime=False) for s in load_services(ROOT)
+        ]
+        with pytest.raises(SystemExit, match="match"):
+            generate.render_all(services)
+
+    def test_env_example_secrets_are_generated_and_differ(self) -> None:
+        from gv_cli.main import fill_secrets
+
+        rendered = generate.render_all(load_services(ROOT))["infra/compose/.env.example"]
+        values = dict(
+            line.split("=", 1)
+            for line in fill_secrets(rendered).splitlines()
+            if line and not line.startswith("#")
+        )
+        conn = values["CENTRIFUGO_TOKEN_HMAC_SECRET"]
+        sub = values["CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET"]
+        assert len(conn) >= 32 and len(sub) >= 32 and conn != sub
+        assert values["CENTRIFUGO_ALLOWED_ORIGINS"] == "https://localhost"
+
+    def test_centrifugo_config(self) -> None:
+        """Конфиг v6: без анонимов, без клиентских публикаций, отдельный секрет подписок."""
+        import json
+
+        config = json.loads((ROOT / "infra/centrifugo/config.json").read_text(encoding="utf-8"))
+        text = json.dumps(config)
+        assert "hmac_secret_key" not in text and "api_key" not in text  # секреты — из env
+        client = config["client"]
+        assert client["allow_anonymous_connect_without_token"] is False
+        assert client["user_connection_limit"] > 0
+        assert client["subscription_token"]["enabled"] is True
+        assert config["http_stream"]["enabled"] is True
+        namespaces = {ns["name"]: ns for ns in config["channel"]["namespaces"]}
+        assert set(namespaces) == {"room", "personal"}
+        for ns in namespaces.values():
+            for key in ("publish", "subscribe", "presence", "history"):
+                assert ns.get(f"allow_{key}_for_client", False) is False
+            assert ns.get("allow_subscribe_for_anonymous", False) is False
+            assert ns.get("allow_publish_for_subscriber", False) is False
+        room = namespaces["room"]
+        assert room["history_size"] > 0 and room["history_ttl"] and room["force_recovery"]
+
+    def test_centrifugo_mounted_with_env_secrets(self) -> None:
+        compose = yaml.safe_load(
+            (ROOT / "infra/compose/compose.infra.yml").read_text(encoding="utf-8")
+        )
+        centrifugo = compose["services"]["centrifugo"]
+        assert "../centrifugo/config.json:/centrifugo/config.json:ro" in centrifugo["volumes"]
+        assert "/centrifugo/config.json" in centrifugo["command"]
+        env = centrifugo["environment"]
+        assert env["CENTRIFUGO_CLIENT_SUBSCRIPTION_TOKEN_HMAC_SECRET_KEY"].startswith(
+            "${CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET:?"
+        )
+        assert env["CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY"].startswith(
+            "${CENTRIFUGO_TOKEN_HMAC_SECRET:?"
+        )

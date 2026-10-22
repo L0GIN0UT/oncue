@@ -209,10 +209,18 @@ services:
     restart: unless-stopped
     networks: [backend]
     logging: *logging
-    command: ["centrifugo"]
+    # Namespace-ы, права и лимиты — в infra/centrifugo/config.json (D9 этапа 4); секреты —
+    # только из env (переменные CENTRIFUGO_* перекрывают файл).
+    command: ["centrifugo", "--config", "/centrifugo/config.json"]
+    volumes:
+      - ../centrifugo/config.json:/centrifugo/config.json:ro
     environment:
       CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY:?задайте CENTRIFUGO_API_KEY}
+      # connection-токены подписывает identity, subscription-токены комнат — match: секреты
+      # разные (client.token / client.subscription_token, subscription_token.enabled=true).
       CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_TOKEN_HMAC_SECRET:?задайте CENTRIFUGO_TOKEN_HMAC_SECRET}
+      CENTRIFUGO_CLIENT_SUBSCRIPTION_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET:?задайте CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET}
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: ${CENTRIFUGO_ALLOWED_ORIGINS:?задайте CENTRIFUGO_ALLOWED_ORIGINS}
       CENTRIFUGO_ENGINE_TYPE: redis
       CENTRIFUGO_ENGINE_REDIS_ADDRESS: redis://:${REDIS_PASSWORD}@redis:6379/1
       CENTRIFUGO_HEALTH_ENABLED: "true"
