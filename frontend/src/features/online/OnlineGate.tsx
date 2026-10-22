@@ -11,7 +11,7 @@ import { useTranslations } from "next-intl";
 import { Users } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { useViewer } from "@/features/auth/session";
-import { safeNext } from "@/features/auth/AuthForms";
+import { safeNext, withNext } from "@/features/auth/AuthForms";
 
 export function OnlineGate({ children }: { children: ReactNode }) {
   const t = useTranslations();
@@ -49,12 +49,12 @@ export function OnlineAuthRequired() {
       <p className="max-w-[52ch] text-ink-muted">{t("online.auth.text")}</p>
       <div className="flex flex-wrap gap-3">
         <Button asChild size="lg">
-          <Link href={`/login?next=${encodeURIComponent(next)}`} data-testid="online-login">
+          <Link href={withNext("/login", next)} data-testid="online-login">
             {t("online.auth.login")}
           </Link>
         </Button>
         <Button asChild size="lg" variant="secondary">
-          <Link href="/register" data-testid="online-register">
+          <Link href={withNext("/register", next)} data-testid="online-register">
             {t("online.auth.register")}
           </Link>
         </Button>

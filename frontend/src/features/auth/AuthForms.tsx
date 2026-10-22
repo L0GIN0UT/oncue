@@ -47,6 +47,38 @@ export function safeNext(
   return url.pathname + url.search + url.hash;
 }
 
+/** Ключ localStorage: куда вернуть после подтверждения e-mail (ссылка из письма — новая вкладка). */
+const PENDING_NEXT_KEY = "gv_auth_next";
+
+/** Ссылка на вход или регистрацию с безопасным `next` (без него, если возвращать некуда). */
+export function withNext(path: "/login" | "/register", next: string | null | undefined): string {
+  const safe = safeNext(next);
+  return safe === "/" ? path : `${path}?next=${encodeURIComponent(safe)}`;
+}
+
+/** Запомнить `next` регистрации до подтверждения e-mail (удобство одного браузера). */
+export function rememberNext(next: string | null | undefined): void {
+  const safe = safeNext(next);
+  try {
+    if (safe === "/") globalThis.localStorage?.removeItem(PENDING_NEXT_KEY);
+    else globalThis.localStorage?.setItem(PENDING_NEXT_KEY, safe);
+  } catch {
+    // Хранилище недоступно (приватный режим) — вернём на главную.
+  }
+}
+
+/** Прочитать и забыть запомненный `next`; значение снова проходит {@link safeNext}. */
+export function takeRememberedNext(): string | null {
+  try {
+    const value = globalThis.localStorage?.getItem(PENDING_NEXT_KEY) ?? null;
+    globalThis.localStorage?.removeItem(PENDING_NEXT_KEY);
+    const safe = safeNext(value);
+    return safe === "/" ? null : safe;
+  } catch {
+    return null;
+  }
+}
+
 export function LoginForm({ next }: { next: string | null }) {
   const t = useTranslations();
   const dt = useDynamicT();
@@ -104,7 +136,10 @@ export function LoginForm({ next }: { next: string | null }) {
       </Button>
       <p className="text-ink-muted">
         {t("auth.noAccount")}{" "}
-        <Link href="/register" className="font-medium text-ink underline underline-offset-4">
+        <Link
+          href={withNext("/register", next)}
+          className="font-medium text-ink underline underline-offset-4"
+        >
           {t("auth.signUp")}
         </Link>
       </p>
@@ -112,7 +147,14 @@ export function LoginForm({ next }: { next: string | null }) {
   );
 }
 
-export function RegisterForm({ consents }: { consents: ConsentRequirement[] }) {
+export function RegisterForm({
+  consents,
+  next = null,
+}: {
+  consents: ConsentRequirement[];
+  /** Куда вернуть после подтверждения e-mail и входа (`?next=`, безопасный путь сайта). */
+  next?: string | null;
+}) {
   const t = useTranslations();
   const dt = useDynamicT();
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +183,7 @@ export function RegisterForm({ consents }: { consents: ConsentRequirement[] }) {
           },
         }),
       );
+      rememberNext(next);
       setDone(true);
     } catch (err) {
       setError(errorText(dt, t("auth.error.generic"), err));
@@ -151,13 +194,20 @@ export function RegisterForm({ consents }: { consents: ConsentRequirement[] }) {
 
   if (done) {
     return (
-      <p
-        role="status"
-        className="rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule"
-        data-testid="register-done"
-      >
-        {t("auth.checkEmail")}
-      </p>
+      <div className="flex flex-col items-start gap-4">
+        <p
+          role="status"
+          className="rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule"
+          data-testid="register-done"
+        >
+          {t("auth.checkEmail")}
+        </p>
+        <Button asChild variant="secondary">
+          <Link href={withNext("/login", next)} data-testid="register-done-login">
+            {t("auth.signIn")}
+          </Link>
+        </Button>
+      </div>
     );
   }
 
@@ -210,7 +260,10 @@ export function RegisterForm({ consents }: { consents: ConsentRequirement[] }) {
       </Button>
       <p className="text-ink-muted">
         {t("auth.haveAccount")}{" "}
-        <Link href="/login" className="font-medium text-ink underline underline-offset-4">
+        <Link
+          href={withNext("/login", next)}
+          className="font-medium text-ink underline underline-offset-4"
+        >
           {t("auth.signIn")}
         </Link>
       </p>
@@ -221,13 +274,17 @@ export function RegisterForm({ consents }: { consents: ConsentRequirement[] }) {
 export function VerifyEmail({ token }: { token: string | null }) {
   const t = useTranslations();
   const [state, setState] = useState<"pending" | "ok" | "failed">(token ? "pending" : "failed");
+  const [next, setNext] = useState<string | null>(null);
   const sent = useRef(false);
   useEffect(() => {
     if (!token || sent.current) return;
     sent.current = true;
     api()
       .identity.POST("/v1/auth/verify-email", { body: { token } })
-      .then((r) => setState(r.response.ok ? "ok" : "failed"))
+      .then((r) => {
+        if (r.response.ok) setNext(takeRememberedNext());
+        setState(r.response.ok ? "ok" : "failed");
+      })
       .catch(() => setState("failed"));
   }, [token]);
   return (
@@ -237,7 +294,9 @@ export function VerifyEmail({ token }: { token: string | null }) {
       </p>
       {state === "ok" && (
         <Button asChild>
-          <Link href="/login">{t("auth.signIn")}</Link>
+          <Link href={withNext("/login", next)} data-testid="verify-login">
+            {t("auth.signIn")}
+          </Link>
         </Button>
       )}
     </div>
