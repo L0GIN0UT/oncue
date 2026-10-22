@@ -409,6 +409,7 @@ async def test_r10_rematch_forgets_previous_match_rules() -> None:
     assert match.match_id in h.owner._rules
     await h.ok(room, b, "forfeit")
     await h.ok(room, host, "rematch")
+    await h.ok(room, b, "rematch")
     assert room.rematch_code is not None
     assert match.match_id not in h.owner._rules
 

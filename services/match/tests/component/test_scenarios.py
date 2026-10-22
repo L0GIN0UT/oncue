@@ -248,11 +248,17 @@ async def test_duel_race_forfeit_and_rematch(svc: MatchApp) -> None:
     assert by_user[str(b.user_id)]["finish"] == "forfeit"
     assert summary["room"]["phase"] == "summary"
 
-    rematch = await svc.ok(a, code, "rematch")
+    # Сдавшийся остаётся в комнате: реванш ждёт его согласия («Ждём остальных…»).
+    waiting = await svc.ok(a, code, "rematch")
+    assert waiting["rematch_code"] is None
+    assert (await svc.state(b, code))["room"]["phase"] == "summary"
+    rematch = await svc.ok(b, code, "rematch")
     new_code = rematch["rematch_code"]
     assert new_code and new_code != code
     fresh = await svc.client.get(f"/v1/rooms/{new_code}", headers=a.headers)
     assert fresh.status_code == 200 and fresh.json()["host_id"] == str(a.user_id)
+    players = {p["user_id"] for p in (await svc.state(b, new_code))["room"]["players"]}
+    assert players == {str(a.user_id), str(b.user_id)}
     # Старая комната закрыта: код реванша — в дельте closed и в state для вернувшихся.
     closed = [m["delta"] for m in _channel(svc, code) if m["kind"] == "closed"]
     assert closed == [{"reason": "rematch", "rematch_code": new_code}]
@@ -381,7 +387,16 @@ async def test_start_failure_after_202_is_visible_in_lobby(app_factory: Any) -> 
     svc = await app_factory(plan_delay_s=0.3, reply_timeout_ms=50)
     a, b = svc.user(), svc.user()
     code = (await svc.create(a, "film.lobby.collection", collection_ids=[str(uuid7())]))["code"]
-    await svc.join(code, b)
+    # Таймаут ответа 50 мс: вход и готовность тоже могут вернуть 202 — ждём по state.
+    for path, body in (("join", {}), ("ready", {"ready": True})):
+        sent = await svc.post(b, code, path, **body)
+        assert sent.status_code in (200, 202), sent.text
+    svc.online.add(b.user_id)
+    await svc.until(
+        a,
+        code,
+        lambda s: len(s["room"]["players"]) == 2 and s["room"]["players"][1]["ready"],
+    )
     svc.plans.unavailable()
     version = (await svc.state(a, code))["room"]["version"]
     accepted = await svc.post(a, code, "start", expected_version=version)
