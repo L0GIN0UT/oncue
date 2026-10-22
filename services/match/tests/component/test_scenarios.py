@@ -116,6 +116,9 @@ async def test_party_of_four_statuses_without_texts_and_summary(svc: MatchApp) -
     secret = f"секрет-{uuid7().hex[-6:]}"
     miss = await svc.ok(b, code, "match/guess", **_guess(await svc.state(b, code), secret))
     assert miss["result"] == "miss" and miss["me"]["guesses"][0]["display"] == secret
+    assert_no_secrets(miss, TITLES[:1])  # ответ команды: только своё, без ключа ответа
+    ticked = (await svc.tick(d, code, known=0)).json()
+    assert_no_secrets(ticked, TITLES[:1], texts=(secret,))
     seen_by_c = await svc.state(c, code)
     statuses = {p["user_id"]: p["status"] for p in seen_by_c["match"]["players"]}
     assert statuses[str(b.user_id)] == "answered"
@@ -307,6 +310,18 @@ async def test_lobby_free_chat_denylist_and_duel_emotes_only(svc: MatchApp) -> N
     assert emotes[0]["phrase"] == "match.phrases.good_luck" and emotes[0]["emote"] is None
     silenced = await svc.post(muted, duel, "match/emote", kind="emote", key="match.emotes.gg")
     assert_problem(silenced, 403, "match.chat_muted")
+
+
+async def test_chat_slow_sanction_limits_rate(svc: MatchApp) -> None:
+    host = svc.user()
+    slow = svc.user(sanctions=int(Sanction.CHAT_SLOW))
+    code = (await svc.create(host, "film.lobby.collection", collection_ids=[str(uuid7())]))["code"]
+    await svc.join(code, slow)
+    await svc.ok(slow, code, "match/chat", text="первое")
+    second = await svc.post(slow, code, "match/chat", text="второе")
+    problem = assert_problem(second, 429, "match.rate_limited")
+    assert second.headers["retry-after"] and problem["details"]["retry_after"] >= 1
+    await svc.ok(host, code, "match/chat", text="хост без санкций")
 
 
 # ----------------------------------------------------------------------------- прочее
