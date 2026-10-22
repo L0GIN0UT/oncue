@@ -1,6 +1,6 @@
 "use client";
 /**
- * Шапка: знак, разделы «Соло» и «Сборники», «Медиатека» (только пользователю, этап 3b D7),
+ * Шапка: знак, разделы «Соло», «Онлайн» (этап 4) и «Сборники», «Медиатека» (только пользователю, этап 3b D7),
  * статус входа (личные данные — только на клиенте, D2).
  */
 import Link from "next/link";
@@ -20,6 +20,13 @@ export function SiteHeader() {
       <nav className="flex items-center gap-1 text-sm sm:gap-3">
         <Link href="/solo" className="rounded-md px-3 py-2 text-ink-muted hover:text-ink">
           {t("nav.solo")}
+        </Link>
+        <Link
+          href="/online"
+          className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+          data-testid="nav-online"
+        >
+          {t("nav.online")}
         </Link>
         <Link
           href="/collections"
