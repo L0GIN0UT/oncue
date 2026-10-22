@@ -21,10 +21,13 @@ from identity_service.api.common import (
     ConsentIn,
     SessionUser,
     actor_of,
+    binding_token,
+    clear_binding_cookie,
     clear_session_cookies,
     client_ip,
     device_token,
     session_user,
+    set_binding_cookie,
     set_device_cookie,
     set_session_cookies,
 )
@@ -248,6 +251,7 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
         await end_guest_session(deps, request)
         set_session_cookies(response, verified.session, settings)
         set_device_cookie(response, verified.device_token, settings)
+        clear_binding_cookie(response, settings)  # код погашен — привязка больше не нужна
         return SessionResponse(
             user=session_user(verified.session), expires_in=verified.session.expires_in
         )
@@ -265,7 +269,9 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
         dependencies=same_origin,
         summary="Регистрация по никнейму, e-mail и паролю; код подтверждения уходит на почту",
     )
-    async def register(body: RegisterRequest, request: Request) -> ChallengeResponse:
+    async def register(
+        body: RegisterRequest, request: Request, response: Response
+    ) -> ChallengeResponse:
         # Ответ не зависит от того, был ли e-mail занят (защита от перечисления).
         issued = await uc.register(
             RegisterCommand(
@@ -278,6 +284,8 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
                 ip=client_ip(request),
             )
         )
+        if issued.binding_token:  # во всех ветках одинаково: cookie не выдаёт существование адреса
+            set_binding_cookie(response, issued.binding_token, settings)
         return _challenge(issued)
 
     @router.post(
@@ -289,7 +297,12 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     async def verify_email(
         body: CodeRequest, request: Request, response: Response
     ) -> SessionResponse:
-        verified = await uc.verify_email(body.challenge_id, body.code, ip=client_ip(request))
+        verified = await uc.verify_email(
+            body.challenge_id,
+            body.code,
+            ip=client_ip(request),
+            binding_token=binding_token(request),
+        )
         return await _open_session(request, response, verified)
 
     @router.post(
@@ -305,6 +318,8 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
         if result.session is None:
             # Неизвестное устройство: cookie сессии не выдаём до ввода кода.
             assert result.challenge is not None  # noqa: S101 — инвариант LoginResult
+            if result.challenge.binding_token:
+                set_binding_cookie(response, result.challenge.binding_token, settings)
             return LoginResponse(status="code_required", challenge=_challenge(result.challenge))
         await end_guest_session(deps, request)
         set_session_cookies(response, result.session, settings)
@@ -323,7 +338,12 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     async def login_confirm(
         body: CodeRequest, request: Request, response: Response
     ) -> SessionResponse:
-        verified = await uc.confirm_login(body.challenge_id, body.code, ip=client_ip(request))
+        verified = await uc.confirm_login(
+            body.challenge_id,
+            body.code,
+            ip=client_ip(request),
+            binding_token=binding_token(request),
+        )
         return await _open_session(request, response, verified)
 
     @router.post(

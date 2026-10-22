@@ -33,6 +33,11 @@ def email_subject_hash(address: str) -> str:
     return hashlib.sha256(f"email:{address.casefold()}".encode()).hexdigest()
 
 
+def mail_key(address: str) -> str:
+    """Ключ лимита писем на адрес: хэш, без ПДн в Redis и в записи кода."""
+    return hashlib.sha256(f"mail:{address.casefold()}".encode()).hexdigest()
+
+
 def decoy_subject_hash(address: str) -> str:
     """Субъект «пустышки» для адреса: детерминирован, как у настоящего кода.
 

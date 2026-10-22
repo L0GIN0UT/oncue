@@ -508,6 +508,7 @@ def _challenge(row: Row[Any]) -> EmailChallenge:
         last_sent_at=row.last_sent_at,
         consumed_at=row.consumed_at,
         cancelled_at=row.cancelled_at,
+        mail_key=row.mail_key,
     )
 
 
@@ -538,6 +539,7 @@ class SqlEmailChallengeRepository:
                         last_sent_at=challenge.last_sent_at,
                         consumed_at=challenge.consumed_at,
                         cancelled_at=challenge.cancelled_at,
+                        mail_key=challenge.mail_key,
                     )
                 )
         except IntegrityError as exc:

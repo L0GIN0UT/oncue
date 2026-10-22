@@ -114,3 +114,74 @@ def test_smtp_tls_modes_are_mutually_exclusive() -> None:
         SmtpEmailSender(
             host="h", port=465, sender="s", code_ttl_s=600, start_tls=True, use_tls=True
         )
+
+
+# ----------------------------------------------------------------------------- фоновая отправка
+
+
+class _Gate:
+    """Отправитель, который ждёт сигнала: имитирует медленный SMTP."""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        import asyncio
+
+        self.release = asyncio.Event()
+        self.sent: list[EmailMessage] = []
+        self.fail = fail
+
+    async def send(self, message: EmailMessage) -> None:
+        await self.release.wait()
+        if self.fail:
+            raise RuntimeError("smtp down")
+        self.sent.append(message)
+
+
+async def test_background_sender_returns_before_the_slow_smtp_finishes() -> None:
+    """Время ответа не зависит от SMTP: send() возвращается, пока письмо ещё не ушло."""
+    from identity_service.infrastructure.clients import BackgroundEmailSender
+
+    gate = _Gate()
+    sender = BackgroundEmailSender(gate)
+
+    await sender.send(_message(code="123456"))
+    assert gate.sent == []  # SMTP ещё «думает», а вызывающий уже свободен
+
+    gate.release.set()
+    await sender.drain()
+    assert [m.code for m in gate.sent] == ["123456"]
+
+
+async def test_background_sender_swallows_and_logs_smtp_failure() -> None:
+    from identity_service.infrastructure.clients import BackgroundEmailSender
+
+    gate = _Gate(fail=True)
+    gate.release.set()
+    sender = BackgroundEmailSender(gate)
+
+    with capture_logs() as logs:
+        await sender.send(_message(code="123456"))
+        await sender.drain()
+
+    failed = [e for e in logs if e["event"] == "email.send_failed"]
+    assert failed and failed[0]["error"] == "RuntimeError"
+    assert "123456" not in str(logs)
+
+
+async def test_background_sender_applies_backpressure_when_queue_is_full() -> None:
+    """При max_pending задачах в полёте письмо отправляется синхронно (очередь не растёт)."""
+    import asyncio
+
+    from identity_service.infrastructure.clients import BackgroundEmailSender
+
+    gate = _Gate()
+    sender = BackgroundEmailSender(gate, max_pending=1)
+    await sender.send(_message(code="111111"))  # занимает единственный слот
+
+    blocked = asyncio.create_task(sender.send(_message(code="222222")))
+    await asyncio.sleep(0.05)
+    assert not blocked.done()  # второе письмо ждёт отправки, а не уходит в очередь
+
+    gate.release.set()
+    await blocked
+    await sender.drain()
+    assert sorted(m.code or "" for m in gate.sent) == ["111111", "222222"]

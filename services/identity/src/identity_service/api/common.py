@@ -25,6 +25,7 @@ from identity_service.settings import Settings
 
 REFRESH_COOKIE = "gv_refresh"
 DEVICE_COOKIE = "gv_device"
+BIND_COOKIE = "gv_bind"
 OAUTH_COOKIE = "gv_oauth"
 
 
@@ -151,4 +152,31 @@ def set_device_cookie(response: Response, token: str, settings: Settings) -> Non
         path=settings.cookies.refresh_path,
         httponly=True,
         **_cookie_kwargs(settings),
+    )
+
+
+def binding_token(request: Request) -> str | None:
+    """Значение cookie привязки кода к браузеру (``None`` — cookie нет)."""
+    return request.cookies.get(BIND_COOKIE) or None
+
+
+def set_binding_cookie(response: Response, token: str, settings: Settings) -> None:
+    """Cookie ``gv_bind`` (ADR 0041): код подтверждается только из браузера, который его запросил.
+
+    Живёт не дольше записи кода; только ручки auth, HttpOnly.
+    """
+    response.set_cookie(
+        BIND_COOKIE,
+        token,
+        max_age=settings.email_code.max_lifetime_s,
+        path=settings.cookies.refresh_path,
+        httponly=True,
+        **_cookie_kwargs(settings),
+    )
+
+
+def clear_binding_cookie(response: Response, settings: Settings) -> None:
+    """Удалить cookie привязки (код погашен)."""
+    response.delete_cookie(
+        BIND_COOKIE, path=settings.cookies.refresh_path, httponly=True, **_cookie_kwargs(settings)
     )

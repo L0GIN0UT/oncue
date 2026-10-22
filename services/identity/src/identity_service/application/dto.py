@@ -43,6 +43,8 @@ class ChallengeIssued:
         code_length: Цифр в коде.
         expires_in_s: Сколько секунд код действует.
         resend_after_s: Через сколько секунд можно запросить повтор.
+        binding_token: Значение одноразового cookie ``gv_bind`` (register, login): в тело
+            ответа не попадает, API кладёт его в cookie.
     """
 
     challenge_id: UUID
@@ -50,6 +52,7 @@ class ChallengeIssued:
     code_length: int
     expires_in_s: int
     resend_after_s: int
+    binding_token: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

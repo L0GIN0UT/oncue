@@ -190,7 +190,10 @@ email_challenges = Table(
     Column("send_count", Integer, nullable=False, server_default=text("1")),
     # Всего списанных попыток за жизнь записи: resend обнуляет attempts, но не это (потолок).
     Column("spent_total", Integer, nullable=False, server_default=text("0")),
+    # sha256 одноразового cookie gv_bind: подтвердить код можно только из этого браузера.
     Column("device_hash", Text, nullable=True),
+    # Ключ лимита писем на адрес (хэш адреса): одинаков у кода и пустышки (миграция 0012).
+    Column("mail_key", Text, nullable=True),
     Column("session_id", Uuid, nullable=True),
     Column("created_at", _TS, nullable=False),
     Column("expires_at", _TS, nullable=False),

@@ -128,7 +128,9 @@ async def test_register_rate_limited_by_ip(world: Any) -> None:
 
 async def test_verify_email_opens_session_and_trusts_device(world: Any) -> None:
     resp = await world.uc.register(_cmd())
-    result = await world.uc.verify_email(resp.challenge_id, world.last_code())
+    result = await world.uc.verify_email(
+        resp.challenge_id, world.last_code(), binding_token=resp.binding_token
+    )
     session = result.session
     (user,) = world.data.users.values()
     assert user.email_verified
@@ -144,9 +146,9 @@ async def test_verify_email_opens_session_and_trusts_device(world: Any) -> None:
 async def test_verify_email_is_single_use(world: Any) -> None:
     resp = await world.uc.register(_cmd())
     code = world.last_code()
-    await world.uc.verify_email(resp.challenge_id, code)
+    await world.uc.verify_email(resp.challenge_id, code, binding_token=resp.binding_token)
     with pytest.raises(InvalidInputError) as info:
-        await world.uc.verify_email(resp.challenge_id, code)
+        await world.uc.verify_email(resp.challenge_id, code, binding_token=resp.binding_token)
     assert info.value.code == "auth.code_invalid"
 
 
@@ -154,7 +156,9 @@ async def test_verify_expired_code(world: Any) -> None:
     resp = await world.uc.register(_cmd())
     world.clock.advance(seconds=601)
     with pytest.raises(GoneError) as info:
-        await world.uc.verify_email(resp.challenge_id, world.last_code())
+        await world.uc.verify_email(
+            resp.challenge_id, world.last_code(), binding_token=resp.binding_token
+        )
     assert info.value.code == "auth.code_expired"
     (user,) = world.data.users.values()
     assert not user.email_verified
@@ -164,7 +168,9 @@ async def test_bootstrap_admin_only_after_verification(world: Any) -> None:
     resp = await world.uc.register(_cmd(email="boss@example.com"))
     (user,) = world.data.users.values()
     assert user.roles == {"user"}
-    result = await world.uc.verify_email(resp.challenge_id, world.last_code())
+    result = await world.uc.verify_email(
+        resp.challenge_id, world.last_code(), binding_token=resp.binding_token
+    )
     assert world.data.users[user.id].roles == {"user", "admin"}
     assert "roles.manage" in result.session.perms
     changed = [e for e in world.events if isinstance(e, UserRolesChanged)]
@@ -212,7 +218,11 @@ async def test_unverified_email_gets_verification_code_instead_of_session(world:
 
     assert result.session is None and result.status == "code_required"
     assert result.challenge is not None and result.challenge.purpose == "register"
-    verified = await world.uc.verify_email(result.challenge.challenge_id, world.last_code())
+    verified = await world.uc.verify_email(
+        result.challenge.challenge_id,
+        world.last_code(),
+        binding_token=result.challenge.binding_token,
+    )
     assert verified.session.user_id is not None
 
 

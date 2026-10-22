@@ -32,7 +32,10 @@ class EmailChallenge:
         user_id: Владелец; ``None`` у «пустышки» (адрес занят/не существует).
         attempts / max_attempts: Списанные и допустимые вводы.
         send_count: Сколько раз код отправлялся (первая отправка + resend).
-        device_hash: sha256 cookie ``gv_device`` устройства, начавшего вход.
+        device_hash: sha256 одноразового cookie ``gv_bind`` браузера, запросившего код
+            (register, login): подтвердить код можно только из него; ``None`` — без привязки.
+        mail_key: Ключ лимита писем на адрес (хэш адреса) — одинаков у настоящего кода и
+            пустышки, поэтому resend расходует один и тот же лимит.
         session_id: Сессия, начавшая смену пароля (её не отзывают).
     """
 
@@ -51,6 +54,7 @@ class EmailChallenge:
     last_sent_at: datetime
     consumed_at: datetime | None = None
     cancelled_at: datetime | None = None
+    mail_key: str | None = None
 
     def is_active(self, now: datetime) -> bool:
         """Не погашен, не отменён и не истёк."""

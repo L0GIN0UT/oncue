@@ -86,6 +86,7 @@ from identity_service.domain import (
 )
 from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
 from identity_service.infrastructure.clients import (
+    BackgroundEmailSender,
     LogEmailSender,
     SmtpEmailSender,
     YandexOAuthProvider,
@@ -600,16 +601,19 @@ def build_periodic_jobs(infra: Infrastructure) -> list[PeriodicJob]:
 def _email_sender(settings: Settings) -> EmailSender:
     if settings.email.backend == "smtp":
         smtp = settings.smtp
-        return SmtpEmailSender(
-            host=smtp.host,
-            port=smtp.port,
-            sender=settings.email.sender,
-            username=smtp.username,
-            password=smtp.password.get_secret_value() if smtp.password else None,
-            start_tls=smtp.start_tls,
-            use_tls=smtp.use_tls,
-            timeout_s=smtp.timeout_s,
-            code_ttl_s=settings.email_code.ttl_s,
+        # SMTP — в фоне: время ответа не должно зависеть от почтового сервера.
+        return BackgroundEmailSender(
+            SmtpEmailSender(
+                host=smtp.host,
+                port=smtp.port,
+                sender=settings.email.sender,
+                username=smtp.username,
+                password=smtp.password.get_secret_value() if smtp.password else None,
+                start_tls=smtp.start_tls,
+                use_tls=smtp.use_tls,
+                timeout_s=smtp.timeout_s,
+                code_ttl_s=settings.email_code.ttl_s,
+            )
         )
     # Код из письма — секрет: в лог его пишем только в local/ci (e2e читают его оттуда).
     return LogEmailSender(

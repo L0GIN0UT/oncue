@@ -58,7 +58,9 @@ async def test_login_without_device_cookie_requires_code(world: Any) -> None:
 async def test_confirm_login_opens_session_and_trusts_device(world: Any) -> None:
     await world.make_user()
     challenge = await _new_device_login(world)
-    verified = await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+    verified = await world.uc.confirm_login(
+        challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+    )
     assert verified.session.session_id in world.data.sessions
     again = await world.login_result("neo_2026", PASSWORD, device_token=verified.device_token)
     assert again.status == "authenticated"
@@ -69,7 +71,9 @@ async def test_planted_device_cookie_is_never_trusted(world: Any) -> None:
     await world.make_user()
     challenge = await _new_device_login(world)  # запрос пришёл с cookie STRANGER
 
-    verified = await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+    verified = await world.uc.confirm_login(
+        challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+    )
 
     assert verified.device_token != STRANGER  # сервер выдал свой токен
     planted = await world.login_result("neo_2026", PASSWORD, device_token=STRANGER)
@@ -79,7 +83,11 @@ async def test_planted_device_cookie_is_never_trusted(world: Any) -> None:
 async def test_new_device_gets_fresh_token_when_it_had_no_cookie(world: Any) -> None:
     await world.make_user()
     result = await world.login_result("neo_2026", PASSWORD, device_token=None)
-    verified = await world.uc.confirm_login(result.challenge.challenge_id, world.last_code())
+    verified = await world.uc.confirm_login(
+        result.challenge.challenge_id,
+        world.last_code(),
+        binding_token=result.challenge.binding_token,
+    )
     assert verified.device_token
     again = await world.login_result("neo_2026", PASSWORD, device_token=verified.device_token)
     assert again.status == "authenticated"
@@ -123,16 +131,22 @@ async def test_new_login_code_cancels_previous_one(world: Any) -> None:
     second = await _new_device_login(world)
     assert first.challenge_id != second.challenge_id
     with pytest.raises(InvalidInputError) as info:
-        await world.uc.confirm_login(first.challenge_id, first_code)
+        await world.uc.confirm_login(
+            first.challenge_id, first_code, binding_token=first.binding_token
+        )
     assert info.value.code == "auth.code_invalid"
-    await world.uc.confirm_login(second.challenge_id, world.last_code())
+    await world.uc.confirm_login(
+        second.challenge_id, world.last_code(), binding_token=second.binding_token
+    )
 
 
 async def test_login_code_cannot_confirm_registration(world: Any) -> None:
     await world.make_user()
     challenge = await _new_device_login(world)
     with pytest.raises(InvalidInputError) as info:
-        await world.uc.verify_email(challenge.challenge_id, world.last_code())
+        await world.uc.verify_email(
+            challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+        )
     assert info.value.code == "auth.code_invalid"
 
 
@@ -153,7 +167,9 @@ async def test_wrong_code_reports_attempts_left_and_keeps_spent_attempt(world: A
     challenge = await _new_device_login(world)
     for left in (4, 3):
         with pytest.raises(InvalidInputError) as info:
-            await world.uc.confirm_login(challenge.challenge_id, "999999")
+            await world.uc.confirm_login(
+                challenge.challenge_id, "999999", binding_token=challenge.binding_token
+            )
         assert info.value.code == "auth.code_invalid"
         assert info.value.details["attempts_left"] == left
     # Откат транзакции запроса не возвращает попытки.
@@ -166,9 +182,13 @@ async def test_exhausted_attempts_block_even_the_right_code(world: Any) -> None:
     code = world.last_code()
     for _ in range(5):
         with pytest.raises(InvalidInputError):
-            await world.uc.confirm_login(challenge.challenge_id, "999999")
+            await world.uc.confirm_login(
+                challenge.challenge_id, "999999", binding_token=challenge.binding_token
+            )
     with pytest.raises(InvalidInputError) as info:
-        await world.uc.confirm_login(challenge.challenge_id, code)
+        await world.uc.confirm_login(
+            challenge.challenge_id, code, binding_token=challenge.binding_token
+        )
     assert info.value.details["attempts_left"] == 0
     assert world.challenge(challenge.challenge_id).consumed_at is None
 
@@ -177,9 +197,13 @@ async def test_correct_code_is_single_use(world: Any) -> None:
     await world.make_user()
     challenge = await _new_device_login(world)
     code = world.last_code()
-    await world.uc.confirm_login(challenge.challenge_id, code)
+    await world.uc.confirm_login(
+        challenge.challenge_id, code, binding_token=challenge.binding_token
+    )
     with pytest.raises(InvalidInputError):
-        await world.uc.confirm_login(challenge.challenge_id, code)
+        await world.uc.confirm_login(
+            challenge.challenge_id, code, binding_token=challenge.binding_token
+        )
 
 
 async def test_unknown_challenge_is_invalid(world: Any) -> None:
@@ -195,7 +219,9 @@ async def test_expired_code(world: Any) -> None:
     challenge = await _new_device_login(world)
     world.clock.advance(seconds=600)
     with pytest.raises(GoneError) as info:
-        await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+        await world.uc.confirm_login(
+            challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+        )
     assert info.value.code == "auth.code_expired"
 
 
@@ -205,9 +231,13 @@ async def test_daily_failure_cap(make_world: Any) -> None:
     challenge = await _new_device_login(world)
     for _ in range(3):
         with pytest.raises(InvalidInputError):
-            await world.uc.confirm_login(challenge.challenge_id, "999999")
+            await world.uc.confirm_login(
+                challenge.challenge_id, "999999", binding_token=challenge.binding_token
+            )
     with pytest.raises(RateLimitedError) as info:
-        await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+        await world.uc.confirm_login(
+            challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+        )
     assert info.value.code == "auth.code_limit_exceeded"
     # Пароль и доверенные устройства при этом работают.
     assert (
@@ -216,7 +246,9 @@ async def test_daily_failure_cap(make_world: Any) -> None:
     # Через сутки потолок снимается.
     world.clock.advance(hours=24, seconds=1)
     fresh = await _new_device_login(world)
-    await world.uc.confirm_login(fresh.challenge_id, world.last_code())
+    await world.uc.confirm_login(
+        fresh.challenge_id, world.last_code(), binding_token=fresh.binding_token
+    )
 
 
 async def test_confirm_is_rate_limited_per_ip(make_world: Any) -> None:
@@ -225,9 +257,19 @@ async def test_confirm_is_rate_limited_per_ip(make_world: Any) -> None:
     challenge = await _new_device_login(world)
     for _ in range(2):
         with pytest.raises(InvalidInputError):
-            await world.uc.confirm_login(challenge.challenge_id, "999999", ip="8.8.8.8")
+            await world.uc.confirm_login(
+                challenge.challenge_id,
+                "999999",
+                ip="8.8.8.8",
+                binding_token=challenge.binding_token,
+            )
     with pytest.raises(RateLimitedError) as info:
-        await world.uc.confirm_login(challenge.challenge_id, world.last_code(), ip="8.8.8.8")
+        await world.uc.confirm_login(
+            challenge.challenge_id,
+            world.last_code(),
+            ip="8.8.8.8",
+            binding_token=challenge.binding_token,
+        )
     assert info.value.code == "rate.limited"
     assert world.challenge(challenge.challenge_id).attempts == 2  # отказ по IP попытку не тратит
 
@@ -254,7 +296,9 @@ async def test_resend_too_early_then_replaces_code(world: Any) -> None:
     assert info.value.details["retry_after"] == 50
 
     with pytest.raises(InvalidInputError):
-        await world.uc.confirm_login(challenge.challenge_id, "999999")  # тратим попытку
+        await world.uc.confirm_login(
+            challenge.challenge_id, "999999", binding_token=challenge.binding_token
+        )  # тратим попытку
     world.advance(50)
     resent = await world.uc.resend_code(challenge.challenge_id)
     assert resent.challenge_id == challenge.challenge_id
@@ -263,8 +307,12 @@ async def test_resend_too_early_then_replaces_code(world: Any) -> None:
     new_code = world.last_code()
     assert new_code != old_code
     with pytest.raises(InvalidInputError):
-        await world.uc.confirm_login(challenge.challenge_id, old_code)
-    await world.uc.confirm_login(challenge.challenge_id, new_code)
+        await world.uc.confirm_login(
+            challenge.challenge_id, old_code, binding_token=challenge.binding_token
+        )
+    await world.uc.confirm_login(
+        challenge.challenge_id, new_code, binding_token=challenge.binding_token
+    )
 
 
 async def test_resend_after_expiry_issues_new_challenge(world: Any) -> None:
@@ -274,7 +322,9 @@ async def test_resend_after_expiry_issues_new_challenge(world: Any) -> None:
     resent = await world.uc.resend_code(challenge.challenge_id)
     assert resent.challenge_id != challenge.challenge_id
     assert resent.purpose == "login"
-    await world.uc.confirm_login(resent.challenge_id, world.last_code())
+    await world.uc.confirm_login(
+        resent.challenge_id, world.last_code(), binding_token=challenge.binding_token
+    )
 
 
 async def test_resend_consumed_or_unknown_is_invalid(world: Any) -> None:
@@ -282,7 +332,9 @@ async def test_resend_consumed_or_unknown_is_invalid(world: Any) -> None:
 
     await world.make_user()
     challenge = await _new_device_login(world)
-    await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+    await world.uc.confirm_login(
+        challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+    )
     world.advance(120)
     for challenge_id in (challenge.challenge_id, uuid7()):
         with pytest.raises(InvalidInputError) as info:
@@ -299,7 +351,9 @@ async def test_resend_registration_code_verifies_account(world: Any) -> None:
     world.advance(61)
     await world.uc.resend_code(resp.challenge_id)
     assert world.emails[-1].purpose == "code_register"
-    result = await world.uc.verify_email(resp.challenge_id, world.last_code())
+    result = await world.uc.verify_email(
+        resp.challenge_id, world.last_code(), binding_token=resp.binding_token
+    )
     assert result.session.user_id in world.data.users
 
 
@@ -372,6 +426,7 @@ async def test_reset_with_weak_password_keeps_code_usable(world: Any) -> None:
         await world.uc.reset_password(resp.challenge_id, code, "short")
     assert info.value.code == "auth.password_weak"
     assert world.challenge(resp.challenge_id).consumed_at is None
+    assert world.challenge(resp.challenge_id).attempts == 0  # попытка не списана
     await world.uc.reset_password(resp.challenge_id, code, NEW_PASSWORD)
 
 
@@ -399,7 +454,9 @@ async def test_password_change_revokes_other_sessions_and_devices_but_not_curren
     # Второе устройство тоже доверено.
     challenge = await _new_device_login(world)
     other_device = (
-        await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+        await world.uc.confirm_login(
+            challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+        )
     ).device_token
 
     resp = await world.uc.request_password_change(
@@ -436,6 +493,8 @@ async def test_password_change_code_of_other_user_is_rejected(world: Any) -> Non
         )
     assert info.value.code == "auth.code_invalid"
     assert world.data.creds[bob] == f"h${PASSWORD}"
+    # Чужая попытка не сжигает попытки владельца кода.
+    assert world.challenge(resp.challenge_id).attempts == 0
 
 
 async def test_password_change_weak_password_rejected(world: Any) -> None:
@@ -455,7 +514,9 @@ async def test_password_change_weak_password_rejected(world: Any) -> None:
 async def test_logout_all_keeps_trust_of_current_device_only(world: Any) -> None:
     user_id = await world.make_user()
     challenge = await _new_device_login(world)
-    verified = await world.uc.confirm_login(challenge.challenge_id, world.last_code())
+    verified = await world.uc.confirm_login(
+        challenge.challenge_id, world.last_code(), binding_token=challenge.binding_token
+    )
     await world.uc.logout_all(user_id, device_token=verified.device_token)
     kept = await world.login_result("neo_2026", PASSWORD, device_token=verified.device_token)
     assert kept.session
@@ -543,14 +604,18 @@ async def test_password_change_trusts_current_device_even_without_cookie(world: 
 # ------------------------------------------------------------------------ ревью безопасности
 
 
-async def test_resend_cannot_keep_a_record_alive_past_the_daily_window(world: Any) -> None:
+async def test_resend_cannot_keep_a_record_alive_past_the_daily_window(
+    make_world: Any,
+) -> None:
     """Запись нельзя держать живой повторными отправками, пока она не выпадет из окна потолка.
 
     ``failures_since`` считает записи по ``created_at``; без абсолютного срока жизни
     атакующий дождался бы суток, и неудачи старой записи перестали бы учитываться.
     """
+    world = make_world(email_per_address=10_000)  # лимит писем не должен мешать серии
     await world.make_user()
-    cid = (await _new_device_login(world)).challenge_id
+    first = await _new_device_login(world)
+    cid, binding = first.challenge_id, first.binding_token
     for _ in range(190):  # ≈ 26 часов с шагом 500 с (TTL кода — 600 с)
         world.advance(seconds=500)
         cid = (await world.uc.resend_code(cid)).challenge_id
@@ -558,7 +623,7 @@ async def test_resend_cannot_keep_a_record_alive_past_the_daily_window(world: An
     with pytest.raises(RateLimitedError) as info:
         for _ in range(40):
             try:
-                await world.uc.confirm_login(cid, "999999")
+                await world.uc.confirm_login(cid, "999999", binding_token=binding)
             except InvalidInputError as exc:
                 if exc.details["attempts_left"] == 0:
                     world.advance(seconds=61)
@@ -566,7 +631,8 @@ async def test_resend_cannot_keep_a_record_alive_past_the_daily_window(world: An
     assert info.value.code == "auth.code_limit_exceeded"
 
 
-async def test_resend_after_max_lifetime_issues_a_new_record(world: Any) -> None:
+async def test_resend_after_max_lifetime_issues_a_new_record(make_world: Any) -> None:
+    world = make_world(email_per_address=10_000)
     await world.make_user()
     first = (await _new_device_login(world)).challenge_id
     cid = first
@@ -638,3 +704,106 @@ async def test_purge_batches_until_short_batch_and_uses_retention() -> None:
     assert first["challenges_before"] == clock.now() - timedelta(seconds=7200)
     assert first["devices_revoked_before"] == clock.now() - timedelta(seconds=600)
     assert first["limit"] == 10 and len(purger.calls) == 3
+
+
+# ------------------------------------------------------------------------ доработки по ревью (2)
+
+
+async def test_code_is_bound_to_the_requesting_browser(world: Any) -> None:
+    """Правильный код из другого браузера (нет cookie gv_bind) считается неверным."""
+    await world.make_user()
+    challenge = await _new_device_login(world)
+    code = world.last_code()
+    assert challenge.binding_token
+
+    for wrong in (None, "someone-elses-cookie"):
+        with pytest.raises(InvalidInputError) as info:
+            await world.uc.confirm_login(challenge.challenge_id, code, binding_token=wrong)
+        assert info.value.code == "auth.code_invalid"
+
+    verified = await world.uc.confirm_login(
+        challenge.challenge_id, code, binding_token=challenge.binding_token
+    )
+    assert verified.session.session_id in world.data.sessions
+
+
+async def test_binding_attempts_are_spent_even_for_the_right_code(world: Any) -> None:
+    await world.make_user()
+    challenge = await _new_device_login(world)
+    code = world.last_code()
+    for _ in range(5):
+        with pytest.raises(InvalidInputError):
+            await world.uc.confirm_login(challenge.challenge_id, code, binding_token=None)
+    with pytest.raises(InvalidInputError) as info:
+        await world.uc.confirm_login(
+            challenge.challenge_id, code, binding_token=challenge.binding_token
+        )
+    assert info.value.details["attempts_left"] == 0  # подбор через чужой браузер не бесплатен
+
+
+async def test_registration_gives_binding_cookie_in_every_branch(make_world: Any) -> None:
+    """Cookie привязки выдаётся и для занятого адреса, и при подавленном письме."""
+    from identity_service.application.dto import RegisterCommand
+
+    world = make_world(email_per_address=1)
+    await world.make_user()  # занимает адрес и тратит единственное письмо
+    taken = await world.uc.register(
+        RegisterCommand(
+            nickname="other",
+            email="neo@example.com",
+            password=PASSWORD,
+            consents=world.config.required_consents,
+        )
+    )
+    fresh = await world.uc.register(
+        RegisterCommand(
+            nickname="third",
+            email="third@example.com",
+            password=PASSWORD,
+            consents=world.config.required_consents,
+        )
+    )
+    assert taken.binding_token and fresh.binding_token  # fake и пустышка не отличаются
+
+
+# У настоящего адреса одно письмо уже ушло при регистрации — лимит на одно больше.
+@pytest.mark.parametrize(("address", "limit"), [("neo@example.com", 3), ("ghost@example.com", 2)])
+async def test_resend_spends_the_same_mail_limit_for_real_code_and_decoy(
+    make_world: Any, address: str, limit: int
+) -> None:
+    """Исчерпанный лимит писем: код не заменяется — одинаково у настоящего и у пустышки."""
+    world = make_world(email_per_address=limit)
+    await world.make_user()
+    first = await world.uc.request_password_reset(address, ip=None)  # письмо 1
+    world.advance(seconds=61)
+    second = await world.uc.resend_code(first.challenge_id)  # письмо 2
+    assert world.challenge(first.challenge_id).send_count == 2
+    code_hash = world.challenge(first.challenge_id).code_hash
+    world.advance(seconds=61)
+
+    third = await world.uc.resend_code(first.challenge_id)  # лимит исчерпан
+
+    assert third.challenge_id == second.challenge_id == first.challenge_id
+    assert world.challenge(first.challenge_id).send_count == 2  # не изменилась
+    assert world.challenge(first.challenge_id).code_hash == code_hash  # код не заменён
+
+
+async def test_decoy_reset_rejects_weak_password_without_spending_attempts(world: Any) -> None:
+    await world.make_user()
+    resp = await world.uc.request_password_reset("ghost@example.com", ip=None)
+    with pytest.raises(InvalidInputError) as info:
+        await world.uc.reset_password(resp.challenge_id, "000000", "short")
+    assert info.value.code == "auth.password_weak"
+    assert world.challenge(resp.challenge_id).attempts == 0
+
+
+async def test_password_change_weak_password_does_not_spend_an_attempt(world: Any) -> None:
+    user_id = await world.make_user()
+    resp = await world.uc.request_password_change(user_id, PASSWORD, session_id=None, ip=None)
+    code = world.last_code()
+    with pytest.raises(InvalidInputError) as info:
+        await world.uc.confirm_password_change(
+            user_id, resp.challenge_id, code, "short", session_id=None
+        )
+    assert info.value.code == "auth.password_weak"
+    assert world.challenge(resp.challenge_id).attempts == 0

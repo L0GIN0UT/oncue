@@ -223,3 +223,37 @@ async def test_0011_invariants_and_cleanup_indexes_are_reversible(database_url: 
     assert not set(names) & await present()
     await asyncio.to_thread(command.upgrade, config, "head")
     assert set(names) <= await present()
+
+
+async def test_0012_mail_key_column_is_reversible(database_url: str) -> None:
+    """Доработки по ревью: колонка mail_key (ключ лимита писем) добавляется и откатывается."""
+    import asyncio
+
+    from alembic import command
+    from sqlalchemy import text
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+
+    async def has_column() -> bool:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as conn:
+                found = await conn.scalar(
+                    text(
+                        "SELECT count(*) FROM information_schema.columns "
+                        "WHERE table_name = 'email_challenges' AND column_name = 'mail_key'"
+                    )
+                )
+                return bool(found)
+        finally:
+            await engine.dispose()
+
+    assert await has_column()
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0011")
+    assert not await has_column()
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert await has_column()

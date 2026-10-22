@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from email.message import EmailMessage as MimeMessage
 from urllib.parse import urlencode
 
@@ -10,7 +11,7 @@ import httpx
 import structlog
 
 from gv_core.errors import DependencyUnavailableError
-from identity_service.application.ports import EmailMessage, ExternalProfile
+from identity_service.application.ports import EmailMessage, EmailSender, ExternalProfile
 from identity_service.application.security import OAuthStateError
 from identity_service.domain import Provider
 
@@ -176,6 +177,40 @@ class LogEmailSender:
         if message.challenge_id is not None:
             extra["challenge_id"] = str(message.challenge_id)  # не секрет: по нему e2e ищет код
         log.info("email.logged", purpose=message.purpose, **extra)
+
+
+class BackgroundEmailSender:
+    """Отправка письма вне запроса: время ответа не зависит от SMTP (ADR 0041, ревью).
+
+    Иначе ``forgot`` отвечал бы дольше для существующего адреса (письмо уходит только ему), и по
+    времени ответа адрес был бы различим. Задача не переживает остановку процесса — письмо
+    тогда не дойдёт, пользователь запросит код повторно (resend). При ``max_pending`` задачах в
+    полёте отправка идёт синхронно: очередь не растёт без границ.
+    """
+
+    def __init__(self, inner: EmailSender, *, max_pending: int = 100) -> None:
+        self._inner, self._max_pending = inner, max_pending
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    async def send(self, message: EmailMessage) -> None:
+        """Поставить письмо в фон (или отправить сразу, если очередь заполнена)."""
+        if len(self._tasks) >= self._max_pending:
+            await self._deliver(message)
+            return
+        task = asyncio.get_running_loop().create_task(self._deliver(message))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def drain(self, timeout_s: float = 10.0) -> None:
+        """Дождаться уже запущенных отправок (остановка процесса, тесты)."""
+        if self._tasks:
+            await asyncio.wait(set(self._tasks), timeout=timeout_s)
+
+    async def _deliver(self, message: EmailMessage) -> None:
+        try:
+            await self._inner.send(message)
+        except Exception as exc:
+            log.warning("email.send_failed", purpose=message.purpose, error=type(exc).__name__)
 
 
 class SmtpEmailSender:

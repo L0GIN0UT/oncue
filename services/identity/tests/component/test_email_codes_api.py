@@ -315,3 +315,49 @@ async def test_logout_all_keeps_current_device_trusted_but_not_others(service: A
     assert (await _login(service.client)).json()["status"] == "authenticated"
     assert (await _login(other)).json()["status"] == "code_required"
     await other.aclose()
+
+
+async def test_code_can_be_entered_only_from_the_browser_that_requested_it(service: Any) -> None:
+    """Правильный код из другого браузера (нет cookie gv_bind) — как неверный (ревью ADR 0041)."""
+    response = await service.client.post(
+        "/v1/auth/register",
+        json={
+            "nickname": "neo_2026",
+            "email": "neo@example.com",
+            "password": PASSWORD,
+            "consents": [
+                {"kind": "terms", "version": "2026-10"},
+                {"kind": "privacy", "version": "2026-10"},
+            ],
+        },
+        headers=_origin(),
+    )
+    assert response.status_code == 202, response.text
+    bind = _set_cookie(response, "gv_bind").lower()
+    assert "httponly" in bind and "path=/v1/auth" in bind
+    assert "gv_bind" not in response.text  # токен привязки в тело ответа не попадает
+    challenge_id = response.json()["challenge_id"]
+    code = service.code_for(challenge_id)
+    payload = {"challenge_id": challenge_id, "code": code}
+
+    other = service.client_from("203.0.113.20")  # другой браузер: cookie gv_bind нет
+    foreign = await other.post("/v1/auth/verify-email", json=payload, headers=_origin())
+    assert_problem(foreign, 422, "auth.code_invalid")
+    await other.aclose()
+
+    mine = await service.client.post("/v1/auth/verify-email", json=payload, headers=_origin())
+    assert mine.status_code == 200, mine.text
+    cleared = _set_cookie(mine, "gv_bind").lower()
+    assert "max-age=0" in cleared  # код погашен — привязка снята
+
+
+async def test_login_code_sets_binding_cookie_and_hides_it_from_the_body(service: Any) -> None:
+    await service.register()
+    other = service.client_from("203.0.113.21")
+
+    first = await _login(other)
+
+    assert first.json()["status"] == "code_required"
+    assert "httponly" in _set_cookie(first, "gv_bind").lower()
+    assert "gv_bind" not in first.text
+    await other.aclose()

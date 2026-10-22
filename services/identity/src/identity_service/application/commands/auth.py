@@ -28,6 +28,7 @@ from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.dto import ChallengeIssued, RegisterCommand
 from identity_service.application.ports import (
     ChallengePurpose,
+    EmailChallenge,
     EmailMessage,
     EmailSender,
     IdentityUnitOfWork,
@@ -44,6 +45,7 @@ from identity_service.application.security import (
     ensure_allowed,
     hash_secret,
     ip_subnet,
+    mail_key,
     rate_key,
     user_subject_hash,
 )
@@ -90,20 +92,25 @@ async def send_safely(sender: EmailSender, message: EmailMessage) -> None:
         log.warning("email.send_failed", purpose=message.purpose, error=type(exc).__name__)
 
 
-async def mail_allowed(limiter: RateLimiter, limits: LimitConfig, to: EmailAddress) -> bool:
-    """Засчитать письмо на адрес (ключ — хэш адреса) и решить, можно ли его отправить.
-
-    Лимит защищает владельца адреса от рассылки через register/forgot. Превышение не видно
-    HTTP-клиенту (иначе раскрылось бы существование аккаунта) — письмо просто не уходит.
-    """
+async def mail_allowed_key(limiter: RateLimiter, limits: LimitConfig, key: str) -> bool:
+    """Засчитать письмо по ключу адреса (``security.mail_key``); ``False`` — лимит исчерпан."""
     decision = await limiter.hit(
-        rate_key("mail:addr", to.value),
+        rate_key("mail:addr", key),
         limit=limits.email_per_address,
         window_s=limits.email_address_window_s,
     )
     if not decision.allowed:
         log.info("email.suppressed_rate_limited")
     return decision.allowed
+
+
+async def mail_allowed(limiter: RateLimiter, limits: LimitConfig, to: EmailAddress) -> bool:
+    """Засчитать письмо на адрес (ключ — хэш адреса) и решить, можно ли его отправить.
+
+    Лимит защищает владельца адреса от рассылки через register/forgot. Превышение не видно
+    HTTP-клиенту (иначе раскрылось бы существование аккаунта) — письмо просто не уходит.
+    """
+    return await mail_allowed_key(limiter, limits, mail_key(to.value))
 
 
 async def send_limited(
@@ -181,6 +188,8 @@ class RegisterWithEmail:
         purpose = ChallengePurpose.REGISTER
         message: EmailMessage | None = None
         new_user_id: UUID | None = None
+        # Привязка к браузеру: cookie gv_bind ставится во всех ветках одинаково.
+        binding_token, binding_hash = self._codes.new_binding()
 
         async with self._uow() as uow:
             if await uow.users.find_by_nickname(nickname) is not None:
@@ -190,10 +199,12 @@ class RegisterWithEmail:
             allowed = await mail_allowed(self._limiter, self._config.limits, email)
             if taken:
                 if allowed:
-                    response = await self._codes.issue_decoy(uow, purpose, email.value)
+                    response = await self._codes.issue_decoy(
+                        uow, purpose, email.value, binding=(binding_token, binding_hash)
+                    )
                     message = EmailMessage(email, "already_registered", None)
                 else:
-                    response = self._codes.fake(purpose)
+                    response = self._codes.fake(purpose, binding_token=binding_token)
             else:
                 now = self._clock.now()
                 user = User.register(
@@ -217,13 +228,15 @@ class RegisterWithEmail:
                         purpose=purpose,
                         subject_hash=email_subject_hash(email.value),
                         user_id=user.id,
+                        device_hash=binding_hash,
+                        mail_key=mail_key(email.value),
                     )
-                    response = self._codes.view(challenge)
+                    response = self._codes.view(challenge, binding_token=binding_token)
                     message = EmailMessage(
                         email, f"code_{purpose.value}", None, code=code, challenge_id=challenge.id
                     )
                 else:
-                    response = self._codes.fake(purpose)
+                    response = self._codes.fake(purpose, binding_token=binding_token)
                 uow.track(user)
             await uow.commit()
 
@@ -258,8 +271,12 @@ class VerifyEmail:
         code: str,
         *,
         ip: str | None = None,
+        binding_token: str | None = None,
     ) -> VerifiedSession:
         """Проверить код, подтвердить адрес и открыть web-сессию.
+
+        ``binding_token`` — cookie ``gv_bind`` браузера, запросившего код; из другого браузера
+        код считается неверным.
 
         Raises:
             InvalidInputError: ``auth.code_invalid``.
@@ -271,6 +288,7 @@ class VerifyEmail:
             challenge = await self._codes.check(
                 uow, challenge_id, code, ChallengePurpose.REGISTER, ip
             )
+            self._codes.require_binding(challenge, binding_token)
             user = await uow.users.get(challenge.user_id) if challenge.user_id else None
             if user is None or not user.is_active:
                 raise code_invalid(0)
@@ -507,20 +525,22 @@ class LoginWithPassword:
                 return LoginResult(session=issued)
             await self._codes.limit_requests(ip)
             purpose = ChallengePurpose.LOGIN
+            binding_token, binding_hash = self._codes.new_binding()
             if await mail_allowed(self._limiter, self._config.limits, user.email):
                 challenge, code = await self._codes.issue(
                     uow,
                     purpose=purpose,
                     subject_hash=user_subject_hash(user.id),
                     user_id=user.id,
-                    device_hash=device_hash(device_token),
+                    device_hash=binding_hash,
+                    mail_key=mail_key(user.email.value),
                 )
-                response = self._codes.view(challenge)
+                response = self._codes.view(challenge, binding_token=binding_token)
                 message = EmailMessage(
                     user.email, f"code_{purpose.value}", None, code=code, challenge_id=challenge.id
                 )
             else:
-                response = self._codes.fake(purpose)
+                response = self._codes.fake(purpose, binding_token=binding_token)
             await uow.commit()
         if message is not None:
             await send_safely(self._email, message)
@@ -532,19 +552,22 @@ class LoginWithPassword:
         purpose = ChallengePurpose.REGISTER
         await self._codes.limit_requests(ip)
         message: EmailMessage | None = None
+        binding_token, binding_hash = self._codes.new_binding()
         if await mail_allowed(self._limiter, self._config.limits, user.email):
             challenge, code = await self._codes.issue(
                 uow,
                 purpose=purpose,
                 subject_hash=email_subject_hash(user.email.value),
                 user_id=user.id,
+                device_hash=binding_hash,
+                mail_key=mail_key(user.email.value),
             )
-            response = self._codes.view(challenge)
+            response = self._codes.view(challenge, binding_token=binding_token)
             message = EmailMessage(
                 user.email, f"code_{purpose.value}", None, code=code, challenge_id=challenge.id
             )
         else:
-            response = self._codes.fake(purpose)
+            response = self._codes.fake(purpose, binding_token=binding_token)
         await uow.commit()
         if message is not None:
             await send_safely(self._email, message)
@@ -570,6 +593,7 @@ class ConfirmLogin:
         code: str,
         *,
         ip: str | None = None,
+        binding_token: str | None = None,
     ) -> VerifiedSession:
         """Проверить код, открыть web-сессию и доверить устройство.
 
@@ -580,6 +604,7 @@ class ConfirmLogin:
         """
         async with self._uow() as uow:
             challenge = await self._codes.check(uow, challenge_id, code, ChallengePurpose.LOGIN, ip)
+            self._codes.require_binding(challenge, binding_token)
             user = await uow.users.get(challenge.user_id) if challenge.user_id else None
             if user is None or not user.is_active or not user.email_verified:
                 raise code_invalid(0)
@@ -824,6 +849,7 @@ class RequestPasswordReset:
                     purpose=purpose,
                     subject_hash=email_subject_hash(address.value),
                     user_id=user.id,
+                    mail_key=mail_key(address.value),
                 )
                 response = self._codes.view(challenge)
                 message = EmailMessage(
@@ -876,6 +902,9 @@ class ResetPassword:
             GoneError: ``auth.code_expired``.
             RateLimitedError: лимит IP или ``auth.code_limit_exceeded``.
         """
+        # Правила, не зависящие от пользователя, — до списания попытки: слабый пароль не
+        # «сжигает» код, а ответ одинаков для настоящего кода и пустышки.
+        self._config.password_policy.check(new_password, nickname="", email="")
         now = self._clock.now()
         async with self._uow() as uow:
             challenge = await self._codes.check(uow, challenge_id, code, ChallengePurpose.RESET, ip)
@@ -942,13 +971,11 @@ class ResendCode:
             current = await uow.email_challenges.get(challenge_id)
             if current is None:
                 raise code_invalid(0)
-            updated, code = await self._codes.resend(uow, current)
+            updated, code = await self._codes.resend(uow, current, send_allowed=self._send_allowed)
             user = await uow.users.get(updated.user_id) if updated.user_id else None
-            if (
-                user is not None
-                and user.is_active
-                and await mail_allowed(self._limiter, self._config.limits, user.email)
-            ):
+            # Код ``None`` — лимит писем исчерпан: запись не менялась, письма нет. Лимит
+            # одинаков у настоящего кода и пустышки (ключ лежит в записи, не зависит от user).
+            if code is not None and user is not None and user.is_active:
                 message = EmailMessage(
                     user.email,
                     f"code_{updated.purpose.value}",
@@ -960,6 +987,12 @@ class ResendCode:
         if message is not None:
             await send_safely(self._email, message)
         return self._codes.view(updated)
+
+    async def _send_allowed(self, challenge: EmailChallenge) -> bool:
+        key = challenge.mail_key
+        if key is None:  # записи без ключа (до миграции 0012) лимитом не охвачены
+            return True
+        return await mail_allowed_key(self._limiter, self._config.limits, key)
 
 
 class RequestPasswordChange:
@@ -1008,6 +1041,7 @@ class RequestPasswordChange:
                     purpose=purpose,
                     subject_hash=user_subject_hash(user.id),
                     user_id=user.id,
+                    mail_key=mail_key(user.email.value),
                     session_id=session_id,
                 )
                 response = self._codes.view(challenge)
@@ -1065,14 +1099,22 @@ class ConfirmPasswordChange:
         """
         now = self._clock.now()
         async with self._uow() as uow:
-            challenge = await self._codes.check(
-                uow, challenge_id, code, ChallengePurpose.PASSWORD_CHANGE, ip
-            )
+            # До списания попытки: чужой/неподходящий код и слабый пароль её не сжигают.
             user = await uow.users.get(user_id)
-            if user is None or not user.is_active or challenge.user_id != user_id:
+            known = await uow.email_challenges.get(challenge_id)
+            if (
+                user is None
+                or not user.is_active
+                or known is None
+                or known.user_id != user_id
+                or known.purpose is not ChallengePurpose.PASSWORD_CHANGE
+            ):
                 raise code_invalid(0)
             self._config.password_policy.check(
                 new_password, nickname=user.nickname.value, email=user.email.value
+            )
+            challenge = await self._codes.check(
+                uow, challenge_id, code, ChallengePurpose.PASSWORD_CHANGE, ip
             )
             await self._codes.consume(uow, challenge)
             await uow.credentials.set_password_hash(

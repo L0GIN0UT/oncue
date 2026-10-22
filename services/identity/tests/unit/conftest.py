@@ -534,7 +534,9 @@ class World:
             RegisterCommand(nickname=nickname, email=email, password=password, consents=CONSENTS)
         )
         if verified:
-            result = await self.uc.verify_email(challenge.challenge_id, self.last_code())
+            result = await self.uc.verify_email(
+                challenge.challenge_id, self.last_code(), binding_token=challenge.binding_token
+            )
             user_id = result.session.user_id
             # Известное устройство DEVICE доверено каждому пользователю из make_user: токен
             # сервер выдаёт сам, поэтому «cookie DEVICE» заводим в данные напрямую.
