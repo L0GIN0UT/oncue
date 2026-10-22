@@ -133,13 +133,17 @@ class RoundOutcome:
         result: Итог раунда.
         level: Уровень точного ответа (``None``, если точного не было).
         partial_level: Уровень частичного ответа (``None``, если не было).
-        elapsed_ms: Время от выдачи первого ассета раунда до ответа (для ``by_speed``).
+        elapsed_ms: Время от выдачи первого ассета раунда до ответа (для ``by_speed``);
+            в матче — от открытия уровня, на котором дан ответ (``party_speed``).
+        window_ms: Окно уровня ответа в матче (``T`` формулы ``party_speed``); в соло
+            ``None``.
     """
 
     result: RoundResult
     level: int | None = None
     partial_level: int | None = None
     elapsed_ms: int | None = None
+    window_ms: int | None = None
 
 
 def _require_active(state: RoundState) -> None:
@@ -242,6 +246,17 @@ def void(state: RoundState) -> RoundState:
     return replace(state, outcome=RoundResult.VOID)
 
 
+def close_round(state: RoundState) -> RoundState:
+    """Завершить идущий раунд без точного ответа (матч: уровни кончились по таймеру или
+    соперник опередил): итог ``partial``, если частичный ответ был засчитан, иначе ``miss``.
+
+    Raises:
+        RoundFinishedError: раунд уже завершён.
+    """
+    _require_active(state)
+    return replace(state, outcome=_final_result(state))
+
+
 def require_level_open(state: RoundState, level: int, *, levels_count: int) -> None:
     """Проверить, что уровень можно выдать клиенту (D11).
 
@@ -257,7 +272,9 @@ def require_level_open(state: RoundState, level: int, *, levels_count: int) -> N
         raise LevelLockedError("уровень ещё не открыт", details={"level": level, "opened": opened})
 
 
-def round_outcome(state: RoundState, *, elapsed_ms: int | None = None) -> RoundOutcome:
+def round_outcome(
+    state: RoundState, *, elapsed_ms: int | None = None, window_ms: int | None = None
+) -> RoundOutcome:
     """Итог завершённого раунда для Scorer и события ``GameFinished``.
 
     ``level`` — уровень точного ответа (иначе ``None``), ``partial_level`` — уровень, на
@@ -266,20 +283,24 @@ def round_outcome(state: RoundState, *, elapsed_ms: int | None = None) -> RoundO
     Args:
         state: Завершённое состояние.
         elapsed_ms: Время от выдачи первого ассета раунда до последнего хода (считает game).
+        window_ms: Окно уровня ответа (матч, ``party_speed``).
 
     Raises:
         RoundNotFinishedError: раунд ещё идёт.
-        ValueError: отрицательное время.
+        ValueError: отрицательное время или неположительное окно.
     """
     if state.outcome is None:
         raise RoundNotFinishedError("раунд ещё не завершён")
     if elapsed_ms is not None and elapsed_ms < 0:
         raise ValueError("elapsed_ms не может быть отрицательным")
+    if window_ms is not None and window_ms <= 0:
+        raise ValueError("window_ms должно быть положительным")
     if state.outcome is RoundResult.VOID:
-        return RoundOutcome(result=RoundResult.VOID, elapsed_ms=elapsed_ms)
+        return RoundOutcome(result=RoundResult.VOID, elapsed_ms=elapsed_ms, window_ms=window_ms)
     return RoundOutcome(
         result=state.outcome,
         level=state.level if state.outcome is RoundResult.EXACT else None,
         partial_level=state.partial_awarded_level,
         elapsed_ms=elapsed_ms,
+        window_ms=window_ms,
     )

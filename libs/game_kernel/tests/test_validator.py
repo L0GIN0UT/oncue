@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from gv_game_kernel import (
+    ALL_SESSIONS,
     ConfigError,
     ConfigIssue,
     EngineFactory,
@@ -80,7 +81,7 @@ BROKEN: list[tuple[str, str, Any, ConfigIssue]] = [
     (
         "music.daily.classic",
         "scoring.type",
-        "party_speed",
+        "elo",
         ConfigIssue("scoring.type", "config.unknown_plugin"),
     ),
     (
@@ -355,16 +356,13 @@ def test_every_rule_code_is_covered() -> None:
     }
 
 
-# Онлайн-режимы этапа 4 (``duel``/``party``/``lobby``) собирает поток A (ContestRule, A1–A5).
-STAGE3A_MODES = sorted(
-    p.stem
-    for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml")
-    if p.stem.split(".")[1] not in {"duel", "party", "lobby"}
+# Тестовые режимы 3a, шаблон сборника 3b и онлайн-шаблоны этапа 4 (``duel``/``party``/
+# ``lobby``): game публикует все виды сессий (``ALL_SESSIONS``), источник ``collection`` —
+# ``register_collection``.
+STAGE3A_MODES = sorted(p.stem for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml"))
+FULL = EngineFactory(
+    register_collection(register_builtin(PluginRegistry())), supported_sessions=ALL_SESSIONS
 )
-
-
-# Тестовые режимы 3a и шаблон сборника 3b (источник ``collection`` — ``register_collection``).
-FULL = EngineFactory(register_collection(register_builtin(PluginRegistry())))
 
 
 @pytest.mark.parametrize("key", STAGE3A_MODES)

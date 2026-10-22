@@ -223,6 +223,41 @@ Source `collection` (`register_collection`) подключается в game н�
 
 ## 8. Онлайн-специфика (match)
 
-- Тот же `ModeConfig` + `session.kind ∈ {duel, party, lobby}` с параметрами: `players: {min, max}`, `rounds`, `round_timer_sec`, `attempts_per_level`, `level_lock_on_first_correct` (опережение в дуэли), `ranked`, `ladder` (ключ рейтинга для rating).
-- Подсчёт очков в party — плагин `party_speed`: `max(1, round(max_points × k × clamp(1 − t/T)))`, где `k = 0.5` для частичного ответа.
-- Ladder-ы (например `music.classic`, `film.lite`) объявляются в конфиге rating. Рейтинг ведётся по `(user, ladder)`.
+Решения — [ADR 0032](adr/0032-online-sessions-in-mode-config.md), план — [stage-4](plans/stage-4.md) D2–D4.
+
+**Конфиг.** Тот же `ModeConfig`, `session` — объединение по `kind`: `solo` (как на этапах 2–3) или онлайн `duel | party | lobby` — `OnlineSessionSpec {players{min,max}, rounds, countdown_s, level_windows_s[], reveal_s, contest{type,params}, disconnect_grace_s, ranked, ladder?, lobby?{overridable, visibility}, chat}`. У онлайн-сессии нет `end` и `allow_guest` (схема). game публикует и соло-, и онлайн-конфиги (`EngineFactory(..., supported_sessions=ALL_SESSIONS)`), играет только соло (`ModeEngine.solo_session` → `game.mode_not_solo`); match собирает движок с `ONLINE_SESSIONS` (`ModeEngine.online_session` → `game.mode_not_online`).
+
+**Проверки `validate` для онлайн-сессии** (код `config.*`, путь от корня):
+
+| Правило | Путь | Код |
+|---|---|---|
+| `contest.type` есть в реестре, `params` проходят схему плагина | `session.contest.type` / `.params.*` | `unknown_plugin` / `schema.*` |
+| `answer.format` ∈ `ContestRule.answer_formats` (`race` — `classic`; `parallel` — `classic`, `pick`) | `session.contest.type` | `answer_format_unsupported` |
+| формат с одним ответом (`pick`) — одна попытка уровня | `session.contest.params.attempts_per_level` | `single_answer_levels` |
+| `players.min ≤ players.max` (`max ≤ 6` — схема) | `session.players.min` | `players_range` |
+| `len(level_windows_s)` = число уровней загадки | `session.level_windows_s` | `levels_mismatch` |
+| `ranked ⇒ ladder` | `session.ladder` | `ladder_required` |
+| `kind: lobby ⇔ lobby` задан | `session.lobby` | `lobby_required` / `lobby_unexpected` |
+| свободный чат — только у лобби | `session.chat.free_text` | `free_text_lobby_only` |
+| значение шаблона входит в каждый список `lobby.overridable` (окно — только если окна всех уровней равны) | `session.lobby.overridable.<поле>` | `override_default_missing` |
+| варианты `players_max ≥ players.min`; варианты `answer_format` известны и поддержаны загадкой, источником, matcher-ом и состязанием; варианты `clue` — валидный `clue` того же домена с тем же числом уровней | `session.lobby.overridable.<поле>[i]…` | `players_range`, `unknown_plugin`, `answer_format_unsupported`, `domain_unsupported`, `levels_mismatch`, `schema.*` |
+| Scorer `party_speed` — только у онлайн-сессии | `scoring.params` | `online_only` |
+
+**Состязание — плагин `ContestRule`** (`builtin/contests.py`, `register_builtin`; параметры — `contracts/modes/params/contest.<key>.v1.json`). Состояние раунда — неизменяемый `ContestRoundState` (общий уровень, `level_opened_at_ms`, `level_ends_at_ms`, `level_locked`, `finished`) + `PlayerRound` на игрока (свой `RoundState`, `active`, время оцениваемого ответа). Переходы чистые, время — аргумент `now_ms` (часы match); порядок ходов в одну миллисекунду — порядок вызовов (порядок стрима комнаты).
+
+- Ход игрока применяется к его `RoundState` по правилам `ContestRoundRules` (`attempts_per_level` из параметров, пас можно, сдаваться в раунде нельзя — сдача матча у match). Исчерпал попытки уровня или спасовал — «ответил» и ждёт следующего уровня.
+- Ход на закрытом уровне (окно истекло, блокировка) или после исчерпания попыток — `LevelLockedError`; в завершённом раунде (в т. ч. у вышедшего) — `RoundFinishedError`.
+- `race` (дуэль): при `lock_on_first_correct` первый `exact` закрывает уровень для всех, следующий уровень открывается сразу со своим окном — соперник может угадать на нём за меньшие очки. Уровень закрывается и тогда, когда никто из активных больше не может на нём ходить.
+- `parallel` (party, лобби): уровень закрывается по окну или, при `end_when_all_answered`, когда ответили все активные игроки.
+- `next_level` открывает следующий уровень или завершает раунд (уровни кончились или все активные завершили раунд): незавершённые получают `partial` или `miss` (`round.close_round`). Вышедший (`leave`) — `void`, если его раунд ещё шёл.
+- Статусы для всех (`views`) — `thinking | answered | missed | guessed` без текстов ответов; уровень угадывания виден только после закрытия этого уровня.
+
+**Фасад для match — `ModeEngine.contest_*`** (match не обращается к плагинам напрямую): `contest_start(player_ids, now_ms)` (окно уровня 1), `contest_guess(state, player, answer, draw, display=, now_ms=)` → `ContestStep(state, match, option)` (сверка тем же matcher-ом, вердикт — только в ответ команды игрока), `contest_skip`, `contest_level_closed`, `contest_deadline_ms` (`phase_ends_at`), `contest_advance` (окно следующего уровня из `level_windows_s`), `contest_round_finished`, `contest_leave`, `contest_views`, `contest_outcome`/`contest_score`/`contest_scores`, `contest_require_level_open` (выдача ассета уровня, D11), `level_window_ms(level)`, `round_rules`.
+
+**Очки.** Дуэль — `by_level` (например, `points: [12, 6]`). Party — Scorer `party_speed`: `max(1, round(max_points × k × clamp(1 − t/T)))`, `k = 1` за точный и `partial_ratio` за частичный, `t` — от открытия уровня, на котором дан оцениваемый ответ (точный, иначе первый частичный), `T` — окно этого уровня (`RoundOutcome.elapsed_ms`, `window_ms`); округление — половина вверх, промах и `void` — 0. Итог матча — `MatchOutcome.rank(scores, left=)`: места с ничьими `1, 1, 3`, вышедшие — после оставшихся (между собой — по очкам), для двух игроков — `win/loss/draw`.
+
+**Несколько сборников лобби.** `DrawContext.collection_ids` (`draw_context(collection_ids=...)`), не больше `source.collection.params.max_collections` (по умолчанию 1; иначе `game.too_many_collections`); пустой список — прежний `collection_id`. Единица, встреченная в предыдущем сборнике, из следующих убирается; при `shuffle` каждый сборник перемешивается по seed, затем сборники чередуются по кругу в порядке лобби; память лобби (`exclude_ids`) — после свежих единиц всех сборников. Один сборник — розыгрыш этапа 3b без изменений.
+
+**Тесты.** DSL `gv_testkit.match.given_match(cfg).with_players(...).with_items(...).at(t).when_guess(player, ...).then_level_closed().then_scores({...})` поверх фасада и фейки портов match: `FakeRoundPlanPort`, `FakeRealtime` (каждое сообщение — по `contracts/realtime`), `FakeLinkPort` (одна ссылка на уровень).
+
+Ladder-ы (например `music.classic`, `film.lite`) объявляются в конфиге rating (этап 4b, D15 плана). Рейтинг ведётся по `(user, ladder)`.

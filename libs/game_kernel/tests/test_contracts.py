@@ -150,6 +150,8 @@ def test_seed_is_valid_by_schema_and_models(seed: Path) -> None:
         plugins.append(("end", body["session"]["end"]))
     if "reveal" in body["clue"]:
         plugins.append(("reveal", body["clue"]["reveal"]))
+    if "contest" in body["session"]:
+        plugins.append(("contest", body["session"]["contest"]))
     for section, plugin in plugins:
         path = _plugin_schema(section, plugin["type"])
         assert path.is_file(), f"нет схемы параметров {path.relative_to(ROOT)}"
@@ -292,9 +294,12 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         MetricCompareParams,
         NoneParams,
         PairParams,
+        ParallelParams,
+        PartySpeedParams,
         PoolParams,
         PosterMaskedParams,
         PreferenceParams,
+        RaceParams,
         RandomParams,
         SoundtrackParams,
         StreakParams,
@@ -323,11 +328,14 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         ("by_speed", BySpeedParams, params / "scorer.by_speed.v1.json"),
         ("streak", StreakParams, params / "scorer.streak.v1.json"),
         ("none", NoneParams, params / "scorer.none.v1.json"),
+        ("party_speed", PartySpeedParams, params / "scorer.party_speed.v1.json"),
         ("title_alias", TitleAliasParams, params / "matcher.title_alias.v1.json"),
         ("metric_compare", MetricCompareParams, params / "matcher.metric_compare.v1.json"),
         ("preference", PreferenceParams, params / "matcher.preference.v1.json"),
         ("all_rounds", AllRoundsParams, params / "end.all_rounds.v1.json"),
         ("lives", LivesParams, params / "end.lives.v1.json"),
+        ("race", RaceParams, params / "contest.race.v1.json"),
+        ("parallel", ParallelParams, params / "contest.parallel.v1.json"),
     ]
 
 
@@ -352,8 +360,9 @@ CLUE_KEYS = (
 )
 SOURCE_KEYS = ("daily", "random", "marathon", "pair", "bracket", "collection")
 MATCHER_KEYS = ("title_alias", "metric_compare", "preference")
-SCORER_KEYS = ("by_level", "by_speed", "streak", "none")
+SCORER_KEYS = ("by_level", "by_speed", "streak", "none", "party_speed")
 END_KEYS = ("all_rounds", "lives")
+CONTEST_KEYS = ("race", "parallel")
 
 
 def test_every_registered_plugin_has_a_contract() -> None:
@@ -367,6 +376,7 @@ def test_every_registered_plugin_has_a_contract() -> None:
         *(registry.matcher(k) for k in MATCHER_KEYS),
         *(registry.scorer(k) for k in SCORER_KEYS),
         *(registry.end_rule(k) for k in END_KEYS),
+        *(registry.contest(k) for k in CONTEST_KEYS),
     ]
     missing = [p for p in plugins if p is None or p.params_schema not in covered]
     assert missing == []
@@ -375,14 +385,10 @@ def test_every_registered_plugin_has_a_contract() -> None:
     assert clue_files == set(CLUE_KEYS)
     sections = {"source": SOURCE_KEYS, "matcher": MATCHER_KEYS, "scorer": SCORER_KEYS}
     sections["end"] = END_KEYS
+    sections["contest"] = CONTEST_KEYS
     for section, keys in sections.items():
         files = {p.name.split(".")[1] for p in (MODES / "params").glob(f"{section}.*.v1.json")}
-        assert files - PENDING_STAGE4A.get(section, set()) == set(keys), section
-
-
-# Схемы шага 0a этапа 4 (ADR 0032), плагины к которым регистрирует поток A (A2, A3).
-# Поток A удаляет записи по мере реализации; к слиянию 4a словарь должен быть пустым.
-PENDING_STAGE4A: dict[str, set[str]] = {"scorer": {"party_speed"}}
+        assert files == set(keys), section
 
 
 def test_answer_formats_are_registered() -> None:

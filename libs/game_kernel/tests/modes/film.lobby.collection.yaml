@@ -6,7 +6,9 @@ domain: film
 source:
   type: collection
   params:
-    round_options: [5, 10, 25]
+    # Варианты не больше session.rounds (ADR 0028); число раундов лобби выбирает хост
+    # из session.lobby.overridable.rounds.
+    round_options: [5, 10]
     min_items: 5
     max_collections: 3
 clue:
