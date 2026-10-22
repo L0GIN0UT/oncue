@@ -265,4 +265,29 @@ describe("RoomLink: tick и обрывы", () => {
     expect(t.states).toEqual([5, 7]);
     t.link.stop();
   });
+
+  it("гонка входа: 403 на первый снимок (вход ответил 202) — повтор с паузой, без onFatal", async () => {
+    const t = setup({ stateVersion: 2 });
+    t.fetchState
+      .mockRejectedValueOnce(new ApiError(403, { code: "match.not_participant" }))
+      .mockRejectedValueOnce(new ApiError(403, { code: "match.not_participant" }));
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.onFatal).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_300);
+    expect(t.fetchState).toHaveBeenCalledTimes(3);
+    expect(t.link.version).toBe(2);
+    expect(t.onFatal).not.toHaveBeenCalled();
+    t.link.stop();
+  });
+
+  it("гонка входа: повторы кончились — onFatal", async () => {
+    const t = setup();
+    t.fetchState.mockRejectedValue(new ApiError(403, { code: "match.not_participant" }));
+    t.tick.mockRejectedValue(new ApiError(403, { code: "match.not_participant" }));
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(t.fetchState).toHaveBeenCalledTimes(6);
+    expect(t.onFatal).toHaveBeenCalledOnce();
+  });
 });

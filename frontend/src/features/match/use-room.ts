@@ -7,6 +7,7 @@
  * дельту, а не дождавшись — ресинк (D6).
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { isApiError } from "@/shared/api/errors";
 import type { GuessResult, RoomCommandResult } from "@/shared/api/types";
 import {
   defaultTransportFactory,
@@ -78,12 +79,26 @@ export function useRoom(code: string, { enabled, transportFactory }: Options): U
 
   const command = useCallback(
     async <N extends CommandName>(name: N, body: CommandBody<N>) => {
-      const out = await sendCommand(code, name, body);
+      let out;
+      try {
+        out = await sendCommand(code, name, body);
+      } catch (e) {
+        // Уровень уже закрыт для меня или фаза ушла — не повторяем, а берём снимок.
+        if (isStaleCommandError(e)) void linkRef.current?.resync();
+        throw e;
+      }
       const link = linkRef.current;
+      const { round_index: roundIndex, level } = body as { round_index?: unknown; level?: unknown };
+      const levelMove = name === "match/skip" || name === "match/guess";
       if (out.kind === "accepted") {
+        // Исход хода неизвестен до снимка: уровень блокируется, чтобы не было повторного хода.
+        if (levelMove && typeof roundIndex === "number" && typeof level === "number")
+          dispatch({ type: "skipped", round_index: roundIndex, level });
         link?.awaitAccepted(out.version);
         return null;
       }
+      if (name === "match/skip" && typeof roundIndex === "number" && typeof level === "number")
+        dispatch({ type: "skipped", round_index: roundIndex, level });
       const data: unknown = out.data;
       if (isRoomResult(data)) {
         const current = storeRef.current.state;
@@ -103,6 +118,11 @@ export function useRoom(code: string, { enabled, transportFactory }: Options): U
   const resync = useCallback(() => void linkRef.current?.resync(), []);
 
   return { store, status, fatal, clock, command, resync };
+}
+
+/** 409 на ход: уровень закрыт для меня (`level_locked`) или фаза ушла (`phase_mismatch`). */
+export function isStaleCommandError(e: unknown): boolean {
+  return isApiError(e, "match.level_locked") || isApiError(e, "match.phase_mismatch");
 }
 
 /** Версия, которую видит клиент (`expected_version` команд фазы). */

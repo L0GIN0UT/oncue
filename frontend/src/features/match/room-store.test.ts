@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MatchView, RoomState, RoomView } from "@/shared/api/types";
 import type { RoomMessage } from "@/shared/realtime";
-import { initialRoomStore, roomReducer, type RoomStore } from "./room-store";
+import { canAnswer, initialRoomStore, roomReducer, type RoomStore } from "./room-store";
 
 const A = "00000000-0000-4000-8000-00000000000a";
 const B = "00000000-0000-4000-8000-00000000000b";
@@ -238,5 +238,95 @@ describe("roomReducer", () => {
     });
     expect(viaSnapshot.rematchCode).toBe("K7MQ2XWR");
     expect(snapshot().rematchCode).toBeNull();
+  });
+
+  describe("canAnswer: поле ответа по своему состоянию уровня", () => {
+    const withMe = (me: Partial<NonNullable<RoomState["me"]>>) =>
+      snapshot({
+        me: { round_index: 0, attempts_left: 3, guesses: [], status: "thinking", ...me },
+      });
+
+    it("думает и есть попытки — можно; ответил (parallel), угадал, мимо, без попыток — нельзя", () => {
+      expect(canAnswer(withMe({}), A)).toBe(true);
+      expect(canAnswer(withMe({ status: "answered", attempts_left: 1 }), A)).toBe(false);
+      expect(canAnswer(withMe({ status: "guessed" }), A)).toBe(false);
+      expect(canAnswer(withMe({ status: "missed" }), A)).toBe(false);
+      expect(canAnswer(withMe({ attempts_left: 0 }), A)).toBe(false);
+    });
+
+    it("race: промах с оставшимися попытками — снова можно отвечать", () => {
+      const s = roomReducer(withMe({}), {
+        type: "guess",
+        result: {
+          version: 11,
+          result: "miss",
+          attempts_left: 2,
+          level_closed: false,
+          me: { round_index: 0, attempts_left: 2, status: "thinking", guesses: [] },
+        },
+      });
+      expect(canAnswer(s, A)).toBe(true);
+    });
+
+    it("свой пропуск — уровень заблокирован, даже пока мой статус в канале ещё «думает»", () => {
+      const s = roomReducer(withMe({}), { type: "skipped", round_index: 0, level: 1 });
+      expect(s.meStale).toBe(true);
+      expect(s.state!.match!.players[0]!.status).toBe("thinking");
+      expect(canAnswer(s, A)).toBe(false);
+    });
+
+    it("level_closed — нельзя", () => {
+      const s = send(withMe({}), 11, "level_closed", { round_index: 0, level: 1, players: [] });
+      expect(canAnswer(s, A)).toBe(false);
+    });
+
+    it("пропуск на уровне 1 → level_opened уровня 2 того же раунда: поле активно сразу, снимок запрошен", () => {
+      const skipped = roomReducer(withMe({}), { type: "skipped", round_index: 0, level: 1 });
+      const missed = send(skipped, 11, "player", {
+        user_id: A,
+        presence: "online",
+        status: "missed",
+      });
+      expect(canAnswer(missed, A)).toBe(false);
+      const opened = send(missed, 12, "level_opened", {
+        round_index: 0,
+        level: 2,
+        phase_ends_at: "2026-10-22T10:01:00Z",
+        clue: null,
+      });
+      expect(opened.meStale).toBe(true);
+      expect(canAnswer(opened, A)).toBe(true);
+      // Снимок пришёл: решает своё состояние уровня.
+      const synced = roomReducer(opened, {
+        type: "snapshot",
+        state: {
+          ...opened.state!,
+          me: { round_index: 0, attempts_left: 3, guesses: [], status: "thinking" },
+        },
+      });
+      expect(synced.meStale).toBe(false);
+      expect(canAnswer(synced, A)).toBe(true);
+    });
+
+    it("level_opened нового раунда — тоже снимок и поле по статусу «думает»", () => {
+      const s = send(withMe({ status: "guessed" }), 11, "level_opened", {
+        round_index: 1,
+        level: 1,
+        phase_ends_at: "2026-10-22T10:01:00Z",
+        clue: null,
+      });
+      expect(s.meStale).toBe(true);
+      expect(canAnswer(s, A)).toBe(true);
+    });
+
+    it("phase level_open нового уровня тоже помечает своё состояние устаревшим", () => {
+      const s = send(withMe({ status: "answered" }), 11, "phase", {
+        phase: "level_open",
+        phase_ends_at: null,
+        round_index: 0,
+        level: 2,
+      });
+      expect(s.meStale).toBe(true);
+    });
   });
 });

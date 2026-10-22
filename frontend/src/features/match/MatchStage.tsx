@@ -17,7 +17,7 @@ import { isKnownAnswerFormat, matchAnswerRegistry } from "./answers/registry";
 import { ChatPanel } from "./ChatPanel";
 import { PhaseTimer, useRemainingSeconds } from "./PhaseTimer";
 import { PlayersRail } from "./PlayersRail";
-import type { FeedItem, RoomStore } from "./room-store";
+import { canAnswer, type FeedItem, type RoomStore } from "./room-store";
 import { RoundRevealPanel } from "./RoundRevealPanel";
 import { useLevelClue } from "./use-level-clue";
 
@@ -55,13 +55,7 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
   const format = room.settings.answer_format;
   const Answer = isKnownAnswerFormat(format) ? matchAnswerRegistry[format] : null;
   const level = match?.level ?? null;
-  const myOpen =
-    room.phase === "level_open" &&
-    !!me &&
-    me.round_index === match?.round_index &&
-    me.status !== "guessed" &&
-    me.status !== "missed" &&
-    me.attempts_left > 0;
+  const myOpen = canAnswer(store, myId);
   const mySlot = room.players.find((p) => p.user_id === myId && p.presence !== "left") ?? null;
   const iAmIn = mySlot !== null;
 
