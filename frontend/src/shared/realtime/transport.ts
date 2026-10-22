@@ -25,15 +25,28 @@ export type RoomTransport = {
 
 export type TransportFactory = (code: string) => RoomTransport;
 
-/** Ошибка токена: 401/403 — без повторов (гость, не участник), иначе Centrifugo повторит. */
+/**
+ * Ошибка токена: 401/403/404 (гость, не участник, комнаты нет) и 503 `realtime.not_configured`
+ * (realtime не настроен на стенде) — без повторов: комната живёт на HTTP-tick. Остальное
+ * Centrifugo повторит с паузой.
+ */
 async function tokenOrStop(get: () => Promise<string>): Promise<string> {
   try {
     return await get();
   } catch (e) {
-    if (isApiError(e) && (e.status === 401 || e.status === 403 || e.status === 404))
-      throw new UnauthorizedError(e.code);
+    if (isStopError(e)) throw new UnauthorizedError(isApiError(e) ? e.code : "stop");
     throw e;
   }
+}
+
+export function isStopError(e: unknown): boolean {
+  return (
+    isApiError(e) &&
+    (e.status === 401 ||
+      e.status === 403 ||
+      e.status === 404 ||
+      e.code === "realtime.not_configured")
+  );
 }
 
 /** Адреса Centrifugo на своём origin (gateway: `location /connection/`). */

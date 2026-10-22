@@ -472,7 +472,7 @@ export interface paths {
         put?: never;
         /**
          * Connection-токен realtime (Centrifugo)
-         * @description Только пользователь с аккаунтом: гость — 403 `auth.guest_forbidden`, отозванная сессия — 401 `auth.session_revoked`. Cookie-запрос — Origin из `GV_PUBLIC_ORIGINS` и `X-CSRF-Token` (403 `auth.csrf_failed`). Лимит частоты на пользователя (429). Ответ — `Cache-Control: no-store`.
+         * @description Только пользователь с аккаунтом: гость — 403 `auth.guest_forbidden`, отозванная сессия — 401 `auth.session_revoked`. Cookie-запрос — Origin из `GV_PUBLIC_ORIGINS` и `X-CSRF-Token` (403 `auth.csrf_failed`). Лимит частоты на пользователя (429). Нет секрета Centrifugo (только local/ci) — 503 `realtime.not_configured`. Ответ — `Cache-Control: no-store`.
          */
         post: operations["realtime_token_v1_realtime_token_post"];
         delete?: never;
@@ -1969,8 +1969,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

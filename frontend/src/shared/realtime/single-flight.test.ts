@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { singleFlight } from "./single-flight";
-import { centrifugeEndpoints } from "./transport";
+import { ApiError } from "@/shared/api/errors";
+import { centrifugeEndpoints, isStopError } from "./transport";
 
 describe("singleFlight", () => {
   it("параллельные вызовы с одним ключом — один запрос; разные ключи — разные", async () => {
@@ -24,6 +25,17 @@ describe("singleFlight", () => {
     await expect(get()).rejects.toThrow("boom");
     await expect(get()).resolves.toBe("ok");
     expect(run).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ошибки токенов realtime", () => {
+  it("гость, не участник и выключенный realtime — без повторов; 5xx и сеть — повтор", () => {
+    expect(isStopError(new ApiError(403, { code: "auth.guest_forbidden" }))).toBe(true);
+    expect(isStopError(new ApiError(404, { code: "match.room_not_found" }))).toBe(true);
+    expect(isStopError(new ApiError(503, { code: "realtime.not_configured" }))).toBe(true);
+    expect(isStopError(new ApiError(503, { code: "http.503" }))).toBe(false);
+    expect(isStopError(new ApiError(429, { code: "common.rate_limited" }))).toBe(false);
+    expect(isStopError(new Error("network"))).toBe(false);
   });
 });
 
