@@ -35,6 +35,36 @@ _TOP_ORDER = (
     "rewards",
     "features",
 )
+# Порядок ключей session — как в $defs/SoloSession и $defs/OnlineSession контракта (ADR 0032):
+# ключи двух веток не пересекаются, кроме kind и rounds, поэтому список общий.
+_SESSION_ORDER = (
+    "kind",
+    "players",
+    "rounds",
+    "attempts_per_level",
+    "skip_allowed",
+    "give_up_allowed",
+    "allow_guest",
+    "abandon_after_min",
+    "end",
+    "countdown_s",
+    "level_windows_s",
+    "reveal_s",
+    "contest",
+    "disconnect_grace_s",
+    "ranked",
+    "ladder",
+    "lobby",
+    "chat",
+)
+# Вложенные объекты session: плагин — type, params; места — min, max; лобби — как в LobbySpec.
+_NESTED_ORDER: dict[str, tuple[str, ...]] = {
+    "players": ("min", "max"),
+    "contest": ("type", "params"),
+    "end": ("type", "params"),
+    "lobby": ("visibility", "overridable"),
+    "chat": ("emotes", "phrases", "free_text"),
+}
 _TIMESTAMP_TAG = "tag:yaml.org,2002:timestamp"
 _PATH_TOKEN = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
 
@@ -153,9 +183,21 @@ def _all_keys(value: Any) -> list[Any]:
     return keys
 
 
-def _ordered(body: dict[str, Any]) -> dict[str, Any]:
-    first = {k: body[k] for k in _TOP_ORDER if k in body}
+def _by_order(body: dict[str, Any], order: tuple[str, ...]) -> dict[str, Any]:
+    first = {k: body[k] for k in order if k in body}
     return first | {k: v for k, v in body.items() if k not in first}
+
+
+def _ordered(body: dict[str, Any]) -> dict[str, Any]:
+    result = _by_order(body, _TOP_ORDER)
+    session = result.get("session")
+    if isinstance(session, dict):
+        session = _by_order(session, _SESSION_ORDER)
+        result["session"] = {
+            k: _by_order(v, _NESTED_ORDER[k]) if k in _NESTED_ORDER and isinstance(v, dict) else v
+            for k, v in session.items()
+        }
+    return result
 
 
 def dump(body: Any, fmt: Format) -> str:
@@ -244,9 +286,10 @@ def _key_line(node: Node, token: str | int) -> int | None:
 def line_of(text: str, path: str) -> int | None:
     """Строка текста (с 1), где находится поле ``path`` (``session.rounds``, ``a.b[0]``).
 
-    Путь ведёт к несуществующему полю (обязательное поле пропущено, путь pydantic с именем
-    варианта union) — берётся самый глубокий существующий предок: ошибка всё равно видна
-    рядом с нужным местом. Текст не разбирается — ``None``.
+    Путь ведёт к несуществующему полю (обязательное поле пропущено) — берётся самый глубокий
+    существующий предок: ошибка всё равно видна рядом с нужным местом. Сегмент с именем ветки
+    union (``session.duel.rounds``; game его убирает, но путь не обязан быть таким) —
+    пропускается. Текст не разбирается — ``None``.
     """
     tokens = _path_tokens(path)
     if tokens is None:
@@ -259,12 +302,21 @@ def line_of(text: str, path: str) -> int | None:
         return None
     node: Node = root
     line: int = root.start_mark.line + 1
-    for token in tokens:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
         child = _child(node, token)
         if child is None:
-            break
+            # Имя ветки union в пути (``session.duel.players``): лишний сегмент пропускаем,
+            # если следующий за ним есть на этом уровне; иначе — ближайший предок.
+            following = tokens[index + 1] if index + 1 < len(tokens) else None
+            if following is None or _child(node, following) is None:
+                break
+            index += 1
+            continue
         line = _key_line(node, token) or child.start_mark.line + 1
         node = child
+        index += 1
     return line
 
 

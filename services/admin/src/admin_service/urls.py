@@ -14,7 +14,7 @@ admin.site.site_title = "Guessverse"
 admin.site.index_title = "Разделы"
 admin.site.login_form = IdentityLoginForm
 
-# До include(): маршруты разделов используют конвертеры modekey и isodate.
+# До include(): маршруты разделов используют конвертеры modekey, isodate и roomcode.
 converters.register()
 
 urlpatterns = [
@@ -27,6 +27,7 @@ urlpatterns = [
     path("game/modes/", include("admin_service.apps.game_config.urls")),
     path("game/daily/", include("admin_service.apps.game_daily.urls")),
     path("collections/", include("admin_service.apps.collections.urls")),
+    path("matches/", include("admin_service.apps.matches.urls")),
     # Статика django-admin прямо из пакетов (без collectstatic и отдельного сервера):
     # админка внутренняя и малонагруженная, а общий Dockerfile не меняем (D7).
     re_path(r"^static/(?P<path>.*)$", serve, {"insecure": True}),

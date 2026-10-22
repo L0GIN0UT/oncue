@@ -19,7 +19,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from admin_service.apps.game_config import config_text
+from admin_service.apps.game_config import config_text, schema_hints
 from admin_service.apps.game_config.forms import (
     MODE_KEY_RE,
     ArchiveForm,
@@ -33,7 +33,7 @@ from admin_service.apps.game_config.forms import (
 from admin_service.core.game_client import GAME, GameAdminClient
 from admin_service.core.media_client import MEDIA, MediaAdminClient
 from admin_service.core.permissions import has_perm, require_perm
-from admin_service.core.service_client import ServiceClient
+from admin_service.core.service_client import ServiceClient, ServiceError
 from admin_service.core.views import mutate, read
 
 VIEW, EDIT, PUBLISH = "config.modes.view", "config.modes.edit", "config.modes.publish"
@@ -47,6 +47,10 @@ _WARNING_TEXTS = {
 # Как параметры GET /admin/v1/profiles у media-pipeline: другое значение туда не отправляем.
 _CLUE_TYPE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _PARAMS_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+SOLO, ONLINE = "solo", "online"
+_SESSION_KINDS = frozenset({SOLO, ONLINE})
+_PUBLISHED = "published"
+_SCHEMA_ATTR = "_gv_mode_config_schema"
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -84,12 +88,16 @@ def mode_list(request: HttpRequest) -> HttpResponse:
     filters: dict[str, str] = {}
     if form.is_bound and form.is_valid():
         filters = {k: v for k, v in form.cleaned_data.items() if v}
+    session = filters.pop("session", "")
     rows, error = read(request, GAME, lambda c: GameAdminClient(c).mode_configs(**filters))
     modes = []
     for row in _list(rows):
         key = str(row.get("key") or "")
         url = reverse("game_config:mode", args=[key]) if MODE_KEY_RE.match(key) else None
-        modes.append({**row, "admin_url": url})
+        kind = row.get("session_kind")
+        modes.append({**row, "admin_url": url, "session": kind if kind in _SESSION_KINDS else None})
+    if session and error is None:
+        modes, error = _filter_by_session(request, modes, session)
     return render(
         request,
         "admin_game_config/mode_list.html",
@@ -99,8 +107,32 @@ def mode_list(request: HttpRequest) -> HttpResponse:
             "modes": modes,
             "error": error.message if error else None,
             "new_form": NewModeForm() if has_perm(request, EDIT) else None,
+            "session_filter": session,
         },
     )
+
+
+def _filter_by_session(
+    request: HttpRequest, modes: list[dict[str, Any]], session: str
+) -> tuple[list[dict[str, Any]], ServiceError | None]:
+    """Оставить режимы с нужным видом сессии (соло / онлайн, ADR 0032).
+
+    Вид берётся из строки списка (``session_kind``), если game его отдаёт; иначе — по
+    опубликованным онлайн-режимам (``GET /v1/modes?session=online``, один запрос):
+    опубликованный режим не из этого списка — соло. У режима без опубликованной версии
+    и у архивного вид так не узнать — в отфильтрованный список они не попадают.
+    """
+    if any(m["session"] is None for m in modes):
+        online, error = read(request, GAME, lambda c: GameAdminClient(c).online_modes())
+        if error is not None:
+            return [], error
+        online_keys = {str(m.get("key")) for m in _list(online)}
+        for m in modes:
+            if m["session"] is None and str(m.get("key")) in online_keys:
+                m["session"] = ONLINE
+            elif m["session"] is None and m.get("status") == _PUBLISHED:
+                m["session"] = SOLO
+    return [m for m in modes if m["session"] == session], None
 
 
 @require_GET
@@ -112,7 +144,10 @@ def mode_new(request: HttpRequest) -> HttpResponse:
         errors = "; ".join(str(e) for e in form.errors.get("key", []))
         messages.error(request, f"Ключ режима: {errors}")
         return redirect("game_config:modes")
-    return redirect("game_config:edit", key=form.cleaned_data["key"])
+    url = reverse("game_config:edit", kwargs={"key": form.cleaned_data["key"]})
+    return redirect(
+        f"{url}?session={ONLINE}" if form.cleaned_data.get("session") == ONLINE else url
+    )
 
 
 # ---------------------------------------------------------------------------- карточка
@@ -306,21 +341,66 @@ def _initial_editor(request: HttpRequest, key: str, fmt: config_text.Format) -> 
         if body_error is not None:
             return {"error": body_error, "form": None, "validation": None}
         revision = None
-    else:  # режима ещё нет: заготовка с ключом и доменом, остальное — по схеме
-        body, revision = {"key": key, "domain": key.split(".", 1)[0]}, None
+    else:  # режима ещё нет: заготовка по схеме нужной ветки session (или ключ и домен)
+        body, revision = _new_body(request, key), None
     text = config_text.dump(body if isinstance(body, dict) else {}, fmt)
     form = EditorForm(initial={"fmt": fmt, "text": text, "base_revision": revision})
     validation = _validation_view(draft.get("validation"), text) if draft else None
     return {"error": None, "form": form, "validation": validation, "is_new": error is not None}
 
 
+def _new_body(request: HttpRequest, key: str) -> dict[str, Any]:
+    """Заготовка нового режима: обязательные поля по схеме game, ``session`` — ветки из
+    ``?session=solo|online``; схема недоступна — только ключ и домен."""
+    domain = key.split(".", 1)[0]
+    online = request.GET.get("session") == ONLINE
+    body = schema_hints.new_config(_editor_schema(request), key=key, domain=domain, online=online)
+    return body or {"key": key, "domain": domain}
+
+
+def _editor_schema(request: HttpRequest) -> Any:
+    """Сводная схема конфига из game (один запрос на запрос страницы; ошибка — ``None``)."""
+    if not hasattr(request, _SCHEMA_ATTR):
+        schema, error = read(request, GAME, lambda c: GameAdminClient(c).schema())
+        setattr(request, _SCHEMA_ATTR, None if error is not None else schema)
+    return getattr(request, _SCHEMA_ATTR)
+
+
+def _current_kind(form: Any) -> Any:
+    """``session.kind`` текста в форме (разобранного или начального); не разобрать — ``None``."""
+    body = getattr(form, "body", None)
+    if body is None and form is not None and not form.is_bound:
+        text, fmt = form.initial.get("text"), form.initial.get("fmt")
+        try:
+            body = config_text.parse(text, fmt) if isinstance(text, str) else None
+        except config_text.ConfigTextError:
+            body = None
+    session = body.get("session") if isinstance(body, dict) else None
+    return session.get("kind") if isinstance(session, dict) else None
+
+
+def _hints(request: HttpRequest, form: Any) -> dict[str, Any] | None:
+    """Подсказки по веткам ``session`` (соло | онлайн, ADR 0032); текущая — по ``kind``."""
+    schema = _editor_schema(request)
+    variants = schema_hints.session_variants(schema)
+    if not variants:
+        return None
+    current = schema_hints.variant_for(variants, _current_kind(form))
+    return {
+        "variants": [{"v": v, "current": v is current} for v in variants],
+        "contest_types": schema_hints.plugin_types(schema, "contest"),
+    }
+
+
 def _render_editor(
     request: HttpRequest, key: str, *, status: int = 200, **context: Any
 ) -> HttpResponse:
+    form = context.get("form")
+    hints = _hints(request, form) if form is not None else None
     return render(
         request,
         "admin_game_config/mode_edit.html",
-        {"title": f"Черновик {key}", "key": key, **context},
+        {"title": f"Черновик {key}", "key": key, "hints": hints, **context},
         status=status,
     )
 

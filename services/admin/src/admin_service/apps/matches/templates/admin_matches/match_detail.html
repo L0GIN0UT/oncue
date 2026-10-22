@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'matches:rooms' %}">← к комнатам</a></p>
+{% if not_found %}<p>Матча <code>{{ match_id }}</code> нет (или он ещё не завершён).</p>{% endif %}
+{% if result %}
+<table>
+  <tr><th>Комната</th><td><code>{{ result.room_code }}</code></td></tr>
+  <tr><th>Режим</th><td>{{ mode.key }}{% if mode.version %} v{{ mode.version }}{% endif %} ({{ mode.kind }}{% if mode.ranked %}, рейтинговый{% endif %})</td></tr>
+  <tr><th>Завершение</th><td>{% if result.finish == "aborted" %}<strong>aborted</strong> (принудительно){% else %}{{ result.finish }}{% endif %}</td></tr>
+  <tr><th>Начат</th><td>{{ result.started_at }}</td></tr>
+  <tr><th>Закончен</th><td>{{ result.finished_at }}</td></tr>
+</table>
+<h2>Игроки</h2>
+<table>
+  <thead><tr><th>Место</th><th>Никнейм</th><th>Очки</th><th>Исход</th><th>Завершение</th><th>Слот</th><th>id</th></tr></thead>
+  {% for p in players %}
+  <tr><td>{{ p.place }}</td><td>{{ p.nickname }}</td><td>{{ p.score }}</td><td>{{ p.outcome|default:"—" }}</td><td>{{ p.finish }}</td><td>{{ p.slot }}</td><td>{{ p.user_id }}</td></tr>
+  {% empty %}<tr><td colspan="7">Игроков нет</td></tr>
+  {% endfor %}
+</table>
+<h2>Раунды</h2>
+<table>
+  <thead><tr><th>#</th><th>Единица</th><th>Результаты</th></tr></thead>
+  {% for r in rounds %}
+  <tr>
+    <td>{{ r.index|add:1 }}{% if r.void %} <strong>(аннулирован)</strong>{% endif %}</td>
+    <td>{% if r.catalog_url %}<a href="{{ r.catalog_url }}">{{ r.media_item_id }}</a>{% else %}{{ r.media_item_id }}{% endif %}</td>
+    <td>{% for x in r.results %}{{ x.nickname }}: {{ x.score }}{% if x.level is not None %} (уровень {{ x.level }}{% if x.partial %}, частично{% endif %}){% else %} (не угадал){% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="3">Раундов нет</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
