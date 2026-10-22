@@ -43,6 +43,48 @@
   },
   "tiers": [
     {
+      "below": 400,
+      "family": "iron",
+      "key": "iron_1",
+      "step": 1,
+      "title_key": "rating.tier.iron"
+    },
+    {
+      "below": 500,
+      "family": "iron",
+      "key": "iron_2",
+      "step": 2,
+      "title_key": "rating.tier.iron"
+    },
+    {
+      "below": 600,
+      "family": "iron",
+      "key": "iron_3",
+      "step": 3,
+      "title_key": "rating.tier.iron"
+    },
+    {
+      "below": 700,
+      "family": "copper",
+      "key": "copper_1",
+      "step": 1,
+      "title_key": "rating.tier.copper"
+    },
+    {
+      "below": 800,
+      "family": "copper",
+      "key": "copper_2",
+      "step": 2,
+      "title_key": "rating.tier.copper"
+    },
+    {
+      "below": 900,
+      "family": "copper",
+      "key": "copper_3",
+      "step": 3,
+      "title_key": "rating.tier.copper"
+    },
+    {
       "below": 1000,
       "family": "bronze",
       "key": "bronze_1",
