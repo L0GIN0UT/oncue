@@ -426,3 +426,28 @@ async def test_abort_during_countdown_writes_no_result() -> None:
     assert match is not None and match.finish is MatchFinish.ABORTED
     assert room.phase is Phase.CLOSED and not h.owner.unpersisted(room)
     assert h.records.started == {} and h.records.finished == {}
+
+
+# ----------------------------------------------------------------------------- e2e CI: «матч встал»
+async def test_parallel_next_level_reopens_own_move_only_in_state() -> None:
+    """После пропуска свой ход закрыт до закрытия уровня; на следующем уровне того же раунда
+    ``me.attempts_left`` снова > 0 — но ``me`` приходит только в ``GET /state`` (ADR 0035),
+    дельта ``level_opened`` его не несёт: клиент обязан перечитать снимок на новом уровне."""
+    h = Harness()
+    room, host = await h.room("film.lobby.collection", collection_ids=(uuid7(),))
+    b, c = await h.join(room, 2)
+    await h.start(room, host)
+    await h.ok(room, host, "skip", **h.turn(room))
+    mine = room_state(room, host, h.now_ms())["me"]
+    assert mine["attempts_left"] == 0 and mine["status"] == "answered"
+    again = await h.cmd(room, host, "skip", **h.turn(room))
+    assert again["status"] == 409 and _code(again) == "match.level_locked"
+    assert room.match is not None and room.match.statuses[str(host)] == "answered"
+    for user in (b, c):
+        await h.ok(room, user, "skip", **h.turn(room))
+    match = room.match
+    assert match.contest is not None and match.contest.level == 2
+    state = room_state(room, host, h.now_ms())
+    assert state["me"]["attempts_left"] == 1 and state["me"]["status"] == "thinking"
+    opened = messages(room, room.pull_changes(), h.now_ms())
+    assert opened and all("me" not in m["delta"] for m in opened)
