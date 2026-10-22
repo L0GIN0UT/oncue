@@ -24,7 +24,7 @@
         "outcome": "win",
         "place": 1,
         "score": 18,
-        "slot": 1,
+        "slot": 0,
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002"
       },
       {
@@ -32,7 +32,7 @@
         "outcome": "loss",
         "place": 2,
         "score": 6,
-        "slot": 2,
+        "slot": 1,
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003"
       }
     ],
@@ -40,7 +40,7 @@
     "room_code": "K7M2QX9P",
     "rounds": [
       {
-        "index": 1,
+        "index": 0,
         "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
         "results": [
           {
@@ -60,7 +60,7 @@
         ]
       },
       {
-        "index": 2,
+        "index": 1,
         "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000102",
         "results": [
           {

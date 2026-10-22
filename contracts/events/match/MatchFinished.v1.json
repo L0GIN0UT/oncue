@@ -119,8 +119,9 @@
             "type": "integer"
           },
           "slot": {
-            "maximum": 6,
-            "minimum": 1,
+            "description": "Место в комнате с 0",
+            "maximum": 5,
+            "minimum": 0,
             "type": "integer"
           },
           "user_id": {
@@ -155,8 +156,9 @@
         "additionalProperties": false,
         "properties": {
           "index": {
-            "maximum": 50,
-            "minimum": 1,
+            "description": "Номер раунда с 0 (как game.GameFinished)",
+            "maximum": 49,
+            "minimum": 0,
             "type": "integer"
           },
           "media_item_id": {

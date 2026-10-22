@@ -139,57 +139,73 @@
           "maxItems": 6,
           "type": "array"
         },
-        "round": {
-          "maximum": 50,
-          "minimum": 1,
+        "round_index": {
+          "description": "Номер раунда с 0 (как round_index в API)",
+          "maximum": 49,
+          "minimum": 0,
           "type": "integer"
         }
       },
       "required": [
-        "round",
+        "round_index",
         "level",
         "players"
       ],
       "type": "object"
     },
+    "LevelClue": {
+      "additionalProperties": false,
+      "description": "Подача уровня — схема LevelClue из contracts/openapi/match.json: ссылка одна на комнату, раунд и уровень (D11)",
+      "properties": {
+        "expires_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 32,
+          "type": "string"
+        },
+        "level": {
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "meta": {
+          "description": "ClueMeta — параметры уровня для UI",
+          "type": "object"
+        },
+        "mime": {
+          "maxLength": 100,
+          "type": "string"
+        },
+        "url": {
+          "format": "uri-reference",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "kind",
+        "url",
+        "expires_at",
+        "mime",
+        "meta"
+      ],
+      "type": "object"
+    },
     "LevelOpenedDelta": {
       "additionalProperties": false,
-      "description": "Открыт уровень загадки: ссылка уровня появляется только здесь",
+      "description": "Открыт уровень загадки: ссылка уровня появляется только здесь (null — ассет недоступен, раунд void)",
       "properties": {
-        "asset": {
+        "clue": {
           "anyOf": [
             {
-              "additionalProperties": false,
-              "description": "Ассет уровня",
-              "properties": {
-                "expires_at": {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                "media_type": {
-                  "maxLength": 100,
-                  "type": "string"
-                },
-                "url": {
-                  "description": "Подписанная ссылка уровня (одна на комнату, раунд и уровень, D11)",
-                  "format": "uri-reference",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "url",
-                "expires_at"
-              ],
-              "type": "object"
+              "$ref": "#/$defs/LevelClue"
             },
             {
               "type": "null"
             }
           ]
-        },
-        "clue": {
-          "description": "Подача уровня: вид загадки (ClueView ядра, как у соло) без сведений об ответе",
-          "type": "object"
         },
         "level": {
           "maximum": 20,
@@ -200,17 +216,17 @@
           "format": "date-time",
           "type": "string"
         },
-        "round": {
-          "maximum": 50,
-          "minimum": 1,
+        "round_index": {
+          "description": "Номер раунда с 0 (как round_index в API)",
+          "maximum": 49,
+          "minimum": 0,
           "type": "integer"
         }
       },
       "required": [
-        "round",
+        "round_index",
         "level",
         "phase_ends_at",
-        "asset",
         "clue"
       ],
       "type": "object"
@@ -269,11 +285,12 @@
             }
           ]
         },
-        "round": {
+        "round_index": {
           "anyOf": [
             {
-              "maximum": 50,
-              "minimum": 1,
+              "description": "Номер раунда с 0 (как round_index в API)",
+              "maximum": 49,
+              "minimum": 0,
               "type": "integer"
             },
             {
@@ -290,7 +307,7 @@
       "required": [
         "phase",
         "phase_ends_at",
-        "round",
+        "round_index",
         "level"
       ],
       "type": "object"
@@ -299,6 +316,10 @@
       "additionalProperties": false,
       "description": "Изменился один игрок (присутствие, готовность, статус в раунде, очки)",
       "properties": {
+        "away": {
+          "description": "Игрок отметил «отошёл»",
+          "type": "boolean"
+        },
         "presence": {
           "enum": [
             "online",
@@ -351,33 +372,12 @@
     },
     "RoundRevealDelta": {
       "additionalProperties": false,
-      "description": "Ревил раунда: ответ раскрывается только в фазе reveal",
+      "description": "Ревил раунда (схема RoundReveal API + очки раунда): ответ раскрывается только в фазе reveal",
       "properties": {
-        "asset": {
+        "final_clue": {
           "anyOf": [
             {
-              "additionalProperties": false,
-              "description": "Ассет уровня",
-              "properties": {
-                "expires_at": {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                "media_type": {
-                  "maxLength": 100,
-                  "type": "string"
-                },
-                "url": {
-                  "description": "Подписанная ссылка уровня (одна на комнату, раунд и уровень, D11)",
-                  "format": "uri-reference",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "url",
-                "expires_at"
-              ],
-              "type": "object"
+              "$ref": "#/$defs/LevelClue"
             },
             {
               "type": "null"
@@ -387,6 +387,28 @@
         "media_item_id": {
           "format": "uuid",
           "type": "string"
+        },
+        "persons": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 200,
+                "type": "string"
+              },
+              "role": {
+                "maxLength": 32,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "role"
+            ],
+            "type": "object"
+          },
+          "maxItems": 10,
+          "type": "array"
         },
         "results": {
           "items": {
@@ -432,32 +454,36 @@
           "maxItems": 6,
           "type": "array"
         },
-        "round": {
-          "maximum": 50,
-          "minimum": 1,
+        "round_index": {
+          "description": "Номер раунда с 0 (как round_index в API)",
+          "maximum": 49,
+          "minimum": 0,
           "type": "integer"
         },
-        "subtitle": {
+        "title": {
+          "maxLength": 300,
+          "type": "string"
+        },
+        "year": {
           "anyOf": [
             {
-              "maxLength": 300,
-              "type": "string"
+              "maximum": 2100,
+              "minimum": 1800,
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ]
-        },
-        "title": {
-          "maxLength": 300,
-          "type": "string"
         }
       },
       "required": [
-        "round",
+        "round_index",
         "media_item_id",
         "title",
-        "asset",
+        "year",
+        "persons",
+        "final_clue",
         "results"
       ],
       "type": "object"

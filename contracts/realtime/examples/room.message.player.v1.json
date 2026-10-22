@@ -1,5 +1,6 @@
 {
   "delta": {
+    "away": false,
     "presence": "disconnected",
     "ready": true,
     "score": 0,

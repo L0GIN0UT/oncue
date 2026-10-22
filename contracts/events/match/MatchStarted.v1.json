@@ -51,8 +51,9 @@
         "additionalProperties": false,
         "properties": {
           "slot": {
-            "maximum": 6,
-            "minimum": 1,
+            "description": "Место в комнате с 0",
+            "maximum": 5,
+            "minimum": 0,
             "type": "integer"
           },
           "user_id": {

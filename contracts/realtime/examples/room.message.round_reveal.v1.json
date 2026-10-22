@@ -1,7 +1,13 @@
 {
   "delta": {
-    "asset": null,
+    "final_clue": null,
     "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
+    "persons": [
+      {
+        "name": "Кино",
+        "role": "artist"
+      }
+    ],
     "results": [
       {
         "level": 1,
@@ -18,9 +24,9 @@
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003"
       }
     ],
-    "round": 1,
-    "subtitle": "1988",
-    "title": "Кино — Группа крови"
+    "round_index": 0,
+    "title": "Группа крови",
+    "year": 1988
   },
   "kind": "round_reveal",
   "server_now": "2026-10-22T12:00:14Z",

@@ -27,7 +27,7 @@
         "outcome": null,
         "place": 1,
         "score": 240,
-        "slot": 1,
+        "slot": 0,
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002"
       },
       {
@@ -35,7 +35,7 @@
         "outcome": null,
         "place": 2,
         "score": 180,
-        "slot": 2,
+        "slot": 1,
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003"
       },
       {
@@ -43,7 +43,7 @@
         "outcome": null,
         "place": 2,
         "score": 180,
-        "slot": 3,
+        "slot": 2,
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000004"
       },
       {
@@ -51,7 +51,7 @@
         "outcome": null,
         "place": 4,
         "score": 40,
-        "slot": 4,
+        "slot": 3,
         "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000005"
       }
     ],
@@ -59,7 +59,7 @@
     "room_code": "Q4WZ8HNR",
     "rounds": [
       {
-        "index": 1,
+        "index": 0,
         "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
         "results": [
           {
