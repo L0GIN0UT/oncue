@@ -320,9 +320,11 @@ class TestRealtime:
         services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
         identity = services["identity"]["environment"]
         match = services["match"]["environment"]
-        for env in (identity, match):
-            assert env["GV_REALTIME__API_URL"] == "http://centrifugo:8000/api"
-            assert env["GV_REALTIME__API_KEY"].startswith("${CENTRIFUGO_API_KEY:?")
+        assert match["GV_REALTIME__API_URL"] == "http://centrifugo:8000/api"
+        assert match["GV_REALTIME__API_KEY"].startswith("${CENTRIFUGO_API_KEY:?")
+        # identity только подписывает токены — ключа server API у него нет (минимум прав).
+        assert "GV_REALTIME__API_KEY" not in identity
+        assert "GV_REALTIME__API_URL" not in identity
         # D9: connection-токены — только identity, subscription — только match.
         assert identity["GV_REALTIME__CONNECTION_TOKEN_SECRET"].startswith(
             "${CENTRIFUGO_TOKEN_HMAC_SECRET:?"
