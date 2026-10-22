@@ -3,18 +3,20 @@
 {% block content %}
 {% include "admin/gv_messages.html" %}
 <form method="get">{{ form.as_p }}<input type="submit" value="Показать"></form>
+{% if session_filter %}<p>Фильтр по сессии: режимы без опубликованной версии и архивные сюда не попадают (вид сессии известен только у опубликованных).</p>{% endif %}
 <table>
-  <thead><tr><th>Ключ</th><th>Домен</th><th>Статус</th><th>Опубликована</th><th>Черновик</th><th>Изменён</th></tr></thead>
+  <thead><tr><th>Ключ</th><th>Домен</th><th>Сессия</th><th>Статус</th><th>Опубликована</th><th>Черновик</th><th>Изменён</th></tr></thead>
   {% for m in modes %}
   <tr>
     <td>{% if m.admin_url %}<a href="{{ m.admin_url }}">{{ m.key }}</a>{% else %}{{ m.key }}{% endif %}</td>
     <td>{{ m.domain }}</td>
+    <td>{% if m.session == "online" %}онлайн{% elif m.session == "solo" %}соло{% else %}—{% endif %}</td>
     <td>{{ m.status }}</td>
     <td>{% if m.published_version %}v{{ m.published_version }}{% else %}—{% endif %}</td>
     <td>{% if m.has_draft %}есть{% else %}—{% endif %}</td>
     <td>{{ m.updated_at|default:"" }}</td>
   </tr>
-  {% empty %}<tr><td colspan="6">Режимов нет</td></tr>
+  {% empty %}<tr><td colspan="7">Режимов нет</td></tr>
   {% endfor %}
 </table>
 {% if new_form %}

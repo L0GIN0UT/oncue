@@ -116,3 +116,45 @@ def test_too_deep_nesting_is_a_form_error(fmt: str) -> None:
     text = '{"a": ' + "[" * 20000 + "]" * 20000 + "}"
     with pytest.raises(ConfigTextError, match=r"вложенность|JSON|YAML"):
         config_text.parse(text, fmt)  # type: ignore[arg-type]  # параметризация строкой
+
+
+ONLINE_YAML = """\
+key: music.duel.classic
+domain: music
+session:
+  kind: duel
+  players: {min: 2, max: 2}
+  rounds: 7
+"""
+
+
+@pytest.mark.parametrize(
+    ("path", "line"),
+    [
+        ("session.players.max", 5),
+        ("session.duel.players.max", 5),  # имя ветки union в пути пропускается
+        ("session.duel", 3),  # за веткой ничего — ближайший предок
+        ("session.duel.missing", 3),
+    ],
+)
+def test_line_of_skips_union_branch_name(path: str, line: int) -> None:
+    assert config_text.line_of(ONLINE_YAML, path) == line
+
+
+def test_dump_orders_online_session_like_contract() -> None:
+    body = {
+        "key": "music.duel.classic",
+        "session": {
+            "reveal_s": 5,
+            "chat": {"free_text": False, "emotes": []},
+            "contest": {"params": {}, "type": "race"},
+            "players": {"max": 2, "min": 2},
+            "kind": "duel",
+            "custom": 1,
+        },
+    }
+    session = config_text.parse(config_text.dump(body, "yaml"), "yaml")["session"]
+    assert list(session) == ["kind", "players", "reveal_s", "contest", "chat", "custom"]
+    assert list(session["players"]) == ["min", "max"]
+    assert list(session["contest"]) == ["type", "params"]
+    assert list(session["chat"]) == ["emotes", "free_text"]

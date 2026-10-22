@@ -18,6 +18,8 @@ STATUSES = [
     ("published", "опубликован"),
     ("archived", "в архиве"),
 ]
+SESSIONS = [("", "все"), ("solo", "соло"), ("online", "онлайн")]
+NEW_SESSIONS = [("solo", "соло (game)"), ("online", "онлайн (match): дуэль, party, лобби")]
 FORMAT_CHOICES = [("yaml", "YAML"), ("json", "JSON")]
 # Как ModeKeyPath в contracts/openapi/game.json.
 MODE_KEY_RE = re.compile(r"^(music|film)\.[a-z0-9_]+\.[a-z0-9_]+$")
@@ -30,6 +32,8 @@ class ModeFilterForm(forms.Form):
 
     domain = forms.ChoiceField(label="Домен", choices=DOMAINS, required=False)
     status = forms.ChoiceField(label="Статус", choices=STATUSES, required=False)
+    # Не параметр game: вид сессии определяет админка (см. views.mode_list).
+    session = forms.ChoiceField(label="Сессия", choices=SESSIONS, required=False)
 
 
 class NewModeForm(forms.Form):
@@ -41,6 +45,13 @@ class NewModeForm(forms.Form):
         max_length=MODE_KEY_MAX,
         help_text="домен.тип.имя, например music.daily.classic",
         error_messages={"invalid": "формат: music|film.<тип>.<имя> (a-z, 0-9, _)"},
+    )
+    session = forms.ChoiceField(
+        label="Сессия",
+        choices=NEW_SESSIONS,
+        initial="solo",
+        required=False,
+        help_text="заготовка конфига — по схеме выбранной ветки session (ADR 0032)",
     )
 
 

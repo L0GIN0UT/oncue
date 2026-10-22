@@ -309,10 +309,29 @@ def media() -> Iterator[ContractStub]:
     yield from _contract_stub(MEDIA, "media_pipeline")
 
 
+def mode_config_schema() -> dict[str, Any]:
+    """Ответ game ``GET /admin/v1/mode-configs/schema`` для тестов: схема — сам контракт
+    ``contracts/modes/mode_config.v1.json`` (``session`` — ``oneOf`` с ``$defs``, ADR 0032)."""
+    from gv_testkit.contracts import contracts_dir
+
+    path = contracts_dir() / "modes" / "mode_config.v1.json"
+    return {
+        "mode_config": json.loads(path.read_text(encoding="utf-8")),
+        "plugins": {"contest": {"race": {}, "parallel": {}}},
+        "partial": [],
+    }
+
+
 @pytest.fixture
 def game() -> Iterator[ContractStub]:
-    """Заглушка game (по contracts/openapi/game.json, admin-API — docs/plans/stage-2.md §2.6)."""
-    yield from _contract_stub(GAME, "game")
+    """Заглушка game (по contracts/openapi/game.json, admin-API — docs/plans/stage-2.md §2.6).
+
+    Сводная схема конфига (подсказки редактора, этап 4a) отвечает по умолчанию — её читает
+    каждая страница редактора; тест может переопределить маршрут.
+    """
+    for stub in _contract_stub(GAME, "game"):
+        stub.route("GET", "/admin/v1/mode-configs/schema").respond(200, json=mode_config_schema())
+        yield stub
 
 
 @pytest.fixture

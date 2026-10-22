@@ -23,4 +23,21 @@
   <button type="submit" name="action" value="save">Сохранить черновик</button>
 </form>
 {% endif %}
+{% if hints %}
+<h2>Подсказки: ветки <code>session</code></h2>
+<p>Ветка выбирается по <code>session.kind</code>: соло играет game, онлайн (дуэль, party, лобби) — match.
+   У онлайн-сессии нет <code>allow_guest</code> (только с аккаунтом).{% if hints.contest_types %}
+   Плагины <code>session.contest.type</code>: {{ hints.contest_types|join:", " }}.{% endif %}</p>
+{% for item in hints.variants %}
+<details{% if item.current %} open{% endif %}>
+  <summary><strong>{% if item.v.online %}онлайн{% else %}соло{% endif %}</strong>: kind = {{ item.v.kinds|join:" | " }}{% if item.current %} — <em>текущая ветка</em>{% endif %}{% if item.v.description %} — {{ item.v.description }}{% endif %}</summary>
+  <table>
+    <thead><tr><th>Поле</th><th>Обязательно</th><th>Тип</th><th>Ограничения</th><th>Описание</th></tr></thead>
+    {% for f in item.v.fields %}
+    <tr><td><code>{{ f.name }}</code></td><td>{% if f.required %}да{% else %}—{% endif %}</td><td><code>{{ f.type }}</code></td><td>{{ f.constraints }}</td><td>{{ f.description }}</td></tr>
+    {% endfor %}
+  </table>
+</details>
+{% endfor %}
+{% endif %}
 {% endblock %}
