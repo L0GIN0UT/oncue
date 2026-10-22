@@ -308,6 +308,7 @@ def encode(room: Room) -> Json:
         "last_match_id": str(room.last_match_id) if room.last_match_id else None,
         "rematch_votes": sorted(_ids(room.rematch_votes)),
         "rematch_code": room.rematch_code,
+        "start_error": list(room.start_error) if room.start_error is not None else None,
         "close_reason": room.close_reason,
         "cursor": room.cursor,
         "ops": room.ops,
@@ -594,6 +595,9 @@ def _decode(d: Json) -> Room:
         last_match_id=_opt_uuid(d.get("last_match_id")),
         rematch_votes={_uuid(v) for v in d.get("rematch_votes", [])},
         rematch_code=d.get("rematch_code"),
+        start_error=(
+            (str(d["start_error"][0]), int(d["start_error"][1])) if d.get("start_error") else None
+        ),
         close_reason=d.get("close_reason"),
         cursor=str(d.get("cursor", "0-0")),
         ops=dict(d.get("ops", {})),

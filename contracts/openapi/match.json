@@ -1857,6 +1857,17 @@
           "settings": {
             "$ref": "#/components/schemas/RoomSettings"
           },
+          "start_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StartError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Почему не начался матч (старт мог ответить 202 до отказа game); сбрасывается при следующем старте или смене настроек"
+          },
           "version": {
             "minimum": 0.0,
             "title": "Version",
@@ -2011,7 +2022,7 @@
         "type": "object"
       },
       "SettingsOptions": {
-        "description": "Что хост может выбрать (``session.lobby.overridable`` шаблона, D12); ``null`` — нельзя.",
+        "description": "Что хост может выбрать (``session.lobby.overridable`` шаблона, D12); ``null`` — нельзя.\n\n``answer_format`` и ``clue_type`` в 4a всегда ``null``: план game их пока не принимает\n(выбор — 422 ``match.setting_not_allowed``, ``details.reason = not_supported_yet``).",
         "properties": {
           "answer_format": {
             "anyOf": [
@@ -2284,6 +2295,27 @@
           "level"
         ],
         "title": "SkipRequest",
+        "type": "object"
+      },
+      "StartError": {
+        "description": "Последний отказ старта матча (план game не получен) — виден всем в лобби.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "code": {
+            "description": "`match.game_unavailable`, `match.pool_too_small` и т. п.",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "at"
+        ],
+        "title": "StartError",
         "type": "object"
       },
       "StartRequest": {
