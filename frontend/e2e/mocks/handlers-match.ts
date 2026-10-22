@@ -219,13 +219,22 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       const body = (await request.json()) as {
         mode_key: string;
         settings?: Record<string, unknown>;
+        collection_ids?: string[] | null;
       };
       const def = mw.mode(body.mode_key);
       if (!def) return problem(404, "match.mode_not_found");
       const active = mw.playerRoom.get(userId);
       if (active && mw.rooms.get(active)?.phase !== "closed")
         return problem(409, "match.active_room_conflict", { code: active });
-      const room = mw.create(userId, def, (body.settings ?? null) as never);
+      const ids = body.collection_ids ?? [];
+      if (def.source === "collection") {
+        if (!ids.length) return problem(422, "match.collection_required");
+        if (ids.length > (def.options?.max_collections ?? 1))
+          return problem(422, "match.too_many_collections");
+        if (!ids.every((id) => world.ugc.collections.some((c) => c.id === id)))
+          return problem(404, "match.collection_not_found");
+      }
+      const room = mw.create(userId, def, (body.settings ?? null) as never, ids);
       return HttpResponse.json(mw.roomView(room), { status: 201, headers: NO_STORE });
     }),
 
@@ -365,10 +374,16 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
         if (stay.every((p) => room.rematch.has(p.user_id))) {
           room.phase = "closed";
           for (const p of stay) mw.playerRoom.delete(p.user_id);
-          const next = mw.create(room.hostId, room.def, room.settings);
+          const next = mw.create(
+            room.hostId,
+            room.def,
+            room.settings,
+            room.settings.collection_ids ?? [],
+          );
           for (const p of stay) if (p.user_id !== room.hostId) mw.addPlayer(next, p.user_id);
           rematchCode = next.code;
-          mw.publish(room, "closed", { reason: "rematch" });
+          room.rematchCode = next.code;
+          mw.publish(room, "closed", { reason: "rematch", rematch_code: next.code });
         }
         return { version: room.version, room: mw.roomView(room), rematch_code: rematchCode };
       }),
@@ -467,7 +482,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
                 version: d.ref.version,
                 domain: d.ref.domain,
                 title_key: d.ref.title_key,
-                source_type: "random",
+                source_type: d.source ?? "random",
                 clue_type: d.ref.clue_type,
                 answer_format: d.ref.answer_format,
                 presentation: "score",
@@ -480,7 +495,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
                   contest_type: d.race ? "race" : "parallel",
                   ranked: false,
                   ladder: null,
-                  max_collections: null,
+                  max_collections: d.options?.max_collections ?? null,
                   lobby: d.options ? { overridable: d.options } : null,
                   chat: d.chat,
                 },

@@ -105,6 +105,12 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await rival.getByTestId("emote-match.emotes.gg").click();
   await expect(page.getByTestId("player-rival").getByTestId("emote-bubble")).toHaveText("🤝 GG");
 
+  // «Отошёл / Вернулся»: отметка видна сопернику.
+  await rival.getByTestId("away-toggle").click();
+  await expect(page.getByTestId("player-rival")).toContainText("Отошёл");
+  await rival.getByTestId("away-toggle").click();
+  await expect(page.getByTestId("player-rival")).not.toContainText("Отошёл");
+
   // Второй раунд: соперник сдаётся.
   await expect(rival.getByTestId("match-round")).toHaveText("Раунд 2 из 2");
   await rival.getByTestId("forfeit").click();
@@ -126,8 +132,14 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await page.getByTestId("rematch").click();
   await expect(page.getByTestId("rematch")).toHaveText("Ждём согласия остальных…");
   await rival.getByTestId("rematch").click();
+  // Оба проголосовавших переходят в новую комнату: соперник — по ответу команды, хост — по
+  // дельте `closed {reason: rematch, rematch_code}`.
   await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
   await expect(rival.getByTestId("room-code")).not.toHaveText(code);
+  const rematchCode = (await rival.getByTestId("room-code").textContent())!.trim();
+  await expect(page).toHaveURL(`/room/${rematchCode}`);
+  await expect(page.getByTestId("room-code")).toHaveText(rematchCode);
+  await expect(page.getByTestId("player-rival")).toBeVisible();
 
   // «Мои матчи» в профиле → итог матча.
   await page.goto("/me");
@@ -270,4 +282,55 @@ test("хаб: открытые лобби и вход в комнату из с�
   await rival.getByTestId(`open-room-${code}`).getByRole("link").click();
   await rival.getByTestId("join-room").click();
   await expect(page.getByTestId("player-rival")).toBeVisible();
+});
+
+test("регистрация из экрана онлайна возвращает в онлайн после подтверждения и входа", async ({
+  page,
+}) => {
+  await page.goto("/online");
+  await page.getByTestId("online-register").click();
+  await expect(page).toHaveURL(/\/register\?next=%2Fonline$/);
+  await page.getByLabel("Ник").fill("newcomer");
+  await page.getByLabel("E-mail").fill("newcomer@example.com");
+  await page.getByLabel("Пароль").fill("long-enough-pass");
+  for (const box of await page.getByRole("checkbox").all()) await box.check();
+  await page.getByRole("button", { name: "Зарегистрироваться" }).click();
+  await expect(page.getByTestId("register-done")).toBeVisible();
+  await expect(page.getByTestId("register-done-login")).toHaveAttribute(
+    "href",
+    "/login?next=%2Fonline",
+  );
+
+  // Ссылка из письма — та же вкладка браузера: после подтверждения вход ведёт в онлайн.
+  await page.goto("/verify-email?token=valid-token");
+  await page.getByTestId("verify-login").click();
+  await expect(page).toHaveURL(/\/login\?next=%2Fonline$/);
+  await page.getByLabel("E-mail или ник").fill("newcomer");
+  await page.getByLabel("Пароль").fill("long-enough-pass");
+  await page.getByRole("button", { name: "Войти" }).click();
+  await expect(page).toHaveURL(/\/online$/);
+  await expect(page.getByTestId("join-by-code")).toBeVisible();
+});
+
+test("сборник: «Играть с друзьями» создаёт лобби по сборнику; у музыки без шаблона кнопки нет", async ({
+  page,
+  player,
+}) => {
+  await login(page);
+  await page.goto("/collections/00000000-0000-4000-a000-000000000003");
+  await expect(page.getByTestId("collection-play")).toBeVisible();
+  await expect(page.getByTestId("play-with-friends")).toHaveCount(0);
+
+  await page.goto("/collections/00000000-0000-4000-a000-000000000001");
+  await page.getByTestId("play-with-friends-start").click();
+  await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+  await expect(page.getByTestId("lobby-collections")).toContainText("Кино · кадры: классика");
+  const code = (await page.getByTestId("room-code").textContent())!.trim();
+
+  const rival = await player("rival");
+  await joinRoom(rival, code);
+  await expect(rival.getByTestId("lobby-collections")).toContainText("Кино · кадры: классика");
+  for (const p of [page, rival]) await p.getByTestId("ready-toggle").click();
+  await page.getByTestId("start-match").click();
+  await expect(page.getByTestId("clue-image")).toBeVisible();
 });

@@ -43,6 +43,8 @@ type ModeDef = {
   race: boolean;
   chat: S["ChatOptions"];
   options: S["SettingsOptions"] | null;
+  /** Источник раундов: `collection` — единицы из `collection_ids` комнаты. */
+  source?: "random" | "collection";
 };
 
 const EMOTES = ["match.emotes.wow", "match.emotes.gg", "match.emotes.fire"];
@@ -112,7 +114,58 @@ export const ONLINE_MODES: ModeDef[] = [
       max_collections: null,
     },
   },
+  {
+    ref: ref("film.lobby.collection", "film", "lobby", "frame"),
+    min: 2,
+    max: 6,
+    rounds: 2,
+    windowS: 25,
+    levels: 1,
+    attempts: 1,
+    points: [10],
+    race: false,
+    chat: { emotes: EMOTES, phrases: PHRASES, free_text: true },
+    source: "collection",
+    options: {
+      rounds: [2, 3, 5],
+      level_window_s: [15, 25],
+      players_max: [2, 4, 6],
+      visibility: ["public", "private"],
+      answer_format: null,
+      clue_type: null,
+      max_collections: 3,
+    },
+  },
 ];
+
+/** Онлайн-шаблоны в форме `game /v1/modes?session=online` (`ModeOut` с блоком `online`). */
+export function onlineModesOut() {
+  return ONLINE_MODES.map((d) => ({
+    key: d.ref.key,
+    version: d.ref.version,
+    domain: d.ref.domain,
+    title_key: d.ref.title_key,
+    source_type: d.source ?? "random",
+    clue_type: d.ref.clue_type,
+    answer_format: d.ref.answer_format as "classic",
+    presentation: "score" as const,
+    rounds: d.rounds,
+    allow_guest: false,
+    levels: Array.from({ length: d.levels }, (_, i) => ({ index: i + 1, hint: {} })),
+    online: {
+      kind: d.ref.kind,
+      players: { min: d.min, max: d.max },
+      rounds: d.rounds,
+      level_windows_s: Array.from({ length: d.levels }, () => d.windowS),
+      contest_type: d.race ? "race" : "parallel",
+      ranked: false,
+      ladder: null,
+      max_collections: d.options?.max_collections ?? null,
+      lobby: d.options ? { overridable: d.options } : null,
+      chat: d.chat,
+    },
+  }));
+}
 
 type PlayerRound = {
   attemptsLeft: number;
@@ -150,6 +203,7 @@ type MockRoom = {
   matchId: string | null;
   memory: Set<string>;
   rematch: Set<string>;
+  rematchCode: string | null;
   createdAt: string;
 };
 
@@ -213,7 +267,12 @@ export class MatchWorld {
 
   // ------------------------------------------------------------------ комнаты
 
-  create(userId: string, def: ModeDef, override: S["SettingsOverride"] | null): MockRoom {
+  create(
+    userId: string,
+    def: ModeDef,
+    override: S["SettingsOverride"] | null,
+    collectionIds: string[] = [],
+  ): MockRoom {
     const code = this.newCode();
     const room: MockRoom = {
       code,
@@ -225,7 +284,7 @@ export class MatchWorld {
         clue_type: def.ref.clue_type,
         players_max: override?.players_max ?? def.max,
         visibility: override?.visibility ?? "private",
-        collection_ids: [],
+        collection_ids: collectionIds,
       },
       hostId: userId,
       players: [],
@@ -238,6 +297,7 @@ export class MatchWorld {
       matchId: null,
       memory: new Set(),
       rematch: new Set(),
+      rematchCode: null,
       createdAt: new Date(this.now()).toISOString(),
     };
     this.rooms.set(code, room);
@@ -277,6 +337,8 @@ export class MatchWorld {
       host_id: room.hostId,
       match_id: room.matchId,
       memory_size: room.memory.size,
+      // Поле RoomView.rematch_code (контракт потока R): код комнаты реванша.
+      ...(room.rematchCode ? { rematch_code: room.rematchCode } : {}),
       mode: room.def.ref,
       options: room.def.options,
       players: room.players.map(({ lastSeen: _, ...p }) => ({
@@ -399,7 +461,17 @@ export class MatchWorld {
   // ------------------------------------------------------------------ матч
 
   start(room: MockRoom): void {
-    const pool = ITEMS.filter((i) => i.domain === room.def.ref.domain && !room.memory.has(i.id));
+    const fromCollections = new Set(
+      this.world.ugc.collections
+        .filter((c) => room.settings.collection_ids?.includes(c.id))
+        .flatMap((c) => c.items.map((i) => i.media_item_id)),
+    );
+    const pool = ITEMS.filter(
+      (i) =>
+        i.domain === room.def.ref.domain &&
+        !room.memory.has(i.id) &&
+        (room.def.source !== "collection" || fromCollections.has(i.id)),
+    );
     const items = pool.slice(0, room.settings.rounds);
     const id = `0192b000-0000-7000-8000-${String(this.rooms.size * 1000 + room.version).padStart(12, "0")}`;
     room.match = {
@@ -571,7 +643,7 @@ export class MatchWorld {
       finish,
       players: placements,
       rounds: m.rounds,
-      collection_ids: [],
+      collection_ids: room.settings.collection_ids ?? [],
     });
     this.setPhase(room, "summary", null);
     this.publish(room, "summary", {
