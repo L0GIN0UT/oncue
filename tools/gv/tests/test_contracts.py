@@ -47,6 +47,35 @@ class TestSchemaCompatibility:
 
 
 class TestOpenApiCompatibility:
+    def test_object_to_one_of_with_compatible_branch_is_not_breaking(self) -> None:
+        """ADR 0032: session стал oneOf — старая ветка solo сохранена в $defs."""
+        solo = _obj({"kind": {"type": "string"}, "rounds": {"type": "integer"}}, ["kind"])
+        old = _obj({"session": solo})
+        online = _obj({"kind": {"type": "string"}, "players": {"type": "integer"}}, ["kind"])
+        new = {
+            **_obj({"session": {"type": "object", "oneOf": [{"$ref": "#/$defs/S"}, online]}}),
+            "$defs": {"S": solo},
+        }
+        assert contracts.schema_breaking("f", old, new) == []
+
+    def test_object_to_one_of_without_compatible_branch_is_breaking(self) -> None:
+        old = _obj({"session": _obj({"rounds": {"type": "integer"}})})
+        new = _obj(
+            {
+                "session": {
+                    "type": "object",
+                    "oneOf": [
+                        _obj({"rounds": {"type": "string"}}),
+                        _obj({"players": {"type": "integer"}}),
+                    ],
+                }
+            }
+        )
+        problems = contracts.schema_breaking("f", old, new)
+        assert [p.detail for p in problems] == [
+            "$.session: ни одна ветка oneOf/anyOf не совместима со старой схемой"
+        ]
+
     def test_removed_operation_is_breaking(self) -> None:
         old = {"paths": {"/v1/a": {"get": {}, "post": {}}, "/v1/b": {"get": {}}}}
         new = {"paths": {"/v1/a": {"get": {}}, "/v1/c": {"get": {}}}}

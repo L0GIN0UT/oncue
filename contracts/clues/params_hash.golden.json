@@ -305,6 +305,22 @@
       "params_hash": "d2f76337c3613cfcb3bd4147f746a8c289c7c49f0245a3a4b6b7620f231495d2"
     },
     {
+      "canonical_json": "{\"levels\":[{\"seconds\":4},{\"seconds\":15}],\"start_s\":0}",
+      "name": "profile:audio_intro:duel",
+      "params": {
+        "levels": [
+          {
+            "seconds": 4
+          },
+          {
+            "seconds": 15
+          }
+        ],
+        "start_s": 0
+      },
+      "params_hash": "0952468f5d38a2fcee62148f18705b21295a30423ccd50c8967749a60bbedd07"
+    },
+    {
       "canonical_json": "{}",
       "name": "empty",
       "params": {},

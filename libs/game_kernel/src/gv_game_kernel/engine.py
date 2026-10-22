@@ -20,6 +20,16 @@
 
 Недоступный ассет (``GoneError`` из ``AssetPort``) движок не перехватывает: game ловит
 ошибку и вызывает ``void`` — раунд аннулируется и не входит в ``max_score``.
+
+Раунд онлайн-матча (ADR 0032) — фасад ``contest_*`` поверх ``ContestRule`` режима; match
+не обращается к плагинам напрямую::
+
+    state = engine.contest_start(player_ids, now_ms=now)          # уровень 1, окно уровня 1
+    step = engine.contest_guess(state, pid, answer, draw, display=..., now_ms=now)
+    if engine.contest_level_closed(step.state, now_ms=now):        # и по дедлайну окна
+        state = engine.contest_advance(step.state, now_ms=now)     # следующий уровень / итог
+    if engine.contest_round_finished(state):
+        scores = engine.contest_scores(state)                      # очки раунда по игрокам
 """
 
 from __future__ import annotations
@@ -33,8 +43,12 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from gv_core.errors import GoneError
+from gv_game_kernel.contest import ContestRoundState, PlayerRoundView
 from gv_game_kernel.errors import (
     AnswerKindError,
+    LevelLockedError,
+    ModeNotOnlineError,
+    ModeNotSoloError,
     OptionNotFoundError,
     RoundFinishedError,
     RoundNotFinishedError,
@@ -50,6 +64,7 @@ from gv_game_kernel.plugins import (
     CollectionBasedSource,
     Comparison,
     ComparisonSource,
+    ContestRule,
     DrawContext,
     EndRule,
     LevelSpec,
@@ -82,6 +97,7 @@ from gv_game_kernel.round import (
     GuessKind,
     RoundOutcome,
     RoundResult,
+    RoundRules,
     RoundState,
     apply_guess,
     apply_skip,
@@ -90,7 +106,7 @@ from gv_game_kernel.round import (
     round_outcome,
     void,
 )
-from gv_game_kernel.spec import ModeConfig
+from gv_game_kernel.spec import ModeConfig, OnlineSessionSpec, SoloSessionSpec, solo_end
 from gv_text import CONJUNCTION_REPLACEMENTS, NormalizerConfig, TitleNormalizer
 
 DEFAULT_CANDIDATE_LIMIT = 5000
@@ -151,6 +167,24 @@ class ShownView:
     metric: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class ContestStep:
+    """Итог хода игрока в матче: новое состояние раунда и результат сверки.
+
+    ``match`` и ``option`` уходят только в ответ команды игрока; другим участникам — только
+    статусы ``contest_views`` (античит §12 плана этапа 4).
+
+    Attributes:
+        state: Состояние раунда матча после хода.
+        match: Вердикт сверки.
+        option: Выбранный вариант (формат ``pick``) или ``None``.
+    """
+
+    state: ContestRoundState
+    match: MatchResult
+    option: OptionSpec | None = None
+
+
 class ModeEngine:
     """Движок режима: плагины конфига с разобранными параметрами.
 
@@ -165,6 +199,7 @@ class ModeEngine:
         end_rule: Правило завершения сессии (``session.end`` или ``all_rounds``).
         reveal: Тип загадки ревила (``clue.reveal``) или ``None``.
         normalizer: Нормализатор ответов (по умолчанию ``answer_normalizer()``).
+        contest: Правило состязания онлайн-сессии (``session.contest``) или ``None``.
 
     Raises:
         pydantic.ValidationError: параметры не проходят схему плагина (``build`` такой
@@ -184,6 +219,7 @@ class ModeEngine:
         end_rule: EndRule,
         reveal: ClueType | None = None,
         normalizer: TitleNormalizer | None = None,
+        contest: ContestRule | None = None,
     ) -> None:
         self.config = config
         self.clue = clue
@@ -194,7 +230,14 @@ class ModeEngine:
         self.answer_format = answer_format
         self.end_rule = end_rule
         self.reveal = reveal
-        end = config.session.end
+        self.contest = contest
+        session = config.session
+        self.contest_params: BaseModel | None = (
+            contest.params_schema.model_validate(session.contest.params)
+            if contest is not None and isinstance(session, OnlineSessionSpec)
+            else None
+        )
+        end = solo_end(config)
         self.end_params: BaseModel = end_rule.params_schema.model_validate(
             end.params if end is not None else {}
         )
@@ -359,8 +402,13 @@ class ModeEngine:
         candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
         subject_ids: frozenset[UUID] = frozenset(),
         collection_id: UUID | None = None,
+        collection_ids: Sequence[UUID] = (),
     ) -> DrawContext:
-        """Контекст розыгрыша с полями режима (ключ, домен, загадка, ``params_hash``)."""
+        """Контекст розыгрыша с полями режима (ключ, домен, загадка, ``params_hash``).
+
+        ``collection_ids`` — сборники лобби матча (источник ``collection``, D12 этапа 4);
+        пустой — источник читает ``collection_id``.
+        """
         return DrawContext(
             mode_key=self.config.key,
             domain=self.config.domain,
@@ -375,6 +423,7 @@ class ModeEngine:
             candidate_limit=candidate_limit,
             subject_ids=subject_ids,
             collection_id=collection_id,
+            collection_ids=tuple(collection_ids),
         )
 
     def _require_own(self, ctx: DrawContext) -> None:
@@ -602,6 +651,39 @@ class ModeEngine:
         ctx = self._match_ctx if draw is None else replace(self._match_ctx, draw=draw)
         return self.matcher.match(answer, item, self.matcher_params, ctx)
 
+    @property
+    def solo_session(self) -> SoloSessionSpec:
+        """Правила соло-сессии (game играет только соло).
+
+        Raises:
+            ModeNotSoloError: режим онлайн — его играет match (ADR 0032).
+        """
+        session = self.config.session
+        if not isinstance(session, SoloSessionSpec):
+            raise ModeNotSoloError("режим онлайн: его играет match", details={"kind": session.kind})
+        return session
+
+    @property
+    def online_session(self) -> OnlineSessionSpec:
+        """Правила онлайн-сессии (match играет только онлайн).
+
+        Raises:
+            ModeNotOnlineError: режим соло — его играет game (ADR 0032).
+        """
+        session = self.config.session
+        if not isinstance(session, OnlineSessionSpec):
+            raise ModeNotOnlineError("режим соло: его играет game", details={"kind": session.kind})
+        return session
+
+    @property
+    def round_rules(self) -> RoundRules:
+        """Правила ходов раунда: соло — ``session``; онлайн — от ``ContestRule`` (ADR 0032)."""
+        session = self.config.session
+        if isinstance(session, SoloSessionSpec):
+            return session
+        contest, params = self._contest()
+        return contest.round_rules(params)
+
     @staticmethod
     def new_round() -> RoundState:
         """Начальное состояние раунда (уровень 1, ходов нет)."""
@@ -609,9 +691,7 @@ class ModeEngine:
 
     def advance(self, state: RoundState, guess: Guess) -> RoundState:
         """Применить уже сверенный ответ по правилам сессии (см. ``round.apply_guess``)."""
-        return apply_guess(
-            state, guess, levels_count=self.levels_count, session=self.config.session
-        )
+        return apply_guess(state, guess, levels_count=self.levels_count, session=self.round_rules)
 
     def answer(
         self,
@@ -655,11 +735,11 @@ class ModeEngine:
 
     def skip(self, state: RoundState) -> RoundState:
         """Пропустить уровень (``session.skip_allowed``)."""
-        return apply_skip(state, levels_count=self.levels_count, session=self.config.session)
+        return apply_skip(state, levels_count=self.levels_count, session=self.round_rules)
 
     def give_up(self, state: RoundState) -> RoundState:
         """Сдаться (``session.give_up_allowed``)."""
-        return give_up(state, session=self.config.session)
+        return give_up(state, session=self.round_rules)
 
     @staticmethod
     def void(state: RoundState) -> RoundState:
@@ -723,3 +803,173 @@ class ModeEngine:
         if count < 0:
             raise ValueError("число раундов не может быть отрицательным")
         return self.round_max_score() * count
+
+    # ------------------------------------------------------------------------- матч (ADR 0032)
+    def _contest(self) -> tuple[ContestRule, BaseModel]:
+        """Плагин состязания и его параметры.
+
+        Raises:
+            ModeNotOnlineError: режим соло.
+        """
+        self.online_session  # noqa: B018 — проверка вида сессии (бросает ModeNotOnlineError)
+        if self.contest is None or self.contest_params is None:
+            raise AssertionError("онлайн-движок собран без ContestRule")  # pragma: no cover
+        return self.contest, self.contest_params
+
+    def level_window_ms(self, level: int) -> int:
+        """Окно уровня ``level`` (с 1) в мс: ``session.level_windows_s[level - 1]``.
+
+        Raises:
+            ModeNotOnlineError: режим соло.
+            ValueError: уровня нет у загадки.
+        """
+        windows = self.online_session.level_windows_s
+        if not 1 <= level <= len(windows):
+            raise ValueError(f"уровня {level} нет: окон {len(windows)}")
+        return windows[level - 1] * 1000
+
+    def contest_start(self, player_ids: Sequence[str], *, now_ms: int) -> ContestRoundState:
+        """Начать раунд матча: уровень 1 открыт для всех игроков с окном уровня 1.
+
+        Raises:
+            ModeNotOnlineError: режим соло.
+            ValueError: нет игроков или игроки повторяются.
+        """
+        contest, params = self._contest()
+        return contest.start_round(
+            player_ids, now_ms=now_ms, window_ms=self.level_window_ms(1), params=params
+        )
+
+    def contest_guess(
+        self,
+        state: ContestRoundState,
+        player_id: str,
+        answer: AnswerInput,
+        draw: RoundDraw,
+        *,
+        display: str,
+        now_ms: int,
+    ) -> ContestStep:
+        """Сверить ответ игрока с загаданной единицей раунда и применить ход.
+
+        Вердикт возвращается только вызывающему (ответ команды игрока); если ход не
+        принят (уровень закрыт, раунд завершён), вердикт не раскрывается — ошибка.
+
+        Args:
+            state: Состояние раунда матча.
+            player_id: Игрок (его участие и слот проверяет match).
+            answer: Ответ игрока.
+            draw: Состав раунда из плана (``target`` — загаданная единица).
+            display: Что показать в истории попыток игрока.
+            now_ms: Серверное время хода.
+
+        Raises:
+            ModeNotOnlineError: режим соло.
+            RoundFinishedError: раунд завершён (для всех или для игрока).
+            LevelLockedError: уровень закрыт или попытки уровня исчерпаны.
+            AnswerKindError | OptionNotFoundError: см. ``check``.
+            ValueError: неизвестный игрок.
+        """
+        contest, params = self._contest()
+        match = self.check(answer, draw.target, draw)
+        option = self.option(draw, answer.option_id) if answer.option_id is not None else None
+        guess = Guess(
+            kind=GuessKind(answer.input_kind),
+            level=state.level,
+            verdict=match.verdict,
+            display=display,
+        )
+        after = contest.apply_guess(
+            state, player_id, guess, levels_count=self.levels_count, now_ms=now_ms, params=params
+        )
+        return ContestStep(state=after, match=match, option=option)
+
+    def contest_skip(
+        self, state: ContestRoundState, player_id: str, *, now_ms: int
+    ) -> ContestRoundState:
+        """Пас игрока на открытом уровне: он ждёт следующего уровня (как исчерпавший попытки).
+
+        Raises:
+            ModeNotOnlineError | RoundFinishedError | LevelLockedError | ValueError: как
+                у ``contest_guess``.
+        """
+        contest, params = self._contest()
+        skip = Guess(kind=GuessKind.SKIP, level=state.level, verdict=None, display="")
+        return contest.apply_guess(
+            state, player_id, skip, levels_count=self.levels_count, now_ms=now_ms, params=params
+        )
+
+    def contest_level_closed(self, state: ContestRoundState, *, now_ms: int) -> bool:
+        """Закрыт ли текущий уровень (окно истекло, блокировка, ответили все)."""
+        contest, params = self._contest()
+        return contest.level_closed(state, now_ms=now_ms, params=params)
+
+    @staticmethod
+    def contest_deadline_ms(state: ContestRoundState) -> int | None:
+        """Дедлайн окна открытого уровня (``phase_ends_at`` match) или ``None``."""
+        return None if state.finished else state.level_ends_at_ms
+
+    def contest_advance(self, state: ContestRoundState, *, now_ms: int) -> ContestRoundState:
+        """После закрытия уровня — открыть следующий (с его окном) или завершить раунд.
+
+        Raises:
+            ModeNotOnlineError: режим соло.
+            RoundFinishedError: раунд уже завершён.
+            ValueError: уровень ещё открыт.
+        """
+        contest, params = self._contest()
+        windows = self.online_session.level_windows_s
+        next_level = min(state.level + 1, len(windows))
+        return contest.next_level(
+            state,
+            levels_count=self.levels_count,
+            now_ms=now_ms,
+            window_ms=self.level_window_ms(next_level),
+            params=params,
+        )
+
+    def contest_round_finished(self, state: ContestRoundState) -> bool:
+        """Раунд матча завершён для всех."""
+        contest, params = self._contest()
+        return contest.round_finished(state, params=params)
+
+    def contest_leave(self, state: ContestRoundState, player_id: str) -> ContestRoundState:
+        """Игрок вышел: его идущий раунд — ``void`` (очки прошлых раундов сохраняются)."""
+        contest, _ = self._contest()
+        return contest.leave(state, player_id)
+
+    def contest_views(self, state: ContestRoundState) -> list[PlayerRoundView]:
+        """Статусы игроков для всех участников — без текстов ответов."""
+        contest, _ = self._contest()
+        return contest.views(state)
+
+    def contest_outcome(self, state: ContestRoundState, player_id: str) -> RoundOutcome:
+        """Итог раунда игрока (``RoundNotFinishedError``, пока его раунд идёт)."""
+        contest, params = self._contest()
+        return contest.outcome(state, player_id, params=params)
+
+    def contest_score(self, state: ContestRoundState, player_id: str) -> int:
+        """Очки игрока за завершённый раунд матча."""
+        return self.score(self.contest_outcome(state, player_id))
+
+    def contest_scores(self, state: ContestRoundState) -> dict[str, int]:
+        """Очки всех игроков за раунд (раунд должен быть завершён).
+
+        Raises:
+            RoundNotFinishedError: раунд ещё идёт.
+        """
+        if not self.contest_round_finished(state):
+            raise RoundNotFinishedError("раунд матча ещё идёт")
+        return {pid: self.contest_score(state, pid) for pid in state.players}
+
+    def contest_require_level_open(self, state: ContestRoundState, level: int) -> None:
+        """Уровень можно выдать (D11): открыт сейчас или раньше; после раунда — все.
+
+        Raises:
+            LevelLockedError: уровень ещё не открыт.
+        """
+        opened = self.levels_count if state.finished else state.level
+        if not 1 <= level <= opened:
+            raise LevelLockedError(
+                "уровень ещё не открыт", details={"level": level, "opened": opened}
+            )

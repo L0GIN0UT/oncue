@@ -21,16 +21,42 @@ from game_service.domain.errors import (
 )
 from game_service.domain.session import SessionStatus
 from gv_core.clock import Clock
-from gv_game_kernel import PlayableFor, SubjectQuery
+from gv_game_kernel import OnlineSessionSpec, PlayableFor, SubjectQuery
+
+
+def online_json(rules: ModeRules, session: OnlineSessionSpec) -> Json:
+    """Правила комнаты онлайн-режима для хаба и экрана создания лобби (ADR 0032).
+
+    Только то, что видно игроку до матча: вид, места, раунды, окна уровней, что может
+    выбрать хост и ключи эмоций/фраз. План раундов и ключи ответа здесь не появляются.
+    """
+    lobby = session.lobby
+    return {
+        "kind": session.kind,
+        "players": {"min": session.players.min, "max": session.players.max},
+        "rounds": session.rounds,
+        "level_windows_s": list(session.level_windows_s),
+        "contest_type": session.contest.type,
+        "ranked": session.ranked,
+        "ladder": session.ladder,
+        "max_collections": rules.max_collections if rules.engine.uses_collection else None,
+        "lobby": lobby.model_dump(mode="json", exclude_none=True) if lobby is not None else None,
+        "chat": session.chat.model_dump(mode="json"),
+    }
 
 
 def mode_json(rules: ModeRules) -> Json:
     """Режим для ``GET /v1/modes``: подача выбирается по данным (D12), не по ключу.
 
     У шаблона сборника (``kind=collection``) — ещё ``round_options`` и ``min_items`` из
-    конфига (без учёта конкретного сборника); у остальных они ``None``."""
+    конфига (без учёта конкретного сборника); у остальных они ``None``. У онлайн-режима
+    (``session=online``) — блок ``online``; пресетов и выбора числа раундов у него нет
+    (план раундов составляет match с game без них), ``allow_guest`` — всегда ``false``
+    (онлайн только с аккаунтом, ADR 0036)."""
+    session = rules.config.session
+    online = session if isinstance(session, OnlineSessionSpec) else None
     template = rules.engine.uses_collection
-    presets = rules.presets()
+    presets = rules.presets() if online is None else []
     query = rules.subject_query()
     limit = rules.max_subjects()
     subject = (
@@ -47,13 +73,14 @@ def mode_json(rules: ModeRules) -> Json:
         "clue_type": rules.clue_type,
         "rounds": rules.rounds,
         "levels": [{"index": lvl.index, "hint": dict(lvl.hint)} for lvl in rules.levels],
-        "allow_guest": rules.config.session.allow_guest,
+        "allow_guest": online is None and rules.engine.solo_session.allow_guest,
         "presets": [{"id": p.id, "title_key": p.title_key} for p in presets] or None,
         "answer_format": rules.answer_format,
         "presentation": rules.presentation,
         "start": {"subject": subject} if subject is not None else None,
-        "round_options": rules.engine.round_options() if template else None,
+        "round_options": rules.engine.round_options() if template and online is None else None,
         "min_items": rules.min_playable() if template else None,
+        "online": online_json(rules, online) if online is not None else None,
     }
 
 
@@ -69,7 +96,7 @@ def _collection_mode_json(rules: ModeRules, playable: int, total: int) -> Json:
         "mode_key": rules.key,
         "title_key": rules.config.title_i18n,
         "clue_type": rules.clue_type,
-        "allow_guest": rules.config.session.allow_guest,
+        "allow_guest": rules.engine.solo_session.allow_guest,
         "playable": playable,
         "total": total,
         "available": available,
@@ -102,14 +129,21 @@ class PlayQueries:
         self._playability_per_min = playability_per_min
         self._candidate_limit = candidate_limit
 
-    async def modes(self, domain: str | None, *, collection: bool = False) -> list[Json]:
-        """Опубликованные режимы одного вида: по умолчанию — играемые сами по себе, без
+    async def modes(
+        self, domain: str | None, *, collection: bool = False, online: bool = False
+    ) -> list[Json]:
+        """Опубликованные режимы одного вида: по умолчанию — соло, играемые сами по себе, без
         шаблонов сборника (без ``collection_id`` их не начать, ADR 0028); при
-        ``collection`` — только шаблоны сборника (конструктор, экран сессии по сборнику)."""
+        ``collection`` — только шаблоны сборника (конструктор, экран сессии по сборнику).
+
+        При ``online`` — все онлайн-режимы (шаблоны дуэли, party и лобби, в том числе
+        лобби по сборнику; ``collection`` не учитывается): соло-хаб их не видит (ADR 0032).
+        """
         return [
             mode_json(r)
-            for r in await self._catalog.published()
-            if (domain is None or r.domain == domain) and r.engine.uses_collection == collection
+            for r in await self._catalog.published(online=online)
+            if (domain is None or r.domain == domain)
+            and (online or r.engine.uses_collection == collection)
         ]
 
     async def result(self, player: Player, session_id: UUID) -> Json:

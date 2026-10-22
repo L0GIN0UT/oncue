@@ -1,0 +1,21 @@
+{
+  "delta": {
+    "level": 1,
+    "players": [
+      {
+        "level": 1,
+        "status": "guessed",
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002"
+      },
+      {
+        "level": null,
+        "status": "missed",
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003"
+      }
+    ],
+    "round_index": 0
+  },
+  "kind": "level_closed",
+  "server_now": "2026-10-22T12:00:14Z",
+  "version": 13
+}

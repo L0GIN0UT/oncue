@@ -97,10 +97,15 @@ COMMIT → commit offset
 
 ## 6. Realtime (Centrifugo)
 
-- Публикует **только бэкенд**: сервисы вызывают серверный API Centrifugo. Клиенты подписываются по токену, который выдаёт identity (claims с разрешёнными каналами).
-- Каналы: `user:#{userId}` (персональные), `room:{code}`, `feed:{name}` (публичные ленты).
-- Сообщение в канал — это **уведомление об изменении с версией** (`version`). При пропуске версии клиент делает REST-ресинк. Поэтому потеря сообщения не ломает состояние.
-- Масштабирование: несколько нод Centrifugo с Redis-брокером.
+Решение — [ADR 0035](../adr/0035-realtime-centrifugo-tokens-and-tick.md); конфиг — `infra/centrifugo/config.json`; формат сообщения — `contracts/realtime/room.message.v1.json`.
+
+- Публикует **только бэкенд**: match вызывает серверный API Centrifugo (`GV_REALTIME__API_URL`/`API_KEY`). Клиенты не публикуют (`allow_publish_for_client: false`), анонимов нет.
+- **Токены с разными секретами:** connection-токен выдаёт identity (`POST /v1/realtime/token`, TTL ≤ 10 мин, без прав на каналы); subscription-токен канала комнаты — match (`POST /v1/rooms/{code}/realtime-token`, только участник). Компрометация match не позволяет подделать вход. Отзыв сессии не рвёт открытое соединение — оно живёт до `exp` connection-токена.
+- Каналы: `room:{code}` (4a, история 100 сообщений / 600 с, recovery), `personal:#{userId}` (namespace заведён, потребители — этап 5), `feed:{name}` (публичные ленты, позже).
+- Сообщение в канал — **уведомление об изменении с версией** (`version`, `kind`, `delta`). Личное (свои попытки) и скрытое (план, ключи ответа) в канал не идут. При пропуске версии клиент делает REST-ресинк `GET /v1/rooms/{code}/state`, поэтому потеря сообщения не ломает состояние.
+- **Фолбэк без WebSocket:** gateway проксирует `/connection/` (WS), `/connection/http_stream` и `/connection/emulation`; при остановленном Centrifugo клиент шлёт `POST /v1/rooms/{code}/tick` (heartbeat присутствия + снимок), матч доигрывается.
+- **Синхронный вызов match → game** — единственный на старте матча (план раундов, [ADR 0033](../adr/0033-match-round-plan-from-game.md)); дальше матч не зависит от game. Сбой — отказ старта, комната остаётся в лобби. Не нарушает правило «без цепочек»: game сам в match не ходит.
+- Масштабирование: несколько нод Centrifugo с Redis-брокером; `user_connection_limit` действует на узел (учесть на этапе 7).
 
 ## 7. Сквозные заголовки
 

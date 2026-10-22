@@ -1,6 +1,87 @@
 {
   "components": {
     "schemas": {
+      "AnswerKey": {
+        "description": "Ключ ответа раунда: всё, что нужно ядру для `answer.check` без вызова game.\n\nПовторяет ``gv_game_kernel.MediaItemRef`` (алиасы — уже нормализованные).",
+        "properties": {
+          "aliases": {
+            "description": "Нормализованные алиасы всех видов",
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "partial": {
+            "description": "Ключи partial-matcher-ов режима (`answer.partial`), по которым есть данные",
+            "items": {
+              "type": "string"
+            },
+            "title": "Partial",
+            "type": "array"
+          },
+          "persons": {
+            "items": {
+              "$ref": "#/components/schemas/PersonKey"
+            },
+            "title": "Persons",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "title_aliases": {
+            "description": "Алиасы видов `title`/`alt` (подмножество)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Title Aliases",
+            "type": "array"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "domain",
+          "kind",
+          "title",
+          "year",
+          "aliases",
+          "title_aliases",
+          "persons",
+          "partial"
+        ],
+        "title": "AnswerKey",
+        "type": "object"
+      },
       "ArchiveRequest": {
         "additionalProperties": false,
         "description": "Убрать режим из каталога (сессии доигрываются).",
@@ -807,6 +888,28 @@
         "title": "ItemAnswer",
         "type": "object"
       },
+      "LevelAsset": {
+        "description": "Набор ассетов уровня: ссылку match запрашивает у media-pipeline при открытии (D11).",
+        "properties": {
+          "asset_set_id": {
+            "format": "uuid",
+            "title": "Asset Set Id",
+            "type": "string"
+          },
+          "level": {
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "asset_set_id"
+        ],
+        "title": "LevelAsset",
+        "type": "object"
+      },
       "LevelOut": {
         "description": "Уровень загадки для UI.",
         "properties": {
@@ -848,6 +951,42 @@
           "hint"
         ],
         "title": "LevelOut",
+        "type": "object"
+      },
+      "ModeConfigBody": {
+        "description": "Опубликованная версия конфига режима: тело — по ``contracts/modes/mode_config.v1.json``.",
+        "properties": {
+          "body": {
+            "additionalProperties": true,
+            "description": "Тело конфига (`ModeConfig`), включая `session`",
+            "title": "Body",
+            "type": "object"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "domain",
+          "body"
+        ],
+        "title": "ModeConfigBody",
         "type": "object"
       },
       "ModeConfigDetail": {
@@ -943,6 +1082,16 @@
               }
             ],
             "title": "Published Version"
+          },
+          "session_kind": {
+            "default": "solo",
+            "description": "По последней опубликованной версии (у неопубликованного — по черновику): online — duel/party/lobby, играет match (ADR 0032)",
+            "enum": [
+              "solo",
+              "online"
+            ],
+            "title": "Session Kind",
+            "type": "string"
           },
           "status": {
             "description": "draft — режим ещё ни разу не опубликован",
@@ -1172,6 +1321,17 @@
             "description": "Только у шаблона сборника: минимум играбельных единиц для игры",
             "title": "Min Items"
           },
+          "online": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnlineModeOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у онлайн-режима (`session=online`); у соло-режимов — null"
+          },
           "presentation": {
             "default": "score",
             "enum": [
@@ -1369,6 +1529,146 @@
         "title": "MoveStats",
         "type": "object"
       },
+      "OnlineChatOut": {
+        "description": "Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``) и признак\nсвободного чата (только кастомное лобби, ADR 0036).",
+        "properties": {
+          "emotes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Emotes",
+            "type": "array"
+          },
+          "free_text": {
+            "title": "Free Text",
+            "type": "boolean"
+          },
+          "phrases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Phrases",
+            "type": "array"
+          }
+        },
+        "required": [
+          "emotes",
+          "phrases",
+          "free_text"
+        ],
+        "title": "OnlineChatOut",
+        "type": "object"
+      },
+      "OnlineModeOut": {
+        "description": "Правила комнаты онлайн-режима (``GET /v1/modes?session=online``, ADR 0032).",
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/OnlineChatOut"
+          },
+          "contest_type": {
+            "description": "Плагин состязания (`race`, `parallel`)",
+            "title": "Contest Type",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "duel",
+              "party",
+              "lobby"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ladder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ladder"
+          },
+          "level_windows_s": {
+            "description": "Окно каждого уровня загадки, с",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Level Windows S",
+            "type": "array"
+          },
+          "lobby": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у кастомного лобби: `{visibility, overridable}` по `$defs/LobbySpec` контракта конфига режима — из чего выбирает хост",
+            "title": "Lobby"
+          },
+          "max_collections": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у лобби по сборнику: сколько сборников можно выбрать",
+            "title": "Max Collections"
+          },
+          "players": {
+            "$ref": "#/components/schemas/OnlinePlayersOut"
+          },
+          "ranked": {
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "rounds": {
+            "minimum": 1.0,
+            "title": "Rounds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "players",
+          "rounds",
+          "level_windows_s",
+          "contest_type",
+          "ranked",
+          "chat"
+        ],
+        "title": "OnlineModeOut",
+        "type": "object"
+      },
+      "OnlinePlayersOut": {
+        "description": "Места комнаты.",
+        "properties": {
+          "max": {
+            "minimum": 2.0,
+            "title": "Max",
+            "type": "integer"
+          },
+          "min": {
+            "minimum": 2.0,
+            "title": "Min",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "title": "OnlinePlayersOut",
+        "type": "object"
+      },
       "OptionAnswer": {
         "additionalProperties": false,
         "description": "Ответ выбором варианта раунда (формат ``pick``).",
@@ -1422,6 +1722,37 @@
         "title": "OptionOut",
         "type": "object"
       },
+      "PersonKey": {
+        "description": "Персона единицы (для partial-ключей matcher-а: исполнитель, режиссёр).",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "normalized": {
+            "description": "Нормализованное имя (`gv_text`)",
+            "title": "Normalized",
+            "type": "string"
+          },
+          "person_id": {
+            "format": "uuid",
+            "title": "Person Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "person_id",
+          "name",
+          "normalized",
+          "role"
+        ],
+        "title": "PersonKey",
+        "type": "object"
+      },
       "PersonOut": {
         "description": "Персона в ревиле.",
         "properties": {
@@ -1439,6 +1770,128 @@
           "role"
         ],
         "title": "PersonOut",
+        "type": "object"
+      },
+      "PlanCollection": {
+        "description": "Сборник плана: версия состава фиксируется (ADR 0028).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "content_version сборника",
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "PlanCollection",
+        "type": "object"
+      },
+      "PlanOption": {
+        "description": "Вариант ответа ``pick``: ``option_id`` непрозрачен, за ним — единица (только для match).",
+        "properties": {
+          "label_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Key"
+          },
+          "media_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Item Id"
+          },
+          "option_id": {
+            "pattern": "^[a-z0-9_]{1,32}$",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "option_id"
+        ],
+        "title": "PlanOption",
+        "type": "object"
+      },
+      "PlannedRound": {
+        "description": "Раунд плана: загаданная единица, ключ ответа, ассеты по уровням.",
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/AnswerKey"
+          },
+          "index": {
+            "exclusiveMaximum": 50.0,
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/LevelAsset"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Levels",
+            "type": "array"
+          },
+          "options": {
+            "description": "Только формат `pick`",
+            "items": {
+              "$ref": "#/components/schemas/PlanOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "reveal_asset_set_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Набор ассетов ревила (`clue.reveal`), если задан",
+            "title": "Reveal Asset Set Id"
+          }
+        },
+        "required": [
+          "index",
+          "answer",
+          "levels"
+        ],
+        "title": "PlannedRound",
         "type": "object"
       },
       "PlayabilityOut": {
@@ -2036,6 +2489,105 @@
           "guesses"
         ],
         "title": "RoundOut",
+        "type": "object"
+      },
+      "RoundPlan": {
+        "description": "План матча: версия и тело конфига плюс разыгранные раунды.",
+        "properties": {
+          "collections": {
+            "items": {
+              "$ref": "#/components/schemas/PlanCollection"
+            },
+            "title": "Collections",
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ModeConfigBody"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedRound"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Rounds",
+            "type": "array"
+          },
+          "seed": {
+            "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
+            "title": "Seed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "seed",
+          "rounds"
+        ],
+        "title": "RoundPlan",
+        "type": "object"
+      },
+      "RoundPlanRequest": {
+        "additionalProperties": false,
+        "description": "Запрос плана матча (D5): детерминирован по ``seed`` при том же пуле.",
+        "properties": {
+          "collection_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Collection Ids",
+            "type": "array"
+          },
+          "exclude_ids": {
+            "description": "Единицы, которые не должны выпасть (память лобби)",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Exclude Ids",
+            "type": "array"
+          },
+          "mode_key": {
+            "maxLength": 100,
+            "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "rounds": {
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Rounds",
+            "type": "integer"
+          },
+          "seed": {
+            "description": "Сид розыгрыша: секретный, случайный на каждый старт матча (match хранит его только в снимке комнаты; ADR 0033)",
+            "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
+            "title": "Seed",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Версия шаблона; null — текущая опубликованная",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "mode_key",
+          "seed",
+          "rounds"
+        ],
+        "title": "RoundPlanRequest",
         "type": "object"
       },
       "RoundProgress": {
@@ -3183,6 +3735,28 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "description": "Фильтр по `session_kind`; не задан — все режимы",
+            "in": "query",
+            "name": "session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "solo",
+                    "online"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Фильтр по `session_kind`; не задан — все режимы",
+              "title": "Session"
             }
           }
         ],
@@ -4752,6 +5326,248 @@
         ]
       }
     },
+    "/internal/v1/modes/{mode_key}/versions/{version}": {
+      "get": {
+        "description": "Для проверки шаблона и переопределений лобби в match; версии неизменяемы (кэшируется вызывающим без срока). Ошибки: 404 `game.mode_not_found` (нет такой опубликованной или архивной версии).",
+        "operationId": "get_mode_version_internal_v1_modes__mode_key__versions__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mode_key",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+              "title": "Mode Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModeConfigBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Тело опубликованной версии конфига",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/round-plans": {
+      "post": {
+        "description": "Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), 422 `game.collection_not_supported` (сборники у режима без source `collection`). `exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — пока хватает остальных единиц).",
+        "operationId": "create_round_plan_internal_v1_round_plans_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "План раундов матча",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
     "/v1/collections/{collection_id}/modes": {
       "get": {
         "description": "Опубликованные режимы с source `collection` домена сборника и сколько единиц в каждом играбельно. Только опубликованный, не скрытый сборник (по проекции `collections.collection.v1`), иначе 404 `game.collection_not_found`. Без названий и `media_item_id` (D6). Субъект не обязателен.",
@@ -5028,7 +5844,7 @@
     },
     "/v1/modes": {
       "get": {
-        "description": "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`.",
+        "description": "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`. `session=solo` (по умолчанию) — только соло-режимы; `session=online` — онлайн-шаблоны (дуэль, party, лобби, в том числе по сборнику; `kind` не учитывается) с блоком `online` (ADR 0032): соло-хаб их не видит.",
         "operationId": "list_modes_v1_modes_get",
         "parameters": [
           {
@@ -5062,6 +5878,20 @@
                 "collection"
               ],
               "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session",
+            "required": false,
+            "schema": {
+              "default": "solo",
+              "enum": [
+                "solo",
+                "online"
+              ],
+              "title": "Session",
               "type": "string"
             }
           }
@@ -5388,7 +6218,7 @@
     },
     "/v1/sessions": {
       "post": {
-        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.",
+        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 422 `game.mode_not_solo` (онлайн-режим играется только в комнате match), 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.",
         "operationId": "start_session_v1_sessions_post",
         "parameters": [
           {

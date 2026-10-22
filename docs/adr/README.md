@@ -35,3 +35,8 @@
 | [0029](0029-collection-assets-scoped-sets.md) | Ассеты сборников — наборы со `scope` |
 | [0030](0030-minimal-ugc-safety-before-moderation.md) | Минимальная безопасность UGC до модерации этапа 5 |
 | [0031](0031-library-config-shelves-private-catalog-projection.md) | Медиатека: системные полки из конфига, приватность, проекция каталога |
+| [0032](0032-online-sessions-in-mode-config.md) | Онлайн-сессии в `ModeConfig`: `OnlineSessionSpec`, `ContestRule`, `party_speed`, шаблоны лобби |
+| [0033](0033-match-round-plan-from-game.md) | Источник раундов матча — план от game по internal API |
+| [0034](0034-rooms-process-lease-snapshots.md) | Процесс `rooms`: команды через Redis Stream, lease с fencing-эпохой, снимки, итог в Postgres |
+| [0035](0035-realtime-centrifugo-tokens-and-tick.md) | Realtime: токены Centrifugo, namespace-ы, версии и recovery, HTTP-tick |
+| [0036](0036-online-account-only-chat-and-ratings.md) | Онлайн только с аккаунтом; эмоции и фразы, чат в лобби, оценки игроков |

@@ -1,0 +1,19 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0101",
+  "aggregate_type": "match",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000004a0004",
+  "event_type": "match.PlayerRated",
+  "event_version": 1,
+  "occurred_at": "2026-10-22T12:00:00Z",
+  "payload": {
+    "at": "2026-10-22T12:05:00Z",
+    "from_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002",
+    "kind": "praise",
+    "match_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0101",
+    "reason": null,
+    "to_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003"
+  },
+  "producer": "match"
+}

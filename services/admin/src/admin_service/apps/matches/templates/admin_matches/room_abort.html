@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'matches:rooms' %}">← к комнатам</a></p>
+<p>Матч комнаты <code>{{ code }}</code> завершится принудительно (<code>finish = aborted</code>),
+   комната закроется. Действие необратимо; причина попадёт в аудит.</p>
+<form method="post" action="{% url 'matches:abort' code=code %}">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  {{ form.idempotency_key }}
+  <button type="submit">Завершить комнату {{ code }}</button>
+</form>
+{% endblock %}

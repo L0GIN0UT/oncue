@@ -33,10 +33,10 @@
 - **Реализация:** Nginx (на VPS) → Envoy/Ingress (в Kubernetes). Конфиг декларативный и лежит в `infra/`.
 
 ### bff-web
-- **Отвечает за:** агрегацию данных под экраны веб-клиента — `GET /api/web/v1/session`, `/pages/home`, `/pages/solo`, `/pages/results/{session_id}`; источник данных для SSR Next.js.
+- **Отвечает за:** агрегацию данных под экраны веб-клиента — `GET /api/web/v1/session`, `/pages/home`, `/pages/solo`, `/pages/results/{session_id}`, `/pages/online`, `/pages/match/{id}`; источник данных для SSR Next.js.
 - **Не отвечает за:** доменную логику, хранение данных и **команды**: bff только читает ([ADR 0017](../adr/0017-frontend-nextjs-bff-read-only.md)). Ходы игры браузер шлёт прямо в game, автокомплит — в catalog.
-- **Данные:** нет БД; Redis — кэш публичных данных (`game /v1/modes` 30 с, карточки catalog 5 мин). Личные блоки не кэшируются.
-- **Вызывает:** game (`/v1/modes`, `/v1/daily`, `/v1/sessions/{id}/result`), identity (`/v1/me`), catalog (`/v1/items/{id}`) — с токеном пользователя как `Bearer`; токен проверяется локально по JWKS.
+- **Данные:** нет БД; Redis — кэш публичных данных (`game /v1/modes` 30 с, карточки catalog 5 мин). Личные блоки не кэшируются. Онлайн только с аккаунтом: гость получает `{status: "auth_required"}` без вызовов ([ADR 0036](../adr/0036-online-account-only-chat-and-ratings.md)); детали — `services/bff_web/CLAUDE.md`.
+- **Вызывает:** game (`/v1/modes`, `/v1/daily`, `/v1/sessions/{id}/result`), identity (`/v1/me`), catalog (`/v1/items/{id}`), match (открытые комнаты, «Мои матчи», итог матча), library (флаги «в медиатеке» для итога матча) — с токеном пользователя как `Bearer`; токен проверяется локально по JWKS.
 - **Масштаб:** stateless. **Деградация:** таймаут 1,5 с и circuit breaker на источник; блок упавшего источника — `{"status": "unavailable"}`, страница всё равно 200.
 
 ---
@@ -83,12 +83,16 @@
 - **Деградация:** проверка ответов и розыгрыш работают на проекциях, без catalog. Без media-pipeline новые уровни не выдаются (503 `game.assets_unavailable`), ход и итог работают. Без Redis лимиты пропускают запросы (fail-open с метрикой).
 
 ### 5. match
-- **Отвечает за:** лобби и комнаты, матчмейкинг (очереди по фильтрам), конечный автомат матча (countdown → playing → reveal → summary), таймеры, ответы в реальном времени, реконнект, сдачу, тех. победу, чат и эмоции в комнате, наблюдение за матчем. Использует **те же плагины**, что и game (общая библиотека `libs/game-kernel`).
-- **Данные:** Redis (состояние комнат, lease владельца, очереди матчмейкинга), Postgres (match_results, room_history).
-- **Публикует:** `MatchStarted`, `MatchFinished` (с результатами игроков), `PlayerForfeited`, `PlayerRated` (похвала/жалоба).
-- **Слушает:** `UserSanctionsChanged` (запрет рейтинговых игр, мут чата), проекции каталога и сборников.
-- **Масштаб:** single-writer на комнату (lease в Redis), шардирование комнат по инстансам ([ADR 0010](../adr/0010-match-room-single-writer.md)). Рассылка клиентам — через Centrifugo.
-- **Деградация:** при потере websocket клиент переходит на HTTP-tick.
+- **Отвечает за:** лобби и комнаты (дуэль 1×1, party 3–6, кастомные лобби по шаблону режима или сборнику), конечный автомат матча (lobby → countdown → playing → reveal → summary), таймеры, ответы в реальном времени, реконнект, сдачу, тех. победу, эмоции/фразы и свободный чат в лобби, реванш, итог матча. Правила матча — плагины `ContestRule` общей библиотеки `libs/game-kernel` ([ADR 0032](../adr/0032-online-sessions-in-mode-config.md)). Матчмейкинг и наблюдение — 4b.
+- **Данные:** Redis — горячее состояние комнаты (`{room:CODE}`: снимок, lease владельца, поток команд, ответы), Postgres — история: `matches`, `match_players`, `match_rounds` (партиции по месяцу), `player_ratings_given` (оценки игроков), проекции `users_proj`, `mode_heads`, `admin_actions`, outbox/inbox. Redis с AOF — единственное хранилище активных комнат ([data.md](data.md)).
+- **Процессы:** `api`, `relay`, `consumer`, `rooms` (владелец комнат: lease с fencing-эпохой, команды через Redis Stream, снимки, handoff — [ADR 0034](../adr/0034-rooms-process-lease-snapshots.md)); `all` запускает их вместе.
+- **Публикует:** `match.match.v1` — `MatchStarted`, `MatchFinished` (результаты игроков и раундов, без ников и e-mail), `PlayerRated` (похвала/жалоба; потребитель — этап 5). Контракты — `contracts/events/match/`.
+- **Слушает:** `identity.UserDeleted` (обезличивание), `UserProfileBasicsChanged` (ники), `game.mode_config.v1` (проекция `mode_heads`). `UserSanctionsChanged` — этап 5 (пока санкции читаются из claim `sanctions`).
+- **Вызывает синхронно:** game `internal/round-plans` и тело конфига режима (план раундов при старте матча, [ADR 0033](../adr/0033-match-round-plan-from-game.md)); media-pipeline `asset-links` (ссылка уровня — одна на комнату/раунд/уровень). Оба вызова с сервисным токеном; breaker и таймаут, недоступный ассет — раунд `void`, недоступный game — отказ старта (`start_error` в лобби).
+- **Realtime:** публикует в Centrifugo (`room:{code}`, уведомления с `version`), выдаёт subscription-токены; connection-токен — identity ([ADR 0035](../adr/0035-realtime-centrifugo-tokens-and-tick.md), [communication.md §6](communication.md)). Без Centrifugo — HTTP-tick.
+- **Доступ:** только с аккаунтом, гость — 403 `auth.guest_forbidden` ([ADR 0036](../adr/0036-online-account-only-chat-and-ratings.md)). Admin-API: `/admin/v1/rooms|matches` (право `match.manage`).
+- **Масштаб:** single-writer на комнату (lease в Redis, [ADR 0010](../adr/0010-match-room-single-writer.md)); комнат на инстанс — `GV_MATCH__MAX_ROOMS_PER_INSTANCE`. Особенности реализации — `services/match/CLAUDE.md`.
+- **Деградация:** потеря websocket → HTTP-tick; падение `rooms` → другой инстанс забирает комнату, разрыв ≤ lease TTL; Centrifugo недоступен — матч идёт на tick.
 
 ### 6. rating
 - **Отвечает за:** Эло (дуэль и многопользовательский), калибровку, звания, сезоны, топ недели и сезона, все лидерборды (набор задаётся конфигом), историю рейтинга.
@@ -156,6 +160,7 @@
 - **Этап 1:** Django 5.2. Вход через identity (`/internal/v1/admin-sessions`, только пароль + `admin.access`). Разделы «Каталог» (catalog и media_pipeline) и «Пользователи» (identity). Чтение тоже идёт через admin-API ([ADR 0013](../adr/0013-admin-catalog-via-admin-api.md)); реплики и unmanaged-модели — этап 5.
 - **Данные:** зеркало пользователей (права = снимок perms identity), `django_session` (токены identity только в зашифрованном виде), аудит `AuditEntry` (append-only), inbox.
 - **Слушает:** `UserRolesChanged`, `UserDeleted` — применяет только `version` больше `identity_version` ([ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
+- **Этап 4a:** раздел «Матчи» (право `match.manage`; у moderator только `match.spectate`, раздел скрыт): активные комнаты, принудительное завершение с `reason` (`POST /admin/v1/rooms/{code}/abort`), итог матча — через admin-API match; онлайн-шаблоны в редакторе «Режимов» (ветка `session.kind=online`, фильтр «соло / онлайн»). Детали — `services/admin/CLAUDE.md`.
 - **Мутации:** форма с обязательной `reason` и `Idempotency-Key`; `AuditEntry` пишется и при успехе, и при отказе.
 - **Доступ:** gateway админку не публикует; IP allowlist обязателен вне local/ci.
 
@@ -172,13 +177,15 @@
 
 | Вызывающий | Вызываемый | Зачем | Если недоступен |
 |---|---|---|---|
-| bff-web | game, identity, catalog | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
+| bff-web | game, identity, catalog, collections, library, match | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
 | game | media-pipeline (internal, сервисный токен) | Подписанная ссылка на ассет уровня и ревила | Ретрай; 503 `game.assets_unavailable` |
 | game, admin | identity (internal) | Сервисный токен (client credentials) | Старый токен до `exp`, затем вызов не выполняется |
-| match | media-pipeline | То же, что у game (этап 4) | То же |
+| match | game (internal `round-plans`, тело конфига режима) | План раундов при старте матча, [ADR 0033](../adr/0033-match-round-plan-from-game.md) | Отказ старта: `start_error` в лобби, повтор хостом |
+| match | media-pipeline (`asset-links`) | Ссылка уровня и ревила матча | Раунд `void` |
+| match | Centrifugo (server API) | Публикация изменений комнаты | Клиенты на HTTP-tick |
 | progression | payments (internal) | Проверка entitlement при покупке | Кэш entitlements (TTL) |
-| admin | identity `/internal/v1/admin-sessions*` (сервисный токен), admin-API сервисов | Вход в админку, модерация, конфиги | Раздел админки недоступен |
+| admin | identity `/internal/v1/admin-sessions*` (сервисный токен), admin-API сервисов (в т. ч. match: комнаты, итоги) | Вход в админку, модерация, конфиги | Раздел админки недоступен |
 
-Браузер (через gateway) ходит напрямую: в **game** — команды игры (старт, ход, пропуск, сдача, ассет уровня); в **catalog** — автокомплит ответа (`/v1/autocomplete`); в **identity** — вход, гостевая сессия, refresh; в **bff-web** — только GET-экраны ([ADR 0017](../adr/0017-frontend-nextjs-bff-read-only.md)).
+Браузер (через gateway) ходит напрямую: в **game** — команды игры (старт, ход, пропуск, сдача, ассет уровня); в **catalog** — автокомплит ответа (`/v1/autocomplete`); в **identity** — вход, гостевая сессия, refresh, connection-токен Centrifugo; в **match** — команды комнаты, tick, state, subscription-токен ([ADR 0035](../adr/0035-realtime-centrifugo-tokens-and-tick.md)); в **Centrifugo** (`/connection/`) — подписка на канал комнаты; в **bff-web** — только GET-экраны ([ADR 0017](../adr/0017-frontend-nextjs-bff-read-only.md)).
 
-Проверка ответа в game и match идёт по локальной проекции (названия и алиасы), без сетевого вызова.
+Проверка ответа в game и match идёт по локальной проекции (названия и алиасы), без сетевого вызова. Match при старте матча один раз получает план раундов от game ([ADR 0033](../adr/0033-match-round-plan-from-game.md)); в ходе матча сетевых вызовов к game нет, кроме ссылок media-pipeline.

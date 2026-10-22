@@ -17,7 +17,17 @@ from pydantic import BaseModel
 from referencing import Registry, Resource
 
 from gv_game_kernel import ConfigError, ModeConfig, params_hash, parse_mode_config
-from gv_game_kernel.spec import AnswerSpec, ClueSpec, PluginSpec, SessionSpec
+from gv_game_kernel.spec import (
+    AnswerSpec,
+    ChatSpec,
+    ClueSpec,
+    LobbyOverridable,
+    LobbySpec,
+    OnlineSessionSpec,
+    PlayersSpec,
+    PluginSpec,
+    SoloSessionSpec,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -71,14 +81,34 @@ def _assert_model_matches(model: type[BaseModel], schema: dict[str, Any], where:
 def test_mode_config_model_matches_schema() -> None:
     schema = _load(MODES / "mode_config.v1.json")
     _assert_model_matches(ModeConfig, schema, "ModeConfig")
-    _assert_model_matches(SessionSpec, schema["properties"]["session"], "session")
+    defs = schema["$defs"]
+    _assert_model_matches(SoloSessionSpec, defs["SoloSession"], "session[solo]")
+    _assert_model_matches(OnlineSessionSpec, defs["OnlineSession"], "session[online]")
+    online = defs["OnlineSession"]["properties"]
+    _assert_model_matches(PlayersSpec, online["players"], "session.players")
+    _assert_model_matches(ChatSpec, online["chat"], "session.chat")
+    _assert_model_matches(PluginSpec, online["contest"], "session.contest")
+    _assert_model_matches(LobbySpec, defs["LobbySpec"], "session.lobby")
+    _assert_model_matches(
+        LobbyOverridable, defs["LobbySpec"]["properties"]["overridable"], "lobby.overridable"
+    )
     _assert_model_matches(AnswerSpec, schema["properties"]["answer"], "answer")
     for section in ("source", "scoring"):
         _assert_model_matches(PluginSpec, schema["properties"][section], section)
     _assert_model_matches(ClueSpec, schema["properties"]["clue"], "clue")
     _assert_model_matches(PluginSpec, schema["properties"]["clue"]["properties"]["reveal"], "rev")
-    _assert_model_matches(PluginSpec, schema["properties"]["session"]["properties"]["end"], "end")
+    _assert_model_matches(PluginSpec, defs["SoloSession"]["properties"]["end"], "end")
     _assert_model_matches(PluginSpec, schema["properties"]["answer"]["properties"]["matcher"], "m")
+
+
+def test_session_is_one_of_solo_and_online() -> None:
+    """ADR 0032: ветка solo не изменилась, онлайн — отдельная ветка без allow_guest."""
+    schema = _load(MODES / "mode_config.v1.json")
+    refs = [b["$ref"] for b in schema["properties"]["session"]["oneOf"]]
+    assert refs == ["#/$defs/SoloSession", "#/$defs/OnlineSession"]
+    kinds = schema["$defs"]["OnlineSession"]["properties"]["kind"]["enum"]
+    assert kinds == ["duel", "party", "lobby"]
+    assert "allow_guest" not in schema["$defs"]["OnlineSession"]["properties"]
 
 
 def test_schema_has_no_service_owned_fields() -> None:
@@ -120,6 +150,8 @@ def test_seed_is_valid_by_schema_and_models(seed: Path) -> None:
         plugins.append(("end", body["session"]["end"]))
     if "reveal" in body["clue"]:
         plugins.append(("reveal", body["clue"]["reveal"]))
+    if "contest" in body["session"]:
+        plugins.append(("contest", body["session"]["contest"]))
     for section, plugin in plugins:
         path = _plugin_schema(section, plugin["type"])
         assert path.is_file(), f"нет схемы параметров {path.relative_to(ROOT)}"
@@ -262,9 +294,12 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         MetricCompareParams,
         NoneParams,
         PairParams,
+        ParallelParams,
+        PartySpeedParams,
         PoolParams,
         PosterMaskedParams,
         PreferenceParams,
+        RaceParams,
         RandomParams,
         SoundtrackParams,
         StreakParams,
@@ -293,11 +328,14 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         ("by_speed", BySpeedParams, params / "scorer.by_speed.v1.json"),
         ("streak", StreakParams, params / "scorer.streak.v1.json"),
         ("none", NoneParams, params / "scorer.none.v1.json"),
+        ("party_speed", PartySpeedParams, params / "scorer.party_speed.v1.json"),
         ("title_alias", TitleAliasParams, params / "matcher.title_alias.v1.json"),
         ("metric_compare", MetricCompareParams, params / "matcher.metric_compare.v1.json"),
         ("preference", PreferenceParams, params / "matcher.preference.v1.json"),
         ("all_rounds", AllRoundsParams, params / "end.all_rounds.v1.json"),
         ("lives", LivesParams, params / "end.lives.v1.json"),
+        ("race", RaceParams, params / "contest.race.v1.json"),
+        ("parallel", ParallelParams, params / "contest.parallel.v1.json"),
     ]
 
 
@@ -322,8 +360,9 @@ CLUE_KEYS = (
 )
 SOURCE_KEYS = ("daily", "random", "marathon", "pair", "bracket", "collection")
 MATCHER_KEYS = ("title_alias", "metric_compare", "preference")
-SCORER_KEYS = ("by_level", "by_speed", "streak", "none")
+SCORER_KEYS = ("by_level", "by_speed", "streak", "none", "party_speed")
 END_KEYS = ("all_rounds", "lives")
+CONTEST_KEYS = ("race", "parallel")
 
 
 def test_every_registered_plugin_has_a_contract() -> None:
@@ -337,6 +376,7 @@ def test_every_registered_plugin_has_a_contract() -> None:
         *(registry.matcher(k) for k in MATCHER_KEYS),
         *(registry.scorer(k) for k in SCORER_KEYS),
         *(registry.end_rule(k) for k in END_KEYS),
+        *(registry.contest(k) for k in CONTEST_KEYS),
     ]
     missing = [p for p in plugins if p is None or p.params_schema not in covered]
     assert missing == []
@@ -345,6 +385,7 @@ def test_every_registered_plugin_has_a_contract() -> None:
     assert clue_files == set(CLUE_KEYS)
     sections = {"source": SOURCE_KEYS, "matcher": MATCHER_KEYS, "scorer": SCORER_KEYS}
     sections["end"] = END_KEYS
+    sections["contest"] = CONTEST_KEYS
     for section, keys in sections.items():
         files = {p.name.split(".")[1] for p in (MODES / "params").glob(f"{section}.*.v1.json")}
         assert files == set(keys), section
@@ -390,7 +431,37 @@ def test_stage3a_test_modes_are_valid_by_schema(path: Path) -> None:
     if "end" in body["session"]:
         end = body["session"]["end"]
         errors += _errors(_plugin_schema("end", end["type"]), end["params"])
+    if "contest" in body["session"]:
+        contest = body["session"]["contest"]
+        errors += _errors(_plugin_schema("contest", contest["type"]), contest["params"])
     if "reveal" in body["clue"]:
         reveal = body["clue"]["reveal"]
         errors += _errors(_plugin_schema("reveal", reveal["type"]), reveal["params"])
     assert errors == []
+    assert parse_mode_config(body).key == path.stem
+
+
+ONLINE_MODES = [p for p in TEST_MODES if p.stem.split(".")[1] in {"duel", "party", "lobby"}]
+
+
+def test_online_test_modes_cover_every_kind() -> None:
+    kinds = {yaml.safe_load(p.read_text(encoding="utf-8"))["session"]["kind"] for p in ONLINE_MODES}
+    assert kinds == {"duel", "party", "lobby"}
+
+
+@pytest.mark.parametrize("path", ONLINE_MODES, ids=lambda p: p.stem)
+def test_online_mode_parses_as_online_session(path: Path) -> None:
+    config = parse_mode_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+    assert config.is_online
+    assert isinstance(config.session, OnlineSessionSpec)
+
+
+def test_online_session_rejects_allow_guest_with_stable_path() -> None:
+    body = yaml.safe_load(ONLINE_MODES[0].read_text(encoding="utf-8"))
+    body["session"] = {**body["session"], "allow_guest": True}
+    with pytest.raises(ConfigError) as info:
+        parse_mode_config(body)
+    assert {"path": "session.allow_guest", "code": "schema.extra_forbidden"} in info.value.details[
+        "errors"
+    ]
+    assert _errors(MODES / "mode_config.v1.json", body) != []

@@ -270,7 +270,12 @@ async def game(
         dead_letters=FakeDeadLetterSink(),
         clock=clock,
     )
-    app = create_app(definition, runtime, jwt_verifier=token_issuer.verifier())
+    app = create_app(
+        definition,
+        runtime,
+        jwt_verifier=token_issuer.verifier(),
+        service_jwt_verifier=token_issuer.verifier(audience="game"),
+    )
     try:
         async with service_client(app) as client:
             yield GameService(client, runtime, processor, token_issuer, assets, clock, definition)

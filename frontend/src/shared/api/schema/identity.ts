@@ -461,6 +461,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/realtime/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connection-токен realtime (Centrifugo)
+         * @description Только пользователь с аккаунтом: гость — 403 `auth.guest_forbidden`, отозванная сессия — 401 `auth.session_revoked`. Cookie-запрос — Origin из `GV_PUBLIC_ORIGINS` и `X-CSRF-Token` (403 `auth.csrf_failed`). Лимит частоты на пользователя (429). Нет секрета Centrifugo (только local/ci) — 503 `realtime.not_configured`. Ответ — `Cache-Control: no-store`.
+         */
+        post: operations["realtime_token_v1_realtime_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -698,6 +718,20 @@ export interface components {
             title: string;
             /** Type */
             type: string;
+        };
+        /**
+         * RealtimeTokenResponse
+         * @description Connection-токен Centrifugo (клиент передаёт его в ``centrifuge``).
+         */
+        RealtimeTokenResponse: {
+            /**
+             * Expires At
+             * Format: date-time
+             * @description Истечение токена (≤ 10 мин от выдачи)
+             */
+            expires_at: string;
+            /** Token */
+            token: string;
         };
         /**
          * RegisterRequest
@@ -1883,6 +1917,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    realtime_token_v1_realtime_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealtimeTokenResponse"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

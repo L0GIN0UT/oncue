@@ -1,0 +1,109 @@
+{
+  "$id": "urn:guessverse:contracts:events:match:MatchStarted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Матч начался (отсчёт закончился, план раундов получен). aggregate_id — match_id. Без ников и e-mail (ПДн).",
+  "properties": {
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "format": {
+      "description": "Вид сессии режима (session.kind)",
+      "enum": [
+        "duel",
+        "party",
+        "lobby"
+      ],
+      "type": "string"
+    },
+    "ladder": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Ladder рейтинга (только ranked, этап 4b)"
+    },
+    "match_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "mode_key": {
+      "maxLength": 100,
+      "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+      "type": "string"
+    },
+    "mode_version": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "players": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "slot": {
+            "description": "Место в комнате с 0",
+            "maximum": 5,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "slot"
+        ],
+        "type": "object"
+      },
+      "maxItems": 6,
+      "minItems": 2,
+      "type": "array"
+    },
+    "ranked": {
+      "type": "boolean"
+    },
+    "room_code": {
+      "description": "Код комнаты (D12)",
+      "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "description": "Версия комнаты на момент события (монотонна в пределах комнаты)",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "match_id",
+    "version",
+    "room_code",
+    "mode_key",
+    "mode_version",
+    "domain",
+    "format",
+    "ranked",
+    "ladder",
+    "players",
+    "started_at"
+  ],
+  "title": "match.MatchStarted v1",
+  "type": "object",
+  "x-aggregate-type": "match",
+  "x-topic": "match.match.v1"
+}

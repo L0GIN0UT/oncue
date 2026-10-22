@@ -110,7 +110,20 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 | `GV_PUBLIC_ORIGINS` | identity, game | JSON-массив Origin веб-клиента (dev — `["https://localhost"]`): только с них принимаются мутации по cookie (CSRF) |
 | `GV_JWT__SIGNING_KEYS` | identity | JSON `[{kid, private_pem, active}]`; `gv dev secrets` генерирует Ed25519-ключ. Пусто — временный ключ (только local/ci) |
 | `GV_GAME__DAILY_SEED_SECRET` | game | Секрет розыгрыша наборов дня; без него compose не стартует |
-| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
+| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin, match / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
+| `CENTRIFUGO_API_KEY` | Centrifugo, match | Ключ server API; match получает его как `GV_REALTIME__API_KEY` (identity — нет) |
+| `CENTRIFUGO_TOKEN_HMAC_SECRET` | Centrifugo, identity | Секрет connection-токенов (`GV_REALTIME__CONNECTION_TOKEN_SECRET` у identity) |
+| `CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET` | Centrifugo, match | Секрет subscription-токенов каналов комнат (`GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET` у match); **обязан отличаться** от секрета connection-токенов, секреты ≥ 32 символов |
+| `CENTRIFUGO_ALLOWED_ORIGINS` | Centrifugo | Origin веб-клиента (dev — `https://localhost`); без него compose не стартует |
+| `GV_SERVICE_SECRET_MATCH` | match | Секрет сервисного токена match для game и media-pipeline; его sha256 — в `GV_SERVICE_CLIENTS` identity |
+
+**Онлайн (этап 4a).**
+
+- **Процесс `rooms`.** Владелец комнат match ([ADR 0034](adr/0034-rooms-process-lease-snapshots.md)): в compose входит в команду `all` образа match, в Kubernetes — отдельный Deployment (`match rooms`). При SIGTERM: остановка (`GV_RUNNERS__STOP_TIMEOUT_S`, 5 с) + передача комнат (`GV_RUNNERS__HANDOFF_TIMEOUT_S`, 10 с) должны быть меньше `shutdown_timeout_s` (25 с) и `stop_grace_period` (30 с) — иначе валидация настроек не даст стартовать. Падение runner-а завершает процесс с ненулевым кодом.
+- **`GV_REALTIME__*`** (сервисы с `realtime = true` в `infra/services.toml`, [ADR 0035](adr/0035-realtime-centrifugo-tokens-and-tick.md)): `API_URL` + `API_KEY` задаются только вместе (match), `CONNECTION_TOKEN_SECRET` — identity, `SUBSCRIPTION_TOKEN_SECRET` — match; `TOKEN_AUDIENCE` (`centrifugo`, как в конфиге Centrifugo), `TOKEN_TTL_S` (≤ 600), `TIMEOUT_S`. Секреты короче 32 символов и совпадение двух секретов — ошибка старта.
+- **`GV_MATCH__*`** — лимиты и параметры `rooms`, полный перечень с умолчаниями и описанием — `services/match/src/match_service/settings.py`. Ключевые: `LEASE_TTL_S` (10) и `LEASE_RENEW_S` (3, не больше половины TTL), `REPLY_TIMEOUT_MS` (1500), `TICK_S` (5) и `PRESENCE_TIMEOUT_S` (12), `MAX_ROOMS_PER_INSTANCE` (300), `ROOMS_POLL_MS` (250, меньше `socket_timeout` Redis 2 с), `CLOSED_TTL_S`, `SNAPSHOT_TTL_H`, `GAME_URL`/`MEDIA_URL` и таймауты, `BREAKER_*`. Игровые величины (таймеры, очки, число раундов) здесь не живут — только в конфиге режима.
+- **Centrifugo.** Образ `centrifugo/centrifugo:v6` (тег плавающий — закрепить до точной версии), движок Redis (db 1), конфиг `infra/centrifugo/config.json` монтируется read-only: namespace-ы `room` (история 100 / 600 с, recovery) и `personal`, анонимов и публикации клиентов нет, `user_connection_limit` 10. Секреты и Origin — только из env (`CENTRIFUGO_*` перекрывают файл). Gateway: `/connection/` (WS), `/connection/http_stream`, `/connection/emulation`.
+- **Redis match** — AOF включён: потеря Redis теряет активные комнаты (история матчей — в Postgres).
 
 Dev-оверлей (`compose.services.dev.yml`) монтирует `seeds/game/modes` в game (`GV_GAME__BOOTSTRAP_MODES_DIR`) и направляет ссылки из писем identity на `https://localhost/verify-email|reset-password`.
 

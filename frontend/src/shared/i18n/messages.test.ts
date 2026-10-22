@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import messages from "../../../messages/ru.json";
+import { CHAT_REJECT_REASONS, MATCH_ERROR_CODES } from "@/features/match/errors";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 
@@ -133,8 +134,40 @@ describe("messages/ru.json", () => {
         "mention_forbidden",
         "email_forbidden",
       ].map((k) => `errors.ugc.${k}`),
+      // Этап 4a: онлайн — перечисления match и коды ошибок из описаний ручек OpenAPI.
+      ...["duel", "party", "lobby"].map((k) => `online.kind.${k}`),
+      ...["win", "loss", "draw"].map((k) => `online.outcome.${k}`),
+      ...["completed", "forfeit", "left", "tech_win", "tech_loss"].map((k) => `online.finish.${k}`),
+      ...["thinking", "answered", "missed", "guessed"].map((k) => `match.status.${k}`),
+      ...["disconnected", "left"].map((k) => `match.presence.${k}`),
+      ...[
+        "rounds",
+        "level_window_s",
+        "players_max",
+        "answer_format",
+        "clue_type",
+        "visibility",
+      ].map((k) => `match.settings.${k}`),
+      ...["public", "private"].map((k) => `match.settings.visibilityValue.${k}`),
+      ...["generic", "network", "guest_forbidden", ...MATCH_ERROR_CODES].map(
+        (k) => `match.error.${k}`,
+      ),
+      ...CHAT_REJECT_REASONS.map((k) => `match.error.chat_rejected_${k}`),
+      // Базовые эмоции и фразы онлайн-шаблонов (session.chat в сидах режимов).
+      ...["wow", "gg", "fire", "laugh", "think"].map((k) => `match.emotes.${k}`),
+      ...["good_luck", "well_played", "nice_one", "so_close"].map((k) => `match.phrases.${k}`),
     ];
     expect(dynamic.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
+  });
+
+  it("переводит эмоции и фразы session.chat онлайн-шаблонов из сидов", () => {
+    const dir = path.resolve(root, "..", "seeds", "game", "modes");
+    const keys = readdirSync(dir).flatMap((f) =>
+      [...readFileSync(path.join(dir, f), "utf8").matchAll(/match\.(?:emotes|phrases)\.\w+/g)].map(
+        (m) => m[0],
+      ),
+    );
+    expect(keys.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
   });
 
   it("переводит title_key тегов collections и системных полок library из их конфигов", () => {

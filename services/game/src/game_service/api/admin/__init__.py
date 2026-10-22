@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Path, Query
 
@@ -72,8 +72,12 @@ def build_admin_router(c: ApiServices) -> APIRouter:
         principal: ConfigViewer,
         domain: Annotated[Domain | None, Query()] = None,
         status: Annotated[ConfigStatus | None, Query()] = None,
+        session: Annotated[
+            Literal["solo", "online"] | None,
+            Query(description="Фильтр по `session_kind`; не задан — все режимы"),
+        ] = None,
     ) -> list[ModeConfigSummary]:
-        rows = await c.mode_queries.list_modes(domain=domain, status=status)
+        rows = await c.mode_queries.list_modes(domain=domain, status=status, session=session)
         return [ModeConfigSummary.model_validate(r) for r in rows]
 
     # Объявлена раньше /mode-configs/{mode_key}: иначе «schema» попала бы в {mode_key}.

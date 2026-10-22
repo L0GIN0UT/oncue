@@ -276,6 +276,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/modes/{mode_key}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Тело опубликованной версии конфига
+         * @description Для проверки шаблона и переопределений лобби в match; версии неизменяемы (кэшируется вызывающим без срока). Ошибки: 404 `game.mode_not_found` (нет такой опубликованной или архивной версии).
+         */
+        get: operations["get_mode_version_internal_v1_modes__mode_key__versions__version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/v1/round-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * План раундов матча
+         * @description Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), 422 `game.collection_not_supported` (сборники у режима без source `collection`). `exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — пока хватает остальных единиц).
+         */
+        post: operations["create_round_plan_internal_v1_round_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/collections/{collection_id}/modes": {
         parameters: {
             query?: never;
@@ -359,7 +399,7 @@ export interface paths {
         };
         /**
          * Опубликованные режимы
-         * @description Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`.
+         * @description Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`. `session=solo` (по умолчанию) — только соло-режимы; `session=online` — онлайн-шаблоны (дуэль, party, лобби, в том числе по сборнику; `kind` не учитывается) с блоком `online` (ADR 0032): соло-хаб их не видит.
          */
         get: operations["list_modes_v1_modes_get"];
         put?: never;
@@ -421,7 +461,7 @@ export interface paths {
         put?: never;
         /**
          * Начать сессию
-         * @description 201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.
+         * @description 201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 422 `game.mode_not_solo` (онлайн-режим играется только в комнате match), 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.
          */
         post: operations["start_session_v1_sessions_post"];
         delete?: never;
@@ -568,6 +608,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AnswerKey
+         * @description Ключ ответа раунда: всё, что нужно ядру для `answer.check` без вызова game.
+         *
+         *     Повторяет ``gv_game_kernel.MediaItemRef`` (алиасы — уже нормализованные).
+         */
+        AnswerKey: {
+            /**
+             * Aliases
+             * @description Нормализованные алиасы всех видов
+             */
+            aliases: string[];
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Kind */
+            kind: string;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /**
+             * Partial
+             * @description Ключи partial-matcher-ов режима (`answer.partial`), по которым есть данные
+             */
+            partial: string[];
+            /** Persons */
+            persons: components["schemas"]["PersonKey"][];
+            /** Title */
+            title: string;
+            /**
+             * Title Aliases
+             * @description Алиасы видов `title`/`alt` (подмножество)
+             */
+            title_aliases: string[];
+            /** Year */
+            year: number | null;
+        };
         /**
          * ArchiveRequest
          * @description Убрать режим из каталога (сессии доигрываются).
@@ -958,6 +1039,19 @@ export interface components {
             media_item_id: string;
         };
         /**
+         * LevelAsset
+         * @description Набор ассетов уровня: ссылку match запрашивает у media-pipeline при открытии (D11).
+         */
+        LevelAsset: {
+            /**
+             * Asset Set Id
+             * Format: uuid
+             */
+            asset_set_id: string;
+            /** Level */
+            level: number;
+        };
+        /**
          * LevelOut
          * @description Уровень загадки для UI.
          */
@@ -971,6 +1065,28 @@ export interface components {
             };
             /** Index */
             index: number;
+        };
+        /**
+         * ModeConfigBody
+         * @description Опубликованная версия конфига режима: тело — по ``contracts/modes/mode_config.v1.json``.
+         */
+        ModeConfigBody: {
+            /**
+             * Body
+             * @description Тело конфига (`ModeConfig`), включая `session`
+             */
+            body: {
+                [key: string]: unknown;
+            };
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Key */
+            key: string;
+            /** Version */
+            version: number;
         };
         /**
          * ModeConfigDetail
@@ -1011,6 +1127,13 @@ export interface components {
             key: string;
             /** Published Version */
             published_version: number | null;
+            /**
+             * Session Kind
+             * @description По последней опубликованной версии (у неопубликованного — по черновику): online — duel/party/lobby, играет match (ADR 0032)
+             * @default solo
+             * @enum {string}
+             */
+            session_kind: "solo" | "online";
             /**
              * Status
              * @description draft — режим ещё ни разу не опубликован
@@ -1107,6 +1230,8 @@ export interface components {
              * @description Только у шаблона сборника: минимум играбельных единиц для игры
              */
             min_items?: number | null;
+            /** @description Только у онлайн-режима (`session=online`); у соло-режимов — null */
+            online?: components["schemas"]["OnlineModeOut"] | null;
             /**
              * Presentation
              * @default score
@@ -1178,6 +1303,70 @@ export interface components {
             agree_pct: number;
         };
         /**
+         * OnlineChatOut
+         * @description Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``) и признак
+         *     свободного чата (только кастомное лобби, ADR 0036).
+         */
+        OnlineChatOut: {
+            /** Emotes */
+            emotes: string[];
+            /** Free Text */
+            free_text: boolean;
+            /** Phrases */
+            phrases: string[];
+        };
+        /**
+         * OnlineModeOut
+         * @description Правила комнаты онлайн-режима (``GET /v1/modes?session=online``, ADR 0032).
+         */
+        OnlineModeOut: {
+            chat: components["schemas"]["OnlineChatOut"];
+            /**
+             * Contest Type
+             * @description Плагин состязания (`race`, `parallel`)
+             */
+            contest_type: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "duel" | "party" | "lobby";
+            /** Ladder */
+            ladder?: string | null;
+            /**
+             * Level Windows S
+             * @description Окно каждого уровня загадки, с
+             */
+            level_windows_s: number[];
+            /**
+             * Lobby
+             * @description Только у кастомного лобби: `{visibility, overridable}` по `$defs/LobbySpec` контракта конфига режима — из чего выбирает хост
+             */
+            lobby?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Max Collections
+             * @description Только у лобби по сборнику: сколько сборников можно выбрать
+             */
+            max_collections?: number | null;
+            players: components["schemas"]["OnlinePlayersOut"];
+            /** Ranked */
+            ranked: boolean;
+            /** Rounds */
+            rounds: number;
+        };
+        /**
+         * OnlinePlayersOut
+         * @description Места комнаты.
+         */
+        OnlinePlayersOut: {
+            /** Max */
+            max: number;
+            /** Min */
+            min: number;
+        };
+        /**
          * OptionAnswer
          * @description Ответ выбором варианта раунда (формат ``pick``).
          */
@@ -1198,6 +1387,26 @@ export interface components {
             title?: string | null;
         };
         /**
+         * PersonKey
+         * @description Персона единицы (для partial-ключей matcher-а: исполнитель, режиссёр).
+         */
+        PersonKey: {
+            /** Name */
+            name: string;
+            /**
+             * Normalized
+             * @description Нормализованное имя (`gv_text`)
+             */
+            normalized: string;
+            /**
+             * Person Id
+             * Format: uuid
+             */
+            person_id: string;
+            /** Role */
+            role: string;
+        };
+        /**
          * PersonOut
          * @description Персона в ревиле.
          */
@@ -1206,6 +1415,57 @@ export interface components {
             name: string;
             /** Role */
             role: string;
+        };
+        /**
+         * PlanCollection
+         * @description Сборник плана: версия состава фиксируется (ADR 0028).
+         */
+        PlanCollection: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Version
+             * @description content_version сборника
+             */
+            version: number;
+        };
+        /**
+         * PlannedRound
+         * @description Раунд плана: загаданная единица, ключ ответа, ассеты по уровням.
+         */
+        PlannedRound: {
+            answer: components["schemas"]["AnswerKey"];
+            /** Index */
+            index: number;
+            /** Levels */
+            levels: components["schemas"]["LevelAsset"][];
+            /**
+             * Options
+             * @description Только формат `pick`
+             */
+            options?: components["schemas"]["PlanOption"][];
+            /**
+             * Reveal Asset Set Id
+             * @description Набор ассетов ревила (`clue.reveal`), если задан
+             */
+            reveal_asset_set_id?: string | null;
+        };
+        /**
+         * PlanOption
+         * @description Вариант ответа ``pick``: ``option_id`` непрозрачен, за ним — единица (только для match).
+         */
+        PlanOption: {
+            /** Label Key */
+            label_key?: string | null;
+            /** Media Item Id */
+            media_item_id?: string | null;
+            /** Option Id */
+            option_id: string;
+            /** Title */
+            title?: string | null;
         };
         /**
          * PlayabilityOut
@@ -1459,6 +1719,46 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "active" | "finished" | "void";
+        };
+        /**
+         * RoundPlan
+         * @description План матча: версия и тело конфига плюс разыгранные раунды.
+         */
+        RoundPlan: {
+            /** Collections */
+            collections?: components["schemas"]["PlanCollection"][];
+            mode: components["schemas"]["ModeConfigBody"];
+            /** Rounds */
+            rounds: components["schemas"]["PlannedRound"][];
+            /** Seed */
+            seed: string;
+        };
+        /**
+         * RoundPlanRequest
+         * @description Запрос плана матча (D5): детерминирован по ``seed`` при том же пуле.
+         */
+        RoundPlanRequest: {
+            /** Collection Ids */
+            collection_ids?: string[];
+            /**
+             * Exclude Ids
+             * @description Единицы, которые не должны выпасть (память лобби)
+             */
+            exclude_ids?: string[];
+            /** Mode Key */
+            mode_key: string;
+            /** Rounds */
+            rounds: number;
+            /**
+             * Seed
+             * @description Сид розыгрыша: секретный, случайный на каждый старт матча (match хранит его только в снимке комнаты; ADR 0033)
+             */
+            seed: string;
+            /**
+             * Version
+             * @description Версия шаблона; null — текущая опубликованная
+             */
+            version?: number | null;
         };
         /**
          * RoundProgress
@@ -1966,6 +2266,8 @@ export interface operations {
         parameters: {
             query?: {
                 domain?: ("music" | "film") | null;
+                /** @description Фильтр по `session_kind`; не задан — все режимы */
+                session?: ("solo" | "online") | null;
                 status?: ("draft" | "published" | "archived") | null;
             };
             header?: never;
@@ -2893,6 +3195,163 @@ export interface operations {
             };
         };
     };
+    get_mode_version_internal_v1_modes__mode_key__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mode_key: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModeConfigBody"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_round_plan_internal_v1_round_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoundPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoundPlan"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     collection_modes_v1_collections__collection_id__modes_get: {
         parameters: {
             query?: never;
@@ -3065,6 +3524,7 @@ export interface operations {
             query?: {
                 domain?: ("music" | "film") | null;
                 kind?: "play" | "collection";
+                session?: "solo" | "online";
             };
             header?: never;
             path?: never;

@@ -518,6 +518,27 @@
         "title": "Problem",
         "type": "object"
       },
+      "RealtimeTokenResponse": {
+        "description": "Connection-токен Centrifugo (клиент передаёт его в ``centrifuge``).",
+        "properties": {
+          "expires_at": {
+            "description": "Истечение токена (≤ 10 мин от выдачи)",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expires_at"
+        ],
+        "title": "RealtimeTokenResponse",
+        "type": "object"
+      },
       "RegisterRequest": {
         "description": "Регистрация.",
         "properties": {
@@ -2321,6 +2342,88 @@
           }
         },
         "summary": "Вход через привязанный Яндекс ID",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/realtime/token": {
+      "post": {
+        "description": "Только пользователь с аккаунтом: гость — 403 `auth.guest_forbidden`, отозванная сессия — 401 `auth.session_revoked`. Cookie-запрос — Origin из `GV_PUBLIC_ORIGINS` и `X-CSRF-Token` (403 `auth.csrf_failed`). Лимит частоты на пользователя (429). Нет секрета Centrifugo (только local/ci) — 503 `realtime.not_configured`. Ответ — `Cache-Control: no-store`.",
+        "operationId": "realtime_token_v1_realtime_token_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Connection-токен realtime (Centrifugo)",
         "tags": [
           "identity"
         ]

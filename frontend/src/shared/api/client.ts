@@ -6,6 +6,7 @@ import type { paths as CatalogPaths } from "./schema/catalog";
 import type { paths as IdentityPaths } from "./schema/identity";
 import type { paths as CollectionsPaths } from "./schema/collections";
 import type { paths as LibraryPaths } from "./schema/library";
+import type { paths as MatchPaths } from "./schema/match";
 import { ApiError } from "./errors";
 import { apiFetch } from "./http";
 
@@ -16,6 +17,7 @@ export const API_PREFIX = {
   identity: "/api/identity",
   collections: "/api/collections",
   library: "/api/library",
+  match: "/api/match",
 } as const;
 
 type Clients = {
@@ -25,6 +27,7 @@ type Clients = {
   identity: Client<IdentityPaths>;
   collections: Client<CollectionsPaths>;
   library: Client<LibraryPaths>;
+  match: Client<MatchPaths>;
 };
 
 let clients: Clients | null = null;
@@ -42,6 +45,7 @@ export function api(): Clients {
       identity: make<IdentityPaths>(API_PREFIX.identity),
       collections: make<CollectionsPaths>(API_PREFIX.collections),
       library: make<LibraryPaths>(API_PREFIX.library),
+      match: make<MatchPaths>(API_PREFIX.match),
     };
   }
   return clients;

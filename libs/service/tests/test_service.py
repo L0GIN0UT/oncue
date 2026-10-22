@@ -430,3 +430,53 @@ def test_ugc_denylist_path_empty_means_builtin(
     monkeypatch.setenv("GV_UGC__DENYLIST_PATH", raw)
     path = Demo(service_name="demo").ugc.denylist_path
     assert path == (Path(expected) if expected else None)
+
+
+@pytest.mark.unit
+class TestRealtimeSettings:
+    """``GV_REALTIME__*`` (D9 этапа 4): необязательная секция, разные секреты токенов."""
+
+    def test_absent_by_default(self) -> None:
+        assert ServiceSettings(service_name="demo").realtime is None
+
+    def test_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GV_SERVICE_NAME", "match")
+        monkeypatch.setenv("GV_REALTIME__API_URL", "http://centrifugo:8000/api")
+        monkeypatch.setenv("GV_REALTIME__API_KEY", "k" * 32)
+        monkeypatch.setenv("GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET", "s" * 32)
+        realtime = ServiceSettings().realtime  # type: ignore[call-arg]  # поля — из env
+        assert realtime is not None
+        assert realtime.api_url == "http://centrifugo:8000/api"
+        assert realtime.subscription_token_secret is not None
+        assert realtime.connection_token_secret is None
+        assert realtime.token_audience == "centrifugo"
+        assert "s" * 32 not in repr(realtime)  # секреты не попадают в логи
+
+    def test_token_issuer_without_server_api(self) -> None:
+        """identity подписывает токены, но не публикует: ключа server API у него нет."""
+        from gv_service import RealtimeSettings
+
+        realtime = RealtimeSettings.model_validate({"connection_token_secret": "c" * 32})
+        assert realtime.api_url is None
+        assert realtime.api_key is None
+
+    @pytest.mark.parametrize(
+        ("fields", "error"),
+        [
+            ({"api_key": "short"}, "32"),
+            ({"subscription_token_secret": "x" * 31}, "32"),
+            (
+                {"connection_token_secret": "same" * 8, "subscription_token_secret": "same" * 8},
+                "различаться",
+            ),
+            ({"api_url": "centrifugo:8000"}, "api_url"),
+            ({"token_ttl_s": 601}, "token_ttl_s"),
+            ({"api_key": None}, "вместе"),
+        ],
+    )
+    def test_rejects_weak_config(self, fields: dict[str, str], error: str) -> None:
+        from gv_service import RealtimeSettings
+
+        values = {"api_url": "http://centrifugo:8000/api", "api_key": "k" * 32, **fields}
+        with pytest.raises(ValueError, match=error):
+            RealtimeSettings.model_validate(values)

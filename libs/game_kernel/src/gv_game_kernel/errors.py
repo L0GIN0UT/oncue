@@ -25,6 +25,9 @@ SUBJECT_REQUIRED = "game.subject_required"
 TOO_MANY_SUBJECTS = "game.too_many_subjects"
 COLLECTION_REQUIRED = "game.collection_required"
 ROUNDS_NOT_ALLOWED = "game.rounds_not_allowed"
+MODE_NOT_SOLO = "game.mode_not_solo"
+MODE_NOT_ONLINE = "game.mode_not_online"
+TOO_MANY_COLLECTIONS = "game.too_many_collections"
 
 
 class ConfigError(InvalidInputError):
@@ -136,3 +139,24 @@ class RoundsNotAllowedError(InvalidInputError):
     """
 
     default_code = ROUNDS_NOT_ALLOWED
+
+
+class ModeNotSoloError(InvalidInputError):
+    """Онлайн-режим нельзя играть соло: его играет match (422 ``game.mode_not_solo``, ADR 0032)."""
+
+    default_code = MODE_NOT_SOLO
+
+
+class ModeNotOnlineError(InvalidInputError):
+    """Соло-режим нельзя играть матчем (422 ``game.mode_not_online``, ADR 0032)."""
+
+    default_code = MODE_NOT_ONLINE
+
+
+class TooManyCollectionsError(InvalidInputError):
+    """Сборников больше, чем ``max_collections`` источника (422 ``game.too_many_collections``).
+
+    ``details = {"given": int, "max": int}``.
+    """
+
+    default_code = TOO_MANY_COLLECTIONS

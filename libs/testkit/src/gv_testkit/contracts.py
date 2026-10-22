@@ -98,3 +98,28 @@ def load_example(
     if fresh_id:
         envelope = envelope.model_copy(update={"event_id": uuid7()})
     return envelope
+
+
+def realtime_validation_errors(
+    message: dict[str, Any], channel: str = "room.message", version: int = 1
+) -> list[str]:
+    """Ошибки сообщения realtime-канала относительно ``contracts/realtime`` (ADR 0035).
+
+    Args:
+        message: Сообщение канала (``{version, kind, server_now, delta}``).
+        channel: Имя контракта канала (``room.message``).
+        version: Версия схемы.
+    """
+    path = contracts_dir() / "realtime" / f"{channel}.v{version}.json"
+    if not path.is_file():
+        return [f"нет контракта {path.relative_to(contracts_dir().parent)}"]
+    errors = _validator(str(path)).iter_errors(message)
+    return sorted(f"{'/'.join(map(str, e.absolute_path)) or '$'}: {e.message}" for e in errors)
+
+
+def assert_realtime_message_matches_schema(
+    message: dict[str, Any], channel: str = "room.message", version: int = 1
+) -> None:
+    """Сообщение, которое match публикует в канал, соответствует ``contracts/realtime``."""
+    errors = realtime_validation_errors(message, channel, version)
+    assert not errors, f"{channel} v{version}: " + "; ".join(errors)

@@ -1,4 +1,4 @@
-"""Конвертеры маршрутов: ключ режима и дата дня — проверяются до представления."""
+"""Конвертеры маршрутов: ключ режима, дата дня и код комнаты — проверяются до представления."""
 
 from __future__ import annotations
 
@@ -31,7 +31,20 @@ class IsoDateConverter:
         return value.isoformat() if isinstance(value, date) else value
 
 
+class RoomCodeConverter:
+    """Код комнаты: 8 символов ``[A-HJ-NP-Z2-9]`` (как ``code`` в contracts/openapi/match.json)."""
+
+    regex = r"[A-HJ-NP-Z2-9]{8}"
+
+    def to_python(self, value: str) -> str:
+        return value
+
+    def to_url(self, value: str) -> str:
+        return value
+
+
 def register() -> None:
     """Зарегистрировать конвертеры; вызывается один раз — из корневого ``urls.py``."""
     register_converter(ModeKeyConverter, "modekey")
     register_converter(IsoDateConverter, "isodate")
+    register_converter(RoomCodeConverter, "roomcode")

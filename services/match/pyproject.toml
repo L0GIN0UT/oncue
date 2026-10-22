@@ -3,7 +3,7 @@ name = "guessverse-match"
 version = "0.1.0"
 description = "Онлайн: лобби, комнаты, матчмейкинг, конечный автомат матча, таймеры, реконнект, наблюдение"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-game-kernel", "gv-text", "httpx>=0.28", "pyjwt>=2.10"]
 
 [project.scripts]
 match = "match_service.main:run"

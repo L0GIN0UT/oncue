@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { signInAsGuest, setupMockBackend } from "@/test/msw";
 import { csrfToken } from "@/shared/lib/cookies";
-import { safeNext } from "./AuthForms";
+import { rememberNext, safeNext, takeRememberedNext, withNext } from "./AuthForms";
 import { parseConsents } from "./consents";
 import { ensureSession, startGuestSession } from "./session";
 
@@ -62,5 +62,21 @@ describe("parseConsents", () => {
     ]);
     expect(parseConsents(undefined).map((c) => c.kind)).toEqual(["terms", "privacy", "age_18"]);
     expect(parseConsents("broken,:1,x:")).toEqual([]);
+  });
+});
+
+describe("next регистрации", () => {
+  it("ссылки входа и регистрации несут только безопасный next", () => {
+    expect(withNext("/register", "/room/K7MQ2XWP")).toBe("/register?next=%2Froom%2FK7MQ2XWP");
+    expect(withNext("/login", "//evil.example")).toBe("/login");
+    expect(withNext("/login", null)).toBe("/login");
+  });
+
+  it("next запоминается до подтверждения e-mail, читается один раз и перепроверяется", () => {
+    rememberNext("/online");
+    expect(takeRememberedNext()).toBe("/online");
+    expect(takeRememberedNext()).toBeNull();
+    localStorage.setItem("gv_auth_next", "https://evil.example/");
+    expect(takeRememberedNext()).toBeNull();
   });
 });

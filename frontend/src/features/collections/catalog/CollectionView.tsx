@@ -24,6 +24,7 @@ import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
 import { SaveButton } from "@/features/library/SaveButton";
+import { PlayWithFriends } from "@/features/match/PlayWithFriends";
 import { collectionKeys, fetchCollectionPage, setFavorite, setLike } from "../api";
 import { Cover } from "../Cover";
 import { apiErrorText } from "../errors";
@@ -139,6 +140,7 @@ function CollectionBody({
       </header>
 
       <ModesBlock page={page} detail={detail} />
+      <PlayWithFriends collectionId={detail.collection_id} domain={detail.domain} />
 
       {items && (
         <section

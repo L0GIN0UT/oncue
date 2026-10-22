@@ -19,6 +19,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from gv_game_kernel.contest import ContestRoundState, PlayerRoundView
 from gv_game_kernel.ports import (
     AssetPort,
     CandidatePort,
@@ -29,7 +30,7 @@ from gv_game_kernel.ports import (
     SubjectQuery,
 )
 from gv_game_kernel.refs import AssetRef, MediaItemRef
-from gv_game_kernel.round import MatchVerdict, RoundOutcome
+from gv_game_kernel.round import Guess, MatchVerdict, RoundOutcome, RoundRules
 from gv_game_kernel.spec import ModeConfig
 from gv_text import TitleNormalizer
 
@@ -137,6 +138,9 @@ class DrawContext:
         subject_ids: Персоны, выбранные игроком (марафон) или темой периода (сетка).
         collection_id: Сборник сессии (``POST /v1/sessions.collection_id``); обязателен
             для источника ``collection``, остальные источники его не читают.
+        collection_ids: Сборники лобби матча (D12 плана этапа 4: несколько сборников,
+            ``source.collection.params.max_collections``). Источник читает
+            ``collection_ids`` или, если он пуст, ``collection_id`` как список из одного.
     """
 
     mode_key: str
@@ -152,6 +156,7 @@ class DrawContext:
     candidate_limit: int = 5000
     subject_ids: frozenset[UUID] = frozenset()
     collection_id: UUID | None = None
+    collection_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -581,4 +586,86 @@ class EndRule(Protocol):
 
     def lives_left(self, history: Sequence[RoundOutcome], params: BaseModel) -> int | None:
         """Сколько «жизней» осталось (для UI) или ``None``, если правило их не считает."""
+        ...
+
+
+# ----------------------------------------------------------------------------- ContestRule
+class ContestRule(Protocol):
+    """Правило состязания онлайн-матча (``race``, ``parallel``; ADR 0032, D3).
+
+    Ядро не знает видов матча: дуэль и party отличаются только плагином в
+    ``session.contest``. Все методы чистые; время — аргумент ``now_ms`` (мс, часы match).
+
+    Attributes:
+        key: Ключ в реестре и значение ``session.contest.type``.
+        params_schema: Модель параметров (``contracts/modes/params/contest.<key>.v1.json``).
+        answer_formats: Совместимые форматы ответа (``race`` — ``classic``;
+            ``parallel`` — ``classic``, ``pick``).
+    """
+
+    key: ClassVar[str]
+    params_schema: ClassVar[type[BaseModel]]
+    answer_formats: ClassVar[frozenset[str]]
+
+    def round_rules(self, params: BaseModel) -> RoundRules:
+        """Правила ходов раунда игрока (попытки на уровень; пропуска и сдачи в матче нет)."""
+        ...
+
+    def start_round(
+        self, player_ids: Sequence[str], *, now_ms: int, window_ms: int, params: BaseModel
+    ) -> ContestRoundState:
+        """Начать раунд: открыть уровень 1 для всех игроков с окном ``window_ms``."""
+        ...
+
+    def apply_guess(
+        self,
+        state: ContestRoundState,
+        player_id: str,
+        guess: Guess,
+        *,
+        levels_count: int,
+        now_ms: int,
+        params: BaseModel,
+    ) -> ContestRoundState:
+        """Применить уже сверенный ход игрока.
+
+        Raises:
+            LevelLockedError: уровень закрыт (окно истекло, ``race`` — соперник угадал) или
+                у игрока кончились попытки уровня.
+            RoundFinishedError: раунд уже завершён.
+        """
+        ...
+
+    def level_closed(self, state: ContestRoundState, *, now_ms: int, params: BaseModel) -> bool:
+        """Закрыт ли текущий уровень: окно истекло, досрочная блокировка или ответили все."""
+        ...
+
+    def next_level(
+        self,
+        state: ContestRoundState,
+        *,
+        levels_count: int,
+        now_ms: int,
+        window_ms: int,
+        params: BaseModel,
+    ) -> ContestRoundState:
+        """Открыть следующий уровень после закрытия текущего или завершить раунд."""
+        ...
+
+    def round_finished(self, state: ContestRoundState, *, params: BaseModel) -> bool:
+        """Раунд окончен для всех (все угадали, уровни кончились, ``race`` — угадано)."""
+        ...
+
+    def leave(self, state: ContestRoundState, player_id: str) -> ContestRoundState:
+        """Игрок вышел: его раунд ``void``, остальные продолжают."""
+        ...
+
+    def outcome(
+        self, state: ContestRoundState, player_id: str, *, params: BaseModel
+    ) -> RoundOutcome:
+        """Итог раунда игрока для ``Scorer`` (``elapsed_ms`` — от открытия уровня ответа)."""
+        ...
+
+    def views(self, state: ContestRoundState) -> list[PlayerRoundView]:
+        """Статусы игроков для всех участников — без текстов ответов (античит)."""
         ...

@@ -76,9 +76,11 @@ class GetCollectionsPage:
             found = await limiter.attempt(
                 self._collections.catalog(replace(query, limit=self._results_limit))
             )
-            if isinstance(found, UpstreamRejectedError):
+            if isinstance(found, UpstreamRejectedError) and (
+                error := screen_error(found, not_found="каталог не найден")
+            ):
                 # Курсор от другой сортировки, неизвестный режим — ошибка запроса, а не отказ.
-                raise screen_error(found, not_found="каталог не найден")
+                raise error
             return CollectionsPage(
                 blocks=CollectionsBlocks(results=block_of(found, "collections.results")),
                 cacheable=query.q is None,
@@ -122,8 +124,10 @@ class GetCollectionPage:
             limiter.attempt(self._collections.detail(viewer.token, collection_id)),
             limiter.attempt(self._game.collection_modes(collection_id)),
         )
-        if isinstance(detail, UpstreamRejectedError):
-            raise screen_error(detail, not_found="сборник не найден")
+        if isinstance(detail, UpstreamRejectedError) and (
+            error := screen_error(detail, not_found="сборник не найден")
+        ):
+            raise error
         collection: Block[CollectionDetail] = block_of(detail, "collection")
         modes_block = block_of(modes, "collection.modes")
         return CollectionPage(

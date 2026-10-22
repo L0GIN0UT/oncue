@@ -1,0 +1,24 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:scorer.party_speed:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Очки party за скорость (D4): max(1, round(max_points × k × clamp(1 − t/T))), k = 1 за точный и partial_ratio за частичный, t — от открытия уровня, T — окно уровня",
+  "properties": {
+    "max_points": {
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "partial_ratio": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "max_points",
+    "partial_ratio"
+  ],
+  "title": "scorer.party_speed params v1",
+  "type": "object"
+}

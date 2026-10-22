@@ -32,6 +32,8 @@ class Target:
 SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
     "game": {"media_pipeline": ["assets.link"]},
     "admin": {"identity": ["admin_sessions"]},
+    # Этап 4a (§2.7): план раундов матча у game (D5) и ссылки на ассеты уровней.
+    "match": {"game": ["rounds.plan"], "media_pipeline": ["assets.link"]},
 }
 """Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
 
@@ -40,10 +42,33 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
 """
 
 
-COOKIE_MUTATION_SERVICES: frozenset[str] = frozenset({"identity", "game", "collections", "library"})
+COOKIE_MUTATION_SERVICES: frozenset[str] = frozenset(
+    {"identity", "game", "collections", "library", "match"}
+)
 """Сервисы с мутациями по cookie (CSRF-проверка Origin по ``GV_PUBLIC_ORIGINS``).
 
 bff_web только читает (GET), admin — Django со своей CSRF-защитой.
+"""
+
+
+REALTIME_TOKEN_SECRETS: dict[str, tuple[str, str]] = {
+    "identity": ("GV_REALTIME__CONNECTION_TOKEN_SECRET", "CENTRIFUGO_TOKEN_HMAC_SECRET"),
+    "match": ("GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET", "CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET"),
+}
+"""Секреты токенов Centrifugo (D9 этапа 4): сервис → (переменная сервиса, переменная ``.env``).
+
+identity подписывает connection-токены, match — subscription-токены каналов комнат. Секреты
+разные: компрометация match не даёт подделать вход в Centrifugo от имени любого пользователя.
+Сервис из этого словаря обязан иметь ``realtime = true`` в реестре (проверяет ``gv gen``).
+"""
+
+
+REALTIME_PUBLISHERS: frozenset[str] = frozenset({"match"})
+"""Сервисы, которые публикуют в Centrifugo через server API (получают ``GV_REALTIME__API_*``).
+
+identity только подписывает connection-токены: ключ server API ему не нужен (минимум прав —
+утечка env identity не даёт публиковать в каналы комнат). rating добавится на этапе 4b.
+Сервис из этого множества обязан иметь ``realtime = true`` в реестре (проверяет ``gv gen``).
 """
 
 
@@ -77,8 +102,21 @@ TARGETS: tuple[Target, ...] = (
 )
 
 
+def _check_realtime(services: list[Service]) -> None:
+    missing = sorted(
+        s.name
+        for s in services
+        if (s.name in REALTIME_TOKEN_SECRETS or s.name in REALTIME_PUBLISHERS) and not s.realtime
+    )
+    if missing:
+        raise SystemExit(f"секрет токенов Centrifugo задан для сервисов без realtime: {missing}")
+
+
 def _render(template: str, services: list[Service]) -> str:
+    _check_realtime(services)
     return _env.get_template(template).render(
+        realtime_token_secrets=REALTIME_TOKEN_SECRETS,
+        realtime_publishers=REALTIME_PUBLISHERS,
         services=services,
         service_clients=SERVICE_CLIENTS,
         service_clients_json=service_clients_json(),

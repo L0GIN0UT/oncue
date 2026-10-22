@@ -1,0 +1,12 @@
+{
+  "delta": {
+    "level": 1,
+    "phase": "level_open",
+    "phase_ends_at": "2026-10-22T12:00:25Z",
+    "round_index": 0,
+    "rounds_total": 7
+  },
+  "kind": "phase",
+  "server_now": "2026-10-22T12:00:10Z",
+  "version": 12
+}

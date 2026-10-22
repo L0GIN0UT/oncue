@@ -1,4 +1,407 @@
 {
+  "$defs": {
+    "LobbySpec": {
+      "additionalProperties": false,
+      "description": "Настройки шаблона кастомного лобби (D12)",
+      "properties": {
+        "overridable": {
+          "additionalProperties": false,
+          "description": "Что может выбрать хост: списки разрешённых значений; значение шаблона обязано входить в список (проверка ядра)",
+          "properties": {
+            "answer_format": {
+              "anyOf": [
+                {
+                  "description": "Варианты формата ответа (ключи AnswerFormat)",
+                  "items": {
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "type": "string"
+                  },
+                  "maxItems": 5,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "clue": {
+              "anyOf": [
+                {
+                  "description": "Варианты загадки (как clue конфига)",
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "Тип загадки и уровни (плагин ClueType); params совпадают с профилем media-pipeline (D7)",
+                    "properties": {
+                      "params": {
+                        "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+                        "type": "object"
+                      },
+                      "reveal": {
+                        "additionalProperties": false,
+                        "description": "Подача ревила другим типом загадки того же домена (ADR 0026); нет — последний уровень clue",
+                        "properties": {
+                          "params": {
+                            "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+                            "type": "object"
+                          },
+                          "type": {
+                            "maxLength": 64,
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "params"
+                        ],
+                        "type": "object"
+                      },
+                      "type": {
+                        "maxLength": 64,
+                        "pattern": "^[a-z][a-z0-9_]*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "params"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "level_window_s": {
+              "anyOf": [
+                {
+                  "description": "Варианты окна уровня, с (одно значение на все уровни)",
+                  "items": {
+                    "maximum": 300,
+                    "minimum": 3,
+                    "type": "integer"
+                  },
+                  "maxItems": 10,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "players_max": {
+              "anyOf": [
+                {
+                  "description": "Варианты числа мест",
+                  "items": {
+                    "maximum": 6,
+                    "minimum": 2,
+                    "type": "integer"
+                  },
+                  "maxItems": 5,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rounds": {
+              "anyOf": [
+                {
+                  "description": "Варианты числа раундов",
+                  "items": {
+                    "maximum": 50,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "maxItems": 10,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "visibility": {
+              "anyOf": [
+                {
+                  "description": "Варианты видимости",
+                  "items": {
+                    "enum": [
+                      "public",
+                      "private"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 2,
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "visibility": {
+          "default": "private",
+          "enum": [
+            "public",
+            "private"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "overridable"
+      ],
+      "type": "object"
+    },
+    "OnlineSession": {
+      "additionalProperties": false,
+      "description": "Онлайн-сессия (играет match, ADR 0032). Поля allow_guest нет: онлайн только с аккаунтом (ADR 0036)",
+      "properties": {
+        "chat": {
+          "additionalProperties": false,
+          "description": "Эмоции и готовые фразы (ключи i18n) и свободный чат — только у kind: lobby (D14)",
+          "properties": {
+            "emotes": {
+              "items": {
+                "maxLength": 200,
+                "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+                "type": "string"
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "free_text": {
+              "default": false,
+              "type": "boolean"
+            },
+            "phrases": {
+              "items": {
+                "maxLength": 200,
+                "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+                "type": "string"
+              },
+              "maxItems": 32,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "contest": {
+          "additionalProperties": false,
+          "description": "Правило состязания (плагин ContestRule): race — дуэль, parallel — party",
+          "properties": {
+            "params": {
+              "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+              "type": "object"
+            },
+            "type": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ],
+          "type": "object"
+        },
+        "countdown_s": {
+          "description": "Отсчёт перед первым раундом",
+          "maximum": 30,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disconnect_grace_s": {
+          "description": "Сколько ждать отключившегося игрока до выбывания (D10)",
+          "maximum": 300,
+          "minimum": 5,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "duel",
+            "party",
+            "lobby"
+          ],
+          "type": "string"
+        },
+        "ladder": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Ключ ladder-а rating (D15)"
+        },
+        "level_windows_s": {
+          "description": "Окно каждого уровня загадки, с; длина равна числу уровней (проверка ядра)",
+          "items": {
+            "maximum": 300,
+            "minimum": 3,
+            "type": "integer"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
+        },
+        "lobby": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LobbySpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Кастомное лобби (обязательно у kind: lobby, D12)"
+        },
+        "players": {
+          "additionalProperties": false,
+          "description": "Минимум для старта и максимум мест (min ≤ max — проверка ядра)",
+          "properties": {
+            "max": {
+              "maximum": 6,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "min": {
+              "maximum": 6,
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ],
+          "type": "object"
+        },
+        "ranked": {
+          "default": false,
+          "description": "Рейтинговый матч (только из очереди подбора, этап 4b); требует ladder",
+          "type": "boolean"
+        },
+        "reveal_s": {
+          "description": "Длительность ревила между раундами",
+          "maximum": 60,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rounds": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "players",
+        "rounds",
+        "countdown_s",
+        "level_windows_s",
+        "reveal_s",
+        "contest",
+        "disconnect_grace_s"
+      ],
+      "type": "object"
+    },
+    "SoloSession": {
+      "additionalProperties": false,
+      "description": "Соло-сессия (играет game)",
+      "properties": {
+        "abandon_after_min": {
+          "description": "Через сколько минут без ходов сессия считается брошенной",
+          "maximum": 10080,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "allow_guest": {
+          "type": "boolean"
+        },
+        "attempts_per_level": {
+          "maximum": 5,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "end": {
+          "additionalProperties": false,
+          "description": "Правило досрочного завершения сессии (плагин EndRule); нет — all_rounds",
+          "properties": {
+            "params": {
+              "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
+              "type": "object"
+            },
+            "type": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "params"
+          ],
+          "type": "object"
+        },
+        "give_up_allowed": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "solo"
+          ],
+          "type": "string"
+        },
+        "rounds": {
+          "description": "Число раундов; с правилом завершения session.end — максимум раундов",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "skip_allowed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "rounds",
+        "attempts_per_level",
+        "skip_allowed",
+        "give_up_allowed",
+        "allow_guest",
+        "abandon_after_min"
+      ],
+      "type": "object"
+    }
+  },
   "$id": "urn:guessverse:contracts:modes:mode_config:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -142,69 +545,14 @@
       "type": "object"
     },
     "session": {
-      "additionalProperties": false,
-      "properties": {
-        "abandon_after_min": {
-          "description": "Через сколько минут без ходов сессия считается брошенной",
-          "maximum": 10080,
-          "minimum": 1,
-          "type": "integer"
+      "description": "Правила сессии: соло (game) или онлайн (match) — по kind (ADR 0032). Ветка solo не изменилась с этапа 2",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/SoloSession"
         },
-        "allow_guest": {
-          "type": "boolean"
-        },
-        "attempts_per_level": {
-          "maximum": 5,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "end": {
-          "additionalProperties": false,
-          "description": "Правило досрочного завершения сессии (плагин EndRule); нет — all_rounds",
-          "properties": {
-            "params": {
-              "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/*, contracts/clues/*)",
-              "type": "object"
-            },
-            "type": {
-              "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_]*$",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "params"
-          ],
-          "type": "object"
-        },
-        "give_up_allowed": {
-          "type": "boolean"
-        },
-        "kind": {
-          "enum": [
-            "solo"
-          ],
-          "type": "string"
-        },
-        "rounds": {
-          "description": "Число раундов; с правилом завершения session.end — максимум раундов",
-          "maximum": 200,
-          "minimum": 1,
-          "type": "integer"
-        },
-        "skip_allowed": {
-          "type": "boolean"
+        {
+          "$ref": "#/$defs/OnlineSession"
         }
-      },
-      "required": [
-        "kind",
-        "rounds",
-        "attempts_per_level",
-        "skip_allowed",
-        "give_up_allowed",
-        "allow_guest",
-        "abandon_after_min"
       ],
       "type": "object"
     },

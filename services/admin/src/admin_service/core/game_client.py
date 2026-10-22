@@ -39,6 +39,18 @@ class GameAdminClient:
         """Список режимов (``config.modes.view``)."""
         return self._client.get(_CONFIGS, params={"domain": domain, "status": status})
 
+    def schema(self) -> Any:
+        """Сводная JSON Schema конфига ``{mode_config, plugins, partial}`` — подсказки редактора."""
+        return self._client.get(f"{_CONFIGS}/schema")
+
+    def online_modes(self) -> Any:
+        """Опубликованные онлайн-режимы (``GET /v1/modes?session=online``, ADR 0032).
+
+        Публичное чтение без персональных данных: в строке списка ``/admin/v1/mode-configs``
+        вида сессии нет, а фильтр «соло / онлайн» иначе потребовал бы запроса на каждый режим.
+        """
+        return self._client.get("/v1/modes", params={"session": "online"})
+
     def mode_config(self, mode_key: str) -> Any:
         """Режим: версии и черновик."""
         return self._client.get(f"{_CONFIGS}/{_key(mode_key)}")

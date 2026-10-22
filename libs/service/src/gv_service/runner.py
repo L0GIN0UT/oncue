@@ -6,6 +6,7 @@
     <service> relay      # публикация outbox → Redpanda + периодические задачи
     <service> consumer   # обработка доменных событий
     <service> worker     # фоновые задачи RabbitMQ
+    <service> rooms      # долгоживущие компоненты (build_runners): владельцы комнат match
     <service> all        # всё в одном процессе (VPS, локально)
     <service> migrate    # миграции БД (отдельный job перед выкатом)
 
@@ -13,8 +14,9 @@
 (по умолчанию 9100); на основном HTTP-порту ``/metrics`` нет.
 
 Graceful shutdown: по SIGTERM/SIGINT readiness сразу отвечает 503, HTTP-сервер дообрабатывает
-текущие запросы, фоновые циклы завершают текущее сообщение и выходят; весь процесс
-укладывается в ``shutdown_timeout_s``.
+текущие запросы, фоновые циклы завершают текущее сообщение и выходят, runner-ы процесса
+``rooms`` перестают брать работу и проходят handoff (``gv_service.runners``); весь процесс
+укладывается в ``shutdown_timeout_s``. Инфраструктура закрывается последней.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ from gv_service.builtin_jobs import collect_periodic_jobs
 from gv_service.definition import Infrastructure, ServiceDefinition
 from gv_service.metrics_server import MetricsServer
 from gv_service.periodic import PeriodicJobRunner
+from gv_service.runners import supervise_runners
 from gv_service.settings import ServiceSettings
 
 log = structlog.get_logger(__name__)
@@ -54,6 +57,7 @@ class Command(StrEnum):
     RELAY = "relay"
     CONSUMER = "consumer"
     WORKER = "worker"
+    ROOMS = "rooms"
     ALL = "all"
     MIGRATE = "migrate"
 
@@ -139,19 +143,26 @@ class Runtime:
             Command.RELAY: ("relay",),
             Command.CONSUMER: ("consumer",),
             Command.WORKER: ("worker",),
-            Command.ALL: ("api", "relay", "consumer", "worker"),
+            Command.ROOMS: ("rooms",),
+            Command.ALL: ("api", "relay", "consumer", "worker", "rooms"),
         }[self.command]
         available: dict[str, Callable[[], Awaitable[None]] | None] = {
             "api": lambda: self._run_api(infra, tracing=tracing),
             "relay": self._relay_factory(infra),
             "consumer": self._consumer_factory(infra),
             "worker": self._worker_factory(infra),
+            "rooms": self._rooms_factory(infra),
         }
         components: dict[str, Callable[[], Awaitable[None]]] = {}
         for name in wanted:
             factory = available[name]
             if factory is not None:
                 components[name] = factory
+            elif name == "rooms" and self.command is not Command.ALL:
+                raise SystemExit(
+                    f"команда rooms: у сервиса {self.definition.name} нет долгоживущих "
+                    "компонентов (ServiceDefinition.build_runners)"
+                )
             elif self.command is not Command.ALL:
                 # Явно запрошенный, но не сконфигурированный компонент — ошибка конфигурации.
                 raise SystemExit(
@@ -286,6 +297,21 @@ class Runtime:
                         )
             finally:
                 await queue.stop()
+
+        return run
+
+    def _rooms_factory(self, infra: Infrastructure) -> Callable[[], Awaitable[None]] | None:
+        """Процесс rooms: runner-ы сервиса с graceful handoff по SIGTERM (D6 этапа 4)."""
+        build = self.definition.build_runners
+        if build is None:
+            return None
+        runners = build(infra)
+        if not runners:
+            return None
+        settings = self.settings.runners
+
+        async def run() -> None:
+            await supervise_runners(runners, self.stop, settings)
 
         return run
 

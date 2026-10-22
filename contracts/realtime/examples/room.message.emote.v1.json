@@ -1,0 +1,11 @@
+{
+  "delta": {
+    "at": "2026-10-22T12:00:21Z",
+    "emote": "match.emotes.gg",
+    "phrase": null,
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002"
+  },
+  "kind": "emote",
+  "server_now": "2026-10-22T12:00:21Z",
+  "version": 16
+}

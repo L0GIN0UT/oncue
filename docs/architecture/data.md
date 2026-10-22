@@ -35,7 +35,7 @@
 | Таблица | Сервис | Стратегия |
 |---|---|---|
 | game_results, guesses | game | Партиционирование по месяцу (`pg_partman`), горячие 3 месяца, старые → архив/ClickHouse |
-| match_results | match | Партиционирование по месяцу |
+| matches, match_players, match_rounds | match | Партиционирование по месяцу |
 | ledger | progression | Партиционирование по месяцу, append-only, баланс — материализованная проекция |
 | rating_history | rating | Партиционирование по сезону |
 | notifications | notifications | По месяцу, TTL 180 дней |

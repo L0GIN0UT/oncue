@@ -9,12 +9,17 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("auth.signUp") };
 }
 
-export default async function RegisterPage() {
-  const t = await getTranslations();
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const [t, query] = await Promise.all([getTranslations(), searchParams]);
+  const next = typeof query.next === "string" ? query.next : null;
   const consents = parseConsents(process.env.GV_CONSENTS__REQUIRED);
   return (
     <AuthShell title={t("auth.signUpTitle")} lead={t("auth.signUpLead")}>
-      <RegisterForm consents={consents} />
+      <RegisterForm consents={consents} next={next} />
     </AuthShell>
   );
 }

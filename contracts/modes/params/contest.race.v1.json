@@ -1,0 +1,24 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:contest.race:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Дуэль (D3): первый точный ответ закрывает уровень для всех; следующий уровень открывается по окну level_windows_s",
+  "properties": {
+    "attempts_per_level": {
+      "description": "Ответов игрока на один уровень",
+      "maximum": 5,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "lock_on_first_correct": {
+      "description": "Точный ответ одного игрока закрывает уровень для остальных",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "attempts_per_level",
+    "lock_on_first_correct"
+  ],
+  "title": "contest.race params v1",
+  "type": "object"
+}

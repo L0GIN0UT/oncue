@@ -10,7 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const contractsDir = path.resolve(root, "..", "contracts", "openapi");
 const outDir = path.join(root, "src", "shared", "api", "schema");
-const SERVICES = ["game", "bff_web", "catalog", "identity", "collections", "library"];
+const SERVICES = ["game", "bff_web", "catalog", "identity", "collections", "library", "match"];
 const check = process.argv.includes("--check");
 
 const HEADER = (name) =>

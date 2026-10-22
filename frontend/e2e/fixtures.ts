@@ -1,13 +1,23 @@
 /** Общие фикстуры e2e на моках: сброс мок-бэкенда, управление сценариями, проверка axe. */
 import AxeBuilder from "@axe-core/playwright";
-import { test as base, expect, type Locator, type Page } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import type { Scenario } from "./mocks/world";
 import type { UgcScenario } from "./mocks/ugc";
+import type { MatchScenario } from "./mocks/match";
+import { installFakeRealtime } from "./realtime";
 
 const MOCK_URL = `http://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 3101}`;
 
 type Fixtures = {
-  scenario: (s: Scenario & { ugc?: UgcScenario }) => Promise<void>;
+  scenario: (s: Scenario & { ugc?: UgcScenario; match?: MatchScenario }) => Promise<void>;
+  /** Ещё один игрок онлайна: свой контекст браузера (cookie), вход под `nickname`. */
+  player: (nickname: string) => Promise<Page>;
   expectAccessible: (page: Page) => Promise<void>;
 };
 
@@ -19,7 +29,20 @@ export const test = base.extend<Fixtures>({
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
     });
+    await installFakeRealtime(page);
     await use(page);
+  },
+  player: async ({ browser, baseURL, locale, timezoneId }, use) => {
+    const contexts: BrowserContext[] = [];
+    await use(async (nickname) => {
+      const context = await browser.newContext({ baseURL, locale, timezoneId });
+      contexts.push(context);
+      await installFakeRealtime(context);
+      const page = await context.newPage();
+      await login(page, nickname);
+      return page;
+    });
+    for (const c of contexts) await c.close();
   },
   scenario: async ({ request }, use) => {
     await use(async (s) => {

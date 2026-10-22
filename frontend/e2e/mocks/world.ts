@@ -442,7 +442,7 @@ const blank = (index: number, itemId: string): Round => ({
 
 const LOST = new Set(["miss", "gave_up"]);
 
-/** Пользователи мок-мира: игрок и автор сборников (этап 3b). */
+/** Пользователи мок-мира: игрок, автор сборников (этап 3b) и соперники онлайна (этап 4a). */
 const BASE_USERS: MockUser[] = [
   {
     id: uuid(901),
@@ -458,6 +458,14 @@ const BASE_USERS: MockUser[] = [
     password: "correct-horse",
     verified: true,
   },
+  // Соперники онлайна (этап 4a): несколько контекстов браузера в одной комнате.
+  ...["rival", "third", "fourth"].map((nickname, i) => ({
+    id: uuid(903 + i),
+    nickname,
+    email: `${nickname}@example.com`,
+    password: "correct-horse",
+    verified: true,
+  })),
 ];
 
 export class MockWorld {

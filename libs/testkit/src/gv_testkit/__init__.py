@@ -12,7 +12,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from gv_testkit.api import assert_problem, service_client
     from gv_testkit.auth import TestTokenIssuer
-    from gv_testkit.contracts import assert_event_matches_schema, load_example
+    from gv_testkit.contracts import (
+        assert_event_matches_schema,
+        assert_realtime_message_matches_schema,
+        load_example,
+    )
     from gv_testkit.events import assert_published, outbox_envelopes, published_envelopes
     from gv_testkit.fakes import (
         FakeClock,
@@ -51,6 +55,7 @@ _EXPORTS = {
     "S3Endpoint": "gv_testkit.infra",
     "assert_event_matches_schema": "gv_testkit.contracts",
     "load_example": "gv_testkit.contracts",
+    "assert_realtime_message_matches_schema": "gv_testkit.contracts",
     "stub_service": "gv_testkit.stubs",
     "assert_idempotency_purge": "gv_testkit.periodic",
     "run_periodic_job": "gv_testkit.periodic",
@@ -76,6 +81,7 @@ __all__ = [
     "assert_idempotency_purge",
     "assert_problem",
     "assert_published",
+    "assert_realtime_message_matches_schema",
     "create_schema",
     "load_example",
     "outbox_envelopes",

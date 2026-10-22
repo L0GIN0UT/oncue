@@ -12,7 +12,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 from uuid import UUID
 
 import structlog
@@ -38,6 +38,7 @@ from gv_core.clock import Clock
 from gv_core.ids import uuid7
 from gv_db.idempotency import request_fingerprint, run_idempotent
 from gv_game_kernel import ConfigError, PluginSpec, params_hash, parse_mode_config
+from gv_game_kernel.spec import OnlineKind
 
 log = structlog.get_logger(__name__)
 
@@ -79,6 +80,21 @@ def draft_json(d: Draft) -> Json:
     }
 
 
+ONLINE_KINDS: frozenset[str] = frozenset(get_args(OnlineKind))
+"""Виды онлайн-сессии (ADR 0032)."""
+
+
+def session_kind_of(line: ModeLine) -> str:
+    """``online`` | ``solo`` по последней версии конфига (у неопубликованного — по черновику).
+
+    Тело черновика может быть невалидным: всё, что не онлайн-вид, считается соло.
+    """
+    source = line.latest.body if line.latest is not None else line.draft.body if line.draft else {}
+    session = source.get("session") if isinstance(source, Mapping) else None
+    kind = session.get("kind") if isinstance(session, Mapping) else None
+    return "online" if kind in ONLINE_KINDS else "solo"
+
+
 def summary_json(line: ModeLine) -> Json:
     """Строка списка режимов."""
     moments = [
@@ -92,6 +108,7 @@ def summary_json(line: ModeLine) -> Json:
         "status": str(line.status),
         "published_version": line.published_version,
         "has_draft": line.draft is not None,
+        "session_kind": session_kind_of(line),
         "updated_at": max(moments).isoformat() if moments else None,
     }
 
@@ -515,8 +532,10 @@ class ModeConfigQueries:
         self._uow = uow
         self._validator = validator
 
-    async def list_modes(self, *, domain: str | None, status: str | None) -> list[Json]:
-        """Режимы с фильтрами."""
+    async def list_modes(
+        self, *, domain: str | None, status: str | None, session: str | None = None
+    ) -> list[Json]:
+        """Режимы с фильтрами (``session`` — ``solo`` | ``online``, см. ``session_kind_of``)."""
         async with self._uow() as uow:
             lines = await uow.modes.list_lines()
         return [
@@ -524,6 +543,7 @@ class ModeConfigQueries:
             for line in lines
             if (domain is None or line.domain == domain)
             and (status is None or str(line.status) == status)
+            and (session is None or session_kind_of(line) == session)
         ]
 
     async def detail(self, key: str) -> Json:

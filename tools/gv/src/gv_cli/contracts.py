@@ -125,12 +125,47 @@ def openapi_breaking(file: str, old: Json, new: Json) -> list[Breaking]:
     return [Breaking(file, f"удалена операция {m.upper()} {p}") for p, m in removed]
 
 
-def schema_breaking(file: str, old: Json, new: Json, path: str = "$") -> list[Breaking]:
-    """Ломающие изменения JSON Schema события (рекурсивно по вложенным объектам).
+def _resolve(node: Json, root: Json) -> Json:
+    """Раскрыть локальную ссылку ``{"$ref": "#/$defs/X"}`` внутри того же документа."""
+    ref = node.get("$ref")
+    if not isinstance(ref, str) or not ref.startswith("#/"):
+        return node
+    target: Any = root
+    for part in ref[2:].split("/"):
+        target = target[part]
+    resolved: Json = target
+    return resolved
+
+
+def schema_breaking(
+    file: str,
+    old: Json,
+    new: Json,
+    path: str = "$",
+    *,
+    old_root: Json | None = None,
+    new_root: Json | None = None,
+) -> list[Breaking]:
+    """Ломающие изменения JSON Schema (рекурсивно по вложенным объектам).
 
     Ломающими считаются: смена типа, удаление свойства, новое обязательное поле.
     Добавление необязательного поля — совместимо (потребители — tolerant readers).
+    Объект, ставший ``oneOf``/``anyOf`` (дискриминированное объединение, ADR 0032),
+    совместим, если хотя бы одна ветка не ломает прежнюю схему: старые документы проходят
+    по этой ветке. Локальные ``$ref`` (``#/$defs/...``) раскрываются.
     """
+    old_root = old if old_root is None else old_root
+    new_root = new if new_root is None else new_root
+    old, new = _resolve(old, old_root), _resolve(new, new_root)
+    branches = new.get("oneOf") or new.get("anyOf")
+    if branches and not (old.get("oneOf") or old.get("anyOf")) and "properties" in old:
+        candidates = [
+            schema_breaking(file, old, branch, f"{path}|{i}", old_root=old_root, new_root=new_root)
+            for i, branch in enumerate(branches)
+        ]
+        if any(not c for c in candidates):
+            return []
+        return [Breaking(file, f"{path}: ни одна ветка oneOf/anyOf не совместима со старой схемой")]
     problems: list[Breaking] = []
     if old.get("type") != new.get("type"):
         problems.append(Breaking(file, f"{path}: тип {old.get('type')!r} → {new.get('type')!r}"))
@@ -146,7 +181,16 @@ def schema_breaking(file: str, old: Json, new: Json, path: str = "$") -> list[Br
         Breaking(file, f"{path}.{name}: поле стало обязательным") for name in sorted(newly_required)
     )
     for name in sorted(old_props.keys() & new_props.keys()):
-        problems.extend(schema_breaking(file, old_props[name], new_props[name], f"{path}.{name}"))
+        problems.extend(
+            schema_breaking(
+                file,
+                old_props[name],
+                new_props[name],
+                f"{path}.{name}",
+                old_root=old_root,
+                new_root=new_root,
+            )
+        )
     return problems
 
 

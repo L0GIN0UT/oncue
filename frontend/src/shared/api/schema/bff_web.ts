@@ -116,6 +116,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/match/{match_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Итог матча
+         * @description Итог (match) + карточки единиц раундов (catalog) + флаги «в медиатеке» (library). Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Нет или ещё идёт — 404 `match.match_not_found`. Упавший match — все блоки `unavailable`; catalog или library — только их блок. Всегда `private, no-store`.
+         */
+        get: operations["match_page_v1_pages_match__match_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/online": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Хаб онлайна
+         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
+         */
+        get: operations["online_page_v1_pages_online_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/results/{session_id}": {
         parameters: {
             query?: never;
@@ -228,6 +268,16 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[ItemShelvesCard]] */
+        Block_list_ItemShelvesCard__: {
+            /** Data */
+            data?: components["schemas"]["ItemShelvesCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[ModeCard]] */
         Block_list_ModeCard__: {
             /** Data */
@@ -248,6 +298,16 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[OnlineModeCard]] */
+        Block_list_OnlineModeCard__: {
+            /** Data */
+            data?: components["schemas"]["OnlineModeCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[RecordCard]] */
         Block_list_RecordCard__: {
             /** Data */
@@ -262,6 +322,33 @@ export interface components {
         Block_list_ShelfCard__: {
             /** Data */
             data?: components["schemas"]["ShelfCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[MatchSummary] */
+        Block_MatchSummary_: {
+            data?: components["schemas"]["MatchSummary"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[MyMatchesList] */
+        Block_MyMatchesList_: {
+            data?: components["schemas"]["MyMatchesList"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[OpenRoomsList] */
+        Block_OpenRoomsList_: {
+            data?: components["schemas"]["OpenRoomsList"] | null;
             /**
              * Status
              * @enum {string}
@@ -667,6 +754,20 @@ export interface components {
             year?: number | null;
         };
         /**
+         * ItemShelvesCard
+         * @description Флаг «в медиатеке»: полки пользователя с единицей (пусто — не сохранена).
+         */
+        ItemShelvesCard: {
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /** Shelves */
+            shelves: string[];
+        };
+        JsonValue: unknown;
+        /**
          * LibraryBlocks
          * @description Блоки медиатеки.
          */
@@ -693,6 +794,135 @@ export interface components {
          */
         LibraryShelfPage: {
             blocks: components["schemas"]["LibraryShelfBlocks"];
+        };
+        /**
+         * MatchBlocks
+         * @description Блоки экрана итога матча.
+         */
+        MatchBlocks: {
+            items: components["schemas"]["Block_list_ItemCard__"];
+            library: components["schemas"]["Block_list_ItemShelvesCard__"];
+            match: components["schemas"]["Block_MatchSummary_"];
+        };
+        /**
+         * MatchModeCard
+         * @description Шаблон режима комнаты или матча (``match ModeRef``).
+         */
+        MatchModeCard: {
+            /** Answer Format */
+            answer_format: string;
+            /** Clue Type */
+            clue_type: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "duel" | "party" | "lobby";
+            /**
+             * Ranked
+             * @default false
+             */
+            ranked: boolean;
+            /** Title Key */
+            title_key: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * MatchPage
+         * @description ``GET /v1/pages/match/{match_id}`` (только пользователь).
+         */
+        MatchPage: {
+            blocks: components["schemas"]["MatchBlocks"];
+        };
+        /**
+         * MatchPlayerCard
+         * @description Игрок в итоге матча: место с ничьими (1, 1, 3), ``outcome`` — только у дуэли.
+         */
+        MatchPlayerCard: {
+            /**
+             * Finish
+             * @enum {string}
+             */
+            finish: "completed" | "forfeit" | "left" | "tech_win" | "tech_loss";
+            /** Nickname */
+            nickname: string;
+            /** Outcome */
+            outcome: ("win" | "loss" | "draw") | null;
+            /** Place */
+            place: number;
+            /** Score */
+            score: number;
+            /** Slot */
+            slot: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * MatchRoundCard
+         * @description Раунд итога: карточка единицы — в блоке ``items`` по ``media_item_id``.
+         */
+        MatchRoundCard: {
+            /** Index */
+            index: number;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /** Results */
+            results: components["schemas"]["RoundPlayerResultCard"][];
+            /**
+             * Void
+             * @description Раунд аннулирован (ассет недоступен)
+             * @default false
+             */
+            void: boolean;
+        };
+        /**
+         * MatchSummary
+         * @description Итог матча (``match /v1/matches/{id}``).
+         */
+        MatchSummary: {
+            /** Collection Ids */
+            collection_ids?: string[];
+            /**
+             * Finish
+             * @enum {string}
+             */
+            finish: "completed" | "forfeit" | "tech_win" | "aborted";
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /**
+             * Match Id
+             * Format: uuid
+             */
+            match_id: string;
+            mode: components["schemas"]["MatchModeCard"];
+            /** Players */
+            players: components["schemas"]["MatchPlayerCard"][];
+            /** Room Code */
+            room_code: string;
+            /** Rounds */
+            rounds: components["schemas"]["MatchRoundCard"][];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
         };
         /**
          * ModeCard
@@ -759,6 +989,199 @@ export interface components {
          */
         ModeStartCard: {
             subject?: components["schemas"]["SubjectPickCard"] | null;
+        };
+        /**
+         * MyMatchCard
+         * @description Матч в «Моих матчах» (``match /v1/me/matches``).
+         */
+        MyMatchCard: {
+            /**
+             * Finish
+             * @enum {string}
+             */
+            finish: "completed" | "forfeit" | "tech_win" | "aborted";
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /**
+             * Match Id
+             * Format: uuid
+             */
+            match_id: string;
+            mode: components["schemas"]["MatchModeCard"];
+            /**
+             * My Finish
+             * @enum {string}
+             */
+            my_finish: "completed" | "forfeit" | "left" | "tech_win" | "tech_loss";
+            /**
+             * Outcome
+             * @description Только у дуэли
+             */
+            outcome: ("win" | "loss" | "draw") | null;
+            /** Place */
+            place: number;
+            /** Players */
+            players: number;
+            /** Score */
+            score: number;
+        };
+        /**
+         * MyMatchesList
+         * @description Мои последние матчи; ``next_cursor`` — для ``match /v1/me/matches``.
+         */
+        MyMatchesList: {
+            /** Items */
+            items: components["schemas"]["MyMatchCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * OnlineBlocks
+         * @description Блоки хаба онлайна: каждый деградирует независимо.
+         */
+        OnlineBlocks: {
+            /** @description Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`) */
+            modes: components["schemas"]["Block_list_OnlineModeCard__"];
+            my_matches: components["schemas"]["Block_MyMatchesList_"];
+            open_rooms: components["schemas"]["Block_OpenRoomsList_"];
+        };
+        /**
+         * OnlineChatCard
+         * @description Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``).
+         */
+        OnlineChatCard: {
+            /** Emotes */
+            emotes: string[];
+            /**
+             * Free Text
+             * @description Свободный чат — только кастомное лобби (ADR 0036)
+             */
+            free_text: boolean;
+            /** Phrases */
+            phrases: string[];
+        };
+        /**
+         * OnlineModeCard
+         * @description Онлайн-режим для создания комнаты (``game /v1/modes?session=online``).
+         */
+        OnlineModeCard: {
+            /**
+             * Answer Format
+             * @enum {string}
+             */
+            answer_format: "classic" | "pick";
+            /** Clue Type */
+            clue_type: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Key */
+            key: string;
+            online: components["schemas"]["OnlineRulesCard"];
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** Source Type */
+            source_type: string;
+            /** Title Key */
+            title_key: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * OnlinePage
+         * @description ``GET /v1/pages/online``: блоки — только при ``status = ok``, иначе ``blocks: null``.
+         */
+        OnlinePage: {
+            blocks?: components["schemas"]["OnlineBlocks"] | null;
+            /**
+             * Status
+             * @description `auth_required` — гость или аноним (экран регистрации, D13); `session_expired` — токен не прошёл проверку или match ответил 401 (обновить сессию и повторить)
+             * @enum {string}
+             */
+            status: "ok" | "auth_required" | "session_expired";
+        };
+        /**
+         * OnlineRulesCard
+         * @description Правила комнаты онлайн-режима (``game ModeOut.online``, ADR 0032).
+         */
+        OnlineRulesCard: {
+            chat: components["schemas"]["OnlineChatCard"];
+            /**
+             * Contest Type
+             * @description Плагин состязания (`race`, `parallel`)
+             */
+            contest_type: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "duel" | "party" | "lobby";
+            /** Ladder */
+            ladder?: string | null;
+            /**
+             * Level Windows S
+             * @description Окно каждого уровня загадки, с
+             */
+            level_windows_s: number[];
+            /**
+             * Lobby
+             * @description Только у кастомного лобби: `{visibility, overridable}` (LobbySpec конфига)
+             */
+            lobby?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Max Collections
+             * @description Только у лобби по сборнику: сколько сборников выбрать
+             */
+            max_collections?: number | null;
+            /** Players Max */
+            players_max: number;
+            /** Players Min */
+            players_min: number;
+            /** Ranked */
+            ranked: boolean;
+            /** Rounds */
+            rounds: number;
+        };
+        /**
+         * OpenRoomCard
+         * @description Открытое лобби (``match /v1/rooms/open``): вход — по ``code`` напрямую в match.
+         */
+        OpenRoomCard: {
+            /** Code */
+            code: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Host Nickname */
+            host_nickname: string;
+            mode: components["schemas"]["MatchModeCard"];
+            /** Players */
+            players: number;
+            /** Players Max */
+            players_max: number;
+            settings: components["schemas"]["RoomSettingsCard"];
+        };
+        /**
+         * OpenRoomsList
+         * @description Открытые лобби, новые первыми; ``next_cursor`` — для ``match /v1/rooms/open``.
+         */
+        OpenRoomsList: {
+            /** Items */
+            items: components["schemas"]["OpenRoomCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /**
          * PersonCard
@@ -933,6 +1356,57 @@ export interface components {
             session_id: string;
             /** Share Text */
             share_text: string;
+        };
+        /**
+         * RoomSettingsCard
+         * @description Действующие настройки комнаты (шаблон + переопределения хоста).
+         */
+        RoomSettingsCard: {
+            /** Answer Format */
+            answer_format: string;
+            /** Clue Type */
+            clue_type: string;
+            /** Collection Ids */
+            collection_ids?: string[];
+            /**
+             * Level Window S
+             * @description Окно уровня, с
+             */
+            level_window_s: number;
+            /** Players Max */
+            players_max: number;
+            /** Rounds */
+            rounds: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "public" | "private";
+        };
+        /**
+         * RoundPlayerResultCard
+         * @description Результат игрока в раунде.
+         */
+        RoundPlayerResultCard: {
+            /**
+             * Elapsed Ms
+             * @description От открытия уровня
+             */
+            elapsed_ms?: number | null;
+            /**
+             * Level
+             * @description Уровень угадывания; null — не угадал
+             */
+            level: number | null;
+            /** Partial */
+            partial: boolean;
+            /** Score */
+            score: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         /**
          * ServiceMeta
@@ -1325,6 +1799,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Problem"];
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    match_page_v1_pages_match__match_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                match_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    online_page_v1_pages_online_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnlinePage"];
                 };
             };
         };
