@@ -1,0 +1,77 @@
+{
+  "$id": "urn:guessverse:contracts:events:rating:SeasonStarted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Начался сезон ladder-а (ADR 0039). aggregate_id — season_id. Рейтинги нового сезона = мягкий сброс предыдущих; потребитель-проекция (match) применяет формулу `soft_reset` к своим значениям сам, отдельных RatingChanged на сброс нет.",
+  "properties": {
+    "ends_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ladder": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "ladder_version": {
+      "description": "Версия конфига ladder-а, действующая на старте сезона",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "number": {
+      "description": "Порядковый номер сезона в ladder-е",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "season_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "soft_reset": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Мягкий сброс: новый рейтинг = target + ratio × (старый − target)",
+          "properties": {
+            "ratio": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "target": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "target",
+            "ratio"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Сброс, применённый к рейтингам предыдущего сезона; null — первый сезон"
+    },
+    "starts_at": {
+      "format": "date-time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "season_id",
+    "ladder",
+    "number",
+    "ladder_version",
+    "starts_at",
+    "ends_at",
+    "soft_reset"
+  ],
+  "title": "rating.SeasonStarted v1",
+  "type": "object",
+  "x-aggregate-type": "season",
+  "x-topic": "rating.rating.v1"
+}

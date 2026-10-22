@@ -1,0 +1,109 @@
+{
+  "$id": "urn:guessverse:contracts:events:rating:LadderPublished:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Опубликована версия конфига ladder-а (ADR 0037). aggregate_id — ключ ladder-а. Потребители: game (валидация `session.ladder` по проекции ключей), match (окна подбора и список форматов очереди из `matchmaking`). Остальной конфиг (Эло, звания, сезоны) остаётся в rating. Версия монотонна: потребитель применяет только версию выше текущей.",
+  "properties": {
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "formats": {
+      "description": "Форматы очереди, доступные в ladder-е",
+      "items": {
+        "description": "Формат очереди: classic — ввод названия, lite — 4 варианта",
+        "enum": [
+          "classic",
+          "lite"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "ladder": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "matchmaking": {
+      "additionalProperties": false,
+      "description": "Подбор соперника: окно рейтинга растёт со временем ожидания (ADR 0038)",
+      "properties": {
+        "interval_s": {
+          "description": "Период батчевого матчера, с",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "slow_hint_after_s": {
+          "description": "Через сколько с показать «ищем дольше обычного»; игрок остаётся в очереди",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "window": {
+          "additionalProperties": false,
+          "properties": {
+            "base": {
+              "description": "Начальное окно ±, очков",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "max": {
+              "description": "Потолок окна ±, очков",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "step": {
+              "description": "Прирост окна за шаг, очков",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "step_every_s": {
+              "description": "Длина шага, с",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "base",
+            "step",
+            "step_every_s",
+            "max"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "window",
+        "slow_hint_after_s",
+        "interval_s"
+      ],
+      "type": "object"
+    },
+    "published_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "ladder",
+    "version",
+    "domain",
+    "formats",
+    "matchmaking",
+    "published_at"
+  ],
+  "title": "rating.LadderPublished v1",
+  "type": "object",
+  "x-aggregate-type": "ladder",
+  "x-topic": "rating.rating.v1"
+}

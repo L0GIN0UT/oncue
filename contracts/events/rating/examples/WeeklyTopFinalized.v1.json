@@ -1,0 +1,28 @@
+{
+  "aggregate_id": "film:2026-10-19",
+  "aggregate_type": "ladder",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0006",
+  "event_type": "rating.WeeklyTopFinalized",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "ladder": "film",
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0002",
+    "top": [
+      {
+        "delta": 87,
+        "place": 1,
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000002"
+      },
+      {
+        "delta": 64,
+        "place": 2,
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003"
+      }
+    ],
+    "week_start": "2026-10-19"
+  },
+  "producer": "rating"
+}

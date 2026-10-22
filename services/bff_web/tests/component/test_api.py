@@ -1136,7 +1136,16 @@ async def test_online_page_match_stub_501_and_game_down_are_unavailable(bff: Bff
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "blocks": {"open_rooms": UNAVAILABLE, "my_matches": UNAVAILABLE, "modes": UNAVAILABLE},
+        "blocks": {
+            "open_rooms": UNAVAILABLE,
+            "my_matches": UNAVAILABLE,
+            "modes": UNAVAILABLE,
+            # блоки 4b до потока C2 не заполняются (контракт 0a)
+            "queues": None,
+            "ratings": None,
+            "seasons": None,
+            "weekly": None,
+        },
     }
 
 
@@ -1373,3 +1382,12 @@ async def test_online_modes_without_online_block_are_contract_violation(bff: Bff
     blocks = response.json()["blocks"]
     assert blocks["modes"] == UNAVAILABLE
     assert blocks["open_rooms"]["status"] == "ok"
+
+
+async def test_leaderboards_page_is_public_stub_501(bff: Bff) -> None:
+    """Страница лидербордов 4b: контракт 0a, без токена; реализация — поток C2."""
+    response = await bff.client.get("/v1/pages/leaderboards", params={"ladder": "film"})
+    assert response.status_code == 501
+    assert (
+        await bff.client.get("/v1/pages/leaderboards", params={"ladder": "Film!"})
+    ).status_code == 422

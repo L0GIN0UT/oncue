@@ -19,6 +19,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from gv_core.random import Random
 from gv_game_kernel.contest import ContestRoundState, PlayerRoundView
 from gv_game_kernel.ports import (
     AssetPort,
@@ -668,4 +669,41 @@ class ContestRule(Protocol):
 
     def views(self, state: ContestRoundState) -> list[PlayerRoundView]:
         """Статусы игроков для всех участников — без текстов ответов (античит)."""
+        ...
+
+
+# ----------------------------------------------------------------------------- DistractorSource
+class DistractorSource(Protocol):
+    """Подбор неверных вариантов формата ``pick`` (``lite``; ADR 0040).
+
+    Возможность источника, а не вид режима: ядро не знает, как «близко» подбирать, — это
+    плагин в ``answer.params.distractors``. Подбор чистый и детерминированный при заданном
+    ``rng`` (план раундов воспроизводим по seed). Пул — играбельные единицы домена, которые
+    даёт game; плагин не ходит в каталог сам.
+
+    Attributes:
+        key: Ключ в реестре и значение ``answer.params.distractors.type``.
+        params_schema: Модель параметров (``contracts/modes/params/distractor.<key>.v1.json``).
+    """
+
+    key: ClassVar[str]
+    params_schema: ClassVar[type[BaseModel]]
+
+    def pick(
+        self,
+        correct: MediaItemRef,
+        pool: Sequence[MediaItemRef],
+        *,
+        count: int,
+        params: BaseModel,
+        rng: Random,
+    ) -> list[MediaItemRef]:
+        """``count`` различных неверных вариантов из ``pool``.
+
+        Верная единица и одноимённые с ней (по ``title_aliases``) в результат не попадают.
+        Порядок результата не несёт смысла: перемешивание на комнату — дело match.
+
+        Raises:
+            PoolTooSmallError: подходящих кандидатов меньше ``count`` или ``min_pool``.
+        """
         ...

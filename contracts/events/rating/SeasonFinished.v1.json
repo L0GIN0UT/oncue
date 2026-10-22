@@ -1,0 +1,57 @@
+{
+  "$id": "urn:guessverse:contracts:events:rating:SeasonFinished:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Сезон закрыт по `ends_at` или админом (ADR 0039). aggregate_id — season_id. Итоговые места не в событии (тысячи игроков): `standings_ref` указывает на выборку в API rating. Награды — progression, этап 5.",
+  "properties": {
+    "closed_by": {
+      "description": "`schedule` — по ends_at; `admin` — вручную",
+      "enum": [
+        "schedule",
+        "admin"
+      ],
+      "type": "string"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ladder": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "number": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "players_count": {
+      "description": "Игроков с рейтингом в сезоне",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "season_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "standings_ref": {
+      "description": "Ссылка на итоговую таблицу: путь к ручке rating `/v1/ladders/{ladder}/leaderboard?season=…`",
+      "maxLength": 300,
+      "type": "string"
+    }
+  },
+  "required": [
+    "season_id",
+    "ladder",
+    "number",
+    "finished_at",
+    "closed_by",
+    "players_count",
+    "standings_ref"
+  ],
+  "title": "rating.SeasonFinished v1",
+  "type": "object",
+  "x-aggregate-type": "season",
+  "x-topic": "rating.rating.v1"
+}

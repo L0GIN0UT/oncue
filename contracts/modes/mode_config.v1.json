@@ -436,6 +436,40 @@
           ],
           "type": "object"
         },
+        "params": {
+          "additionalProperties": false,
+          "description": "Возможности источника ответа (ADR 0040): сейчас только дистракторы формата pick/lite",
+          "properties": {
+            "distractors": {
+              "additionalProperties": false,
+              "description": "Автоподбор неверных вариантов из пула по близости к верному (плагин DistractorSource); вариантов в раунде = count + 1; option_id непрозрачны и перемешаны на комнату",
+              "properties": {
+                "count": {
+                  "description": "Сколько неверных вариантов",
+                  "maximum": 7,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "params": {
+                  "description": "Параметры плагина; проверяются его params_schema (contracts/modes/params/distractor.*)",
+                  "type": "object"
+                },
+                "type": {
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "count",
+                "params"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
         "partial": {
           "description": "Виды частичного ответа (плагины PartialRule), например artist",
           "items": {

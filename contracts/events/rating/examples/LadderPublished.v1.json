@@ -1,0 +1,31 @@
+{
+  "aggregate_id": "film",
+  "aggregate_type": "ladder",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0003",
+  "event_type": "rating.LadderPublished",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "domain": "film",
+    "formats": [
+      "classic",
+      "lite"
+    ],
+    "ladder": "film",
+    "matchmaking": {
+      "interval_s": 1,
+      "slow_hint_after_s": 60,
+      "window": {
+        "base": 100,
+        "max": 600,
+        "step": 50,
+        "step_every_s": 10
+      }
+    },
+    "published_at": "2026-10-23T09:00:00Z",
+    "version": 1
+  },
+  "producer": "rating"
+}

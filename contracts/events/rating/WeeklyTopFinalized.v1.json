@@ -1,0 +1,61 @@
+{
+  "$id": "urn:guessverse:contracts:events:rating:WeeklyTopFinalized:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Топ недели закрыт: прирост рейтинга с понедельника (ADR 0039). aggregate_id — `{ladder}:{week_start}`; повтор за тот же период идемпотентен. Награды — progression, этап 5.",
+  "properties": {
+    "ladder": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "season_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "top": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "delta": {
+            "description": "Прирост рейтинга за неделю",
+            "type": "integer"
+          },
+          "place": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "delta",
+          "place"
+        ],
+        "type": "object"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
+    "week_start": {
+      "description": "Понедельник недели в зоне конфига ladder-а",
+      "format": "date",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ladder",
+    "season_id",
+    "week_start",
+    "top"
+  ],
+  "title": "rating.WeeklyTopFinalized v1",
+  "type": "object",
+  "x-aggregate-type": "ladder",
+  "x-topic": "rating.rating.v1"
+}

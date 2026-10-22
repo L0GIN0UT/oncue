@@ -1,0 +1,141 @@
+{
+  "calibration": {
+    "hide_tier": true,
+    "matches": 10
+  },
+  "domain": "film",
+  "elo": {
+    "format_multiplier": {
+      "classic": 1.0,
+      "lite": 0.8
+    },
+    "k": 20,
+    "k_calibrating": 40,
+    "leaver_penalty": 10,
+    "scale": 400,
+    "start": 1000
+  },
+  "formats": [
+    "classic",
+    "lite"
+  ],
+  "key": "film",
+  "leaderboard": {
+    "min_matches": 10,
+    "page_size": 50
+  },
+  "matchmaking": {
+    "interval_s": 1,
+    "slow_hint_after_s": 60,
+    "window": {
+      "base": 100,
+      "max": 600,
+      "step": 50,
+      "step_every_s": 10
+    }
+  },
+  "season": {
+    "length_days": 56,
+    "soft_reset": {
+      "ratio": 0.5,
+      "target": 1000
+    }
+  },
+  "tiers": [
+    {
+      "below": 1000,
+      "family": "bronze",
+      "key": "bronze_1",
+      "step": 1,
+      "title_key": "rating.tier.bronze"
+    },
+    {
+      "below": 1100,
+      "family": "bronze",
+      "key": "bronze_2",
+      "step": 2,
+      "title_key": "rating.tier.bronze"
+    },
+    {
+      "below": 1200,
+      "family": "bronze",
+      "key": "bronze_3",
+      "step": 3,
+      "title_key": "rating.tier.bronze"
+    },
+    {
+      "below": 1300,
+      "family": "silver",
+      "key": "silver_1",
+      "step": 1,
+      "title_key": "rating.tier.silver"
+    },
+    {
+      "below": 1400,
+      "family": "silver",
+      "key": "silver_2",
+      "step": 2,
+      "title_key": "rating.tier.silver"
+    },
+    {
+      "below": 1500,
+      "family": "silver",
+      "key": "silver_3",
+      "step": 3,
+      "title_key": "rating.tier.silver"
+    },
+    {
+      "below": 1600,
+      "family": "gold",
+      "key": "gold_1",
+      "step": 1,
+      "title_key": "rating.tier.gold"
+    },
+    {
+      "below": 1700,
+      "family": "gold",
+      "key": "gold_2",
+      "step": 2,
+      "title_key": "rating.tier.gold"
+    },
+    {
+      "below": 1800,
+      "family": "gold",
+      "key": "gold_3",
+      "step": 3,
+      "title_key": "rating.tier.gold"
+    },
+    {
+      "below": 1900,
+      "family": "platinum",
+      "key": "platinum_1",
+      "step": 1,
+      "title_key": "rating.tier.platinum"
+    },
+    {
+      "below": 2000,
+      "family": "platinum",
+      "key": "platinum_2",
+      "step": 2,
+      "title_key": "rating.tier.platinum"
+    },
+    {
+      "below": 2100,
+      "family": "platinum",
+      "key": "platinum_3",
+      "step": 3,
+      "title_key": "rating.tier.platinum"
+    },
+    {
+      "below": null,
+      "family": "diamond",
+      "key": "diamond",
+      "step": null,
+      "title_key": "rating.tier.diamond"
+    }
+  ],
+  "weekly": {
+    "timezone": "Europe/Moscow",
+    "top_size": 10
+  }
+}

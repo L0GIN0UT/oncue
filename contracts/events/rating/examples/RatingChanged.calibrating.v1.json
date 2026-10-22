@@ -1,0 +1,30 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003",
+  "aggregate_type": "rating",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0002",
+  "event_type": "rating.RatingChanged",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "at": "2026-10-23T12:05:00Z",
+    "calibrating": true,
+    "calibration_left": 7,
+    "delta": -22,
+    "format": "lite",
+    "ladder": "film",
+    "leaver_penalty": 10,
+    "match_id": "0192a3b4-c5d6-7e8f-9a0b-0000000e0201",
+    "matches_played": 3,
+    "new": 978,
+    "old": 1000,
+    "old_tier": null,
+    "outcome": "loss",
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001",
+    "tier": null,
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000003",
+    "version": 3
+  },
+  "producer": "rating"
+}

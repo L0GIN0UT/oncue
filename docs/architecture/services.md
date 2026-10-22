@@ -95,9 +95,9 @@
 - **Деградация:** потеря websocket → HTTP-tick; падение `rooms` → другой инстанс забирает комнату, разрыв ≤ lease TTL; Centrifugo недоступен — матч идёт на tick.
 
 ### 6. rating
-- **Отвечает за:** Эло (дуэль и многопользовательский), калибровку, звания, сезоны, топ недели и сезона, все лидерборды (набор задаётся конфигом), историю рейтинга.
+- **Отвечает за:** Эло рейтинговой дуэли (ladder = домен, [ADR 0037](../adr/0037-rating-elo-calibration-ladder-config.md)), калибровку, звания, сезоны, топ недели и сезона, все лидерборды (набор задаётся конфигом), историю рейтинга.
 - **Данные:** Postgres (ratings по `(user, ladder)`, rating_history, seasons), Redis ZSET (лидерборды).
-- **Публикует:** `RatingChanged`, `SeasonFinished`, `WeeklyTopFinalized`.
+- **Публикует:** `RatingChanged`, `LadderPublished`, `SeasonStarted`, `SeasonFinished`, `WeeklyTopFinalized` (топик `rating.rating.v1`).
 - **Слушает:** `MatchFinished`, `DailyCompleted` (серии), `PredictionWinnerSelected`, `ProgressionLevelChanged`.
 - **Масштаб:** запись асинхронная по событиям, чтение из Redis.
 - **Деградация:** матчи не ждут rating. Пересчёт догоняет по событиям из лога Redpanda.

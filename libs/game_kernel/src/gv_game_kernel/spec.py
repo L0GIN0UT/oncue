@@ -79,6 +79,26 @@ class ScoringSpec(PluginSpec):
     """Подсчёт очков (плагин ``Scorer``); очки уровней — в ``params.points`` (D7)."""
 
 
+class DistractorsSpec(PluginSpec):
+    """Автоподбор неверных вариантов формата ``pick`` (плагин ``DistractorSource``, ADR 0040).
+
+    Attributes:
+        count: Сколько неверных вариантов; вариантов в раунде — ``count + 1``.
+    """
+
+    count: Annotated[int, Field(strict=True, ge=1, le=7)]
+
+
+class AnswerParamsSpec(_Spec):
+    """Возможности источника ответа (ADR 0040).
+
+    Attributes:
+        distractors: Дистракторы для ``pick``; ``None`` — варианты даёт источник раунда.
+    """
+
+    distractors: DistractorsSpec | None = None
+
+
 class AnswerSpec(_Spec):
     """Формат ответа, matcher и виды частичного ответа.
 
@@ -87,11 +107,13 @@ class AnswerSpec(_Spec):
             варианта раунда (ADR 0023).
         matcher: Плагин сверки.
         partial: Ключи плагинов ``PartialRule`` (например ``artist``).
+        params: Дистракторы формата ``pick`` (ADR 0040); у остальных форматов не задаётся.
     """
 
     format: PluginKey
     matcher: MatcherSpec
     partial: tuple[PluginKey, ...] = Field(default=(), max_length=10)
+    params: AnswerParamsSpec | None = None
 
 
 class SoloSessionSpec(_Spec):

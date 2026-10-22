@@ -1,0 +1,42 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:distractor.similar:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Дистракторы по близости (ADR 0040): из играбельного пула того же домена, без верного и без одноимённых единиц",
+  "properties": {
+    "min_pool": {
+      "description": "Минимум кандидатов в пуле; меньше — раунд недоступен (`match.content_unavailable`)",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "popularity_ratio": {
+      "description": "Допустимое отношение популярности кандидата к верному (1 — любое; 0,5 — не менее половины и не более вдвое); null — не учитывать",
+      "maximum": 1,
+      "minimum": 0,
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "same_genre": {
+      "description": "Хотя бы один общий жанр с верным",
+      "type": "boolean"
+    },
+    "year_window": {
+      "description": "Допустимая разница годов выхода; null — не учитывать",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "same_genre",
+    "year_window",
+    "popularity_ratio",
+    "min_pool"
+  ],
+  "title": "distractor.similar params v1",
+  "type": "object"
+}
