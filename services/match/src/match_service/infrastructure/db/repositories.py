@@ -395,10 +395,11 @@ class SqlUsers:
         await session.execute(
             text(
                 "UPDATE match_rounds SET results = ("
-                " SELECT jsonb_agg(CASE WHEN e->>'user_id' = :uid"
-                " THEN jsonb_set(e, '{user_id}', to_jsonb(:anon)) ELSE e END)"
+                " SELECT jsonb_agg(CASE WHEN e->>'user_id' = CAST(:uid AS text)"
+                " THEN jsonb_set(e, '{user_id}', to_jsonb(CAST(:anon AS text))) ELSE e END)"
                 " FROM jsonb_array_elements(results) AS e)"
-                " WHERE results @> jsonb_build_array(jsonb_build_object('user_id', :uid))"
+                " WHERE results @> jsonb_build_array("
+                "jsonb_build_object('user_id', CAST(:uid AS text)))"
             ),
             {"uid": str(user_id), "anon": str(UUID(int=0))},
         )

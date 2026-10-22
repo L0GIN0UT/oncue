@@ -153,8 +153,20 @@ class RoomActor:
             if room.is_closed:
                 await self._close(room)
                 return
-            if not await self._iteration(room, stop):
-                return
+            try:
+                if not await self._iteration(room, stop):
+                    return
+            except (RedisError, OSError, TimeoutError) as exc:
+                # Сбой Redis посреди итерации: состояние в памяти могло уйти вперёд снимка —
+                # перечитать снимок (команды без снимка применятся заново с курсора).
+                log.warning("match.room_iteration_failed", room=self.code, error=type(exc).__name__)
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(stop.wait(), self._settings.poll_ms / 1000)
+                reloaded = await self._store.load(self.code)
+                if reloaded is None:
+                    return
+                room = self._room = reloaded
+                self._written = self._signature(room)
 
     async def _iteration(self, room: Room, stop: asyncio.Event) -> bool:
         """Одна итерация цикла; ``False`` — выйти (остановка или потеря lease)."""
