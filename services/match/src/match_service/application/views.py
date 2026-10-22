@@ -127,6 +127,7 @@ def room_view(room: Room, now_ms: int) -> Json:
         "phase_ends_at": iso(room.phase_ends_at_ms),
         "match_id": str(match_id) if match_id is not None else None,
         "memory_size": len(room.memory),
+        "rematch_code": room.rematch_code,
         "version": room.version,
         "server_now": iso(now_ms),
     }

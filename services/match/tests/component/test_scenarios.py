@@ -250,6 +250,12 @@ async def test_duel_race_forfeit_and_rematch(svc: MatchApp) -> None:
     assert new_code and new_code != code
     fresh = await svc.client.get(f"/v1/rooms/{new_code}", headers=a.headers)
     assert fresh.status_code == 200 and fresh.json()["host_id"] == str(a.user_id)
+    # Старая комната закрыта: код реванша — в дельте closed и в state для вернувшихся.
+    closed = [m["delta"] for m in _channel(svc, code) if m["kind"] == "closed"]
+    assert closed == [{"reason": "rematch", "rematch_code": new_code}]
+    old = await svc.state(a, code)
+    assert old["room"]["phase"] == "closed" and old["room"]["rematch_code"] == new_code
+    svc.realtime.assert_versions_contiguous(f"room:{code}")
 
 
 # ----------------------------------------------------------------------------- п. 7

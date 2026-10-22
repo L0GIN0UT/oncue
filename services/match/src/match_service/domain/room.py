@@ -456,7 +456,10 @@ class Room:
         self.close_reason = reason
         self.touch(now_ms)
         self.set_phase(Phase.CLOSED, None, round_index=None, level=None)
-        self.emit("closed", reason=reason)
+        if self.rematch_code is not None and self.rematch_code != self.code:
+            self.emit("closed", reason=reason, rematch_code=self.rematch_code)
+        else:
+            self.emit("closed", reason=reason)
 
     # ------------------------------------------------------------------ команды
     def op_reply(self, key: str) -> dict[str, Any] | None:  # Any: JSON ответа

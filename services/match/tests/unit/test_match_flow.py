@@ -291,6 +291,9 @@ async def test_duel_rematch_creates_new_room_with_same_players() -> None:
     assert [s.user_id for s in fresh.seats] == [a] and fresh.host_id == a
     assert await h.player_rooms.get(a) == code
     assert await h.player_rooms.get(b) is None
+    assert room.phase is Phase.CLOSED and room.close_reason == "rematch"
+    closed = [c.data for c in room.changes if c.kind == "closed"]
+    assert closed == [{"reason": "rematch", "rematch_code": code}]
 
 
 async def test_unavailable_asset_voids_round() -> None:

@@ -92,8 +92,11 @@ class RoomQueries:
             raise MatchNotFoundError("комнаты нет или она закрыта", code=errors.ROOM_NOT_FOUND)
         return room
 
-    async def _participant(self, code: str, user_id: UUID) -> Room:
-        room = await self._room(code)
+    async def _participant(self, code: str, user_id: UUID, *, closed: bool = False) -> Room:
+        """Участник комнаты; ``closed`` — закрытая комната ещё читается (код реванша)."""
+        room = await self._store.load(code) if closed else await self._room(code)
+        if room is None:
+            raise MatchNotFoundError("комнаты нет или она закрыта", code=errors.ROOM_NOT_FOUND)
         seat = room.seat_of(user_id)
         if seat is None or seat.presence is Presence.LEFT:
             raise MatchForbiddenError("вы не участник комнаты", code=errors.NOT_PARTICIPANT)
@@ -112,14 +115,15 @@ class RoomQueries:
 
     async def state(self, user_id: UUID, code: str) -> Json:
         """Полный снимок для участника."""
-        room = await self._participant(code, user_id)
+        room = await self._participant(code, user_id, closed=True)
         return room_state(room, user_id, self._now_ms())
 
     async def tick(self, user_id: UUID, code: str, known_version: int | None) -> Json:
         """Heartbeat присутствия и снимок, если версия новее известной клиенту."""
-        room = await self._participant(code, user_id)
+        room = await self._participant(code, user_id, closed=True)
         now = self._now_ms()
-        await self._presence.touch(code, user_id, now)
+        if not room.is_closed:
+            await self._presence.touch(code, user_id, now)
         fresh = known_version is None or room.version > known_version
         return {
             "version": room.version,

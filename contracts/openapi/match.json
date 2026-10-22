@@ -1836,6 +1836,19 @@
             "title": "Players Min",
             "type": "integer"
           },
+          "rematch_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Код комнаты реванша, когда согласились все (у кастомного лобби — свой код: комната возвращается в лобби); старая комната дуэли и party закрывается",
+            "title": "Rematch Code"
+          },
           "server_now": {
             "format": "date-time",
             "title": "Server Now",

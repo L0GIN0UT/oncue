@@ -526,8 +526,10 @@ class RoomOwner:
             if await self._store.create(fresh):
                 for seat in players:
                     await self._player_rooms.assign(seat.user_id, code)
+                # Старая комната закрывается: код реванша получают все (дельта closed и
+                # RoomView.rematch_code в state/tick).
                 room.rematch_code = code
-                room.emit("lobby")
+                room.close("rematch", now)
                 return
         raise MatchUnavailableError("не удалось создать комнату реванша")
 
