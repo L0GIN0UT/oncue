@@ -187,3 +187,11 @@ class RedisPlayerRooms:
     async def release(self, user_id: UUID, code: str) -> None:
         """Освободить, если записана эта комната."""
         await self._release(keys=[keys.player(user_id)], args=[code])
+
+    async def lock_create(self, user_id: UUID, ttl_ms: int) -> bool:
+        """Замок создания комнаты (``SET NX PX``); ``False`` — создание уже идёт."""
+        return bool(await self._redis.set(keys.creating(user_id), "1", nx=True, px=ttl_ms))
+
+    async def unlock_create(self, user_id: UUID) -> None:
+        """Снять замок создания."""
+        await self._redis.delete(keys.creating(user_id))

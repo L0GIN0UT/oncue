@@ -15,7 +15,9 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+from match_service.application.ports import RoomCommand
 from match_service.infrastructure.db.tables import TABLES
+from match_service.infrastructure.rooms.stream import RedisCommandBus
 from match_service.settings import MatchSettings, Settings
 from pydantic import SecretStr
 from redis.asyncio import Redis
@@ -34,6 +36,8 @@ from gv_testkit.match import FakeLinkPort, FakeRealtime, FakeRoundPlanPort
 START = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 SUB_SECRET = "s" * 40
 ORIGIN = "https://oncue.test"
+SYNC_USER = UUID(int=1)
+SYNC_TIMEOUT_MS = 3000
 
 
 class MemoryModes:
@@ -75,6 +79,7 @@ class MatchApp:
     realtime: FakeRealtime
     processor: EventProcessor
     redis: Redis
+    subscriptions: Any = None
     online: set[UUID] = field(default_factory=set)
 
     # ------------------------------------------------------------------ субъекты
@@ -154,11 +159,23 @@ class MatchApp:
                 assert response.status_code in (200, 403, 404), response.text
 
     async def advance(self, code: str, players: Iterable[Player], seconds: float) -> None:
-        """Сдвинуть часы; игроки на связи шлют heartbeat; дать владельцу отработать."""
+        """Сдвинуть часы; игроки на связи шлют heartbeat; дождаться итерации владельца."""
         players = list(players)
         self.clock.advance(seconds=seconds)
         await self.heartbeat(code, players)
-        await asyncio.sleep(0.05)
+        await self.sync(code)
+
+    async def sync(self, code: str) -> None:
+        """Барьер: ответ на служебную команду приходит после ``tick`` той же итерации.
+
+        Неизвестная команда отвергается владельцем без изменений комнаты, но ответ
+        отправляется только после снимка итерации, где уже отработаны дедлайны по
+        сдвинутым часам. Закрытая комната не отвечает — тогда ждать нечего.
+        """
+        command = RoomCommand(op_id=f"sync-{uuid7().hex}", kind="sync", user_id=SYNC_USER, data={})
+        bus = RedisCommandBus(self.redis, maxlen=10_000)
+        await bus.send(code, command)
+        await bus.wait_reply(code, command, SYNC_TIMEOUT_MS)
 
     async def until(
         self,
@@ -200,6 +217,11 @@ def settings(database_url: str, redis_url: str, **match: Any) -> Settings:
         "join_by_code_per_ip_per_min": 10_000,
         "commands_per_player_per_s": 1000,
         "chat_per_player_per_min": 1000,
+        # Сценарии опрашивают /state и /tick в реальном времени при стоящих FakeClock.
+        "tick_per_player_per_min": 100_000,
+        "state_per_player_per_min": 100_000,
+        "join_by_code_per_user_per_min": 10_000,
+        "emote_per_player_per_min": 1000,
         "presence_timeout_s": 120,
     }
     return Settings(

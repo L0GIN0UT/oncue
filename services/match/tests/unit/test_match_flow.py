@@ -336,7 +336,9 @@ async def test_idle_lobby_closes_and_persist_failure_is_retried() -> None:
     await h2.start(room2, a)
     assert room2.match is not None and not room2.match.started_written
     h2.records.fail = False
-    await h2.tick(room2, 0)
+    await h2.tick(room2, 0)  # пауза перед повтором ещё не прошла
+    assert not room2.match.started_written
+    await h2.tick(room2, 1)
     assert room2.match.started_written and len(h2.records.started) == 1
 
 

@@ -15,7 +15,13 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from match_doubles import MemoryRecords, factory, plan_factory, seed_bodies
+from match_doubles import (
+    MemoryRecords,
+    MemorySubscriptions,
+    factory,
+    plan_factory,
+    seed_bodies,
+)
 from match_service.application.owner import OwnerSettings, RoomOwner
 from match_service.application.ports import RoomCommand
 from match_service.domain.model import Phase
@@ -87,6 +93,8 @@ class Cluster:
             clock=SystemClock(),
             random=SystemRandom(),
             new_id=uuid7,
+            seeds=lambda: uuid7().hex * 2,
+            subscriptions=MemorySubscriptions(),
             settings=OwnerSettings(
                 op_window=64, memory_limit=100, idle_ms=600_000, presence_timeout_ms=60_000
             ),
@@ -232,16 +240,15 @@ async def test_sigterm_hands_off_without_losing_commands(cluster: Cluster) -> No
     await _until(lambda: _owned_by(cluster, code, "a"))
     cluster.node("b")
     users = [uuid7() for _ in range(4)]
-    sends = [
-        asyncio.create_task(
-            cluster.command(code, u, "join", op_id=f"op-join-{i:04d}", nickname=f"p{i}")
-        )
+    commands = [
+        RoomCommand(op_id=f"op-join-{i:04d}", kind="join", user_id=u, data={"nickname": f"p{i}"})
         for i, u in enumerate(users)
     ]
-    await asyncio.sleep(0.01)
+    for command in commands:  # команды уже в потоке, когда приходит сигнал
+        await cluster.bus.send(code, command)
     a.stop.set()  # SIGTERM: перестать брать работу → handoff
     await asyncio.wait_for(a.task, 5)
-    await asyncio.gather(*sends)
+    await asyncio.gather(*(cluster.bus.wait_reply(code, c, 1500) for c in commands))
     await _until(lambda: _owned_by(cluster, code, "b"), timeout_s=2)
 
     async def all_joined() -> bool:
@@ -274,6 +281,40 @@ async def test_closed_room_leaves_indexes_and_owner(cluster: Cluster) -> None:
     room = await cluster.store.load(code)
     assert room is not None and room.phase is Phase.CLOSED
     assert await cluster.redis.ttl(keys.snapshot(code)) > 0
+
+
+async def test_missing_or_unreadable_snapshot_leaves_active_index(cluster: Cluster) -> None:
+    await cluster.redis.zadd(keys.ACTIVE, {"MISSING1": 0, "BROKEN01": 0})
+    await cluster.redis.set(keys.snapshot("BROKEN01"), b"{not json")
+    cluster.node("a")
+
+    async def forgotten() -> bool:
+        return await cluster.redis.zcard(keys.ACTIVE) == 0
+
+    await _until(forgotten)
+    assert await cluster.owner_of("MISSING1") is None
+    assert await cluster.owner_of("BROKEN01") is None
+
+
+async def test_actor_stops_when_lease_is_stolen(cluster: Cluster) -> None:
+    a = cluster.node("a")
+    code, host = await cluster.room()
+    await _until(lambda: _owned_by(cluster, code, "a"))
+    actor = a.runner.actors[code]
+    # Lease перехвачен (пауза процесса дольше TTL): запись снимка CAS-ом не пройдёт.
+    await cluster.redis.set(keys.owner(code), "thief|99", px=60_000)
+    joiner = uuid7()
+    command = RoomCommand(op_id="op-lost-0001", kind="join", user_id=joiner, data={})
+    await cluster.bus.send(code, command)
+
+    async def lost() -> bool:
+        return actor.lost and code not in a.runner.actors
+
+    await _until(lost)
+    room = await cluster.store.load(code)
+    assert room is not None and [s.user_id for s in room.seats] == [host]
+    # Команда не подтверждена: её применит следующий владелец.
+    assert await cluster.redis.xlen(keys.commands(code)) == 1
 
 
 async def _owned_by(cluster: Cluster, code: str, instance: str) -> bool:

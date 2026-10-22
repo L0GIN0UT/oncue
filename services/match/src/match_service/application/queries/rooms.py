@@ -12,7 +12,7 @@ from datetime import datetime
 from uuid import UUID
 
 from gv_core.clock import Clock
-from match_service.application.commands.rooms import Actor
+from match_service.application.commands.rooms import Actor, code_lookup_limits
 from match_service.application.ports import (
     Json,
     PresenceStore,
@@ -58,6 +58,9 @@ class QueryLimits:
 
     join_by_code_per_ip_per_min: int
     tokens_per_min: int
+    join_by_code_per_user_per_min: int = 20
+    tick_per_min: int = 150
+    state_per_min: int = 60
 
 
 class RoomQueries:
@@ -104,22 +107,25 @@ class RoomQueries:
 
     async def get(self, actor: Actor, code: str) -> Json:
         """Комната по коду (экран входа): без данных матча; перебор кодов — fail-closed."""
-        await self._limiter.hit(
-            "join_ip",
-            actor.ip or "unknown",
-            limit=self._limits.join_by_code_per_ip_per_min,
-            window_s=60,
-            fail_closed=True,
+        await code_lookup_limits(
+            self._limiter,
+            actor,
+            per_ip=self._limits.join_by_code_per_ip_per_min,
+            per_user=self._limits.join_by_code_per_user_per_min,
         )
         return room_view(await self._room(code), self._now_ms())
 
     async def state(self, user_id: UUID, code: str) -> Json:
-        """Полный снимок для участника."""
+        """Полный снимок для участника (лимит ``GV_MATCH__STATE_PER_PLAYER_PER_MIN``)."""
+        await self._limiter.hit(
+            "state", str(user_id), limit=self._limits.state_per_min, window_s=60
+        )
         room = await self._participant(code, user_id, closed=True)
         return room_state(room, user_id, self._now_ms())
 
     async def tick(self, user_id: UUID, code: str, known_version: int | None) -> Json:
         """Heartbeat присутствия и снимок, если версия новее известной клиенту."""
+        await self._limiter.hit("tick", str(user_id), limit=self._limits.tick_per_min, window_s=60)
         room = await self._participant(code, user_id, closed=True)
         now = self._now_ms()
         if not room.is_closed:

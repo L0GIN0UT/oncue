@@ -414,7 +414,12 @@ def set_clue(
     clue: Clue | None,
     now_ms: int,
 ) -> list[Need]:
-    """Ссылка открытого уровня получена (``None`` — ассет недоступен: раунд ``void``)."""
+    """Ссылка открытого уровня получена.
+
+    ``None`` — ассет недоступен (D11, решение оркестратора): на уровне 1 раунд ``void`` для
+    всех; на следующих — угадавшие на прошлых уровнях сохраняют очки, раунд ``void`` только
+    для неугадавших.
+    """
     match = _match(room)
     contest = match.contest
     if (
@@ -434,7 +439,13 @@ def set_clue(
         clue=clue,
     )
     if clue is None:
-        return _finish_round(room, rules, now_ms, void=True)
+        if level == 1:
+            return _finish_round(room, rules, now_ms, void=True)
+        for pid, pr in contest.players.items():
+            if pr.active and not pr.state.finished:
+                contest = rules.leave(contest, pid)
+        match.contest = contest
+        return _finish_round(room, rules, now_ms, void=False)
     return []
 
 
@@ -567,16 +578,37 @@ def presence(
     Args:
         seen_ms: Последний heartbeat игрока (``tick``); нет записи — время входа.
     """
+    match = room.match
     for seat in list(room.seats):
         if seat.presence is Presence.LEFT:
             continue
         last = max(seen_ms.get(seat.user_id, 0), seat.joined_at_ms)
         fresh = now_ms - last < timing.presence_timeout_ms
-        if fresh and room.reconnect(seat.user_id, now_ms):
-            _on_reconnect(room, seat.user_id, now_ms)
-        elif not fresh and room.disconnect(seat.user_id):
-            _on_disconnect(room, seat.user_id, now_ms)
+        player = match.players.get(seat.user_id) if match is not None else None
+        # Матч сверяется с состоянием игрока, а не только с переходом места: возврат
+        # через join (место уже online) тоже снимает паузу.
+        if fresh:
+            room.reconnect(seat.user_id, now_ms)
+            if player is not None and player.active and player.disconnected_at_ms is not None:
+                _on_reconnect(room, seat.user_id, now_ms)
+        else:
+            room.disconnect(seat.user_id)
+            if player is not None and player.active and player.disconnected_at_ms is None:
+                _on_disconnect(room, seat.user_id, now_ms)
     _grace(room, rules, timing, now_ms)
+
+
+def rejoin(room: Room, user_id: UUID, now_ms: int) -> None:
+    """Участник вернулся по ссылке (join): heartbeat с текущего момента, пауза снимается."""
+    seat = room.seat_of(user_id)
+    if seat is None or seat.presence is Presence.LEFT:
+        return
+    seat.joined_at_ms = now_ms
+    room.reconnect(user_id, now_ms)
+    match = room.match
+    player = match.players.get(user_id) if match is not None else None
+    if player is not None and player.active and player.disconnected_at_ms is not None:
+        _on_reconnect(room, user_id, now_ms)
 
 
 def _on_disconnect(room: Room, user_id: UUID, now_ms: int) -> None:
@@ -621,10 +653,8 @@ def _on_reconnect(room: Room, user_id: UUID, now_ms: int) -> None:
         c = match.contest
         match.contest = replace(
             c,
-            level_opened_at_ms=None
-            if c.level_opened_at_ms is None
-            else c.level_opened_at_ms + shift,
-            level_ends_at_ms=None if c.level_ends_at_ms is None else c.level_ends_at_ms + shift,
+            level_opened_at_ms=_shift(c.level_opened_at_ms, shift),
+            level_ends_at_ms=_shift(c.level_ends_at_ms, shift),
         )
     ends = None if paused.remaining_ms is None else now_ms + paused.remaining_ms
     room.set_phase(

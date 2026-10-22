@@ -154,6 +154,7 @@ class MemoryPlayerRooms:
     """``PlayerRooms`` в памяти."""
 
     rooms: dict[UUID, str] = field(default_factory=dict)
+    creating: set[UUID] = field(default_factory=set)
 
     async def get(self, user_id: UUID) -> str | None:
         return self.rooms.get(user_id)
@@ -167,6 +168,28 @@ class MemoryPlayerRooms:
     async def release(self, user_id: UUID, code: str) -> None:
         if self.rooms.get(user_id) == code:
             del self.rooms[user_id]
+
+    async def lock_create(self, user_id: UUID, ttl_ms: int) -> bool:
+        if user_id in self.creating:
+            return False
+        self.creating.add(user_id)
+        return True
+
+    async def unlock_create(self, user_id: UUID) -> None:
+        self.creating.discard(user_id)
+
+
+@dataclass
+class MemorySubscriptions:
+    """``Subscriptions`` в памяти: отозванные подписки ``(user_id, channel)``."""
+
+    revoked: list[tuple[UUID, str]] = field(default_factory=list)
+    fail: bool = False
+
+    async def unsubscribe(self, user_id: UUID, channel: str) -> None:
+        if self.fail:
+            raise ConnectionError("centrifugo недоступен (двойник)")
+        self.revoked.append((user_id, channel))
 
 
 @dataclass
@@ -189,14 +212,15 @@ class MemoryRecords:
     async def record_finished(self, room: Room, match: MatchState) -> bool:
         if self.fail:
             raise ConnectionError("postgres недоступен (двойник)")
-        if match.match_id in self.finished:
+        if match.match_id in self.finished or match.started_at_ms is None:
             return False
-        started = match.started_at_ms or match.created_at_ms
+        started = match.started_at_ms
         self.finished[match.match_id] = match_finished(
             room,
             match,
             started_at=datetime.fromtimestamp(started / 1000, UTC),
             finished_at=datetime.fromtimestamp((match.finished_at_ms or started) / 1000, UTC),
+            hidden=frozenset(room.forgotten),
         )
         return True
 

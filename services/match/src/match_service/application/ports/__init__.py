@@ -113,6 +113,14 @@ class PlayerRooms(Protocol):
         """Освободить, если записана эта комната."""
         ...
 
+    async def lock_create(self, user_id: UUID, ttl_ms: int) -> bool:
+        """Замок создания комнаты игроком; ``False`` — другое создание ещё идёт."""
+        ...
+
+    async def unlock_create(self, user_id: UUID) -> None:
+        """Снять замок создания."""
+        ...
+
 
 # ----------------------------------------------------------------------------- внешние
 @dataclass(frozen=True, slots=True)
@@ -157,6 +165,14 @@ class RealtimePublisher(Protocol):
 
     async def publish(self, channel: str, message: Json) -> None:
         """Опубликовать сообщение ``room.message.v1``."""
+        ...
+
+
+class Subscriptions(Protocol):
+    """Отзыв подписок на канал комнаты (server API Centrifugo ``unsubscribe``)."""
+
+    async def unsubscribe(self, user_id: UUID, channel: str) -> None:
+        """Отписать пользователя от канала (кик, выход, удаление аккаунта)."""
         ...
 
 
@@ -271,6 +287,27 @@ class MatchRecords(Protocol):
         Raises:
             MatchConflictError: ``match.already_rated``; ``idempotency.key_reused``.
         """
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class AdminAction:
+    """Запись аудита админского действия над комнатой."""
+
+    actor_id: UUID
+    action: str
+    room_code: str
+    match_id: UUID | None
+    reason: str
+    idempotency_key: str
+    at: datetime
+
+
+class AdminAudit(Protocol):
+    """Аудит админских действий match (Postgres)."""
+
+    async def record(self, action: AdminAction) -> bool:
+        """Записать; ``False`` — уже записано с этим ключом (повтор запроса)."""
         ...
 
 

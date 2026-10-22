@@ -29,11 +29,22 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
     guessed = [p for p in room.match.contest.players.values() if p.state.guesses]
     assert len(guessed) == 2
     if SCHEMA_VERSION == 1:
-        # Поля, добавленные после сохранения снимка (start_error), читаются по умолчанию,
-        # остальное не меняется при перезаписи.
+        # Поля, добавленные после сохранения снимка (start_error, elapsed_ms/window_ms
+        # ходов), читаются по умолчанию; старое окно ops («user:op» → полный ответ)
+        # сжимается до статуса и кода по игрокам; остальное не меняется при перезаписи.
         encoded = encode(room)
-        assert {k: encoded[k] for k in data} == data
+        same = set(data) - {"ops", "match"}
+        assert {k: encoded[k] for k in same} == {k: data[k] for k in same}
         assert encoded["start_error"] is None
+        assert encode(decode(encoded)) == encoded
+        legacy = {tuple(key.split(":", 1)) for key in data["ops"]}
+        compact = {(user, op) for user, ops in encoded["ops"].items() for op in ops}
+        assert compact == legacy
+        for ops in encoded["ops"].values():
+            for outcome in ops.values():
+                assert "body" not in outcome or "room" not in outcome["body"]
+        players = encoded["match"]["contest"]["players"]
+        assert all(p["elapsed_ms"] is None and p["window_ms"] is None for p in players.values())
 
 
 async def test_live_room_round_trips_through_snapshot() -> None:

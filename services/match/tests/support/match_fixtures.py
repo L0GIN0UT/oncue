@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from match_app import START, MatchApp, MemoryModes, settings
-from match_doubles import plan_factory, seed_bodies
+from match_doubles import MemorySubscriptions, plan_factory, seed_bodies
 from match_service.infrastructure.container import MatchAdapters
 from match_service.infrastructure.db.tables import TABLES
 from match_service.main import (
@@ -85,10 +85,12 @@ async def app_factory(
         plans._factory = plan_factory(bodies)
         links = FakeLinkPort(now=START, ttl_s=3600)
         realtime = FakeRealtime()
+        subscriptions = MemorySubscriptions()
         adapters = MatchAdapters(
             plans=plans,
             assets=links,
             publisher=realtime,
+            subscriptions=subscriptions,
             modes=MemoryModes(bodies),
             random=SystemRandom(),
             instance=f"test-{uuid7().hex[-8:]}",
@@ -113,7 +115,16 @@ async def app_factory(
         client = await stack.enter_async_context(service_client(app))
         assert infra.redis is not None
         service = MatchApp(
-            client, infra, clock, token_issuer, plans, links, realtime, processor, infra.redis
+            client,
+            infra,
+            clock,
+            token_issuer,
+            plans,
+            links,
+            realtime,
+            processor,
+            infra.redis,
+            subscriptions,
         )
         if rooms:
             stop = asyncio.Event()

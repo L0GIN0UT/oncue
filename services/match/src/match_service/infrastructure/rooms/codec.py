@@ -111,6 +111,8 @@ def _contest(c: ContestRoundState | None) -> Json | None:
             pid: {
                 "active": p.active,
                 "answered_at_ms": p.answered_at_ms,
+                "elapsed_ms": p.elapsed_ms,
+                "window_ms": p.window_ms,
                 "state": _round_state(p.state),
             }
             for pid, p in c.players.items()
@@ -309,6 +311,7 @@ def encode(room: Room) -> Json:
         "rematch_votes": sorted(_ids(room.rematch_votes)),
         "rematch_code": room.rematch_code,
         "start_error": list(room.start_error) if room.start_error is not None else None,
+        "forgotten": sorted(_ids(room.forgotten)),
         "close_reason": room.close_reason,
         "cursor": room.cursor,
         "ops": room.ops,
@@ -374,6 +377,9 @@ def _read_contest(d: Json | None) -> ContestRoundState | None:
                 state=_read_round_state(p["state"]),
                 answered_at_ms=p.get("answered_at_ms"),
                 active=bool(p.get("active", True)),
+                # party_speed: без t и T очки после handoff падали бы до 1 (ревью, блокер 1).
+                elapsed_ms=p.get("elapsed_ms"),
+                window_ms=p.get("window_ms"),
             )
             for pid, p in d.get("players", {}).items()
         },
@@ -508,6 +514,21 @@ def _read_options(d: Json | None) -> SettingsOptions | None:
     )
 
 
+def _read_ops(raw: Json) -> dict[str, dict[str, Json]]:
+    """Окно ``op_id``: ``user → op → итог``; прежний плоский формат ``"user:op" → ответ``
+    (до окна на игрока) читается с переводом в компактный итог."""
+    ops: dict[str, dict[str, Json]] = {}
+    for key, value in raw.items():
+        if isinstance(value, dict) and "status" not in value:
+            ops[key] = {str(op): dict(v) for op, v in value.items()}
+            continue
+        user, _, op = str(key).partition(":")
+        if op and isinstance(value, dict):
+            compact = {k: value[k] for k in ("status", "code", "details") if k in value}
+            ops.setdefault(user, {})[op] = compact
+    return ops
+
+
 _UPGRADES: dict[int, Callable[[Json], Json]] = {}
 """Шаги ``версия → версия + 1`` (пока одна версия формата)."""
 
@@ -598,9 +619,10 @@ def _decode(d: Json) -> Room:
         start_error=(
             (str(d["start_error"][0]), int(d["start_error"][1])) if d.get("start_error") else None
         ),
+        forgotten={_uuid(u) for u in d.get("forgotten", [])},
         close_reason=d.get("close_reason"),
         cursor=str(d.get("cursor", "0-0")),
-        ops=dict(d.get("ops", {})),
+        ops=_read_ops(d.get("ops") or {}),
     )
 
 

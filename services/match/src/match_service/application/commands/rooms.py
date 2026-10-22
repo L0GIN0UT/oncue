@@ -31,8 +31,10 @@ from gv_text.ugc import (
     UgcPolicy,
     UgcViolation,
 )
-from match_service.application.owner import new_code
+from match_service.application.owner import new_code, replay
 from match_service.application.ports import (
+    AdminAction,
+    AdminAudit,
     CommandBus,
     IdempotentCreates,
     Json,
@@ -43,7 +45,7 @@ from match_service.application.ports import (
     RoomStore,
     Users,
 )
-from match_service.application.rules import RulesFactory
+from match_service.application.rules import ModeTemplate, RulesFactory
 from match_service.application.views import room_view
 from match_service.domain import errors
 from match_service.domain.errors import (
@@ -54,7 +56,7 @@ from match_service.domain.errors import (
     MatchUnavailableError,
     error_for_status,
 )
-from match_service.domain.model import Presence
+from match_service.domain.model import Presence, RoomSettings
 from match_service.domain.room import Room, SettingsChange, apply_settings, default_settings
 
 log = structlog.get_logger(__name__)
@@ -98,6 +100,9 @@ class RoomLimits:
     commands_per_s: int
     chat_per_min: int
     chat_slow_interval_s: int
+    join_by_code_per_user_per_min: int = 20
+    emote_per_min: int = 30
+    create_lock_ms: int = 5000
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,7 @@ class RoomService:
         clock: Clock,
         random: Random,
         limits: RoomLimits,
+        audit: AdminAudit | None = None,
     ) -> None:
         self._store = store
         self._bus = bus
@@ -139,6 +145,7 @@ class RoomService:
         self._clock = clock
         self._random = random
         self._limits = limits
+        self._audit = audit
 
     def _now_ms(self) -> int:
         return int(self._clock.now().timestamp() * 1000)
@@ -194,8 +201,35 @@ class RoomService:
                 "рейтинговые комнаты — только из очереди", code=errors.RANKED_FORBIDDEN
             )
         settings = apply_settings(tpl.template, default_settings(tpl.template), change)
-        await self._require_free(actor.user_id)
         nickname = await self._users.nickname(actor.user_id) or ""
+        # Параллельные создания одним игроком (аудит §11): проверка «одна активная
+        # комната» читает указатель, а комнаты по нему ещё нет — без замка оба запроса
+        # создали бы по комнате.
+        if not await self._player_rooms.lock_create(actor.user_id, self._limits.create_lock_ms):
+            raise MatchConflictError("комната уже создаётся", code=errors.ACTIVE_ROOM_CONFLICT)
+        try:
+            return await self._create_room(
+                actor,
+                tpl=tpl,
+                settings=settings,
+                nickname=nickname,
+                key=key,
+                fingerprint=fingerprint,
+            )
+        finally:
+            await self._player_rooms.unlock_create(actor.user_id)
+
+    async def _create_room(
+        self,
+        actor: Actor,
+        *,
+        tpl: ModeTemplate,
+        settings: RoomSettings,
+        nickname: str,
+        key: str,
+        fingerprint: str,
+    ) -> Json:
+        mode_key = tpl.mode.key
         for _ in range(_CODE_ATTEMPTS):
             room = Room.create(
                 code=new_code(self._random),
@@ -206,27 +240,41 @@ class RoomService:
                 nickname=nickname,
                 now_ms=self._now_ms(),
             )
-            if await self._store.create(room):
-                await self._player_rooms.assign(actor.user_id, room.code)
+            # Сначала занять «одну активную комнату» (SET NX), потом создать комнату:
+            # два параллельных создания одним игроком не дадут двух комнат.
+            await self._claim(actor.user_id, room.code)
+            try:
+                created = await self._store.create(room)
+            except BaseException:
+                await self._player_rooms.release(actor.user_id, room.code)
+                raise
+            if created:
                 await self._creates.put(actor.user_id, key, fingerprint, room.code)
                 log.info("match.room_created", room=room.code, mode_key=mode_key)
                 return room_view(room, self._now_ms())
+            await self._player_rooms.release(actor.user_id, room.code)
         raise MatchUnavailableError("не удалось выдать код комнаты")
 
-    async def _require_free(self, user_id: UUID) -> None:
-        """У игрока нет другой активной комнаты (D10)."""
-        current = await self._player_rooms.get(user_id)
-        if current is None:
+    async def _claim(self, user_id: UUID, code: str) -> None:
+        """Занять ``player:{id}:room`` под новую комнату (D10).
+
+        Raises:
+            MatchConflictError: ``match.active_room_conflict`` — есть другая активная комната.
+        """
+        if await self._player_rooms.claim(user_id, code):
             return
-        room = await self._store.load(current)
-        seat = room.seat_of(user_id) if room is not None else None
-        active = room is not None and not room.is_closed
-        if active and seat is not None and seat.presence is not Presence.LEFT:
-            raise MatchConflictError(
-                "у вас уже есть активная комната",
-                code=errors.ACTIVE_ROOM_CONFLICT,
-                details={"code": current},
-            )
+        current = await self._player_rooms.get(user_id)
+        if current is not None and current != code:
+            room = await self._store.load(current)
+            seat = room.seat_of(user_id) if room is not None else None
+            active = room is not None and not room.is_closed
+            if active and seat is not None and seat.presence is not Presence.LEFT:
+                raise MatchConflictError(
+                    "у вас уже есть активная комната",
+                    code=errors.ACTIVE_ROOM_CONFLICT,
+                    details={"code": current},
+                )
+        await self._player_rooms.assign(user_id, code)
 
     # ------------------------------------------------------------------ команды
     async def command(
@@ -239,7 +287,8 @@ class RoomService:
         """
         room = await self._require_room(code)
         command = RoomCommand(op_id=op_id, kind=kind, user_id=actor.user_id, data=data or {})
-        saved = room.op_reply(command.reply_key)
+        stored = room.op_reply(actor.user_id, op_id)
+        saved = replay(room, command, stored, self._now_ms()) if stored is not None else None
         if saved is None:
             await self._limiter.hit(
                 "cmd", str(actor.user_id), limit=self._limits.commands_per_s, window_s=1
@@ -260,12 +309,11 @@ class RoomService:
 
     async def join(self, actor: Actor, code: str, op_id: str) -> CommandOutcome:
         """Войти по коду (лимит перебора кодов — по IP, fail-closed)."""
-        await self._limiter.hit(
-            "join_ip",
-            actor.ip or "unknown",
-            limit=self._limits.join_by_code_per_ip_per_min,
-            window_s=60,
-            fail_closed=True,
+        await code_lookup_limits(
+            self._limiter,
+            actor,
+            per_ip=self._limits.join_by_code_per_ip_per_min,
+            per_user=self._limits.join_by_code_per_user_per_min,
         )
         nickname = await self._users.nickname(actor.user_id) or ""
         return await self.command(actor, code, "join", op_id, {"nickname": nickname})
@@ -273,9 +321,14 @@ class RoomService:
     async def emote(
         self, actor: Actor, code: str, op_id: str, kind: str, key: str
     ) -> CommandOutcome:
-        """Эмоция или фраза (``CHAT_MUTE`` — 403)."""
+        """Эмоция или фраза: ``CHAT_MUTE`` — 403, ``CHAT_SLOW`` и свой лимит — 429."""
         if actor.chat_muted:
             raise MatchForbiddenError("чат ограничен", code=errors.CHAT_MUTED)
+        user = str(actor.user_id)
+        if actor.chat_slow:
+            interval = self._limits.chat_slow_interval_s
+            await self._limiter.hit("emote_slow", user, limit=1, window_s=interval)
+        await self._limiter.hit("emote", user, limit=self._limits.emote_per_min, window_s=60)
         return await self.command(actor, code, "emote", op_id, {"kind": kind, "key": key})
 
     async def chat(self, actor: Actor, code: str, op_id: str, text: str) -> CommandOutcome:
@@ -306,6 +359,9 @@ class RoomService:
     async def abort(self, admin_id: UUID, code: str, op_id: str, reason: str) -> CommandOutcome:
         """Принудительное завершение комнаты (админ, ``match.manage``).
 
+        Текст причины — только в аудит (``admin_actions``); в ``MatchFinished.abort_reason``
+        уходит машинный код ``admin``.
+
         Raises:
             MatchNotFoundError: ``match.room_not_found``.
             MatchConflictError: ``match.room_closed``.
@@ -315,9 +371,31 @@ class RoomService:
             raise MatchNotFoundError("комнаты нет", code=errors.ROOM_NOT_FOUND)
         if room.is_closed:
             raise MatchConflictError("комната уже закрыта", code=errors.ROOM_CLOSED)
-        log.info("match.admin_abort", room=code, admin_id=str(admin_id), reason_len=len(reason))
+        if self._audit is not None:
+            await self._audit.record(
+                AdminAction(
+                    actor_id=admin_id,
+                    action="room.abort",
+                    room_code=code,
+                    match_id=room.match.match_id if room.match is not None else None,
+                    reason=reason,
+                    idempotency_key=op_id,
+                    at=self._clock.now(),
+                )
+            )
+        log.info("match.admin_abort", room=code, admin_id=str(admin_id))
         outcome = await self.command(Actor(admin_id), code, "abort", op_id, {})
         return CommandOutcome(202, {"accepted": True, "version": outcome.body["version"]})
+
+
+async def code_lookup_limits(
+    limiter: RateLimiter, actor: Actor, *, per_ip: int, per_user: int
+) -> None:
+    """Перебор кодов комнат (D12): лимит по IP и по пользователю, оба fail-closed."""
+    await limiter.hit("join_ip", actor.ip or "unknown", limit=per_ip, window_s=60, fail_closed=True)
+    await limiter.hit(
+        "join_user", str(actor.user_id), limit=per_user, window_s=60, fail_closed=True
+    )
 
 
 def unwrap(reply: Json) -> Json:

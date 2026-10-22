@@ -715,9 +715,17 @@
             "type": "array"
           },
           "room_code": {
-            "pattern": "^[A-HJ-NP-Z2-9]{8}$",
-            "title": "Room Code",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только участникам матча (не участнику — null)",
+            "title": "Room Code"
           },
           "rounds": {
             "items": {

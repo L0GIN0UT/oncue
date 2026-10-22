@@ -139,12 +139,16 @@ class Room:
     Attributes:
         cursor: Последняя применённая команда потока ``{room:CODE}:cmd`` (подтверждение
             команд вместе со снимком).
-        ops: Окно ответов на команды по ``user_id:op_id`` (идемпотентность, §12 п. 3).
+        ops: Окно ответов на команды: ``user_id → op_id → компактный итог`` (статус, код,
+            вердикт; без видов комнаты). Окно — на игрока: чужие команды не вытесняют твои
+            ответы (идемпотентность, §12 п. 3).
         memory: Сыгранные единицы лобби (``exclude_ids`` плана, D12).
         phase_version: Версия, с которой действует текущая фаза и уровень: команда фазы
             с ``expected_version`` меньше неё — из прошлой фазы (409).
         start_error: Последний отказ старта ``(код, мс)``: команда могла получить 202, а
             план game не пришёл — игроки видят причину в ``RoomView.start_error``.
+        forgotten: Удалённые аккаунты (``identity.UserDeleted``): в итоге матча без их
+            идентификаторов, даже если проекция ``users_proj`` ещё не закоммичена.
         changes: Изменения с последнего снимка (в снимок не входят).
     """
 
@@ -168,9 +172,10 @@ class Room:
     rematch_code: str | None = None
     close_reason: str | None = None
     cursor: str = "0-0"
-    ops: dict[str, dict[str, Any]] = field(default_factory=dict)  # Any: JSON ответа
+    ops: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)  # Any: итог
     schema_version: int = SCHEMA_VERSION
     start_error: tuple[str, int] | None = None
+    forgotten: set[UUID] = field(default_factory=set)
     changes: list[Change] = field(default_factory=list)
 
     # ------------------------------------------------------------------ создание
@@ -461,6 +466,10 @@ class Room:
         """
         self.require_phase(Phase.LOBBY)
         self.require_host(user_id)
+        if any(s.presence is not Presence.ONLINE for s in self.seats):
+            raise MatchConflictError(
+                "не все на связи", code=errors.NOT_ALL_READY, details={"reason": "disconnected"}
+            )
         if len(self.seats) < self.template.players_min:
             raise MatchConflictError(
                 "недостаточно игроков",
@@ -484,12 +493,15 @@ class Room:
             self.emit("closed", reason=reason)
 
     # ------------------------------------------------------------------ команды
-    def op_reply(self, key: str) -> dict[str, Any] | None:  # Any: JSON ответа
-        """Сохранённый ответ команды (повтор ``op_id``)."""
-        return self.ops.get(key)
+    def op_reply(self, user_id: UUID, op_id: str) -> dict[str, Any] | None:  # Any: итог
+        """Сохранённый итог команды игрока (повтор ``op_id``)."""
+        return self.ops.get(str(user_id), {}).get(op_id)
 
-    def remember_op(self, key: str, reply: dict[str, Any], window: int) -> None:  # Any: JSON
-        """Запомнить ответ команды; окно — последние ``window`` команд."""
-        self.ops[key] = reply
-        while len(self.ops) > window:
-            self.ops.pop(next(iter(self.ops)))
+    def remember_op(
+        self, user_id: UUID, op_id: str, outcome: dict[str, Any], window: int
+    ) -> None:  # Any: компактный итог
+        """Запомнить итог команды; окно — последние ``window`` команд этого игрока."""
+        own = self.ops.setdefault(str(user_id), {})
+        own[op_id] = outcome
+        while len(own) > window:
+            own.pop(next(iter(own)))
