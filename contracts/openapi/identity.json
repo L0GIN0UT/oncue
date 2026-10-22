@@ -2349,7 +2349,7 @@
     },
     "/v1/realtime/token": {
       "post": {
-        "description": "Только пользователь с аккаунтом: гость — 403 `auth.guest_forbidden`, отозванная сессия — 401 `auth.session_revoked`. Cookie-запрос — Origin из `GV_PUBLIC_ORIGINS` и `X-CSRF-Token` (403 `auth.csrf_failed`). Лимит частоты на пользователя (429). Ответ — `Cache-Control: no-store`.",
+        "description": "Только пользователь с аккаунтом: гость — 403 `auth.guest_forbidden`, отозванная сессия — 401 `auth.session_revoked`. Cookie-запрос — Origin из `GV_PUBLIC_ORIGINS` и `X-CSRF-Token` (403 `auth.csrf_failed`). Лимит частоты на пользователя (429). Нет секрета Centrifugo (только local/ci) — 503 `realtime.not_configured`. Ответ — `Cache-Control: no-store`.",
         "operationId": "realtime_token_v1_realtime_token_post",
         "responses": {
           "200": {
@@ -2407,7 +2407,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2420,7 +2420,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Connection-токен realtime (Centrifugo)",

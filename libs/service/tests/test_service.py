@@ -452,6 +452,14 @@ class TestRealtimeSettings:
         assert realtime.token_audience == "centrifugo"
         assert "s" * 32 not in repr(realtime)  # секреты не попадают в логи
 
+    def test_token_issuer_without_server_api(self) -> None:
+        """identity подписывает токены, но не публикует: ключа server API у него нет."""
+        from gv_service import RealtimeSettings
+
+        realtime = RealtimeSettings.model_validate({"connection_token_secret": "c" * 32})
+        assert realtime.api_url is None
+        assert realtime.api_key is None
+
     @pytest.mark.parametrize(
         ("fields", "error"),
         [
@@ -462,6 +470,8 @@ class TestRealtimeSettings:
                 "различаться",
             ),
             ({"api_url": "centrifugo:8000"}, "api_url"),
+            ({"token_ttl_s": 601}, "token_ttl_s"),
+            ({"api_key": None}, "вместе"),
         ],
     )
     def test_rejects_weak_config(self, fields: dict[str, str], error: str) -> None:

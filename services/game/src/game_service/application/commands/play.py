@@ -252,14 +252,18 @@ class PlayService:
             Снимок и признак «создана сейчас» (``False`` — незавершённая сессия периода, 200).
 
         Raises:
-            ModeNotFoundError, GuestNotAllowedError, DailyAlreadyPlayedError,
+            ModeNotFoundError, ModeNotSoloError (онлайн-режим), GuestNotAllowedError,
+            DailyAlreadyPlayedError,
             DailyNotReadyError, PoolEmptyError, PresetNotFoundError, SubjectsNotSupportedError,
             SubjectRequiredError, TooManySubjectsError, GameRateLimitedError,
             CollectionNotFoundError, CollectionRequiredError, CollectionNotSupportedError,
             CollectionDomainMismatchError, RoundsNotAllowedError, PoolTooSmallError (сборник).
         """
         version, rules = await self._catalog.latest(mode_key)
-        if player.ref.is_guest and not rules.engine.solo_session.allow_guest:
+        # Онлайн-режим играет match (ADR 0032): отказ — до лимитов, набора периода и
+        # транзакции, чтобы попытка не тратила ни лимит, ни строку сессии.
+        solo = rules.engine.solo_session
+        if player.ref.is_guest and not solo.allow_guest:
             raise GuestNotAllowedError("режим доступен только с аккаунтом")
         subjects = sorted(set(subject_ids))
         if subjects and rules.subject_query() is None:

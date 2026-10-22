@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
@@ -72,6 +72,47 @@ class ModeStart(BaseModel):
     subject: SubjectPick | None = None
 
 
+class OnlinePlayersOut(BaseModel):
+    """Места комнаты."""
+
+    min: int = Field(ge=2)
+    max: int = Field(ge=2)
+
+
+class OnlineChatOut(BaseModel):
+    """Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``) и признак
+    свободного чата (только кастомное лобби, ADR 0036)."""
+
+    emotes: list[str]
+    phrases: list[str]
+    free_text: bool
+
+
+class OnlineModeOut(BaseModel):
+    """Правила комнаты онлайн-режима (``GET /v1/modes?session=online``, ADR 0032)."""
+
+    kind: Literal["duel", "party", "lobby"]
+    players: OnlinePlayersOut
+    rounds: int = Field(ge=1)
+    level_windows_s: list[int] = Field(description="Окно каждого уровня загадки, с")
+    contest_type: str = Field(description="Плагин состязания (`race`, `parallel`)")
+    ranked: bool
+    ladder: str | None = None
+    max_collections: int | None = Field(
+        default=None, description="Только у лобби по сборнику: сколько сборников можно выбрать"
+    )
+    # Any: структура `LobbySpec` контракта `mode_config.v1.json` (`overridable` — списки
+    # разрешённых значений, в том числе `clue` с параметрами плагина).
+    lobby: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Только у кастомного лобби: `{visibility, overridable}` по `$defs/LobbySpec` "
+            "контракта конфига режима — из чего выбирает хост"
+        ),
+    )
+    chat: OnlineChatOut
+
+
 class ModeOut(BaseModel):
     """Опубликованный режим (``GET /v1/modes``)."""
 
@@ -99,6 +140,10 @@ class ModeOut(BaseModel):
         default=None,
         ge=0,
         description="Только у шаблона сборника: минимум играбельных единиц для игры",
+    )
+    online: OnlineModeOut | None = Field(
+        default=None,
+        description="Только у онлайн-режима (`session=online`); у соло-режимов — null",
     )
 
 
