@@ -5,14 +5,23 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details: Record<string, unknown> | null;
+  /** Заголовок `Retry-After` в секундах (429 и `auth.code_resend_too_early`), если был. */
+  readonly retryAfterS: number | null;
 
-  constructor(status: number, problem: Partial<Problem> | null) {
+  constructor(status: number, problem: Partial<Problem> | null, retryAfterS: number | null = null) {
     super(problem?.title ?? `HTTP ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.code = problem?.code ?? `http.${status}`;
     this.details = problem?.details ?? null;
+    this.retryAfterS = retryAfterS;
   }
+}
+
+/** `Retry-After` в секундах (HTTP-дата не поддерживается — identity шлёт секунды). */
+export function parseRetryAfter(res: Response): number | null {
+  const n = Number(res.headers.get("Retry-After"));
+  return Number.isFinite(n) && n > 0 ? Math.ceil(n) : null;
 }
 
 /** Запрос не дошёл до сервера или ответ не получен (обрыв, таймаут). */
@@ -36,5 +45,5 @@ export async function toApiError(res: Response): Promise<ApiError> {
   } catch {
     problem = null;
   }
-  return new ApiError(res.status, problem);
+  return new ApiError(res.status, problem, parseRetryAfter(res));
 }

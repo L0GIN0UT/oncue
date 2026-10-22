@@ -11,6 +11,15 @@ import { createMatchHandlers } from "./handlers-match";
 import { onlineModesOut, type MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
+/** Код подтверждения мок-identity (ADR 0041): в e2e против мока он всегда один. */
+export const MOCK_CODE = "123456";
+const challengeBody = (id: string, purpose: string) => ({
+  challenge_id: id,
+  code_length: 6,
+  expires_in_s: 600,
+  purpose,
+  resend_after_s: 0,
+});
 const CSRF = "gv_csrf";
 const ACCESS = "gv_access";
 
@@ -65,6 +74,8 @@ function withCookies(response: Response, cookies: string[]): Response {
 }
 
 export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpHandler[] {
+  // challenge_id -> id пользователя, ожидающего подтверждения e-mail (код всегда MOCK_CODE).
+  const pendingByChallenge = new Map<string, string>();
   const g = "*/api/game/v1";
 
   /** Общая обвязка хода: субъект, CSRF, идемпотентность, версия. */
@@ -440,6 +451,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
       if (!user.verified) return problem(403, "auth.email_not_verified");
       return withCookies(
         HttpResponse.json({
+          status: "authenticated",
           expires_in: 900,
           user: { id: user.id, display_name: user.nickname, roles: ["player"], perms: [] },
         }),
@@ -459,29 +471,42 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
         return problem(422, "auth.consents_required");
       if (body.password.length < 10)
         return problem(422, "auth.password_weak", { reason: "too_short" });
-      // Занятый ник или e-mail — тот же 202 (identity не раскрывает существование аккаунта).
-      if (
-        world.users.some(
-          (u) => u.email === body.email.toLowerCase() || u.nickname === body.nickname,
-        )
-      )
-        return HttpResponse.json({ status: "accepted" }, { status: 202 });
-      world.users.push({
-        id: world.nextId(8),
-        nickname: body.nickname,
-        email: body.email.toLowerCase(),
-        password: body.password,
-        verified: false,
-      });
-      return HttpResponse.json({ status: "accepted" }, { status: 202 });
+      // Занятый ник или e-mail — тот же 202 с таким же challenge (identity не раскрывает аккаунт).
+      const taken = world.users.some(
+        (u) => u.email === body.email.toLowerCase() || u.nickname === body.nickname,
+      );
+      const challengeId = crypto.randomUUID();
+      if (!taken) {
+        const id = world.nextId(8);
+        world.users.push({
+          id,
+          nickname: body.nickname,
+          email: body.email.toLowerCase(),
+          password: body.password,
+          verified: false,
+        });
+        pendingByChallenge.set(challengeId, id);
+      }
+      return HttpResponse.json(challengeBody(challengeId, "register"), { status: 202 });
     }),
 
     http.post("*/api/identity/v1/auth/verify-email", async ({ request }) => {
-      const { token } = (await request.json()) as { token: string };
-      if (token !== "valid-token") return problem(422, "auth.email_token_invalid");
-      const pending = world.users.find((u) => !u.verified);
-      if (pending) pending.verified = true;
-      return new HttpResponse(null, { status: 204 });
+      const { challenge_id, code } = (await request.json()) as {
+        challenge_id: string;
+        code: string;
+      };
+      if (code !== MOCK_CODE) return problem(422, "auth.code_invalid", { attempts_left: 4 });
+      const user = world.users.find((u) => u.id === pendingByChallenge.get(challenge_id));
+      if (!user) return problem(422, "auth.code_invalid", { attempts_left: 4 });
+      user.verified = true;
+      pendingByChallenge.delete(challenge_id);
+      return withCookies(
+        HttpResponse.json({
+          expires_in: 900,
+          user: { id: user.id, display_name: user.nickname, roles: ["player"], perms: [] },
+        }),
+        sessionCookies(`user.${user.id}`),
+      );
     }),
 
     http.post("*/api/identity/v1/auth/logout", ({ request }) => {

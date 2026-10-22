@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 
-test("регистрация → подтверждение e-mail → вход", async ({ page, expectAccessible }) => {
+test("регистрация → код из письма → сессия", async ({ page, expectAccessible }) => {
   await page.goto("/register");
   await expectAccessible(page);
   await page.getByLabel("Ник").fill("newbie");
@@ -10,17 +10,12 @@ test("регистрация → подтверждение e-mail → вход"
   await expect(page.getByText("Отметьте все согласия.")).toBeVisible();
   for (const box of await page.getByRole("checkbox").all()) await box.check();
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
-  await expect(page.getByTestId("register-done")).toBeVisible();
-
-  await page.goto("/verify-email?token=valid-token");
-  await expect(page.getByTestId("verify-state")).toHaveText(
-    "E-mail подтверждён. Теперь можно войти.",
-  );
-
-  await page.goto("/login");
-  await page.getByLabel("E-mail или ник").fill("newbie");
-  await page.getByLabel("Пароль").fill("long-enough-pass");
-  await page.getByRole("button", { name: "Войти" }).click();
+  // Неверный код — ошибка со счётчиком попыток, верный открывает сессию.
+  await page.getByTestId("code-input").fill("000000");
+  await page.getByTestId("code-submit").click();
+  await expect(page.getByTestId("code-error")).toContainText("Осталось 4 попытки");
+  await page.getByTestId("code-input").fill("123456");
+  await page.getByTestId("code-submit").click();
   await expect(page).toHaveURL("/");
   await expect(page.getByTestId("user-name")).toHaveText("newbie");
 });
@@ -37,10 +32,4 @@ test("вход с неверным паролем показывает ошиб�
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByTestId("user-name")).toHaveText("player");
-});
-
-test("ссылка из письма /auth/verify-email перенаправляется на /verify-email", async ({ page }) => {
-  await page.goto("/auth/verify-email?token=bad");
-  await expect(page).toHaveURL(/\/verify-email\?token=bad$/);
-  await expect(page.getByTestId("verify-state")).toContainText("недействительна");
 });

@@ -73,7 +73,6 @@ describe("messages/ru.json", () => {
         "rate_limited",
         "failed",
       ].flatMap((k) => [`start.error.${k}.title`, `start.error.${k}.text`]),
-      ...["pending", "ok", "failed"].map((k) => `auth.verify.${k}`),
       // Этап 3a: перечисления контрактов text_asset, presentation, туры сетки, варианты пары.
       ...["year", "genres", "country", "director", "cast_top3"].map((k) => `game.textField.${k}`),
       ...["not_started", "in_progress", "finished"].map((s) => `daily.statusPlain.${s}`),

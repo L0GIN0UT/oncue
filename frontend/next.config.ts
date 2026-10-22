@@ -9,10 +9,6 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   // CSP с nonce ставит proxy (src/proxy.ts); остальные заголовки безопасности — nginx (web-headers.conf).
-  async redirects() {
-    // Ссылки из писем identity по умолчанию ведут на /auth/... (GV_EMAIL__VERIFY_LINK).
-    return [{ source: "/auth/verify-email", destination: "/verify-email", permanent: false }];
-  },
 };
 
 export default withNextIntl(nextConfig);

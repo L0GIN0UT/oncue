@@ -168,6 +168,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/codes/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправить код повторно (не раньше resend_after_s) */
+        post: operations["resend_code_v1_auth_codes_resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/guest": {
         parameters: {
             query?: never;
@@ -197,8 +214,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Вход по e-mail или никнейму и паролю */
+        /** Вход по e-mail или никнейму и паролю; с нового устройства нужен код с почты */
         post: operations["login_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/login/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подтвердить вход с нового устройства кодом из письма */
+        post: operations["login_confirm_v1_auth_login_confirm_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -239,6 +273,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/password/change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Начать смену пароля в профиле: текущий пароль, код уходит на почту */
+        post: operations["change_password_v1_auth_password_change_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/password/change/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Завершить смену пароля кодом; другие сессии и устройства отзываются */
+        post: operations["change_password_confirm_v1_auth_password_change_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/password/forgot": {
         parameters: {
             query?: never;
@@ -248,7 +316,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Запросить ссылку для сброса пароля */
+        /** Запросить код для сброса пароля (ответ одинаков для любого адреса) */
         post: operations["forgot_v1_auth_password_forgot_post"];
         delete?: never;
         options?: never;
@@ -265,7 +333,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Задать новый пароль по ссылке из письма */
+        /** Задать новый пароль по коду из письма: прежние сессии и устройства отзываются, владелец сразу входит и доверяет это устройство */
         post: operations["reset_v1_auth_password_reset_post"];
         delete?: never;
         options?: never;
@@ -299,7 +367,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Регистрация по никнейму, e-mail и паролю */
+        /** Регистрация по никнейму, e-mail и паролю; код подтверждения уходит на почту */
         post: operations["register_v1_auth_register_post"];
         delete?: never;
         options?: never;
@@ -316,7 +384,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Подтвердить e-mail по ссылке из письма */
+        /** Подтвердить e-mail кодом из письма; открывает сессию и доверяет устройству */
         post: operations["verify_email_v1_auth_verify_email_post"];
         delete?: never;
         options?: never;
@@ -486,14 +554,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * AcceptedResponse
-         * @description Запрос принят; результат придёт письмом.
-         */
-        AcceptedResponse: {
-            /** Status */
-            status: string;
-        };
-        /**
          * AdminRefreshRequest
          * @description Обновление или отзыв admin-сессии.
          */
@@ -575,6 +635,41 @@ export interface components {
             authorize_url: string;
         };
         /**
+         * ChallengeResponse
+         * @description Код отправлен на почту (ADR 0041). Одинаков для существующего и нет адреса.
+         */
+        ChallengeResponse: {
+            /**
+             * Challenge Id
+             * Format: uuid
+             */
+            challenge_id: string;
+            /** Code Length */
+            code_length: number;
+            /** Expires In S */
+            expires_in_s: number;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "register" | "login" | "reset" | "password_change";
+            /** Resend After S */
+            resend_after_s: number;
+        };
+        /**
+         * CodeRequest
+         * @description Ввод кода из письма.
+         */
+        CodeRequest: {
+            /**
+             * Challenge Id
+             * Format: uuid
+             */
+            challenge_id: string;
+            /** Code */
+            code: string;
+        };
+        /**
          * ConsentIn
          * @description Согласие определённой редакции.
          */
@@ -652,6 +747,24 @@ export interface components {
             password: string;
         };
         /**
+         * LoginResponse
+         * @description Результат входа: сессия (``authenticated``) или нужен код с почты (``code_required``).
+         *
+         *     При ``authenticated`` заполнены ``user`` и ``expires_in``, при ``code_required`` — только
+         *     ``challenge``; cookie сессии при этом не выдаются.
+         */
+        LoginResponse: {
+            challenge?: components["schemas"]["ChallengeResponse"] | null;
+            /** Expires In */
+            expires_in?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "authenticated" | "code_required";
+            user?: components["schemas"]["SessionUser"] | null;
+        };
+        /**
          * MeResponse
          * @description Профиль владельца аккаунта.
          */
@@ -679,6 +792,29 @@ export interface components {
             perms: string[];
             /** Roles */
             roles: string[];
+        };
+        /**
+         * PasswordChangeConfirmRequest
+         * @description Завершение смены пароля: код из письма и новый пароль.
+         */
+        PasswordChangeConfirmRequest: {
+            /**
+             * Challenge Id
+             * Format: uuid
+             */
+            challenge_id: string;
+            /** Code */
+            code: string;
+            /** New Password */
+            new_password: string;
+        };
+        /**
+         * PasswordChangeRequest
+         * @description Начало смены пароля в профиле: подтверждение текущим паролем.
+         */
+        PasswordChangeRequest: {
+            /** Current Password */
+            current_password: string;
         };
         /**
          * Problem
@@ -752,14 +888,30 @@ export interface components {
             password: string;
         };
         /**
+         * ResendRequest
+         * @description Повторная отправка кода.
+         */
+        ResendRequest: {
+            /**
+             * Challenge Id
+             * Format: uuid
+             */
+            challenge_id: string;
+        };
+        /**
          * ResetRequest
-         * @description Новый пароль по токену из письма.
+         * @description Новый пароль по коду из письма.
          */
         ResetRequest: {
+            /**
+             * Challenge Id
+             * Format: uuid
+             */
+            challenge_id: string;
+            /** Code */
+            code: string;
             /** Password */
             password: string;
-            /** Token */
-            token: string;
         };
         /**
          * RoleMatrixBody
@@ -863,14 +1015,6 @@ export interface components {
             perms: string[];
             /** Roles */
             roles: string[];
-        };
-        /**
-         * TokenRequest
-         * @description Одноразовый токен из письма.
-         */
-        TokenRequest: {
-            /** Token */
-            token: string;
         };
         /**
          * UnlinkRequest
@@ -1408,6 +1552,39 @@ export interface operations {
             };
         };
     };
+    resend_code_v1_auth_codes_resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChallengeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_guest_session_v1_auth_guest_post: {
         parameters: {
             query?: never;
@@ -1475,6 +1652,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_confirm_v1_auth_login_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
@@ -1525,6 +1735,70 @@ export interface operations {
             };
         };
     };
+    change_password_v1_auth_password_change_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChallengeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_confirm_v1_auth_password_change_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     forgot_v1_auth_password_forgot_post: {
         parameters: {
             query?: never;
@@ -1544,7 +1818,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AcceptedResponse"];
+                    "application/json": components["schemas"]["ChallengeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1572,11 +1846,13 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -1628,7 +1904,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AcceptedResponse"];
+                    "application/json": components["schemas"]["ChallengeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1651,16 +1927,18 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TokenRequest"];
+                "application/json": components["schemas"]["CodeRequest"];
             };
         };
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

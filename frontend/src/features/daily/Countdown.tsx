@@ -2,7 +2,7 @@
 /** Табло отсчёта до смены дня. До гидрации — прочерки (время сервера и клиента различаются). */
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { formatClock, remainingUntil } from "./countdown";
+import { formatClock, remainingUntil } from "./countdown-time";
 import { useNow } from "./use-now";
 
 export function Countdown({ target, onElapsed }: { target: string; onElapsed?: () => void }) {
