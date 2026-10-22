@@ -8,7 +8,7 @@
 
 | Что | Где | Как работает |
 |---|---|---|
-| Агенты (8) | `.claude/agents/` | planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, refactor-cleaner, doc-updater — каждый знает суть проекта и свои правила |
+| Агенты (9) | `.claude/agents/` | planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, refactor-cleaner, doc-updater, explorer — каждый знает суть проекта и свои правила; модель, `effort` и лимит ответа — во frontmatter и разделе «Бюджет ответа» (§0.1) |
 | Команды (10) | `.claude/commands/` | `/plan`, `/tdd`, `/review`, `/verify`, `/build-fix`, `/refactor-clean`, `/update-docs`, `/checkpoint`, `/learn`, `/orchestrate` |
 | Правила | `.claude/rules/` | Подгружаются **только для затронутых путей** (`paths:`): python, tests, migrations, contracts, infra, docs, зона безопасности; `workflow.md` — всегда |
 | Хуки | `.claude/settings.json` → `gv hook <имя>` | Логика на Python в `tools/gv/src/gv_cli/hooks.py`, покрыта тестами |
@@ -29,20 +29,42 @@
 
 Права (`permissions`) в `.claude/settings.json` разрешают проверки и тесты без подтверждения и запрещают чтение `.env`, ключей и сертификатов. Личные настройки — в `.claude/settings.local.json` (не в git).
 
+## 0.1. Экономия токенов
+
+Каждый субагент стартует с пустого контекста: заново читает `CLAUDE.md`, правила и файлы, а его ответ целиком ложится в контекст основной сессии. Поэтому:
+
+| Агент | Модель / effort | Ответ, строк |
+|---|---|---|
+| `explorer` | haiku / low | ≤ 15 |
+| `doc-updater` | haiku / low | ≤ 10 |
+| `build-error-resolver`, `refactor-cleaner` | sonnet / low | ≤ 15 |
+| `tdd-guide` | sonnet / medium | ≤ 15 |
+| `code-reviewer` | sonnet / medium | ≤ 25 |
+| `planner`, `architect`, `security-reviewer` | opus / medium | 60 / 40 / 30 |
+
+- Основная сессия — `"model": "opusplan"` в `.claude/settings.json`: Opus думает в режиме плана, код пишет Sonnet. Агенты без своей модели (плагинные, `general-purpose`) работают на `CLAUDE_CODE_SUBAGENT_MODEL=sonnet` оттуда же (`env`).
+- Новая сессия на каждый этап: длинный контекст на Opus — главный расход. Передача — через `docs/handoff/<тема>.md`.
+- Работа на 2–5 вызовов инструментов — в основной сессии. Агент оправдан, когда кусок большой или его чтение файлов не должно попасть в основной контекст.
+- Параллельно — не больше 2–3 агентов и только на независимые крупные куски с непересекающимися файлами.
+- Один ревьюер на задачу (§6). Плагинные агенты — только если у проекта нет аналога.
+- У каждого агента явный `tools:`: без него агент наследует все инструменты и MCP-серверы, и их описания занимают контекст.
+- Хуки агентов не запускают: `format` — это `ruff`, остальные — проверки на Python за миллисекунды.
+- Плагины и коннекторы аккаунта claude.ai, не нужные проекту (redis, 42crunch, observability, 3d-animation, ui-ux-pro-max, дубли ревьюеров), лучше выключить: описание каждого скилла и агента лежит в контексте каждой сессии.
+
 ## 1. Порядок загрузки контекста (экономия токенов)
 
 1. **Всегда первым** читается `CLAUDE.md` в корне: выжимка проекта, правила, карта документов.
 2. Затем `services/<name>/CLAUDE.md` того сервиса, с которым идёт работа.
 3. Из `docs/` — **только документ по теме задачи** (карта в [README.md](README.md)). Всю документацию подряд не читать.
 4. Документацию библиотек брать через **context7** (точная версия), а не через веб-поиск и не по памяти.
-5. Широкий поиск по коду («где используется», «как устроено X») — через агента `feature-dev:code-explorer`. Он возвращает вывод, а не дамп файлов.
+5. Широкий поиск по коду («где используется», «как устроено X») — через агента `explorer` (haiku). Он возвращает вывод, а не дамп файлов.
 6. Скиллы подключаются по таблице ниже, а не «на всякий случай».
 
 ## 2. Карта: этап работы → инструмент
 
 | Этап / ситуация | Обязательно | По необходимости |
 |---|---|---|
-| **Новая фича** (больше одного файла) | `/plan` (агент `planner`) → `/tdd` (агент `tdd-guide`) | `/orchestrate feature`; `feature-dev:code-explorer` для разбора чужого кода |
+| **Новая фича** (больше одного файла) | `/plan` (в сессии; агент `planner` — для нескольких сервисов) → `/tdd` (агент `tdd-guide`) | `/orchestrate feature`; агент `explorer` для разбора чужого кода |
 | **Новый бэкенд-компонент** (endpoint, consumer, worker, cron) | `backend-design:think-before-coding` → `backend-design:design` | `backend-design:component-architect` |
 | **Архитектурное решение / новая технология** | агент `architect` + `backend-design:boring-by-default` | агент `backend-design:boring-tech-advisor`; ADR по итогам |
 | **Схема БД, ORM-модели** | `backend-design:data-modeling-discipline` | агент `backend-design:schema-reviewer` |
@@ -59,7 +81,7 @@
 | **E2E фронта** | playwright (MCP) | — |
 | **Типы и доменные модели** | — | агент `pr-review-toolkit:type-design-analyzer` |
 | **Комментарии и докстринги** | правила §4 | агент `pr-review-toolkit:comment-analyzer` |
-| **После написания кода** | `/review` (агент `code-reviewer`; для чувствительных зон + `security-reviewer`) | агент `code-simplifier` |
+| **После написания кода** | `/review` (один ревьюер: `security-reviewer` для чувствительных зон, иначе `code-reviewer`) | — |
 | **Перед коммитом / PR** | `/verify pre-pr` | `pr-review-toolkit:review-pr` для крупных PR |
 | **Красные проверки (lint, типы, контракты, тесты)** | `/build-fix` (агент `build-error-resolver`) | — |
 | **Документация после изменений** | `/update-docs` (агент `doc-updater`) | агент `pr-review-toolkit:comment-analyzer` |
@@ -74,8 +96,8 @@ Security Guidance работает автоматически: хуки на к�
 | Зона | Перед merge обязательно |
 |---|---|
 | **Любой diff** | `backend-design:security-discipline` |
-| **Новый endpoint или права доступа** | `backend-design:auth-and-authorization` + агент `backend-design:security-reviewer` |
-| **identity, auth, токены, сессии, роли** | всё выше + `finecomb:finecomb` по изменённому модулю |
+| **Новый endpoint или права доступа** | `backend-design:auth-and-authorization` + проектный агент `security-reviewer` |
+| **identity, auth, токены, сессии, роли** | всё выше + `finecomb:finecomb` по изменённому модулю — один раз на PR, перед merge |
 | **payments, progression (ledger), entitlements** | всё выше + `finecomb:finecomb` + `backend-design:idempotency-and-side-effects`. Ручная проверка владельцем проекта |
 | **Изменение OpenAPI контракта** | `42crunch-api-security-testing:42crunch-audit` по спецификации |
 | **Перед релизом** | `finecomb:finecomb` по всему репозиторию + 42crunch audit + scan на staging |
@@ -105,7 +127,8 @@ Security Guidance работает автоматически: хуки на к�
 
 ## 6. Чего не делать
 
-- Не запускать все ревью-агенты подряд на мелкий diff: для правки в 20 строк достаточно `security-discipline` + `code-simplifier`.
+- Не запускать все ревью-агенты подряд на мелкий diff: правку в 20 строк ревьюит основная сессия по чек-листу `code-reviewer` + `security-discipline`.
+- Не запускать агента на задачу из 2–5 вызовов инструментов и не давать агенту пересказывать файлы (§0.1).
 - Не запускать параллельно ревьюеров с одной задачей: `/review` (проектный), `code-review:code-review` и `pr-review-toolkit:review-pr` — выбрать один.
 - Не обходить хуки (`--no-verify`, правка сгенерированных файлов): исправлять причину.
 - Не принимать технологию, которой нет в [architecture/README.md](architecture/README.md) §6, без ADR.
