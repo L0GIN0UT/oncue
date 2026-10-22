@@ -136,7 +136,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       if (userId instanceof Response) return userId;
       const room = roomOf(String(params.code));
       if (!room) return problem(404, "match.room_not_found");
-      if (!mw.member(room, userId)) return problem(403, "match.not_participant");
+      if (!mw.snapshotMember(room, userId)) return problem(403, "match.not_participant");
       return HttpResponse.json(mw.state(room, userId), { headers: NO_STORE });
     }),
 
@@ -145,7 +145,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       if (userId instanceof Response) return userId;
       const room = roomOf(String(params.code));
       if (!room) return problem(404, "match.room_not_found");
-      const p = mw.member(room, userId);
+      const p = mw.snapshotMember(room, userId);
       if (!p) return problem(403, "match.not_participant");
       const { known_version } = (await request.json()) as { known_version?: number | null };
       p.lastSeen = mw.now();
@@ -251,6 +251,8 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
           if (active && active !== room.code && mw.rooms.get(active)?.phase !== "closed")
             return problem(409, "match.active_room_conflict", { code: active });
           mw.addPlayer(room, userId);
+          if (mw.scenario.joinStateLagMs)
+            room.joinLag.set(userId, mw.now() + mw.scenario.joinStateLagMs);
           mw.publishLobby(room);
           return roomResult(room);
         },

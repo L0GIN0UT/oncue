@@ -342,3 +342,49 @@ test("сборник: «Играть с друзьями» создаёт лоб
   await page.getByTestId("start-match").click();
   await expect(page.getByTestId("clue-image")).toBeVisible();
 });
+
+test("вход с 202 и запаздывающим снимком; поле ответа — по своему состоянию уровня, новый уровень без своих команд", async ({
+  page,
+  player,
+  scenario,
+}) => {
+  await login(page);
+  const code = await createRoom(page, "music.duel.classic");
+  const rival = await player("rival");
+
+  // Вход ответил 202, а снимок ещё 1,5 с не знает игрока: клиент повторяет GET /state.
+  await scenario({ match: { acceptOnce: true, joinStateLagMs: 1_500 } });
+  await rival.goto(`/room/${code}`);
+  await rival.getByTestId("join-room").click();
+  await expect(rival.getByTestId("room-code")).toHaveText(code, { timeout: 10_000 });
+  await expect(rival.getByTestId("room-fatal")).toHaveCount(0);
+
+  for (const p of [page, rival]) await p.getByTestId("ready-toggle").click();
+  await expect(page.getByTestId("player-rival").getByTestId("ready-state")).toHaveText("Готов");
+  await page.getByTestId("start-match").click();
+  await expect(page.getByTestId("match-level")).toHaveText("Уровень 1 из 2");
+
+  // Свой пропуск: поле и «Пропустить» заблокированы, повторного хода нет.
+  await expect(page.getByRole("combobox")).toBeEnabled();
+  await page.getByTestId("match-skip").click();
+  await expect(page.getByRole("combobox")).toBeDisabled();
+  await expect(page.getByTestId("match-skip")).toBeDisabled();
+
+  // Соперник тоже пропускает — сервер открывает уровень 2: поле снова активно без своих команд,
+  // сразу по статусу «думает» из канала, не дожидаясь снимка (GET /state здесь медленный).
+  await page.route(/\/rooms\/[A-Z0-9]+\/state$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 4_000));
+    await route.continue();
+  });
+  await rival.getByTestId("match-skip").click();
+  await expect(page.getByTestId("match-level")).toHaveText("Уровень 2 из 2");
+  await expect(page.getByRole("combobox")).toBeEnabled({ timeout: 2_000 });
+  await page.unroute(/\/rooms\/[A-Z0-9]+\/state$/);
+  await expect(rival.getByRole("combobox")).toBeEnabled();
+
+  // Промахи до конца попыток блокируют поле только у промахнувшегося.
+  for (const guess of ["Мимо 1", "Мимо 2", "Мимо 3"]) await answer(rival, guess);
+  await expect(rival.getByTestId("attempts-left")).toHaveText("Попыток не осталось");
+  await expect(rival.getByRole("combobox")).toBeDisabled();
+  await expect(page.getByRole("combobox")).toBeEnabled();
+});

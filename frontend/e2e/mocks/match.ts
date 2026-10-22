@@ -23,6 +23,8 @@ export type MatchScenario = {
   chatDeny?: string[];
   /** Следующий старт сорвётся: `RoomView.start_error` с этим кодом (план раундов не получен). */
   startFailOnce?: string;
+  /** После входа снимок «не знает» игрока столько мс: state/tick — 403 (гонка 202 при входе). */
+  joinStateLagMs?: number;
   /** Следующая команда ответит 202 `CommandAccepted` (владелец не успел), применившись. */
   acceptOnce?: boolean;
   /** Без tick дольше — «Отключён». */
@@ -206,6 +208,8 @@ type MockRoom = {
   memory: Set<string>;
   rematch: Set<string>;
   rematchCode: string | null;
+  /** user_id → до какого момента снимок не знает вошедшего игрока (сценарий joinStateLagMs). */
+  joinLag: Map<string, number>;
   startError: { code: string; at: string } | null;
   createdAt: string;
 };
@@ -301,6 +305,7 @@ export class MatchWorld {
       memory: new Set(),
       rematch: new Set(),
       rematchCode: null,
+      joinLag: new Map(),
       startError: null,
       createdAt: new Date(this.now()).toISOString(),
     };
@@ -327,6 +332,13 @@ export class MatchWorld {
 
   member(room: MockRoom, userId: string) {
     return room.players.find((p) => p.user_id === userId) ?? null;
+  }
+
+  /** Участник, которого уже видит снимок (с учётом запаздывания после входа). */
+  snapshotMember(room: MockRoom, userId: string) {
+    const lag = room.joinLag.get(userId);
+    if (lag !== undefined && this.now() < lag) return null;
+    return this.member(room, userId);
   }
 
   // ------------------------------------------------------------------ виды
