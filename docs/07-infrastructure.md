@@ -125,7 +125,7 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 - **Centrifugo.** Образ `centrifugo/centrifugo:v6` (тег плавающий — закрепить до точной версии), движок Redis (db 1), конфиг `infra/centrifugo/config.json` монтируется read-only: namespace-ы `room` (история 100 / 600 с, recovery) и `personal`, анонимов и публикации клиентов нет, `user_connection_limit` 10. Секреты и Origin — только из env (`CENTRIFUGO_*` перекрывают файл). Gateway: `/connection/` (WS), `/connection/http_stream`, `/connection/emulation`.
 - **Redis match** — AOF включён: потеря Redis теряет активные комнаты (история матчей — в Postgres).
 
-Dev-оверлей (`compose.services.dev.yml`) монтирует `seeds/game/modes` в game (`GV_GAME__BOOTSTRAP_MODES_DIR`) и направляет ссылки из писем identity на `https://localhost/verify-email|reset-password`.
+Dev-оверлей (`compose.services.dev.yml`) монтирует `seeds/game/modes` в game (`GV_GAME__BOOTSTRAP_MODES_DIR`) и включает у identity `GV_EMAIL__BACKEND=log` (код из письма пишется в лог, только local/ci; [ADR 0041](adr/0041-email-codes-trusted-devices.md)).
 
 Остальные настройки сервисов описаны в `settings.py` сервиса и в [плане этапа 1](plans/stage-1.md).
 

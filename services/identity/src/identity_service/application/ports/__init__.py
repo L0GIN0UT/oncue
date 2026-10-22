@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -16,36 +15,22 @@ from gv_core.uow import UnitOfWork
 from gv_db.idempotency import IdempotencyStore
 from identity_service.domain import (
     AuthIdentity,
+    ChallengePurpose,
     Consent,
     EmailAddress,
+    EmailChallenge,
     Nickname,
     Provider,
     RefreshToken,
     RoleMatrix,
     Session,
+    TrustedDevice,
     User,
 )
 
+__all__ = ["ChallengePurpose", "EmailChallenge", "TrustedDevice"]  # реэкспорт доменных типов
+
 # ----------------------------------------------------------------------------- DTO
-
-
-class EmailTokenPurpose(StrEnum):
-    """Назначение одноразового токена из письма."""
-
-    VERIFY = "verify"
-    RESET = "reset"
-
-
-@dataclass(frozen=True, slots=True)
-class EmailToken:
-    """Одноразовый токен из письма (в хранилище — только SHA-256)."""
-
-    id: UUID
-    user_id: UUID
-    purpose: EmailTokenPurpose
-    token_hash: str
-    created_at: datetime
-    expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +108,10 @@ class EmailMessage:
     purpose: str
     link: str | None
     providers: tuple[str, ...] = ()
+    code: str | None = None
+    """Одноразовый код (ADR 0041); как и ``link``, секрет: в лог только local/ci."""
+    challenge_id: UUID | None = None
+    """Код, к которому относится письмо (e2e и аудит находят код в логе по нему)."""
 
 
 # ----------------------------------------------------------------------------- репозитории
@@ -260,27 +249,81 @@ class ConsentRepository(Protocol):
         ...
 
 
-class EmailTokenRepository(Protocol):
-    """Одноразовые токены из писем."""
+class EmailChallengeRepository(Protocol):
+    """Коды из писем (в транзакции use-case)."""
 
-    async def add(self, token: EmailToken) -> None:
-        """Сохранить."""
+    async def add(self, challenge: EmailChallenge) -> None:
+        """Сохранить новый код; прежний активный (субъект, назначение) гасится вызывающим."""
         ...
 
-    async def consume(
-        self, token_hash: str, purpose: EmailTokenPurpose, now: datetime
-    ) -> UUID | None:
-        """Атомарно погасить действующий токен; вернуть ``user_id`` или ``None``."""
+    async def get(self, challenge_id: UUID) -> EmailChallenge | None:
+        """Код по id."""
         ...
 
-    async def invalidate_for_user(
-        self, user_id: UUID, purpose: EmailTokenPurpose, now: datetime
+    async def cancel_active(
+        self, subject_hash: str, purpose: ChallengePurpose, now: datetime
     ) -> int:
-        """Пометить использованными все непогашенные токены пользователя этой цели.
+        """Отменить действующий код (субъект, назначение); вернуть, сколько отменено."""
+        ...
+
+    async def replace_code(
+        self, challenge_id: UUID, *, code_hash: str, expires_at: datetime, now: datetime
+    ) -> bool:
+        """Повторная отправка: новый код в той же записи, ``send_count + 1``, попытки сброшены.
+
+        Условный UPDATE: ``False``, если код погашен, отменён, истёк или ``last_sent_at``
+        ближе ``resend_after_s`` (проверку времени задаёт вызывающий через ``now``).
+        """
+        ...
+
+    async def consume(self, challenge_id: UUID, now: datetime) -> bool:
+        """Погасить действующий код условным UPDATE; ``False`` — уже погашен/отменён/истёк."""
+        ...
+
+    async def delete_for_subjects(self, user_id: UUID, subject_hashes: Iterable[str]) -> int:
+        """Удалить все коды пользователя и коды с этими субъектами (удаление аккаунта)."""
+        ...
+
+    async def failures_since(self, subject_hash: str, since: datetime) -> int:
+        """Неудачные вводы по субъекту за период (дневной потолок)."""
+        ...
+
+
+class ChallengeAttempts(Protocol):
+    """Списание попытки в СВОЕЙ транзакции, независимой от транзакции use-case.
+
+    Иначе откат запроса (ошибка пароля, сбой после проверки) возвращал бы попытку и давал
+    бесконечный перебор кода (ADR 0041).
+    """
+
+    async def spend(self, challenge_id: UUID, now: datetime) -> EmailChallenge | None:
+        """Атомарно ``attempts + 1`` у действующего кода с ``attempts < max_attempts``.
 
         Returns:
-            Сколько токенов погашено.
+            Запись после списания или ``None`` — кода нет, он неактивен или попытки исчерпаны.
         """
+        ...
+
+
+class TrustedDeviceRepository(Protocol):
+    """Доверенные устройства."""
+
+    async def add(self, device: TrustedDevice) -> None:
+        """Доверить устройство (повтор для той же пары продлевает срок)."""
+        ...
+
+    async def is_trusted(self, user_id: UUID, device_hash: str, now: datetime) -> bool:
+        """Устройство доверено, не отозвано и не истекло."""
+        ...
+
+    async def revoke_for_user(
+        self, user_id: UUID, now: datetime, *, except_hash: str | None = None
+    ) -> int:
+        """Снять доверие со всех устройств пользователя, кроме ``except_hash``."""
+        ...
+
+    async def delete_for_user(self, user_id: UUID) -> int:
+        """Удалить все устройства пользователя (удаление аккаунта)."""
         ...
 
 
@@ -318,7 +361,12 @@ class IdentityUnitOfWork(UnitOfWork, Protocol):
         ...
 
     @property
-    def email_tokens(self) -> EmailTokenRepository:
+    def email_challenges(self) -> EmailChallengeRepository:
+        """Репозиторий в транзакции."""
+        ...
+
+    @property
+    def trusted_devices(self) -> TrustedDeviceRepository:
         """Репозиторий в транзакции."""
         ...
 
@@ -382,6 +430,23 @@ class GuestSessionPurger(Protocol):
         ...
 
 
+class ChallengePurger(Protocol):
+    """Удаление просроченных кодов и отозванных/истёкших доверенных устройств."""
+
+    async def purge(
+        self,
+        *,
+        challenges_before: datetime,
+        devices_revoked_before: datetime,
+        now: datetime,
+        limit: int,
+    ) -> int:
+        """Удалить до ``limit`` строк каждой таблицы: коды с ``expires_at <= challenges_before``,
+        устройства с ``expires_at <= now`` или ``revoked_at <= devices_revoked_before``.
+        Возвращает общее число удалённых строк."""
+        ...
+
+
 class SigningKeyProvider(Protocol):
     """Публичные ключи подписи."""
 
@@ -395,6 +460,22 @@ class SecretGenerator(Protocol):
 
     def token(self, nbytes: int) -> str:
         """Случайная строка base64url из ``nbytes`` байт."""
+        ...
+
+
+class CodeService(Protocol):
+    """Генерация и проверка одноразовых кодов (``secrets.randbelow``, HMAC)."""
+
+    def generate(self, length: int) -> str:
+        """Случайный числовой код ровно из ``length`` цифр (с ведущими нулями)."""
+        ...
+
+    def digest(self, *, challenge_id: UUID, code: str) -> str:
+        """HMAC кода, привязанный к ``challenge_id`` (код нельзя перенести на другую запись)."""
+        ...
+
+    def matches(self, stored: str, *, challenge_id: UUID, code: str) -> bool:
+        """Сравнение за постоянное время (``hmac.compare_digest``)."""
         ...
 
 

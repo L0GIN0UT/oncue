@@ -391,10 +391,15 @@ def jwt_signing_keys() -> str:
     return json.dumps([key], separators=(",", ":"))
 
 
+_MANUAL_SECRETS = frozenset({"GV_SMTP__PASSWORD"})
+"""Секреты внешних систем: случайная строка вместо настоящего пароля SMTP сломала бы отправку."""
+
+
 def fill_secrets(template: str) -> str:
     """Заполнить пустые секреты .env.example случайными значениями.
 
-    Секрет — пустая переменная, в имени которой есть PASSWORD/SECRET/TOKEN/KEY.
+    Секрет — пустая переменная, в имени которой есть PASSWORD/SECRET/TOKEN/KEY, кроме
+    ``_MANUAL_SECRETS`` (их задаёт оператор).
     Переменные из ``_SHARED_SECRETS`` получают значение своей пары (секрет подписи
     ссылок нужен и gateway, и media-pipeline — ADR 0012). В ``GV_SERVICE_CLIENTS``
     пустые ``secret_sha256`` заменяются на sha256 сгенерированных
@@ -409,7 +414,7 @@ def fill_secrets(template: str) -> str:
         needs_secret = sep and not value and not key.startswith("#")
         if needs_secret and key == _JWT_KEYS_ENV:
             lines.append(f"{key}={jwt_signing_keys()}")
-        elif needs_secret and any(k in key for k in secret_keys):
+        elif needs_secret and key not in _MANUAL_SECRETS and any(k in key for k in secret_keys):
             twin = _SHARED_SECRETS.get(key)
             shared = generated.get(twin) if twin else None
             generated[key] = shared or secrets.token_urlsafe(32)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayIn, formatClock, nextMidnight, remainingUntil } from "./countdown";
+import { dayIn, formatClock, nextMidnight, remainingUntil } from "./countdown-time";
 
 describe("отсчёт до смены дня (Europe/Moscow)", () => {
   it("полночь по Москве — 21:00 UTC предыдущего дня", () => {

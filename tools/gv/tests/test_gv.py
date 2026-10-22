@@ -182,7 +182,36 @@ class TestFrontend:
         assert not workspace.frontend_changed(["services/game/x.py", "frontend.md"])
 
 
-def test_fill_secrets_hashes_service_client_secrets() -> None:
+def test_fill_secrets_generates_email_code_key_but_not_smtp_credentials() -> None:
+    """ADR 0041: ключ HMAC кодов генерируется, пароль/логин SMTP остаются пустыми."""
+    from gv_cli.main import fill_secrets
+
+    template = "\n".join(
+        ["GV_EMAIL_CODE__HMAC_KEY=", "GV_SMTP__USERNAME=", "GV_SMTP__PASSWORD=", "REDIS_PASSWORD="]
+    )
+    out = fill_secrets(template)
+    values = dict(line.split("=", 1) for line in out.splitlines())
+    assert len(values["GV_EMAIL_CODE__HMAC_KEY"]) >= 32
+    assert values["GV_SMTP__USERNAME"] == ""
+    assert values["GV_SMTP__PASSWORD"] == ""
+    assert values["REDIS_PASSWORD"] != ""
+
+
+def test_generated_identity_compose_has_email_code_settings() -> None:
+    """compose identity получает настройки кодов и SMTP; ссылок с токенами нет."""
+    from gv_cli.generate import render_all
+    from gv_cli.registry import load_services
+
+    rendered = render_all(load_services(ROOT))
+    compose = rendered["infra/compose/compose.services.yml"]
+    assert "GV_EMAIL_CODE__HMAC_KEY: ${GV_EMAIL_CODE__HMAC_KEY:?" in compose
+    assert "GV_EMAIL__BACKEND: ${GV_EMAIL__BACKEND:-smtp}" in compose
+    assert "GV_SMTP__PASSWORD: ${GV_SMTP__PASSWORD:-}" in compose
+    dev = rendered["infra/compose/compose.services.dev.yml"]
+    assert "GV_EMAIL__BACKEND: ${GV_EMAIL__BACKEND:-log}" in dev
+    assert "VERIFY_LINK" not in dev
+    assert "GV_SMTP__PASSWORD=\n" in rendered["infra/compose/.env.example"]
+
     """D13: секреты клиентов — случайные, в GV_SERVICE_CLIENTS identity — только их sha256."""
     import hashlib
     import json
@@ -274,9 +303,9 @@ def test_generated_compose_passes_stage2_settings() -> None:
     assert dev["game"]["environment"]["GV_GAME__BOOTSTRAP_MODES_DIR"] == "/seeds/game/modes"
     assert dev["game"]["volumes"] == ["../../seeds/game/modes:/seeds/game/modes:ro"]
     assert (ROOT / "infra/compose" / "../../seeds/game/modes").resolve().is_dir()
-    links = dev["identity"]["environment"]
-    assert links["GV_EMAIL__VERIFY_LINK"] == "https://localhost/verify-email?token={token}"
-    assert links["GV_EMAIL__RESET_LINK"] == "https://localhost/reset-password?token={token}"
+    mail = dev["identity"]["environment"]
+    assert mail["GV_EMAIL__BACKEND"] == "${GV_EMAIL__BACKEND:-log}"
+    assert not any("LINK" in key for key in mail)  # ссылок с токенами нет (ADR 0041)
 
 
 def test_public_origins_for_cookie_mutation_services() -> None:

@@ -13,7 +13,7 @@ import dataclasses
 import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Self
 from uuid import UUID
 
@@ -21,16 +21,22 @@ import pytest
 from identity_service.application.commands.account import DeleteAccount, GrantConsents
 from identity_service.application.commands.auth import (
     AdminLogin,
+    ConfirmLogin,
+    ConfirmPasswordChange,
+    LoginResult,
     LoginWithPassword,
     Logout,
     LogoutAll,
     PasswordAuthenticator,
     RefreshSession,
     RegisterWithEmail,
+    RequestPasswordChange,
     RequestPasswordReset,
+    ResendCode,
     ResetPassword,
     VerifyEmail,
 )
+from identity_service.application.commands.codes import CodeChallenges
 from identity_service.application.commands.oauth import (
     CompleteOAuth,
     LinkExternalAccount,
@@ -46,9 +52,8 @@ from identity_service.application.commands.service_tokens import (
 from identity_service.application.config import AuthConfig, LimitConfig
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.ports import (
+    ChallengePurpose,
     EmailMessage,
-    EmailToken,
-    EmailTokenPurpose,
     ExternalProfile,
     IssuedAccess,
     OAuthState,
@@ -63,25 +68,30 @@ from identity_service.application.queries import (
     ListLinkedAccounts,
     ListUsers,
 )
-from identity_service.application.sessions import SessionIssuer
+from identity_service.application.security import hash_secret
+from identity_service.application.sessions import IssuedSession, SessionIssuer
 from identity_service.domain import (
     AuthIdentity,
     Consent,
     ConsentRequirement,
     EmailAddress,
+    EmailChallenge,
     Nickname,
     PasswordPolicy,
     Provider,
     RefreshToken,
     RoleMatrix,
     Session,
+    TrustedDevice,
     User,
 )
 from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
 
 from gv_core import ConflictError, DomainEvent
+from gv_core.ids import uuid7
 from gv_testkit import FakeClock, FakeUnitOfWork, InMemoryIdempotencyStore
 
+DEVICE = "device-token-known"  # cookie доверенного устройства make_user
 ALL_PERMS = frozenset(
     {
         "admin.access",
@@ -121,7 +131,8 @@ class Data:
     matrix: RoleMatrix = SEED_MATRIX
     audit: list[RoleChange] = field(default_factory=list)
     consents: list[Consent] = field(default_factory=list)
-    email_tokens: dict[str, tuple[EmailToken, datetime | None]] = field(default_factory=dict)
+    challenges: dict[UUID, EmailChallenge] = field(default_factory=dict)
+    devices: dict[tuple[UUID, str], TrustedDevice] = field(default_factory=dict)
 
 
 class Users:
@@ -268,34 +279,138 @@ class Consents:
         return [c for c in self.d.consents if c.user_id == user_id]
 
 
-class EmailTokens:
+class Challenges:
+    """Коды из писем. Попытки, списанные отдельной транзакцией, лежат в ``world.spent``."""
+
+    def __init__(self, d: Data, spent: dict[UUID, int], spent_total: dict[UUID, int]) -> None:
+        # spent — попытки текущего кода (resend обнуляет), spent_total — за жизнь записи
+        # (как колонка ``spent_total``: resend её не трогает, по ней считается суточный потолок).
+        self.d, self.spent, self.spent_total = d, spent, spent_total
+
+    def _merged(self, ch: EmailChallenge) -> EmailChallenge:
+        return dataclasses.replace(ch, attempts=ch.attempts + self.spent.get(ch.id, 0))
+
+    async def add(self, challenge: EmailChallenge) -> None:
+        self.d.challenges[challenge.id] = challenge
+
+    async def get(self, challenge_id: UUID) -> EmailChallenge | None:
+        found = self.d.challenges.get(challenge_id)
+        return self._merged(found) if found else None
+
+    async def cancel_active(
+        self, subject_hash: str, purpose: ChallengePurpose, now: datetime
+    ) -> int:
+        count = 0
+        for key, ch in list(self.d.challenges.items()):
+            if ch.subject_hash == subject_hash and ch.purpose is purpose and ch.is_active(now):
+                self.d.challenges[key] = dataclasses.replace(ch, cancelled_at=now)
+                count += 1
+        return count
+
+    async def replace_code(
+        self, challenge_id: UUID, *, code_hash: str, expires_at: datetime, now: datetime
+    ) -> bool:
+        ch = self.d.challenges.get(challenge_id)
+        if ch is None or not ch.is_active(now):
+            return False
+        self.spent.pop(challenge_id, None)
+        self.d.challenges[challenge_id] = dataclasses.replace(
+            ch,
+            code_hash=code_hash,
+            expires_at=expires_at,
+            last_sent_at=now,
+            send_count=ch.send_count + 1,
+            attempts=0,
+        )
+        return True
+
+    async def consume(self, challenge_id: UUID, now: datetime) -> bool:
+        ch = self.d.challenges.get(challenge_id)
+        if ch is None or not ch.is_active(now):
+            return False
+        self.d.challenges[challenge_id] = dataclasses.replace(ch, consumed_at=now)
+        return True
+
+    async def failures_since(self, subject_hash: str, since: datetime) -> int:
+        total = 0
+        for ch in self.d.challenges.values():
+            if ch.subject_hash == subject_hash and ch.created_at >= since:
+                total += self.spent_total.get(ch.id, 0) - (1 if ch.consumed_at else 0)
+        return total
+
+    async def delete_for_subjects(self, user_id: UUID, subject_hashes: Iterable[str]) -> int:
+        hashes = set(subject_hashes)
+        doomed = [
+            key
+            for key, ch in self.d.challenges.items()
+            if ch.user_id == user_id or ch.subject_hash in hashes
+        ]
+        for key in doomed:
+            del self.d.challenges[key]
+        return len(doomed)
+
+
+class Attempts:
+    """Списание попытки вне транзакции use-case (как отдельная транзакция в БД)."""
+
+    def __init__(self, world: World) -> None:
+        self.w = world
+
+    async def spend(self, challenge_id: UUID, now: datetime) -> EmailChallenge | None:
+        ch = self.w.data.challenges.get(challenge_id)
+        if ch is None or not ch.is_active(now):
+            return None
+        merged = dataclasses.replace(ch, attempts=ch.attempts + self.w.spent.get(ch.id, 0))
+        if merged.is_exhausted:
+            return None
+        self.w.spent[ch.id] = self.w.spent.get(ch.id, 0) + 1
+        self.w.spent_total[ch.id] = self.w.spent_total.get(ch.id, 0) + 1
+        return dataclasses.replace(merged, attempts=merged.attempts + 1)
+
+
+class Devices:
     def __init__(self, d: Data) -> None:
         self.d = d
 
-    async def add(self, token: EmailToken) -> None:
-        self.d.email_tokens[token.token_hash] = (token, None)
+    async def add(self, device: TrustedDevice) -> None:
+        self.d.devices[(device.user_id, device.device_hash)] = device
 
-    async def consume(
-        self, token_hash: str, purpose: EmailTokenPurpose, now: datetime
-    ) -> UUID | None:
-        found = self.d.email_tokens.get(token_hash)
-        if found is None:
-            return None
-        token, used = found
-        if used is not None or token.purpose is not purpose or token.expires_at <= now:
-            return None
-        self.d.email_tokens[token_hash] = (token, now)
-        return token.user_id
+    async def is_trusted(self, user_id: UUID, device_hash: str, now: datetime) -> bool:
+        found = self.d.devices.get((user_id, device_hash))
+        return found is not None and found.revoked_at is None and now < found.expires_at
 
-    async def invalidate_for_user(
-        self, user_id: UUID, purpose: EmailTokenPurpose, now: datetime
+    async def revoke_for_user(
+        self, user_id: UUID, now: datetime, *, except_hash: str | None = None
     ) -> int:
         count = 0
-        for key, (token, used) in list(self.d.email_tokens.items()):
-            if token.user_id == user_id and token.purpose is purpose and used is None:
-                self.d.email_tokens[key] = (token, now)
+        for key, dev in list(self.d.devices.items()):
+            if key[0] == user_id and dev.device_hash != except_hash and dev.revoked_at is None:
+                self.d.devices[key] = dataclasses.replace(dev, revoked_at=now)
                 count += 1
         return count
+
+    async def delete_for_user(self, user_id: UUID) -> int:
+        doomed = [key for key in self.d.devices if key[0] == user_id]
+        for key in doomed:
+            del self.d.devices[key]
+        return len(doomed)
+
+
+class FakeCodeService:
+    """Детерминированные коды: 000001, 000002, ... ; «HMAC» — строка с id."""
+
+    def __init__(self) -> None:
+        self.n = 0
+
+    def generate(self, length: int) -> str:
+        self.n += 1
+        return f"{self.n:0{length}d}"
+
+    def digest(self, *, challenge_id: UUID, code: str) -> str:
+        return f"d|{challenge_id}|{code}"
+
+    def matches(self, stored: str, *, challenge_id: UUID, code: str) -> bool:
+        return stored == self.digest(challenge_id=challenge_id, code=code)
 
 
 class World:
@@ -310,6 +425,8 @@ class World:
         self.revoked: set[UUID] = set()
         self.states = FakeStateStore()
         self.emails: list[EmailMessage] = []
+        self.spent: dict[UUID, int] = {}
+        self.spent_total: dict[UUID, int] = {}
         self.secrets = SeqSecrets()
         self.yandex = FakeOAuth()
         # Не транзакционный: откат мутации не моделирует (см. gv_testkit).
@@ -317,12 +434,11 @@ class World:
         self.config = config or AuthConfig(
             required_consents=CONSENTS,
             bootstrap_admin_emails=frozenset({"boss@example.com"}),
-            verify_link="https://gv.test/verify?token={token}",
-            reset_link="https://gv.test/reset?token={token}",
             return_to_prefixes=("/", "/profile"),
             password_policy=PasswordPolicy(banned=frozenset({"qwertyuiop"})),
         )
         self.tokens = FakeTokens()
+        self.codes = FakeCodeService()
         self.uc = self._build()
 
     def uow(self) -> WorldUoW:
@@ -335,6 +451,14 @@ class World:
         revocation = FakeRevocation(self.revoked)
         providers = {Provider.YANDEX: self.yandex}
         email = FakeEmail(self.emails)
+        codes = CodeChallenges(
+            codes=self.codes,
+            attempts=Attempts(self),
+            limiter=self.limiter,
+            secrets=self.secrets,
+            clock=clock,
+            config=c,
+        )
         return IdentityUseCases(
             config=c,
             register=RegisterWithEmail(
@@ -342,20 +466,32 @@ class World:
                 hasher=self.hasher,
                 limiter=self.limiter,
                 email=email,
-                secrets=self.secrets,
+                codes=codes,
                 clock=clock,
                 config=c,
             ),
-            verify_email=VerifyEmail(uow, clock, c),
-            login=LoginWithPassword(uow, authn, issuer),
+            verify_email=VerifyEmail(uow, clock, c, codes=codes, sessions=issuer),
+            login=LoginWithPassword(
+                uow, authn, issuer, codes=codes, limiter=self.limiter, email=email, config=c
+            ),
+            confirm_login=ConfirmLogin(uow, codes=codes, sessions=issuer),
+            resend_code=ResendCode(uow, codes=codes, limiter=self.limiter, email=email, config=c),
+            request_password_change=RequestPasswordChange(
+                uow, authn, codes=codes, limiter=self.limiter, email=email, config=c
+            ),
+            confirm_password_change=ConfirmPasswordChange(
+                uow, self.hasher, revocation, clock, c, email=email, codes=codes
+            ),
             admin_login=AdminLogin(uow, authn, issuer),
             refresh=RefreshSession(uow, issuer, revocation, clock),
             logout=Logout(uow, revocation, clock),
             logout_all=LogoutAll(uow, revocation, clock),
             request_password_reset=RequestPasswordReset(
-                uow, limiter=self.limiter, email=email, secrets=self.secrets, clock=clock, config=c
+                uow, limiter=self.limiter, email=email, codes=codes, clock=clock, config=c
             ),
-            reset_password=ResetPassword(uow, self.hasher, revocation, clock, c, email=email),
+            reset_password=ResetPassword(
+                uow, self.hasher, revocation, clock, c, email=email, codes=codes, sessions=issuer
+            ),
             start_oauth=StartOAuth(
                 uow, providers, self.states, self.secrets, c, authenticator=authn
             ),
@@ -394,21 +530,57 @@ class World:
         """Зарегистрировать (и при необходимости подтвердить) пользователя через use-cases."""
         from identity_service.application.dto import RegisterCommand
 
-        user_id = await self.uc.register(
+        challenge = await self.uc.register(
             RegisterCommand(nickname=nickname, email=email, password=password, consents=CONSENTS)
         )
-        assert user_id is not None
         if verified:
-            await self.uc.verify_email(self.last_link_token())
+            result = await self.uc.verify_email(
+                challenge.challenge_id, self.last_code(), binding_token=challenge.binding_token
+            )
+            user_id = result.session.user_id
+            # Известное устройство DEVICE доверено каждому пользователю из make_user: токен
+            # сервер выдаёт сам, поэтому «cookie DEVICE» заводим в данные напрямую.
+            now = self.clock.now()
+            self.data.devices[(user_id, hash_secret(DEVICE))] = TrustedDevice(
+                uuid7(), user_id, hash_secret(DEVICE), now, now + timedelta(days=180)
+            )
+        else:
+            user_id = next(u.id for u in self.data.users.values() if u.email.value == email.lower())
         if roles is not None:
             user = self.data.users[user_id]
             user.roles = roles
         return user_id
 
-    def last_link_token(self) -> str:
-        link = next(m.link for m in reversed(self.emails) if m.link)
-        assert link is not None
-        return link.rsplit("token=", 1)[1]
+    async def login(
+        self, login: str, password: str, *, ip: str | None = None, device_token: str | None = DEVICE
+    ) -> IssuedSession:
+        """Вход с доверенного устройства (по умолчанию) — сразу сессия."""
+        result = await self.uc.login(login, password, ip=ip, device_token=device_token)
+        assert result.session is not None, "ожидалась сессия, а не code_required"
+        return result.session
+
+    async def login_result(
+        self, login: str, password: str, *, ip: str | None = None, device_token: str | None = None
+    ) -> LoginResult:
+        """Вход как есть (по умолчанию — неизвестное устройство)."""
+        return await self.uc.login(login, password, ip=ip, device_token=device_token)
+
+    def last_code(self) -> str:
+        """Код из последнего письма с кодом."""
+        return next(m.code for m in reversed(self.emails) if m.code)
+
+    def codes_sent(self) -> list[str]:
+        """Все отправленные коды по порядку."""
+        return [m.code for m in self.emails if m.code]
+
+    def challenge(self, challenge_id: UUID) -> EmailChallenge:
+        """Запись кода с учётом списанных попыток."""
+        ch = self.data.challenges[challenge_id]
+        return dataclasses.replace(ch, attempts=ch.attempts + self.spent.get(ch.id, 0))
+
+    def advance(self, seconds: int) -> None:
+        """Сдвинуть часы."""
+        self.clock.advance(seconds=seconds)
 
 
 class WorldUoW(FakeUnitOfWork):
@@ -422,7 +594,8 @@ class WorldUoW(FakeUnitOfWork):
         self.identities = Identities(self._data)
         self.roles = Roles(self._data)
         self.consents = Consents(self._data)
-        self.email_tokens = EmailTokens(self._data)
+        self.email_challenges = Challenges(self._data, world.spent, world.spent_total)
+        self.trusted_devices = Devices(self._data)
         self.idempotency = world.idempotency
 
     async def __aenter__(self) -> Self:

@@ -17,7 +17,7 @@ import type {
   SessionSnapshot,
   Suggestion,
 } from "@/shared/api/types";
-import { dayIn, nextMidnight } from "@/features/daily/countdown";
+import { dayIn, nextMidnight } from "@/features/daily/countdown-time";
 import { COLLECTION_MODES, UgcWorld } from "./ugc";
 
 export type Domain = "music" | "film";

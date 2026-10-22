@@ -15,6 +15,11 @@ from identity_service.application.commands.auth import (
 )
 from identity_service.application.config import AuthConfig
 from identity_service.application.ports import RevocationStore, UnitOfWorkFactory
+from identity_service.application.security import (
+    decoy_subject_hash,
+    email_subject_hash,
+    user_subject_hash,
+)
 from identity_service.domain import Consent, ConsentRequirement, Provider
 
 log = structlog.get_logger(__name__)
@@ -76,12 +81,24 @@ class DeleteAccount:
             if user is None or not user.is_active:
                 raise NotFoundError("аккаунт не найден", code="user.not_found")
             await self._auth.confirm_password(uow, user, password, ip)
+            address = user.email.value  # до анонимизации: нужен для чистки кодов
             for identity in await uow.identities.list_for_user(user_id):
                 await uow.identities.remove(user_id, Provider(identity.provider))
             await uow.credentials.delete(user_id)
             user.delete(self._clock.now())
             await uow.users.save(user)
             revoked = await revoke_all_sessions(uow, user_id, self._clock, "account_deleted")
+            # Коды и устройства не нужны после удаления; в них хэши адреса и пользователя, а
+            # анонимизация e-mail не должна оставлять по ним следов.
+            await uow.email_challenges.delete_for_subjects(
+                user_id,
+                (
+                    email_subject_hash(address),
+                    decoy_subject_hash(address),
+                    user_subject_hash(user_id),
+                ),
+            )
+            await uow.trusted_devices.delete_for_user(user_id)
             uow.track(user)
             await uow.commit()
         await revoke_quietly(self._revocation, revoked)

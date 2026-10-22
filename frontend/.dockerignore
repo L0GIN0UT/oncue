@@ -1,0 +1,6 @@
+# Контекст сборки web — frontend/ (infra/docker/web.Dockerfile). Зависимости и артефакты
+# хоста не должны попадать в образ: `COPY . .` затёр бы node_modules, собранный в контейнере.
+node_modules
+.next
+test-results
+playwright-report

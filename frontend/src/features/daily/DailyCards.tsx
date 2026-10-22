@@ -14,7 +14,7 @@ import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { Countdown } from "./Countdown";
-import { nextMidnight } from "./countdown";
+import { nextMidnight } from "./countdown-time";
 
 export const homeQueryKey = ["page", "home"] as const;
 

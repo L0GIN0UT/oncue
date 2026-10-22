@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { signInAsGuest, setupMockBackend } from "@/test/msw";
 import { csrfToken } from "@/shared/lib/cookies";
-import {
-  rememberNext,
-  safeNext,
-  takeRememberedNext,
-  verifyEmailToken,
-  withNext,
-} from "./AuthForms";
+import { safeNext, withNext } from "./AuthForms";
 import { parseConsents } from "./consents";
 import { ensureSession, startGuestSession } from "./session";
 
@@ -76,41 +70,5 @@ describe("next регистрации", () => {
     expect(withNext("/register", "/room/K7MQ2XWP")).toBe("/register?next=%2Froom%2FK7MQ2XWP");
     expect(withNext("/login", "//evil.example")).toBe("/login");
     expect(withNext("/login", null)).toBe("/login");
-  });
-
-  it("next запоминается до подтверждения e-mail, читается один раз и перепроверяется", () => {
-    rememberNext("/online");
-    expect(takeRememberedNext()).toBe("/online");
-    expect(takeRememberedNext()).toBeNull();
-    localStorage.setItem("gv_auth_next", "https://evil.example/");
-    expect(takeRememberedNext()).toBeNull();
-  });
-});
-
-describe("подтверждение e-mail при лимите gateway", () => {
-  const noSleep = async () => {};
-
-  it("429 — повтор с паузой, затем успех (токен не израсходован)", async () => {
-    const statuses = [429, 429, 204];
-    const waits: number[] = [];
-    const result = await verifyEmailToken(
-      async () => ({ status: statuses.shift()!, retryAfterS: 2 }),
-      async (ms) => void waits.push(ms),
-    );
-    expect(result).toBe("ok");
-    expect(waits).toEqual([2000, 2000]);
-  });
-
-  it("лимит не отпустил — rate_limited, а не «ссылка недействительна»", async () => {
-    await expect(verifyEmailToken(async () => ({ status: 429 }), noSleep)).resolves.toBe(
-      "rate_limited",
-    );
-  });
-
-  it("4xx кроме 429 — недействительная ссылка без повторов", async () => {
-    let calls = 0;
-    const result = await verifyEmailToken(async () => ((calls += 1), { status: 400 }), noSleep);
-    expect(result).toBe("failed");
-    expect(calls).toBe(1);
   });
 });

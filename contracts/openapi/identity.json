@@ -1,20 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AcceptedResponse": {
-        "description": "Запрос принят; результат придёт письмом.",
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "AcceptedResponse",
-        "type": "object"
-      },
       "AdminRefreshRequest": {
         "description": "Обновление или отзыв admin-сессии.",
         "properties": {
@@ -183,6 +169,70 @@
           "authorize_url"
         ],
         "title": "AuthorizeResponse",
+        "type": "object"
+      },
+      "ChallengeResponse": {
+        "description": "Код отправлен на почту (ADR 0041). Одинаков для существующего и нет адреса.",
+        "properties": {
+          "challenge_id": {
+            "format": "uuid",
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "code_length": {
+            "title": "Code Length",
+            "type": "integer"
+          },
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "integer"
+          },
+          "purpose": {
+            "enum": [
+              "register",
+              "login",
+              "reset",
+              "password_change"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "resend_after_s": {
+            "title": "Resend After S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "purpose",
+          "code_length",
+          "expires_in_s",
+          "resend_after_s"
+        ],
+        "title": "ChallengeResponse",
+        "type": "object"
+      },
+      "CodeRequest": {
+        "description": "Ввод кода из письма.",
+        "properties": {
+          "challenge_id": {
+            "format": "uuid",
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 10,
+            "minLength": 4,
+            "pattern": "^[0-9]+$",
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "code"
+        ],
+        "title": "CodeRequest",
         "type": "object"
       },
       "ConsentIn": {
@@ -360,6 +410,55 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "LoginResponse": {
+        "description": "Результат входа: сессия (``authenticated``) или нужен код с почты (``code_required``).\n\nПри ``authenticated`` заполнены ``user`` и ``expires_in``, при ``code_required`` — только\n``challenge``; cookie сессии при этом не выдаются.",
+        "properties": {
+          "challenge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChallengeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In"
+          },
+          "status": {
+            "enum": [
+              "authenticated",
+              "code_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionUser"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "LoginResponse",
+        "type": "object"
+      },
       "MeResponse": {
         "description": "Профиль владельца аккаунта.",
         "properties": {
@@ -437,6 +536,52 @@
           "consents"
         ],
         "title": "MeResponse",
+        "type": "object"
+      },
+      "PasswordChangeConfirmRequest": {
+        "description": "Завершение смены пароля: код из письма и новый пароль.",
+        "properties": {
+          "challenge_id": {
+            "format": "uuid",
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 10,
+            "minLength": 4,
+            "pattern": "^[0-9]+$",
+            "title": "Code",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge_id",
+          "code",
+          "new_password"
+        ],
+        "title": "PasswordChangeConfirmRequest",
+        "type": "object"
+      },
+      "PasswordChangeRequest": {
+        "description": "Начало смены пароля в профиле: подтверждение текущим паролем.",
+        "properties": {
+          "current_password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password"
+        ],
+        "title": "PasswordChangeRequest",
         "type": "object"
       },
       "Problem": {
@@ -601,24 +746,46 @@
         "title": "RegisterRequest",
         "type": "object"
       },
-      "ResetRequest": {
-        "description": "Новый пароль по токену из письма.",
+      "ResendRequest": {
+        "description": "Повторная отправка кода.",
         "properties": {
+          "challenge_id": {
+            "format": "uuid",
+            "title": "Challenge Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge_id"
+        ],
+        "title": "ResendRequest",
+        "type": "object"
+      },
+      "ResetRequest": {
+        "description": "Новый пароль по коду из письма.",
+        "properties": {
+          "challenge_id": {
+            "format": "uuid",
+            "title": "Challenge Id",
+            "type": "string"
+          },
+          "code": {
+            "maxLength": 10,
+            "minLength": 4,
+            "pattern": "^[0-9]+$",
+            "title": "Code",
+            "type": "string"
+          },
           "password": {
             "maxLength": 256,
             "minLength": 1,
             "title": "Password",
             "type": "string"
-          },
-          "token": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Token",
-            "type": "string"
           }
         },
         "required": [
-          "token",
+          "challenge_id",
+          "code",
           "password"
         ],
         "title": "ResetRequest",
@@ -841,22 +1008,6 @@
           "perms"
         ],
         "title": "SessionUser",
-        "type": "object"
-      },
-      "TokenRequest": {
-        "description": "Одноразовый токен из письма.",
-        "properties": {
-          "token": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Token",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token"
-        ],
-        "title": "TokenRequest",
         "type": "object"
       },
       "UnlinkRequest": {
@@ -1706,6 +1857,47 @@
         ]
       }
     },
+    "/v1/auth/codes/resend": {
+      "post": {
+        "operationId": "resend_code_v1_auth_codes_resend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Отправить код повторно (не раньше resend_after_s)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
     "/v1/auth/guest": {
       "post": {
         "description": "Cookie `gv_access`, `gv_refresh`, `gv_csrf` как при входе. Лимит по IP (429 `rate.limited`). При уже действующей сессии — 409 `auth.already_authenticated`.",
@@ -1784,6 +1976,47 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Вход по e-mail или никнейму и паролю; с нового устройства нужен код с почты",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/auth/login/confirm": {
+      "post": {
+        "operationId": "login_confirm_v1_auth_login_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
                   "$ref": "#/components/schemas/SessionResponse"
                 }
               }
@@ -1801,7 +2034,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Вход по e-mail или никнейму и паролю",
+        "summary": "Подтвердить вход с нового устройства кодом из письма",
         "tags": [
           "identity"
         ]
@@ -1835,14 +2068,14 @@
         ]
       }
     },
-    "/v1/auth/password/forgot": {
+    "/v1/auth/password/change": {
       "post": {
-        "operationId": "forgot_v1_auth_password_forgot_post",
+        "operationId": "change_password_v1_auth_password_change_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ForgotRequest"
+                "$ref": "#/components/schemas/PasswordChangeRequest"
               }
             }
           },
@@ -1853,7 +2086,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AcceptedResponse"
+                  "$ref": "#/components/schemas/ChallengeResponse"
                 }
               }
             },
@@ -1870,20 +2103,20 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Запросить ссылку для сброса пароля",
+        "summary": "Начать смену пароля в профиле: текущий пароль, код уходит на почту",
         "tags": [
           "identity"
         ]
       }
     },
-    "/v1/auth/password/reset": {
+    "/v1/auth/password/change/confirm": {
       "post": {
-        "operationId": "reset_v1_auth_password_reset_post",
+        "operationId": "change_password_confirm_v1_auth_password_change_confirm_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ResetRequest"
+                "$ref": "#/components/schemas/PasswordChangeConfirmRequest"
               }
             }
           },
@@ -1904,7 +2137,89 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Задать новый пароль по ссылке из письма",
+        "summary": "Завершить смену пароля кодом; другие сессии и устройства отзываются",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/auth/password/forgot": {
+      "post": {
+        "operationId": "forgot_v1_auth_password_forgot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Запросить код для сброса пароля (ответ одинаков для любого адреса)",
+        "tags": [
+          "identity"
+        ]
+      }
+    },
+    "/v1/auth/password/reset": {
+      "post": {
+        "operationId": "reset_v1_auth_password_reset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Задать новый пароль по коду из письма: прежние сессии и устройства отзываются, владелец сразу входит и доверяет это устройство",
         "tags": [
           "identity"
         ]
@@ -1949,7 +2264,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AcceptedResponse"
+                  "$ref": "#/components/schemas/ChallengeResponse"
                 }
               }
             },
@@ -1966,7 +2281,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Регистрация по никнейму, e-mail и паролю",
+        "summary": "Регистрация по никнейму, e-mail и паролю; код подтверждения уходит на почту",
         "tags": [
           "identity"
         ]
@@ -1979,14 +2294,21 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TokenRequest"
+                "$ref": "#/components/schemas/CodeRequest"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "204": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "422": {
@@ -2000,7 +2322,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Подтвердить e-mail по ссылке из письма",
+        "summary": "Подтвердить e-mail кодом из письма; открывает сессию и доверяет устройству",
         "tags": [
           "identity"
         ]

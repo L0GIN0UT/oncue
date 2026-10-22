@@ -4,7 +4,8 @@
  * Один последовательный сценарий на засеянном стеке (`gv dev seed`: каталог с синтетикой 3a,
  * исходники, кураторские сборники `seeds/collections`):
  * 1. Пользователи A и B регистрируются через UI. Письмо подтверждения identity в local/ci
- *    пишет в лог (`email.logged … link=…`), ссылка берётся из `docker compose logs identity`.
+ *    пишет в лог (`email.logged … challenge_id=… code=…`), код берётся из
+ *    `docker compose logs identity` по `challenge_id` (`e2e/auth.ts`).
  * 2. A создаёт сборник «Кино · кадры …» (8 фильмов, у двух свои эмодзи): черновик — через
  *    API, восьмая единица — в конструкторе. Две вкладки (два входа A = два устройства):
  *    вторая получает 409 `collections.draft_conflict` и экран выбора, оставляет свою версию
@@ -22,9 +23,7 @@
  * Ответы тесту неизвестны: раунды завершаются «Сдаться». Селекторы — `data-testid`
  * (контракт с фронтендом перечислен у каждого шага).
  */
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import {
   expect,
   request as playwrightRequest,
@@ -36,6 +35,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { loginViaUi, registerViaUi } from "./auth";
 
 test.skip(process.env.E2E_SEEDED !== "1", "стек не засеян: нужен шаг засева (E2E_SEEDED=1)");
 test.describe.configure({ mode: "serial" });
@@ -108,70 +108,15 @@ const isDraftSave = (id: string) => (r: { url(): string; request(): { method(): 
   r.request().method() === "PUT" && r.url().endsWith(`/api/collections/v1/collections/${id}/draft`);
 
 // ----------------------------------------------------------------------------- регистрация
-const COMPOSE_DIR = process.env.E2E_COMPOSE_DIR;
-const COMPOSE_FILES = (
-  process.env.E2E_COMPOSE_FILES ??
-  "-f compose.infra.yml -f compose.infra.dev.yml -f compose.services.yml -f compose.services.dev.yml -f compose.web.yml -f compose.gateway.yml"
-)
-  .split(/\s+/)
-  .filter(Boolean);
-
-/**
- * Последняя ссылка подтверждения e-mail из лога identity после `since`.
- *
- * В local/ci identity шлёт письма в лог (`LogEmailSender`, ссылка — только вне production);
- * адреса в логе нет, поэтому берём самую свежую ссылку: сценарий последовательный (workers: 1).
- */
-/** Ссылки подтверждения, уже отданные игрокам этого процесса (повтор — чужая ссылка). */
-const usedVerifyTokens = new Set<string>();
-
-function verifyTokenSince(since: string): string | null {
-  const cwd = COMPOSE_DIR ?? path.resolve(test.info().project.testDir, "../infra/compose");
-  const logs = execFileSync(
-    "docker",
-    ["compose", "--env-file", ".env", ...COMPOSE_FILES, "logs", "--no-color", "--since", since, "identity"],
-    { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  );
-  const tokens = [...logs.matchAll(/verify-email\?token=([A-Za-z0-9_.~%-]+)/g)].map((m) => m[1]!);
-  // Игроки регистрируются подряд: в окне `since` может лежать уже использованная ссылка
-  // предыдущего игрока, а письмо текущего — ещё не в логе. Берём только новую ссылку.
-  const fresh = tokens.filter((t) => !usedVerifyTokens.has(t)).at(-1) ?? null;
-  if (fresh !== null) usedVerifyTokens.add(fresh);
-  return fresh;
-}
-
 type User = { context: BrowserContext; page: Page; nickname: string };
 
-/** Регистрация через UI → ссылка из письма → вход. Возвращает вошедший контекст. */
+/** Регистрация через UI → код из письма (лог identity) → сессия. Возвращает вошедший контекст. */
 async function registerUser(browser: Browser, prefix: string): Promise<User> {
   const nickname = `${prefix}${RUN}`;
   const context = await browser.newContext();
   const page = await context.newPage();
-  const since = new Date(Date.now() - 1_000).toISOString();
-  await page.goto("/register");
-  await page.getByLabel("Ник").fill(nickname);
-  await page.getByLabel("E-mail").fill(`${nickname}@example.com`);
-  await page.getByLabel("Пароль").fill(PASSWORD);
-  for (const box of await page.getByRole("checkbox").all()) await box.check();
-  await page.getByRole("button", { name: "Зарегистрироваться" }).click();
-  await expect(page.getByTestId("register-done")).toBeVisible();
-
-  let token: string | null = null;
-  await expect
-    .poll(() => (token = verifyTokenSince(since)), { timeout: 30_000, message: "ссылка подтверждения в логе identity" })
-    .not.toBeNull();
-  await page.goto(`/verify-email?token=${token}`);
-  await expect(page.getByTestId("verify-state")).toContainText("подтверждён");
-  await login(page, nickname);
+  await registerViaUi(page, nickname, PASSWORD);
   return { context, page, nickname };
-}
-
-async function login(page: Page, nickname: string): Promise<void> {
-  await page.goto("/login");
-  await page.getByLabel("E-mail или ник").fill(nickname);
-  await page.getByLabel("Пароль").fill(PASSWORD);
-  await page.getByRole("button", { name: "Войти" }).click();
-  await expect(page.getByTestId("user-name")).toHaveText(nickname);
 }
 
 // ----------------------------------------------------------------------------- игра
@@ -326,7 +271,7 @@ test("A: черновик, конфликт двух вкладок, публи�
   const second = await browser.newContext();
   try {
     const tab2 = await second.newPage();
-    await login(tab2, author.nickname);
+    await loginViaUi(tab2, author.nickname, PASSWORD); // новое устройство: вход с кодом
     const tab1 = author.page;
     // Обе вкладки загрузили одну ревизию черновика (`editor-title` заполнен).
     for (const tab of [tab1, tab2]) {

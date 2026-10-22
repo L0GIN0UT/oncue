@@ -1,6 +1,6 @@
 "use client";
-/** Минимальные формы входа, регистрации и подтверждения e-mail к API identity. */
-import { useEffect, useRef, useState, type FormEvent } from "react";
+/** Формы входа и регистрации к API identity; коды из писем вводятся в {@link CodeStep}. */
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,11 +11,12 @@ import { Button } from "@/shared/ui/button";
 import { Field } from "@/shared/ui/field";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import type { ConsentRequirement } from "./consents";
+import { CodeStep, type Challenge } from "./CodeStep";
 
-type DynT = ReturnType<typeof useDynamicT>;
+export type DynT = ReturnType<typeof useDynamicT>;
 
 /** Текст ошибки identity по коду (`auth.error.<код>`); неизвестный код — общий текст. */
-function errorText(dt: DynT, generic: string, e: unknown): string {
+export function errorText(dt: DynT, generic: string, e: unknown): string {
   if (isApiError(e) && e.status === 429) return dt("auth.error.rate_limited", generic);
   const code = isApiError(e) ? e.code : "network";
   return dt(`auth.error.${code.replace(/^auth\./, "").replace(/\./g, "_")}`, generic);
@@ -47,45 +48,29 @@ export function safeNext(
   return url.pathname + url.search + url.hash;
 }
 
-/** Ключ localStorage: куда вернуть после подтверждения e-mail (ссылка из письма — новая вкладка). */
-const PENDING_NEXT_KEY = "gv_auth_next";
-
 /** Ссылка на вход или регистрацию с безопасным `next` (без него, если возвращать некуда). */
 export function withNext(path: "/login" | "/register", next: string | null | undefined): string {
   const safe = safeNext(next);
   return safe === "/" ? path : `${path}?next=${encodeURIComponent(safe)}`;
 }
 
-/** Запомнить `next` регистрации до подтверждения e-mail (удобство одного браузера). */
-export function rememberNext(next: string | null | undefined): void {
-  const safe = safeNext(next);
-  try {
-    if (safe === "/") globalThis.localStorage?.removeItem(PENDING_NEXT_KEY);
-    else globalThis.localStorage?.setItem(PENDING_NEXT_KEY, safe);
-  } catch {
-    // Хранилище недоступно (приватный режим) — вернём на главную.
-  }
-}
-
-/** Прочитать и забыть запомненный `next`; значение снова проходит {@link safeNext}. */
-export function takeRememberedNext(): string | null {
-  try {
-    const value = globalThis.localStorage?.getItem(PENDING_NEXT_KEY) ?? null;
-    globalThis.localStorage?.removeItem(PENDING_NEXT_KEY);
-    const safe = safeNext(value);
-    return safe === "/" ? null : safe;
-  } catch {
-    return null;
-  }
+/** Сессия открыта (вход, подтверждение): обновить личные данные и вернуть на `next`. */
+export function useFinishSignIn(next: string | null): () => Promise<void> {
+  const router = useRouter();
+  const client = useQueryClient();
+  return async () => {
+    await client.invalidateQueries();
+    router.replace(safeNext(next));
+  };
 }
 
 export function LoginForm({ next }: { next: string | null }) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const router = useRouter();
-  const client = useQueryClient();
+  const finish = useFinishSignIn(next);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -93,7 +78,7 @@ export function LoginForm({ next }: { next: string | null }) {
     setBusy(true);
     setError(null);
     try {
-      unwrap(
+      const res = unwrap(
         await api().identity.POST("/v1/auth/login", {
           body: {
             login: String(form.get("login") ?? ""),
@@ -101,13 +86,38 @@ export function LoginForm({ next }: { next: string | null }) {
           },
         }),
       );
-      await client.invalidateQueries();
-      router.replace(safeNext(next));
+      if (res.status === "code_required" && res.challenge) {
+        // Новое устройство: сессии ещё нет, нужен код из письма.
+        setChallenge(res.challenge);
+        setBusy(false);
+        return;
+      }
+      await finish();
     } catch (err) {
       setError(errorText(dt, t("auth.error.generic"), err));
       setBusy(false);
     }
   };
+
+  if (challenge) {
+    return (
+      <CodeStep
+        challenge={challenge}
+        submitLabel={t("auth.confirmSignIn")}
+        onSubmit={async (code, ch) => {
+          const body = { challenge_id: ch.challenge_id, code };
+          // Неподтверждённому пользователю вход выдаёт код регистрации (ADR 0041) —
+          // его принимает verify-email, а не login/confirm.
+          unwrap(
+            ch.purpose === "register"
+              ? await api().identity.POST("/v1/auth/verify-email", { body })
+              : await api().identity.POST("/v1/auth/login/confirm", { body }),
+          );
+          await finish();
+        }}
+      />
+    );
+  }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
@@ -134,6 +144,15 @@ export function LoginForm({ next }: { next: string | null }) {
       <Button type="submit" size="lg" disabled={busy}>
         {t("auth.signIn")}
       </Button>
+      <p>
+        <Link
+          href="/forgot-password"
+          className="text-ink-muted underline underline-offset-4 hover:text-ink"
+          data-testid="forgot-link"
+        >
+          {t("auth.forgot")}
+        </Link>
+      </p>
       <p className="text-ink-muted">
         {t("auth.noAccount")}{" "}
         <Link
@@ -152,14 +171,15 @@ export function RegisterForm({
   next = null,
 }: {
   consents: ConsentRequirement[];
-  /** Куда вернуть после подтверждения e-mail и входа (`?next=`, безопасный путь сайта). */
+  /** Куда вернуть после подтверждения e-mail (`?next=`, безопасный путь сайта). */
   next?: string | null;
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const finish = useFinishSignIn(next);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -172,7 +192,7 @@ export function RegisterForm({
     setBusy(true);
     setError(null);
     try {
-      unwrap(
+      const res = unwrap(
         await api().identity.POST("/v1/auth/register", {
           body: {
             nickname: String(form.get("nickname") ?? "").trim(),
@@ -183,8 +203,7 @@ export function RegisterForm({
           },
         }),
       );
-      rememberNext(next);
-      setDone(true);
+      setChallenge(res);
     } catch (err) {
       setError(errorText(dt, t("auth.error.generic"), err));
     } finally {
@@ -192,22 +211,20 @@ export function RegisterForm({
     }
   };
 
-  if (done) {
+  if (challenge) {
     return (
-      <div className="flex flex-col items-start gap-4">
-        <p
-          role="status"
-          className="rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule"
-          data-testid="register-done"
-        >
-          {t("auth.checkEmail")}
-        </p>
-        <Button asChild variant="secondary">
-          <Link href={withNext("/login", next)} data-testid="register-done-login">
-            {t("auth.signIn")}
-          </Link>
-        </Button>
-      </div>
+      <CodeStep
+        challenge={challenge}
+        submitLabel={t("auth.confirmSignUp")}
+        onSubmit={async (code, ch) => {
+          unwrap(
+            await api().identity.POST("/v1/auth/verify-email", {
+              body: { challenge_id: ch.challenge_id, code },
+            }),
+          );
+          await finish();
+        }}
+      />
     );
   }
 
@@ -268,62 +285,5 @@ export function RegisterForm({
         </Link>
       </p>
     </form>
-  );
-}
-
-export type VerifyState = "pending" | "ok" | "failed" | "rate_limited";
-
-/**
- * Подтвердить e-mail. 429 (лимит gateway `auth_per_ip`) — не «недействительная ссылка»:
- * токен не израсходован, поэтому повторяем с паузой; не отпустило — `rate_limited`.
- */
-export async function verifyEmailToken(
-  send: () => Promise<{ status: number; retryAfterS?: number }>,
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  attempts = 4,
-): Promise<VerifyState> {
-  for (let i = 0; i < attempts; i++) {
-    const { status, retryAfterS } = await send();
-    if (status !== 429) return status >= 200 && status < 300 ? "ok" : "failed";
-    if (i < attempts - 1) await sleep(Math.min(Math.max(retryAfterS ?? 3, 1), 10) * 1000);
-  }
-  return "rate_limited";
-}
-
-export function VerifyEmail({ token }: { token: string | null }) {
-  const t = useTranslations();
-  const [state, setState] = useState<VerifyState>(token ? "pending" : "failed");
-  const [next, setNext] = useState<string | null>(null);
-  const sent = useRef(false);
-  useEffect(() => {
-    if (!token || sent.current) return;
-    sent.current = true;
-    verifyEmailToken(async () => {
-      const r = await api().identity.POST("/v1/auth/verify-email", { body: { token } });
-      const retryAfter = Number(r.response.headers.get("Retry-After"));
-      return {
-        status: r.response.status,
-        retryAfterS: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-      };
-    })
-      .then((result) => {
-        if (result === "ok") setNext(takeRememberedNext());
-        setState(result);
-      })
-      .catch(() => setState("failed"));
-  }, [token]);
-  return (
-    <div className="flex flex-col items-start gap-4" role="status">
-      <p className="text-lg" data-testid="verify-state">
-        {t(`auth.verify.${state}`)}
-      </p>
-      {state === "ok" && (
-        <Button asChild>
-          <Link href={withNext("/login", next)} data-testid="verify-login">
-            {t("auth.signIn")}
-          </Link>
-        </Button>
-      )}
-    </div>
   );
 }

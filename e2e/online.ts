@@ -3,7 +3,7 @@
  * полном стеке: регистрация игроков, вход в комнату, ходы по UI, статусы игроков.
  *
  * Игроки — свежие пользователи каждого прогона (как в `collections.spec.ts`): регистрация
- * через UI, ссылка подтверждения e-mail — из лога identity (`docker compose logs identity`,
+ * через UI, код подтверждения e-mail — из лога identity (`docker compose logs identity`,
  * в local/ci письма пишутся в лог). Засеянные постоянные пользователи не подходят: комната,
  * брошенная упавшим прогоном, держала бы их (409 `match.active_room_conflict`).
  *
@@ -11,9 +11,7 @@
  * проходятся пропуском (`match-skip`) или заведомо неверным ответом. Ожиданий по времени
  * нет — только по состояниям UI; таймауты учитывают окна уровней шаблонов (≤ 30 с).
  */
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import {
   expect,
   test,
@@ -23,6 +21,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { registerViaUi } from "./auth";
 
 /** Уникальный хвост прогона: ники и тексты не пересекаются с прошлыми прогонами на стеке. */
 export const RUN = randomUUID().slice(0, 8);
@@ -81,72 +80,8 @@ export type Player = { context: BrowserContext; page: Page; nickname: string };
 type Problem = { code: string; details?: Record<string, unknown> | null };
 
 // ----------------------------------------------------------------------------- регистрация
-const COMPOSE_DIR = process.env.E2E_COMPOSE_DIR;
-const COMPOSE_FILES = (
-  process.env.E2E_COMPOSE_FILES ??
-  "-f compose.infra.yml -f compose.infra.dev.yml -f compose.services.yml -f compose.services.dev.yml -f compose.web.yml -f compose.gateway.yml"
-)
-  .split(/\s+/)
-  .filter(Boolean);
 
-/**
- * Последняя ссылка подтверждения e-mail из лога identity после `since`. Адреса в логе нет,
- * поэтому игроки регистрируются строго по одному (workers: 1, без параллельных регистраций).
- */
-/** Ссылки подтверждения, уже отданные игрокам этого процесса (повтор — чужая ссылка). */
-const usedVerifyTokens = new Set<string>();
-
-function verifyTokenSince(since: string): string | null {
-  const cwd =
-    COMPOSE_DIR ??
-    path.resolve(test.info().project.testDir, "../infra/compose");
-  const logs = execFileSync(
-    "docker",
-    [
-      "compose",
-      "--env-file",
-      ".env",
-      ...COMPOSE_FILES,
-      "logs",
-      "--no-color",
-      "--since",
-      since,
-      "identity",
-    ],
-    { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  );
-  const tokens = [
-    ...logs.matchAll(/verify-email\?token=([A-Za-z0-9_.~%-]+)/g),
-  ].map((m) => m[1]!);
-  // Игроки регистрируются подряд: в окне `since` может лежать уже использованная ссылка
-  // предыдущего игрока, а письмо текущего — ещё не в логе. Берём только новую ссылку.
-  const fresh = tokens.filter((t) => !usedVerifyTokens.has(t)).at(-1) ?? null;
-  if (fresh !== null) usedVerifyTokens.add(fresh);
-  return fresh;
-}
-
-/**
- * Отправить форму входа/регистрации с учётом лимита gateway `auth_per_ip` (30 в минуту с
- * одного IP): e2e регистрирует десятки игроков с одного адреса, 429 — подождать и повторить.
- */
-async function submitThrottled(
-  page: Page,
-  button: string,
-  path: string,
-): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const response = page.waitForResponse(
-      (r) =>
-        new URL(r.url()).pathname === path && r.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: button }).click();
-    if ((await response).status() !== 429) return;
-    await page.waitForTimeout(3_000); // окно лимита nginx — 2 с на запрос; пауза здесь осознанна
-  }
-  throw new Error(`${path}: лимит gateway не отпустил за 20 попыток`);
-}
-
-/** Регистрация через UI → ссылка из письма → вход. Свой браузерный контекст на игрока. */
+/** Регистрация через UI → код из письма (лог identity) → сессия. Свой контекст на игрока. */
 export async function registerPlayer(
   browser: Browser,
   prefix: string,
@@ -155,37 +90,11 @@ export async function registerPlayer(
   const context = await browser.newContext();
   trackApiErrors(context, nickname);
   const page = await context.newPage();
-  const since = new Date(Date.now() - 1_000).toISOString();
-  await page.goto("/register");
-  await page.getByLabel("Ник").fill(nickname);
-  await page.getByLabel("E-mail").fill(`${nickname}@example.com`);
-  await page.getByLabel("Пароль").fill(PASSWORD);
-  for (const box of await page.getByRole("checkbox").all()) await box.check();
-  await submitThrottled(
-    page,
-    "Зарегистрироваться",
-    "/api/identity/v1/auth/register",
-  );
-  await expect(page.getByTestId("register-done")).toBeVisible();
-
-  let token: string | null = null;
-  await expect
-    .poll(() => (token = verifyTokenSince(since)), {
-      timeout: 30_000,
-      message: "ссылка подтверждения в логе identity",
-    })
-    .not.toBeNull();
-  await page.goto(`/verify-email?token=${token}`);
-  await expect(page.getByTestId("verify-state")).toContainText("подтверждён");
-  await page.goto("/login");
-  await page.getByLabel("E-mail или ник").fill(nickname);
-  await page.getByLabel("Пароль").fill(PASSWORD);
-  await submitThrottled(page, "Войти", "/api/identity/v1/auth/login");
-  await expect(page.getByTestId("user-name")).toHaveText(nickname);
+  await registerViaUi(page, nickname, PASSWORD);
   return { context, page, nickname };
 }
 
-/** Игроки по префиксам — последовательно (см. {@link verifyTokenSince}). */
+/** Игроки по префиксам — последовательно (общий лимит gateway на регистрацию с одного IP). */
 export async function registerPlayers(
   browser: Browser,
   prefixes: string[],

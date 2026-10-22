@@ -45,7 +45,7 @@
 
 ### 1. identity
 - **Отвечает за:** аккаунты, регистрацию и вход (OAuth-провайдеры, e-mail), сессии, access/refresh-токены, привязку внешних аккаунтов для входа, слияние аккаунтов, удаление аккаунта, **роли и права** (user, moderator, admin), согласия (условия, 18+, cookie).
-- **Данные:** users, password_credentials, auth_identities (provider, subject), sessions (`subject_kind = user | guest`), refresh_tokens, roles, permissions, role_changes (аудит), consents, email_tokens, idempotency_keys; merge_operations — этап 6.
+- **Данные:** users, password_credentials, auth_identities (provider, subject), sessions (`subject_kind = user | guest`), refresh_tokens, roles, permissions, role_changes (аудит), consents, email_challenges (одноразовые коды из писем), trusted_devices (доверенные устройства), idempotency_keys; merge_operations — этап 6. Вместо ссылок с токенами — коды и доверенные устройства ([ADR 0041](../adr/0041-email-codes-trusted-devices.md)); события не менялись. Фоновая очистка `email_challenges`/`trusted_devices` по сроку — планируется (в коде пока только `guest_sessions.purge`).
 - **Публикует:** `UserRegistered`, `UserProfileBasicsChanged`, `UserRolesChanged`, `UserDeleted`, `ExternalAccountLinked`/`Unlinked`; `AccountsMerged` — этап 6.
 - **Слушает:** —
 - **API (этап 1):** публичный `/v1/auth/*`, `/v1/me*`, OAuth Яндекса; internal `/internal/v1/admin-sessions[/refresh|/revoke]` (вход в админку только паролем + `admin.access`, ответ несёт `identity_version`); admin `/admin/v1/users`, `/admin/v1/roles`. Admin-мутации — по [ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md); понижение прав отзывает сессии пользователя.

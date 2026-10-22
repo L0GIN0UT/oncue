@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from email.message import EmailMessage as MimeMessage
 from urllib.parse import urlencode
 
@@ -10,24 +11,28 @@ import httpx
 import structlog
 
 from gv_core.errors import DependencyUnavailableError
-from identity_service.application.ports import EmailMessage, ExternalProfile
+from identity_service.application.ports import EmailMessage, EmailSender, ExternalProfile
 from identity_service.application.security import OAuthStateError
 from identity_service.domain import Provider
 
 log = structlog.get_logger(__name__)
 
 _SUBJECTS = {
-    "verify": "Подтвердите e-mail в Guessverse",
-    "reset": "Сброс пароля в Guessverse",
+    "code_register": "Код подтверждения e-mail в Guessverse",
+    "code_login": "Код для входа в Guessverse",
+    "code_reset": "Код для сброса пароля в Guessverse",
+    "code_password_change": "Код для смены пароля в Guessverse",
     "already_registered": "У вас уже есть аккаунт Guessverse",
     "provider_linked": "К аккаунту Guessverse привязан внешний сервис",
     "provider_unlinked": "От аккаунта Guessverse отвязан внешний сервис",
     "password_changed": "Пароль в Guessverse изменён",
 }
+_CODE_TAIL = "Код действует {minutes} мин. Если это были не вы — просто проигнорируйте письмо.\n"
 _BODIES = {
-    "verify": "Чтобы подтвердить адрес, откройте ссылку:\n{link}\n",
-    "reset": "Чтобы задать новый пароль, откройте ссылку:\n{link}\n"
-    "Если вы не запрашивали сброс, просто проигнорируйте письмо.\n",
+    "code_register": "Код подтверждения e-mail: {code}\n" + _CODE_TAIL,
+    "code_login": "Код для входа с нового устройства: {code}\n" + _CODE_TAIL,
+    "code_reset": "Код для сброса пароля: {code}\n" + _CODE_TAIL,
+    "code_password_change": "Код для смены пароля: {code}\n" + _CODE_TAIL,
     "already_registered": "Кто-то пытался зарегистрироваться с вашим адресом. Если это вы — "
     "войдите или восстановите пароль.\n",
     "provider_linked": "К вашему аккаунту привязан сервис: {providers}. Через него можно "
@@ -38,6 +43,25 @@ _BODIES = {
     "Привязанные сервисы, через которые можно войти: {providers}. Если какой-то из них не ваш — "
     "отвяжите его в профиле.\n",
 }
+_SECONDS_IN_MINUTE = 60
+
+
+def render_email(message: EmailMessage, *, code_ttl_s: int) -> tuple[str, str]:
+    """Тема и текст письма.
+
+    Args:
+        message: Письмо; для ``code_*`` обязателен ``code``.
+        code_ttl_s: Срок действия кода в секундах (``GV_EMAIL_CODE__TTL_S``), в тексте — минуты.
+
+    Returns:
+        ``(subject, body)``. Ссылок с секретами в письмах нет (ADR 0041).
+    """
+    body = _BODIES[message.purpose].format(
+        code=message.code or "",
+        minutes=max(1, -(-code_ttl_s // _SECONDS_IN_MINUTE)),
+        providers=", ".join(message.providers) or "нет",
+    )
+    return _SUBJECTS[message.purpose], body
 
 
 class YandexOAuthProvider:
@@ -131,26 +155,66 @@ class YandexOAuthProvider:
 
 
 class LogEmailSender:
-    """Письма в лог (локальная разработка, демонстрация этапа 1).
+    """Письма в лог (local/ci).
 
-    В production ссылка с секретом в лог не пишется — только факт и назначение письма.
-    Адрес получателя не логируется никогда (ПДн).
+    Код пишется в лог только при ``include_secrets`` (local/ci, e2e читают код оттуда);
+    иначе — лишь факт и назначение. Адрес получателя не логируется никогда (ПДн).
     """
 
-    def __init__(self, *, include_links: bool) -> None:
-        self._include_links = include_links
+    def __init__(self, *, include_secrets: bool = False) -> None:
+        self._include_secrets = include_secrets
 
     async def send(self, message: EmailMessage) -> None:
         """«Отправить» письмо."""
-        extra = {"providers": list(message.providers)} if message.providers else {}
-        if self._include_links and message.link:
-            log.info("email.logged", purpose=message.purpose, link=message.link, **extra)
-        else:
-            log.info("email.logged", purpose=message.purpose, **extra)
+        extra: dict[str, object] = {}
+        if message.providers:
+            extra["providers"] = list(message.providers)
+        if self._include_secrets:
+            if message.code:
+                extra["code"] = message.code
+            if message.link:
+                extra["link"] = message.link
+        if message.challenge_id is not None:
+            extra["challenge_id"] = str(message.challenge_id)  # не секрет: по нему e2e ищет код
+        log.info("email.logged", purpose=message.purpose, **extra)
+
+
+class BackgroundEmailSender:
+    """Отправка письма вне запроса: время ответа не зависит от SMTP (ADR 0041, ревью).
+
+    Иначе ``forgot`` отвечал бы дольше для существующего адреса (письмо уходит только ему), и по
+    времени ответа адрес был бы различим. Задача не переживает остановку процесса — письмо
+    тогда не дойдёт, пользователь запросит код повторно (resend). При ``max_pending`` задачах в
+    полёте отправка идёт синхронно: очередь не растёт без границ.
+    """
+
+    def __init__(self, inner: EmailSender, *, max_pending: int = 100) -> None:
+        self._inner, self._max_pending = inner, max_pending
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    async def send(self, message: EmailMessage) -> None:
+        """Поставить письмо в фон (или отправить сразу, если очередь заполнена)."""
+        if len(self._tasks) >= self._max_pending:
+            await self._deliver(message)
+            return
+        task = asyncio.get_running_loop().create_task(self._deliver(message))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def drain(self, timeout_s: float = 10.0) -> None:
+        """Дождаться уже запущенных отправок (остановка процесса, тесты)."""
+        if self._tasks:
+            await asyncio.wait(set(self._tasks), timeout=timeout_s)
+
+    async def _deliver(self, message: EmailMessage) -> None:
+        try:
+            await self._inner.send(message)
+        except Exception as exc:
+            log.warning("email.send_failed", purpose=message.purpose, error=type(exc).__name__)
 
 
 class SmtpEmailSender:
-    """Отправка через SMTP (STARTTLS по умолчанию)."""
+    """Отправка через SMTP: STARTTLS (по умолчанию) или неявный TLS (``use_tls``, порт 465)."""
 
     def __init__(
         self,
@@ -158,32 +222,35 @@ class SmtpEmailSender:
         host: str,
         port: int,
         sender: str,
+        code_ttl_s: int,
         username: str | None = None,
         password: str | None = None,
         start_tls: bool = True,
+        use_tls: bool = False,
         timeout_s: float = 10.0,
     ) -> None:
+        if use_tls and start_tls:
+            raise ValueError("use_tls и start_tls взаимоисключающи")
         self._host, self._port, self._from = host, port, sender
         self._user, self._password = username, password
-        self._tls, self._timeout = start_tls, timeout_s
+        self._start_tls, self._use_tls, self._timeout = start_tls, use_tls, timeout_s
+        self._code_ttl_s = code_ttl_s
 
     async def send(self, message: EmailMessage) -> None:
         """Отправить письмо."""
+        subject, body = render_email(message, code_ttl_s=self._code_ttl_s)
         mime = MimeMessage()
         mime["From"] = self._from
         mime["To"] = message.to.value
-        mime["Subject"] = _SUBJECTS[message.purpose]
-        mime.set_content(
-            _BODIES[message.purpose].format(
-                link=message.link or "", providers=", ".join(message.providers) or "нет"
-            )
-        )
+        mime["Subject"] = subject
+        mime.set_content(body)
         await aiosmtplib.send(
             mime,
             hostname=self._host,
             port=self._port,
             username=self._user,
             password=self._password,
-            start_tls=self._tls,
+            start_tls=self._start_tls,
+            use_tls=self._use_tls,
             timeout=self._timeout,
         )

@@ -292,7 +292,7 @@ test("хаб: открытые лобби и вход в комнату из с�
   await expect(page.getByTestId("player-rival")).toBeVisible();
 });
 
-test("регистрация из экрана онлайна возвращает в онлайн после подтверждения и входа", async ({
+test("регистрация из экрана онлайна возвращает в онлайн после подтверждения кодом", async ({
   page,
 }) => {
   await page.goto("/online");
@@ -303,19 +303,8 @@ test("регистрация из экрана онлайна возвращае
   await page.getByLabel("Пароль").fill("long-enough-pass");
   for (const box of await page.getByRole("checkbox").all()) await box.check();
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
-  await expect(page.getByTestId("register-done")).toBeVisible();
-  await expect(page.getByTestId("register-done-login")).toHaveAttribute(
-    "href",
-    "/login?next=%2Fonline",
-  );
-
-  // Ссылка из письма — та же вкладка браузера: после подтверждения вход ведёт в онлайн.
-  await page.goto("/verify-email?token=valid-token");
-  await page.getByTestId("verify-login").click();
-  await expect(page).toHaveURL(/\/login\?next=%2Fonline$/);
-  await page.getByLabel("E-mail или ник").fill("newcomer");
-  await page.getByLabel("Пароль").fill("long-enough-pass");
-  await page.getByRole("button", { name: "Войти" }).click();
+  await page.getByTestId("code-input").fill("123456");
+  await page.getByTestId("code-submit").click();
   await expect(page).toHaveURL(/\/online$/);
   await expect(page.getByTestId("join-by-code")).toBeVisible();
 });

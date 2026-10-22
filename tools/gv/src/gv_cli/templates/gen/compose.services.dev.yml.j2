@@ -7,9 +7,8 @@ services:
     environment:
       GV_LOG_JSON: "false"
 {% if s.name == "identity" %}
-      # Ссылки из писем ведут на веб-клиент за локальным gateway.
-      GV_EMAIL__VERIFY_LINK: https://localhost/verify-email?token={token}
-      GV_EMAIL__RESET_LINK: https://localhost/reset-password?token={token}
+      # Локально письма с кодом пишутся в лог (ADR 0041); smtp — через GV_EMAIL__BACKEND в .env.
+      GV_EMAIL__BACKEND: ${GV_EMAIL__BACKEND:-log}
 {% endif %}
 {% if s.name == "game" %}
       # Сиды режимов публикуются при старте (game.modes.bootstrap).

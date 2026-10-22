@@ -69,6 +69,17 @@ services:
       GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}
       # Пусто — временный ключ (только local/ci); вне них identity не стартует без ключей.
       GV_JWT__SIGNING_KEYS: ${GV_JWT__SIGNING_KEYS:-}
+      # Коды из писем (ADR 0041): вне local/ci backend=smtp и ключ HMAC обязательны.
+      GV_EMAIL__BACKEND: ${GV_EMAIL__BACKEND:-smtp}
+      GV_EMAIL__SENDER: ${GV_EMAIL__SENDER:-Guessverse <no-reply@guessverse.local>}
+      GV_EMAIL_CODE__HMAC_KEY: ${GV_EMAIL_CODE__HMAC_KEY:?задайте GV_EMAIL_CODE__HMAC_KEY}
+      GV_SMTP__HOST: ${GV_SMTP__HOST:-localhost}
+      GV_SMTP__PORT: ${GV_SMTP__PORT:-587}
+      GV_SMTP__USERNAME: ${GV_SMTP__USERNAME:-}
+      GV_SMTP__PASSWORD: ${GV_SMTP__PASSWORD:-}
+      GV_SMTP__START_TLS: ${GV_SMTP__START_TLS:-true}
+      GV_SMTP__USE_TLS: ${GV_SMTP__USE_TLS:-false}
+      GV_SMTP__TIMEOUT_S: ${GV_SMTP__TIMEOUT_S:-10}
     depends_on:
       identity-migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

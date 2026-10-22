@@ -40,3 +40,4 @@
 | [0034](0034-rooms-process-lease-snapshots.md) | Процесс `rooms`: команды через Redis Stream, lease с fencing-эпохой, снимки, итог в Postgres |
 | [0035](0035-realtime-centrifugo-tokens-and-tick.md) | Realtime: токены Centrifugo, namespace-ы, версии и recovery, HTTP-tick |
 | [0036](0036-online-account-only-chat-and-ratings.md) | Онлайн только с аккаунтом; эмоции и фразы, чат в лобби, оценки игроков |
+| [0041](0041-email-codes-trusted-devices.md) | Одноразовые коды по почте и доверенные устройства вместо ссылок с токенами |

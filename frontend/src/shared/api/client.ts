@@ -7,7 +7,7 @@ import type { paths as IdentityPaths } from "./schema/identity";
 import type { paths as CollectionsPaths } from "./schema/collections";
 import type { paths as LibraryPaths } from "./schema/library";
 import type { paths as MatchPaths } from "./schema/match";
-import { ApiError } from "./errors";
+import { ApiError, parseRetryAfter } from "./errors";
 import { apiFetch } from "./http";
 
 export const API_PREFIX = {
@@ -63,7 +63,11 @@ export function unwrap<T>(result: Result<T>): T {
   const { data, error, response } = result;
   if (error !== undefined || !response.ok) {
     const problem = error && typeof error === "object" ? (error as Record<string, unknown>) : null;
-    throw new ApiError(response.status, problem as ConstructorParameters<typeof ApiError>[1]);
+    throw new ApiError(
+      response.status,
+      problem as ConstructorParameters<typeof ApiError>[1],
+      parseRetryAfter(response),
+    );
   }
   return data as T;
 }

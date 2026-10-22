@@ -19,7 +19,7 @@
 План: [plans/stage-1.md](plans/stage-1.md). Решения: ADR [0012](adr/0012-signed-asset-links-nginx.md)–[0015](adr/0015-admin-idempotency-and-asset-event-order.md).
 
 - **edge:** `/metrics` на отдельном порту 9100 у всех процессов; gateway с TLS (443, HSTS, 80 → 301), `/media/` через `secure_link` в приватное S3-хранилище (MinIO заменён на SeaweedFS — [ADR 0021](adr/0021-s3-storage-seaweedfs.md)); CSRF/Origin для cookie-аутентификации в `libs/auth`.
-- **identity:** регистрация (никнейм + e-mail + пароль), вход по e-mail или никнейму, сессии с ротацией refresh, JWT/JWKS, роли и права, согласия, привязка Яндекс ID и вход через привязанный аккаунт, admin-сессии и admin-API пользователей и ролей.
+- **identity:** регистрация (никнейм + e-mail + пароль), вход по e-mail или никнейму, сессии с ротацией refresh, JWT/JWKS, роли и права, согласия, подтверждение e-mail и сброс пароля одноразовыми кодами, доверенные устройства ([ADR 0041](adr/0041-email-codes-trusted-devices.md)), привязка Яндекс ID и вход через привязанный аккаунт, admin-сессии и admin-API пользователей и ролей.
 - **catalog:** MediaItem (music + film), импорт (файл, TMDB, MusicBrainz, Spotify, Яндекс Музыка — внешние выключены по умолчанию), нормализация и алиасы, OpenSearch с fallback на pg_trgm, автокомплит, admin-API.
 - **media-pipeline:** `audio_intro`, `frame_progressive`, `poster_masked`; подписанные ссылки (ADR 0012), admin-загрузка исходников и перегенерация. Вместо CDN — `proxy_cache` на gateway (CDN — этап 7).
 - **admin:** Django 5.2, вход через identity, синхронизация прав, разделы «Каталог» и «Пользователи», аудит (append-only).

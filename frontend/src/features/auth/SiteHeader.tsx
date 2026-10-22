@@ -44,6 +44,15 @@ export function SiteHeader() {
             {t("nav.library")}
           </Link>
         )}
+        {subject?.kind === "user" && (
+          <Link
+            href="/me/security"
+            className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+            data-testid="nav-security"
+          >
+            {t("nav.security")}
+          </Link>
+        )}
         {subject?.kind === "user" ? (
           <Link
             href="/me/collections"
