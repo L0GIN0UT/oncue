@@ -54,6 +54,10 @@ export class RoomLink {
   private resyncing: Promise<void> | null = null;
   private resyncAgain = false;
   private stopped = true;
+  /** Был ли хоть один снимок: до него 403/404 — гонка входа, а не исключение из комнаты. */
+  private hadState = false;
+  private entryRetriesLeft = 0;
+  private entryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: RoomLinkDeps) {
     this.config = { ...DEFAULT_REALTIME_CONFIG, ...deps.config };
@@ -70,6 +74,7 @@ export class RoomLink {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.entryRetriesLeft = this.config.entryRetries;
     this.armOffline();
     void this.resync();
     this.deps.transport?.start({
@@ -92,8 +97,9 @@ export class RoomLink {
 
   stop(): void {
     this.stopped = true;
-    for (const t of [this.tickTimer, this.offlineTimer, this.acceptedTimer]) if (t) clearTimeout(t);
-    this.tickTimer = this.offlineTimer = this.acceptedTimer = null;
+    for (const t of [this.tickTimer, this.offlineTimer, this.acceptedTimer, this.entryTimer])
+      if (t) clearTimeout(t);
+    this.tickTimer = this.offlineTimer = this.acceptedTimer = this.entryTimer = null;
     this.deps.transport?.stop();
   }
 
@@ -148,7 +154,10 @@ export class RoomLink {
           this.applyState(state);
         } catch (e) {
           if (this.stopped) return;
-          if (this.isFatal(e)) return this.fail(e);
+          if (this.isFatal(e)) {
+            if (this.retryEntry()) return;
+            return this.fail(e);
+          }
           // Сеть или 5xx: снимок принесёт следующий tick.
         }
       } while (this.resyncAgain && !this.stopped);
@@ -159,9 +168,22 @@ export class RoomLink {
     return this.resyncing;
   }
 
+  /** Повторить снимок после гонки входа; `false` — повторы кончились или снимок уже был. */
+  private retryEntry(): boolean {
+    if (this.hadState || this.entryRetriesLeft <= 0) return false;
+    this.entryRetriesLeft -= 1;
+    if (this.entryTimer) clearTimeout(this.entryTimer);
+    this.entryTimer = setTimeout(() => {
+      this.entryTimer = null;
+      void this.resync();
+    }, this.config.entryRetryMs);
+    return true;
+  }
+
   private applyState(state: RoomState): void {
     const pending = this.gate.reset(state.room.version);
     if (pending === null) return;
+    this.hadState = true;
     this.deps.onState(state);
     for (const m of pending) this.deps.onMessage(m);
   }
@@ -180,7 +202,8 @@ export class RoomLink {
       }
     } catch (e) {
       if (this.stopped) return;
-      if (this.isFatal(e)) this.fail(e);
+      // До первого снимка tick тоже может не знать игрока — ресинк повторит вход.
+      if (this.isFatal(e) && this.hadState) this.fail(e);
     }
   }
 

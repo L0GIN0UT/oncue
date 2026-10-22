@@ -39,6 +39,8 @@ export type RoomStore = {
   rematchCode: string | null;
   /** `me` относится к другому раунду — нужен снимок. */
   meStale: boolean;
+  /** Уровень `раунд:уровень`, на котором я уже сходил без ответа `me` (пропуск, 202). */
+  lockedLevel: string | null;
 };
 
 export const FEED_LIMIT = 50;
@@ -51,12 +53,15 @@ export const initialRoomStore: RoomStore = {
   closedReason: null,
   rematchCode: null,
   meStale: false,
+  lockedLevel: null,
 };
 
 export type RoomAction =
   | { type: "snapshot"; state: RoomState }
   | { type: "message"; message: RoomMessage }
-  | { type: "guess"; result: GuessResult };
+  | { type: "guess"; result: GuessResult }
+  /** Свой пропуск принят: ответ команды без `me` — блокируем уровень до снимка. */
+  | { type: "skipped"; round_index: number; level: number };
 
 export function roomReducer(store: RoomStore, action: RoomAction): RoomStore {
   switch (action.type) {
@@ -64,6 +69,9 @@ export function roomReducer(store: RoomStore, action: RoomAction): RoomStore {
       return fromSnapshot(store, action.state);
     case "message":
       return isKnownMessage(action.message) ? applyMessage(store, action.message) : store;
+    case "skipped":
+      // Мой статус придёт дельтой или снимком; до тех пор уровень закрыт для повторного хода.
+      return { ...store, meStale: true, lockedLevel: `${action.round_index}:${action.level}` };
     case "guess": {
       const state = store.state;
       if (!state?.match || state.match.round_index !== action.result.me.round_index) return store;
@@ -197,7 +205,9 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
         next = { ...next, reveal: null };
       // Новый раунд или матч, которого в снимке ещё нет (после отсчёта), — нужен снимок.
       const me = next.state?.me;
-      if (d.round_index !== null && (!me || me.round_index !== d.round_index))
+      const levelChanged =
+        d.phase === "level_open" && d.level !== null && store.state?.match?.level !== d.level;
+      if (d.round_index !== null && (!me || me.round_index !== d.round_index || levelChanged))
         next = { ...next, meStale: true };
       return next;
     }
@@ -221,8 +231,11 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
             p.status === "guessed" && match.round_index === d.round_index ? p.status : "thinking",
         })),
       }));
+      // Новый уровень: попытки и статус уровня — только из снимка (личное в канал не идёт).
       const me = next.state?.me;
-      if (!me || me.round_index !== d.round_index) next = { ...next, meStale: true };
+      const prev = store.state?.match;
+      if (!me || me.round_index !== d.round_index || prev?.level !== d.level)
+        next = { ...next, meStale: true };
       return { ...next, reveal: null };
     }
 
@@ -283,6 +296,26 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
         rematchCode: m.delta.rematch_code ?? store.rematchCode,
       };
   }
+}
+
+/**
+ * Можно ли мне отвечать сейчас. Уровень открыт и я на нём ещё не сходил без ответа `me`.
+ * Своё состояние (`me`: статус, попытки уровня) свежее — решает оно: «думает» и попытки есть;
+ * в `parallel` ответивший ждёт закрытия уровня (`answered`). Пока `me` устарел (новый уровень
+ * или раунд, снимок в пути) — решает мой статус в `match.players`, который `level_opened`
+ * сбрасывает в «думает»: поле включается сразу, без ожидания `GET /state`.
+ */
+export function canAnswer(store: RoomStore, myId: string | null): boolean {
+  const { state, meStale } = store;
+  const match = state?.match;
+  if (!state || !match || state.room.phase !== "level_open" || match.level === null) return false;
+  if (store.lockedLevel === `${match.round_index}:${match.level}`) return false;
+  const me = state.me;
+  if (me && !meStale && me.round_index === match.round_index) {
+    return (me.status === "thinking" || me.status === null) && me.attempts_left > 0;
+  }
+  const mine = match.players.find((p) => p.user_id === myId);
+  return mine?.status === "thinking";
 }
 
 /** Мой слот в комнате по `user_id`; `null` — не участник (или ещё не знаем, кто я). */
