@@ -32,9 +32,10 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from gv_core.errors import GoneError
+from gv_core.errors import GoneError, NotImplementedYetError
 from gv_game_kernel.errors import (
     AnswerKindError,
+    ModeNotSoloError,
     OptionNotFoundError,
     RoundFinishedError,
     RoundNotFinishedError,
@@ -82,6 +83,7 @@ from gv_game_kernel.round import (
     GuessKind,
     RoundOutcome,
     RoundResult,
+    RoundRules,
     RoundState,
     apply_guess,
     apply_skip,
@@ -90,7 +92,7 @@ from gv_game_kernel.round import (
     round_outcome,
     void,
 )
-from gv_game_kernel.spec import ModeConfig
+from gv_game_kernel.spec import ModeConfig, SoloSessionSpec, solo_end
 from gv_text import CONJUNCTION_REPLACEMENTS, NormalizerConfig, TitleNormalizer
 
 DEFAULT_CANDIDATE_LIMIT = 5000
@@ -194,7 +196,7 @@ class ModeEngine:
         self.answer_format = answer_format
         self.end_rule = end_rule
         self.reveal = reveal
-        end = config.session.end
+        end = solo_end(config)
         self.end_params: BaseModel = end_rule.params_schema.model_validate(
             end.params if end is not None else {}
         )
@@ -602,6 +604,30 @@ class ModeEngine:
         ctx = self._match_ctx if draw is None else replace(self._match_ctx, draw=draw)
         return self.matcher.match(answer, item, self.matcher_params, ctx)
 
+    @property
+    def solo_session(self) -> SoloSessionSpec:
+        """Правила соло-сессии (game играет только соло).
+
+        Raises:
+            ModeNotSoloError: режим онлайн — его играет match (ADR 0032).
+        """
+        session = self.config.session
+        if not isinstance(session, SoloSessionSpec):
+            raise ModeNotSoloError("режим онлайн: его играет match", details={"kind": session.kind})
+        return session
+
+    @property
+    def round_rules(self) -> RoundRules:
+        """Правила ходов раунда: соло — ``session``; онлайн — от ``ContestRule`` (ADR 0032).
+
+        Raises:
+            NotImplementedYetError: онлайн-правила подключает поток A этапа 4a.
+        """
+        session = self.config.session
+        if isinstance(session, SoloSessionSpec):
+            return session
+        raise NotImplementedYetError("правила раунда онлайн-сессии выводит ContestRule")
+
     @staticmethod
     def new_round() -> RoundState:
         """Начальное состояние раунда (уровень 1, ходов нет)."""
@@ -609,9 +635,7 @@ class ModeEngine:
 
     def advance(self, state: RoundState, guess: Guess) -> RoundState:
         """Применить уже сверенный ответ по правилам сессии (см. ``round.apply_guess``)."""
-        return apply_guess(
-            state, guess, levels_count=self.levels_count, session=self.config.session
-        )
+        return apply_guess(state, guess, levels_count=self.levels_count, session=self.round_rules)
 
     def answer(
         self,
@@ -655,11 +679,11 @@ class ModeEngine:
 
     def skip(self, state: RoundState) -> RoundState:
         """Пропустить уровень (``session.skip_allowed``)."""
-        return apply_skip(state, levels_count=self.levels_count, session=self.config.session)
+        return apply_skip(state, levels_count=self.levels_count, session=self.round_rules)
 
     def give_up(self, state: RoundState) -> RoundState:
         """Сдаться (``session.give_up_allowed``)."""
-        return give_up(state, session=self.config.session)
+        return give_up(state, session=self.round_rules)
 
     @staticmethod
     def void(state: RoundState) -> RoundState:

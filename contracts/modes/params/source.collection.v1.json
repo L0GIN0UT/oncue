@@ -2,8 +2,15 @@
   "$id": "urn:guessverse:contracts:modes:params:source.collection:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Сборник (ADR 0028): шаблон режима, сам сборник приходит в POST /v1/sessions (collection_id) и попадает в DrawContext.collection_id. Число раундов выбирает игрок из round_options; \"all\" — все играбельные единицы сборника",
+  "description": "Сборник (ADR 0028): шаблон режима, сам сборник приходит в POST /v1/sessions (collection_id) и попадает в DrawContext.collection_id; лобби матча передаёт до max_collections сборников (DrawContext.collection_ids). Число раундов выбирает игрок из round_options; \"all\" — все играбельные единицы сборника",
   "properties": {
+    "max_collections": {
+      "default": 1,
+      "description": "Сколько сборников можно выбрать в лобби матча (D12 этапа 4); соло — всегда один",
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+    },
     "min_items": {
       "description": "Минимум играбельных единиц сборника, чтобы режим был доступен",
       "maximum": 200,

@@ -1,8 +1,8 @@
 """Состояние раунда и переходы между уровнями (правила D9 плана этапа 2).
 
 ``RoundState`` неизменяем: каждый переход возвращает новое состояние. Переходы — чистые
-функции от состояния, результата сверки и ``SessionSpec``; game хранит состояние в
-сессии и сам решает, когда вызвать переход.
+функции от состояния, результата сверки и правил ``RoundRules`` (соло —
+``SoloSessionSpec``); game хранит состояние в сессии и сам решает, когда вызвать переход.
 
 Правила (``docs/plans/stage-2.md`` §4, «round.py»; D9):
     * ``exact`` завершает раунд на текущем уровне;
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import Protocol
 
 from gv_game_kernel.errors import (
     GIVE_UP_NOT_ALLOWED,
@@ -31,7 +32,29 @@ from gv_game_kernel.errors import (
     RoundFinishedError,
     RoundNotFinishedError,
 )
-from gv_game_kernel.spec import SessionSpec
+
+
+class RoundRules(Protocol):
+    """Правила ходов раунда одного игрока.
+
+    Соло — ``SoloSessionSpec``; онлайн — правила, которые выводит ``ContestRule`` из своих
+    параметров (ADR 0032).
+    """
+
+    @property
+    def attempts_per_level(self) -> int:
+        """Ответов на один уровень."""
+        ...
+
+    @property
+    def skip_allowed(self) -> bool:
+        """Можно ли пропустить уровень."""
+        ...
+
+    @property
+    def give_up_allowed(self) -> bool:
+        """Можно ли сдаться."""
+        ...
 
 
 class MatchVerdict(StrEnum):
@@ -141,7 +164,7 @@ def _next_level(state: RoundState, levels_count: int) -> RoundState:
 
 
 def apply_guess(
-    state: RoundState, guess: Guess, *, levels_count: int, session: SessionSpec
+    state: RoundState, guess: Guess, *, levels_count: int, session: RoundRules
 ) -> RoundState:
     """Применить ответ: ``exact`` завершает раунд, промах после ``attempts_per_level``
     ответов открывает следующий уровень, после последнего уровня — ``miss`` (или
@@ -175,7 +198,7 @@ def apply_guess(
     return after
 
 
-def apply_skip(state: RoundState, *, levels_count: int, session: SessionSpec) -> RoundState:
+def apply_skip(state: RoundState, *, levels_count: int, session: RoundRules) -> RoundState:
     """Пропустить уровень (если ``session.skip_allowed``); на последнем уровне — итог
     раунда (``miss`` или ``partial``).
 
@@ -191,7 +214,7 @@ def apply_skip(state: RoundState, *, levels_count: int, session: SessionSpec) ->
     return _next_level(replace(state, guesses=(*state.guesses, skip)), levels_count)
 
 
-def give_up(state: RoundState, *, session: SessionSpec) -> RoundState:
+def give_up(state: RoundState, *, session: RoundRules) -> RoundState:
     """Сдаться: итог ``gave_up`` (если ``session.give_up_allowed``).
 
     Засчитанный ранее частичный ответ сохраняется (``partial_awarded_level``): очки за

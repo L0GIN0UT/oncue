@@ -45,7 +45,7 @@ from gv_game_kernel.plugins import (
     Scorer,
     Source,
 )
-from gv_game_kernel.spec import ModeConfig, error_path
+from gv_game_kernel.spec import ModeConfig, SoloSessionSpec, error_path, solo_end
 from gv_text import TitleNormalizer
 
 UNKNOWN_PLUGIN = "config.unknown_plugin"
@@ -215,7 +215,7 @@ class EngineFactory:
         matcher = r.matcher(config.answer.matcher.type)
         scorer = r.scorer(config.scoring.type)
         answer_format = r.answer_format(config.answer.format)
-        end_spec = config.session.end
+        end_spec = solo_end(config)
         end_rule = r.end_rule(end_spec.type) if end_spec is not None else None
         reveal_spec = config.clue.reveal
         reveal = r.clue(reveal_spec.type) if reveal_spec is not None else None
@@ -307,7 +307,8 @@ class EngineFactory:
         clue, source = r.clue(config.clue.type), r.source(config.source.type)
         matcher, scorer = r.matcher(config.answer.matcher.type), r.scorer(config.scoring.type)
         answer_format = r.answer_format(config.answer.format)
-        end_rule = r.end_rule(config.session.end.type if config.session.end else DEFAULT_END_RULE)
+        end_spec = solo_end(config)
+        end_rule = r.end_rule(end_spec.type if end_spec is not None else DEFAULT_END_RULE)
         reveal = r.clue(config.clue.reveal.type) if config.clue.reveal else None
         partials = tuple(r.partial(kind) for kind in config.answer.partial)
         if (
@@ -385,7 +386,7 @@ def _single_answer_issues(config: ModeConfig, levels_count: int) -> list[ConfigI
     issues: list[ConfigIssue] = []
     if levels_count != 1:
         issues.append(ConfigIssue("clue.params.levels", SINGLE_ANSWER_LEVELS))
-    if config.session.attempts_per_level != 1:
+    if isinstance(config.session, SoloSessionSpec) and config.session.attempts_per_level != 1:
         issues.append(ConfigIssue("session.attempts_per_level", SINGLE_ANSWER_LEVELS))
     return issues
 

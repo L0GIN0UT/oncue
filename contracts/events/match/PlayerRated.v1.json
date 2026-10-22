@@ -1,0 +1,56 @@
+{
+  "$id": "urn:guessverse:contracts:events:match:PlayerRated:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок оценил другого после матча (похвала или жалоба, D14). aggregate_id — match_id. В 4a только хранится, потребитель — social на этапе 5.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "from_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "praise",
+        "report"
+      ],
+      "type": "string"
+    },
+    "match_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Причина жалобы (ключ из конфига social); null у похвалы"
+    },
+    "to_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "match_id",
+    "from_id",
+    "to_id",
+    "kind",
+    "reason",
+    "at"
+  ],
+  "title": "match.PlayerRated v1",
+  "type": "object",
+  "x-aggregate-type": "match",
+  "x-topic": "match.match.v1"
+}

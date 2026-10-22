@@ -350,3 +350,37 @@ class TestS3WithoutDocker:
 
         with pytest.raises(OSError):
             urllib.request.urlopen(endpoint.url, timeout=1)  # noqa: S310 — локальный адрес
+
+
+_REALTIME_EXAMPLES = sorted((_REPO_ROOT / "contracts" / "realtime" / "examples").glob("*.json"))
+
+
+class TestRealtimeContracts:
+    """``contracts/realtime`` (ADR 0035): примеры валидны, утечка ответа — ошибка схемы."""
+
+    @pytest.fixture(autouse=True)
+    def contracts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GV_CONTRACTS_DIR", str(_REPO_ROOT / "contracts"))
+
+    @pytest.mark.parametrize("path", _REALTIME_EXAMPLES, ids=lambda p: p.stem)
+    def test_examples_are_valid(self, path: Path) -> None:
+        import json
+
+        from gv_testkit import assert_realtime_message_matches_schema
+
+        assert_realtime_message_matches_schema(json.loads(path.read_text(encoding="utf-8")))
+
+    def test_answer_in_level_delta_is_rejected(self) -> None:
+        import json
+
+        from gv_testkit.contracts import realtime_validation_errors
+
+        path = _REPO_ROOT / "contracts/realtime/examples/room.message.level_opened.v1.json"
+        message = json.loads(path.read_text(encoding="utf-8"))
+        message["delta"]["media_item_id"] = "0192a3b4-c5d6-7e8f-9a0b-000000000101"
+        assert realtime_validation_errors(message) != []
+
+    def test_unknown_channel_is_reported(self) -> None:
+        from gv_testkit.contracts import realtime_validation_errors
+
+        assert realtime_validation_errors({}, channel="nope")[0].startswith("нет контракта")

@@ -1,0 +1,24 @@
+{
+  "$id": "urn:guessverse:contracts:modes:params:contest.parallel:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Party (D3): все отвечают в окне уровня; уровень закрывается по таймеру или когда ответили все",
+  "properties": {
+    "attempts_per_level": {
+      "description": "Ответов игрока на один уровень",
+      "maximum": 5,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "end_when_all_answered": {
+      "description": "Закрыть уровень досрочно, когда ответили все активные игроки",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "attempts_per_level",
+    "end_when_all_answered"
+  ],
+  "title": "contest.parallel params v1",
+  "type": "object"
+}

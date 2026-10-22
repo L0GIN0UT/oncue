@@ -1,0 +1,761 @@
+{
+  "$defs": {
+    "ChatDelta": {
+      "additionalProperties": false,
+      "description": "Сообщение свободного чата (только кастомное лобби, прошло gv_text.ugc, D14); клиент экранирует",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "message_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "user_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "user_id",
+        "text",
+        "at"
+      ],
+      "type": "object"
+    },
+    "ClosedDelta": {
+      "additionalProperties": false,
+      "description": "Комната закрыта; клиент отписывается",
+      "properties": {
+        "reason": {
+          "description": "Машинная причина: finished, idle, aborted, host_left и т. п.",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_.]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
+    "EmoteDelta": {
+      "additionalProperties": false,
+      "description": "Эмоция или готовая фраза из session.chat конфига (ключ i18n)",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "emote": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phrase": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id",
+        "at"
+      ],
+      "type": "object"
+    },
+    "LevelClosedDelta": {
+      "additionalProperties": false,
+      "description": "Уровень закрыт (окно истекло, соперник угадал или ответили все)",
+      "properties": {
+        "level": {
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "players": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "anyOf": [
+                  {
+                    "maximum": 20,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "description": "Статус без текста ответа (античит)",
+                "enum": [
+                  "thinking",
+                  "answered",
+                  "missed",
+                  "guessed"
+                ],
+                "type": "string"
+              },
+              "user_id": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "user_id",
+              "status",
+              "level"
+            ],
+            "type": "object"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        "round": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "round",
+        "level",
+        "players"
+      ],
+      "type": "object"
+    },
+    "LevelOpenedDelta": {
+      "additionalProperties": false,
+      "description": "Открыт уровень загадки: ссылка уровня появляется только здесь",
+      "properties": {
+        "asset": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "Ассет уровня",
+              "properties": {
+                "expires_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "media_type": {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "url": {
+                  "description": "Подписанная ссылка уровня (одна на комнату, раунд и уровень, D11)",
+                  "format": "uri-reference",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url",
+                "expires_at"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clue": {
+          "description": "Подача уровня: вид загадки (ClueView ядра, как у соло) без сведений об ответе",
+          "type": "object"
+        },
+        "level": {
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "phase_ends_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "round": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "round",
+        "level",
+        "phase_ends_at",
+        "asset",
+        "clue"
+      ],
+      "type": "object"
+    },
+    "LobbyDelta": {
+      "additionalProperties": false,
+      "description": "Изменились настройки, состав, хост или готовность — клиент заменяет снимок лобби",
+      "properties": {
+        "room": {
+          "description": "Полный снимок комнаты — схема RoomView из contracts/openapi/match.json",
+          "type": "object"
+        }
+      },
+      "required": [
+        "room"
+      ],
+      "type": "object"
+    },
+    "PhaseDelta": {
+      "additionalProperties": false,
+      "description": "Смена фазы матча; таймер клиента — по phase_ends_at с поправкой на server_now",
+      "properties": {
+        "level": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "enum": [
+            "lobby",
+            "countdown",
+            "level_open",
+            "level_closed",
+            "reveal",
+            "summary",
+            "paused",
+            "closed"
+          ],
+          "type": "string"
+        },
+        "phase_ends_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "round": {
+          "anyOf": [
+            {
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rounds_total": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "phase",
+        "phase_ends_at",
+        "round",
+        "level"
+      ],
+      "type": "object"
+    },
+    "PlayerDelta": {
+      "additionalProperties": false,
+      "description": "Изменился один игрок (присутствие, готовность, статус в раунде, очки)",
+      "properties": {
+        "presence": {
+          "enum": [
+            "online",
+            "disconnected",
+            "left"
+          ],
+          "type": "string"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "description": "Статус без текста ответа (античит)",
+              "enum": [
+                "thinking",
+                "answered",
+                "missed",
+                "guessed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id",
+        "presence"
+      ],
+      "type": "object"
+    },
+    "RoundRevealDelta": {
+      "additionalProperties": false,
+      "description": "Ревил раунда: ответ раскрывается только в фазе reveal",
+      "properties": {
+        "asset": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "Ассет уровня",
+              "properties": {
+                "expires_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "media_type": {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                "url": {
+                  "description": "Подписанная ссылка уровня (одна на комнату, раунд и уровень, D11)",
+                  "format": "uri-reference",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url",
+                "expires_at"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "media_item_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "results": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "anyOf": [
+                  {
+                    "maximum": 20,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "partial": {
+                "type": "boolean"
+              },
+              "score": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "total": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "user_id": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "user_id",
+              "level",
+              "partial",
+              "score",
+              "total"
+            ],
+            "type": "object"
+          },
+          "maxItems": 6,
+          "type": "array"
+        },
+        "round": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "maxLength": 300,
+          "type": "string"
+        }
+      },
+      "required": [
+        "round",
+        "media_item_id",
+        "title",
+        "asset",
+        "results"
+      ],
+      "type": "object"
+    },
+    "SummaryDelta": {
+      "additionalProperties": false,
+      "description": "Итог матча; подробности — GET /v1/matches/{id}",
+      "properties": {
+        "match_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "placements": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "finish": {
+                "enum": [
+                  "completed",
+                  "forfeit",
+                  "left",
+                  "tech_win",
+                  "tech_loss"
+                ],
+                "type": "string"
+              },
+              "outcome": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "win",
+                      "loss",
+                      "draw"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "place": {
+                "maximum": 6,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "score": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "user_id": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "user_id",
+              "place",
+              "score",
+              "outcome",
+              "finish"
+            ],
+            "type": "object"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "match_id",
+        "placements"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:guessverse:contracts:realtime:room.message:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "lobby"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/LobbyDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "player"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/PlayerDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "phase"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/PhaseDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "level_opened"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/LevelOpenedDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "level_closed"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/LevelClosedDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "round_reveal"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/RoundRevealDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "summary"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/SummaryDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "chat"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/ChatDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "emote"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/EmoteDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "closed"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/ClosedDelta"
+          }
+        }
+      }
+    }
+  ],
+  "description": "Публикует только бэкенд match (ADR 0035). Каждое сообщение несёт version комнаты: пропуск версии → GET /v1/rooms/{code}/state. Неизвестный kind клиент игнорирует (расширение kind совместимо, удаление — новая версия). Личное (свои попытки) в канал не идёт. До фазы reveal в канале нет media_item_id, названия, ключей ответа и плана (античит §12 плана этапа 4).",
+  "properties": {
+    "delta": {
+      "type": "object"
+    },
+    "kind": {
+      "description": "Вид изменения: lobby, player, phase, level_opened, level_closed, round_reveal, summary, chat, emote, closed",
+      "maxLength": 32,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "server_now": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "version": {
+      "description": "Версия комнаты после изменения (монотонна)",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "kind",
+    "server_now",
+    "delta"
+  ],
+  "title": "Сообщение канала комнаты room:{code} v1",
+  "type": "object"
+}

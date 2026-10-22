@@ -94,11 +94,11 @@ class AnswerSpec(_Spec):
     partial: tuple[PluginKey, ...] = Field(default=(), max_length=10)
 
 
-class SessionSpec(_Spec):
-    """Правила сессии.
+class SoloSessionSpec(_Spec):
+    """Правила соло-сессии (играет сервис game).
 
     Attributes:
-        kind: Вид сессии (этап 2 — ``solo``).
+        kind: Вид сессии — ``solo``.
         rounds: Число раундов.
         attempts_per_level: Ответов на один уровень загадки (D9: 1 в соло).
         skip_allowed: Можно ли пропустить уровень.
@@ -119,6 +119,124 @@ class SessionSpec(_Spec):
     end: PluginSpec | None = None
 
 
+SessionSpec = SoloSessionSpec
+"""Прежнее имя модели соло-сессии (этапы 2–3); новый код использует ``SoloSessionSpec``."""
+
+OnlineKind = Literal["duel", "party", "lobby"]
+Visibility = Literal["public", "private"]
+LadderKey = Annotated[
+    str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$", max_length=64)
+]
+MAX_ONLINE_PLAYERS = 6
+"""Потолок игроков онлайн-комнаты по контракту (лобби до 32 — после релиза, §14 плана)."""
+
+
+class PlayersSpec(_Spec):
+    """Число игроков комнаты (ADR 0032).
+
+    Attributes:
+        min: Минимум для старта матча.
+        max: Максимум мест в комнате.
+    """
+
+    min: StrictInt = Field(ge=2, le=MAX_ONLINE_PLAYERS)
+    max: StrictInt = Field(ge=2, le=MAX_ONLINE_PLAYERS)
+
+
+class ChatSpec(_Spec):
+    """Эмоции, готовые фразы и свободный чат комнаты (D14, ADR 0036).
+
+    Attributes:
+        emotes: Ключи i18n эмоций (доступны всем режимам).
+        phrases: Ключи i18n готовых фраз.
+        free_text: Свободный чат; допустим только у ``kind: lobby`` (проверка ядра).
+    """
+
+    emotes: tuple[I18nKey, ...] = Field(default=(), max_length=32)
+    phrases: tuple[I18nKey, ...] = Field(default=(), max_length=32)
+    free_text: StrictBool = False
+
+
+class LobbyOverridable(_Spec):
+    """Что хост кастомного лобби может выбрать вместо значений шаблона (D12).
+
+    Каждое поле — список разрешённых значений; значение шаблона обязано входить в список
+    (перекрёстная проверка ядра). Пустой список или ``None`` — поле не переопределяется.
+
+    Attributes:
+        rounds: Варианты числа раундов.
+        level_window_s: Варианты окна уровня в секундах (одно значение на все уровни).
+        answer_format: Варианты формата ответа (ключи ``AnswerFormat``).
+        clue: Варианты загадки (тип и параметры — как ``clue`` конфига).
+        players_max: Варианты числа мест.
+        visibility: Варианты видимости комнаты.
+    """
+
+    rounds: tuple[Annotated[StrictInt, Field(ge=1, le=50)], ...] | None = Field(
+        default=None, max_length=10
+    )
+    level_window_s: tuple[Annotated[StrictInt, Field(ge=3, le=300)], ...] | None = Field(
+        default=None, max_length=10
+    )
+    answer_format: tuple[PluginKey, ...] | None = Field(default=None, max_length=5)
+    clue: tuple[ClueSpec, ...] | None = Field(default=None, max_length=10)
+    players_max: tuple[Annotated[StrictInt, Field(ge=2, le=MAX_ONLINE_PLAYERS)], ...] | None = (
+        Field(default=None, max_length=5)
+    )
+    visibility: tuple[Visibility, ...] | None = Field(default=None, max_length=2)
+
+
+class LobbySpec(_Spec):
+    """Настройки шаблона кастомного лобби (D12).
+
+    Attributes:
+        overridable: Что может менять хост.
+        visibility: Видимость по умолчанию (открытые лобби видны в списке).
+    """
+
+    overridable: LobbyOverridable
+    visibility: Visibility = "private"
+
+
+class OnlineSessionSpec(_Spec):
+    """Правила онлайн-сессии (играет сервис match; ADR 0032, D2).
+
+    Attributes:
+        kind: ``duel`` (1×1), ``party`` (3–6) или ``lobby`` (кастомное лобби по шаблону).
+        players: Минимум и максимум игроков.
+        rounds: Число раундов матча.
+        countdown_s: Отсчёт перед первым раундом.
+        level_windows_s: Окно каждого уровня загадки в секундах; длина равна числу
+            уровней (перекрёстная проверка ядра).
+        reveal_s: Длительность ревила между раундами.
+        contest: Правило состязания (плагин ``ContestRule``: ``race``, ``parallel``).
+        disconnect_grace_s: Сколько ждать отключившегося игрока до выбывания (D10).
+        ranked: Рейтинговый матч (только из очереди подбора, этап 4b).
+        ladder: Ключ ladder-а rating (обязателен при ``ranked``).
+        lobby: Настройки кастомного лобби (обязательны у ``kind: lobby``).
+        chat: Эмоции, фразы и свободный чат.
+    """
+
+    kind: OnlineKind
+    players: PlayersSpec
+    rounds: StrictInt = Field(ge=1, le=50)
+    countdown_s: StrictInt = Field(ge=0, le=30)
+    level_windows_s: tuple[Annotated[StrictInt, Field(ge=3, le=300)], ...] = Field(
+        min_length=1, max_length=20
+    )
+    reveal_s: StrictInt = Field(ge=0, le=60)
+    contest: PluginSpec
+    disconnect_grace_s: StrictInt = Field(ge=5, le=300)
+    ranked: StrictBool = False
+    ladder: LadderKey | None = None
+    lobby: LobbySpec | None = None
+    chat: ChatSpec = Field(default_factory=ChatSpec)
+
+
+AnySessionSpec = Annotated[SoloSessionSpec | OnlineSessionSpec, Field(discriminator="kind")]
+"""Сессия режима: соло (game) или онлайн (match) — по ``kind``."""
+
+
 class ModeConfig(_Spec):
     """Тело конфига режима (без ``version`` и ``status``).
 
@@ -131,7 +249,7 @@ class ModeConfig(_Spec):
         clue: Тип загадки.
         answer: Ответ и matcher.
         scoring: Подсчёт очков.
-        session: Правила сессии.
+        session: Правила сессии: соло (game) или онлайн (match), по ``kind``.
         rewards: Награды (без проверки до этапа 5).
         features: Продуктовые флаги режима.
     """
@@ -144,9 +262,20 @@ class ModeConfig(_Spec):
     clue: ClueSpec
     answer: AnswerSpec
     scoring: ScoringSpec
-    session: SessionSpec
+    session: AnySessionSpec
     rewards: JsonObject = Field(default_factory=dict)
     features: dict[str, StrictBool] = Field(default_factory=dict)
+
+    @property
+    def is_online(self) -> bool:
+        """Онлайн-режим (играет match, ADR 0032)."""
+        return isinstance(self.session, OnlineSessionSpec)
+
+
+def solo_end(config: ModeConfig) -> PluginSpec | None:
+    """Правило досрочного завершения соло-сессии; у онлайн-сессии его нет (``None``)."""
+    session = config.session
+    return session.end if isinstance(session, SoloSessionSpec) else None
 
 
 def error_path(loc: tuple[int | str, ...]) -> str:
@@ -163,6 +292,20 @@ def error_path(loc: tuple[int | str, ...]) -> str:
     return path or "$"
 
 
+_SESSION_TAGS = frozenset({"solo", "duel", "party", "lobby"})
+
+
+def _strip_session_tag(loc: tuple[int | str, ...]) -> tuple[int | str, ...]:
+    """Убрать тег дискриминатора из пути: ``session.solo.rounds`` → ``session.rounds``.
+
+    pydantic вставляет ``kind`` ветки union в ``loc``; путь ошибки для автора конфига и
+    админки не должен зависеть от устройства модели.
+    """
+    if loc[:1] == ("session",) and loc[1:2] and loc[1] in _SESSION_TAGS:
+        return (loc[0], *loc[2:])
+    return loc
+
+
 def parse_mode_config(body: Mapping[str, Any]) -> ModeConfig:
     """Разобрать тело конфига; ошибки схемы — ``ConfigError`` со списком путей.
 
@@ -173,7 +316,7 @@ def parse_mode_config(body: Mapping[str, Any]) -> ModeConfig:
         return ModeConfig.model_validate(dict(body))
     except ValidationError as exc:
         errors = [
-            {"path": error_path(tuple(e["loc"])), "code": f"schema.{e['type']}"}
+            {"path": error_path(_strip_session_tag(tuple(e["loc"]))), "code": f"schema.{e['type']}"}
             for e in exc.errors(include_url=False, include_input=False)
         ]
         raise ConfigError(details={"errors": errors}) from exc

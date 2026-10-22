@@ -25,6 +25,7 @@ SUBJECT_REQUIRED = "game.subject_required"
 TOO_MANY_SUBJECTS = "game.too_many_subjects"
 COLLECTION_REQUIRED = "game.collection_required"
 ROUNDS_NOT_ALLOWED = "game.rounds_not_allowed"
+MODE_NOT_SOLO = "game.mode_not_solo"
 
 
 class ConfigError(InvalidInputError):
@@ -136,3 +137,9 @@ class RoundsNotAllowedError(InvalidInputError):
     """
 
     default_code = ROUNDS_NOT_ALLOWED
+
+
+class ModeNotSoloError(InvalidInputError):
+    """Онлайн-режим нельзя играть соло: его играет match (422 ``game.mode_not_solo``, ADR 0032)."""
+
+    default_code = MODE_NOT_SOLO

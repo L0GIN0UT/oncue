@@ -1,0 +1,20 @@
+{
+  "delta": {
+    "asset": {
+      "expires_at": "2026-10-22T12:01:10Z",
+      "media_type": "audio/mpeg",
+      "url": "/media/a/0192a3b4c5d67e8f9a0b000000000a01.mp3?md5=abc&expires=1792670425"
+    },
+    "clue": {
+      "kind": "audio",
+      "level": 1,
+      "levels_total": 2
+    },
+    "level": 1,
+    "phase_ends_at": "2026-10-22T12:00:25Z",
+    "round": 1
+  },
+  "kind": "level_opened",
+  "server_now": "2026-10-22T12:00:10Z",
+  "version": 12
+}

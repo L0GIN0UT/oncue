@@ -377,11 +377,14 @@ class CollectionParams(PluginParams):
         round_options: Из чего выбирает игрок: подмножество ``{5, 10, 25, "all"}``.
         min_items: Минимум играбельных единиц сборника, чтобы режим был доступен.
         shuffle: Перемешать единицы (иначе — первые ``n`` в порядке сборника).
+        max_collections: Сколько сборников можно выбрать в лобби матча (этап 4, D12);
+            соло — всегда один.
     """
 
     round_options: RoundOptions
     min_items: Annotated[StrictInt, Field(ge=1, le=200)]
     shuffle: StrictBool = True
+    max_collections: Annotated[StrictInt, Field(ge=1, le=10)] = 1
 
 
 class CollectionSource:

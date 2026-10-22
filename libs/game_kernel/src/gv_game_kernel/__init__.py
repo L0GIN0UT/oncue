@@ -6,6 +6,7 @@
 """
 
 from gv_game_kernel.builtin import daily_seed, register_builtin, register_collection
+from gv_game_kernel.contest import ContestRoundState, PlayerRound, PlayerRoundView, PlayerStatus
 from gv_game_kernel.engine import AnswerStep, ModeEngine, OptionView, ShownView, answer_normalizer
 from gv_game_kernel.errors import (
     ANSWER_KIND_UNSUPPORTED,
@@ -13,6 +14,7 @@ from gv_game_kernel.errors import (
     CONFIG_INVALID,
     GIVE_UP_NOT_ALLOWED,
     LEVEL_LOCKED,
+    MODE_NOT_SOLO,
     OPTION_UNKNOWN,
     POOL_TOO_SMALL,
     PRESET_NOT_FOUND,
@@ -27,6 +29,7 @@ from gv_game_kernel.errors import (
     CollectionRequiredError,
     ConfigError,
     LevelLockedError,
+    ModeNotSoloError,
     OptionNotFoundError,
     PoolTooSmallError,
     PresetNotFoundError,
@@ -37,6 +40,7 @@ from gv_game_kernel.errors import (
     SubjectRequiredError,
     TooManySubjectsError,
 )
+from gv_game_kernel.outcome import DuelOutcome, MatchOutcome, Placement
 from gv_game_kernel.params import canonical_json, params_hash
 from gv_game_kernel.plugins import (
     AnswerFormat,
@@ -47,6 +51,7 @@ from gv_game_kernel.plugins import (
     CollectionBasedSource,
     Comparison,
     ComparisonSource,
+    ContestRule,
     DrawContext,
     EndRule,
     LevelSpec,
@@ -89,6 +94,7 @@ from gv_game_kernel.round import (
     MatchVerdict,
     RoundOutcome,
     RoundResult,
+    RoundRules,
     RoundState,
     apply_guess,
     apply_skip,
@@ -99,14 +105,21 @@ from gv_game_kernel.round import (
 )
 from gv_game_kernel.spec import (
     AnswerSpec,
+    ChatSpec,
     ClueSpec,
+    LobbyOverridable,
+    LobbySpec,
     MatcherSpec,
     ModeConfig,
+    OnlineSessionSpec,
+    PlayersSpec,
     PluginSpec,
     ScoringSpec,
     SessionSpec,
+    SoloSessionSpec,
     SourceSpec,
     parse_mode_config,
+    solo_end,
 )
 
 __all__ = [
@@ -115,6 +128,7 @@ __all__ = [
     "CONFIG_INVALID",
     "GIVE_UP_NOT_ALLOWED",
     "LEVEL_LOCKED",
+    "MODE_NOT_SOLO",
     "OPTION_UNKNOWN",
     "POOL_TOO_SMALL",
     "PRESET_NOT_FOUND",
@@ -135,6 +149,7 @@ __all__ = [
     "AssetPort",
     "AssetRef",
     "CandidatePort",
+    "ChatSpec",
     "ClueAsset",
     "ClueSpec",
     "ClueType",
@@ -146,7 +161,10 @@ __all__ = [
     "ComparisonSource",
     "ConfigError",
     "ConfigIssue",
+    "ContestRoundState",
+    "ContestRule",
     "DrawContext",
+    "DuelOutcome",
     "DuplicatePluginError",
     "EndRule",
     "EngineFactory",
@@ -154,13 +172,18 @@ __all__ = [
     "GuessKind",
     "LevelLockedError",
     "LevelSpec",
+    "LobbyOverridable",
+    "LobbySpec",
     "MatchContext",
+    "MatchOutcome",
     "MatchResult",
     "MatchVerdict",
     "MatcherSpec",
     "MediaItemRef",
     "ModeConfig",
     "ModeEngine",
+    "ModeNotSoloError",
+    "OnlineSessionSpec",
     "OptionNotFoundError",
     "OptionSpec",
     "OptionView",
@@ -168,7 +191,12 @@ __all__ = [
     "PartialRule",
     "PeriodSource",
     "PersonRef",
+    "Placement",
     "PlayableFor",
+    "PlayerRound",
+    "PlayerRoundView",
+    "PlayerStatus",
+    "PlayersSpec",
     "PluginRegistry",
     "PluginSpec",
     "PoolQuery",
@@ -183,6 +211,7 @@ __all__ = [
     "RoundOutcome",
     "RoundPick",
     "RoundResult",
+    "RoundRules",
     "RoundSource",
     "RoundState",
     "RoundsNotAllowedError",
@@ -191,6 +220,7 @@ __all__ = [
     "ScoringSpec",
     "SessionSpec",
     "ShownView",
+    "SoloSessionSpec",
     "Source",
     "SourceSpec",
     "SubjectQuery",
@@ -209,5 +239,6 @@ __all__ = [
     "register_collection",
     "require_level_open",
     "round_outcome",
+    "solo_end",
     "void",
 ]

@@ -17,7 +17,17 @@ from pydantic import BaseModel
 from referencing import Registry, Resource
 
 from gv_game_kernel import ConfigError, ModeConfig, params_hash, parse_mode_config
-from gv_game_kernel.spec import AnswerSpec, ClueSpec, PluginSpec, SessionSpec
+from gv_game_kernel.spec import (
+    AnswerSpec,
+    ChatSpec,
+    ClueSpec,
+    LobbyOverridable,
+    LobbySpec,
+    OnlineSessionSpec,
+    PlayersSpec,
+    PluginSpec,
+    SoloSessionSpec,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -71,14 +81,34 @@ def _assert_model_matches(model: type[BaseModel], schema: dict[str, Any], where:
 def test_mode_config_model_matches_schema() -> None:
     schema = _load(MODES / "mode_config.v1.json")
     _assert_model_matches(ModeConfig, schema, "ModeConfig")
-    _assert_model_matches(SessionSpec, schema["properties"]["session"], "session")
+    defs = schema["$defs"]
+    _assert_model_matches(SoloSessionSpec, defs["SoloSession"], "session[solo]")
+    _assert_model_matches(OnlineSessionSpec, defs["OnlineSession"], "session[online]")
+    online = defs["OnlineSession"]["properties"]
+    _assert_model_matches(PlayersSpec, online["players"], "session.players")
+    _assert_model_matches(ChatSpec, online["chat"], "session.chat")
+    _assert_model_matches(PluginSpec, online["contest"], "session.contest")
+    _assert_model_matches(LobbySpec, defs["LobbySpec"], "session.lobby")
+    _assert_model_matches(
+        LobbyOverridable, defs["LobbySpec"]["properties"]["overridable"], "lobby.overridable"
+    )
     _assert_model_matches(AnswerSpec, schema["properties"]["answer"], "answer")
     for section in ("source", "scoring"):
         _assert_model_matches(PluginSpec, schema["properties"][section], section)
     _assert_model_matches(ClueSpec, schema["properties"]["clue"], "clue")
     _assert_model_matches(PluginSpec, schema["properties"]["clue"]["properties"]["reveal"], "rev")
-    _assert_model_matches(PluginSpec, schema["properties"]["session"]["properties"]["end"], "end")
+    _assert_model_matches(PluginSpec, defs["SoloSession"]["properties"]["end"], "end")
     _assert_model_matches(PluginSpec, schema["properties"]["answer"]["properties"]["matcher"], "m")
+
+
+def test_session_is_one_of_solo_and_online() -> None:
+    """ADR 0032: ветка solo не изменилась, онлайн — отдельная ветка без allow_guest."""
+    schema = _load(MODES / "mode_config.v1.json")
+    refs = [b["$ref"] for b in schema["properties"]["session"]["oneOf"]]
+    assert refs == ["#/$defs/SoloSession", "#/$defs/OnlineSession"]
+    kinds = schema["$defs"]["OnlineSession"]["properties"]["kind"]["enum"]
+    assert kinds == ["duel", "party", "lobby"]
+    assert "allow_guest" not in schema["$defs"]["OnlineSession"]["properties"]
 
 
 def test_schema_has_no_service_owned_fields() -> None:
@@ -347,7 +377,12 @@ def test_every_registered_plugin_has_a_contract() -> None:
     sections["end"] = END_KEYS
     for section, keys in sections.items():
         files = {p.name.split(".")[1] for p in (MODES / "params").glob(f"{section}.*.v1.json")}
-        assert files == set(keys), section
+        assert files - PENDING_STAGE4A.get(section, set()) == set(keys), section
+
+
+# Схемы шага 0a этапа 4 (ADR 0032), плагины к которым регистрирует поток A (A2, A3).
+# Поток A удаляет записи по мере реализации; к слиянию 4a словарь должен быть пустым.
+PENDING_STAGE4A: dict[str, set[str]] = {"scorer": {"party_speed"}}
 
 
 def test_answer_formats_are_registered() -> None:
@@ -390,7 +425,37 @@ def test_stage3a_test_modes_are_valid_by_schema(path: Path) -> None:
     if "end" in body["session"]:
         end = body["session"]["end"]
         errors += _errors(_plugin_schema("end", end["type"]), end["params"])
+    if "contest" in body["session"]:
+        contest = body["session"]["contest"]
+        errors += _errors(_plugin_schema("contest", contest["type"]), contest["params"])
     if "reveal" in body["clue"]:
         reveal = body["clue"]["reveal"]
         errors += _errors(_plugin_schema("reveal", reveal["type"]), reveal["params"])
     assert errors == []
+    assert parse_mode_config(body).key == path.stem
+
+
+ONLINE_MODES = [p for p in TEST_MODES if p.stem.split(".")[1] in {"duel", "party", "lobby"}]
+
+
+def test_online_test_modes_cover_every_kind() -> None:
+    kinds = {yaml.safe_load(p.read_text(encoding="utf-8"))["session"]["kind"] for p in ONLINE_MODES}
+    assert kinds == {"duel", "party", "lobby"}
+
+
+@pytest.mark.parametrize("path", ONLINE_MODES, ids=lambda p: p.stem)
+def test_online_mode_parses_as_online_session(path: Path) -> None:
+    config = parse_mode_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+    assert config.is_online
+    assert isinstance(config.session, OnlineSessionSpec)
+
+
+def test_online_session_rejects_allow_guest_with_stable_path() -> None:
+    body = yaml.safe_load(ONLINE_MODES[0].read_text(encoding="utf-8"))
+    body["session"] = {**body["session"], "allow_guest": True}
+    with pytest.raises(ConfigError) as info:
+        parse_mode_config(body)
+    assert {"path": "session.allow_guest", "code": "schema.extra_forbidden"} in info.value.details[
+        "errors"
+    ]
+    assert _errors(MODES / "mode_config.v1.json", body) != []

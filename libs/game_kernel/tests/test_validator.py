@@ -355,7 +355,12 @@ def test_every_rule_code_is_covered() -> None:
     }
 
 
-STAGE3A_MODES = sorted(p.stem for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml"))
+# Онлайн-режимы этапа 4 (``duel``/``party``/``lobby``) собирает поток A (ContestRule, A1–A5).
+STAGE3A_MODES = sorted(
+    p.stem
+    for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml")
+    if p.stem.split(".")[1] not in {"duel", "party", "lobby"}
+)
 
 
 # Тестовые режимы 3a и шаблон сборника 3b (источник ``collection`` — ``register_collection``).

@@ -259,7 +259,7 @@ class PlayService:
             CollectionDomainMismatchError, RoundsNotAllowedError, PoolTooSmallError (сборник).
         """
         version, rules = await self._catalog.latest(mode_key)
-        if player.ref.is_guest and not rules.config.session.allow_guest:
+        if player.ref.is_guest and not rules.engine.solo_session.allow_guest:
             raise GuestNotAllowedError("режим доступен только с аккаунтом")
         subjects = sorted(set(subject_ids))
         if subjects and rules.subject_query() is None:
@@ -415,7 +415,7 @@ class PlayService:
             seed=seed,
             plan=plan,
             round_max=rules.round_max,
-            idle_timeout_s=rules.config.session.abandon_after_min * 60,
+            idle_timeout_s=rules.engine.solo_session.abandon_after_min * 60,
             now=now,
             progressive=rules.is_progressive,
             collection_id=collection.collection_id if collection else None,
