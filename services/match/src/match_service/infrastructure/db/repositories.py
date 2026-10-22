@@ -391,6 +391,17 @@ class SqlUsers:
         await session.execute(
             update(match_players).where(match_players.c.user_id == user_id).values(user_id=None)
         )
+        # Результаты раундов хранят user_id в JSON: заменить на анонимный (UUID(int=0)).
+        await session.execute(
+            text(
+                "UPDATE match_rounds SET results = ("
+                " SELECT jsonb_agg(CASE WHEN e->>'user_id' = :uid"
+                " THEN jsonb_set(e, '{user_id}', to_jsonb(:anon)) ELSE e END)"
+                " FROM jsonb_array_elements(results) AS e)"
+                " WHERE results @> jsonb_build_array(jsonb_build_object('user_id', :uid))"
+            ),
+            {"uid": str(user_id), "anon": str(UUID(int=0))},
+        )
         await session.execute(
             delete(player_ratings_given).where(
                 or_(

@@ -1,16 +1,22 @@
-"""Общее для роутеров match: ``Cache-Control: no-store`` на всех ответах, включая ошибки."""
+"""Общее для роутеров match: ``Cache-Control: no-store``, субъект команды, use-cases."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
-from fastapi import Path, Request, Response
+from fastapi import Path, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from pydantic import BaseModel
 
+from gv_auth import Principal, Sanction
 from gv_core.errors import AppError
 from gv_service.problems import problem, retry_after_seconds, status_for
 from match_service.api.public.schemas import ROOM_CODE_PATTERN
+from match_service.application.commands.rooms import Actor, CommandOutcome, RoomService
+from match_service.application.queries.matches import MatchQueries, RatePlayer
+from match_service.application.queries.rooms import RoomQueries
 
 NO_STORE = "no-store"
 
@@ -51,3 +57,54 @@ class NoStoreRoute(APIRoute):
             return response
 
         return handler
+
+
+class MatchServices(Protocol):
+    """Use-cases для роутеров (собирает ``main.py``: слой api не знает infrastructure)."""
+
+    @property
+    def service_name(self) -> str:
+        """Имя сервиса."""
+        ...
+
+    @property
+    def rooms(self) -> RoomService:
+        """Команды комнат."""
+        ...
+
+    @property
+    def room_queries(self) -> RoomQueries:
+        """Чтение комнат."""
+        ...
+
+    @property
+    def matches(self) -> MatchQueries:
+        """История матчей."""
+        ...
+
+    @property
+    def rate(self) -> RatePlayer:
+        """Оценки игроков."""
+        ...
+
+
+ServicesProvider = Callable[[], MatchServices]
+"""Ленивое получение use-cases: роутеры собираются без подключений (экспорт OpenAPI)."""
+
+
+def actor_of(principal: Principal, request: Request | None = None) -> Actor:
+    """Субъект команды: пользователь, санкции чата из claim, IP (лимит перебора кодов)."""
+    ip = request.client.host if request is not None and request.client else None
+    return Actor(
+        user_id=principal.user_id,
+        chat_muted=principal.is_sanctioned(Sanction.CHAT_MUTE),
+        chat_slow=principal.is_sanctioned(Sanction.CHAT_SLOW),
+        ip=ip,
+    )
+
+
+def respond[M: BaseModel](outcome: CommandOutcome, model: type[M]) -> M | JSONResponse:
+    """200 — тело по схеме ответа (лишние поля отбрасываются); 202 — ``CommandAccepted``."""
+    if outcome.status == status.HTTP_202_ACCEPTED:
+        return JSONResponse(outcome.body, status_code=status.HTTP_202_ACCEPTED)
+    return model.model_validate(outcome.body)

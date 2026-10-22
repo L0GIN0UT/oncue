@@ -1,11 +1,9 @@
 """Admin API (/admin/v1): для админ-панели, только с правами модератора/администратора.
 
 Доступ — ``admin.access`` + ``match.manage`` (identity ``0008_seed_online_perms``, §2.7 плана
-этапа 4); мутации — ``Idempotency-Key`` и ``reason``. Шаг 0a: контракт и заглушки (501
-после проверки прав), реализация — поток R.
+этапа 4); мутации — ``Idempotency-Key`` и ``reason``. Завершение комнаты — команда
+владельцу (``op_id`` = ``Idempotency-Key``), ответ — 202.
 """
-
-# ruff: noqa: ARG001 — параметры заглушек нужны ради схемы и зависимостей авторизации.
 
 from __future__ import annotations
 
@@ -15,19 +13,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from gv_auth import Principal, require_perm
-from gv_core.errors import NotImplementedYetError
-from gv_service import IdempotencyKey, Infrastructure, problem_responses
+from gv_service import IdempotencyKey, problem_responses
 from match_service.api.admin.schemas import AbortRoomRequest, AdminRoomsPage
-from match_service.api.common import NoStoreRoute, RoomCodePath
+from match_service.api.common import NoStoreRoute, RoomCodePath, ServicesProvider
 from match_service.api.public.schemas import CommandAccepted, Cursor, MatchResult, Phase
 
 ADMIN_ACCESS = "admin.access"
 MATCH_MANAGE = "match.manage"
 Manager = Annotated[Principal, Depends(require_perm(ADMIN_ACCESS, MATCH_MANAGE))]
-STAGE = "admin-API комнат — поток R плана этапа 4"
 
 
-def build_admin_router(infra: Infrastructure) -> APIRouter:
+def build_admin_router(services: ServicesProvider) -> APIRouter:
     """Ручки админки: активные комнаты, принудительное завершение, итог матча."""
     router = APIRouter(prefix="/admin/v1", tags=["match-admin"], route_class=NoStoreRoute)
 
@@ -39,12 +35,13 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         responses=problem_responses(401, 403, 422, 501),
     )
     async def list_rooms(
-        principal: Manager,
+        principal: Manager,  # noqa: ARG001 — проверка прав
         phase: Annotated[Phase | None, Query()] = None,
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
     ) -> AdminRoomsPage:
-        raise NotImplementedYetError(STAGE)
+        page = await services().room_queries.admin_rooms(phase, cursor, limit)
+        return AdminRoomsPage.model_validate(page)
 
     @router.post(
         "/rooms/{code}/abort",
@@ -61,7 +58,8 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
     async def abort_room(
         code: RoomCodePath, body: AbortRoomRequest, principal: Manager, key: IdempotencyKey
     ) -> CommandAccepted:
-        raise NotImplementedYetError(STAGE)
+        outcome = await services().rooms.abort(principal.user_id, code, key, body.reason)
+        return CommandAccepted.model_validate(outcome.body)
 
     @router.get(
         "/matches/{match_id}",
@@ -71,8 +69,9 @@ def build_admin_router(infra: Infrastructure) -> APIRouter:
         responses=problem_responses(401, 403, 404, 422, 501),
     )
     async def get_match(
-        match_id: Annotated[UUID, Path(description="Идентификатор матча")], principal: Manager
+        match_id: Annotated[UUID, Path(description="Идентификатор матча")],
+        principal: Manager,  # noqa: ARG001 — проверка прав
     ) -> MatchResult:
-        raise NotImplementedYetError(STAGE)
+        return MatchResult.model_validate(await services().matches.get(match_id))
 
     return router

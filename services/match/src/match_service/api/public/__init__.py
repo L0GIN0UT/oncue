@@ -10,24 +10,28 @@
 * команда, на которую владелец комнаты не ответил за ``GV_MATCH__REPLY_TIMEOUT_MS``, —
   202 ``CommandAccepted`` (D6).
 
-Шаг 0a: контракт и заглушки — после проверки авторизации 501 ``common.not_implemented``;
-реализация — поток R (§5 плана).
+Ручки только переводят HTTP в use-cases (``MatchServices``): права в комнате проверяет
+владелец комнаты, виды для зрителя строит application (античит §12).
 """
-
-# ruff: noqa: ARG001 — параметры заглушек нужны ради схемы и зависимостей авторизации.
 
 from __future__ import annotations
 
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from gv_auth import Principal, require_user
-from gv_core.errors import NotImplementedYetError
-from gv_service import IdempotencyKey, Infrastructure, problem_responses
-from match_service.api.common import NoStoreRoute, RoomCodePath
+from gv_service import IdempotencyKey, problem_responses
+from match_service.api.common import (
+    NoStoreRoute,
+    RoomCodePath,
+    ServicesProvider,
+    actor_of,
+    respond,
+)
 from match_service.api.public.schemas import (
     AwayRequest,
     ChatRequest,
@@ -53,6 +57,7 @@ from match_service.api.public.schemas import (
     RoomCommandResult,
     RoomState,
     RoomView,
+    SettingsOverride,
     SettingsRequest,
     SkipRequest,
     StartRequest,
@@ -60,12 +65,11 @@ from match_service.api.public.schemas import (
     TickRequest,
     TickResult,
 )
+from match_service.domain.room import SettingsChange
 
 User = Annotated[Principal, Depends(require_user)]
 MatchId = Annotated[UUID, Path(description="Идентификатор матча")]
 Limit = Annotated[int, Query(ge=1, le=50)]
-
-STAGE = "онлайн-комнаты — поток R плана этапа 4"
 
 _ACCEPTED: dict[int | str, dict[str, Any]] = {
     202: {
@@ -83,6 +87,11 @@ _COMMON_ROOM_ERRORS = (
 )
 
 
+def _payload(body: BaseModel) -> dict[str, Any]:  # Any: JSON команды
+    """Поля команды без ``op_id`` (он уходит отдельно в ``RoomCommand``)."""
+    return body.model_dump(mode="json", exclude={"op_id"}, exclude_none=True)
+
+
 class ServiceMeta(BaseModel):
     """Сведения о сервисе."""
 
@@ -90,17 +99,13 @@ class ServiceMeta(BaseModel):
     status: str
 
 
-def _stub() -> NotImplementedYetError:
-    return NotImplementedYetError(STAGE)
-
-
-def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 — плоский список ручек
+def build_public_router(services: ServicesProvider) -> APIRouter:
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["match"], route_class=NoStoreRoute)
 
     @router.get("/meta", response_model=ServiceMeta, summary="Сведения о сервисе")
     async def meta() -> ServiceMeta:
-        return ServiceMeta(service=infra.settings.service_name, status="stub")
+        return ServiceMeta(service=services().service_name, status="ok")
 
     # ------------------------------------------------------------------ комнаты
     @router.post(
@@ -122,8 +127,27 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=problem_responses(401, 403, 404, 409, 422, 429, 501, 503),
     )
-    async def create_room(body: CreateRoomRequest, user: User, key: IdempotencyKey) -> RoomView:
-        raise _stub()
+    async def create_room(
+        body: CreateRoomRequest, user: User, key: IdempotencyKey, request: Request
+    ) -> RoomView:
+        override = body.settings or SettingsOverride()
+        change = SettingsChange(
+            rounds=override.rounds,
+            level_window_s=override.level_window_s,
+            answer_format=override.answer_format,
+            clue_type=override.clue_type,
+            players_max=override.players_max,
+            visibility=override.visibility,
+            collection_ids=tuple(body.collection_ids) if body.collection_ids else None,
+        )
+        view = await services().rooms.create(
+            actor_of(user, request),
+            mode_key=body.mode_key,
+            change=change,
+            key=key,
+            request=body.model_dump(mode="json"),
+        )
+        return RoomView.model_validate(view)
 
     @router.get(
         "/rooms/open",
@@ -133,11 +157,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         responses=problem_responses(401, 403, 422, 501),
     )
     async def open_rooms(
-        user: User,
+        user: User,  # noqa: ARG001 — зависимость авторизации (только пользователь)
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Limit = 20,
     ) -> OpenRoomsPage:
-        raise _stub()
+        return OpenRoomsPage.model_validate(await services().room_queries.open_rooms(cursor, limit))
 
     @router.get(
         "/rooms/{code}",
@@ -150,8 +174,10 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_READ,
     )
-    async def get_room(code: RoomCodePath, user: User) -> RoomView:
-        raise _stub()
+    async def get_room(code: RoomCodePath, user: User, request: Request) -> RoomView:
+        return RoomView.model_validate(
+            await services().room_queries.get(actor_of(user, request), code)
+        )
 
     @router.post(
         "/rooms/{code}/join",
@@ -166,8 +192,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def join(code: RoomCodePath, body: JoinRequest, user: User) -> RoomCommandResult:
-        raise _stub()
+    async def join(
+        code: RoomCodePath, body: JoinRequest, user: User, request: Request
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.join(actor_of(user, request), code, body.op_id)
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/leave",
@@ -179,8 +208,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def leave(code: RoomCodePath, body: LeaveRequest, user: User) -> RoomCommandResult:
-        raise _stub()
+    async def leave(
+        code: RoomCodePath, body: LeaveRequest, user: User
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(actor_of(user), code, "leave", body.op_id, {})
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/ready",
@@ -189,8 +221,13 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         description=_COMMON_ROOM_ERRORS,
         responses=_ROOM_CMD,
     )
-    async def ready(code: RoomCodePath, body: ReadyRequest, user: User) -> RoomCommandResult:
-        raise _stub()
+    async def ready(
+        code: RoomCodePath, body: ReadyRequest, user: User
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user), code, "ready", body.op_id, {"ready": body.ready}
+        )
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/settings",
@@ -207,8 +244,15 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
     )
     async def change_settings(
         code: RoomCodePath, body: SettingsRequest, user: User
-    ) -> RoomCommandResult:
-        raise _stub()
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user),
+            code,
+            "settings",
+            body.op_id,
+            body.model_dump(mode="json", include={"settings", "collection_ids"}, exclude_none=True),
+        )
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/kick",
@@ -220,8 +264,13 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def kick(code: RoomCodePath, body: TargetPlayerRequest, user: User) -> RoomCommandResult:
-        raise _stub()
+    async def kick(
+        code: RoomCodePath, body: TargetPlayerRequest, user: User
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user), code, "kick", body.op_id, {"user_id": str(body.user_id)}
+        )
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/transfer-host",
@@ -234,8 +283,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
     )
     async def transfer_host(
         code: RoomCodePath, body: TargetPlayerRequest, user: User
-    ) -> RoomCommandResult:
-        raise _stub()
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user), code, "transfer_host", body.op_id, {"user_id": str(body.user_id)}
+        )
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/reset-memory",
@@ -249,8 +301,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
     )
     async def reset_memory(
         code: RoomCodePath, body: ResetMemoryRequest, user: User
-    ) -> RoomCommandResult:
-        raise _stub()
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user), code, "reset_memory", body.op_id, {}
+        )
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/start",
@@ -264,8 +319,13 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def start(code: RoomCodePath, body: StartRequest, user: User) -> RoomCommandResult:
-        raise _stub()
+    async def start(
+        code: RoomCodePath, body: StartRequest, user: User
+    ) -> RoomCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user), code, "start", body.op_id, {"expected_version": body.expected_version}
+        )
+        return respond(outcome, RoomCommandResult)
 
     @router.post(
         "/rooms/{code}/rematch",
@@ -277,8 +337,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def rematch(code: RoomCodePath, body: RematchRequest, user: User) -> RematchResult:
-        raise _stub()
+    async def rematch(
+        code: RoomCodePath, body: RematchRequest, user: User
+    ) -> RematchResult | JSONResponse:
+        outcome = await services().rooms.command(actor_of(user), code, "rematch", body.op_id, {})
+        return respond(outcome, RematchResult)
 
     @router.post(
         "/rooms/{code}/realtime-token",
@@ -293,7 +356,9 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         responses=problem_responses(401, 403, 404, 422, 429, 501),
     )
     async def realtime_token(code: RoomCodePath, user: User) -> RealtimeSubscription:
-        raise _stub()
+        return RealtimeSubscription.model_validate(
+            await services().room_queries.realtime_token(user.user_id, code)
+        )
 
     @router.get(
         "/rooms/{code}/state",
@@ -307,7 +372,7 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         responses=_READ,
     )
     async def room_state(code: RoomCodePath, user: User) -> RoomState:
-        raise _stub()
+        return RoomState.model_validate(await services().room_queries.state(user.user_id, code))
 
     @router.post(
         "/rooms/{code}/tick",
@@ -321,7 +386,8 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         responses=_READ,
     )
     async def tick(code: RoomCodePath, body: TickRequest, user: User) -> TickResult:
-        raise _stub()
+        result = await services().room_queries.tick(user.user_id, code, body.known_version)
+        return TickResult.model_validate(result)
 
     # ------------------------------------------------------------------ команды матча
     @router.post(
@@ -336,8 +402,17 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def guess(code: RoomCodePath, body: GuessRequest, user: User) -> GuessResult:
-        raise _stub()
+    async def guess(
+        code: RoomCodePath, body: GuessRequest, user: User
+    ) -> GuessResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user),
+            code,
+            "guess",
+            body.op_id,
+            body.model_dump(mode="json", exclude={"op_id"}, exclude_none=True),
+        )
+        return respond(outcome, GuessResult)
 
     @router.post(
         "/rooms/{code}/match/skip",
@@ -346,8 +421,17 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         description=_COMMON_ROOM_ERRORS,
         responses=_ROOM_CMD,
     )
-    async def skip(code: RoomCodePath, body: SkipRequest, user: User) -> MatchCommandResult:
-        raise _stub()
+    async def skip(
+        code: RoomCodePath, body: SkipRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user),
+            code,
+            "skip",
+            body.op_id,
+            body.model_dump(mode="json", exclude={"op_id"}),
+        )
+        return respond(outcome, MatchCommandResult)
 
     @router.post(
         "/rooms/{code}/match/forfeit",
@@ -359,8 +443,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def forfeit(code: RoomCodePath, body: ForfeitRequest, user: User) -> MatchCommandResult:
-        raise _stub()
+    async def forfeit(
+        code: RoomCodePath, body: ForfeitRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.command(actor_of(user), code, "forfeit", body.op_id, {})
+        return respond(outcome, MatchCommandResult)
 
     @router.post(
         "/rooms/{code}/match/emote",
@@ -373,8 +460,13 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def emote(code: RoomCodePath, body: EmoteRequest, user: User) -> MatchCommandResult:
-        raise _stub()
+    async def emote(
+        code: RoomCodePath, body: EmoteRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.emote(
+            actor_of(user), code, body.op_id, body.kind, body.key
+        )
+        return respond(outcome, MatchCommandResult)
 
     @router.post(
         "/rooms/{code}/match/chat",
@@ -390,8 +482,11 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=_ROOM_CMD,
     )
-    async def chat(code: RoomCodePath, body: ChatRequest, user: User) -> MatchCommandResult:
-        raise _stub()
+    async def chat(
+        code: RoomCodePath, body: ChatRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.chat(actor_of(user), code, body.op_id, body.text)
+        return respond(outcome, MatchCommandResult)
 
     @router.post(
         "/rooms/{code}/match/away",
@@ -400,8 +495,13 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         description=_COMMON_ROOM_ERRORS,
         responses=_ROOM_CMD,
     )
-    async def away(code: RoomCodePath, body: AwayRequest, user: User) -> MatchCommandResult:
-        raise _stub()
+    async def away(
+        code: RoomCodePath, body: AwayRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.command(
+            actor_of(user), code, "away", body.op_id, {"away": body.away}
+        )
+        return respond(outcome, MatchCommandResult)
 
     # ------------------------------------------------------------------ итоги
     @router.post(
@@ -417,7 +517,9 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         responses=problem_responses(401, 403, 404, 409, 422, 429, 501),
     )
     async def rate(match_id: MatchId, body: RateRequest, user: User, key: IdempotencyKey) -> None:
-        raise _stub()
+        await services().rate.rate(
+            user.user_id, match_id, to_user_id=body.to_user_id, kind=body.kind, key=key
+        )
 
     @router.get(
         "/matches/{match_id}",
@@ -429,8 +531,8 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         ),
         responses=problem_responses(401, 403, 404, 422, 501),
     )
-    async def get_match(match_id: MatchId, user: User) -> MatchResult:
-        raise _stub()
+    async def get_match(match_id: MatchId, user: User) -> MatchResult:  # noqa: ARG001
+        return MatchResult.model_validate(await services().matches.get(match_id))
 
     @router.get(
         "/me/matches",
@@ -444,6 +546,7 @@ def build_public_router(infra: Infrastructure) -> APIRouter:  # noqa: PLR0915 �
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Limit = 20,
     ) -> MyMatchesPage:
-        raise _stub()
+        page = await services().matches.mine(user.user_id, cursor, limit)
+        return MyMatchesPage.model_validate(page)
 
     return router
