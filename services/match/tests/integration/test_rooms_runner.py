@@ -89,7 +89,7 @@ class Cluster:
             assets=FakeLinkPort(),
             records=MemoryRecords(),
             store=self.store,
-            player_rooms=RedisPlayerRooms(self.redis),
+            player_rooms=RedisPlayerRooms(self.redis, ttl_ms=3_600_000),
             clock=SystemClock(),
             random=SystemRandom(),
             new_id=uuid7,

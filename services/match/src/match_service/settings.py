@@ -40,6 +40,9 @@ class MatchSettings(BaseModel):
         join_by_code_per_user_per_min: Поиск комнаты по коду пользователем (fail-closed).
         emote_per_player_per_min: Эмоции и фразы игрока в минуту.
         create_lock_ms: Замок от параллельного создания комнат одним игроком.
+        pending_room_ms: Свежий указатель ``player:{id}:room`` на ещё не созданную комнату
+            считается занятым (создание или вход в процессе).
+        op_users_max: Сколько игроков максимум хранят окно ``op_id`` в снимке комнаты.
         memory_limit: Сколько сыгранных единиц помнит лобби (``exclude_ids`` ≤ 5000).
         rooms_poll_ms: Максимальная пауза цикла владельца (таймеры, присутствие).
         orphan_scan_s: Проверка комнат без владельца (захват после падения).
@@ -82,6 +85,8 @@ class MatchSettings(BaseModel):
     join_by_code_per_user_per_min: int = Field(default=20, ge=1)
     emote_per_player_per_min: int = Field(default=30, ge=1)
     create_lock_ms: int = Field(default=5000, ge=100, le=60_000)
+    op_users_max: int = Field(default=16, ge=2, le=256)
+    pending_room_ms: int = Field(default=10_000, ge=1000, le=120_000)
     memory_limit: int = Field(default=2000, ge=0, le=5000)
     rooms_poll_ms: int = Field(default=250, ge=5, le=1500)
     orphan_scan_s: float = Field(default=2, gt=0, le=60)

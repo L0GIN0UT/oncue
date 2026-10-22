@@ -20,12 +20,26 @@ from uuid import UUID
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from match_service.application.ports import Json, RoomCommand
+from match_service.application.ports import Json, RoomCommand, RoomPointer
 from match_service.domain.errors import MatchUnavailableError
 from match_service.infrastructure.rooms import keys
 
 FIELD = "c"
 _RELEASE_PLAYER = """
+local v = redis.call('GET', KEYS[1])
+if v and (v == ARGV[1] or string.sub(v, 1, string.len(ARGV[1]) + 1) == ARGV[1] .. '|') then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+_REPLACE_PLAYER = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+  return 1
+end
+return 0
+"""
+_UNLOCK = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end
 return 0
 """
@@ -163,35 +177,60 @@ class RedisPresence:
 
 
 class RedisPlayerRooms:
-    """``PlayerRooms``: ``player:{id}:room`` (одна активная комната на игрока, D10)."""
+    """``PlayerRooms``: ``player:{id}:room = code|ms`` с TTL (одна активная комната, D10).
 
-    def __init__(self, redis: Redis) -> None:
+    Замена — Lua compare-and-set по старому значению, освобождение — по коду комнаты;
+    замок создания ``player:{id}:creating`` — случайный токен и compare-and-delete.
+    """
+
+    def __init__(self, redis: Redis, *, ttl_ms: int) -> None:
         self._redis = redis
+        self._ttl_ms = ttl_ms
         self._release = redis.register_script(_RELEASE_PLAYER)
+        self._replace = redis.register_script(_REPLACE_PLAYER)
+        self._unlock = redis.register_script(_UNLOCK)
 
     async def get(self, user_id: UUID) -> str | None:
         """Код активной комнаты."""
-        raw = await self._redis.get(keys.player(user_id))
-        return _text(raw) if raw is not None else None
+        found = await self.pointer(user_id)
+        return found.code if found is not None else None
 
-    async def claim(self, user_id: UUID, code: str) -> bool:
+    async def pointer(self, user_id: UUID) -> RoomPointer | None:
+        """Указатель целиком."""
+        raw = await self._redis.get(keys.player(user_id))
+        return RoomPointer.parse(_text(raw)) if raw is not None else None
+
+    async def claim(self, user_id: UUID, code: str, now_ms: int) -> bool:
         """Занять, если свободно (или уже эта комната)."""
-        if await self._redis.set(keys.player(user_id), code, nx=True):
+        value = f"{code}|{now_ms}"
+        if await self._redis.set(keys.player(user_id), value, nx=True, px=self._ttl_ms):
             return True
         return await self.get(user_id) == code
 
-    async def assign(self, user_id: UUID, code: str) -> None:
+    async def replace(self, user_id: UUID, old: RoomPointer, code: str, now_ms: int) -> bool:
+        """Заменить, если указатель всё ещё ``old``."""
+        done = await self._replace(
+            keys=[keys.player(user_id)], args=[old.raw, f"{code}|{now_ms}", self._ttl_ms]
+        )
+        return bool(done)
+
+    async def assign(self, user_id: UUID, code: str, now_ms: int) -> None:
         """Записать безусловно."""
-        await self._redis.set(keys.player(user_id), code)
+        await self._redis.set(keys.player(user_id), f"{code}|{now_ms}", px=self._ttl_ms)
 
     async def release(self, user_id: UUID, code: str) -> None:
         """Освободить, если записана эта комната."""
         await self._release(keys=[keys.player(user_id)], args=[code])
 
-    async def lock_create(self, user_id: UUID, ttl_ms: int) -> bool:
+    async def lock_create(self, user_id: UUID, token: str, ttl_ms: int) -> bool:
         """Замок создания комнаты (``SET NX PX``); ``False`` — создание уже идёт."""
-        return bool(await self._redis.set(keys.creating(user_id), "1", nx=True, px=ttl_ms))
+        return bool(await self._redis.set(keys.creating(user_id), token, nx=True, px=ttl_ms))
 
-    async def unlock_create(self, user_id: UUID) -> None:
-        """Снять замок создания."""
-        await self._redis.delete(keys.creating(user_id))
+    async def create_holder(self, user_id: UUID) -> str | None:
+        """Токен текущего замка создания."""
+        raw = await self._redis.get(keys.creating(user_id))
+        return _text(raw) if raw is not None else None
+
+    async def unlock_create(self, user_id: UUID, token: str) -> None:
+        """Снять замок, если он всё ещё наш."""
+        await self._unlock(keys=[keys.creating(user_id)], args=[token])

@@ -94,6 +94,28 @@ class PresenceStore(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class RoomPointer:
+    """Значение ``player:{id}:room``: код комнаты и момент, когда игрок её занял.
+
+    Attributes:
+        code: Код комнаты.
+        since_ms: Когда указатель записан (свежий указатель на ещё не созданную комнату —
+            создание или вход в процессе).
+        raw: Сырое значение — для замены compare-and-set.
+    """
+
+    code: str
+    since_ms: int
+    raw: str
+
+    @classmethod
+    def parse(cls, raw: str) -> RoomPointer:
+        """``code|ms`` → указатель (старый формат без момента — записан давно)."""
+        code, _, since = raw.partition("|")
+        return cls(code=code, since_ms=int(since) if since.isdigit() else 0, raw=raw)
+
+
 class PlayerRooms(Protocol):
     """Активная комната игрока ``player:{id}:room`` (D10: одна активная комната)."""
 
@@ -101,24 +123,36 @@ class PlayerRooms(Protocol):
         """Код активной комнаты."""
         ...
 
-    async def claim(self, user_id: UUID, code: str) -> bool:
-        """Занять (если свободно или уже эта комната)."""
+    async def pointer(self, user_id: UUID) -> RoomPointer | None:
+        """Указатель целиком (код, момент, сырое значение)."""
         ...
 
-    async def assign(self, user_id: UUID, code: str) -> None:
-        """Записать безусловно (прошлая комната проверена и неактивна)."""
+    async def claim(self, user_id: UUID, code: str, now_ms: int) -> bool:
+        """Занять, если свободно (``SET NX``) или уже эта комната."""
+        ...
+
+    async def replace(self, user_id: UUID, old: RoomPointer, code: str, now_ms: int) -> bool:
+        """Заменить, только если указатель всё ещё ``old`` (compare-and-set)."""
+        ...
+
+    async def assign(self, user_id: UUID, code: str, now_ms: int) -> None:
+        """Записать безусловно (реванш: игроки переходят из своей же комнаты)."""
         ...
 
     async def release(self, user_id: UUID, code: str) -> None:
         """Освободить, если записана эта комната."""
         ...
 
-    async def lock_create(self, user_id: UUID, ttl_ms: int) -> bool:
+    async def lock_create(self, user_id: UUID, token: str, ttl_ms: int) -> bool:
         """Замок создания комнаты игроком; ``False`` — другое создание ещё идёт."""
         ...
 
-    async def unlock_create(self, user_id: UUID) -> None:
-        """Снять замок создания."""
+    async def create_holder(self, user_id: UUID) -> str | None:
+        """Токен текущего замка создания."""
+        ...
+
+    async def unlock_create(self, user_id: UUID, token: str) -> None:
+        """Снять замок, только если он всё ещё наш (compare-and-delete)."""
         ...
 
 
@@ -306,8 +340,13 @@ class AdminAction:
 class AdminAudit(Protocol):
     """Аудит админских действий match (Postgres)."""
 
-    async def record(self, action: AdminAction) -> bool:
-        """Записать; ``False`` — уже записано с этим ключом (повтор запроса)."""
+    async def record(self, action: AdminAction) -> AdminAction:
+        """Записать одной транзакцией; повтор ключа — без новой строки.
+
+        Returns:
+            Сохранённая запись: новая или прежняя с тем же ``(actor_id, idempotency_key)``
+            (вызывающий сверяет её с запросом).
+        """
         ...
 
 

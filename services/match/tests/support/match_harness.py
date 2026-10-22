@@ -45,6 +45,7 @@ class Harness:
     seen: dict[UUID, int] = field(default_factory=dict)
     op_window: int = 64
     poison_limit: int = 3
+    op_users_max: int = 16
     _ops: int = 0
 
     def __post_init__(self) -> None:
@@ -68,6 +69,7 @@ class Harness:
                 idle_ms=IDLE_MS,
                 presence_timeout_ms=PRESENCE_TIMEOUT_MS,
                 poison_limit=self.poison_limit,
+                op_users_max=self.op_users_max,
             ),
         )
 
@@ -103,7 +105,7 @@ class Harness:
             now_ms=self.now_ms(),
         )
         await self.store.create(room)
-        await self.player_rooms.claim(host, code)
+        await self.player_rooms.claim(host, code, self.now_ms())
         return room, host
 
     async def cmd(

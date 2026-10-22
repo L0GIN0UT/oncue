@@ -16,9 +16,10 @@ runner подаёт команды из потока и снимок, а пос�
 
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -146,6 +147,8 @@ class OwnerSettings:
     idle_ms: int
     presence_timeout_ms: int
     poison_limit: int = 3
+    op_users_max: int = 16
+    pending_room_ms: int = 10_000
 
     @property
     def timing(self) -> Timing:
@@ -167,6 +170,61 @@ INTERNAL_ERROR = "match.unavailable"
 PERSIST_BACKOFF_S = 0.5
 PERSIST_BACKOFF_MAX_S = 30.0
 POISON_REASON = "internal_error"
+
+
+async def claim_room(
+    player_rooms: PlayerRooms,
+    store: RoomStore,
+    user_id: UUID,
+    code: str,
+    *,
+    now_ms: int,
+    pending_ms: int,
+) -> None:
+    """Занять ``player:{id}:room`` под комнату ``code`` (одна активная комната, D10).
+
+    Указатель на другую комнату мешает, если та не закрыта и игрок из неё не вышел (место
+    есть и не ``left`` — или места ещё нет: вход в процессе), либо если комнаты ещё нет, а
+    указатель свежее ``pending_ms`` (создание в процессе). Иначе указатель устарел и
+    заменяется compare-and-set по старому значению: параллельный захват не потеряется.
+
+    Raises:
+        MatchConflictError: ``match.active_room_conflict``.
+    """
+    for _ in range(4):  # повтор — только если указатель поменялся между чтением и заменой
+        if await player_rooms.claim(user_id, code, now_ms):
+            return
+        current = await player_rooms.pointer(user_id)
+        if current is None:
+            continue
+        if current.code == code:
+            return
+        other = await store.load(current.code)
+        if other is None:
+            busy = now_ms - current.since_ms < pending_ms
+        else:
+            seat = other.seat_of(user_id)
+            busy = not other.is_closed and (seat is None or seat.presence is not Presence.LEFT)
+        if busy:
+            raise MatchConflictError(
+                "у вас уже есть активная комната",
+                code=errors.ACTIVE_ROOM_CONFLICT,
+                details={"code": current.code},
+            )
+        if await player_rooms.replace(user_id, current, code, now_ms):
+            return
+    raise MatchConflictError("у вас уже есть активная комната", code=errors.ACTIVE_ROOM_CONFLICT)
+
+
+def is_transient(exc: BaseException) -> bool:
+    """Сбой инфраструктуры (сеть, таймаут): команду повторить, а не пропускать."""
+    return isinstance(exc, OSError | TimeoutError | ConnectionError)
+
+
+def restore(room: Room, before: Room) -> None:
+    """Вернуть комнате состояние ``before`` (копия до команды)."""
+    for f in fields(Room):
+        setattr(room, f.name, getattr(before, f.name))
 
 
 def guess_body(room: Room, user_id: UUID, round_index: int, level: int, result: str) -> Json:
@@ -279,6 +337,7 @@ class RoomOwner:
         seeds: Callable[[], str],
         subscriptions: Subscriptions,
         settings: OwnerSettings,
+        transient: Callable[[BaseException], bool] = is_transient,
     ) -> None:
         self._factory = factory
         self._plans = plans
@@ -291,7 +350,9 @@ class RoomOwner:
         self._new_id = new_id
         self._seeds = seeds
         self._subscriptions = subscriptions
-        self._failures: dict[str, int] = {}
+        self._transient = transient
+        self._failures: dict[str, tuple[str, int]] = {}
+        self._tick_failures: dict[str, int] = {}
         self._persist_backoff: dict[str, tuple[int, int]] = {}
         self._settings = settings
         self._timing = settings.timing
@@ -334,7 +395,13 @@ class RoomOwner:
         return rules
 
     def forget(self, room: Room) -> None:
-        """Комната ушла от этого владельца: правила её матча больше не нужны."""
+        """Комната ушла от этого владельца: правила, счётчики сбоев и паузы записи — тоже."""
+        self._forget_rules(room)
+        self._failures.pop(room.code, None)
+        self._tick_failures.pop(room.code, None)
+        self._persist_backoff.pop(room.code, None)
+
+    def _forget_rules(self, room: Room) -> None:
         if room.match is not None:
             self._rules.pop(room.match.match_id, None)
 
@@ -348,56 +415,95 @@ class RoomOwner:
     async def handle(self, room: Room, command: RoomCommand) -> Json:
         """Применить команду; повтор ``op_id`` — ответ по сохранённому итогу.
 
-        Любой сбой обработчика (не только ``AppError``) — ответ 503 ``match.unavailable``:
-        курсор потока сдвигается, «ядовитая» команда не вешает комнату; серия сбоев подряд
-        прерывает комнату (``GV_MATCH__POISON_LIMIT``).
+        Сбой не ``AppError`` откатывает комнату к состоянию до команды (иначе полупримененная
+        команда ушла бы в снимок, а повтор ``op_id`` применил бы её второй раз). Сбой
+        инфраструктуры (Redis, сеть) пробрасывается: runner перечитает снимок и повторит
+        запись потока. Прочий сбой тоже пробрасывается, пока одна и та же команда не упала
+        ``GV_MATCH__POISON_LIMIT`` раз подряд: тогда — ответ 503 ``match.unavailable`` и
+        курсор идёт дальше (комната цела, команда пропущена).
         """
         saved = room.op_reply(command.user_id, command.op_id)
         if saved is not None:
             return replay(room, command, saved, self._now())
         started = time.perf_counter()
         handler = self._handlers.get(command.kind, self._unknown)
+        before = copy.deepcopy(room)
+        was_member = room.is_member(command.user_id)
         try:
             build = await handler(room, command, self._now())
             await self.settle(room)
             reply = ok(build())
         except AppError as exc:
             reply = failure(exc)
-        except Exception:
-            log.exception("match.command_failed", room=room.code, kind=command.kind)
-            reply = failure(MatchUnavailableError("сбой команды", code=INTERNAL_ERROR))
-            await self._failed(room)
-        else:
-            self._failures.pop(room.code, None)
+        except Exception as exc:
+            restore(room, before)
+            reply = self._crashed(room, command, exc)
         finally:
             COMMAND_APPLY_SECONDS.labels(command.kind).observe(time.perf_counter() - started)
-        if int(reply["status"]) < SERVER_ERROR:
+        last = self._failures.get(room.code)
+        if last is not None and last[0] == f"{command.user_id}:{command.op_id}":
+            # Серия считается по одной записи потока: после перечитывания снимка прежние
+            # команды пакета применяются заново и не должны обнулять её.
+            self._failures.pop(room.code, None)
+        # Окно op_id — только участникам (иначе посторонние раздувают снимок, аудит Н8);
+        # добровольный выход тоже запоминается — его повтор должен вернуть тот же ответ.
+        remembered = room.is_member(command.user_id) or (command.kind == "leave" and was_member)
+        if int(reply["status"]) < SERVER_ERROR and remembered:
             room.remember_op(
-                command.user_id, command.op_id, compact(command, reply), self._settings.op_window
+                command.user_id,
+                command.op_id,
+                compact(command, reply),
+                self._settings.op_window,
+                self._settings.op_users_max,
             )
         return reply
 
+    def _crashed(self, room: Room, command: RoomCommand, exc: Exception) -> Json:
+        """Команда упала не ``AppError`` (комната уже откачена): повторить или пропустить."""
+        if self._transient(exc):
+            log.warning(
+                "match.command_transient_failure",
+                room=room.code,
+                kind=command.kind,
+                error_type=type(exc).__name__,
+            )
+            raise exc
+        key = f"{command.user_id}:{command.op_id}"
+        last, count = self._failures.get(room.code, ("", 0))
+        count = count + 1 if last == key else 1
+        log.exception("match.command_failed", room=room.code, kind=command.kind, attempt=count)
+        if count < self._settings.poison_limit:
+            self._failures[room.code] = (key, count)
+            raise exc
+        log.error("match.command_poisoned", room=room.code, kind=command.kind)
+        return failure(MatchUnavailableError("сбой команды", code=INTERNAL_ERROR))
+
     async def tick(self, room: Room, seen: dict[UUID, int]) -> None:
-        """Таймеры и присутствие (без команд); сбой — как у команды (серия → abort)."""
+        """Таймеры и присутствие; сбой инфраструктуры пробрасывается (runner повторит).
+
+        Прочие сбои ``poison_limit`` тиков подряд — комната прерывается (``internal_error``);
+        успешный тик обнуляет серию.
+        """
         if room.is_closed:
             return
         try:
             match_fsm.presence(room, self.rules_for(room), self._timing, seen, self._now())
             await self.settle(room)
-        except AppError as exc:
-            log.warning("match.tick_failed", room=room.code, code=exc.code)
-            await self._failed(room)
-        except Exception:
+        except Exception as exc:
+            if self._transient(exc):
+                raise
             log.exception("match.tick_failed", room=room.code)
-            await self._failed(room)
+            await self._tick_failed(room)
+        else:
+            self._tick_failures.pop(room.code, None)
 
-    async def _failed(self, room: Room) -> None:
-        """Сбой обработки комнаты; ``poison_limit`` подряд — комната прерывается."""
-        count = self._failures.get(room.code, 0) + 1
-        self._failures[room.code] = count
+    async def _tick_failed(self, room: Room) -> None:
+        """Сбой тика; ``poison_limit`` подряд — комната прерывается."""
+        count = self._tick_failures.get(room.code, 0) + 1
+        self._tick_failures[room.code] = count
         if count < self._settings.poison_limit or room.is_closed:
             return
-        self._failures.pop(room.code, None)
+        self._tick_failures.pop(room.code, None)
         log.error("match.room_poisoned", room=room.code, failures=count)
         try:
             rules = self.rules_for(room)
@@ -425,7 +531,7 @@ class RoomOwner:
         if room.is_closed or room.phase is Phase.LOBBY:
             # Матч сыгран (реванш, возврат в лобби, закрытие): правила больше не нужны —
             # иначе кэш владельца растёт с каждым матчем (ревью §10).
-            self.forget(room)
+            self._forget_rules(room)
         if room.is_closed:
             for seat in room.seats:
                 await self._player_rooms.release(seat.user_id, room.code)
@@ -536,28 +642,14 @@ class RoomOwner:
         except Exception:
             log.exception("match.unsubscribe_failed", room=room.code)
 
-    async def _claim(self, room: Room, user_id: UUID) -> bool:
-        """Занять ``player:{id}:room``; ``True`` — занято сейчас (откатить при ошибке)."""
-        if await self._player_rooms.claim(user_id, room.code):
-            return True
-        other = await self._player_rooms.get(user_id)
-        if other is None or other == room.code:
-            await self._player_rooms.assign(user_id, room.code)
-            return True
-        other_room = await self._store.load(other)
-        seat = other_room.seat_of(user_id) if other_room is not None else None
-        if (
-            other_room is None
-            or other_room.is_closed
-            or seat is None
-            or seat.presence is Presence.LEFT
-        ):
-            await self._player_rooms.assign(user_id, room.code)
-            return True
-        raise MatchConflictError(
-            "у вас уже есть активная комната",
-            code=errors.ACTIVE_ROOM_CONFLICT,
-            details={"code": other},
+    async def _claim(self, room: Room, user_id: UUID) -> None:
+        await claim_room(
+            self._player_rooms,
+            self._store,
+            user_id,
+            room.code,
+            now_ms=self._now(),
+            pending_ms=self._settings.pending_room_ms,
         )
 
     # ------------------------------------------------------------------ лобби
@@ -570,12 +662,11 @@ class RoomOwner:
         if not fresh:
             match_fsm.rejoin(room, user, now)  # возврат по ссылке: снять паузу сразу
             return self._room_result(room)
-        claimed = await self._claim(room, user)
+        await self._claim(room, user)
         try:
             room.join(user, str(cmd.data.get("nickname") or ""), now)
         except AppError:
-            if claimed:
-                await self._player_rooms.release(user, room.code)
+            await self._player_rooms.release(user, room.code)
             raise
         return self._room_result(room)
 
@@ -588,6 +679,8 @@ class RoomOwner:
             match_fsm.leave(room, self._require_rules(room), self._timing, user, now)
         else:
             room.leave_lobby(user, now)
+        # Окно op ушедшего не чистится: повтор leave с тем же op_id — тот же ответ
+        # (правило 5); окно ограничено op_users_max и со временем вытесняется.
         await self._player_rooms.release(user, room.code)
         await self._unsubscribe(user, room)
         return self._room_result(room)
@@ -614,6 +707,7 @@ class RoomOwner:
     async def _kick(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
         target = UUID(str(cmd.data["user_id"]))
         room.kick(cmd.user_id, target, now)
+        room.forget_ops(target)
         await self._player_rooms.release(target, room.code)
         await self._unsubscribe(target, room)
         return self._room_result(room)
@@ -720,7 +814,7 @@ class RoomOwner:
             fresh.pull_changes()
             if await self._store.create(fresh):
                 for seat in players:
-                    await self._player_rooms.assign(seat.user_id, code)
+                    await self._player_rooms.assign(seat.user_id, code, now)
                 # Старая комната закрывается: код реванша получают все (дельта closed и
                 # RoomView.rematch_code в state/tick).
                 room.rematch_code = code
@@ -885,6 +979,7 @@ class RoomOwner:
             # Команда приходит из транзакции consumer'а до её коммита: итог матча не может
             # полагаться только на users_proj.deleted (аудит §5).
             room.forgotten.add(cmd.user_id)
+        room.forget_ops(cmd.user_id)
         await self._player_rooms.release(cmd.user_id, room.code)
         await self._unsubscribe(cmd.user_id, room)
         return self._version(room)

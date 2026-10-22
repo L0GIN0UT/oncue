@@ -6,14 +6,22 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Any
 from uuid import UUID
 
 import pytest
 from match_app import MatchApp, Player
 from match_doubles import TITLES
+from match_harness import Harness
 from match_service.infrastructure.container import container_for
-from match_service.infrastructure.db.tables import admin_actions, idempotency_keys
+from match_service.infrastructure.db.repositories import SqlUsers
+from match_service.infrastructure.db.tables import (
+    admin_actions,
+    idempotency_keys,
+    match_players,
+)
+from match_service.infrastructure.rooms import keys
 from sqlalchemy import func, select
 
 from gv_auth import Sanction
@@ -220,3 +228,107 @@ async def test_a11_parallel_creates_by_one_player_make_one_room(svc: MatchApp) -
             assert_problem(r, 409, "match.active_room_conflict")
     container = container_for(svc.infra)
     assert await container.player_rooms.get(a.user_id) == created[0].json()["code"]
+
+
+# ----------------------------------------------------------------------------- Н3 / Н4
+async def _abort(svc: MatchApp, admin: Player, code: str, reason: str, key: str) -> Any:
+    return await svc.client.post(
+        f"/admin/v1/rooms/{code}/abort",
+        json={"reason": reason},
+        headers={**admin.headers, "Idempotency-Key": key},
+    )
+
+
+async def test_n3_admin_key_reused_for_another_room_is_rejected(svc: MatchApp) -> None:
+    admin = svc.user(perms=["admin.access", "match.manage"])
+    first = (await svc.create(svc.user(), "music.duel.classic"))["code"]
+    second_host = svc.user()
+    second = (await svc.create(second_host, "music.duel.classic"))["code"]
+    done = await _abort(svc, admin, first, "спам", "abort-reuse-0001")
+    assert done.status_code == 202, done.text
+    reused = await _abort(svc, admin, second, "спам", "abort-reuse-0001")
+    assert_problem(reused, 409, "idempotency.key_reused")
+    assert (await svc.state(second_host, second))["room"]["phase"] == "lobby"
+    rows = select(func.count()).select_from(admin_actions)
+    assert await _count(svc, rows) == 1
+
+
+async def test_n4_admin_abort_without_audit_is_unavailable(svc: MatchApp) -> None:
+    host = svc.user()
+    code = (await svc.create(host, "music.duel.classic"))["code"]
+    rooms = container_for(svc.infra).rooms
+    rooms._audit = None
+    admin = svc.user(perms=["admin.access", "match.manage"])
+    response = await _abort(svc, admin, code, "проверка", "abort-noaudit-01")
+    assert response.status_code == 503, response.text
+    assert (await svc.state(host, code))["room"]["phase"] == "lobby"
+
+
+# ----------------------------------------------------------------------------- Н5
+async def test_n5_result_waits_for_concurrent_user_deletion(svc: MatchApp) -> None:
+    h = Harness()
+    room, a = await h.room()
+    (b,) = await h.join(room, 1)
+    await h.start(room, a)
+    await h.ok(room, b, "forfeit")  # сдавшийся вышел: команда remove до него не дойдёт
+    match = room.match
+    assert match is not None and match.finish is not None
+    records = container_for(svc.infra).records
+    assert svc.infra.sessions is not None
+    async with svc.infra.sessions() as session, session.begin():
+        await SqlUsers.forget(session, b, 9)  # UserDeleted ещё не закоммичен
+        writing = asyncio.create_task(records.record_finished(room, match))
+        done, _ = await asyncio.wait({writing}, timeout=0.3)
+        assert not done  # итог ждёт замка удаляемого игрока
+    assert await writing is True
+    players = select(match_players.c.user_id).where(match_players.c.match_id == match.match_id)
+    async with svc.infra.sessions() as session:
+        ids = set((await session.scalars(players)).all())
+    assert b not in ids and None in ids and a in ids
+    payload = await _finished(svc, str(match.match_id))
+    assert str(b) not in str(payload)
+
+
+# ----------------------------------------------------------------------------- Н7 / Н9
+async def test_n7_create_and_join_race_gives_one_room(svc: MatchApp) -> None:
+    other = await svc.create(svc.user(), "film.lobby.collection", collection_ids=[str(uuid7())])
+    p = svc.user()
+    create = svc.client.post(
+        "/v1/rooms",
+        json={"mode_key": "music.duel.classic"},
+        headers={**p.headers, "Idempotency-Key": "idem-race-join-1"},
+    )
+    join = svc.post(p, other["code"], "join")
+    created, joined = await asyncio.gather(create, join)
+    assert (created.status_code == 201) != (joined.status_code == 200), (
+        created.text,
+        joined.text,
+    )
+    loser = joined if created.status_code == 201 else created
+    assert_problem(loser, 409, "match.active_room_conflict")
+
+
+async def test_n9_create_lock_token_and_in_progress(app_factory: Any) -> None:
+    svc = await app_factory(lobby_create_per_user_per_hour=1)
+    p = svc.user()
+    key = "idem-lock-0001"
+    owner = hashlib.sha256(key.encode()).hexdigest()[:16]
+    lock = keys.creating(p.user_id)
+    await svc.redis.set(lock, f"{owner}:{uuid7().hex}", px=60_000)  # создание «идёт»
+    body = {"mode_key": "music.duel.classic"}
+    same = await svc.client.post(
+        "/v1/rooms", json=body, headers={**p.headers, "Idempotency-Key": key}
+    )
+    assert_problem(same, 409, "idempotency.in_progress")
+    for i in range(3):  # замок раньше лимита: попытки не тратят лимит создания
+        other = await svc.client.post(
+            "/v1/rooms", json=body, headers={**p.headers, "Idempotency-Key": f"idem-lock-1{i}"}
+        )
+        assert_problem(other, 409, "match.active_room_conflict")
+    assert await svc.redis.exists(lock)  # чужой замок не снят
+    await svc.redis.delete(lock)
+    created = await svc.client.post(
+        "/v1/rooms", json=body, headers={**p.headers, "Idempotency-Key": key}
+    )
+    assert created.status_code == 201, created.text
+    assert not await svc.redis.exists(lock)

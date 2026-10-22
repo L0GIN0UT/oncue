@@ -13,6 +13,7 @@ from functools import cached_property
 
 import structlog
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
@@ -21,7 +22,7 @@ from gv_game_kernel import AssetPort, PluginRegistry, register_builtin, register
 from gv_service import Infrastructure, ServiceAuthNotConfiguredError, build_service_token_provider
 from gv_text.ugc import UgcPolicy
 from match_service.application.commands.rooms import RoomLimits, RoomService
-from match_service.application.owner import OwnerSettings, RoomOwner
+from match_service.application.owner import OwnerSettings, RoomOwner, is_transient
 from match_service.application.ports import (
     Json,
     ModeSource,
@@ -64,6 +65,11 @@ from match_service.settings import Settings
 log = structlog.get_logger(__name__)
 
 MS = 1000
+
+
+def _transient(exc: BaseException) -> bool:
+    """Сбой Redis или сети: команду владелец не пропускает, а повторяет после перечитывания."""
+    return is_transient(exc) or isinstance(exc, RedisError)
 
 
 def build_registry() -> PluginRegistry:
@@ -148,7 +154,9 @@ class MatchContainer:
     @cached_property
     def player_rooms(self) -> RedisPlayerRooms:
         """Активная комната игрока."""
-        return RedisPlayerRooms(self.redis)
+        # Указатель живёт не дольше снимка комнаты.
+        ttl_ms = int(self.settings.match.snapshot_ttl_h * 3600 * 1000)
+        return RedisPlayerRooms(self.redis, ttl_ms=ttl_ms)
 
     @cached_property
     def bus(self) -> RedisCommandBus:
@@ -283,7 +291,10 @@ class MatchContainer:
                 idle_ms=int(m.room_idle_close_min * 60 * MS),
                 presence_timeout_ms=m.presence_timeout_s * MS,
                 poison_limit=m.poison_limit,
+                op_users_max=m.op_users_max,
+                pending_room_ms=m.pending_room_ms,
             ),
+            transient=_transient,
         )
 
     @cached_property
@@ -314,6 +325,7 @@ class MatchContainer:
                 join_by_code_per_user_per_min=m.join_by_code_per_user_per_min,
                 emote_per_min=m.emote_per_player_per_min,
                 create_lock_ms=m.create_lock_ms,
+                pending_room_ms=m.pending_room_ms,
             ),
             audit=self.audit if self.infra.sessions is not None else None,
         )

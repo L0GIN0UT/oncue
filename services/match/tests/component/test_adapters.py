@@ -17,7 +17,11 @@ from match_service.application.ports import RoundPlanRequest
 from match_service.domain.errors import MatchUnavailableError
 from match_service.infrastructure.breaker import CircuitBreaker
 from match_service.infrastructure.clients import GameClient, MediaLinks
-from match_service.infrastructure.realtime import CentrifugoPublisher, SubscriptionTokenIssuer
+from match_service.infrastructure.realtime import (
+    REALTIME_PUBLISH,
+    CentrifugoPublisher,
+    SubscriptionTokenIssuer,
+)
 from pydantic import SecretStr
 
 from gv_core.errors import DependencyUnavailableError, GoneError
@@ -187,6 +191,35 @@ async def test_centrifugo_publish_and_failures_are_swallowed() -> None:
             await publisher.publish("room:K7MQ2ZXA", message)
             route.mock(side_effect=httpx.ConnectError("down"))
             await publisher.publish("room:K7MQ2ZXA", message)  # без исключения
+    finally:
+        await publisher.aclose()
+
+
+def _count(label: str) -> float:
+    return REALTIME_PUBLISH.labels(label)._value.get()
+
+
+async def test_centrifugo_unsubscribe_reads_api_error_from_body() -> None:
+    settings = RealtimeSettings(api_url=CENTRIFUGO, api_key=SecretStr("k" * 40))
+    publisher = CentrifugoPublisher(settings)
+    user = uuid7()
+    try:
+        with stub_service(CENTRIFUGO) as centrifugo:
+            route = centrifugo.route("POST", "/unsubscribe")
+            route.respond(200, json={"result": {}})
+            ok_before = _count("unsubscribe_ok")
+            await publisher.unsubscribe(user, "room:K7MQ2ZXA")
+            assert _json(route.calls.last.request) == {
+                "user": str(user),
+                "channel": "room:K7MQ2ZXA",
+            }
+            assert _count("unsubscribe_ok") == ok_before + 1
+            # 200 с ошибкой API в теле — не успех (отписка не произошла).
+            route.respond(200, json={"error": {"code": 102, "message": "unknown channel"}})
+            errors_before = _count("unsubscribe_api_error")
+            await publisher.unsubscribe(user, "room:K7MQ2ZXA")
+            assert _count("unsubscribe_api_error") == errors_before + 1
+            assert _count("unsubscribe_ok") == ok_before + 1
     finally:
         await publisher.aclose()
 

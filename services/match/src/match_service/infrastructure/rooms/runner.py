@@ -196,13 +196,9 @@ class RoomActor:
         replies = []
         for entry_id, command in entries:
             if command is not None:
-                try:
-                    reply = await self._owner.handle(room, command)
-                except Exception:
-                    # Владелец ловит сбои сам; это последний рубеж: курсор идёт дальше.
-                    log.exception("match.command_crashed", room=self.code, kind=command.kind)
-                    reply = {"status": 500, "code": "match.unavailable", "message": "сбой"}
-                replies.append((command, reply))
+                # Сбой владелец пробрасывает, откатив комнату: итерация прервётся, снимок
+                # перечитается и запись потока применится заново (см. RoomOwner.handle).
+                replies.append((command, await self._owner.handle(room, command)))
             else:
                 log.warning("match.command_unreadable", room=self.code)
             room.cursor = entry_id
