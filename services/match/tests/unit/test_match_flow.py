@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from match_harness import IDLE_MS, Harness
-from match_service.domain.model import MatchFinish, Phase, Presence
+from match_service.domain.model import MatchFinish, Phase, PlayerFinish, Presence
 
 from gv_core.ids import uuid7
 
@@ -283,17 +283,79 @@ async def test_duel_rematch_creates_new_room_with_same_players() -> None:
     (b,) = await h.join(room, 1)
     await h.start(room, a)
     await h.ok(room, b, "forfeit")
-    # Сдавшийся покинул комнату: согласия оставшегося хватает.
+    # Сдача — исход матча, не выход из комнаты: место B остаётся, реванш ждёт его голоса.
+    seat = room.seat_of(b)
+    assert seat is not None and seat.presence is not Presence.LEFT
+    assert room.match is not None and room.match.players[b].finish is not None
     first = await h.ok(room, a, "rematch")
-    code = first["rematch_code"]
+    assert first["rematch_code"] is None and len(h.store.rooms) == 1
+    body = await h.ok(room, b, "rematch")
+    code = body["rematch_code"]
     assert code is not None and code != room.code
     fresh = h.store.rooms[code]
-    assert [s.user_id for s in fresh.seats] == [a] and fresh.host_id == a
+    assert {s.user_id for s in fresh.seats} == {a, b} and fresh.host_id == a
     assert await h.player_rooms.get(a) == code
-    assert await h.player_rooms.get(b) is None
+    assert await h.player_rooms.get(b) == code
     assert room.phase is Phase.CLOSED and room.close_reason == "rematch"
     closed = [c.data for c in room.changes if c.kind == "closed"]
     assert closed == [{"reason": "rematch", "rematch_code": code}]
+
+
+async def test_duel_rematch_after_leave_needs_only_remaining_player() -> None:
+    h = Harness()
+    room, a = await h.room()
+    (b,) = await h.join(room, 1)
+    await h.start(room, a)
+    await h.ok(room, b, "leave")  # выход из комнаты — место LEFT
+    body = await h.ok(room, a, "rematch")
+    fresh = h.store.rooms[body["rematch_code"]]
+    assert [s.user_id for s in fresh.seats] == [a]
+
+
+async def test_party_forfeited_player_stays_and_votes_for_rematch() -> None:
+    h = Harness()
+    room, host = await h.room("film.party.frame")
+    b, c = await h.join(room, 2)
+    await h.start(room, host)
+    await h.ok(room, c, "forfeit")
+    match = room.match
+    assert match is not None and not match.players[c].active
+    assert room.phase in (Phase.LEVEL_OPEN, Phase.REVEAL)  # матч идёт без C
+    seat = room.seat_of(c)
+    assert seat is not None and seat.presence is Presence.ONLINE
+    denied = await h.cmd(room, c, "guess", **h.guess_data(room, h.title(room)))
+    assert denied["status"] == 403
+    await h.ok(room, b, "forfeit")
+    assert room.phase is Phase.SUMMARY
+    for user in (host, b):
+        assert (await h.ok(room, user, "rematch"))["rematch_code"] is None
+    body = await h.ok(room, c, "rematch")
+    fresh = h.store.rooms[body["rematch_code"]]
+    assert {s.user_id for s in fresh.seats} == {host, b, c}
+
+
+async def test_party_player_returns_before_grace_and_keeps_playing() -> None:
+    h = Harness()
+    room, host = await h.room("film.party.frame")
+    b, c = await h.join(room, 2)
+    await h.start(room, host)
+    h.offline.add(c)
+    await h.tick(room, 13)  # ≥ 12 с без tick — «отключён»
+    seat = room.seat_of(c)
+    assert seat is not None and seat.presence is Presence.DISCONNECTED
+    await h.ok(room, c, "join", nickname="c")  # возврат по ссылке до grace (30 с)
+    h.offline.clear()
+    await h.tick(room, 1)
+    match = room.match
+    assert match is not None and match.players[c].active
+    assert match.players[c].disconnected_at_ms is None
+    assert seat.presence is Presence.ONLINE
+    await h.until(room, Phase.LEVEL_OPEN)
+    await h.ok(room, c, "guess", **h.guess_data(room, h.title(room)))
+    await h.tick(room, 40)  # grace прошла бы — но C на связи и в матче
+    assert match.players[c].finish is not PlayerFinish.LEFT  # не выбыл по grace
+    assert seat.presence is not Presence.LEFT
+    del b
 
 
 async def test_unavailable_asset_voids_round() -> None:

@@ -534,9 +534,22 @@ def leave(room: Room, rules: MatchRules, timing: Timing, user_id: UUID, now_ms: 
 
 
 def forfeit(room: Room, rules: MatchRules, timing: Timing, user_id: UUID, now_ms: int) -> None:
-    """Сдаться: в матче на двоих — поражение (``forfeit``), иначе — выбывание."""
+    """Сдаться: в матче на двоих — поражение (``forfeit``), иначе — выбывание из матча.
+
+    Сдача — исход матча, а не выход из комнаты: место остаётся (присутствие как есть),
+    сдавшийся видит итог и голосует за реванш; из комнаты уводят только ``leave``,
+    выбывание по grace, кик и удаление аккаунта.
+    """
     room.require_phase(Phase.COUNTDOWN, Phase.LEVEL_OPEN, Phase.REVEAL, Phase.PAUSED)
-    _drop(room, rules, timing, user_id, finish=PlayerFinish.FORFEIT, now_ms=now_ms)
+    _drop(
+        room,
+        rules,
+        timing,
+        user_id,
+        finish=PlayerFinish.FORFEIT,
+        now_ms=now_ms,
+        leave_room=False,
+    )
 
 
 def _drop(
@@ -547,6 +560,7 @@ def _drop(
     *,
     finish: PlayerFinish,
     now_ms: int,
+    leave_room: bool = True,
 ) -> None:
     match = _match(room)
     player = match.players.get(user_id)
@@ -556,7 +570,11 @@ def _drop(
     player.finish = finish
     if match.contest is not None:
         match.contest = rules.leave(match.contest, _pid(user_id))
-    room.mark_left(user_id, now_ms)
+    if leave_room:
+        room.mark_left(user_id, now_ms)
+    else:
+        room.touch(now_ms)
+        room.emit("player", user_id=str(user_id))  # исход игрока виден остальным
     if room.is_closed:
         return
     if two:
