@@ -1,4 +1,4 @@
-"""HTTP-клиенты game, catalog, identity, collections и library по их OpenAPI-контрактам.
+"""HTTP-клиенты game, catalog, identity, collections, library и match по их OpenAPI-контрактам.
 
 Схемы ниже — подмножество ``contracts/openapi/<service>.json``: только поля, нужные экранам,
 лишние отбрасываются (источник может добавлять поля без релиза bff). Ответ, не прошедший
@@ -34,9 +34,18 @@ from bff_web_service.application.dto import (
     Difficulty,
     Domain,
     Item,
+    ItemShelves,
+    MatchMode,
+    MatchPlayer,
+    MatchResult,
+    MatchRound,
     Me,
     Mode,
     ModeStart,
+    MyMatch,
+    MyMatches,
+    OpenRoom,
+    OpenRooms,
     Person,
     PersonalRecord,
     Presentation,
@@ -44,6 +53,8 @@ from bff_web_service.application.dto import (
     ResultRecord,
     ResultRound,
     Reveal,
+    RoomSettings,
+    RoundPlayerResult,
     RoundsChoice,
     SessionResult,
     Share,
@@ -288,6 +299,7 @@ class HttpGameClient:
         self._http, self._ttl = http, modes_ttl_s
         self._collection_modes_ttl, self._prefix = collection_modes_ttl_s, cache_prefix
         self._modes_key = f"{cache_prefix}game:modes:v1"
+        self._online_modes_key = f"{cache_prefix}game:modes:v1:online"
 
     async def list_modes(self) -> list[Mode]:
         """Опубликованные режимы всех доменов."""
@@ -295,6 +307,16 @@ class HttpGameClient:
         modes = _parse(self._http.service, _MODES, body)
         if not cached:
             await self._http.remember(self._modes_key, body, self._ttl)
+        return [m.dto() for m in modes]
+
+    async def online_modes(self) -> list[Mode]:
+        """Онлайн-режимы (``/v1/modes?session=online``): публичные, кэшируются как витрина."""
+        body, cached = await self._http.get_public(
+            "/v1/modes", cache_key=self._online_modes_key, params={"session": "online"}
+        )
+        modes = _parse(self._http.service, _MODES, body)
+        if not cached:
+            await self._http.remember(self._online_modes_key, body, self._ttl)
         return [m.dto() for m in modes]
 
     async def daily(self, token: str, domain: Domain | None) -> list[DailyStatus]:
@@ -638,8 +660,14 @@ class _ShelfItemsIn(_In):
     next_cursor: str | None = None
 
 
+class _ItemShelvesIn(_In):
+    media_item_id: UUID
+    shelves: list[str]
+
+
 _SHELVES = TypeAdapter(list[_ShelfIn])
 _SHELF_ITEMS = TypeAdapter(_ShelfItemsIn)
+_ITEM_SHELVES = TypeAdapter(_ItemShelvesIn)
 
 
 class HttpLibraryClient:
@@ -667,3 +695,226 @@ class HttpLibraryClient:
             items=[i.dto() for i in page.items],
             next_cursor=page.next_cursor,
         )
+
+    async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
+        """``GET /v1/items/{id}/shelves``: полки пользователя с этой единицей."""
+        body = await self._http.get(f"/v1/items/{media_item_id}/shelves", token=token)
+        page = _parse(self._http.service, _ITEM_SHELVES, body)
+        if page.media_item_id != media_item_id:
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return ItemShelves(media_item_id, list(page.shelves))
+
+
+# ----------------------------------------------------------------------------- match
+_MatchKindIn = Literal["duel", "party", "lobby"]
+_MatchFinishIn = Literal["completed", "forfeit", "tech_win", "aborted"]
+_PlayerFinishIn = Literal["completed", "forfeit", "left", "tech_win", "tech_loss"]
+_OutcomeIn = Literal["win", "loss", "draw"]
+
+
+class _MatchModeIn(_In):
+    key: str
+    version: int = Field(ge=1)
+    domain: Domain
+    kind: _MatchKindIn
+    title_key: str
+    clue_type: str
+    answer_format: str
+    ranked: bool = False
+
+    def dto(self) -> MatchMode:
+        return MatchMode(
+            key=self.key,
+            version=self.version,
+            domain=self.domain,
+            kind=self.kind,
+            title_key=self.title_key,
+            clue_type=self.clue_type,
+            answer_format=self.answer_format,
+            ranked=self.ranked,
+        )
+
+
+class _RoomSettingsIn(_In):
+    rounds: int = Field(ge=1)
+    level_window_s: int = Field(ge=1)
+    answer_format: str
+    clue_type: str
+    players_max: int = Field(ge=2)
+    visibility: Literal["public", "private"]
+    collection_ids: list[UUID] = Field(default_factory=list)
+
+
+class _OpenRoomIn(_In):
+    code: str = Field(pattern=r"^[A-HJ-NP-Z2-9]{8}$")
+    mode: _MatchModeIn
+    host_nickname: str
+    players: int = Field(ge=0)
+    players_max: int = Field(ge=2)
+    settings: _RoomSettingsIn
+    created_at: datetime
+
+    def dto(self) -> OpenRoom:
+        st = self.settings
+        return OpenRoom(
+            code=self.code,
+            mode=self.mode.dto(),
+            host_nickname=self.host_nickname,
+            players=self.players,
+            players_max=self.players_max,
+            settings=RoomSettings(
+                rounds=st.rounds,
+                level_window_s=st.level_window_s,
+                answer_format=st.answer_format,
+                clue_type=st.clue_type,
+                players_max=st.players_max,
+                visibility=st.visibility,
+                collection_ids=list(st.collection_ids),
+            ),
+            created_at=self.created_at,
+        )
+
+
+class _OpenRoomsIn(_In):
+    items: list[_OpenRoomIn]
+    next_cursor: str | None = None
+
+
+class _MyMatchIn(_In):
+    match_id: UUID
+    mode: _MatchModeIn
+    finished_at: datetime
+    finish: _MatchFinishIn
+    players: int = Field(ge=1)
+    place: int = Field(ge=1)
+    score: int = Field(ge=0)
+    outcome: _OutcomeIn | None
+    my_finish: _PlayerFinishIn
+
+    def dto(self) -> MyMatch:
+        return MyMatch(
+            match_id=self.match_id,
+            mode=self.mode.dto(),
+            finished_at=self.finished_at,
+            finish=self.finish,
+            players=self.players,
+            place=self.place,
+            score=self.score,
+            outcome=self.outcome,
+            my_finish=self.my_finish,
+        )
+
+
+class _MyMatchesIn(_In):
+    items: list[_MyMatchIn]
+    next_cursor: str | None = None
+
+
+class _ResultPlayerIn(_In):
+    user_id: UUID
+    nickname: str
+    slot: int = Field(ge=0)
+    place: int = Field(ge=1)
+    score: int = Field(ge=0)
+    outcome: _OutcomeIn | None
+    finish: _PlayerFinishIn
+
+
+class _RoundPlayerIn(_In):
+    user_id: UUID
+    level: int | None
+    partial: bool
+    score: int = Field(ge=0)
+    elapsed_ms: int | None = Field(default=None, ge=0)
+
+
+class _ResultRoundIn(_In):
+    index: int = Field(ge=0)
+    media_item_id: UUID
+    results: list[_RoundPlayerIn]
+    void: bool = False
+
+
+class _MatchResultIn(_In):
+    match_id: UUID
+    room_code: str
+    mode: _MatchModeIn
+    started_at: datetime
+    finished_at: datetime
+    finish: _MatchFinishIn
+    players: list[_ResultPlayerIn]
+    rounds: list[_ResultRoundIn]
+    collection_ids: list[UUID] = Field(default_factory=list)
+
+    def dto(self) -> MatchResult:
+        return MatchResult(
+            match_id=self.match_id,
+            room_code=self.room_code,
+            mode=self.mode.dto(),
+            started_at=self.started_at,
+            finished_at=self.finished_at,
+            finish=self.finish,
+            players=[
+                MatchPlayer(
+                    user_id=p.user_id,
+                    nickname=p.nickname,
+                    slot=p.slot,
+                    place=p.place,
+                    score=p.score,
+                    outcome=p.outcome,
+                    finish=p.finish,
+                )
+                for p in self.players
+            ],
+            rounds=[
+                MatchRound(
+                    index=r.index,
+                    media_item_id=r.media_item_id,
+                    results=[
+                        RoundPlayerResult(
+                            user_id=x.user_id,
+                            level=x.level,
+                            partial=x.partial,
+                            score=x.score,
+                            elapsed_ms=x.elapsed_ms,
+                        )
+                        for x in r.results
+                    ],
+                    void=r.void,
+                )
+                for r in self.rounds
+            ],
+            collection_ids=list(self.collection_ids),
+        )
+
+
+_OPEN_ROOMS = TypeAdapter(_OpenRoomsIn)
+_MY_MATCHES = TypeAdapter(_MyMatchesIn)
+_MATCH_RESULT = TypeAdapter(_MatchResultIn)
+
+
+class HttpMatchClient:
+    """Публичный API match: всё только пользователю (D13), ничего не кэшируется."""
+
+    def __init__(self, http: UpstreamHttp) -> None:
+        self._http = http
+
+    async def open_rooms(self, token: str, *, limit: int) -> OpenRooms:
+        """``GET /v1/rooms/open``."""
+        body = await self._http.get("/v1/rooms/open", token=token, params={"limit": str(limit)})
+        page = _parse(self._http.service, _OPEN_ROOMS, body)
+        return OpenRooms([r.dto() for r in page.items], page.next_cursor)
+
+    async def my_matches(self, token: str, *, limit: int) -> MyMatches:
+        """``GET /v1/me/matches``."""
+        body = await self._http.get("/v1/me/matches", token=token, params={"limit": str(limit)})
+        page = _parse(self._http.service, _MY_MATCHES, body)
+        return MyMatches([m.dto() for m in page.items], page.next_cursor)
+
+    async def match(self, token: str, match_id: UUID) -> MatchResult:
+        """``GET /v1/matches/{id}``."""
+        body = await self._http.get(f"/v1/matches/{match_id}", token=token)
+        result = _parse(self._http.service, _MATCH_RESULT, body)
+        if result.match_id != match_id:
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return result.dto()

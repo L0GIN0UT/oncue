@@ -27,6 +27,8 @@ from bff_web_service.api.public.schemas import (
     HomePage,
     LibraryPage,
     LibraryShelfPage,
+    MatchPage,
+    OnlinePage,
     ResultsPage,
     SessionInfo,
     SoloPage,
@@ -278,5 +280,41 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         _cache_headers(response, personal=True, policy=policy)
         page = await deps.get_library_shelf(viewer, shelf_ref, cursor=cursor)
         return LibraryShelfPage.model_validate(page, from_attributes=True)
+
+    # ------------------------------------------------------------------ этап 4a
+    @router.get(
+        "/pages/online",
+        response_model=OnlinePage,
+        summary="Хаб онлайна",
+        description=(
+            "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания "
+            "комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). "
+            "Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, "
+            "`blocks: null`, match не вызывается. Всегда `private, no-store`."
+        ),
+    )
+    async def online_page(viewer: CurrentViewer, response: Response) -> OnlinePage:
+        _cache_headers(response, personal=True, policy=policy)
+        page = await deps.get_online(viewer)
+        return OnlinePage.model_validate(page, from_attributes=True)
+
+    @router.get(
+        "/pages/match/{match_id}",
+        response_model=MatchPage,
+        summary="Итог матча",
+        description=(
+            "Итог (match) + карточки единиц раундов (catalog) + флаги «в медиатеке» (library). "
+            "Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. "
+            "Нет или ещё идёт — 404 `match.match_not_found`. Упавший match — все блоки "
+            "`unavailable`; catalog или library — только их блок. Всегда `private, no-store`."
+        ),
+        responses=problem_responses(401, 403, 404, 422),
+    )
+    async def match_page(
+        viewer: CurrentViewer, response: Response, match_id: Annotated[UUID, Path()]
+    ) -> MatchPage:
+        _cache_headers(response, personal=True, policy=policy)
+        page = await deps.get_match(viewer, match_id)
+        return MatchPage.model_validate(page, from_attributes=True)
 
     return router

@@ -18,6 +18,7 @@ from bff_web_service.application.dto import (
     CollectionMode,
     DailyStatus,
     Domain,
+    ItemShelves,
     Mode,
     PersonalRecord,
     SessionResult,
@@ -129,6 +130,9 @@ class FakeGame:
             raise self.collection
         return self.collection
 
+    async def online_modes(self) -> list[Mode]:
+        raise AssertionError("страница сборника не читает онлайн-режимы")
+
 
 @dataclass
 class FakeCollections:
@@ -190,6 +194,9 @@ class FakeLibrary:
         if isinstance(self.items_answer, Exception):
             raise self.items_answer
         return self.items_answer
+
+    async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
+        raise AssertionError("медиатека не читает полки единицы")
 
 
 def catalog_page(collections: FakeCollections) -> GetCollectionsPage:

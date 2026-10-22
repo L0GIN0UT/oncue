@@ -7,6 +7,7 @@ from collections.abc import Awaitable
 
 import structlog
 
+from bff_web_service.application.dto import Item, ItemCard, Mode, ModeCard, Person
 from bff_web_service.application.ports import UpstreamRejectedError, UpstreamUnavailableError
 from bff_web_service.domain import Block
 from gv_core.errors import (
@@ -86,3 +87,34 @@ def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError:
         return InvalidInputError("источник отклонил параметры", code=exc.code)
     code = exc.code if exc.status == HTTP_NOT_FOUND else NotFoundError.default_code
     return NotFoundError(not_found, code=code)
+
+
+def mode_card(mode: Mode) -> ModeCard:
+    """Режим → карточка."""
+    return ModeCard(
+        key=mode.key,
+        domain=mode.domain,
+        title_key=mode.title_key,
+        source_type=mode.source_type,
+        clue_type=mode.clue_type,
+        rounds=mode.rounds,
+        allow_guest=mode.allow_guest,
+        presets=mode.presets,
+        answer_format=mode.answer_format,
+        presentation=mode.presentation,
+        start=mode.start,
+    )
+
+
+def item_card(item: Item) -> ItemCard:
+    """Карточка catalog → карточка экрана."""
+    return ItemCard(
+        media_item_id=item.id,
+        domain=item.domain,
+        kind=item.kind,
+        title=item.title,
+        original_title=item.original_title,
+        year=item.year,
+        genres=list(item.genres),
+        persons=[Person(name=p.name, role=p.role) for p in item.persons],
+    )

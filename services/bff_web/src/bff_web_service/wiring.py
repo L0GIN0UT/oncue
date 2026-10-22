@@ -15,6 +15,8 @@ from bff_web_service.application.queries import (
     GetHomePage,
     GetLibraryPage,
     GetLibraryShelfPage,
+    GetMatchPage,
+    GetOnlinePage,
     GetResultsPage,
     GetSession,
     GetSoloPage,
@@ -27,6 +29,7 @@ from bff_web_service.infrastructure.clients import (
     HttpGameClient,
     HttpIdentityClient,
     HttpLibraryClient,
+    HttpMatchClient,
 )
 from bff_web_service.infrastructure.http import CircuitBreaker, UpstreamHttp
 from bff_web_service.settings import Settings
@@ -72,6 +75,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         cache_prefix=pc.key_prefix,
     )
     library = HttpLibraryClient(upstream("library", up.library_url))
+    match = HttpMatchClient(upstream("match", up.match_url))
     pages = settings.pages
     layout = PageLayout.of(
         random_source_types=pages.random_source_types,
@@ -95,5 +99,13 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         get_library_shelf=GetLibraryShelfPage(
             library, concurrency=up.max_concurrency, items_limit=pages.library_items_limit
         ),
+        get_online=GetOnlinePage(
+            match,
+            game,
+            concurrency=up.max_concurrency,
+            rooms_limit=pages.online_rooms_limit,
+            matches_limit=pages.online_matches_limit,
+        ),
+        get_match=GetMatchPage(match, catalog, library, concurrency=up.max_concurrency),
         http_cache=settings.http_cache,
     )

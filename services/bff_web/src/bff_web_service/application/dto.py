@@ -640,3 +640,179 @@ class LibraryShelfPage:
     """``GET /v1/pages/library/{ref}``."""
 
     blocks: LibraryShelfBlocks
+
+
+# ----------------------------------------------------------------------------- match (этап 4a)
+MatchKind = Literal["duel", "party", "lobby"]
+MatchFinish = Literal["completed", "forfeit", "tech_win", "aborted"]
+PlayerFinish = Literal["completed", "forfeit", "left", "tech_win", "tech_loss"]
+DuelOutcome = Literal["win", "loss", "draw"]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MatchMode:
+    """Шаблон режима комнаты или матча (``match ModeRef``): версия фиксируется при создании."""
+
+    key: str
+    version: int
+    domain: Domain
+    kind: MatchKind
+    title_key: str
+    clue_type: str
+    answer_format: str
+    ranked: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RoomSettings:
+    """Действующие настройки комнаты (шаблон + переопределения хоста)."""
+
+    rounds: int
+    level_window_s: int
+    answer_format: str
+    clue_type: str
+    players_max: int
+    visibility: Literal["public", "private"]
+    collection_ids: list[UUID] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OpenRoom:
+    """Открытое лобби (``match GET /v1/rooms/open``)."""
+
+    code: str
+    mode: MatchMode
+    host_nickname: str
+    players: int
+    players_max: int
+    settings: RoomSettings
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class OpenRooms:
+    """Страница открытых лобби (курсор — для «показать все» напрямую в match)."""
+
+    items: list[OpenRoom]
+    next_cursor: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MyMatch:
+    """Матч в «Моих матчах» (``match GET /v1/me/matches``)."""
+
+    match_id: UUID
+    mode: MatchMode
+    finished_at: datetime
+    finish: MatchFinish
+    players: int
+    place: int
+    score: int
+    outcome: DuelOutcome | None
+    my_finish: PlayerFinish
+
+
+@dataclass(frozen=True, slots=True)
+class MyMatches:
+    """Страница моих матчей."""
+
+    items: list[MyMatch]
+    next_cursor: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MatchPlayer:
+    """Игрок в итоге матча: место с ничьими, ``outcome`` — только у дуэли."""
+
+    user_id: UUID
+    nickname: str
+    slot: int
+    place: int
+    score: int
+    outcome: DuelOutcome | None
+    finish: PlayerFinish
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RoundPlayerResult:
+    """Результат игрока в раунде (``level = None`` — не угадал)."""
+
+    user_id: UUID
+    level: int | None
+    partial: bool
+    score: int
+    elapsed_ms: int | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MatchRound:
+    """Раунд итога: единица раскрыта после матча, карточку берём из catalog."""
+
+    index: int
+    media_item_id: UUID
+    results: list[RoundPlayerResult]
+    void: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MatchResult:
+    """Итог матча (``match GET /v1/matches/{id}``)."""
+
+    match_id: UUID
+    room_code: str
+    mode: MatchMode
+    started_at: datetime
+    finished_at: datetime
+    finish: MatchFinish
+    players: list[MatchPlayer]
+    rounds: list[MatchRound]
+    collection_ids: list[UUID] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class ItemShelves:
+    """На каких полках пользователя лежит единица (``library GET /v1/items/{id}/shelves``)."""
+
+    media_item_id: UUID
+    shelves: list[str]
+
+
+# ----------------------------------------------------------------------------- экраны 4a
+class OnlineStatus(StrEnum):
+    """Состояние хаба онлайна: ``auth_required`` — гость или аноним (D13), блоков нет."""
+
+    OK = "ok"
+    AUTH_REQUIRED = "auth_required"
+
+
+@dataclass(frozen=True, slots=True)
+class OnlineBlocks:
+    """Блоки хаба онлайна; каждый гаснет независимо (ADR 0017)."""
+
+    open_rooms: Block[OpenRooms]
+    my_matches: Block[MyMatches]
+    modes: Block[list[ModeCard]]
+
+
+@dataclass(frozen=True, slots=True)
+class OnlinePage:
+    """``GET /v1/pages/online``: гостю и анониму — ``auth_required`` без блоков."""
+
+    status: OnlineStatus
+    blocks: OnlineBlocks | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchBlocks:
+    """Блоки экрана итога матча."""
+
+    match: Block[MatchResult]
+    items: Block[list[ItemCard]]
+    library: Block[list[ItemShelves]]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchPage:
+    """``GET /v1/pages/match/{id}``."""
+
+    blocks: MatchBlocks
