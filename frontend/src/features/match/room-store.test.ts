@@ -225,4 +225,18 @@ describe("roomReducer", () => {
     const next = roomReducer(s, { type: "snapshot", state: s.state! });
     expect(next.meStale).toBe(false);
   });
+
+  it("реванш: код новой комнаты — из дельты closed или из снимка комнаты", () => {
+    const viaDelta = send(snapshot(), 11, "closed", {
+      reason: "rematch",
+      rematch_code: "K7MQ2XWQ",
+    });
+    expect(viaDelta.rematchCode).toBe("K7MQ2XWQ");
+    const viaSnapshot = roomReducer(initialRoomStore, {
+      type: "snapshot",
+      state: { room: { ...room({ phase: "closed" }), rematch_code: "K7MQ2XWR" } as RoomView },
+    });
+    expect(viaSnapshot.rematchCode).toBe("K7MQ2XWR");
+    expect(snapshot().rematchCode).toBeNull();
+  });
 });

@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Flag } from "lucide-react";
+import { Coffee, Flag } from "lucide-react";
 import type { MatchAnswer, RoomState } from "@/shared/api/types";
 import type { ServerClock } from "@/shared/realtime";
 import { Button } from "@/shared/ui/button";
@@ -25,6 +25,8 @@ export type MatchCommands = {
   guess: (answer: MatchAnswer) => Promise<unknown>;
   skip: () => Promise<unknown>;
   forfeit: () => Promise<unknown>;
+  /** «Отошёл» / «Вернулся» (`POST /match/away`): соперники видят отметку у места. */
+  away: (away: boolean) => Promise<unknown>;
   emote: (kind: "emote" | "phrase", key: string) => Promise<unknown>;
   chat: (text: string) => Promise<unknown>;
 };
@@ -60,7 +62,8 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
     me.status !== "guessed" &&
     me.status !== "missed" &&
     me.attempts_left > 0;
-  const iAmIn = room.players.some((p) => p.user_id === myId && p.presence !== "left");
+  const mySlot = room.players.find((p) => p.user_id === myId && p.presence !== "left") ?? null;
+  const iAmIn = mySlot !== null;
 
   const run = useCallback(
     async (action: () => Promise<unknown>) => {
@@ -224,6 +227,16 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
 
       {iAmIn && (
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={mySlot.away}
+            onClick={() => void run(() => commands.away(!mySlot.away))}
+            data-testid="away-toggle"
+          >
+            <Coffee aria-hidden />
+            {mySlot.away ? t("match.awayBack") : t("match.awaySet")}
+          </Button>
           {confirmForfeit ? (
             <>
               <span className="text-sm text-ink-muted">

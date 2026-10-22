@@ -35,6 +35,8 @@ export type RoomStore = {
   reveal: RoundRevealDelta | null;
   summary: SummaryDelta | null;
   closedReason: string | null;
+  /** Код комнаты реванша: из дельты `closed` или `RoomView.rematch_code` снимка. */
+  rematchCode: string | null;
   /** `me` относится к другому раунду — нужен снимок. */
   meStale: boolean;
 };
@@ -47,6 +49,7 @@ export const initialRoomStore: RoomStore = {
   reveal: null,
   summary: null,
   closedReason: null,
+  rematchCode: null,
   meStale: false,
 };
 
@@ -81,6 +84,7 @@ function fromSnapshot(store: RoomStore, state: RoomState): RoomStore {
     reveal,
     meStale: false,
     closedReason: state.room.phase === "closed" ? (store.closedReason ?? "closed") : null,
+    rematchCode: rematchCodeOf(state.room) ?? store.rematchCode,
     summary: state.room.phase === "summary" || state.room.phase === "closed" ? store.summary : null,
   };
 }
@@ -276,8 +280,18 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
       return {
         ...withRoom(store, v, { ...room, phase: "closed", phase_ends_at: null }),
         closedReason: m.delta.reason,
+        rematchCode: m.delta.rematch_code ?? store.rematchCode,
       };
   }
+}
+
+/**
+ * `RoomView.rematch_code` (поток R добавляет поле в снимок; пока его нет в сгенерированных
+ * типах, читается без привязки к схеме).
+ */
+function rematchCodeOf(room: RoomView): string | null {
+  const code = (room as RoomView & { rematch_code?: unknown }).rematch_code;
+  return typeof code === "string" && code ? code : null;
 }
 
 /** Мой слот в комнате по `user_id`; `null` — не участник (или ещё не знаем, кто я). */

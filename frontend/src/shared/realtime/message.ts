@@ -71,7 +71,8 @@ export type EmoteDelta = {
   emote?: string | null;
   phrase?: string | null;
 };
-export type ClosedDelta = { reason: string };
+/** Комната закрыта; при реванше (`reason: rematch`) — код новой комнаты. */
+export type ClosedDelta = { reason: string; rematch_code?: string | null };
 
 type Envelope<K extends string, D> = { version: number; kind: K; server_now: string; delta: D };
 

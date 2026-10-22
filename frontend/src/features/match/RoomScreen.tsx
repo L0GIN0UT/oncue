@@ -8,7 +8,7 @@
  * `expected_version`; ошибки — по коду (`match.*`), после 409 — ресинк.
  */
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
@@ -38,7 +38,11 @@ const BUBBLE_MS = 5_000;
 
 export function RoomScreen({ code: raw }: { code: string }) {
   const code = normalizeRoomCode(raw);
-  return <OnlineGate>{isRoomCode(code) ? <RoomBody code={code} /> : <RoomMissing />}</OnlineGate>;
+  return (
+    <OnlineGate>
+      {isRoomCode(code) ? <RoomBody key={code} code={code} /> : <RoomMissing />}
+    </OnlineGate>
+  );
 }
 
 type Entry = { member: true } | { member: false; room: RoomView };
@@ -193,6 +197,12 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
   const toast = useToast();
   const router = useRouter();
   const { store, status, fatal, clock, command, resync } = useRoom(code, { enabled: true });
+  const [votedRematch, setVotedRematch] = useState(false);
+  const [ownRematch, setOwnRematch] = useState<string | null>(null);
+  const rematchCode = ownRematch ?? store.rematchCode;
+  useEffect(() => {
+    if (votedRematch && rematchCode) router.push(`/room/${rematchCode}`);
+  }, [votedRematch, rematchCode, router]);
   useReleaseLevelClues(code);
   const serverNow = useCallback(() => clock.now(), [clock]);
   const bubbles = useBubbles(store, serverNow);
@@ -233,6 +243,7 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
     guess: (answer: MatchAnswer) => command("match/guess", { ...roundTarget(), answer }),
     skip: () => command("match/skip", roundTarget()),
     forfeit: () => command("match/forfeit", {}),
+    away: (away: boolean) => command("match/away", { away }),
     emote: (kind, key) => command("match/emote", { kind, key }),
     chat: async (text) => {
       // Ошибку чата (отказ denylist) показывает сама панель чата — пробрасываем.
@@ -308,7 +319,19 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
                 }
               : null
           }
-          actions={<SummaryActions code={code} closed={room.phase === "closed"} act={act} />}
+          actions={
+            <SummaryActions
+              code={code}
+              closed={room.phase === "closed"}
+              voted={votedRematch}
+              rematchCode={rematchCode}
+              onVoted={(next) => {
+                setVotedRematch(true);
+                if (next) setOwnRematch(next);
+              }}
+              act={act}
+            />
+          }
         />
       ) : room.phase === "closed" ? (
         <div className="flex flex-col items-start gap-4 pt-8" data-testid="room-closed">
@@ -333,33 +356,46 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
   );
 }
 
+/**
+ * Реванш (D19): голос — `POST /rematch`. Когда согласны все, новая комната приходит любым из
+ * сигналов — ответом команды, дельтой `closed {reason: rematch, rematch_code}` или
+ * `RoomView.rematch_code` снимка; проголосовавший переходит туда сам (эффект в `RoomLive`).
+ */
 function SummaryActions({
   code,
   closed,
+  voted,
+  rematchCode,
+  onVoted,
   act,
 }: {
   code: string;
   closed: boolean;
+  voted: boolean;
+  rematchCode: string | null;
+  onVoted: (rematchCode: string | null) => void;
   act: (action: () => Promise<unknown>) => Promise<void>;
 }) {
   const t = useTranslations();
-  const router = useRouter();
-  const [voted, setVoted] = useState(false);
 
   const rematch = () =>
     act(async () => {
       const out = await sendCommand(code, "rematch", {});
-      setVoted(true);
-      if (out.kind === "done" && out.data.rematch_code)
-        router.push(`/room/${out.data.rematch_code}`);
+      onVoted(out.kind === "done" ? (out.data.rematch_code ?? null) : null);
     });
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {!closed && (
-        <Button size="lg" onClick={rematch} disabled={voted} data-testid="rematch">
-          {voted ? t("match.rematch.waiting") : t("match.rematch.action")}
+      {rematchCode ? (
+        <Button asChild size="lg" data-testid="rematch-go">
+          <Link href={`/room/${rematchCode}`}>{t("match.rematch.go")}</Link>
         </Button>
+      ) : (
+        !closed && (
+          <Button size="lg" onClick={rematch} disabled={voted} data-testid="rematch">
+            {voted ? t("match.rematch.waiting") : t("match.rematch.action")}
+          </Button>
+        )
       )}
       <Button asChild size="lg" variant="secondary">
         <Link href="/online">{t("match.toOnline")}</Link>
