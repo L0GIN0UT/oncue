@@ -14,10 +14,59 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { expect, test, type APIResponse, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIResponse,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 
 /** Уникальный хвост прогона: ники и тексты не пересекаются с прошлыми прогонами на стеке. */
 export const RUN = randomUUID().slice(0, 8);
+
+/** Ответы API с ошибкой (≥ 400) по браузерному контексту — в текст падения шага (диагностика стека). */
+const apiErrors = new WeakMap<BrowserContext, string[]>();
+
+function trackApiErrors(context: BrowserContext, nickname: string): void {
+  const log: string[] = [];
+  apiErrors.set(context, log);
+  context.on("response", (res) => {
+    const url = new URL(res.url());
+    if (res.status() < 400 || !url.pathname.startsWith("/api/")) return;
+    void res
+      .text()
+      .catch(() => "")
+      .then((body) => {
+        log.push(
+          `${new Date().toISOString()} ${nickname} ${res.status()} ${res.request().method()} ${url.pathname} ${body.slice(0, 300)}`,
+        );
+        if (log.length > 20) log.shift();
+      });
+  });
+}
+
+/** Последние ошибки API игроков — для сообщения о падении. */
+export function apiErrorsOf(pages: Page[]): string {
+  const lines = pages.flatMap((p) => apiErrors.get(p.context()) ?? []);
+  return lines.length
+    ? `\nОшибки API:\n${lines.sort().slice(-30).join("\n")}`
+    : "\nОшибок API не было";
+}
+
+async function withApiErrors<T>(
+  pages: Page[],
+  step: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await step();
+  } catch (error) {
+    if (error instanceof Error) error.message += apiErrorsOf(pages);
+    throw error;
+  }
+}
 const PASSWORD = "e2e-online-password-1";
 
 /** Самое длинное окно уровня онлайн-шаблонов засева + запас на доставку дельты (мс). */
@@ -45,20 +94,38 @@ const COMPOSE_FILES = (
  * поэтому игроки регистрируются строго по одному (workers: 1, без параллельных регистраций).
  */
 function verifyTokenSince(since: string): string | null {
-  const cwd = COMPOSE_DIR ?? path.resolve(test.info().project.testDir, "../infra/compose");
+  const cwd =
+    COMPOSE_DIR ??
+    path.resolve(test.info().project.testDir, "../infra/compose");
   const logs = execFileSync(
     "docker",
-    ["compose", "--env-file", ".env", ...COMPOSE_FILES, "logs", "--no-color", "--since", since, "identity"],
+    [
+      "compose",
+      "--env-file",
+      ".env",
+      ...COMPOSE_FILES,
+      "logs",
+      "--no-color",
+      "--since",
+      since,
+      "identity",
+    ],
     { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
-  const tokens = [...logs.matchAll(/verify-email\?token=([A-Za-z0-9_.~%-]+)/g)].map((m) => m[1]!);
+  const tokens = [
+    ...logs.matchAll(/verify-email\?token=([A-Za-z0-9_.~%-]+)/g),
+  ].map((m) => m[1]!);
   return tokens.at(-1) ?? null;
 }
 
 /** Регистрация через UI → ссылка из письма → вход. Свой браузерный контекст на игрока. */
-export async function registerPlayer(browser: Browser, prefix: string): Promise<Player> {
+export async function registerPlayer(
+  browser: Browser,
+  prefix: string,
+): Promise<Player> {
   const nickname = `${prefix}${RUN}`;
   const context = await browser.newContext();
+  trackApiErrors(context, nickname);
   const page = await context.newPage();
   const since = new Date(Date.now() - 1_000).toISOString();
   await page.goto("/register");
@@ -71,7 +138,10 @@ export async function registerPlayer(browser: Browser, prefix: string): Promise<
 
   let token: string | null = null;
   await expect
-    .poll(() => (token = verifyTokenSince(since)), { timeout: 30_000, message: "ссылка подтверждения в логе identity" })
+    .poll(() => (token = verifyTokenSince(since)), {
+      timeout: 30_000,
+      message: "ссылка подтверждения в логе identity",
+    })
     .not.toBeNull();
   await page.goto(`/verify-email?token=${token}`);
   await expect(page.getByTestId("verify-state")).toContainText("подтверждён");
@@ -84,9 +154,13 @@ export async function registerPlayer(browser: Browser, prefix: string): Promise<
 }
 
 /** Игроки по префиксам — последовательно (см. {@link verifyTokenSince}). */
-export async function registerPlayers(browser: Browser, prefixes: string[]): Promise<Player[]> {
+export async function registerPlayers(
+  browser: Browser,
+  prefixes: string[],
+): Promise<Player[]> {
   const players: Player[] = [];
-  for (const prefix of prefixes) players.push(await registerPlayer(browser, prefix));
+  for (const prefix of prefixes)
+    players.push(await registerPlayer(browser, prefix));
   return players;
 }
 
@@ -99,22 +173,38 @@ export async function closePlayers(players: Player[]): Promise<void> {
 export function api(page: Page, service: "match" | "collections" | "game") {
   const base = `/api/${service}/v1`;
   const headers = async (): Promise<Record<string, string>> => {
-    const csrf = (await page.context().cookies()).find((c) => c.name === "gv_csrf")?.value ?? "";
+    const csrf =
+      (await page.context().cookies()).find((c) => c.name === "gv_csrf")
+        ?.value ?? "";
     // Запросы собираются руками — Origin ставим сами (cookie-мутации требуют его вместе с CSRF).
-    return { "X-CSRF-Token": csrf, Origin: new URL(page.url()).origin, "Idempotency-Key": randomUUID() };
+    return {
+      "X-CSRF-Token": csrf,
+      Origin: new URL(page.url()).origin,
+      "Idempotency-Key": randomUUID(),
+    };
   };
   return {
     get: (p: string) => page.request.get(`${base}${p}`),
-    post: async (p: string, data?: unknown) => page.request.post(`${base}${p}`, { data, headers: await headers() }),
+    post: async (p: string, data?: unknown) =>
+      page.request.post(`${base}${p}`, { data, headers: await headers() }),
   };
 }
 
-export async function json<T>(res: Pick<APIResponse, "status" | "text" | "json" | "url">, status = 200): Promise<T> {
-  expect(res.status(), `${res.url()} → ${res.status()}: ${await res.text()}`).toBe(status);
+export async function json<T>(
+  res: Pick<APIResponse, "status" | "text" | "json" | "url">,
+  status = 200,
+): Promise<T> {
+  expect(
+    res.status(),
+    `${res.url()} → ${res.status()}: ${await res.text()}`,
+  ).toBe(status);
   return (await res.json()) as T;
 }
 
-export async function problem(res: Pick<APIResponse, "status" | "text" | "json" | "url">, status: number): Promise<Problem> {
+export async function problem(
+  res: Pick<APIResponse, "status" | "text" | "json" | "url">,
+  status: number,
+): Promise<Problem> {
   expect(res.status(), `${res.url()}: ${await res.text()}`).toBe(status);
   return (await res.json()) as Problem;
 }
@@ -123,12 +213,15 @@ export async function problem(res: Pick<APIResponse, "status" | "text" | "json" 
 const CODE_URL = /\/room\/[A-HJ-NP-Z2-9]{8}$/;
 
 export async function roomCode(page: Page): Promise<string> {
-  await expect(page).toHaveURL(CODE_URL);
+  await withApiErrors([page], () => expect(page).toHaveURL(CODE_URL));
   return (await page.getByTestId("room-code").textContent())!.trim();
 }
 
 /** Хост создаёт комнату из хаба «Онлайн» по ключу шаблона; вернуть код. */
-export async function createRoomFromHub(page: Page, modeKey: string): Promise<string> {
+export async function createRoomFromHub(
+  page: Page,
+  modeKey: string,
+): Promise<string> {
   await page.goto("/online");
   await page.getByTestId(`create-room-${modeKey}`).click();
   return roomCode(page);
@@ -153,9 +246,12 @@ export async function joinByLink(page: Page, code: string): Promise<void> {
   await expect(page.getByTestId("room-code")).toHaveText(code);
 }
 
-export const playerRow = (page: Page, nickname: string): Locator => page.getByTestId(`player-${nickname}`);
-export const readyState = (page: Page, nickname: string): Locator => playerRow(page, nickname).getByTestId("ready-state");
-export const playerStatus = (page: Page, nickname: string): Locator => playerRow(page, nickname).getByTestId("player-status");
+export const playerRow = (page: Page, nickname: string): Locator =>
+  page.getByTestId(`player-${nickname}`);
+export const readyState = (page: Page, nickname: string): Locator =>
+  playerRow(page, nickname).getByTestId("ready-state");
+export const playerStatus = (page: Page, nickname: string): Locator =>
+  playerRow(page, nickname).getByTestId("player-status");
 
 /** Все отмечают готовность; у хоста все строки — «Готов». */
 export async function allReady(host: Page, players: Player[]): Promise<void> {
@@ -165,28 +261,41 @@ export async function allReady(host: Page, players: Player[]): Promise<void> {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
   }
-  for (const p of players) await expect(readyState(host, p.nickname)).toHaveText("Готов");
+  for (const p of players)
+    await expect(readyState(host, p.nickname)).toHaveText("Готов");
 }
 
 /** Хост стартует матч: отсчёт, затем первый раунд у всех. */
-export async function startMatch(host: Page, players: Player[], roundsTotal: number): Promise<void> {
+export async function startMatch(
+  host: Page,
+  players: Player[],
+  roundsTotal: number,
+): Promise<void> {
   await expect(host.getByTestId("start-match")).toBeEnabled();
   await host.getByTestId("start-match").click();
   for (const p of players) {
-    await expect(p.page.getByTestId("match-round")).toHaveText(`Раунд 1 из ${roundsTotal}`, { timeout: 30_000 });
+    await expect(p.page.getByTestId("match-round")).toHaveText(
+      `Раунд 1 из ${roundsTotal}`,
+      { timeout: 30_000 },
+    );
   }
 }
 
 // ----------------------------------------------------------------------------- ходы
 /** Поле ответа матча (формат `classic`): включено, пока свой ход на открытом уровне возможен. */
-export const answerInput = (page: Page): Locator => page.getByTestId("match-stage").getByRole("combobox");
+export const answerInput = (page: Page): Locator =>
+  page.getByTestId("match-stage").getByRole("combobox");
 
 /** Неверный ответ свободным текстом (Enter без выбранной подсказки отправляет текст). */
 export async function wrongGuess(page: Page, text: string): Promise<void> {
   const input = answerInput(page);
   await expect(input).toBeEnabled({ timeout: LEVEL_WINDOW_MS });
   const [res] = await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "POST" && /\/api\/match\/v1\/rooms\/[^/]+\/match\/guess$/.test(r.url())),
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        /\/api\/match\/v1\/rooms\/[^/]+\/match\/guess$/.test(r.url()),
+    ),
     (async () => {
       await input.fill(text);
       await input.press("Enter");
@@ -200,7 +309,11 @@ export async function skipLevel(page: Page): Promise<void> {
   const skip = page.getByTestId("match-skip");
   await expect(skip).toBeEnabled({ timeout: LEVEL_WINDOW_MS });
   const [res] = await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "POST" && /\/api\/match\/v1\/rooms\/[^/]+\/match\/skip$/.test(r.url())),
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        /\/api\/match\/v1\/rooms\/[^/]+\/match\/skip$/.test(r.url()),
+    ),
     skip.click(),
   ]);
   expect([200, 202], await res.text()).toContain(res.status());
@@ -211,7 +324,11 @@ export async function skipLevel(page: Page): Promise<void> {
  * неверный ответ. Вернуть, был ли ход. Ждёт открытия хода не дольше `waitMs`: уровень могли
  * уже закрыть (окно, все ответили) — тогда хода нет, это не ошибка.
  */
-async function passIfOpen(page: Page, text: string, waitMs: number): Promise<boolean> {
+async function passIfOpen(
+  page: Page,
+  text: string,
+  waitMs: number,
+): Promise<boolean> {
   const input = answerInput(page);
   try {
     await expect(input).toBeEnabled({ timeout: waitMs });
@@ -219,10 +336,13 @@ async function passIfOpen(page: Page, text: string, waitMs: number): Promise<boo
     return false;
   }
   const skip = page.getByTestId("match-skip");
-  const move = (await skip.isVisible()) && (await skip.isEnabled()) ? "skip" : "guess";
+  const move =
+    (await skip.isVisible()) && (await skip.isEnabled()) ? "skip" : "guess";
   const response = page
     .waitForResponse(
-      (r) => r.request().method() === "POST" && new RegExp(`/api/match/v1/rooms/[^/]+/match/${move}$`).test(r.url()),
+      (r) =>
+        r.request().method() === "POST" &&
+        new RegExp(`/api/match/v1/rooms/[^/]+/match/${move}$`).test(r.url()),
       { timeout: 10_000 },
     )
     .catch(() => null);
@@ -241,17 +361,37 @@ async function passIfOpen(page: Page, text: string, waitMs: number): Promise<boo
  * появится `done` (ревил, итог и т. п.). Без пауз: каждый шаг ждёт состояния UI —
  * открытого поля ответа у первого игрока или `done`.
  */
-export async function passUntil(players: Player[], done: (page: Page) => Locator, maxSteps = 200): Promise<void> {
+export async function passUntil(
+  players: Player[],
+  done: (page: Page) => Locator,
+  maxSteps = 200,
+): Promise<void> {
   const first = players[0]!.page;
   for (let step = 0; step < maxSteps; step++) {
     const target = done(first);
-    await expect(target.or(first.locator("[data-testid=match-stage] input[role=combobox]:enabled")).first()).toBeVisible({
-      timeout: LEVEL_WINDOW_MS,
-    });
+    await withApiErrors(
+      players.map((p) => p.page),
+      () =>
+        expect(
+          target
+            .or(
+              first.locator(
+                "[data-testid=match-stage] input[role=combobox]:enabled",
+              ),
+            )
+            .first(),
+        ).toBeVisible({
+          timeout: LEVEL_WINDOW_MS,
+        }),
+    );
     if (await target.first().isVisible()) return;
     for (const [i, p] of players.entries()) {
       // Первый игрок уже на открытом уровне; остальным даём догнать дельту канала.
-      await passIfOpen(p.page, `мимо-${RUN}-${step}-${i}`, i === 0 ? 1_000 : 5_000);
+      await passIfOpen(
+        p.page,
+        `мимо-${RUN}-${step}-${i}`,
+        i === 0 ? 1_000 : 5_000,
+      );
     }
   }
   throw new Error(`матч не дошёл до ожидаемого состояния за ${maxSteps} шагов`);
@@ -261,7 +401,11 @@ export async function passUntil(players: Player[], done: (page: Page) => Locator
 export async function forfeit(page: Page): Promise<void> {
   await page.getByTestId("forfeit").click();
   const [res] = await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "POST" && /\/api\/match\/v1\/rooms\/[^/]+\/match\/forfeit$/.test(r.url())),
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        /\/api\/match\/v1\/rooms\/[^/]+\/match\/forfeit$/.test(r.url()),
+    ),
     page.getByTestId("forfeit-confirm").click(),
   ]);
   expect([200, 202], await res.text()).toContain(res.status());

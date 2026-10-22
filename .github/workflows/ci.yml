@@ -318,6 +318,17 @@ jobs:
             docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color --tail=300 "$svc" || true
             echo "::endgroup::"
           done
+          # Предупреждения и ошибки онлайна — аннотациями check run: их видно через API, даже
+          # когда логи job недоступны (хранилище логов Actions закрыто для агентов).
+          for svc in match game media-pipeline identity centrifugo gateway; do
+            docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color "$svc" 2>/dev/null \
+              | grep -iE '"level": ?"(warning|error|critical)"|level=(warn|error)|\[(warn|error)\]|traceback|exception| 50[0-9] | 40[39] | 409 | 422 ' \
+              | tail -n 60 | cut -c1-400 > /tmp/diag.txt || true
+            if [ -s /tmp/diag.txt ]; then
+              body=$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' /tmp/diag.txt | awk 'BEGIN{ORS="%0A"} {print}')
+              echo "::warning title=e2e diag: $svc::$body"
+            fi
+          done
       - name: Логи стека при падении
         if: failure() && steps.app.outputs.present == 'true'
         working-directory: infra/compose
