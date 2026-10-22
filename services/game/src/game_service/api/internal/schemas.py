@@ -32,7 +32,12 @@ class RoundPlanRequest(BaseModel):
     version: int | None = Field(
         default=None, ge=1, description="Версия шаблона; null — текущая опубликованная"
     )
-    seed: Seed = Field(description="Сид розыгрыша (match: от `match_id`)")
+    seed: Seed = Field(
+        description=(
+            "Сид розыгрыша: секретный, случайный на каждый старт матча "
+            "(match хранит его только в снимке комнаты; ADR 0033)"
+        )
+    )
     rounds: int = Field(ge=1, le=MAX_PLAN_ROUNDS)
     collection_ids: list[UUID] = Field(default_factory=list, max_length=MAX_PLAN_COLLECTIONS)
     exclude_ids: list[UUID] = Field(

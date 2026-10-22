@@ -1128,6 +1128,13 @@ export interface components {
             /** Published Version */
             published_version: number | null;
             /**
+             * Session Kind
+             * @description По последней опубликованной версии (у неопубликованного — по черновику): online — duel/party/lobby, играет match (ADR 0032)
+             * @default solo
+             * @enum {string}
+             */
+            session_kind: "solo" | "online";
+            /**
              * Status
              * @description draft — режим ещё ни разу не опубликован
              * @enum {string}
@@ -1744,7 +1751,7 @@ export interface components {
             rounds: number;
             /**
              * Seed
-             * @description Сид розыгрыша (match: от `match_id`)
+             * @description Сид розыгрыша: секретный, случайный на каждый старт матча (match хранит его только в снимке комнаты; ADR 0033)
              */
             seed: string;
             /**
@@ -2259,6 +2266,8 @@ export interface operations {
         parameters: {
             query?: {
                 domain?: ("music" | "film") | null;
+                /** @description Фильтр по `session_kind`; не задан — все режимы */
+                session?: ("solo" | "online") | null;
                 status?: ("draft" | "published" | "archived") | null;
             };
             header?: never;

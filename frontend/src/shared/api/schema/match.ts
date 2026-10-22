@@ -874,8 +874,11 @@ export interface components {
             mode: components["schemas"]["ModeRef"];
             /** Players */
             players: components["schemas"]["ResultPlayer"][];
-            /** Room Code */
-            room_code: string;
+            /**
+             * Room Code
+             * @description Только участникам матча (не участнику — null)
+             */
+            room_code: string | null;
             /** Rounds */
             rounds: components["schemas"]["ResultRound"][];
             /**

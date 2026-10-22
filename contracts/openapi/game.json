@@ -2563,7 +2563,7 @@
             "type": "integer"
           },
           "seed": {
-            "description": "Сид розыгрыша (match: от `match_id`)",
+            "description": "Сид розыгрыша: секретный, случайный на каждый старт матча (match хранит его только в снимке комнаты; ADR 0033)",
             "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
             "title": "Seed",
             "type": "string"
