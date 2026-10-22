@@ -16,7 +16,10 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]] : "list",
+  // В CI: github — аннотации падений в check run (видны через API без доступа к логам).
+  reporter: process.env.CI
+    ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    : "list",
   outputDir: "test-results",
   use: {
     ...devices["Desktop Chrome"],
