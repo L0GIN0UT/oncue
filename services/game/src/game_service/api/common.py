@@ -17,6 +17,7 @@ from game_service.application.commands.modes import (
 )
 from game_service.application.commands.play import Player, PlayService
 from game_service.application.queries.play import PlayQueries
+from game_service.application.queries.round_plans import RoundPlans
 from game_service.domain.session import PlayerKind, PlayerRef
 from gv_auth import Principal
 from gv_core.errors import AppError
@@ -37,6 +38,7 @@ class ApiServices:
     daily_admin: DailySetAdmin
     asset_requests: RequestClueAssets
     editor_schema: Callable[[], dict[str, Any]]
+    round_plans: RoundPlans
 
 
 class NoStoreRoute(APIRoute):

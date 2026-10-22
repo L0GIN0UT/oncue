@@ -7,8 +7,9 @@
   ``description``, ``emoji`` (этап 3a);
 * источники ``daily``, ``random`` и ``marathon``, ``pair``, ``bracket``;
 * matcher-ы ``title_alias`` и ``metric_compare``, ``preference``; частичный ответ ``artist``;
-* очки ``by_level``, ``by_speed`` и ``streak``, ``none``;
-* форматы ответа ``classic``, ``pick``; правила завершения ``all_rounds``, ``lives``.
+* очки ``by_level``, ``by_speed`` и ``streak``, ``none``, ``party_speed`` (этап 4);
+* форматы ответа ``classic``, ``pick``; правила завершения ``all_rounds``, ``lives``;
+* правила состязания матча ``race``, ``parallel`` (этап 4, ADR 0032).
 
 Источник ``collection`` готов, но регистрируется отдельно (``register_collection``) — в
 game вместе с проекциями сборников (этап 3b).
@@ -38,6 +39,13 @@ from gv_game_kernel.builtin.clues import (
     SoundtrackClue,
     SoundtrackParams,
 )
+from gv_game_kernel.builtin.contests import (
+    ContestRoundRules,
+    ParallelContest,
+    ParallelParams,
+    RaceContest,
+    RaceParams,
+)
 from gv_game_kernel.builtin.end_rules import AllRoundsEnd, AllRoundsParams, LivesEnd, LivesParams
 from gv_game_kernel.builtin.matching import (
     HIGHER,
@@ -59,6 +67,8 @@ from gv_game_kernel.builtin.scoring import (
     BySpeedScorer,
     NoneParams,
     NoneScorer,
+    PartySpeedParams,
+    PartySpeedScorer,
     StreakParams,
     StreakScorer,
 )
@@ -107,12 +117,20 @@ def register_builtin(registry: PluginRegistry) -> PluginRegistry:
     for matcher in (TitleAliasMatcher(), MetricCompareMatcher(), PreferenceMatcher()):
         registry.register_matcher(matcher)
     registry.register_partial(ArtistPartial())
-    for scorer in (ByLevelScorer(), BySpeedScorer(), StreakScorer(), NoneScorer()):
+    for scorer in (
+        ByLevelScorer(),
+        BySpeedScorer(),
+        StreakScorer(),
+        NoneScorer(),
+        PartySpeedScorer(),
+    ):
         registry.register_scorer(scorer)
     registry.register_answer_format(ClassicFormat())
     registry.register_answer_format(PickFormat())
     registry.register_end_rule(AllRoundsEnd())
     registry.register_end_rule(LivesEnd())
+    registry.register_contest(RaceContest())
+    registry.register_contest(ParallelContest())
     return registry
 
 
@@ -143,6 +161,7 @@ __all__ = [
     "ClassicFormat",
     "CollectionParams",
     "CollectionSource",
+    "ContestRoundRules",
     "DailyParams",
     "DailySource",
     "DescriptionClue",
@@ -164,6 +183,10 @@ __all__ = [
     "NoneScorer",
     "PairParams",
     "PairSource",
+    "ParallelContest",
+    "ParallelParams",
+    "PartySpeedParams",
+    "PartySpeedScorer",
     "PickFormat",
     "PoolFilters",
     "PoolParams",
@@ -172,6 +195,8 @@ __all__ = [
     "PreferenceMatcher",
     "PreferenceParams",
     "PresetParams",
+    "RaceContest",
+    "RaceParams",
     "RandomParams",
     "RandomSource",
     "SoundtrackClue",

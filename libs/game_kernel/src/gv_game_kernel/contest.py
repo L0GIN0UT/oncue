@@ -5,7 +5,7 @@
 задаёт ``ContestRule`` через ``RoundRules``. Состояние неизменяемо, переходы — чистые
 функции плагина ``ContestRule``; время приходит аргументом ``now_ms`` (часы — у match).
 
-Сигнатуры зафиксированы шагом 0a; реализации переходов — поток A (``builtin/contests.py``).
+Сигнатуры зафиксированы шагом 0a; реализации переходов — ``builtin/contests.py``.
 """
 
 from __future__ import annotations
@@ -40,11 +40,16 @@ class PlayerRound:
         answered_at_ms: Когда игрок дал точный (или частичный) ответ — для очков за
             скорость (``party_speed``): ``t`` считается от открытия уровня.
         active: Игрок участвует в раунде (``False`` — вышел: его раунд ``void``).
+        elapsed_ms: ``t`` для ``party_speed``: от открытия уровня до ответа, который
+            оценивается (точного, иначе первого частичного); добавлено потоком A.
+        window_ms: ``T`` для ``party_speed``: окно уровня этого ответа; добавлено потоком A.
     """
 
     state: RoundState = field(default_factory=RoundState)
     answered_at_ms: int | None = None
     active: bool = True
+    elapsed_ms: int | None = None
+    window_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,7 +1,8 @@
 """Контракт шага 0a этапа 4 (§2.5, D5): internal-ручки game для match.
 
 Только сервисный токен с ``aud = game`` и областью ``rounds.plan``; пользовательский JWT —
-401, сервисный без области — 403, с областью — 501 до потока B.
+401, сервисный без области — 403, с областью — ответ ручки (здесь режимы не опубликованы —
+404 ``game.mode_not_found``). Сценарии плана — ``test_stage4_online.py``.
 """
 
 from __future__ import annotations
@@ -61,7 +62,7 @@ async def test_internal_requires_service_token_with_rounds_plan_scope(
     allowed = service_token("match", "game", ["rounds.plan"])
     response = await call(_bearer(allowed))
 
-    assert_problem(response, 501, "common.not_implemented")
+    assert_problem(response, 404, "game.mode_not_found")
     assert response.headers["cache-control"] == "no-store"
 
 

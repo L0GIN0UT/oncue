@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, get_args, runtime_checkable
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
@@ -46,6 +46,7 @@ from gv_game_kernel import (
     params_hash,
     parse_mode_config,
 )
+from gv_game_kernel.spec import OnlineKind
 
 POOL_TOO_SMALL = "game.pool_too_small"
 """Код ошибки ядра: в пуле меньше единиц, чем нужно (``PoolTooSmallError`` потока A)."""
@@ -56,6 +57,16 @@ MAX_PERIOD_DAYS = 31
 
 RECORDS_FEATURE = "records"
 """Флаг ``features.records``: личные рекорды и процентиль (D11)."""
+
+SUPPORTED_SESSIONS: frozenset[str] = frozenset({"solo", *get_args(OnlineKind)})
+"""Виды сессий, конфиги которых game хранит и публикует (ADR 0032): соло играет сам game,
+онлайн (``duel``/``party``/``lobby``) — match по плану раундов game. Играть онлайн-режим
+соло нельзя — это проверяет ``ModeEngine.solo_session`` (``game.mode_not_solo``)."""
+
+
+@runtime_checkable
+class _MaxCollections(Protocol):
+    max_collections: int
 
 
 @runtime_checkable
@@ -156,6 +167,18 @@ class ModeRules:
     def presentation(self) -> str:
         """Подача итога (``Scorer.presentation``): ``score`` | ``streak`` | ``bracket``."""
         return self.engine.presentation
+
+    @property
+    def is_online(self) -> bool:
+        """Онлайн-режим: его играет match, в game — только план раундов (ADR 0032, 0033)."""
+        return self.config.is_online
+
+    @property
+    def max_collections(self) -> int:
+        """Сколько сборников принимает источник за раз (``max_collections``, D12); у
+        источника без этого поля — один."""
+        params = self.engine.source_params
+        return params.max_collections if isinstance(params, _MaxCollections) else 1
 
     @property
     def records_enabled(self) -> bool:
@@ -350,7 +373,7 @@ class RulesFactory:
 
     def __init__(self, registry: PluginRegistry) -> None:
         self.registry = registry
-        self._factory = EngineFactory(registry)
+        self._factory = EngineFactory(registry, supported_sessions=SUPPORTED_SESSIONS)
         self._cache: dict[tuple[str, int, str], ModeRules] = {}
 
     def check(self, body: Mapping[str, Any], *, version: int = 0) -> ConfigCheck:

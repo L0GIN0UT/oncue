@@ -120,26 +120,27 @@ class RealtimeSettings(BaseModel):
     каналов комнат; поэтому оба поля необязательны, а нужное проверяет сам сервис.
 
     Attributes:
-        api_url: Адрес server API, ``http://centrifugo:8000/api`` (``GV_REALTIME__API_URL``).
-        api_key: Ключ server API (``GV_REALTIME__API_KEY``).
+        api_url: Адрес server API, ``http://centrifugo:8000/api`` (``GV_REALTIME__API_URL``);
+            только у публикующих сервисов (match), задаётся вместе с ``api_key``.
+        api_key: Ключ server API (``GV_REALTIME__API_KEY``); identity его не получает.
         connection_token_secret: HMAC-секрет connection-токенов (только identity,
             ``GV_REALTIME__CONNECTION_TOKEN_SECRET``).
         subscription_token_secret: HMAC-секрет subscription-токенов (только match,
             ``GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET``).
         token_audience: ``aud`` токенов; совпадает с ``client.token.audience`` и
             ``client.subscription_token.audience`` в ``infra/centrifugo/config.json``.
-        token_ttl_s: Время жизни выдаваемых токенов.
+        token_ttl_s: Время жизни выдаваемых токенов; не больше 10 минут (D9 этапа 4).
         timeout_s: Таймаут запроса к server API.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    api_url: str = Field(pattern=r"^https?://")
-    api_key: SecretStr
+    api_url: str | None = Field(default=None, pattern=r"^https?://")
+    api_key: SecretStr | None = None
     connection_token_secret: SecretStr | None = None
     subscription_token_secret: SecretStr | None = None
     token_audience: str = Field(default="centrifugo", min_length=1, max_length=64)
-    token_ttl_s: int = Field(default=600, ge=60, le=3600)
+    token_ttl_s: int = Field(default=600, ge=60, le=600)
     timeout_s: float = Field(default=2.0, gt=0, le=30)
 
     @field_validator("api_key", "connection_token_secret", "subscription_token_secret")
@@ -149,6 +150,12 @@ class RealtimeSettings(BaseModel):
         if value is not None and len(value.get_secret_value()) < _MIN_SECRET_LEN:
             raise ValueError(f"секрет Centrifugo короче {_MIN_SECRET_LEN} символов")
         return value
+
+    @model_validator(mode="after")
+    def _api_pair(self) -> RealtimeSettings:
+        if (self.api_url is None) != (self.api_key is None):
+            raise ValueError("api_url и api_key server API Centrifugo задаются вместе")
+        return self
 
     @model_validator(mode="after")
     def _secrets_differ(self) -> RealtimeSettings:

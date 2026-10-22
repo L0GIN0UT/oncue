@@ -426,13 +426,14 @@ async def test_admin_upload_audio_generates_audio_levels(service: Service) -> No
     )
     assert response.status_code == 201, response.text
     body = response.json()
-    # audio_intro/default, audio_intro/preview, audio_reverse/default — все от одного аудио
-    assert body["mime"] == "audio/flac" and len(body["scheduled_asset_set_ids"]) == 3
+    # audio_intro/default, audio_intro/preview, audio_intro/duel (4a), audio_reverse/default —
+    # все от одного аудио
+    assert body["mime"] == "audio/flac" and len(body["scheduled_asset_set_ids"]) == 4
     assert (body["position"], body["origin"]) == (1, "upload")
     # повтор с тем же ключом — тот же ответ, без новой загрузки
     again = await service.client.post("/admin/v1/sources", data=form, files=files, headers=headers)
     assert (again.status_code, again.json()) == (201, body)
-    assert len(service.queue.tasks) == 3
+    assert len(service.queue.tasks) == 4
 
     await service.run_tasks()
     sets = (
@@ -442,6 +443,7 @@ async def test_admin_upload_audio_generates_audio_levels(service: Service) -> No
         (s["clue_type"], s["profile_key"], s["status"], s["levels_count"]) for s in sets
     ) == [
         ("audio_intro", "default", "ready", 6),
+        ("audio_intro", "duel", "ready", 2),
         ("audio_intro", "preview", "ready", 1),
         ("audio_reverse", "default", "ready", 6),
     ]
@@ -452,7 +454,7 @@ async def test_admin_upload_audio_generates_audio_levels(service: Service) -> No
         )
         assert link.json()["mime"] == "audio/mp4"
     events = await service.outbox()
-    assert len(events) == 3
+    assert len(events) == 4
     for event_out in events:
         assert_event_matches_schema(event_out)
 

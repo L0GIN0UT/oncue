@@ -5,10 +5,9 @@
 (клиент ``match``, §2.7 плана этапа 4). Пользовательский JWT — 401, сервисный без области —
 403 ``auth.forbidden``.
 
-Шаг 0a: контракт и заглушки (501 после авторизации); реализация — поток B (B2).
+План раундов содержит ключи ответа (античит §12 п. 1 плана этапа 4): он уходит только в ответ
+match и не попадает ни в логи, ни в тексты ошибок.
 """
-
-# ruff: noqa: ARG001 — параметры заглушек нужны ради схемы и зависимости авторизации.
 
 from __future__ import annotations
 
@@ -18,13 +17,12 @@ from fastapi import APIRouter, Depends, Path
 
 from game_service.api.common import ApiServices, NoStoreRoute
 from game_service.api.internal.schemas import ModeConfigBody, RoundPlan, RoundPlanRequest
+from game_service.application.queries.round_plans import RoundPlanQuery
 from gv_auth import ServiceAuthenticator, ServicePrincipal
-from gv_core.errors import NotImplementedYetError
 from gv_service import problem_responses
 
 ROUNDS_PLAN_SCOPE = "rounds.plan"
 """Область сервисного токена match → game (``GV_SERVICE_CLIENTS`` identity)."""
-STAGE = "план раундов матча — поток B плана этапа 4"
 
 Caller = Annotated[
     ServicePrincipal, Depends(ServiceAuthenticator().require_service(ROUNDS_PLAN_SCOPE))
@@ -50,12 +48,26 @@ def build_internal_router(c: ApiServices) -> APIRouter:
             "`game.mode_not_online` (у шаблона `session.kind = solo`), 404 "
             "`game.collection_not_found` (нет, скрыт или удалён), 422 "
             "`game.collection_required`, 422 `game.collection_domain_mismatch`, 422 "
-            "`game.too_many_collections`, 422 `game.pool_too_small` (`details.available`)."
+            "`game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), "
+            "422 `game.collection_not_supported` (сборники у режима без source `collection`). "
+            "`exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — "
+            "пока хватает остальных единиц)."
         ),
         responses=problem_responses(401, 403, 404, 422, 501, 503),
     )
     async def create_round_plan(body: RoundPlanRequest, caller: Caller) -> RoundPlan:
-        raise NotImplementedYetError(STAGE)
+        plan = await c.round_plans.plan(
+            RoundPlanQuery(
+                mode_key=body.mode_key,
+                version=body.version,
+                seed=body.seed,
+                rounds=body.rounds,
+                collection_ids=body.collection_ids,
+                exclude_ids=body.exclude_ids,
+            ),
+            caller=caller.client_id,
+        )
+        return RoundPlan.model_validate(plan)
 
     @router.get(
         "/modes/{mode_key}/versions/{version}",
@@ -71,8 +83,8 @@ def build_internal_router(c: ApiServices) -> APIRouter:
     async def get_mode_version(
         mode_key: ModeKeyPath,
         version: Annotated[int, Path(ge=1)],
-        caller: Caller,
+        caller: Caller,  # noqa: ARG001 — зависимость нужна ради авторизации
     ) -> ModeConfigBody:
-        raise NotImplementedYetError(STAGE)
+        return ModeConfigBody.model_validate(await c.round_plans.mode_version(mode_key, version))
 
     return router

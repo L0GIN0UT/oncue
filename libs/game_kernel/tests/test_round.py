@@ -19,6 +19,7 @@ from gv_game_kernel import (
     SessionSpec,
     apply_guess,
     apply_skip,
+    close_round,
     give_up,
     require_level_open,
     round_outcome,
@@ -178,6 +179,24 @@ def test_outcome_requires_finished_round_and_valid_time() -> None:
         round_outcome(RoundState())
     with pytest.raises(ValueError, match="elapsed_ms"):
         round_outcome(_answer(RoundState(), MatchVerdict.EXACT), elapsed_ms=-1)
+    with pytest.raises(ValueError, match="window_ms"):
+        round_outcome(_answer(RoundState(), MatchVerdict.EXACT), window_ms=0)
+    outcome = round_outcome(_answer(RoundState(), MatchVerdict.EXACT), elapsed_ms=5, window_ms=9)
+    assert (outcome.elapsed_ms, outcome.window_ms) == (5, 9)
+
+
+def test_close_round_gives_partial_or_miss() -> None:
+    """Матч: уровни кончились по таймеру — итог как после последнего промаха (ADR 0032)."""
+    partial = apply_guess(
+        RoundState(),
+        Guess(GuessKind.TEXT, 1, MatchVerdict.PARTIAL, "x"),
+        levels_count=3,
+        session=_session(2),
+    )
+    assert close_round(partial).outcome is RoundResult.PARTIAL
+    assert close_round(RoundState()).outcome is RoundResult.MISS
+    with pytest.raises(RoundFinishedError):
+        close_round(close_round(RoundState()))
 
 
 # ----------------------------------------------------------------------------- свойства

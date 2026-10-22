@@ -133,3 +133,13 @@ profiles:
       start_s: 0
       levels:
         - { seconds: 15 }
+
+  # Дуэль этапа 4a (music.duel.classic, референс Songless): уровень 1 — 4 с, уровень 2 — 15 с.
+  - clue_type: audio_intro
+    profile_key: duel
+    domains: [music]
+    params:
+      start_s: 0
+      levels:
+        - { seconds: 4 }
+        - { seconds: 15 }

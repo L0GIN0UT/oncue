@@ -58,6 +58,7 @@ from gv_game_kernel.errors import (
     PresetNotFoundError,
     RoundsNotAllowedError,
     SubjectRequiredError,
+    TooManyCollectionsError,
     TooManySubjectsError,
 )
 from gv_game_kernel.plugins import (
@@ -431,17 +432,40 @@ class CollectionSource:
         return choice
 
     @staticmethod
-    async def _items(ctx: DrawContext) -> list[MediaItemRef]:
-        """Играбельные единицы сборника без повторов в порядке сборника."""
+    def _collection_ids(ctx: DrawContext, params: CollectionParams) -> tuple[UUID, ...]:
+        """Сборники розыгрыша: ``collection_ids`` (без повторов, в порядке лобби) или
+        ``(collection_id,)`` — сессия соло и лобби с одним сборником.
+
+        Raises:
+            ValueError: в контексте нет ``CollectionPort``.
+            CollectionRequiredError: сборник не передан.
+            TooManyCollectionsError: сборников больше ``max_collections``.
+        """
         if ctx.collections is None:
             raise ValueError("источнику collection нужен CollectionPort")
-        if ctx.collection_id is None:
+        if ctx.collection_ids:
+            ids = tuple(dict.fromkeys(ctx.collection_ids))
+        elif ctx.collection_id is not None:
+            ids = (ctx.collection_id,)
+        else:
             raise CollectionRequiredError("источнику collection нужен сборник")
+        if len(ids) > params.max_collections:
+            raise TooManyCollectionsError(
+                "сборников больше, чем допускает режим",
+                details={"given": len(ids), "max": params.max_collections},
+            )
+        return ids
+
+    @staticmethod
+    async def _collection_items(ctx: DrawContext, collection_id: UUID) -> list[MediaItemRef]:
+        """Играбельные единицы одного сборника без повторов в порядке сборника."""
+        if ctx.collections is None:  # pragma: no cover — проверено в _collection_ids
+            raise ValueError("источнику collection нужен CollectionPort")
         items = await ctx.collections.items(
-            ctx.collection_id,
+            collection_id,
             ctx.candidate_limit,
             playable_for=PlayableFor(
-                clue_type=ctx.clue_type, params_hash=ctx.params_hash, scope=ctx.collection_id
+                clue_type=ctx.clue_type, params_hash=ctx.params_hash, scope=collection_id
             ),
         )
         seen: set[UUID] = set()
@@ -452,31 +476,65 @@ class CollectionSource:
                 ordered.append(item)
         return ordered
 
+    async def _lists(self, ctx: DrawContext, params: CollectionParams) -> list[list[MediaItemRef]]:
+        """Единицы каждого сборника; единица, уже встреченная в предыдущем сборнике, из
+        следующих убирается (одна единица — один раунд)."""
+        seen: set[UUID] = set()
+        lists: list[list[MediaItemRef]] = []
+        for collection_id in self._collection_ids(ctx, params):
+            own = [i for i in await self._collection_items(ctx, collection_id) if i.id not in seen]
+            seen.update(i.id for i in own)
+            lists.append(own)
+        return lists
+
     async def pool_size(self, ctx: DrawContext, params: BaseModel) -> int:
-        """Число различных играбельных единиц сборника (вход ``rounds_for``).
+        """Число различных играбельных единиц сборников (вход ``rounds_for``).
 
         Raises:
             ValueError: в контексте нет ``CollectionPort``.
-            CollectionRequiredError: в контексте нет ``collection_id``.
+            CollectionRequiredError: в контексте нет сборника.
+            TooManyCollectionsError: сборников больше ``max_collections``.
         """
-        typed(params, CollectionParams)
-        return len(await self._items(ctx))
+        p = typed(params, CollectionParams)
+        return sum(len(items) for items in await self._lists(ctx, p))
 
     async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
-        """``n`` единиц сборника ``ctx.collection_id`` (по ``ctx.seed`` или по порядку).
+        """``n`` единиц сборника (или сборников лобби) по ``ctx.seed`` или по порядку.
+
+        Один сборник — как на этапе 3b. Несколько (``ctx.collection_ids``, D12 этапа 4):
+        единицы каждого сборника перемешиваются по seed (при ``shuffle``), затем сборники
+        чередуются по кругу в порядке лобби; ``exclude_ids`` (память лобби) берутся
+        только после свежих единиц всех сборников.
 
         Raises:
             ValueError: в контексте нет ``CollectionPort`` или ``n < 1``.
-            CollectionRequiredError: в контексте нет ``collection_id``.
-            PoolTooSmallError: в сборнике меньше ``min_items`` или меньше ``n`` единиц.
+            CollectionRequiredError: в контексте нет сборника.
+            TooManyCollectionsError: сборников больше ``max_collections``.
+            PoolTooSmallError: в сборниках меньше ``min_items`` или меньше ``n`` единиц.
         """
         _require_n(n)
         p = typed(params, CollectionParams)
-        ordered = await self._items(ctx)
-        if len(ordered) < p.min_items:
-            raise _pool_too_small(len(ordered), p.min_items)
-        if len(ordered) < n:
-            raise _pool_too_small(len(ordered), n)
+        lists = await self._lists(ctx, p)
+        total = sum(len(items) for items in lists)
+        if total < p.min_items:
+            raise _pool_too_small(total, p.min_items)
+        if total < n:
+            raise _pool_too_small(total, n)
+        if len(lists) == 1:
+            return self._draw_one(ctx, p, lists[0], n)
+        rng = SeededRandom(ctx.seed)
+        fresh = [[i for i in items if i.id not in ctx.exclude_ids] for items in lists]
+        recent = [[i for i in items if i.id in ctx.exclude_ids] for items in lists]
+        if p.shuffle:
+            fresh = [rng.sample(items, len(items)) for items in fresh]
+            recent = [rng.sample(items, len(items)) for items in recent]
+        return [*_round_robin(fresh), *_round_robin(recent)][:n]
+
+    @staticmethod
+    def _draw_one(
+        ctx: DrawContext, p: CollectionParams, ordered: list[MediaItemRef], n: int
+    ) -> list[MediaItemRef]:
+        """Розыгрыш из одного сборника (поведение этапа 3b без изменений)."""
         fresh = [item for item in ordered if item.id not in ctx.exclude_ids]
         recent = [item for item in ordered if item.id in ctx.exclude_ids]
         if not p.shuffle:
@@ -518,6 +576,12 @@ class CollectionSource:
     def min_playable(self, params: BaseModel, *, rounds: int) -> int:
         """Минимум играбельных единиц сборника для режима — ``min_items``."""
         return typed(params, CollectionParams).min_items
+
+
+def _round_robin(lists: Sequence[Sequence[MediaItemRef]]) -> list[MediaItemRef]:
+    """Чередование списков по кругу: a1, b1, c1, a2, b2, … (кончившийся список пропускается)."""
+    longest = max((len(items) for items in lists), default=0)
+    return [items[i] for i in range(longest) for items in lists if i < len(items)]
 
 
 # ----------------------------------------------------------------------------- общее 3a

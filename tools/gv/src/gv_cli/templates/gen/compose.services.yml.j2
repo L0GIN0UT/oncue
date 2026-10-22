@@ -89,9 +89,12 @@ services:
       GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
 {% endif %}
 {% if s.realtime %}
-      # Centrifugo (D9 этапа 4): server API для публикаций; секрет токенов — свой у сервиса.
+{% if s.name in realtime_publishers %}
+      # Centrifugo (D9 этапа 4): server API для публикаций — только публикующим сервисам.
       GV_REALTIME__API_URL: http://centrifugo:8000/api
       GV_REALTIME__API_KEY: ${CENTRIFUGO_API_KEY:?задайте CENTRIFUGO_API_KEY}
+{% endif %}
+      # Секрет токенов Centrifugo — свой у каждого сервиса (D9).
 {% if s.name in realtime_token_secrets %}
       {{ realtime_token_secrets[s.name][0] }}: ${ {{- realtime_token_secrets[s.name][1] }}:?задайте {{ realtime_token_secrets[s.name][1] }}}
 {% endif %}
