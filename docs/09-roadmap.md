@@ -78,11 +78,33 @@
 - Остальные ClueType: `audio_reverse`, `audio_blackout`, `soundtrack`, `description`, `emoji`, `frame_sequence`.
 - Режимы: марафон, больше/меньше, топ-32.
 
-## Этап 4. Онлайн
-План: [plans/stage-4.md](plans/stage-4.md) (решения владельца приняты 2026-10-22). Деление: **4a «Комнаты и матч»** — комнаты, кастомные лобби, дуэль, party, realtime, реконнект (ADR 0032–0036); **4b «Рейтинг и подбор»** — rating, матчмейкинг, сезоны, лидерборды, формат `lite` (ADR 0037–0040).
-- match: лобби, комнаты, конечный автомат, single-writer, Centrifugo, реконнект.
-- Дуэль 1×1, party 3–6, кастомные лобби. Матчмейкинг.
-- rating: Эло, ladder-ы, звания, сезоны, лидерборды.
+## Этап 4. Онлайн — 4a реализован в ветке `stage4a/integration` (2026-10-22), на проверке владельцем; 4b не начат
+План: [plans/stage-4.md](plans/stage-4.md) (решения владельца приняты 2026-10-22). Деление: **4a «Комнаты и матч»** — комнаты, кастомные лобби, дуэль, party, realtime, реконнект ([ADR 0032–0036](adr/README.md)); **4b «Рейтинг и подбор»** — rating, матчмейкинг, сезоны, лидерборды, формат `lite` (ADR 0037–0040).
+
+### Подэтап 4a — что сделано
+- **`libs/game_kernel`, `libs/testkit`:** онлайн-сессии в `ModeConfig` (`OnlineSessionSpec`, плагин `ContestRule`, `party_speed`, шаблоны лобби с `overridable`), фасад `ModeEngine.contest_*`; DSL `given_match` и фейки портов match.
+- **`libs/service`, infra:** компонент `rooms` (`build_runners`, graceful stop с handoff, `GV_RUNNERS__*`), `GV_REALTIME__*` и поле `realtime` реестра; Centrifugo с `infra/centrifugo/config.json`, `/connection/http_stream` и `/connection/emulation` на gateway.
+- **match:** домен комнаты и автомат матча, процесс `rooms` (lease с fencing-эпохой, поток команд, снимки, handoff), ручки комнат и матчей, consumers identity и game, итог в Postgres + outbox, `match.match.v1`, античит, реванш, чат и эмоции, разбор отказа старта (`start_error`). Исправления по аудиту безопасности и код-ревью учтены.
+- **game:** internal `round-plans`, онлайн-шаблоны, `session_kind` и фильтр `session` в списке конфигов, секция `contest` в схеме редактора. **media-pipeline:** профиль `audio_intro/duel`. **identity:** `POST /v1/realtime/token`.
+- **bff-web:** `/pages/online`, `/pages/match/{id}`, правила комнаты в блоке `modes`. **admin:** раздел «Матчи», онлайн-шаблоны в редакторе режимов.
+- **frontend:** хаб, лобби, комната, матч, итог, «Мои матчи», реванш, «Отошёл», «Играть с друзьями» со страницы сборника, регистрация с возвратом по `next`, экран для гостя.
+- **seed и CI:** `gv dev seed` публикует онлайн-шаблоны и сборник для лобби; job `e2e-smoke` с `e2e/{lobby,duel,party}.spec.ts`.
+- **Проверено:** unit, integration, component, contract по затронутым модулям; `gv lint`; frontend-job (lint, typecheck, test, build) и Playwright онлайна на моках (2–4 контекста, ресинк по версии, tick, гость, отказ чата).
+- **Осталось:** живая демонстрация [§0 плана](plans/stage-4.md#0-цель-и-критерии-готовности) п. 1–8б на compose у владельца и e2e lobby/duel/party на полном стеке.
+
+### Хвосты 4a
+| Пункт | Где | Когда |
+|---|---|---|
+| Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` game: старт отказывает с `not_supported_yet` | match, game | После решения по плану раундов |
+| `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` (конфиги режимов) | Решение по геймдизайну |
+| Блокирующий `XREAD` на комнату: ~300 соединений Redis на инстанс | match | Нагрузка этапа 7 |
+| Окно отзыва connection-токена Centrifugo — до 10 мин (отзыв сессии не рвёт соединение) | identity, match | Принятый риск; пересмотреть на этапе 7 |
+| Пакетные ручки catalog/library для итога матча (сейчас вызовы по единице) | bff-web, catalog, library | При росте числа раундов |
+| Ручная проверка владельцем: identity (realtime-токен) и match (античит) | — | До слияния в `main` |
+| Тег образа Centrifugo (`v6`) не закреплён до точной версии | `infra/compose` | Этап 7 (зеркало образов) |
+
+### Подэтап 4b — не начат
+- Матчмейкинг (очереди по ladder-ам), rating: Эло с калибровкой, звания, сезоны, топ недели, лидерборды; формат `lite`; наблюдение с правом `match.spectate` (ADR 0037–0040).
 
 ## Этап 5. Прогрессия и социальное
 - progression: опыт, уровни, валюта (ledger), задания, бейджи, магазин косметики, оформление профиля.
