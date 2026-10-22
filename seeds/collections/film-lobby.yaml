@@ -1,0 +1,30 @@
+# Кураторский сборник для онлайн-лобби «кино по сборнику» (план этапа 4 §0 п. 2): шаблон
+# `film.lobby.collection` разыгрывает сразу `session.rounds` (12) раундов, поэтому единиц
+# здесь больше 12 — e2e `e2e/lobby.spec.ts` создаёт лобби кнопкой «Играть с друзьями» на его
+# странице. Только синтетика 3a: у всех единиц готовы кадры `frame_progressive/default`.
+# Формат — seeds/collections/README.md.
+key: film-lobby
+title: "Кино · онлайн-лобби: синтетика"
+description: "Сборник для игры с друзьями: угадывайте фильм по кадру на время."
+domain: film
+default_mode_key: film.collection.frame
+tags: [scifi]
+cover: cinema
+visibility: public
+items:
+  - film:synthetic-09
+  - film:synthetic-10
+  - film:synthetic-11
+  - film:synthetic-12
+  - film:synthetic-13
+  - film:synthetic-14
+  - film:synthetic-15
+  - film:synthetic-16
+  - film:synthetic-17
+  - film:synthetic-18
+  - film:synthetic-19
+  - film:synthetic-20
+  - film:synthetic-21
+  - film:synthetic-22
+  - film:synthetic-23
+  - film:synthetic-24

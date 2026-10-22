@@ -14,6 +14,12 @@
 3. проекцию сборника в game: `GET /v1/collections/{id}/modes`, режим по умолчанию
    `available`, играбельны все единицы.
 
+Онлайн-лобби по сборнику (этап 4a, `film.lobby.collection`): матч разыгрывает сразу
+`session.rounds` раундов шаблона, поэтому засев до долгих шагов проверяет, что у каждого
+такого шаблона есть сборник его домена с не меньшим числом единиц (`film-lobby.yaml`), а
+после засева ждёт, что эти единицы играбельны под сам шаблон
+(`/admin/v1/projection/items?playable_for_mode=film.lobby.collection`).
+
 Адрес collections — `GV_SEED__COLLECTIONS_URL` (по умолчанию `http://127.0.0.1:8106`).
 
 ## Формат `<key>.yaml`

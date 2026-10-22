@@ -1,5 +1,5 @@
 """Оркестратор ``gv dev seed`` — наполнение запущенного стека для e2e (дейлики, режимы 3a,
-кураторские сборники 3b).
+кураторские сборники 3b, онлайн-шаблоны 4a).
 
 Только для local/ci: сидер работает на хосте и обращается к admin/internal-ручкам сервисов
 напрямую (в dev/ci они опубликованы на 127.0.0.1 через ``compose.services.dev.yml``; на
@@ -17,7 +17,9 @@ gateway этих ручек нет). Шаги идемпотентны и без
    ``audio`` для музыки; шесть ``frame`` с ``position``, ``soundtrack`` и ``audio_clip`` для
    фильмов) с ``origin=seed``; ожидание готовности всех наборов единицы и статических
    профилей media-pipeline.
-4. Ожидание играбельного пула каждого режима из ``seeds/game/modes`` в проекции game.
+4. Ожидание играбельного пула каждого режима из ``seeds/game/modes`` в проекции game
+   (у онлайн-шаблонов этапа 4 — не меньше ``session.rounds``) и публикации онлайн-шаблонов
+   (``GET /v1/modes?session=online``).
 5. Перегенерация наборов **всех** плановых источников (дейлики — день, сетка — неделя) на
    текущий период с проверкой пригодности набора.
 6. Кураторские сборники ``seeds/collections/*.yaml`` (план этапа 3b §0 п. 1, D14): создание
@@ -25,6 +27,13 @@ gateway этих ручек нет). Шаги идемпотентны и без
    с ожиданием единиц в проекции collections (``collections.item_unavailable``), набора своих
    эмодзи со ``scope`` сборника в media-pipeline и проекции сборника в game
    (``GET /v1/collections/{id}/modes`` → режим по умолчанию ``available``).
+7. Онлайн-лобби по сборнику (план этапа 4 §0 п. 2): у каждого шаблона ``*.lobby.*`` с
+   источником ``collection`` есть кураторский сборник домена с ≥ ``session.rounds``
+   единиц, и они играбельны под сам шаблон (``playable_for_mode``).
+
+Пользователей засев не создаёт: e2e регистрируют свежих игроков в каждом прогоне (ссылка
+подтверждения — из лога identity), иначе брошенная прошлым прогоном комната держала бы
+игрока (409 ``match.active_room_conflict``).
 """
 
 from __future__ import annotations
@@ -74,6 +83,10 @@ ITEM_UNAVAILABLE = "collections.item_unavailable"
 COLLECTION_SCOPE = "collection"
 # Лимит строк списка сборников admin-API collections (``limit ≤ 100``).
 ADMIN_COLLECTIONS_LIMIT = 100
+# Вид сессии соло-режима (``session.kind``); остальные виды — онлайн (match, ADR 0032).
+SOLO_KIND = "solo"
+# Тип источника раундов «по сборнику» (``source.type``): онлайн-лобби по сборнику (D12).
+COLLECTION_SOURCE = "collection"
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,12 +216,18 @@ class ModePlan:
     Attributes:
         key: Ключ режима.
         min_playable: Сколько играбельных единиц нужно в проекции game: ``pool.min_playable``,
-            иначе минимум темы/персоны (``subject.min_items``/``min_items``), иначе ``size``.
+            иначе минимум темы/персоны (``subject.min_items``/``min_items``), иначе ``size``;
+            у онлайн-шаблона — не меньше ``session.rounds`` (план матча разыгрывает столько
+            раундов сразу, иначе ``game.pool_too_small`` на старте матча).
         period: ``day``/``week`` — у режима плановые наборы (общие поля периода
             ``schedule_ahead_*``); ``None`` — наборов периода нет.
         timezone: Часовой пояс периода.
         size: Ожидаемое число единиц набора периода (``size``), если задано.
         themed: У набора периода есть тема-персона (сетка: ``subject``).
+        domain: Домен режима (``film``/``music``), если задан.
+        online: Онлайн-шаблон (``session.kind`` — не ``solo``; играет match, ADR 0032).
+        uses_collection: Источник раундов — сборники (``source.type: collection``).
+        rounds: Раунды онлайн-сессии по умолчанию (``session.rounds``).
     """
 
     key: str
@@ -217,6 +236,15 @@ class ModePlan:
     timezone: str
     size: int | None
     themed: bool
+    domain: str | None = None
+    online: bool = False
+    uses_collection: bool = False
+    rounds: int | None = None
+
+    @property
+    def lobby_by_collection(self) -> bool:
+        """Онлайн-шаблон по сборнику: e2e нужен кураторский сборник с ≥ ``min_playable``."""
+        return self.online and self.uses_collection
 
     def period_start(self, day: date) -> date:
         """Начало периода дня ``day`` (неделя — с понедельника, как ``period_start`` ядра)."""
@@ -234,6 +262,13 @@ def mode_plan(spec: Mapping[str, Any]) -> ModePlan:
     size = params.get("size")
     min_playable = int(raw_min if raw_min is not None else size or 1)
     scheduled = any(name.startswith("schedule_ahead_") for name in params)
+    session = spec.get("session", {}) or {}
+    online = str(session.get("kind", SOLO_KIND)) != SOLO_KIND
+    raw_rounds = session.get("rounds") if online else None
+    rounds = int(raw_rounds) if raw_rounds is not None else None
+    if rounds is not None:
+        min_playable = max(min_playable, rounds)
+    domain = spec.get("domain")
     return ModePlan(
         key=str(spec["key"]),
         min_playable=min_playable,
@@ -241,6 +276,10 @@ def mode_plan(spec: Mapping[str, Any]) -> ModePlan:
         timezone=str(params.get("timezone", DEFAULT_TIMEZONE)),
         size=int(size) if size is not None else None,
         themed=bool(subject),
+        domain=str(domain) if domain is not None else None,
+        online=online,
+        uses_collection=spec.get("source", {}).get("type") == COLLECTION_SOURCE,
+        rounds=rounds,
     )
 
 
@@ -301,6 +340,39 @@ class CollectionSpec:
     def emoji_items(self) -> list[CollectionItemSpec]:
         """Единицы со своими эмодзи (для них media-pipeline строит набор со ``scope``)."""
         return [item for item in self.items if item.emoji]
+
+
+def lobby_collections(
+    plans: Iterable[ModePlan], specs: Iterable[CollectionSpec]
+) -> list[tuple[ModePlan, CollectionSpec]]:
+    """Кураторский сборник засева для каждого онлайн-шаблона по сборнику (лобби, D12).
+
+    Матч по сборнику разыгрывает ``session.rounds`` раундов сразу, поэтому нужен сборник
+    домена шаблона с ≥ ``min_playable`` единиц (берётся самый большой). Сидер проверяет это
+    до долгих шагов: без такого сборника e2e лобби упал бы на старте матча с
+    ``game.pool_too_small``.
+
+    Raises:
+        SeedError: подходящего сборника нет.
+    """
+    pool = list(specs)
+    result: list[tuple[ModePlan, CollectionSpec]] = []
+    for plan in plans:
+        if not plan.lobby_by_collection:
+            continue
+        fitting = [
+            s
+            for s in pool
+            if (plan.domain is None or s.domain == plan.domain)
+            and len(s.items) >= plan.min_playable
+        ]
+        if not fitting:
+            raise SeedError(
+                f"для онлайн-шаблона {plan.key} нет кураторского сборника домена "
+                f"{plan.domain} с ≥ {plan.min_playable} единиц в seeds/collections"
+            )
+        result.append((plan, max(fitting, key=lambda s: len(s.items))))
+    return result
 
 
 def load_collection_spec(path: Path) -> CollectionSpec:
@@ -447,14 +519,17 @@ class Seeder:
         plans = self.mode_plans()
         # Сиды сборников проверяются до долгих шагов: опечатка в ключе единицы видна сразу.
         collections = self.collection_specs(expected)
+        lobby_collections = self.online_collection_specs(plans, collections)
         self.import_catalog()
         items = self.resolve_items(expected)
         self.generate_sources()
         self.upload_sources(items)
         self.wait_profiles()
+        self.wait_online_templates(plans)
         self.wait_playable_pools(plans)
         self.regenerate_period_sets(plans)
         self.seed_collections(collections, items)
+        self.wait_online_collections(lobby_collections, items)
         self._echo("seed: готово")
 
     # ------------------------------------------------------------------ шаг 1: вход
@@ -700,13 +775,22 @@ class Seeder:
             self._wait_playable(plan.key, plan.min_playable)
 
     def _playable_ids(self, mode_key: str) -> set[str]:
-        """Играбельные единицы режима: общий поиск и отдельно синтетика (лимит поиска 50)."""
+        """Играбельные единицы режима: общий поиск и отдельно синтетика (лимит поиска 50).
+
+        404 — режима нет среди опубликованных: game не опубликовал сид при старте (ошибка
+        валидации пишется в лог game как ``game.bootstrap_config_invalid``), ждать бессмысленно.
+        """
         found: set[str] = set()
         for q in (None, SYNTHETIC_TITLE_QUERY):
             params: dict[str, Any] = {"playable_for_mode": mode_key, "limit": PROJECTION_LIMIT}
             if q is not None:
                 params["q"] = q
             resp = self._game.get("/admin/v1/projection/items", params=params)
+            if resp.status_code == httpx.codes.NOT_FOUND:
+                raise SeedError(
+                    f"режим {mode_key} не опубликован в game: сид seeds/game/modes не прошёл "
+                    "проверку при старте game (см. лог game.bootstrap_config_invalid)"
+                )
             self._check(resp, {200}, f"проекция game для {mode_key}")
             found |= {str(it["media_item_id"]) for it in resp.json() if it.get("playable")}
         return found
@@ -725,6 +809,74 @@ class Seeder:
             timeout_s=self._cfg.assets_timeout_s,
             what=f"играбельный пул {mode_key}",
             on_timeout=lambda: f"играбельных {seen.get('count', 0)} из {min_playable}",
+        )
+
+    # ------------------------------------------------------------------ шаг 4a: онлайн
+    def wait_online_templates(self, plans: Iterable[ModePlan]) -> None:
+        """Онлайн-шаблоны из сидов опубликованы: их отдаёт ``GET /v1/modes?session=online``.
+
+        Этот же список читает фронтенд (хаб «Онлайн», «Играть с друзьями» на странице
+        сборника), а match узнаёт версии шаблонов из ``game.mode_config.v1`` (ADR 0032).
+        Нет онлайн-режимов в сидах — шаг пропускается.
+        """
+        expected = {p.key for p in plans if p.online}
+        if not expected:
+            return
+        state: dict[str, list[str]] = {}
+
+        def published() -> bool:
+            try:
+                resp = self._game_public.get("/v1/modes", params={"session": "online"})
+            except httpx.TransportError:
+                return False
+            self._check(resp, {200}, "онлайн-шаблоны game")
+            keys = {str(m.get("key")) for m in resp.json()}
+            state["missing"] = sorted(expected - keys)
+            return not state["missing"]
+
+        self._echo(f"seed: ожидание онлайн-шаблонов ({len(expected)})")
+        self._poll(
+            published,
+            timeout_s=self._cfg.assets_timeout_s,
+            what="онлайн-шаблоны в game",
+            on_timeout=lambda: f"нет шаблонов: {state.get('missing')}",
+        )
+
+    def online_collection_specs(
+        self, plans: Iterable[ModePlan], specs: Iterable[CollectionSpec]
+    ) -> list[tuple[ModePlan, CollectionSpec]]:
+        """Сборники засева для онлайн-шаблонов по сборнику (см. :func:`lobby_collections`)."""
+        return lobby_collections(plans, specs)
+
+    def wait_online_collections(
+        self,
+        pairs: Iterable[tuple[ModePlan, CollectionSpec]],
+        items: Mapping[str, _ItemRef],
+    ) -> None:
+        """Единицы сборника играбельны под онлайн-шаблон (``playable_for_mode`` = шаблон).
+
+        Признак играбельности считается по ``clue.params`` шаблона лобби (D7), а не по
+        режиму сборника по умолчанию — у них могут быть разные профили ассетов.
+        """
+        for plan, spec in pairs:
+            wanted = {items[i.seed_key].media_item_id for i in spec.items}
+            self._wait_collection_playable(plan, spec.key, wanted)
+
+    def _wait_collection_playable(self, plan: ModePlan, key: str, wanted: set[str]) -> None:
+        seen: dict[str, int] = {}
+
+        def enough() -> bool:
+            seen["count"] = len(wanted & self._playable_ids(plan.key))
+            return seen["count"] >= plan.min_playable
+
+        self._echo(f"seed: ожидание сборника {key} под онлайн-шаблон {plan.key}")
+        self._poll(
+            enough,
+            timeout_s=self._cfg.assets_timeout_s,
+            what=f"сборник {key} под {plan.key}",
+            on_timeout=lambda: (
+                f"играбельных единиц сборника {seen.get('count', 0)} из {plan.min_playable}"
+            ),
         )
 
     # ------------------------------------------------------------------ шаг 5: периоды
