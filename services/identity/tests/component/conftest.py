@@ -33,6 +33,8 @@ YA_INFO = "https://ya.test/info"
 # Клиенты сервисных токенов (D13); в настройках identity — только sha256 секретов.
 ADMIN_SECRET = "admin-client-secret-0123456789abcdef"
 GAME_SECRET = "game-client-secret-0123456789abcdef"
+# Секрет connection-токенов Centrifugo (D9 этапа 4).
+REALTIME_SECRET = "realtime-connection-secret-0123456789abcdef"
 
 
 def sha256_hex(value: str) -> str:
@@ -171,6 +173,12 @@ def make_settings(database_url: str, redis_url: str, prefix: str, **overrides: A
         "bootstrap_admin_emails": ("boss@example.com",),
         "redis_key_prefix": prefix,
         "service_clients": SERVICE_CLIENTS,
+        "realtime": {
+            "api_url": "http://centrifugo.test/api",
+            "api_key": SecretStr("centrifugo-api-key-0123456789abcdef"),
+            "connection_token_secret": SecretStr(REALTIME_SECRET),
+        },
+        "realtime_token_limit": {"per_user": 5, "window_s": 60},
     }
     values.update(overrides)
     return Settings(**values)

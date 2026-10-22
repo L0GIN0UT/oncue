@@ -145,6 +145,17 @@ class ServiceTokenLimitSettings(BaseModel):
     success_per_client_per_min: int = Field(default=600, ge=1)
 
 
+class RealtimeTokenLimitSettings(BaseModel):
+    """Лимит выдачи connection-токенов Centrifugo: ``GV_REALTIME_TOKEN_LIMIT__*``.
+
+    Счётчик — на пользователя. Клиент обновляет токен раз в ``token_ttl_s`` и при
+    переподключении; запас — на несколько вкладок и обрывы сети.
+    """
+
+    per_user: int = Field(default=20, ge=1)
+    window_s: int = Field(default=60, ge=1, le=3600)
+
+
 class BootstrapAdminSettings(BaseModel):
     """Bootstrap-админ для автосидинга (``GV_BOOTSTRAP_ADMIN__*``), только local/ci.
 
@@ -201,6 +212,8 @@ class Settings(ServiceSettings):
     service_token: ServiceTokenSettings = ServiceTokenSettings()
     service_token_limit: ServiceTokenLimitSettings = ServiceTokenLimitSettings()
     guest: GuestSettings = GuestSettings()
+    realtime_token_limit: RealtimeTokenLimitSettings = RealtimeTokenLimitSettings()
+    """Лимит ``POST /v1/realtime/token``; секрет и TTL — в ``GV_REALTIME__*`` (gv_service)."""
     bootstrap_admin: BootstrapAdminSettings = BootstrapAdminSettings()
     """``GV_BOOTSTRAP_ADMIN__*`` — bootstrap-админ автосидинга (только local/ci); пусто — выкл."""
     bootstrap_admin_emails: tuple[str, ...] = ()
