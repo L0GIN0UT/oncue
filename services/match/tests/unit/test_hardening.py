@@ -205,14 +205,26 @@ async def test_n8_op_window_only_for_members_and_bounded() -> None:
     for _ in range(5):  # посторонние не попадают в окно
         await h.cmd(room, uuid7(), "chat", text="спам")
     assert str(b) in room.ops and set(room.ops) <= {str(host), str(b)}
-    await h.ok(room, b, "leave")
-    assert str(b) not in room.ops
+    await h.cmd(room, host, "kick", user_id=str(b))
+    assert str(b) not in room.ops  # кик чистит окно
 
     capped = Harness(op_users_max=2)
     lobby, owner = await capped.room("film.lobby.collection", collection_ids=(uuid7(),))
     users = await capped.join(lobby, 3)
     assert len(lobby.ops) == 2 and str(users[-1]) in lobby.ops
     del owner
+
+
+async def test_n8_repeated_leave_returns_same_reply() -> None:
+    h = Harness()
+    room, host = await h.room("film.lobby.collection", collection_ids=(uuid7(),))
+    b, c = await h.join(room, 2)
+    first = await h.cmd(room, b, "leave", op_id="op-leave-1")
+    assert first["status"] == 200
+    again = await h.cmd(room, b, "leave", op_id="op-leave-1")
+    assert again == first
+    assert room.op_reply(b, "op-leave-1") == {"status": 200}
+    del host, c
 
 
 # ----------------------------------------------------------------------------- Н7

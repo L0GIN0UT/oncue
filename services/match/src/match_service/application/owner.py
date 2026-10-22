@@ -428,6 +428,7 @@ class RoomOwner:
         started = time.perf_counter()
         handler = self._handlers.get(command.kind, self._unknown)
         before = copy.deepcopy(room)
+        was_member = room.is_member(command.user_id)
         try:
             build = await handler(room, command, self._now())
             await self.settle(room)
@@ -444,8 +445,10 @@ class RoomOwner:
             # Серия считается по одной записи потока: после перечитывания снимка прежние
             # команды пакета применяются заново и не должны обнулять её.
             self._failures.pop(room.code, None)
-        # Окно op_id — только участникам (иначе посторонние раздувают снимок, аудит Н8).
-        if int(reply["status"]) < SERVER_ERROR and room.is_member(command.user_id):
+        # Окно op_id — только участникам (иначе посторонние раздувают снимок, аудит Н8);
+        # добровольный выход тоже запоминается — его повтор должен вернуть тот же ответ.
+        remembered = room.is_member(command.user_id) or (command.kind == "leave" and was_member)
+        if int(reply["status"]) < SERVER_ERROR and remembered:
             room.remember_op(
                 command.user_id,
                 command.op_id,
@@ -676,7 +679,8 @@ class RoomOwner:
             match_fsm.leave(room, self._require_rules(room), self._timing, user, now)
         else:
             room.leave_lobby(user, now)
-        room.forget_ops(user)
+        # Окно op ушедшего не чистится: повтор leave с тем же op_id — тот же ответ
+        # (правило 5); окно ограничено op_users_max и со временем вытесняется.
         await self._player_rooms.release(user, room.code)
         await self._unsubscribe(user, room)
         return self._room_result(room)
