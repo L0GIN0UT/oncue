@@ -23,8 +23,12 @@ from bff_web_service.application.dto import (
     DailyStatus,
     Domain,
     Item,
+    ItemShelves,
+    MatchResult,
     Me,
     Mode,
+    MyMatches,
+    OpenRooms,
     PersonalRecord,
     SessionResult,
     Shelf,
@@ -95,6 +99,10 @@ class GameClient(Protocol):
         """
         ...
 
+    async def online_modes(self) -> list[Mode]:
+        """Онлайн-режимы для создания комнаты (``/v1/modes?session=online``; кэшируются)."""
+        ...
+
 
 class CatalogClient(Protocol):
     """Публичный API catalog."""
@@ -141,6 +149,29 @@ class LibraryClient(Protocol):
         self, token: str, shelf_ref: str, *, cursor: str | None, limit: int
     ) -> ShelfItems:
         """Полка и страница её единиц. Чужая или нет — ``UpstreamRejectedError(404)``."""
+        ...
+
+    async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
+        """На каких полках пользователя лежит единица (флаг «в медиатеке»)."""
+        ...
+
+
+class MatchClient(Protocol):
+    """Публичный API match (всё только пользователю, D13; не кэшируется).
+
+    Гость — ``UpstreamRejectedError(403, auth.guest_forbidden)``, аноним — 401.
+    """
+
+    async def open_rooms(self, token: str, *, limit: int) -> OpenRooms:
+        """Публичные комнаты в фазе ``lobby`` со свободными местами, новые первыми."""
+        ...
+
+    async def my_matches(self, token: str, *, limit: int) -> MyMatches:
+        """Сыгранные матчи субъекта токена, новые первыми."""
+        ...
+
+    async def match(self, token: str, match_id: UUID) -> MatchResult:
+        """Итог завершённого матча. Нет или ещё идёт — ``UpstreamRejectedError(404)``."""
         ...
 
 

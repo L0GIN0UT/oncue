@@ -32,13 +32,25 @@
     },
     "ClosedDelta": {
       "additionalProperties": false,
-      "description": "Комната закрыта; клиент отписывается",
+      "description": "Комната закрыта; клиент отписывается (при реванше — переходит в rematch_code)",
       "properties": {
         "reason": {
           "description": "Машинная причина: finished, idle, aborted, host_left и т. п.",
           "maxLength": 64,
           "pattern": "^[a-z][a-z0-9_.]*$",
           "type": "string"
+        },
+        "rematch_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Код комнаты реванша, если все согласились (reason=rematch); клиент переходит в неё"
         }
       },
       "required": [

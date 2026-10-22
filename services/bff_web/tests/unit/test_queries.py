@@ -190,6 +190,9 @@ class FakeGame:
             raise self.collection
         return self.collection
 
+    async def online_modes(self) -> list[Mode]:
+        raise AssertionError("экраны соло не читают онлайн-режимы")
+
 
 @dataclass
 class FakeCatalog:

@@ -1,0 +1,230 @@
+{
+  "open_rooms": {
+    "items": [
+      {
+        "code": "K7M2QX9P",
+        "mode": {
+          "key": "film.lobby.frame",
+          "version": 2,
+          "domain": "film",
+          "kind": "lobby",
+          "title_key": "modes.film.lobby.frame.title",
+          "clue_type": "frame_progressive",
+          "answer_format": "classic"
+        },
+        "host_nickname": "neo_2026",
+        "players": 2,
+        "players_max": 6,
+        "settings": {
+          "rounds": 10,
+          "level_window_s": 20,
+          "answer_format": "classic",
+          "clue_type": "frame_progressive",
+          "players_max": 6,
+          "visibility": "public",
+          "collection_ids": [
+            "0192a3b4-c5d6-7e8f-9a0b-000000000c01"
+          ]
+        },
+        "created_at": "2026-10-22T10:00:00Z"
+      }
+    ],
+    "next_cursor": "c2Vjb25k"
+  },
+  "my_matches": {
+    "items": [
+      {
+        "match_id": "0192a3b4-c5d6-7e8f-9a0b-000000000d01",
+        "mode": {
+          "key": "film.duel.frame",
+          "version": 1,
+          "domain": "film",
+          "kind": "duel",
+          "title_key": "modes.film.duel.frame.title",
+          "clue_type": "frame_progressive",
+          "answer_format": "classic",
+          "ranked": false
+        },
+        "finished_at": "2026-10-21T19:00:00Z",
+        "finish": "completed",
+        "players": 2,
+        "place": 1,
+        "score": 36,
+        "outcome": "win",
+        "my_finish": "completed"
+      }
+    ],
+    "next_cursor": null
+  },
+  "match_result": {
+    "match_id": "0192a3b4-c5d6-7e8f-9a0b-000000000d01",
+    "room_code": "K7M2QX9P",
+    "mode": {
+      "key": "film.duel.frame",
+      "version": 1,
+      "domain": "film",
+      "kind": "duel",
+      "title_key": "modes.film.duel.frame.title",
+      "clue_type": "frame_progressive",
+      "answer_format": "classic",
+      "ranked": false
+    },
+    "started_at": "2026-10-21T18:50:00Z",
+    "finished_at": "2026-10-21T19:00:00Z",
+    "finish": "completed",
+    "collection_ids": [],
+    "players": [
+      {
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e01",
+        "nickname": "neo_2026",
+        "slot": 0,
+        "place": 1,
+        "score": 36,
+        "outcome": "win",
+        "finish": "completed"
+      },
+      {
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e02",
+        "nickname": "trinity",
+        "slot": 1,
+        "place": 2,
+        "score": 12,
+        "outcome": "loss",
+        "finish": "completed"
+      }
+    ],
+    "rounds": [
+      {
+        "index": 0,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-0000000000a1",
+        "void": false,
+        "results": [
+          {
+            "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e01",
+            "level": 1,
+            "partial": false,
+            "score": 12,
+            "elapsed_ms": 3400
+          },
+          {
+            "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e02",
+            "level": null,
+            "partial": false,
+            "score": 0,
+            "elapsed_ms": null
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-0000000000a2",
+        "void": true,
+        "results": []
+      },
+      {
+        "index": 2,
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-0000000000a1",
+        "void": false,
+        "results": []
+      }
+    ]
+  },
+  "online_modes": [
+    {
+      "key": "film.duel.frame",
+      "version": 1,
+      "domain": "film",
+      "title_key": "modes.film.duel.frame.title",
+      "source_type": "random",
+      "clue_type": "frame_progressive",
+      "rounds": 7,
+      "levels": [],
+      "allow_guest": false,
+      "presets": null,
+      "answer_format": "classic",
+      "presentation": "score",
+      "start": null,
+      "online": {
+        "kind": "duel",
+        "players": {
+          "min": 2,
+          "max": 2
+        },
+        "rounds": 7,
+        "level_windows_s": [
+          15,
+          15,
+          15
+        ],
+        "contest_type": "race",
+        "ranked": false,
+        "ladder": null,
+        "max_collections": null,
+        "lobby": null,
+        "chat": {
+          "emotes": [
+            "match.emotes.gg"
+          ],
+          "phrases": [
+            "match.phrases.nice"
+          ],
+          "free_text": false
+        }
+      }
+    },
+    {
+      "key": "film.lobby.collection",
+      "version": 1,
+      "domain": "film",
+      "title_key": "modes.film.lobby.collection.title",
+      "source_type": "collection",
+      "clue_type": "frame_progressive",
+      "rounds": 10,
+      "levels": [],
+      "allow_guest": false,
+      "presets": null,
+      "answer_format": "classic",
+      "presentation": "score",
+      "start": null,
+      "online": {
+        "kind": "lobby",
+        "players": {
+          "min": 2,
+          "max": 6
+        },
+        "rounds": 10,
+        "level_windows_s": [
+          20,
+          20
+        ],
+        "contest_type": "parallel",
+        "ranked": false,
+        "ladder": null,
+        "max_collections": 3,
+        "lobby": {
+          "visibility": "public",
+          "overridable": {
+            "players_max": [
+              2,
+              4,
+              6
+            ]
+          }
+        },
+        "chat": {
+          "emotes": [
+            "match.emotes.gg"
+          ],
+          "phrases": [],
+          "free_text": true
+        }
+      }
+    }
+  ],
+  "item_shelves": {
+    "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-0000000000a1",
+    "shelves": [
+      "system:watched"
+    ]
+  }
+}
