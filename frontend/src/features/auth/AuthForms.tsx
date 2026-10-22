@@ -271,19 +271,44 @@ export function RegisterForm({
   );
 }
 
+export type VerifyState = "pending" | "ok" | "failed" | "rate_limited";
+
+/**
+ * Подтвердить e-mail. 429 (лимит gateway `auth_per_ip`) — не «недействительная ссылка»:
+ * токен не израсходован, поэтому повторяем с паузой; не отпустило — `rate_limited`.
+ */
+export async function verifyEmailToken(
+  send: () => Promise<{ status: number; retryAfterS?: number }>,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  attempts = 4,
+): Promise<VerifyState> {
+  for (let i = 0; i < attempts; i++) {
+    const { status, retryAfterS } = await send();
+    if (status !== 429) return status >= 200 && status < 300 ? "ok" : "failed";
+    if (i < attempts - 1) await sleep(Math.min(Math.max(retryAfterS ?? 3, 1), 10) * 1000);
+  }
+  return "rate_limited";
+}
+
 export function VerifyEmail({ token }: { token: string | null }) {
   const t = useTranslations();
-  const [state, setState] = useState<"pending" | "ok" | "failed">(token ? "pending" : "failed");
+  const [state, setState] = useState<VerifyState>(token ? "pending" : "failed");
   const [next, setNext] = useState<string | null>(null);
   const sent = useRef(false);
   useEffect(() => {
     if (!token || sent.current) return;
     sent.current = true;
-    api()
-      .identity.POST("/v1/auth/verify-email", { body: { token } })
-      .then((r) => {
-        if (r.response.ok) setNext(takeRememberedNext());
-        setState(r.response.ok ? "ok" : "failed");
+    verifyEmailToken(async () => {
+      const r = await api().identity.POST("/v1/auth/verify-email", { body: { token } });
+      const retryAfter = Number(r.response.headers.get("Retry-After"));
+      return {
+        status: r.response.status,
+        retryAfterS: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+      };
+    })
+      .then((result) => {
+        if (result === "ok") setNext(takeRememberedNext());
+        setState(result);
       })
       .catch(() => setState("failed"));
   }, [token]);
