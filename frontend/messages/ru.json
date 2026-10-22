@@ -799,8 +799,8 @@
     "create": {
       "title": "Создать комнату",
       "empty": "Онлайн-режимов пока нет.",
-      "rounds": "{rounds, plural, one {# раунд} few {# раунда} many {# раундов} other {# раунда}}",
-      "busy": "Создаём комнату…"
+      "busy": "Создаём комнату…",
+      "rules": "{kind}: {rounds, plural, one {# раунд} few {# раунда} many {# раундов} other {# раунда}}, {min}–{max} игроков"
     },
     "join": {
       "title": "Войти по коду",

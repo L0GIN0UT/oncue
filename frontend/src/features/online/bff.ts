@@ -1,7 +1,7 @@
 /**
  * Экраны bff-web этапа 4a: `/v1/pages/online` (хаб) и `/v1/pages/match/{id}` (итог матча).
  *
- * `status` хаба: `ok`; `auth_required` — гость или аноним (D13, экран регистрации);
+ * Типы — из снимка `contracts/openapi/bff_web.json` (`pnpm gen:api`). `status` хаба: `ok`; `auth_required` — гость или аноним (D13, экран регистрации);
  * `session_expired` — токен не прошёл проверку (bff отвечает 200, поэтому общий refresh на
  * 401 в `apiFetch` не срабатывает): обновляем сессию через тот же single-flight и повторяем
  * запрос один раз; не вышло — экран входа.
@@ -17,6 +17,7 @@ export type OnlinePage = B["OnlinePage"];
 export type MatchPage = B["MatchPage"];
 export type MatchSummary = B["MatchSummary"];
 export type ItemShelvesCard = B["ItemShelvesCard"];
+export type OnlineModeCard = B["OnlineModeCard"];
 
 type Block<T> = { status: "ok" | "unavailable"; data?: T | null };
 

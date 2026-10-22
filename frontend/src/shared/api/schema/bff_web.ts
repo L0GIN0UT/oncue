@@ -298,6 +298,16 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[OnlineModeCard]] */
+        Block_list_OnlineModeCard__: {
+            /** Data */
+            data?: components["schemas"]["OnlineModeCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[RecordCard]] */
         Block_list_RecordCard__: {
             /** Data */
@@ -756,6 +766,7 @@ export interface components {
             /** Shelves */
             shelves: string[];
         };
+        JsonValue: unknown;
         /**
          * LibraryBlocks
          * @description Блоки медиатеки.
@@ -1033,9 +1044,56 @@ export interface components {
          */
         OnlineBlocks: {
             /** @description Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`) */
-            modes: components["schemas"]["Block_list_ModeCard__"];
+            modes: components["schemas"]["Block_list_OnlineModeCard__"];
             my_matches: components["schemas"]["Block_MyMatchesList_"];
             open_rooms: components["schemas"]["Block_OpenRoomsList_"];
+        };
+        /**
+         * OnlineChatCard
+         * @description Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``).
+         */
+        OnlineChatCard: {
+            /** Emotes */
+            emotes: string[];
+            /**
+             * Free Text
+             * @description Свободный чат — только кастомное лобби (ADR 0036)
+             */
+            free_text: boolean;
+            /** Phrases */
+            phrases: string[];
+        };
+        /**
+         * OnlineModeCard
+         * @description Онлайн-режим для создания комнаты (``game /v1/modes?session=online``).
+         */
+        OnlineModeCard: {
+            /**
+             * Answer Format
+             * @enum {string}
+             */
+            answer_format: "classic" | "pick";
+            /** Clue Type */
+            clue_type: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Key */
+            key: string;
+            online: components["schemas"]["OnlineRulesCard"];
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation: "score" | "streak" | "bracket";
+            /** Source Type */
+            source_type: string;
+            /** Title Key */
+            title_key: string;
+            /** Version */
+            version: number;
         };
         /**
          * OnlinePage
@@ -1049,6 +1107,50 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "auth_required" | "session_expired";
+        };
+        /**
+         * OnlineRulesCard
+         * @description Правила комнаты онлайн-режима (``game ModeOut.online``, ADR 0032).
+         */
+        OnlineRulesCard: {
+            chat: components["schemas"]["OnlineChatCard"];
+            /**
+             * Contest Type
+             * @description Плагин состязания (`race`, `parallel`)
+             */
+            contest_type: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "duel" | "party" | "lobby";
+            /** Ladder */
+            ladder?: string | null;
+            /**
+             * Level Windows S
+             * @description Окно каждого уровня загадки, с
+             */
+            level_windows_s: number[];
+            /**
+             * Lobby
+             * @description Только у кастомного лобби: `{visibility, overridable}` (LobbySpec конфига)
+             */
+            lobby?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Max Collections
+             * @description Только у лобби по сборнику: сколько сборников выбрать
+             */
+            max_collections?: number | null;
+            /** Players Max */
+            players_max: number;
+            /** Players Min */
+            players_min: number;
+            /** Ranked */
+            ranked: boolean;
+            /** Rounds */
+            rounds: number;
         };
         /**
          * OpenRoomCard

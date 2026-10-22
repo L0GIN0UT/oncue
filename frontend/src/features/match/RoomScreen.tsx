@@ -285,7 +285,14 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
       )}
 
       {room.phase === "lobby" ? (
-        <LobbyPanel room={room} myId={myId} bubbles={bubbles} act={act} commands={lobbyCommands} />
+        <LobbyPanel
+          room={room}
+          myId={myId}
+          bubbles={bubbles}
+          feed={store.feed}
+          act={act}
+          commands={{ ...lobbyCommands, emote: matchCommands.emote, chat: matchCommands.chat }}
+        />
       ) : showSummary && matchId ? (
         <MatchSummaryView
           matchId={matchId}

@@ -65,7 +65,12 @@ export function JoinByCode() {
         </Button>
       </div>
       {error && (
-        <p id={`${id}-error`} role="alert" className="text-sm text-miss">
+        <p
+          id={`${id}-error`}
+          role="alert"
+          className="text-sm text-miss"
+          data-testid="room-code-error"
+        >
           {t("online.join.invalid")}
         </p>
       )}

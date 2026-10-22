@@ -7,6 +7,8 @@ import type { MockWorld } from "./world";
 import { MODES, itemById } from "./world";
 import { audioWav, frameSvg } from "./media";
 import { createUgcHandlers } from "./handlers-3b";
+import { createMatchHandlers } from "./handlers-match";
+import type { MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
 const CSRF = "gv_csrf";
@@ -62,7 +64,7 @@ function withCookies(response: Response, cookies: string[]): Response {
   return response;
 }
 
-export function createHandlers(world: MockWorld): HttpHandler[] {
+export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpHandler[] {
   const g = "*/api/game/v1";
 
   /** Общая обвязка хода: субъект, CSRF, идемпотентность, версия. */
@@ -401,6 +403,9 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     // ---------------------------------------------------------------- этап 3b
     ...createUgcHandlers(world),
+
+    // ---------------------------------------------------------------- этап 4a: онлайн
+    ...(matchWorld ? createMatchHandlers(world, matchWorld) : []),
 
     // ---------------------------------------------------------------- identity
     http.post("*/api/identity/v1/auth/guest", ({ request }) => {

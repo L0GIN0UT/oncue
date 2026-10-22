@@ -9,11 +9,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
-import type { Domain, ModeCard } from "@/shared/api/types";
+import type { Domain } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { createRoom } from "@/features/match/api";
 import { matchErrorKey } from "@/features/match/errors";
-import { blockData, useOnlinePage } from "./bff";
+import { blockData, useOnlinePage, type OnlineModeCard } from "./bff";
 import { JoinByCode } from "./JoinByCode";
 import { MyMatchList, OpenRoomList } from "./lists";
 import { OnlineAuthRequired } from "./OnlineGate";
@@ -112,14 +112,14 @@ export function OnlineHub() {
   );
 }
 
-function ModePicker({ modes }: { modes: ModeCard[] }) {
+function ModePicker({ modes }: { modes: OnlineModeCard[] }) {
   const t = useTranslations();
   const dt = useDynamicT();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const create = async (mode: ModeCard) => {
+  const create = async (mode: OnlineModeCard) => {
     setBusy(mode.key);
     setError(null);
     try {
@@ -135,7 +135,10 @@ function ModePicker({ modes }: { modes: ModeCard[] }) {
   return (
     <div className="flex flex-col gap-6">
       {DOMAINS.map((domain) => {
-        const list = modes.filter((m) => m.domain === domain);
+        // Рейтинговые комнаты — только из очереди (4b); режимы по сборнику — со страницы сборника.
+        const list = modes.filter(
+          (m) => m.domain === domain && !m.online.ranked && !m.online.max_collections,
+        );
         if (!list.length) return null;
         return (
           <div key={domain} data-domain={domain} className="flex flex-col gap-3">
@@ -160,7 +163,12 @@ function ModePicker({ modes }: { modes: ModeCard[] }) {
                       <span className="text-sm text-ink-muted">
                         {busy === mode.key
                           ? t("online.create.busy")
-                          : t("online.create.rounds", { rounds: mode.rounds })}
+                          : t("online.create.rules", {
+                              kind: t(`online.kind.${mode.online.kind}`),
+                              rounds: mode.online.rounds,
+                              min: mode.online.players_min,
+                              max: mode.online.players_max,
+                            })}
                       </span>
                     </span>
                   </button>

@@ -4,17 +4,21 @@
  * Next в e2e переписывает `/api/*` и `/media/*` сюда (`GV_DEV_API_ORIGIN`, см. src/proxy.ts),
  * а SSR ходит в bff по `GV_BFF_INTERNAL_URL` — пути `/v1/...` сервер считает путями bff.
  * Управление сценариями: `POST /__mock/reset`, `POST /__mock/scenario {desyncOnce: true}`;
- * сборники и медиатека (этап 3b) — `POST /__mock/scenario {ugc: {draftConflictOnce: true}}`.
+ * сборники и медиатека (этап 3b) — `POST /__mock/scenario {ugc: {draftConflictOnce: true}}`;
+ * онлайн (этап 4a) — `POST /__mock/scenario {match: {dropNextMessage: true}}` (см. match.ts).
  */
 import { createServer, type IncomingMessage } from "node:http";
 import { getResponse } from "msw";
 import { createHandlers } from "./handlers";
 import { MockWorld, type Scenario } from "./world";
 import type { UgcScenario } from "./ugc";
+import { MatchWorld, type MatchScenario } from "./match";
 
 const port = Number(process.env.MOCK_PORT ?? 3101);
 const world = new MockWorld();
-const handlers = createHandlers(world);
+const matchWorld = new MatchWorld(world);
+matchWorld.startClock();
+const handlers = createHandlers(world, matchWorld);
 
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -28,15 +32,18 @@ const server = createServer(async (req, res) => {
     let path = req.url ?? "/";
     if (path === "/__mock/reset" && req.method === "POST") {
       world.reset();
+      matchWorld.reset();
       res.writeHead(204).end();
       return;
     }
     if (path === "/__mock/scenario" && req.method === "POST") {
-      const { ugc, ...rest } = JSON.parse(body.toString() || "{}") as Scenario & {
+      const { ugc, match, ...rest } = JSON.parse(body.toString() || "{}") as Scenario & {
         ugc?: UgcScenario;
+        match?: MatchScenario;
       };
       world.scenario = { ...world.scenario, ...rest };
       if (ugc) world.ugc.scenario = { ...world.ugc.scenario, ...ugc };
+      if (match) matchWorld.scenario = { ...matchWorld.scenario, ...match };
       res.writeHead(204).end();
       return;
     }

@@ -12,6 +12,7 @@ import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useModeTitle } from "@/features/online/lists";
+import { ChatPanel } from "./ChatPanel";
 import { PlayersRail } from "./PlayersRail";
 import type { FeedItem } from "./room-store";
 
@@ -29,6 +30,8 @@ type Props = {
   room: RoomView;
   myId: string | null;
   bubbles: Map<string, FeedItem>;
+  /** Лента чата и эмоций комнаты (чат доступен и в лобби). */
+  feed: FeedItem[];
   /** Выполнить действие; ошибку показывает экран комнаты. */
   act: (action: () => Promise<unknown>) => Promise<void>;
   commands: {
@@ -39,10 +42,12 @@ type Props = {
     transferHost: (userId: string) => Promise<unknown>;
     resetMemory: () => Promise<unknown>;
     leave: () => Promise<unknown>;
+    emote: (kind: "emote" | "phrase", key: string) => Promise<unknown>;
+    chat: (text: string) => Promise<unknown>;
   };
 };
 
-export function LobbyPanel({ room, myId, bubbles, act, commands }: Props) {
+export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) {
   const t = useTranslations();
   const toast = useToast();
   const modeTitle = useModeTitle();
@@ -125,6 +130,14 @@ export function LobbyPanel({ room, myId, bubbles, act, commands }: Props) {
           </ul>
         )}
       </section>
+
+      <ChatPanel
+        chat={room.chat}
+        feed={feed}
+        players={room.players}
+        onEmote={commands.emote}
+        onChat={commands.chat}
+      />
 
       {room.options && (
         <SettingsForm
