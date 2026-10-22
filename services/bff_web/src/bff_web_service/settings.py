@@ -11,8 +11,8 @@ class UpstreamSettings(BaseModel):
     """Адреса сервисов-источников и защита от их отказов (план этапа 2, §6).
 
     Attributes:
-        game_url / catalog_url / identity_url / collections_url / library_url: Внутренние
-            адреса (``GV_UPSTREAMS__GAME_URL``, ``GV_UPSTREAMS__COLLECTIONS_URL`` …).
+        game_url / catalog_url / identity_url / collections_url / library_url / match_url:
+            Внутренние адреса (``GV_UPSTREAMS__GAME_URL``, ``GV_UPSTREAMS__MATCH_URL`` …).
         timeout_s: Общий таймаут одного вызова: медленный источник не держит страницу.
         max_concurrency: Одновременных вызовов на один запрос страницы.
         breaker_failures: Подряд неудачных вызовов, после которых сервис считается упавшим.
@@ -27,6 +27,7 @@ class UpstreamSettings(BaseModel):
     identity_url: str = "http://identity:8000"
     collections_url: str = "http://collections:8000"
     library_url: str = "http://library:8000"
+    match_url: str = "http://match:8000"
     timeout_s: float = Field(default=1.5, gt=0, le=30)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     breaker_failures: int = Field(default=5, ge=1)
@@ -83,6 +84,11 @@ class PagesSettings(BaseModel):
             (``featured``, ``popular``, ``new``).
         collections_results_limit: Карточек на странице результатов поиска сборников.
         library_items_limit: Единиц на странице полки медиатеки.
+        online_rooms_limit: Открытых лобби в блоке хаба онлайна (дальше — курсор match).
+        online_matches_limit: Последних матчей в блоке «Мои матчи» хаба онлайна.
+        match_items_deadline_s: Общий предел на блоки ``items`` (catalog) и ``library``
+            итога матча: до 50 единиц идут волнами по ``max_concurrency``, и без общего
+            предела страница ждала бы ``волны × timeout_s``. Не успел — блок ``unavailable``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -94,6 +100,9 @@ class PagesSettings(BaseModel):
     collections_showcase_limit: int = Field(default=12, ge=1, le=50)
     collections_results_limit: int = Field(default=20, ge=1, le=50)
     library_items_limit: int = Field(default=50, ge=1, le=100)
+    online_rooms_limit: int = Field(default=20, ge=1, le=50)
+    online_matches_limit: int = Field(default=10, ge=1, le=50)
+    match_items_deadline_s: float = Field(default=2.0, gt=0, le=30)
 
 
 class Settings(ServiceSettings):
