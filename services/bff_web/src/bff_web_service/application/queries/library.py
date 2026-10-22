@@ -52,8 +52,10 @@ class GetLibraryPage:
         """
         token = _user_token(viewer)
         shelves = await Limiter(self._concurrency).attempt(self._library.shelves(token))
-        if isinstance(shelves, UpstreamRejectedError):
-            raise screen_error(shelves, not_found="медиатека не найдена")
+        if isinstance(shelves, UpstreamRejectedError) and (
+            error := screen_error(shelves, not_found="медиатека не найдена")
+        ):
+            raise error
         return LibraryPage(blocks=LibraryBlocks(shelves=block_of(shelves, "library.shelves")))
 
 
@@ -77,6 +79,8 @@ class GetLibraryShelfPage:
         page = await Limiter(self._concurrency).attempt(
             self._library.shelf_items(token, shelf_ref, cursor=cursor, limit=self._limit)
         )
-        if isinstance(page, UpstreamRejectedError):
-            raise screen_error(page, not_found="полка не найдена")
+        if isinstance(page, UpstreamRejectedError) and (
+            error := screen_error(page, not_found="полка не найдена")
+        ):
+            raise error
         return LibraryShelfPage(blocks=LibraryShelfBlocks(shelf=block_of(page, "library.shelf")))

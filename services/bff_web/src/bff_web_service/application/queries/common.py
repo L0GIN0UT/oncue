@@ -71,11 +71,13 @@ def block_of[T](value: T | UpstreamError, block: str) -> Block[T]:
     return Block.ok(value)
 
 
-def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError:
+def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError | None:
     """Осознанный отказ источника → ответ экрана с кодом источника.
 
-    404 и прочие 4xx становятся 404 (``not_found`` — сообщение): не раскрываем, почему
-    ресурса нет (IDOR). 422 — ошибка входа (например, курсор от другой сортировки).
+    Ответом экрана становятся только описанные отказы: 401, 403, 404 (``not_found`` —
+    сообщение, код источника), 409 и 422 (например, курсор от другой сортировки). Прочие
+    4xx (400, 410, 418 …) — не «ресурса нет», а сбой источника: ``None``, вызывающий
+    гасит блок (``block_of`` пишет причину в лог).
     """
     if exc.status == HTTP_UNAUTHORIZED:
         return UnauthenticatedError("источник не принял токен", code=exc.code)
@@ -85,8 +87,9 @@ def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError:
         return ConflictError("источник отклонил запрос", code=exc.code)
     if exc.status == HTTP_UNPROCESSABLE:
         return InvalidInputError("источник отклонил параметры", code=exc.code)
-    code = exc.code if exc.status == HTTP_NOT_FOUND else NotFoundError.default_code
-    return NotFoundError(not_found, code=code)
+    if exc.status == HTTP_NOT_FOUND:
+        return NotFoundError(not_found, code=exc.code)
+    return None
 
 
 def mode_card(mode: Mode) -> ModeCard:

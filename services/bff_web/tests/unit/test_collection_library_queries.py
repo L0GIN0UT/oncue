@@ -375,3 +375,18 @@ async def test_foreign_shelf_is_404() -> None:
             USER, "0192a3b4-c5d6-7e8f-9a0b-000000000d01", cursor=None
         )
     assert caught.value.code == "library.shelf_not_found"
+
+
+async def test_undescribed_4xx_is_unavailable_block_not_404() -> None:
+    """``screen_error``: 404 экрана — только на 404 источника; 410/400 — сбой, блок гаснет."""
+    gone = UpstreamRejectedError("library", 410, "library.gone")
+    shelf_page = await GetLibraryShelfPage(
+        FakeLibrary(items_answer=gone), concurrency=10, items_limit=50
+    )(USER, "system:watch_later", cursor=None)
+    assert shelf_page.blocks.shelf.status is BlockStatus.UNAVAILABLE
+
+    odd = UpstreamRejectedError("collections", 400, "collections.bad")
+    page = await GetCollectionPage(FakeCollections(answer=odd), FakeGame(), concurrency=10)(
+        USER, CID
+    )
+    assert page.blocks.collection.status is BlockStatus.UNAVAILABLE
