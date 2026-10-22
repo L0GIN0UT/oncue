@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import httpx
 import pytest
+import respx
 from bff_web_service.main import DEFINITION
 from bff_web_service.settings import Settings
 from pydantic import SecretStr
@@ -24,6 +27,7 @@ pytestmark = pytest.mark.component
 
 GAME, CATALOG, IDENTITY = "http://game.test", "http://catalog.test", "http://identity.test"
 COLLECTIONS, LIBRARY = "http://collections.test", "http://library.test"
+MATCH = "http://match.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -206,6 +210,7 @@ class Stubs:
     identity: ServiceStub
     collections: ServiceStub
     library: ServiceStub
+    match: ServiceStub
 
 
 @dataclass
@@ -227,6 +232,7 @@ def stubs() -> Iterator[Stubs]:
             identity=stack.enter_context(stub_service(IDENTITY, service="identity")),
             collections=stack.enter_context(stub_service(COLLECTIONS, service="collections")),
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
+            match=stack.enter_context(stub_service(MATCH, service="match")),
         )
 
 
@@ -244,6 +250,7 @@ async def bff(
             "identity_url": IDENTITY,
             "collections_url": COLLECTIONS,
             "library_url": LIBRARY,
+            "match_url": MATCH,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -1018,3 +1025,239 @@ async def test_library_foreign_shelf_is_404(bff: Bff) -> None:
 )
 async def test_collection_and_library_page_params_are_strict(bff: Bff, path: str) -> None:
     assert (await bff.client.get(path)).status_code == 422
+
+
+# ----------------------------------------------------------------------------- онлайн (4a)
+SAMPLES: dict[str, Any] = json.loads(
+    (Path(__file__).parents[1] / "data" / "match.json").read_text(encoding="utf-8")
+)
+MATCH_ID = UUID(SAMPLES["match_result"]["match_id"])
+ITEM_2 = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a2")
+UNAVAILABLE = {"status": "unavailable", "data": None}
+
+
+def _online_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
+    rooms = bff.stubs.match.route("GET", "/v1/rooms/open").respond(200, json=SAMPLES["open_rooms"])
+    matches = bff.stubs.match.route("GET", "/v1/me/matches").respond(
+        200, json=SAMPLES["my_matches"]
+    )
+    modes = bff.stubs.game.route("GET", "/v1/modes").respond(200, json=SAMPLES["online_modes"])
+    return rooms, matches, modes
+
+
+async def test_online_page_for_user_all_blocks(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    rooms, matches, modes = _online_routes(bff)
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    body = response.json()
+    assert body["status"] == "ok"
+    blocks = body["blocks"]
+    assert blocks["open_rooms"]["status"] == "ok"
+    room = blocks["open_rooms"]["data"]["items"][0]
+    assert room["code"] == "K7M2QX9P"
+    assert room["mode"]["kind"] == "lobby"
+    assert room["mode"]["ranked"] is False  # поле по умолчанию match
+    assert room["settings"]["collection_ids"] == ["0192a3b4-c5d6-7e8f-9a0b-000000000c01"]
+    assert blocks["open_rooms"]["data"]["next_cursor"] == "c2Vjb25k"
+    assert blocks["my_matches"] == {"status": "ok", "data": SAMPLES["my_matches"]}
+    assert [m["key"] for m in blocks["modes"]["data"]] == ["film.duel.frame"]
+    assert rooms.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert matches.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert dict(rooms.calls.last.request.url.params) == {"limit": "20"}
+    assert dict(matches.calls.last.request.url.params) == {"limit": "10"}
+    assert dict(modes.calls.last.request.url.params) == {"session": "online"}
+    assert "authorization" not in modes.calls.last.request.headers  # публичный, кэшируемый
+
+
+async def test_online_page_guest_and_anonymous_get_auth_required_without_calls(bff: Bff) -> None:
+    rooms, matches, modes = _online_routes(bff)
+
+    for headers in ({}, bff.bearer(bff.issuer.issue_guest())):
+        response = await bff.client.get("/v1/pages/online", headers=headers)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == PRIVATE
+        assert response.json() == {"status": "auth_required", "blocks": None}
+    assert rooms.call_count == matches.call_count == modes.call_count == 0
+
+
+@pytest.mark.parametrize("failure", ["5xx", "timeout", "contract"])
+async def test_online_page_match_down_degrades_its_block_only(bff: Bff, failure: str) -> None:
+    rooms, _, _ = _online_routes(bff)
+    if failure == "5xx":
+        rooms.respond(503)
+    elif failure == "timeout":
+        rooms.mock(side_effect=httpx.ReadTimeout("slow"))
+    else:
+        rooms.respond(200, json={"items": [{"code": "bad"}]})
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["open_rooms"] == UNAVAILABLE
+    assert blocks["my_matches"]["status"] == "ok"
+    assert blocks["modes"]["status"] == "ok"
+
+
+async def test_online_page_match_stub_501_and_game_down_are_unavailable(bff: Bff) -> None:
+    """match до реализации отвечает 501 — блоки гаснут, страница 200."""
+    problem = {"code": "core.not_implemented", "title": "Not implemented", "status": 501}
+    bff.stubs.match.route("GET", "/v1/rooms/open").respond(501, json=problem)
+    bff.stubs.match.route("GET", "/v1/me/matches").respond(501, json=problem)
+    bff.stubs.game.route("GET", "/v1/modes").respond(503)
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "blocks": {"open_rooms": UNAVAILABLE, "my_matches": UNAVAILABLE, "modes": UNAVAILABLE},
+    }
+
+
+async def test_online_modes_are_cached_under_own_key(bff: Bff) -> None:
+    _, _, online = _online_routes(bff)
+    token = bff.bearer(bff.issuer.issue())
+
+    await bff.client.get("/v1/pages/online", headers=token)
+    await bff.client.get("/v1/pages/online", headers=token)
+    assert online.call_count == 1  # второй раз — из Redis
+
+    await bff.client.get("/v1/pages/home")
+    assert online.call_count == 2  # витрина соло не берёт онлайн-режимы из кэша
+    assert "session" not in online.calls.last.request.url.params
+
+
+# ----------------------------------------------------------------------------- итог матча
+def _match_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
+    result = bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json=SAMPLES["match_result"]
+    )
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+    item_2 = bff.stubs.catalog.route("GET", f"/v1/items/{ITEM_2}").respond(
+        200, json={**CARD, "id": str(ITEM_2), "title": "Брат 2"}
+    )
+    shelves_1 = bff.stubs.library.route("GET", f"/v1/items/{ITEM}/shelves").respond(
+        200, json=SAMPLES["item_shelves"]
+    )
+    bff.stubs.library.route("GET", f"/v1/items/{ITEM_2}/shelves").respond(
+        200, json={"media_item_id": str(ITEM_2), "shelves": []}
+    )
+    return result, item_2, shelves_1
+
+
+async def test_match_page_result_items_and_library_flags(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    result, _, shelves_1 = _match_routes(bff)
+
+    response = await bff.client.get(f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    blocks = response.json()["blocks"]
+    assert blocks["match"] == {"status": "ok", "data": SAMPLES["match_result"]}
+    # Раунды 0 и 2 — одна единица: карточка и флаг по ней — по одному разу.
+    assert [i["title"] for i in blocks["items"]["data"]] == ["Брат", "Брат 2"]
+    assert blocks["library"] == {
+        "status": "ok",
+        "data": [
+            {"media_item_id": str(ITEM), "shelves": ["system:watched"]},
+            {"media_item_id": str(ITEM_2), "shelves": []},
+        ],
+    }
+    assert result.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert shelves_1.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert shelves_1.call_count == 1
+
+
+async def test_match_page_requires_user_without_calling_match(bff: Bff) -> None:
+    result, _, _ = _match_routes(bff)
+    path = f"/v1/pages/match/{MATCH_ID}"
+
+    assert_problem(await bff.client.get(path), 401, "auth.unauthenticated")
+    assert_problem(
+        await bff.client.get(path, headers=bff.bearer(bff.issuer.issue_guest())),
+        403,
+        "auth.guest_forbidden",
+    )
+    assert result.call_count == 0
+
+
+async def test_match_page_missing_or_running_is_404(bff: Bff) -> None:
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        404, json={"code": "match.match_not_found", "title": "Not found", "status": 404}
+    )
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    assert_problem(response, 404, "match.match_not_found")
+
+
+@pytest.mark.parametrize("failure", ["501", "timeout"])
+async def test_match_page_match_down_is_200_unavailable(bff: Bff, failure: str) -> None:
+    route = bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}")
+    if failure == "501":
+        route.respond(501, json={"code": "core.not_implemented", "status": 501})
+    else:
+        route.mock(side_effect=httpx.ConnectTimeout("slow"))
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "blocks": {"match": UNAVAILABLE, "items": UNAVAILABLE, "library": UNAVAILABLE}
+    }
+
+
+async def test_match_page_catalog_and_library_degrade_independently(bff: Bff) -> None:
+    _, item_2, _ = _match_routes(bff)
+    item_2.respond(503)
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["match"]["status"] == "ok"
+    assert blocks["items"] == UNAVAILABLE
+    assert blocks["library"]["status"] == "ok"
+
+
+async def test_match_page_library_timeout_hides_only_flags(bff: Bff) -> None:
+    _match_routes(bff)
+    bff.stubs.library.route("GET", f"/v1/items/{ITEM_2}/shelves").mock(
+        side_effect=httpx.ReadTimeout("slow")
+    )
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    blocks = response.json()["blocks"]
+    assert blocks["library"] == UNAVAILABLE
+    assert blocks["items"]["status"] == "ok"
+
+
+async def test_match_page_blocked_item_is_skipped(bff: Bff) -> None:
+    _, item_2, _ = _match_routes(bff)
+    item_2.respond(404, json={"code": "catalog.item_not_found", "title": "Nf", "status": 404})
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    blocks = response.json()["blocks"]
+    assert [i["media_item_id"] for i in blocks["items"]["data"]] == [str(ITEM)]
+    assert blocks["library"]["status"] == "ok"
+
+
+async def test_match_page_id_must_be_uuid(bff: Bff) -> None:
+    response = await bff.client.get("/v1/pages/match/123", headers=bff.bearer(bff.issuer.issue()))
+    assert response.status_code == 422

@@ -55,6 +55,87 @@
         "title": "Block[CollectionResults]",
         "type": "object"
       },
+      "Block_MatchSummary_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[MatchSummary]",
+        "type": "object"
+      },
+      "Block_MyMatchesList_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyMatchesList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[MyMatchesList]",
+        "type": "object"
+      },
+      "Block_OpenRoomsList_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenRoomsList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[OpenRoomsList]",
+        "type": "object"
+      },
       "Block_ResultSummary_": {
         "properties": {
           "data": {
@@ -200,6 +281,37 @@
           "status"
         ],
         "title": "Block[list[ItemCard]]",
+        "type": "object"
+      },
+      "Block_list_ItemShelvesCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ItemShelvesCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[ItemShelvesCard]]",
         "type": "object"
       },
       "Block_list_ModeCard__": {
@@ -1216,6 +1328,29 @@
         "title": "ItemCard",
         "type": "object"
       },
+      "ItemShelvesCard": {
+        "description": "Флаг «в медиатеке»: полки пользователя с единицей (пусто — не сохранена).",
+        "properties": {
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "shelves": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shelves",
+            "type": "array"
+          }
+        },
+        "required": [
+          "media_item_id",
+          "shelves"
+        ],
+        "title": "ItemShelvesCard",
+        "type": "object"
+      },
       "LibraryBlocks": {
         "description": "Блоки медиатеки.",
         "properties": {
@@ -1266,6 +1401,272 @@
           "blocks"
         ],
         "title": "LibraryShelfPage",
+        "type": "object"
+      },
+      "MatchBlocks": {
+        "description": "Блоки экрана итога матча.",
+        "properties": {
+          "items": {
+            "$ref": "#/components/schemas/Block_list_ItemCard__"
+          },
+          "library": {
+            "$ref": "#/components/schemas/Block_list_ItemShelvesCard__"
+          },
+          "match": {
+            "$ref": "#/components/schemas/Block_MatchSummary_"
+          }
+        },
+        "required": [
+          "match",
+          "items",
+          "library"
+        ],
+        "title": "MatchBlocks",
+        "type": "object"
+      },
+      "MatchModeCard": {
+        "description": "Шаблон режима комнаты или матча (``match ModeRef``).",
+        "properties": {
+          "answer_format": {
+            "title": "Answer Format",
+            "type": "string"
+          },
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "duel",
+              "party",
+              "lobby"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ranked": {
+            "default": false,
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "domain",
+          "kind",
+          "title_key",
+          "clue_type",
+          "answer_format"
+        ],
+        "title": "MatchModeCard",
+        "type": "object"
+      },
+      "MatchPage": {
+        "description": "``GET /v1/pages/match/{match_id}`` (только пользователь).",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/MatchBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "MatchPage",
+        "type": "object"
+      },
+      "MatchPlayerCard": {
+        "description": "Игрок в итоге матча: место с ничьими (1, 1, 3), ``outcome`` — только у дуэли.",
+        "properties": {
+          "finish": {
+            "enum": [
+              "completed",
+              "forfeit",
+              "left",
+              "tech_win",
+              "tech_loss"
+            ],
+            "title": "Finish",
+            "type": "string"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "win",
+                  "loss",
+                  "draw"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "place": {
+            "minimum": 1.0,
+            "title": "Place",
+            "type": "integer"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "slot": {
+            "minimum": 0.0,
+            "title": "Slot",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname",
+          "slot",
+          "place",
+          "score",
+          "outcome",
+          "finish"
+        ],
+        "title": "MatchPlayerCard",
+        "type": "object"
+      },
+      "MatchRoundCard": {
+        "description": "Раунд итога: карточка единицы — в блоке ``items`` по ``media_item_id``.",
+        "properties": {
+          "index": {
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "media_item_id": {
+            "format": "uuid",
+            "title": "Media Item Id",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/RoundPlayerResultCard"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "void": {
+            "default": false,
+            "description": "Раунд аннулирован (ассет недоступен)",
+            "title": "Void",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "index",
+          "media_item_id",
+          "results"
+        ],
+        "title": "MatchRoundCard",
+        "type": "object"
+      },
+      "MatchSummary": {
+        "description": "Итог матча (``match /v1/matches/{id}``).",
+        "properties": {
+          "collection_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Collection Ids",
+            "type": "array"
+          },
+          "finish": {
+            "enum": [
+              "completed",
+              "forfeit",
+              "tech_win",
+              "aborted"
+            ],
+            "title": "Finish",
+            "type": "string"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/MatchModeCard"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/MatchPlayerCard"
+            },
+            "title": "Players",
+            "type": "array"
+          },
+          "room_code": {
+            "title": "Room Code",
+            "type": "string"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/MatchRoundCard"
+            },
+            "title": "Rounds",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match_id",
+          "room_code",
+          "mode",
+          "started_at",
+          "finished_at",
+          "finish",
+          "players",
+          "rounds"
+        ],
+        "title": "MatchSummary",
         "type": "object"
       },
       "ModeCard": {
@@ -1410,6 +1811,242 @@
           }
         },
         "title": "ModeStartCard",
+        "type": "object"
+      },
+      "MyMatchCard": {
+        "description": "Матч в «Моих матчах» (``match /v1/me/matches``).",
+        "properties": {
+          "finish": {
+            "enum": [
+              "completed",
+              "forfeit",
+              "tech_win",
+              "aborted"
+            ],
+            "title": "Finish",
+            "type": "string"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/MatchModeCard"
+          },
+          "my_finish": {
+            "enum": [
+              "completed",
+              "forfeit",
+              "left",
+              "tech_win",
+              "tech_loss"
+            ],
+            "title": "My Finish",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "win",
+                  "loss",
+                  "draw"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у дуэли",
+            "title": "Outcome"
+          },
+          "place": {
+            "minimum": 1.0,
+            "title": "Place",
+            "type": "integer"
+          },
+          "players": {
+            "minimum": 1.0,
+            "title": "Players",
+            "type": "integer"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "match_id",
+          "mode",
+          "finished_at",
+          "finish",
+          "players",
+          "place",
+          "score",
+          "outcome",
+          "my_finish"
+        ],
+        "title": "MyMatchCard",
+        "type": "object"
+      },
+      "MyMatchesList": {
+        "description": "Мои последние матчи; ``next_cursor`` — для ``match /v1/me/matches``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MyMatchCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MyMatchesList",
+        "type": "object"
+      },
+      "OnlineBlocks": {
+        "description": "Блоки хаба онлайна: каждый деградирует независимо.",
+        "properties": {
+          "modes": {
+            "$ref": "#/components/schemas/Block_list_ModeCard__",
+            "description": "Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
+          },
+          "my_matches": {
+            "$ref": "#/components/schemas/Block_MyMatchesList_"
+          },
+          "open_rooms": {
+            "$ref": "#/components/schemas/Block_OpenRoomsList_"
+          }
+        },
+        "required": [
+          "open_rooms",
+          "my_matches",
+          "modes"
+        ],
+        "title": "OnlineBlocks",
+        "type": "object"
+      },
+      "OnlinePage": {
+        "description": "``GET /v1/pages/online``: ``auth_required`` — гость или аноним (D13), ``blocks: null``.",
+        "properties": {
+          "blocks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnlineBlocks"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "auth_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OnlinePage",
+        "type": "object"
+      },
+      "OpenRoomCard": {
+        "description": "Открытое лобби (``match /v1/rooms/open``): вход — по ``code`` напрямую в match.",
+        "properties": {
+          "code": {
+            "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "host_nickname": {
+            "title": "Host Nickname",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/MatchModeCard"
+          },
+          "players": {
+            "minimum": 0.0,
+            "title": "Players",
+            "type": "integer"
+          },
+          "players_max": {
+            "minimum": 2.0,
+            "title": "Players Max",
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/RoomSettingsCard"
+          }
+        },
+        "required": [
+          "code",
+          "mode",
+          "host_nickname",
+          "players",
+          "players_max",
+          "settings",
+          "created_at"
+        ],
+        "title": "OpenRoomCard",
+        "type": "object"
+      },
+      "OpenRoomsList": {
+        "description": "Открытые лобби, новые первыми; ``next_cursor`` — для ``match /v1/rooms/open``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpenRoomCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpenRoomsList",
         "type": "object"
       },
       "PersonCard": {
@@ -1804,6 +2441,113 @@
           "blocks"
         ],
         "title": "ResultsPage",
+        "type": "object"
+      },
+      "RoomSettingsCard": {
+        "description": "Действующие настройки комнаты (шаблон + переопределения хоста).",
+        "properties": {
+          "answer_format": {
+            "title": "Answer Format",
+            "type": "string"
+          },
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "collection_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Collection Ids",
+            "type": "array"
+          },
+          "level_window_s": {
+            "description": "Окно уровня, с",
+            "minimum": 1.0,
+            "title": "Level Window S",
+            "type": "integer"
+          },
+          "players_max": {
+            "minimum": 2.0,
+            "title": "Players Max",
+            "type": "integer"
+          },
+          "rounds": {
+            "minimum": 1.0,
+            "title": "Rounds",
+            "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rounds",
+          "level_window_s",
+          "answer_format",
+          "clue_type",
+          "players_max",
+          "visibility"
+        ],
+        "title": "RoomSettingsCard",
+        "type": "object"
+      },
+      "RoundPlayerResultCard": {
+        "description": "Результат игрока в раунде.",
+        "properties": {
+          "elapsed_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "От открытия уровня",
+            "title": "Elapsed Ms"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень угадывания; null — не угадал",
+            "title": "Level"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "level",
+          "partial",
+          "score"
+        ],
+        "title": "RoundPlayerResultCard",
         "type": "object"
       },
       "ServiceMeta": {
@@ -2635,6 +3379,122 @@
           }
         },
         "summary": "Медиатека: полка",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/match/{match_id}": {
+      "get": {
+        "description": "Итог (match) + карточки единиц раундов (catalog) + флаги «в медиатеке» (library). Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Нет или ещё идёт — 404 `match.match_not_found`. Упавший match — все блоки `unavailable`; catalog или library — только их блок. Всегда `private, no-store`.",
+        "operationId": "match_page_v1_pages_match__match_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Итог матча",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/online": {
+      "get": {
+        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Всегда `private, no-store`.",
+        "operationId": "online_page_v1_pages_online_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlinePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Хаб онлайна",
         "tags": [
           "bff_web"
         ]
