@@ -118,6 +118,27 @@ function verifyTokenSince(since: string): string | null {
   return tokens.at(-1) ?? null;
 }
 
+/**
+ * Отправить форму входа/регистрации с учётом лимита gateway `auth_per_ip` (30 в минуту с
+ * одного IP): e2e регистрирует десятки игроков с одного адреса, 429 — подождать и повторить.
+ */
+async function submitThrottled(
+  page: Page,
+  button: string,
+  path: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const response = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === path && r.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: button }).click();
+    if ((await response).status() !== 429) return;
+    await page.waitForTimeout(3_000); // окно лимита nginx — 2 с на запрос; пауза здесь осознанна
+  }
+  throw new Error(`${path}: лимит gateway не отпустил за 20 попыток`);
+}
+
 /** Регистрация через UI → ссылка из письма → вход. Свой браузерный контекст на игрока. */
 export async function registerPlayer(
   browser: Browser,
@@ -133,7 +154,11 @@ export async function registerPlayer(
   await page.getByLabel("E-mail").fill(`${nickname}@example.com`);
   await page.getByLabel("Пароль").fill(PASSWORD);
   for (const box of await page.getByRole("checkbox").all()) await box.check();
-  await page.getByRole("button", { name: "Зарегистрироваться" }).click();
+  await submitThrottled(
+    page,
+    "Зарегистрироваться",
+    "/api/identity/v1/auth/register",
+  );
   await expect(page.getByTestId("register-done")).toBeVisible();
 
   let token: string | null = null;
@@ -148,7 +173,7 @@ export async function registerPlayer(
   await page.goto("/login");
   await page.getByLabel("E-mail или ник").fill(nickname);
   await page.getByLabel("Пароль").fill(PASSWORD);
-  await page.getByRole("button", { name: "Войти" }).click();
+  await submitThrottled(page, "Войти", "/api/identity/v1/auth/login");
   await expect(page.getByTestId("user-name")).toHaveText(nickname);
   return { context, page, nickname };
 }
