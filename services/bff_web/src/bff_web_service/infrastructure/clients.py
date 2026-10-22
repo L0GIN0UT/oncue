@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
 from bff_web_service.application.dto import (
     AnswerFormat,
@@ -44,6 +44,8 @@ from bff_web_service.application.dto import (
     ModeStart,
     MyMatch,
     MyMatches,
+    OnlineChat,
+    OnlineRules,
     OpenRoom,
     OpenRooms,
     Person,
@@ -94,6 +96,46 @@ class _StartIn(_In):
         )
 
 
+class _OnlinePlayersIn(_In):
+    min: int = Field(ge=2)
+    max: int = Field(ge=2)
+
+
+class _OnlineChatIn(_In):
+    emotes: list[str]
+    phrases: list[str]
+    free_text: bool
+
+
+class _OnlineIn(_In):
+    kind: Literal["duel", "party", "lobby"]
+    players: _OnlinePlayersIn
+    rounds: int = Field(ge=1)
+    level_windows_s: list[int]
+    contest_type: str
+    ranked: bool
+    chat: _OnlineChatIn
+    ladder: str | None = None
+    max_collections: int | None = Field(default=None, ge=1)
+    # Схема лобби — ``$defs/LobbySpec`` конфига режима; bff передаёт её фронту как есть.
+    lobby: dict[str, JsonValue] | None = None
+
+    def dto(self) -> OnlineRules:
+        return OnlineRules(
+            kind=self.kind,
+            players_min=self.players.min,
+            players_max=self.players.max,
+            rounds=self.rounds,
+            level_windows_s=list(self.level_windows_s),
+            contest_type=self.contest_type,
+            ranked=self.ranked,
+            chat=OnlineChat(list(self.chat.emotes), list(self.chat.phrases), self.chat.free_text),
+            ladder=self.ladder,
+            max_collections=self.max_collections,
+            lobby=dict(self.lobby) if self.lobby is not None else None,
+        )
+
+
 class _ModeIn(_In):
     key: str
     version: int
@@ -107,6 +149,7 @@ class _ModeIn(_In):
     answer_format: AnswerFormat = "classic"
     presentation: Presentation = "score"
     start: _StartIn | None = None
+    online: _OnlineIn | None = None
 
     def dto(self) -> Mode:
         return Mode(
@@ -124,6 +167,7 @@ class _ModeIn(_In):
             answer_format=self.answer_format,
             presentation=self.presentation,
             start=self.start.dto() if self.start is not None else None,
+            online=self.online.dto() if self.online is not None else None,
         )
 
 
@@ -315,6 +359,11 @@ class HttpGameClient:
             "/v1/modes", cache_key=self._online_modes_key, params={"session": "online"}
         )
         modes = _parse(self._http.service, _MODES, body)
+        if any(m.online is None for m in modes):
+            # По контракту у каждого онлайн-режима есть блок ``online``: без него ответ —
+            # не тот список (например, game без параметра ``session`` отдал соло-режимы).
+            log.warning("bff.contract_violation", service=self._http.service, reason="no_online")
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
         if not cached:
             await self._http.remember(self._online_modes_key, body, self._ttl)
         return [m.dto() for m in modes]

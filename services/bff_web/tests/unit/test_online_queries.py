@@ -21,6 +21,8 @@ from bff_web_service.application.dto import (
     MatchRound,
     Mode,
     MyMatches,
+    OnlineChat,
+    OnlineRules,
     OnlineStatus,
     OpenRooms,
     PersonalRecord,
@@ -65,6 +67,16 @@ ONLINE_MODE = Mode(
     clue_type="frame_progressive",
     rounds=7,
     allow_guest=False,
+    online=OnlineRules(
+        kind="duel",
+        players_min=2,
+        players_max=2,
+        rounds=7,
+        level_windows_s=[15, 15, 15],
+        contest_type="race",
+        ranked=False,
+        chat=OnlineChat(["match.emotes.gg"], [], free_text=False),
+    ),
 )
 
 
@@ -202,7 +214,9 @@ async def test_online_user_gets_all_blocks_with_limits() -> None:
     assert page.status is OnlineStatus.OK
     assert page.blocks is not None
     assert page.blocks.open_rooms.is_ok and page.blocks.my_matches.is_ok
-    assert [m.key for m in page.blocks.modes.data or []] == ["film.duel.frame"]
+    cards = page.blocks.modes.data or []
+    assert [m.key for m in cards] == ["film.duel.frame"]
+    assert cards[0].online is ONLINE_MODE.online
     assert sorted(match.calls) == [("matches", "user-token", "10"), ("rooms", "user-token", "20")]
 
 

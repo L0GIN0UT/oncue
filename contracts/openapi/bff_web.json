@@ -376,6 +376,37 @@
         "title": "Block[list[ModeGroup]]",
         "type": "object"
       },
+      "Block_list_OnlineModeCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OnlineModeCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[OnlineModeCard]]",
+        "type": "object"
+      },
       "Block_list_RecordCard__": {
         "properties": {
           "data": {
@@ -1351,6 +1382,7 @@
         "title": "ItemShelvesCard",
         "type": "object"
       },
+      "JsonValue": {},
       "LibraryBlocks": {
         "description": "Блоки медиатеки.",
         "properties": {
@@ -1929,7 +1961,7 @@
         "description": "Блоки хаба онлайна: каждый деградирует независимо.",
         "properties": {
           "modes": {
-            "$ref": "#/components/schemas/Block_list_ModeCard__",
+            "$ref": "#/components/schemas/Block_list_OnlineModeCard__",
             "description": "Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
           },
           "my_matches": {
@@ -1945,6 +1977,104 @@
           "modes"
         ],
         "title": "OnlineBlocks",
+        "type": "object"
+      },
+      "OnlineChatCard": {
+        "description": "Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``).",
+        "properties": {
+          "emotes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Emotes",
+            "type": "array"
+          },
+          "free_text": {
+            "description": "Свободный чат — только кастомное лобби (ADR 0036)",
+            "title": "Free Text",
+            "type": "boolean"
+          },
+          "phrases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Phrases",
+            "type": "array"
+          }
+        },
+        "required": [
+          "emotes",
+          "phrases",
+          "free_text"
+        ],
+        "title": "OnlineChatCard",
+        "type": "object"
+      },
+      "OnlineModeCard": {
+        "description": "Онлайн-режим для создания комнаты (``game /v1/modes?session=online``).",
+        "properties": {
+          "answer_format": {
+            "enum": [
+              "classic",
+              "pick"
+            ],
+            "title": "Answer Format",
+            "type": "string"
+          },
+          "clue_type": {
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "online": {
+            "$ref": "#/components/schemas/OnlineRulesCard"
+          },
+          "presentation": {
+            "enum": [
+              "score",
+              "streak",
+              "bracket"
+            ],
+            "title": "Presentation",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "domain",
+          "title_key",
+          "source_type",
+          "clue_type",
+          "answer_format",
+          "presentation",
+          "online"
+        ],
+        "title": "OnlineModeCard",
         "type": "object"
       },
       "OnlinePage": {
@@ -1975,6 +2105,106 @@
           "status"
         ],
         "title": "OnlinePage",
+        "type": "object"
+      },
+      "OnlineRulesCard": {
+        "description": "Правила комнаты онлайн-режима (``game ModeOut.online``, ADR 0032).",
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/OnlineChatCard"
+          },
+          "contest_type": {
+            "description": "Плагин состязания (`race`, `parallel`)",
+            "title": "Contest Type",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "duel",
+              "party",
+              "lobby"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ladder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ladder"
+          },
+          "level_windows_s": {
+            "description": "Окно каждого уровня загадки, с",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Level Windows S",
+            "type": "array"
+          },
+          "lobby": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у кастомного лобби: `{visibility, overridable}` (LobbySpec конфига)",
+            "title": "Lobby"
+          },
+          "max_collections": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у лобби по сборнику: сколько сборников выбрать",
+            "title": "Max Collections"
+          },
+          "players_max": {
+            "minimum": 2.0,
+            "title": "Players Max",
+            "type": "integer"
+          },
+          "players_min": {
+            "minimum": 2.0,
+            "title": "Players Min",
+            "type": "integer"
+          },
+          "ranked": {
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "rounds": {
+            "minimum": 1.0,
+            "title": "Rounds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "players_min",
+          "players_max",
+          "rounds",
+          "level_windows_s",
+          "contest_type",
+          "ranked",
+          "chat"
+        ],
+        "title": "OnlineRulesCard",
         "type": "object"
       },
       "OpenRoomCard": {

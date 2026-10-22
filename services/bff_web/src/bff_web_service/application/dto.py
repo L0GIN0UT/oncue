@@ -22,6 +22,7 @@ Presentation = Literal["score", "streak", "bracket"]
 Difficulty = Literal["easy", "medium", "hard"]
 CollectionSort = Literal["featured", "popular", "new", "likes", "difficulty"]
 RoundsChoice = Literal[5, 10, 25, "all"]
+MatchKind = Literal["duel", "party", "lobby"]
 
 
 # ----------------------------------------------------------------------------- зритель
@@ -84,6 +85,38 @@ class ModeStart:
 
 
 @dataclass(frozen=True, slots=True)
+class OnlineChat:
+    """Эмоции и готовые фразы (ключи i18n) и признак свободного чата (только лобби)."""
+
+    emotes: list[str]
+    phrases: list[str]
+    free_text: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OnlineRules:
+    """Правила комнаты онлайн-режима (``ModeOut.online``, ADR 0032).
+
+    Attributes:
+        lobby: Только у кастомного лобби: ``{visibility, overridable}`` — из чего выбирает
+            хост; bff передаёт как есть (схема — ``$defs/LobbySpec`` конфига режима).
+        max_collections: Только у лобби по сборнику: сколько сборников можно выбрать.
+    """
+
+    kind: MatchKind
+    players_min: int
+    players_max: int
+    rounds: int
+    level_windows_s: list[int]
+    contest_type: str
+    ranked: bool
+    chat: OnlineChat
+    ladder: str | None = None
+    max_collections: int | None = None
+    lobby: dict[str, object] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Mode:
     """Опубликованный режим (``game GET /v1/modes``).
 
@@ -91,6 +124,7 @@ class Mode:
         answer_format: Формат ответа (плагин ``AnswerFormat``): поле ввода или выбор варианта.
         presentation: Как показывать итог (объявляет Scorer): очки, серия, сетка.
         start: Выбор перед стартом; ``None`` — стартовать сразу (или по пресету).
+        online: Правила комнаты — только у онлайн-режима (``session=online``).
     """
 
     key: str
@@ -105,6 +139,7 @@ class Mode:
     answer_format: AnswerFormat = "classic"
     presentation: Presentation = "score"
     start: ModeStart | None = None
+    online: OnlineRules | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -646,7 +681,6 @@ class LibraryShelfPage:
 
 
 # ----------------------------------------------------------------------------- match (этап 4a)
-MatchKind = Literal["duel", "party", "lobby"]
 MatchFinish = Literal["completed", "forfeit", "tech_win", "aborted"]
 PlayerFinish = Literal["completed", "forfeit", "left", "tech_win", "tech_loss"]
 DuelOutcome = Literal["win", "loss", "draw"]
@@ -794,13 +828,28 @@ class OnlineStatus(StrEnum):
     SESSION_EXPIRED = "session_expired"
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class OnlineModeCard:
+    """Онлайн-режим для создания комнаты: карточка + правила комнаты."""
+
+    key: str
+    version: int
+    domain: Domain
+    title_key: str
+    source_type: str
+    clue_type: str
+    answer_format: AnswerFormat
+    presentation: Presentation
+    online: OnlineRules
+
+
 @dataclass(frozen=True, slots=True)
 class OnlineBlocks:
     """Блоки хаба онлайна; каждый гаснет независимо (ADR 0017)."""
 
     open_rooms: Block[OpenRooms]
     my_matches: Block[MyMatches]
-    modes: Block[list[ModeCard]]
+    modes: Block[list[OnlineModeCard]]
 
 
 @dataclass(frozen=True, slots=True)

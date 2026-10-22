@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
 from uuid import UUID
 
 import structlog
@@ -19,7 +19,9 @@ from bff_web_service.application.dto import (
     MatchBlocks,
     MatchPage,
     MatchResult,
+    Mode,
     OnlineBlocks,
+    OnlineModeCard,
     OnlinePage,
     OnlineStatus,
     SubjectKind,
@@ -42,7 +44,6 @@ from bff_web_service.application.queries.common import (
     UpstreamError,
     block_of,
     item_card,
-    mode_card,
     screen_error,
 )
 from bff_web_service.domain import Block
@@ -112,11 +113,30 @@ class GetOnlinePage:
             blocks=OnlineBlocks(
                 open_rooms=block_of(rooms, "online.open_rooms"),
                 my_matches=block_of(matches, "online.my_matches"),
-                modes=Block.ok([mode_card(m) for m in modes_block.data])
+                modes=Block.ok(online_mode_cards(modes_block.data))
                 if modes_block.data is not None
                 else Block.unavailable(),
             ),
         )
+
+
+def online_mode_cards(modes: Sequence[Mode]) -> list[OnlineModeCard]:
+    """Онлайн-режимы → карточки создания комнаты (режим без правил комнаты пропускается)."""
+    return [
+        OnlineModeCard(
+            key=m.key,
+            version=m.version,
+            domain=m.domain,
+            title_key=m.title_key,
+            source_type=m.source_type,
+            clue_type=m.clue_type,
+            answer_format=m.answer_format,
+            presentation=m.presentation,
+            online=m.online,
+        )
+        for m in modes
+        if m.online is not None
+    ]
 
 
 class GetMatchPage:

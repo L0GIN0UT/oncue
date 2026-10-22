@@ -12,7 +12,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 Domain = Literal["music", "film"]
 AnswerFormat = Literal["classic", "pick"]
@@ -516,12 +516,55 @@ class MyMatchesList(BaseModel):
     next_cursor: str | None = None
 
 
+class OnlineChatCard(BaseModel):
+    """Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``)."""
+
+    emotes: list[str]
+    phrases: list[str]
+    free_text: bool = Field(description="Свободный чат — только кастомное лобби (ADR 0036)")
+
+
+class OnlineRulesCard(BaseModel):
+    """Правила комнаты онлайн-режима (``game ModeOut.online``, ADR 0032)."""
+
+    kind: MatchKind
+    players_min: int = Field(ge=2)
+    players_max: int = Field(ge=2)
+    rounds: int = Field(ge=1)
+    level_windows_s: list[int] = Field(description="Окно каждого уровня загадки, с")
+    contest_type: str = Field(description="Плагин состязания (`race`, `parallel`)")
+    ranked: bool
+    chat: OnlineChatCard
+    ladder: str | None = None
+    max_collections: int | None = Field(
+        default=None, ge=1, description="Только у лобби по сборнику: сколько сборников выбрать"
+    )
+    lobby: dict[str, JsonValue] | None = Field(
+        default=None,
+        description="Только у кастомного лобби: `{visibility, overridable}` (LobbySpec конфига)",
+    )
+
+
+class OnlineModeCard(BaseModel):
+    """Онлайн-режим для создания комнаты (``game /v1/modes?session=online``)."""
+
+    key: str
+    version: int = Field(ge=1)
+    domain: Domain
+    title_key: str
+    source_type: str
+    clue_type: str
+    answer_format: AnswerFormat
+    presentation: Presentation
+    online: OnlineRulesCard
+
+
 class OnlineBlocks(BaseModel):
     """Блоки хаба онлайна: каждый деградирует независимо."""
 
     open_rooms: Block[OpenRoomsList]
     my_matches: Block[MyMatchesList]
-    modes: Block[list[ModeCard]] = Field(
+    modes: Block[list[OnlineModeCard]] = Field(
         description="Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
     )
 

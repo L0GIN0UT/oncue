@@ -87,6 +87,35 @@ def test_upstream_samples_match_producer_contracts(service: str, path: str, samp
     assert _errors(service, _response_schema(service, path), SAMPLES[sample]) == []
 
 
+def test_online_modes_sample_is_session_online_answer() -> None:
+    """Ответ ``session=online``: у каждого режима блок ``online`` и ``allow_guest = false``."""
+    schema = _response_schema("game", "/v1/modes")
+    assert _errors("game", schema, SAMPLES["online_modes"]) == []
+    online = _spec("game")["components"]["schemas"]["OnlineModeOut"]
+    for mode in SAMPLES["online_modes"]:
+        assert mode["online"] is not None
+        assert mode["allow_guest"] is False and mode["presets"] is None
+        assert _errors("game", online, mode["online"]) == []
+
+
+def _params_errors(service: str, path: str, params: dict[str, str]) -> list[str]:
+    """Query-параметры вызова описаны в снимке ручки и проходят их схемы."""
+    described = {
+        p["name"]: p["schema"]
+        for p in _spec(service)["paths"][path]["get"].get("parameters", [])
+        if p["in"] == "query"
+    }
+    errors: list[str] = []
+    for name, raw in params.items():
+        schema = described.get(name)
+        if schema is None:
+            errors.append(f"{name}: нет в contracts/openapi/{service}.json {path}")
+            continue
+        value: Any = int(raw) if raw.isdigit() else raw
+        errors += [f"{name}={raw}: {e}" for e in _errors(service, schema, value)]
+    return errors
+
+
 def _http(service: str, base: str) -> UpstreamHttp:
     client = httpx.AsyncClient(base_url=base)
     return UpstreamHttp(
@@ -97,12 +126,18 @@ def _http(service: str, base: str) -> UpstreamHttp:
 @pytest.fixture
 def upstreams() -> Iterator[respx.MockRouter]:
     with respx.mock(assert_all_called=False) as router:
-        router.get("http://match.test/v1/rooms/open").respond(200, json=SAMPLES["open_rooms"])
-        router.get("http://match.test/v1/me/matches").respond(200, json=SAMPLES["my_matches"])
+        router.get("http://match.test/v1/rooms/open", name="rooms").respond(
+            200, json=SAMPLES["open_rooms"]
+        )
+        router.get("http://match.test/v1/me/matches", name="matches").respond(
+            200, json=SAMPLES["my_matches"]
+        )
         router.get(f"http://match.test/v1/matches/{MATCH_ID}").respond(
             200, json=SAMPLES["match_result"]
         )
-        router.get("http://game.test/v1/modes").respond(200, json=SAMPLES["online_modes"])
+        router.get("http://game.test/v1/modes", name="modes").respond(
+            200, json=SAMPLES["online_modes"]
+        )
         for rnd in SAMPLES["match_result"]["rounds"]:
             item_id = rnd["media_item_id"]
             router.get(f"http://catalog.test/v1/items/{item_id}").respond(
@@ -131,7 +166,21 @@ async def test_online_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> 
         page = OnlinePage.model_validate(await query(viewer), from_attributes=True)
         body = page.model_dump(mode="json")
         assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/online"), body) == []
+        if viewer is USER:
+            assert body["blocks"]["modes"]["status"] == "ok"
+            assert all(m["online"] for m in body["blocks"]["modes"]["data"])
     assert body == {"status": "auth_required", "blocks": None}
+
+    # Запросы bff к источникам — с параметрами, которые источники описали.
+    calls = {
+        ("game", "/v1/modes"): upstreams["modes"],
+        ("match", "/v1/rooms/open"): upstreams["rooms"],
+        ("match", "/v1/me/matches"): upstreams["matches"],
+    }
+    for (service, path), route in calls.items():
+        params = dict(route.calls.last.request.url.params)
+        assert _params_errors(service, path, params) == []
+    assert dict(upstreams["modes"].calls.last.request.url.params) == {"session": "online"}
 
 
 async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> None:

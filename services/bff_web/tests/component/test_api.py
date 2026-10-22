@@ -1064,7 +1064,28 @@ async def test_online_page_for_user_all_blocks(bff: Bff) -> None:
     assert room["settings"]["collection_ids"] == ["0192a3b4-c5d6-7e8f-9a0b-000000000c01"]
     assert blocks["open_rooms"]["data"]["next_cursor"] == "c2Vjb25k"
     assert blocks["my_matches"] == {"status": "ok", "data": SAMPLES["my_matches"]}
-    assert [m["key"] for m in blocks["modes"]["data"]] == ["film.duel.frame"]
+    online_modes = blocks["modes"]["data"]
+    assert [m["key"] for m in online_modes] == ["film.duel.frame", "film.lobby.collection"]
+    assert online_modes[0]["online"] == {
+        "kind": "duel",
+        "players_min": 2,
+        "players_max": 2,
+        "rounds": 7,
+        "level_windows_s": [15, 15, 15],
+        "contest_type": "race",
+        "ranked": False,
+        "chat": {
+            "emotes": ["match.emotes.gg"],
+            "phrases": ["match.phrases.nice"],
+            "free_text": False,
+        },
+        "ladder": None,
+        "max_collections": None,
+        "lobby": None,
+    }
+    assert online_modes[1]["online"]["lobby"] == SAMPLES["online_modes"][1]["online"]["lobby"]
+    assert online_modes[1]["online"]["max_collections"] == 3
+    assert "allow_guest" not in online_modes[0]  # онлайн только с аккаунтом (D13)
     assert rooms.calls.last.request.headers["authorization"] == f"Bearer {token}"
     assert matches.calls.last.request.headers["authorization"] == f"Bearer {token}"
     assert dict(rooms.calls.last.request.url.params) == {"limit": "20"}
@@ -1340,3 +1361,15 @@ async def test_match_page_foreign_item_in_shelves_answer_is_contract_violation(b
     blocks = response.json()["blocks"]
     assert blocks["library"] == UNAVAILABLE  # флаг чужой единицы не приписываем нашей
     assert blocks["items"]["status"] == "ok"
+
+
+async def test_online_modes_without_online_block_are_contract_violation(bff: Bff) -> None:
+    """game без поддержки ``session`` отдал бы соло-режимы — блок гаснет, а не путает хаб."""
+    _, _, modes = _online_routes(bff)
+    modes.respond(200, json=MODES)
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    blocks = response.json()["blocks"]
+    assert blocks["modes"] == UNAVAILABLE
+    assert blocks["open_rooms"]["status"] == "ok"
