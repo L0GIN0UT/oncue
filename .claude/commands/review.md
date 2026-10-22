@@ -6,6 +6,8 @@ argument-hint: "[путь или ветка]"
 Изменённые файлы:
 !`git diff --name-only HEAD; git diff --name-only --cached`
 
-1. Агент **code-reviewer** — по изменениям: «$ARGUMENTS» (если пусто — рабочая копия).
-2. Если затронуты `services/identity`, `services/payments`, `services/progression`, `libs/auth`, `infra/nginx` или новые/изменённые ручки — параллельно агент **security-reviewer**.
-3. Сведи результаты в один список по серьёзности, без дублей. Итог: можно мержить / после правок / блок.
+Изменения: «$ARGUMENTS» (если пусто — рабочая копия). Один ревьюер:
+- затронуты `services/identity`, `services/payments`, `services/progression`, `libs/auth`, `infra/nginx` — агент **security-reviewer** (он же проверяет слои и тесты);
+- иначе diff до ~100 строк — ревью в основной сессии по чек-листу агента `code-reviewer`; больше — агент **code-reviewer**.
+
+Итог: можно мержить / после правок / блок.

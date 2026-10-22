@@ -6,7 +6,7 @@ Claude Code подхватывает эту папку автоматическ�
 .claude/
   settings.json     # хуки и права (общие для команды, в git)
   settings.local.json  # личные настройки (НЕ в git)
-  agents/           # 8 агентов, знающих суть проекта
+  agents/           # 9 агентов, знающих суть проекта (модель, effort, бюджет ответа — docs/10-ai-assistant.md §0.1)
   commands/         # 10 команд: /plan /tdd /review /verify /build-fix /refactor-clean /update-docs /checkpoint /learn /orchestrate
   rules/            # правила, подгружаемые по путям файлов (paths:), workflow.md — всегда
   skills/           # guessverse-conventions, guessverse-new-service, strategic-compact, learned-*
