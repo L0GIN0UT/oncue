@@ -5,6 +5,8 @@
  * настроек сбрасывает готовность всех (это делает сервер, экран только предупреждает).
  */
 import { useState } from "react";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Check, Copy, Crown, LogOut, Play, RotateCcw, UserX } from "lucide-react";
 import type { RoomView, SettingsOptions, SettingsOverride } from "@/shared/api/types";
@@ -12,6 +14,7 @@ import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useModeTitle } from "@/features/online/lists";
+import { fetchCollection } from "@/features/collections/api";
 import { ChatPanel } from "./ChatPanel";
 import { PlayersRail } from "./PlayersRail";
 import type { FeedItem } from "./room-store";
@@ -130,6 +133,10 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
           </ul>
         )}
       </section>
+
+      {(room.settings.collection_ids?.length ?? 0) > 0 && (
+        <LobbyCollections ids={room.settings.collection_ids ?? []} />
+      )}
 
       <ChatPanel
         chat={room.chat}
@@ -264,5 +271,47 @@ function SettingsForm({
         })}
       </div>
     </section>
+  );
+}
+
+/** Сборники лобби по сборнику (`settings.collection_ids`): название и ссылка на страницу. */
+function LobbyCollections({ ids }: { ids: string[] }) {
+  const t = useTranslations();
+  return (
+    <section
+      aria-labelledby="lobby-collections"
+      className="flex flex-col gap-2"
+      data-testid="lobby-collections"
+    >
+      <h2 id="lobby-collections" className="font-display text-lg font-semibold">
+        {t("match.lobby.collections")}
+      </h2>
+      <ul className="flex flex-wrap gap-2">
+        {ids.map((id) => (
+          <LobbyCollection key={id} id={id} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function LobbyCollection({ id }: { id: string }) {
+  const t = useTranslations();
+  const detail = useQuery({
+    queryKey: ["collections", "detail", id],
+    queryFn: () => fetchCollection(id),
+    staleTime: 60_000,
+    retry: false,
+  });
+  return (
+    <li>
+      <Link
+        href={`/collections/${id}`}
+        className="inline-flex rounded-full bg-stage-raised px-3 py-1.5 text-sm ring-1 ring-rule hover:ring-[var(--accent)]"
+        dir="auto"
+      >
+        {detail.data?.title ?? t("match.lobby.collectionUnknown")}
+      </Link>
+    </li>
   );
 }
