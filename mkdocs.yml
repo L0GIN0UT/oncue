@@ -91,6 +91,11 @@ nav:
       - adr/0029-collection-assets-scoped-sets.md
       - adr/0030-minimal-ugc-safety-before-moderation.md
       - adr/0031-library-config-shelves-private-catalog-projection.md
+      - adr/0032-online-sessions-in-mode-config.md
+      - adr/0033-match-round-plan-from-game.md
+      - adr/0034-rooms-process-lease-snapshots.md
+      - adr/0035-realtime-centrifugo-tokens-and-tick.md
+      - adr/0036-online-account-only-chat-and-ratings.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md
