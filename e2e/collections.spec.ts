@@ -122,6 +122,9 @@ const COMPOSE_FILES = (
  * В local/ci identity шлёт письма в лог (`LogEmailSender`, ссылка — только вне production);
  * адреса в логе нет, поэтому берём самую свежую ссылку: сценарий последовательный (workers: 1).
  */
+/** Ссылки подтверждения, уже отданные игрокам этого процесса (повтор — чужая ссылка). */
+const usedVerifyTokens = new Set<string>();
+
 function verifyTokenSince(since: string): string | null {
   const cwd = COMPOSE_DIR ?? path.resolve(test.info().project.testDir, "../infra/compose");
   const logs = execFileSync(
@@ -130,7 +133,11 @@ function verifyTokenSince(since: string): string | null {
     { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
   const tokens = [...logs.matchAll(/verify-email\?token=([A-Za-z0-9_.~%-]+)/g)].map((m) => m[1]!);
-  return tokens.at(-1) ?? null;
+  // Игроки регистрируются подряд: в окне `since` может лежать уже использованная ссылка
+  // предыдущего игрока, а письмо текущего — ещё не в логе. Берём только новую ссылку.
+  const fresh = tokens.filter((t) => !usedVerifyTokens.has(t)).at(-1) ?? null;
+  if (fresh !== null) usedVerifyTokens.add(fresh);
+  return fresh;
 }
 
 type User = { context: BrowserContext; page: Page; nickname: string };
