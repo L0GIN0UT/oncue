@@ -1,12 +1,12 @@
 # game
 
-Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов; дейлик, больше/меньше, топ-32.
+Соло-движок: сессии, раунды, ответы, очки; реестр плагинов загадок; конфиги режимов (соло и онлайн); дейлик, больше/меньше, топ-32; план раундов матча для match.
 
 - Пакет: `game_service`; запуск: `game api|relay|consumer|worker|all|migrate`
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
 - Публичный API: `/api/game/v1/...` на gateway; admin — `/admin/v1/mode-configs|daily-sets|projection`
 - Зависимости: PostgreSQL, Redis, Redpanda; `gv_game_kernel` (правила), `gv_text` (нормализация)
-- Статус: этап 3b — игра по сборнику (`docs/plans/stage-3b.md` §7, ADR 0028, 0029); этап 3a — марафон, «больше/меньше», сетка топ-32, ревил другим типом, рекорды, запрос ассетов (`docs/plans/stage-3a.md` §5); этап 2 — конфиги, дейлик, соло-сессии, проекции
+- Статус: этап 4a — онлайн-конфиги и план раундов матча (`docs/plans/stage-4.md` §6, ADR 0032, 0033); этап 3b — игра по сборнику (`docs/plans/stage-3b.md` §7, ADR 0028, 0029); этап 3a — марафон, «больше/меньше», сетка топ-32, ревил другим типом, рекорды, запрос ассетов (`docs/plans/stage-3a.md` §5); этап 2 — конфиги, дейлик, соло-сессии, проекции
 
 ## Особенности
 - Контракт API зафиксирован в 0a (§2.6 плана): схемы — `api/public/schemas.py`, `api/admin/schemas.py`; правка схемы = правка `contracts/openapi/game.json` (`gv contracts export`).
@@ -25,3 +25,5 @@
 - Параметр пути admin-ручек — `{mode_key}`: имя `key` конфликтует с параметром зависимости `Idempotency-Key`.
 - Периодические задачи (наборы дня, брошенные сессии) — `ServiceDefinition.build_periodic_jobs`, выполняются в relay под advisory lock; должны быть идемпотентными.
 - Сборники (3b): проекция `collection_proj`/`collection_items_proj` из `collections.collection.v1` (снимок по общей `version`, удалённый — надгробие); адаптер `SqlCollectionPort` обязан совпадать с `FakeCollectionPort.matches` (`tests/integration/test_collections.py`). Сессия фиксирует `collection_id` и `content_version` в `state.collection` и доигрывается после скрытия. Наборы со `scope_id` (свои эмодзи) — только в сессии своего сборника и первыми; удаляет их game сам по снимку (событий удаления от media нет). Шаблоны `*.collection.*` не входят в `GET /v1/modes` (по умолчанию `kind=play`); их отдаёт `GET /v1/modes?kind=collection` (с `round_options`/`min_items` конфига), играбельность сборника — `GET /v1/collections/{id}/modes`.
+- Онлайн-режимы (4a, ADR 0032): конфиги `duel|party|lobby` game проверяет (`RulesFactory`, `SUPPORTED_SESSIONS`) и публикует тем же путём, что соло, но не играет: старт соло-сессии — 422 `game.mode_not_solo` до лимитов и транзакции. `ModeCatalog.published()` по умолчанию — только соло (каталог, дейлики, режимы сборника); онлайн — `published(online=True)` и `GET /v1/modes?session=online` (блок `online`).
+- Internal API для match (ADR 0033, `api/internal`, `application/queries/round_plans.py`): только сервисный токен со scope `rounds.plan`. `POST /internal/v1/round-plans` — `draw_rounds` с `seed` (детерминизм), `exclude_ids`, `collection_ids` (проекция `collection_proj`, как соло), ключи ответа, `asset_set_id` по уровням и ревилу, `options`; только онлайн-режимам (`game.mode_not_online`). Ключи ответа, `media_item_id` и названия не пишутся в логи и ошибки.

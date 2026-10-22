@@ -215,3 +215,19 @@ class CollectionNotSupportedError(InvalidInputError):
 def desync(snapshot: dict[str, Any]) -> DesyncError:
     """Ошибка рассинхронизации с актуальным снимком в ``details.session``."""
     return DesyncError("версия сессии устарела", details={"session": snapshot})
+
+
+# ---------------------------------------------------------------- этап 4: онлайн (ADR 0033)
+class ModeNotOnlineError(InvalidInputError):
+    """План раундов матча запрошен для соло-режима (422): онлайн-план — только онлайн-режимам."""
+
+    default_code = "game.mode_not_online"
+
+
+class TooManyCollectionsError(InvalidInputError):
+    """Сборников больше ``source.collection.params.max_collections`` (422).
+
+    ``details = {"given": int, "max": int}``.
+    """
+
+    default_code = "game.too_many_collections"

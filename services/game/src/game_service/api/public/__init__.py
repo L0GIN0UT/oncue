@@ -75,7 +75,10 @@ def build_public_router(c: ApiServices) -> APIRouter:
             "режимы, которые играются сами по себе, без шаблонов сборника (source "
             "`collection`); `kind=collection` — только шаблоны сборника (конструктор, экран "
             "сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность "
-            "конкретного сборника — `GET /v1/collections/{collection_id}/modes`."
+            "конкретного сборника — `GET /v1/collections/{collection_id}/modes`. "
+            "`session=solo` (по умолчанию) — только соло-режимы; `session=online` — "
+            "онлайн-шаблоны (дуэль, party, лобби, в том числе по сборнику; `kind` не "
+            "учитывается) с блоком `online` (ADR 0032): соло-хаб их не видит."
         ),
         responses=problem_responses(422, 503),
     )
@@ -83,9 +86,12 @@ def build_public_router(c: ApiServices) -> APIRouter:
         response: Response,
         domain: Annotated[Domain | None, Query()] = None,
         kind: Annotated[Literal["play", "collection"], Query()] = "play",
+        session: Annotated[Literal["solo", "online"], Query()] = "solo",
     ) -> list[ModeOut]:
         response.headers["Cache-Control"] = MODES_CACHE
-        rows = await c.queries.modes(domain, collection=kind == "collection")
+        rows = await c.queries.modes(
+            domain, collection=kind == "collection", online=session == "online"
+        )
         return [ModeOut.model_validate(m) for m in rows]
 
     @router.post(
@@ -96,7 +102,8 @@ def build_public_router(c: ApiServices) -> APIRouter:
         description=(
             "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. "
             "Ошибки: 409 `game.daily_already_played` (`details.session_id`), "
-            "403 `game.guest_not_allowed`, 404 `game.mode_not_found`, "
+            "403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 422 "
+            "`game.mode_not_solo` (онлайн-режим играется только в комнате match), "
             "503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. "
             "Марафон: `subject_ids` обязательны — 422 `game.subject_required`, "
             "`game.too_many_subjects`; режим без выбора персон — 422 "
