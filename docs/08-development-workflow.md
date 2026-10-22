@@ -53,7 +53,8 @@ gv test game --level unit
 - `gv new-service <name> --description ... [--public PREFIX] [--no-database]` создаёт сервис из шаблона (гексагональная структура, `settings.py`, `main.py`, миграция outbox/inbox, тесты всех уровней, `CLAUDE.md`), добавляет его в `infra/services.toml` и перегенерирует конфиги. Так все сервисы одинаковы с первого коммита.
 - `gv gen` перегенерирует из реестра compose, Nginx, Prometheus, `.importlinter`, скрипт БД. Руками эти файлы не правятся; CI проверяет `gv gen --check`.
 - `gv contracts export` обновляет снимок OpenAPI и схем событий; `gv contracts check --base origin/main` ищет ломающие изменения.
-- Сиды (`gv dev seed`) и генерация клиентов из OpenAPI (`gv gen-clients`) появятся на этапе 1, когда у сервисов будут реальные API.
+- `gv dev seed` наполняет поднятый стек для e2e (только local/ci, идемпотентно): каталог и синтетика, исходники медиа и ассеты, наборы дня и недели, кураторские сборники `seeds/collections`, ожидание онлайн-шаблонов 4a и их пулов (подробности — докстринг `tools/gv/src/gv_cli/seed.py`). Учётные данные админа — `GV_BOOTSTRAP_ADMIN__LOGIN|PASSWORD` и `GV_SERVICE_SECRET_ADMIN` из `infra/compose/.env`.
+- e2e на полном стеке (`e2e/*.spec.ts`, как job `e2e-smoke`): стек `gv dev up services` + `compose.web.yml`, затем `gv dev seed`, затем `E2E_SEEDED=1 pnpm -C frontend test:e2e:stack` с теми же переменными админа; сценарии, регистрирующие игроков (сборники 3b, онлайн 4a), читают ссылку подтверждения из `docker compose logs identity` (`E2E_COMPOSE_FILES`, `E2E_COMPOSE_DIR`). Адрес стека — `E2E_BASE_URL` (по умолчанию `https://localhost`; он же должен быть в `CENTRIFUGO_ALLOWED_ORIGINS`, иначе онлайн уйдёт на HTTP-tick).
 
 ## 3. Порядок разработки нового функционала
 

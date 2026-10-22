@@ -2,9 +2,10 @@
  * E2E на полном стеке (compose + gateway), только в CI (job e2e-smoke).
  * Запуск: `pnpm -C frontend test:e2e:stack` при поднятом стеке; адрес — E2E_BASE_URL.
  * stack.spec.ts — смоук без данных; daily.spec.ts — сценарий «дейлик», modes.spec.ts — режимы
- * этапа 3a, collections.spec.ts — сборники и медиатека 3b; им нужен засеянный стек (`gv dev
- * seed`: seeds/catalog, seeds/media, сиды режимов, seeds/collections) и E2E_SEEDED=1, см. план
- * этапа 2 §0, 3a §10 и 3b §0. Типы: `pnpm -C frontend exec tsc -p ../e2e`.
+ * этапа 3a, collections.spec.ts — сборники и медиатека 3b, lobby/duel/party.spec.ts — онлайн
+ * 4a (общие шаги — online.ts); им нужен засеянный стек (`gv dev seed`: seeds/catalog,
+ * seeds/media, сиды режимов, seeds/collections) и E2E_SEEDED=1, см. план этапа 2 §0, 3a §10,
+ * 3b §0 и 4 §0. Типы: `pnpm -C frontend exec tsc -p ../e2e`.
  */
 import { defineConfig, devices } from "@playwright/test";
 

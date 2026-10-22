@@ -189,16 +189,19 @@ jobs:
             nginx:1.28-alpine nginx -t
 
   e2e-smoke:
-    # Полный стек на compose: смоук (e2e/stack.spec.ts), сценарии «дейлик» (e2e/daily.spec.ts),
-    # режимы этапа 3a (e2e/modes.spec.ts) и сборники этапа 3b (e2e/collections.spec.ts) — все,
-    # кроме смоука, только при E2E_SEEDED=1, когда стек засеян, `pnpm test:e2e:stack`
-    # (testMatch e2e/playwright.config.ts подхватывает все *.spec.ts). На main и по метке PR `e2e`.
+    # Полный стек на compose: смоук (e2e/stack.spec.ts, в том числе экран «Онлайн доступен после
+    # регистрации»), сценарии «дейлик» (e2e/daily.spec.ts), режимы этапа 3a (e2e/modes.spec.ts),
+    # сборники этапа 3b (e2e/collections.spec.ts) и онлайн этапа 4a (e2e/lobby|duel|party.spec.ts:
+    # несколько контекстов браузера, Centrifugo, процесс rooms в `match all`) — все, кроме смоука,
+    # только при E2E_SEEDED=1, когда стек засеян, `pnpm test:e2e:stack` (testMatch
+    # e2e/playwright.config.ts подхватывает все *.spec.ts). На main и по метке PR `e2e`.
     name: E2E smoke (compose)
     needs: [lint]
     if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'e2e')
     runs-on: ubuntu-24.04
-    # Засев режимов 3a (≈ 60 фильмов × 8 исходников) и сетка на 31 выбор — дольше этапа 2.
-    timeout-minutes: 45
+    # Засев режимов 3a (≈ 60 фильмов × 8 исходников) и сетка на 31 выбор — дольше этапа 2;
+    # онлайн 4a — ещё три сценария по 3–7 минут (окна уровней — по серверным таймерам).
+    timeout-minutes: 60
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       E2E_BASE_URL: https://localhost
@@ -241,13 +244,15 @@ jobs:
         # seeds/media/generate.py делает синтетические аудио-тоны через ffmpeg; на
         # ubuntu-раннере его нет из коробки. Pillow (кадры) уже в окружении uv.
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Засев стека для дейлика, режимов 3a и сборников 3b (gv dev seed)
+      - name: Засев стека для дейлика, режимов 3a, сборников 3b и онлайна 4a (gv dev seed)
         if: steps.app.outputs.present == 'true'
         # Стек поднят с --wait (миграции завершены → bootstrap-админ создан). Сидер ходит
         # напрямую на опубликованные порты сервисов (compose.services.dev.yml) и грузит
         # каталог (с синтетикой 3a), все виды исходников, наборы дня и недели, кураторские
-        # сборники seeds/collections (admin-API collections, ожидание проекций). Успех →
-        # E2E_SEEDED=1 раскрывает e2e/daily.spec.ts, e2e/modes.spec.ts и e2e/collections.spec.ts.
+        # сборники seeds/collections (admin-API collections, ожидание проекций), ждёт онлайн-
+        # шаблоны 4a (music.duel.classic, film.duel.frame, film.party.frame, music.lobby.classic,
+        # film.lobby.collection — публикует их game из seeds/game/modes при старте), их пулы и
+        # сборник film-lobby под шаблон лобби. Успех → E2E_SEEDED=1 раскрывает сценарии.
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
           export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
@@ -267,11 +272,12 @@ jobs:
           node-version: "24"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: E2E — смоук стека (и «дейлик», режимы 3a, сборники 3b при E2E_SEEDED=1)
+      - name: E2E — смоук стека (и «дейлик», режимы 3a, сборники 3b, онлайн 4a при E2E_SEEDED=1)
         if: steps.app.outputs.present == 'true'
         # modes.spec.ts и collections.spec.ts ходят в admin-API game/media/collections как
-        # `gv dev seed`: учётные данные админа — из .env, в лог не попадают. collections.spec.ts
-        # берёт ссылку подтверждения e-mail из `docker compose logs identity` (E2E_COMPOSE_FILES).
+        # `gv dev seed`: учётные данные админа — из .env, в лог не попадают. collections.spec.ts и
+        # онлайн-сценарии (e2e/online.ts) регистрируют свежих игроков и берут ссылку
+        # подтверждения e-mail из `docker compose logs identity` (E2E_COMPOSE_FILES).
         run: |
           env_val() { grep -E "^$1=" infra/compose/.env | cut -d= -f2-; }
           export GV_BOOTSTRAP_ADMIN__LOGIN="$(env_val GV_BOOTSTRAP_ADMIN__LOGIN)"
@@ -301,6 +307,17 @@ jobs:
             | grep -E "daily_pool_too_small|daily_set_ready|daily_items_replaced|assets_ready|game\.daily|pool_empty|theme" \
             || echo "(в логах game нет записей о наборах дня/ассетах)"
           echo "::endgroup::"
+      - name: Диагностика онлайна (match, Centrifugo) при падении
+        if: failure() && steps.app.outputs.present == 'true'
+        working-directory: infra/compose
+        # Отказ старта матча (план game, ассеты), lease и handoff комнат — в логе match; отказы
+        # соединений и подписок — в логе Centrifugo. Общий хвост логов ниже их обрезает.
+        run: |
+          for svc in match centrifugo; do
+            echo "::group::$svc"
+            docker compose --env-file .env ${{ env.E2E_COMPOSE_FILES }} logs --no-color --tail=300 "$svc" || true
+            echo "::endgroup::"
+          done
       - name: Логи стека при падении
         if: failure() && steps.app.outputs.present == 'true'
         working-directory: infra/compose

@@ -34,6 +34,7 @@ from gv_cli.seed import (
     Seeder,
     SeedError,
     load_collection_spec,
+    lobby_collections,
     mode_plan,
 )
 
@@ -71,6 +72,11 @@ class FakeStack:
     bracket_subject: str | None = "55555555-5555-5555-5555-555555555555"
     playable_count: int = 40  # сколько играбельных единиц отдаёт поиск проекции (≤ 50)
     synthetic_playable: int = 0  # сколько ещё — только по запросу q=синтетика
+    playable_items: tuple[str, ...] = ()  # media_item_id единиц ITEMS, играбельных в поиске
+    unpublished: str | None = None  # режим, которого нет среди опубликованных (404)
+    # game: онлайн-шаблоны в GET /v1/modes?session=online и сколько опросов их ещё нет
+    online_modes: tuple[str, ...] = ()
+    online_missing_polls: int = 0
     # collections: сколько мутаций ответят 422 item_unavailable (проекция не догнала catalog)
     collection_unknown_polls: int = 0
     collection_drops: int = 0  # сколько мутаций оборвут соединение (рестарт collections)
@@ -118,6 +124,7 @@ class FakeStack:
             ("PUT", rf"/admin/v1/collections/{_UUID}", self._collection_update),
             ("PUT", rf"/admin/v1/collections/{_UUID}/featured", self._collection_featured),
             ("GET", rf"/v1/collections/{_UUID}/modes", self._collection_modes),
+            ("GET", r"/v1/modes", self._public_modes),
         ]
 
     def handle(self, request: httpx.Request) -> httpx.Response:
@@ -334,9 +341,12 @@ class FakeStack:
         # Поиск проекции game: без q — общий список (≤ 50), с q — синтетика отдельно.
         assert request.url.params.get("playable_for_mode")
         assert int(request.url.params["limit"]) <= 50
+        if request.url.params["playable_for_mode"] == self.unpublished:
+            return _problem(404, "game.mode_not_found")
         q = request.url.params.get("q")
         if q is None:
             ids = [f"01a00000-0000-7000-8000-0000000000{i:02x}" for i in range(self.playable_count)]
+            ids += list(self.playable_items)
         else:
             assert q == SYNTHETIC_TITLE_QUERY
             ids = [
@@ -514,6 +524,15 @@ class FakeStack:
                     "round_options": [5],
                 }
             ],
+        )
+
+    def _public_modes(self, request: httpx.Request) -> httpx.Response:
+        # Онлайн-шаблоны: публичный каталог game без admin-токена.
+        assert request.url.params["session"] == "online"
+        if self._tick("online_modes") <= self.online_missing_polls:
+            return httpx.Response(200, json=[])
+        return httpx.Response(
+            200, json=[{"key": key, "domain": key.split(".")[0]} for key in self.online_modes]
         )
 
 
@@ -1096,8 +1115,170 @@ class TestModePlan:
         assert plan.period_start(date(2026, 10, 18)) == date(2026, 10, 12)  # воскресенье
         assert plan.period_start(date(2026, 10, 12)) == date(2026, 10, 12)
 
+    @pytest.mark.parametrize(
+        ("key", "min_playable", "rounds", "lobby_by_collection"),
+        [
+            # Пул шаблона больше раундов матча — берётся пул.
+            ("music.duel.classic", 20, 7, False),
+            ("film.duel.frame", 20, 7, False),
+            ("film.party.frame", 20, 10, False),
+            ("music.lobby.classic", 20, 10, False),
+            # Лобби по сборнику: min_items 5, но матч разыгрывает session.rounds = 12 сразу.
+            ("film.lobby.collection", 12, 12, True),
+        ],
+    )
+    def test_online_templates(
+        self, key: str, min_playable: int, rounds: int, lobby_by_collection: bool
+    ) -> None:
+        import yaml
+
+        spec = yaml.safe_load((REPO / "seeds/game/modes" / f"{key}.yaml").read_text("utf-8"))
+        plan = mode_plan(spec)
+        assert plan.online
+        assert plan.period is None
+        assert (plan.min_playable, plan.rounds, plan.lobby_by_collection) == (
+            min_playable,
+            rounds,
+            lobby_by_collection,
+        )
+        assert plan.domain == key.split(".", maxsplit=1)[0]
+
+    def test_solo_modes_are_not_online(self) -> None:
+        import yaml
+
+        for path in sorted((REPO / "seeds/game/modes").glob("*.yaml")):
+            spec = yaml.safe_load(path.read_text("utf-8"))
+            kind = (spec.get("session") or {}).get("kind", "solo")
+            assert mode_plan(spec).online is (kind != "solo"), path.name
+
 
 _AHEAD = {"schedule_ahead_periods": 1}
+
+
+# ----------------------------------------------------------------------------- онлайн 4a
+_DUEL_YAML = """\
+key: music.duel.classic
+domain: music
+source:
+  type: random
+  params:
+    pool:
+      kinds: [track]
+      min_playable: 1
+session:
+  kind: duel
+  rounds: 1
+"""
+
+_LOBBY_YAML = """\
+key: film.lobby.collection
+domain: film
+source:
+  type: collection
+  params:
+    min_items: 1
+session:
+  kind: lobby
+  rounds: {rounds}
+"""
+
+_LOBBY_COLLECTION = """\
+key: film-lobby
+title: "Кино · лобби"
+domain: film
+default_mode_key: film.collection.frame
+items:
+  - film:interstellar
+"""
+
+ONLINE = ("music.duel.classic", "film.lobby.collection")
+FILM_ID = ITEMS[0][2]
+
+
+def _online(workspace: Path, *, lobby_rounds: int = 1) -> Path:
+    """Добавить в рабочий каталог онлайн-шаблоны (дуэль, лобби по сборнику) и сборник лобби."""
+    modes = workspace / "seeds" / "game" / "modes"
+    (modes / "music.duel.classic.yaml").write_text(_DUEL_YAML, encoding="utf-8")
+    (modes / "film.lobby.collection.yaml").write_text(
+        _LOBBY_YAML.format(rounds=lobby_rounds), encoding="utf-8"
+    )
+    (workspace / "seeds" / "collections" / "film-lobby.yaml").write_text(
+        _LOBBY_COLLECTION, encoding="utf-8"
+    )
+    return workspace
+
+
+class TestSeedOnline:
+    """Онлайн-шаблоны этапа 4a: публикация, пулы и сборник для лобби (план §0 п. 1–2)."""
+
+    def test_waits_for_templates_and_lobby_collection(self, workspace: Path) -> None:
+        stack = FakeStack(online_modes=ONLINE, online_missing_polls=2, playable_items=(FILM_ID,))
+        _run(stack, _online(workspace))
+
+        # Шаблоны ждут, пока game не отдаст все онлайн-ключи (опрос, а не одна попытка).
+        assert len(stack.recorded("GET", "/v1/modes")) == 3
+        # Пулы онлайн-шаблонов ждут тем же поиском проекции, что и соло.
+        polled = [
+            r.url.params["playable_for_mode"]
+            for r in stack.recorded("GET", "/admin/v1/projection/items")
+        ]
+        assert set(ONLINE) <= set(polled)
+        # Сборник лобби проверяется под сам шаблон лобби — после засева сборников.
+        paths = [r.url.path for r in stack.requests]
+        last_lobby_poll = max(
+            i
+            for i, r in enumerate(stack.requests)
+            if r.url.path == "/admin/v1/projection/items"
+            and r.url.params["playable_for_mode"] == "film.lobby.collection"
+        )
+        assert last_lobby_poll > paths.index("/admin/v1/collections")
+        # Шаблоны — до перегенерации плановых наборов (шаг пулов).
+        first_regen = next(i for i, p in enumerate(paths) if p.endswith("/regenerate"))
+        assert paths.index("/v1/modes") < first_regen
+
+    def test_without_online_templates_skips_step(self, workspace: Path) -> None:
+        stack = FakeStack()
+        _run(stack, workspace)
+        assert not stack.recorded("GET", "/v1/modes")
+
+    def test_missing_template_times_out_with_keys(self, workspace: Path) -> None:
+        stack = FakeStack(online_modes=ONLINE[:1], playable_items=(FILM_ID,))
+        with pytest.raises(SeedError, match=r"film\.lobby\.collection"):
+            _run(stack, _online(workspace))
+
+    def test_unpublished_mode_fails_fast(self, workspace: Path) -> None:
+        stack = FakeStack(online_modes=ONLINE, unpublished="music.duel.classic")
+        with pytest.raises(SeedError, match="не опубликован"):
+            _run(stack, _online(workspace))
+        polled = [
+            r.url.params["playable_for_mode"]
+            for r in stack.recorded("GET", "/admin/v1/projection/items")
+        ]
+        assert polled.count("music.duel.classic") == 1  # без ожидания до таймаута
+
+    def test_lobby_needs_collection_with_enough_items(self, workspace: Path) -> None:
+        # Матч на 3 раунда, а в сборнике лобби одна единица — ошибка до импорта каталога.
+        stack = FakeStack(online_modes=ONLINE, playable_items=(FILM_ID,))
+        with pytest.raises(SeedError, match=r"film\.lobby\.collection.*≥ 3"):
+            _run(stack, _online(workspace, lobby_rounds=3))
+        assert not stack.recorded("POST", "/admin/v1/imports")
+
+    def test_lobby_collection_not_playable_times_out(self, workspace: Path) -> None:
+        stack = FakeStack(online_modes=ONLINE)  # единица сборника не играбельна под шаблон
+        with pytest.raises(SeedError, match=r"под film\.lobby\.collection.*0 из 1"):
+            _run(stack, _online(workspace))
+
+    def test_real_seeds_have_collection_for_every_lobby(self) -> None:
+        import yaml
+
+        plans = [
+            mode_plan(yaml.safe_load(p.read_text("utf-8")))
+            for p in sorted((REPO / "seeds/game/modes").glob("*.yaml"))
+        ]
+        specs = [load_collection_spec(p) for p in _COLLECTIONS]
+        picked = {plan.key: spec.key for plan, spec in lobby_collections(plans, specs)}
+        # Демонстрация §0 п. 2: «кино по сборнику» на 12 раундов — свой сборник засева.
+        assert picked == {"film.lobby.collection": "film-lobby"}
 
 
 # ----------------------------------------------------------------------------- синтетика
