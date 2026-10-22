@@ -7,6 +7,7 @@ from collections.abc import Awaitable
 
 import structlog
 
+from bff_web_service.application.dto import Item, ItemCard, Mode, ModeCard, Person
 from bff_web_service.application.ports import UpstreamRejectedError, UpstreamUnavailableError
 from bff_web_service.domain import Block
 from gv_core.errors import (
@@ -70,11 +71,13 @@ def block_of[T](value: T | UpstreamError, block: str) -> Block[T]:
     return Block.ok(value)
 
 
-def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError:
+def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError | None:
     """Осознанный отказ источника → ответ экрана с кодом источника.
 
-    404 и прочие 4xx становятся 404 (``not_found`` — сообщение): не раскрываем, почему
-    ресурса нет (IDOR). 422 — ошибка входа (например, курсор от другой сортировки).
+    Ответом экрана становятся только описанные отказы: 401, 403, 404 (``not_found`` —
+    сообщение, код источника), 409 и 422 (например, курсор от другой сортировки). Прочие
+    4xx (400, 410, 418 …) — не «ресурса нет», а сбой источника: ``None``, вызывающий
+    гасит блок (``block_of`` пишет причину в лог).
     """
     if exc.status == HTTP_UNAUTHORIZED:
         return UnauthenticatedError("источник не принял токен", code=exc.code)
@@ -84,5 +87,37 @@ def screen_error(exc: UpstreamRejectedError, *, not_found: str) -> AppError:
         return ConflictError("источник отклонил запрос", code=exc.code)
     if exc.status == HTTP_UNPROCESSABLE:
         return InvalidInputError("источник отклонил параметры", code=exc.code)
-    code = exc.code if exc.status == HTTP_NOT_FOUND else NotFoundError.default_code
-    return NotFoundError(not_found, code=code)
+    if exc.status == HTTP_NOT_FOUND:
+        return NotFoundError(not_found, code=exc.code)
+    return None
+
+
+def mode_card(mode: Mode) -> ModeCard:
+    """Режим → карточка."""
+    return ModeCard(
+        key=mode.key,
+        domain=mode.domain,
+        title_key=mode.title_key,
+        source_type=mode.source_type,
+        clue_type=mode.clue_type,
+        rounds=mode.rounds,
+        allow_guest=mode.allow_guest,
+        presets=mode.presets,
+        answer_format=mode.answer_format,
+        presentation=mode.presentation,
+        start=mode.start,
+    )
+
+
+def item_card(item: Item) -> ItemCard:
+    """Карточка catalog → карточка экрана."""
+    return ItemCard(
+        media_item_id=item.id,
+        domain=item.domain,
+        kind=item.kind,
+        title=item.title,
+        original_title=item.original_title,
+        year=item.year,
+        genres=list(item.genres),
+        persons=[Person(name=p.name, role=p.role) for p in item.persons],
+    )

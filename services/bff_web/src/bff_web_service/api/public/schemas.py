@@ -12,7 +12,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 Domain = Literal["music", "film"]
 AnswerFormat = Literal["classic", "pick"]
@@ -442,3 +442,207 @@ class LibraryShelfPage(BaseModel):
     """``GET /v1/pages/library/{ref}`` (только пользователь)."""
 
     blocks: LibraryShelfBlocks
+
+
+# ----------------------------------------------------------------------------- онлайн (4a)
+MatchKind = Literal["duel", "party", "lobby"]
+MatchFinish = Literal["completed", "forfeit", "tech_win", "aborted"]
+PlayerFinish = Literal["completed", "forfeit", "left", "tech_win", "tech_loss"]
+DuelOutcome = Literal["win", "loss", "draw"]
+
+
+class MatchModeCard(BaseModel):
+    """Шаблон режима комнаты или матча (``match ModeRef``)."""
+
+    key: str
+    version: int = Field(ge=1)
+    domain: Domain
+    kind: MatchKind
+    title_key: str
+    clue_type: str
+    answer_format: str
+    ranked: bool = False
+
+
+class RoomSettingsCard(BaseModel):
+    """Действующие настройки комнаты (шаблон + переопределения хоста)."""
+
+    rounds: int = Field(ge=1)
+    level_window_s: int = Field(ge=1, description="Окно уровня, с")
+    answer_format: str
+    clue_type: str
+    players_max: int = Field(ge=2)
+    visibility: Literal["public", "private"]
+    collection_ids: list[UUID] = Field(default_factory=list)
+
+
+class OpenRoomCard(BaseModel):
+    """Открытое лобби (``match /v1/rooms/open``): вход — по ``code`` напрямую в match."""
+
+    code: str = Field(pattern=r"^[A-HJ-NP-Z2-9]{8}$")
+    mode: MatchModeCard
+    host_nickname: str
+    players: int = Field(ge=0)
+    players_max: int = Field(ge=2)
+    settings: RoomSettingsCard
+    created_at: datetime
+
+
+class OpenRoomsList(BaseModel):
+    """Открытые лобби, новые первыми; ``next_cursor`` — для ``match /v1/rooms/open``."""
+
+    items: list[OpenRoomCard]
+    next_cursor: str | None = None
+
+
+class MyMatchCard(BaseModel):
+    """Матч в «Моих матчах» (``match /v1/me/matches``)."""
+
+    match_id: UUID
+    mode: MatchModeCard
+    finished_at: datetime
+    finish: MatchFinish
+    players: int = Field(ge=1)
+    place: int = Field(ge=1)
+    score: int = Field(ge=0)
+    outcome: DuelOutcome | None = Field(description="Только у дуэли")
+    my_finish: PlayerFinish
+
+
+class MyMatchesList(BaseModel):
+    """Мои последние матчи; ``next_cursor`` — для ``match /v1/me/matches``."""
+
+    items: list[MyMatchCard]
+    next_cursor: str | None = None
+
+
+class OnlineChatCard(BaseModel):
+    """Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``)."""
+
+    emotes: list[str]
+    phrases: list[str]
+    free_text: bool = Field(description="Свободный чат — только кастомное лобби (ADR 0036)")
+
+
+class OnlineRulesCard(BaseModel):
+    """Правила комнаты онлайн-режима (``game ModeOut.online``, ADR 0032)."""
+
+    kind: MatchKind
+    players_min: int = Field(ge=2)
+    players_max: int = Field(ge=2)
+    rounds: int = Field(ge=1)
+    level_windows_s: list[int] = Field(description="Окно каждого уровня загадки, с")
+    contest_type: str = Field(description="Плагин состязания (`race`, `parallel`)")
+    ranked: bool
+    chat: OnlineChatCard
+    ladder: str | None = None
+    max_collections: int | None = Field(
+        default=None, ge=1, description="Только у лобби по сборнику: сколько сборников выбрать"
+    )
+    lobby: dict[str, JsonValue] | None = Field(
+        default=None,
+        description="Только у кастомного лобби: `{visibility, overridable}` (LobbySpec конфига)",
+    )
+
+
+class OnlineModeCard(BaseModel):
+    """Онлайн-режим для создания комнаты (``game /v1/modes?session=online``)."""
+
+    key: str
+    version: int = Field(ge=1)
+    domain: Domain
+    title_key: str
+    source_type: str
+    clue_type: str
+    answer_format: AnswerFormat
+    presentation: Presentation
+    online: OnlineRulesCard
+
+
+class OnlineBlocks(BaseModel):
+    """Блоки хаба онлайна: каждый деградирует независимо."""
+
+    open_rooms: Block[OpenRoomsList]
+    my_matches: Block[MyMatchesList]
+    modes: Block[list[OnlineModeCard]] = Field(
+        description="Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
+    )
+
+
+class OnlinePage(BaseModel):
+    """``GET /v1/pages/online``: блоки — только при ``status = ok``, иначе ``blocks: null``."""
+
+    status: Literal["ok", "auth_required", "session_expired"] = Field(
+        description=(
+            "`auth_required` — гость или аноним (экран регистрации, D13); "
+            "`session_expired` — токен не прошёл проверку или match ответил 401 "
+            "(обновить сессию и повторить)"
+        )
+    )
+    blocks: OnlineBlocks | None = None
+
+
+class MatchPlayerCard(BaseModel):
+    """Игрок в итоге матча: место с ничьими (1, 1, 3), ``outcome`` — только у дуэли."""
+
+    user_id: UUID
+    nickname: str
+    slot: int = Field(ge=0)
+    place: int = Field(ge=1)
+    score: int = Field(ge=0)
+    outcome: DuelOutcome | None
+    finish: PlayerFinish
+
+
+class RoundPlayerResultCard(BaseModel):
+    """Результат игрока в раунде."""
+
+    user_id: UUID
+    level: int | None = Field(description="Уровень угадывания; null — не угадал")
+    partial: bool
+    score: int = Field(ge=0)
+    elapsed_ms: int | None = Field(default=None, ge=0, description="От открытия уровня")
+
+
+class MatchRoundCard(BaseModel):
+    """Раунд итога: карточка единицы — в блоке ``items`` по ``media_item_id``."""
+
+    index: int = Field(ge=0)
+    media_item_id: UUID
+    results: list[RoundPlayerResultCard]
+    void: bool = Field(default=False, description="Раунд аннулирован (ассет недоступен)")
+
+
+class MatchSummary(BaseModel):
+    """Итог матча (``match /v1/matches/{id}``)."""
+
+    match_id: UUID
+    room_code: str
+    mode: MatchModeCard
+    started_at: datetime
+    finished_at: datetime
+    finish: MatchFinish
+    players: list[MatchPlayerCard]
+    rounds: list[MatchRoundCard]
+    collection_ids: list[UUID] = Field(default_factory=list)
+
+
+class ItemShelvesCard(BaseModel):
+    """Флаг «в медиатеке»: полки пользователя с единицей (пусто — не сохранена)."""
+
+    media_item_id: UUID
+    shelves: list[str]
+
+
+class MatchBlocks(BaseModel):
+    """Блоки экрана итога матча."""
+
+    match: Block[MatchSummary]
+    items: Block[list[ItemCard]]
+    library: Block[list[ItemShelvesCard]]
+
+
+class MatchPage(BaseModel):
+    """``GET /v1/pages/match/{match_id}`` (только пользователь)."""
+
+    blocks: MatchBlocks

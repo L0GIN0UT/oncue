@@ -10,6 +10,8 @@ from bff_web_service.application.queries import (
     GetHomePage,
     GetLibraryPage,
     GetLibraryShelfPage,
+    GetMatchPage,
+    GetOnlinePage,
     GetResultsPage,
     GetSession,
     GetSoloPage,
@@ -29,4 +31,6 @@ class BffDeps:
     get_collection: GetCollectionPage
     get_library: GetLibraryPage
     get_library_shelf: GetLibraryShelfPage
+    get_online: GetOnlinePage
+    get_match: GetMatchPage
     http_cache: HttpCacheSettings
