@@ -7,13 +7,21 @@
 
 from gv_game_kernel.builtin import daily_seed, register_builtin, register_collection
 from gv_game_kernel.contest import ContestRoundState, PlayerRound, PlayerRoundView, PlayerStatus
-from gv_game_kernel.engine import AnswerStep, ModeEngine, OptionView, ShownView, answer_normalizer
+from gv_game_kernel.engine import (
+    AnswerStep,
+    ContestStep,
+    ModeEngine,
+    OptionView,
+    ShownView,
+    answer_normalizer,
+)
 from gv_game_kernel.errors import (
     ANSWER_KIND_UNSUPPORTED,
     COLLECTION_REQUIRED,
     CONFIG_INVALID,
     GIVE_UP_NOT_ALLOWED,
     LEVEL_LOCKED,
+    MODE_NOT_ONLINE,
     MODE_NOT_SOLO,
     OPTION_UNKNOWN,
     POOL_TOO_SMALL,
@@ -23,12 +31,14 @@ from gv_game_kernel.errors import (
     ROUNDS_NOT_ALLOWED,
     SKIP_NOT_ALLOWED,
     SUBJECT_REQUIRED,
+    TOO_MANY_COLLECTIONS,
     TOO_MANY_SUBJECTS,
     ActionNotAllowedError,
     AnswerKindError,
     CollectionRequiredError,
     ConfigError,
     LevelLockedError,
+    ModeNotOnlineError,
     ModeNotSoloError,
     OptionNotFoundError,
     PoolTooSmallError,
@@ -38,6 +48,7 @@ from gv_game_kernel.errors import (
     RoundsNotAllowedError,
     RuleViolation,
     SubjectRequiredError,
+    TooManyCollectionsError,
     TooManySubjectsError,
 )
 from gv_game_kernel.outcome import DuelOutcome, MatchOutcome, Placement
@@ -82,6 +93,9 @@ from gv_game_kernel.ports import (
 )
 from gv_game_kernel.refs import AssetRef, MediaItemRef, PersonRef
 from gv_game_kernel.registry import (
+    ALL_SESSIONS,
+    ONLINE_SESSIONS,
+    SOLO_SESSIONS,
     UNKNOWN_PLUGIN,
     ConfigIssue,
     DuplicatePluginError,
@@ -98,6 +112,7 @@ from gv_game_kernel.round import (
     RoundState,
     apply_guess,
     apply_skip,
+    close_round,
     give_up,
     require_level_open,
     round_outcome,
@@ -123,12 +138,15 @@ from gv_game_kernel.spec import (
 )
 
 __all__ = [
+    "ALL_SESSIONS",
     "ANSWER_KIND_UNSUPPORTED",
     "COLLECTION_REQUIRED",
     "CONFIG_INVALID",
     "GIVE_UP_NOT_ALLOWED",
     "LEVEL_LOCKED",
+    "MODE_NOT_ONLINE",
     "MODE_NOT_SOLO",
+    "ONLINE_SESSIONS",
     "OPTION_UNKNOWN",
     "POOL_TOO_SMALL",
     "PRESET_NOT_FOUND",
@@ -136,7 +154,9 @@ __all__ = [
     "ROUND_FINISHED",
     "ROUND_NOT_FINISHED",
     "SKIP_NOT_ALLOWED",
+    "SOLO_SESSIONS",
     "SUBJECT_REQUIRED",
+    "TOO_MANY_COLLECTIONS",
     "TOO_MANY_SUBJECTS",
     "UNKNOWN_PLUGIN",
     "ActionNotAllowedError",
@@ -163,6 +183,7 @@ __all__ = [
     "ConfigIssue",
     "ContestRoundState",
     "ContestRule",
+    "ContestStep",
     "DrawContext",
     "DuelOutcome",
     "DuplicatePluginError",
@@ -182,6 +203,7 @@ __all__ = [
     "MediaItemRef",
     "ModeConfig",
     "ModeEngine",
+    "ModeNotOnlineError",
     "ModeNotSoloError",
     "OnlineSessionSpec",
     "OptionNotFoundError",
@@ -226,11 +248,13 @@ __all__ = [
     "SubjectQuery",
     "SubjectRequiredError",
     "SubjectSource",
+    "TooManyCollectionsError",
     "TooManySubjectsError",
     "answer_normalizer",
     "apply_guess",
     "apply_skip",
     "canonical_json",
+    "close_round",
     "daily_seed",
     "give_up",
     "params_hash",

@@ -52,14 +52,33 @@ class ModeCatalog:
             raise ModeVersionNotFoundError("версия конфига не найдена")
         return self.factory.build(found)
 
-    async def published(self) -> list[ModeRules]:
-        """Правила всех опубликованных режимов; несобираемые пропускаются с ошибкой в логе."""
+    async def version_of(self, key: str, version: int) -> tuple[ConfigVersion, ModeRules]:
+        """Опубликованная или архивная версия режима и её правила (план матча, ADR 0033).
+
+        Raises:
+            ModeNotFoundError: такой версии нет.
+            ModeUnavailableError: конфиг не собирается текущим реестром.
+        """
+        found = await self.source.version(key, version)
+        if found is None:
+            raise ModeNotFoundError("версия режима не найдена")
+        return found, self.factory.build(found)
+
+    async def published(self, *, online: bool = False) -> list[ModeRules]:
+        """Правила опубликованных режимов одного вида: по умолчанию — соло (их играет game:
+        каталог, дейлики, режимы сборника), при ``online`` — онлайн (играет match, ADR 0032).
+
+        Несобираемые пропускаются с ошибкой в логе.
+        """
         result = []
         for version in await self.source.published():
             try:
-                result.append(self.factory.build(version))
+                rules = self.factory.build(version)
             except ModeUnavailableError:
                 log.exception(
                     "game.mode_unavailable", mode_key=version.key, version=version.version
                 )
+                continue
+            if rules.is_online == online:
+                result.append(rules)
         return sorted(result, key=lambda r: r.key)

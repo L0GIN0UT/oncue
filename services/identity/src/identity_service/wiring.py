@@ -46,6 +46,10 @@ from identity_service.application.commands.oauth import (
     StartOAuth,
     UnlinkExternalAccount,
 )
+from identity_service.application.commands.realtime import (
+    IssueRealtimeToken,
+    RealtimeTokenConfig,
+)
 from identity_service.application.commands.roles import AssignRoles, UpdateRoleMatrix
 from identity_service.application.commands.service_tokens import (
     IssueServiceToken,
@@ -81,6 +85,7 @@ from identity_service.infrastructure.clients import (
 from identity_service.infrastructure.db.guest_sessions import SqlGuestSessionPurger
 from identity_service.infrastructure.db.repositories import SqlIdentityUnitOfWork
 from identity_service.infrastructure.db.tables import TABLES
+from identity_service.infrastructure.realtime import HmacRealtimeTokenSigner
 from identity_service.infrastructure.redis_stores import (
     RedisOAuthStateStore,
     RedisRateLimiter,
@@ -181,6 +186,52 @@ def signing_keys(settings: Settings, *, serving: bool) -> list[SigningKey]:
     if serving:
         log.warning("auth.ephemeral_signing_key")
     return [generate_dev_key()]
+
+
+def realtime_signer(settings: Settings, *, serving: bool) -> HmacRealtimeTokenSigner | None:
+    """Подписант connection-токенов Centrifugo из ``GV_REALTIME__CONNECTION_TOKEN_SECRET``.
+
+    Без секрета вне local/ci процесс не стартует (fail-closed, как ``GV_JWT__SIGNING_KEYS``):
+    ошибка конфигурации видна при деплое, а не первым игроком онлайна. В local/ci (и при
+    сборке без инфраструктуры — экспорт OpenAPI) — ``None``: ручка отвечает 503
+    ``realtime.not_configured``, остальной identity работает без Centrifugo.
+
+    Секрет subscription-токенов identity иметь не должен (D9: им владеет только match) —
+    его наличие тоже ошибка конфигурации.
+
+    Raises:
+        KeyConfigError: нет секрета вне local/ci, задан чужой секрет или ``aud`` совпал
+            с ``aud`` access- или сервисных токенов.
+    """
+    rt = settings.realtime
+    if rt is not None and rt.subscription_token_secret is not None:
+        raise KeyConfigError(
+            "GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET не должен быть у identity (D9)"
+        )
+    # Защита в глубину к разным алгоритмам: и aud не должен совпасть с access/internal.
+    if rt is not None and rt.token_audience in (settings.jwt_audience, settings.internal_audience):
+        raise KeyConfigError("GV_REALTIME__TOKEN_AUDIENCE совпадает с aud токенов сервисов")
+    secret = rt.connection_token_secret if rt is not None else None
+    if secret is not None:
+        return HmacRealtimeTokenSigner(secret.get_secret_value())
+    if serving and settings.environment not in (Environment.LOCAL, Environment.CI):
+        raise KeyConfigError("GV_REALTIME__CONNECTION_TOKEN_SECRET обязателен вне local/ci")
+    if serving:
+        log.warning("realtime.not_configured")
+    return None
+
+
+def realtime_config(settings: Settings) -> RealtimeTokenConfig:
+    """Настройки → параметры выдачи connection-токенов."""
+    limit = settings.realtime_token_limit
+    defaults = RealtimeTokenConfig()
+    rt = settings.realtime
+    return RealtimeTokenConfig(
+        ttl_s=rt.token_ttl_s if rt is not None else defaults.ttl_s,
+        audience=rt.token_audience if rt is not None else defaults.audience,
+        per_user=limit.per_user,
+        window_s=limit.window_s,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,6 +420,9 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
                 uow, guest_issuer, limiter, clock, guests, on_started=GUEST_SESSIONS_STARTED.inc
             ),
             end=EndGuestSession(uow, revocation, clock),
+        ),
+        issue_realtime_token=IssueRealtimeToken(
+            realtime_signer(settings, serving=serving), limiter, clock, realtime_config(settings)
         ),
     )
 

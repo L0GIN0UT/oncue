@@ -1311,6 +1311,17 @@
             "description": "Только у шаблона сборника: минимум играбельных единиц для игры",
             "title": "Min Items"
           },
+          "online": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnlineModeOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у онлайн-режима (`session=online`); у соло-режимов — null"
+          },
           "presentation": {
             "default": "score",
             "enum": [
@@ -1506,6 +1517,146 @@
           "agree_pct"
         ],
         "title": "MoveStats",
+        "type": "object"
+      },
+      "OnlineChatOut": {
+        "description": "Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``) и признак\nсвободного чата (только кастомное лобби, ADR 0036).",
+        "properties": {
+          "emotes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Emotes",
+            "type": "array"
+          },
+          "free_text": {
+            "title": "Free Text",
+            "type": "boolean"
+          },
+          "phrases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Phrases",
+            "type": "array"
+          }
+        },
+        "required": [
+          "emotes",
+          "phrases",
+          "free_text"
+        ],
+        "title": "OnlineChatOut",
+        "type": "object"
+      },
+      "OnlineModeOut": {
+        "description": "Правила комнаты онлайн-режима (``GET /v1/modes?session=online``, ADR 0032).",
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/OnlineChatOut"
+          },
+          "contest_type": {
+            "description": "Плагин состязания (`race`, `parallel`)",
+            "title": "Contest Type",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "duel",
+              "party",
+              "lobby"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ladder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ladder"
+          },
+          "level_windows_s": {
+            "description": "Окно каждого уровня загадки, с",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Level Windows S",
+            "type": "array"
+          },
+          "lobby": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у кастомного лобби: `{visibility, overridable}` по `$defs/LobbySpec` контракта конфига режима — из чего выбирает хост",
+            "title": "Lobby"
+          },
+          "max_collections": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только у лобби по сборнику: сколько сборников можно выбрать",
+            "title": "Max Collections"
+          },
+          "players": {
+            "$ref": "#/components/schemas/OnlinePlayersOut"
+          },
+          "ranked": {
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "rounds": {
+            "minimum": 1.0,
+            "title": "Rounds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "players",
+          "rounds",
+          "level_windows_s",
+          "contest_type",
+          "ranked",
+          "chat"
+        ],
+        "title": "OnlineModeOut",
+        "type": "object"
+      },
+      "OnlinePlayersOut": {
+        "description": "Места комнаты.",
+        "properties": {
+          "max": {
+            "minimum": 2.0,
+            "title": "Max",
+            "type": "integer"
+          },
+          "min": {
+            "minimum": 2.0,
+            "title": "Min",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ],
+        "title": "OnlinePlayersOut",
         "type": "object"
       },
       "OptionAnswer": {
@@ -5265,7 +5416,7 @@
     },
     "/internal/v1/round-plans": {
       "post": {
-        "description": "Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`).",
+        "description": "Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), 422 `game.collection_not_supported` (сборники у режима без source `collection`). `exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — пока хватает остальных единиц).",
         "operationId": "create_round_plan_internal_v1_round_plans_post",
         "requestBody": {
           "content": {
@@ -5661,7 +5812,7 @@
     },
     "/v1/modes": {
       "get": {
-        "description": "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`.",
+        "description": "Публичный, `Cache-Control: public, max-age=30`. `kind=play` (по умолчанию) — режимы, которые играются сами по себе, без шаблонов сборника (source `collection`); `kind=collection` — только шаблоны сборника (конструктор, экран сессии по сборнику) с `round_options`/`min_items` из конфига. Играбельность конкретного сборника — `GET /v1/collections/{collection_id}/modes`. `session=solo` (по умолчанию) — только соло-режимы; `session=online` — онлайн-шаблоны (дуэль, party, лобби, в том числе по сборнику; `kind` не учитывается) с блоком `online` (ADR 0032): соло-хаб их не видит.",
         "operationId": "list_modes_v1_modes_get",
         "parameters": [
           {
@@ -5695,6 +5846,20 @@
                 "collection"
               ],
               "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session",
+            "required": false,
+            "schema": {
+              "default": "solo",
+              "enum": [
+                "solo",
+                "online"
+              ],
+              "title": "Session",
               "type": "string"
             }
           }
@@ -6021,7 +6186,7 @@
     },
     "/v1/sessions": {
       "post": {
-        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.",
+        "description": "201 — новая сессия. Для дейлика при незавершённой сессии дня — 200 с ней же. Ошибки: 409 `game.daily_already_played` (`details.session_id`), 403 `game.guest_not_allowed`, 404 `game.mode_not_found`, 422 `game.mode_not_solo` (онлайн-режим играется только в комнате match), 503 `game.daily_not_ready` (набор периода не готов), 503 `game.pool_empty`. Марафон: `subject_ids` обязательны — 422 `game.subject_required`, `game.too_many_subjects`; режим без выбора персон — 422 `game.subjects_not_supported`. Сетка периода: повторный вход в доигранную — 409 `game.daily_already_played`. Сборник (`collection_id`, `rounds`): 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required` (режим с source `collection` без сборника), 422 `game.collection_domain_mismatch`, 422 `game.rounds_not_allowed` (нет в `round_options`), 422 `game.collection_not_supported` (`collection_id` у режима без source `collection`), 422 `game.pool_too_small`.",
         "operationId": "start_session_v1_sessions_post",
         "parameters": [
           {

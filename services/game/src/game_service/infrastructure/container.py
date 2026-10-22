@@ -41,6 +41,7 @@ from game_service.application.ports import (
     UnitOfWorkFactory,
 )
 from game_service.application.queries.play import PlayQueries
+from game_service.application.queries.round_plans import RoundPlans
 from game_service.application.rules import RulesFactory
 from game_service.application.views import RevealLinkCache, SessionPresenter, ShareSettings
 from game_service.infrastructure.config_cache import CachedModeConfigs
@@ -256,6 +257,13 @@ class GameContainer:
             subjects_per_min=self.settings.game_limits.subjects_per_min,
             playability_per_min=self.settings.game_limits.playability_per_min,
             candidate_limit=self.settings.game.candidate_limit,
+        )
+
+    @cached_property
+    def round_plans(self) -> RoundPlans:
+        """План раундов матча для match (internal API, ADR 0033)."""
+        return RoundPlans(
+            self.uow_factory(), self.catalog, candidate_limit=self.settings.game.candidate_limit
         )
 
     @cached_property

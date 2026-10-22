@@ -9,8 +9,15 @@ from typing import Any
 
 import pytest
 import yaml
-from game_service.application.rules import ModeRules, PeriodSchedule, RulesFactory
+from game_service.application.rules import (
+    SUPPORTED_SESSIONS,
+    ModeRules,
+    PeriodSchedule,
+    RulesFactory,
+)
 from game_service.infrastructure.plugins import CatalogRegistry
+
+from gv_game_kernel import ModeNotSoloError, PluginRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -27,13 +34,33 @@ def factory(plugin_registry: CatalogRegistry) -> RulesFactory:
     return RulesFactory(plugin_registry)
 
 
+KERNEL_ONLINE = hasattr(PluginRegistry, "contest")
+"""Плагины состязания и ``party_speed`` в ядре (поток A этапа 4a)."""
+
+
 @pytest.mark.parametrize("name", sorted(p.stem for p in SEEDS.glob("*.yaml")))
 def test_seeds_are_valid(factory: RulesFactory, name: str) -> None:
-    check = factory.check(body(name))
+    raw = body(name)
+    if raw["session"]["kind"] != "solo" and not KERNEL_ONLINE:
+        pytest.skip("онлайн-сид проверяется плагинами ContestRule потока A этапа 4a")
+    check = factory.check(raw)
     assert check.errors == []
     assert check.rules is not None
-    # Формат pick — один уровень и один ответ (ядро), классика — шесть уровней.
-    assert check.rules.levels_count == (1 if check.rules.answer_format == "pick" else 6)
+    # Число уровней — по параметрам загадки (pick — один, классика соло — шесть, дуэль — два).
+    assert check.rules.levels_count == len(raw["clue"]["params"]["levels"])
+    assert check.rules.is_online == (raw["session"]["kind"] != "solo")
+
+
+def test_online_config_is_stored_but_not_played_solo(factory: RulesFactory) -> None:
+    """Онлайн-конфиг game проверяет и собирает (ADR 0032), но соло-правил у него нет."""
+    duel = rules_of(factory, "film.duel.frame")
+    assert duel.is_online and duel.levels_count == 6 and duel.max_collections == 1
+    with pytest.raises(ModeNotSoloError) as info:
+        _ = duel.engine.solo_session
+    assert info.value.code == "game.mode_not_solo"
+    assert {"solo", "duel", "party", "lobby"} == SUPPORTED_SESSIONS
+    solo = rules_of(factory, "film.collection.frame")
+    assert not solo.is_online and solo.max_collections == 1
 
 
 def rules_of(factory: RulesFactory, name: str) -> ModeRules:

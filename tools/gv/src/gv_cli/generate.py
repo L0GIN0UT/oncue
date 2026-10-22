@@ -61,6 +61,15 @@ identity подписывает connection-токены, match — subscription-
 """
 
 
+REALTIME_PUBLISHERS: frozenset[str] = frozenset({"match"})
+"""Сервисы, которые публикуют в Centrifugo через server API (получают ``GV_REALTIME__API_*``).
+
+identity только подписывает connection-токены: ключ server API ему не нужен (минимум прав —
+утечка env identity не даёт публиковать в каналы комнат). rating добавится на этапе 4b.
+Сервис из этого множества обязан иметь ``realtime = true`` в реестре (проверяет ``gv gen``).
+"""
+
+
 def service_clients_json() -> str:
     """``GV_SERVICE_CLIENTS`` с пустыми ``secret_sha256`` (их заполняет ``gv dev secrets``)."""
     return json.dumps(
@@ -93,7 +102,9 @@ TARGETS: tuple[Target, ...] = (
 
 def _check_realtime(services: list[Service]) -> None:
     missing = sorted(
-        s.name for s in services if s.name in REALTIME_TOKEN_SECRETS and not s.realtime
+        s.name
+        for s in services
+        if (s.name in REALTIME_TOKEN_SECRETS or s.name in REALTIME_PUBLISHERS) and not s.realtime
     )
     if missing:
         raise SystemExit(f"секрет токенов Centrifugo задан для сервисов без realtime: {missing}")
@@ -103,6 +114,7 @@ def _render(template: str, services: list[Service]) -> str:
     _check_realtime(services)
     return _env.get_template(template).render(
         realtime_token_secrets=REALTIME_TOKEN_SECRETS,
+        realtime_publishers=REALTIME_PUBLISHERS,
         services=services,
         service_clients=SERVICE_CLIENTS,
         service_clients_json=service_clients_json(),

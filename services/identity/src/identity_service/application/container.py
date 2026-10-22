@@ -22,6 +22,7 @@ from identity_service.application.commands.oauth import (
     StartOAuth,
     UnlinkExternalAccount,
 )
+from identity_service.application.commands.realtime import IssueRealtimeToken
 from identity_service.application.commands.roles import AssignRoles, UpdateRoleMatrix
 from identity_service.application.commands.service_tokens import IssueServiceToken
 from identity_service.application.config import AuthConfig
@@ -63,3 +64,5 @@ class IdentityUseCases:
     issue_service_token: IssueServiceToken
     guest: GuestUseCases | None = None
     """Гостевые сессии (D5 плана этапа 2); ``None`` — выключены (тестовые сборки)."""
+    issue_realtime_token: IssueRealtimeToken | None = None
+    """Connection-токены Centrifugo (D9 этапа 4); ``None`` — ручка отвечает 503."""

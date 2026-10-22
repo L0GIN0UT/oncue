@@ -1,4 +1,5 @@
-"""Встроенные способы подсчёта очков: ``by_level`` и ``by_speed`` (D10).
+"""Встроенные способы подсчёта очков: ``by_level`` и ``by_speed`` (D10), ``streak``,
+``none`` (этап 3a) и ``party_speed`` (party, ADR 0032).
 
 Дробные коэффициенты из конфига (``partial_ratio``, ``window_s``) приходят как float;
 считаем через ``Fraction(str(x))``, чтобы ``floor(100 × 0.29)`` давал 29, а не 28 из-за
@@ -238,4 +239,65 @@ class NoneScorer:
     ) -> list[ParamIssue]:
         """Перекрёстных правил нет."""
         typed(params, NoneParams)
+        return []
+
+
+# ----------------------------------------------------------------------------- party_speed
+ONLINE_ONLY = "config.online_only"
+"""Код проблемы: плагин считает по окну уровня матча — в соло-сессии окна нет."""
+
+
+class PartySpeedParams(PluginParams):
+    """Параметры ``party_speed`` (``contracts/modes/params/scorer.party_speed.v1.json``)."""
+
+    max_points: Annotated[StrictInt, Field(ge=1, le=1000)]
+    partial_ratio: Ratio
+
+
+class PartySpeedScorer:
+    """Очки party за скорость (D4, ADR 0032): ``max(1, round(max_points × k × clamp(1 − t/T)))``.
+
+    ``k`` — 1 за точный ответ и ``partial_ratio`` за частичный; ``t`` —
+    ``RoundOutcome.elapsed_ms`` (от открытия уровня ответа, часы сервера), ``T`` —
+    ``RoundOutcome.window_ms`` (окно этого уровня). Округление — половина вверх, без
+    ошибок двоичной арифметики. Промах, сдача без частичного и ``void`` — 0; угаданный
+    раунд — не меньше 1. Без времени ответа (``t`` или ``T`` неизвестны) — минимум, 1:
+    клиенту не на что влиять.
+    """
+
+    key: ClassVar[str] = "party_speed"
+    params_schema: ClassVar[type[BaseModel]] = PartySpeedParams
+    presentation: ClassVar[str] = SCORE_PRESENTATION
+    requires_early_end: ClassVar[bool] = False
+
+    def score(self, outcome: RoundOutcome, params: BaseModel) -> int:
+        """Очки за раунд (``exact`` — полная доля, частичный — ``× partial_ratio``)."""
+        p = typed(params, PartySpeedParams)
+        if outcome.result is RoundResult.EXACT:
+            k = Fraction(1)
+        elif outcome.result is not RoundResult.VOID and outcome.partial_level is not None:
+            k = _exact(p.partial_ratio)
+        else:
+            return 0
+        share = self._share(outcome.elapsed_ms, outcome.window_ms)
+        return max(1, math.floor(p.max_points * k * share + Fraction(1, 2)))
+
+    @staticmethod
+    def _share(elapsed_ms: int | None, window_ms: int | None) -> Fraction:
+        """``clamp(1 − t/T)`` в точных дробях; без времени — 0 (минимум очков)."""
+        if elapsed_ms is None or window_ms is None or window_ms <= 0:
+            return Fraction(0)
+        return min(Fraction(1), max(Fraction(0), 1 - Fraction(elapsed_ms, window_ms)))
+
+    def max_score(self, params: BaseModel, levels_count: int) -> int:
+        """Максимум за раунд — ``max_points``."""
+        return typed(params, PartySpeedParams).max_points
+
+    def cross_check(
+        self, params: BaseModel, *, config: ModeConfig, levels_count: int
+    ) -> list[ParamIssue]:
+        """Только онлайн-сессия: ``T`` — окно уровня матча (``session.level_windows_s``)."""
+        typed(params, PartySpeedParams)
+        if not config.is_online:
+            return [ParamIssue("$", ONLINE_ONLY)]
         return []

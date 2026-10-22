@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from gv_game_kernel import (
+    ALL_SESSIONS,
     ConfigError,
     ConfigIssue,
     EngineFactory,
@@ -22,9 +24,14 @@ from gv_game_kernel.builtin import AudioIntroParams
 pytestmark = pytest.mark.unit
 
 SeedBody = Callable[[str], dict[str, Any]]
-SEEDS = sorted(
-    p.stem for p in (Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml")
-)
+_SEED_FILES = sorted((Path(__file__).resolve().parents[3] / "seeds/game/modes").glob("*.yaml"))
+# Сиды делятся по ``session.kind``: соло (game) и онлайн-шаблоны 4a (match, ADR 0032).
+SEEDS = [
+    p.stem
+    for p in _SEED_FILES
+    if yaml.safe_load(p.read_text(encoding="utf-8"))["session"]["kind"] == "solo"
+]
+ONLINE_SEEDS = [p.stem for p in _SEED_FILES if p.stem not in SEEDS]
 FACTORY = EngineFactory(register_builtin(PluginRegistry()))
 # Сиды game собираются реестром процесса game: встроенные плагины и ``collection`` (3b).
 SEED_FACTORY = EngineFactory(register_collection(register_builtin(PluginRegistry())))
@@ -80,7 +87,7 @@ BROKEN: list[tuple[str, str, Any, ConfigIssue]] = [
     (
         "music.daily.classic",
         "scoring.type",
-        "party_speed",
+        "elo",
         ConfigIssue("scoring.type", "config.unknown_plugin"),
     ),
     (
@@ -355,16 +362,13 @@ def test_every_rule_code_is_covered() -> None:
     }
 
 
-# Онлайн-режимы этапа 4 (``duel``/``party``/``lobby``) собирает поток A (ContestRule, A1–A5).
-STAGE3A_MODES = sorted(
-    p.stem
-    for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml")
-    if p.stem.split(".")[1] not in {"duel", "party", "lobby"}
+# Тестовые режимы 3a, шаблон сборника 3b и онлайн-шаблоны этапа 4 (``duel``/``party``/
+# ``lobby``): game публикует все виды сессий (``ALL_SESSIONS``), источник ``collection`` —
+# ``register_collection``.
+STAGE3A_MODES = sorted(p.stem for p in (Path(__file__).resolve().parent / "modes").glob("*.yaml"))
+FULL = EngineFactory(
+    register_collection(register_builtin(PluginRegistry())), supported_sessions=ALL_SESSIONS
 )
-
-
-# Тестовые режимы 3a и шаблон сборника 3b (источник ``collection`` — ``register_collection``).
-FULL = EngineFactory(register_collection(register_builtin(PluginRegistry())))
 
 
 @pytest.mark.parametrize("key", STAGE3A_MODES)
