@@ -1948,7 +1948,7 @@
         "type": "object"
       },
       "OnlinePage": {
-        "description": "``GET /v1/pages/online``: ``auth_required`` — гость или аноним (D13), ``blocks: null``.",
+        "description": "``GET /v1/pages/online``: блоки — только при ``status = ok``, иначе ``blocks: null``.",
         "properties": {
           "blocks": {
             "anyOf": [
@@ -1961,9 +1961,11 @@
             ]
           },
           "status": {
+            "description": "`auth_required` — гость или аноним (экран регистрации, D13); `session_expired` — токен не прошёл проверку или match ответил 401 (обновить сессию и повторить)",
             "enum": [
               "ok",
-              "auth_required"
+              "auth_required",
+              "session_expired"
             ],
             "title": "Status",
             "type": "string"
@@ -3480,7 +3482,7 @@
     },
     "/v1/pages/online": {
       "get": {
-        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Всегда `private, no-store`.",
+        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.",
         "operationId": "online_page_v1_pages_online_get",
         "responses": {
           "200": {

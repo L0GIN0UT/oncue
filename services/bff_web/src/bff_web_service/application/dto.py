@@ -41,11 +41,14 @@ class Viewer:
         kind: Вид субъекта по проверенному токену; ``None`` — аноним или токен не удалось
             проверить локально (ключи identity недоступны).
         verified: Токен проверен локально (подпись, срок, отзыв).
+        token_rejected: Токен был, но не прошёл локальную проверку (истёк, отозван,
+            подделан): для экранов это аноним, а хаб онлайна просит фронт обновить сессию.
     """
 
     token: str | None = None
     kind: SubjectKind | None = None
     verified: bool = False
+    token_rejected: bool = False
 
     @property
     def is_personal(self) -> bool:
@@ -779,10 +782,16 @@ class ItemShelves:
 
 # ----------------------------------------------------------------------------- экраны 4a
 class OnlineStatus(StrEnum):
-    """Состояние хаба онлайна: ``auth_required`` — гость или аноним (D13), блоков нет."""
+    """Состояние хаба онлайна; кроме ``ok`` блоков нет.
+
+    ``auth_required`` — гость или аноним (D13): фронт показывает экран регистрации.
+    ``session_expired`` — токен не прошёл проверку или match ответил 401: фронт обновляет
+    сессию (refresh) и повторяет запрос.
+    """
 
     OK = "ok"
     AUTH_REQUIRED = "auth_required"
+    SESSION_EXPIRED = "session_expired"
 
 
 @dataclass(frozen=True, slots=True)
@@ -796,7 +805,7 @@ class OnlineBlocks:
 
 @dataclass(frozen=True, slots=True)
 class OnlinePage:
-    """``GET /v1/pages/online``: гостю и анониму — ``auth_required`` без блоков."""
+    """``GET /v1/pages/online``: блоки есть только при ``status = ok``."""
 
     status: OnlineStatus
     blocks: OnlineBlocks | None = None

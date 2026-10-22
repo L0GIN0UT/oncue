@@ -527,9 +527,15 @@ class OnlineBlocks(BaseModel):
 
 
 class OnlinePage(BaseModel):
-    """``GET /v1/pages/online``: ``auth_required`` — гость или аноним (D13), ``blocks: null``."""
+    """``GET /v1/pages/online``: блоки — только при ``status = ok``, иначе ``blocks: null``."""
 
-    status: Literal["ok", "auth_required"]
+    status: Literal["ok", "auth_required", "session_expired"] = Field(
+        description=(
+            "`auth_required` — гость или аноним (экран регистрации, D13); "
+            "`session_expired` — токен не прошёл проверку или match ответил 401 "
+            "(обновить сессию и повторить)"
+        )
+    )
     blocks: OnlineBlocks | None = None
 
 

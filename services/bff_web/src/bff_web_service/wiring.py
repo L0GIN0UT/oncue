@@ -106,6 +106,12 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             rooms_limit=pages.online_rooms_limit,
             matches_limit=pages.online_matches_limit,
         ),
-        get_match=GetMatchPage(match, catalog, library, concurrency=up.max_concurrency),
+        get_match=GetMatchPage(
+            match,
+            catalog,
+            library,
+            concurrency=up.max_concurrency,
+            items_deadline_s=pages.match_items_deadline_s,
+        ),
         http_cache=settings.http_cache,
     )

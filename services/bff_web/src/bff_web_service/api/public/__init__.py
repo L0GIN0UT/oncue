@@ -96,13 +96,16 @@ async def resolve_viewer(request: Request) -> Viewer:
         principal = await verifier.verify(token)
     except UnauthenticatedError as exc:
         log.info("bff.token_rejected", code=exc.code)
-        return ANONYMOUS
+        return REJECTED
     except DependencyUnavailableError:
         log.warning("bff.jwks_unavailable")
         return Viewer(token=token)
     kind = SubjectKind.GUEST if principal.is_guest else SubjectKind.USER
     return Viewer(token=token, kind=kind, verified=True)
 
+
+REJECTED = Viewer(token_rejected=True)
+"""Токен не прошёл проверку: для экранов — аноним (токен дальше не уходит)."""
 
 CurrentViewer = Annotated[Viewer, Depends(resolve_viewer)]
 
@@ -290,7 +293,9 @@ def build_public_router(deps: BffDeps) -> APIRouter:
             "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания "
             "комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). "
             "Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, "
-            "`blocks: null`, match не вызывается. Всегда `private, no-store`."
+            "`blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил "
+            "401 — `status: session_expired` (обновить сессию и повторить). Всегда "
+            "`private, no-store`."
         ),
     )
     async def online_page(viewer: CurrentViewer, response: Response) -> OnlinePage:

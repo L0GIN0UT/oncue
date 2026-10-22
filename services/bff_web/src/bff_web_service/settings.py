@@ -86,6 +86,9 @@ class PagesSettings(BaseModel):
         library_items_limit: Единиц на странице полки медиатеки.
         online_rooms_limit: Открытых лобби в блоке хаба онлайна (дальше — курсор match).
         online_matches_limit: Последних матчей в блоке «Мои матчи» хаба онлайна.
+        match_items_deadline_s: Общий предел на блоки ``items`` (catalog) и ``library``
+            итога матча: до 50 единиц идут волнами по ``max_concurrency``, и без общего
+            предела страница ждала бы ``волны × timeout_s``. Не успел — блок ``unavailable``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -99,6 +102,7 @@ class PagesSettings(BaseModel):
     library_items_limit: int = Field(default=50, ge=1, le=100)
     online_rooms_limit: int = Field(default=20, ge=1, le=50)
     online_matches_limit: int = Field(default=10, ge=1, le=50)
+    match_items_deadline_s: float = Field(default=2.0, gt=0, le=30)
 
 
 class Settings(ServiceSettings):

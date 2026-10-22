@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
@@ -175,9 +177,20 @@ def online(match: FakeMatch, game: FakeGame | None = None) -> GetOnlinePage:
 
 
 def match_page(
-    match: FakeMatch, catalog: FakeCatalog | None = None, library: FakeLibrary | None = None
+    match: FakeMatch,
+    catalog: FakeCatalog | None = None,
+    library: FakeLibrary | None = None,
+    *,
+    concurrency: int = 10,
+    deadline_s: float = 5.0,
 ) -> GetMatchPage:
-    return GetMatchPage(match, catalog or FakeCatalog(), library or FakeLibrary(), concurrency=10)
+    return GetMatchPage(
+        match,
+        catalog or FakeCatalog(),
+        library or FakeLibrary(),
+        concurrency=concurrency,
+        items_deadline_s=deadline_s,
+    )
 
 
 # ----------------------------------------------------------------------------- хаб
@@ -204,16 +217,27 @@ async def test_online_guest_and_anonymous_are_auth_required_without_calls(viewer
     assert match.calls == [] and game.calls == 0
 
 
-@pytest.mark.parametrize(
-    "rejection",
-    [GUEST_REJECTED, UpstreamRejectedError("match", 401, "auth.unauthenticated")],
-    ids=["guest", "revoked"],
-)
-async def test_online_unverified_token_rejected_by_match_is_auth_required(
-    rejection: UpstreamRejectedError,
-) -> None:
-    page = await online(FakeMatch(rooms=rejection, matches=rejection))(UNVERIFIED)
+async def test_online_unverified_guest_token_is_auth_required() -> None:
+    """JWKS недоступен: гостя распознаёт match (403) — экран регистрации."""
+    page = await online(FakeMatch(rooms=GUEST_REJECTED, matches=GUEST_REJECTED))(UNVERIFIED)
     assert page.status is OnlineStatus.AUTH_REQUIRED
+
+
+async def test_online_match_401_is_session_expired() -> None:
+    """match не принял токен (отозван после выдачи) — фронт обновит сессию и повторит."""
+    revoked = UpstreamRejectedError("match", 401, "auth.session_revoked")
+    page = await online(FakeMatch(rooms=revoked))(USER)
+    assert page.status is OnlineStatus.SESSION_EXPIRED
+    assert page.blocks is None
+
+
+async def test_online_locally_rejected_token_is_session_expired_without_calls() -> None:
+    match, game = FakeMatch(), FakeGame()
+
+    page = await online(match, game)(Viewer(token_rejected=True))
+
+    assert page.status is OnlineStatus.SESSION_EXPIRED
+    assert match.calls == [] and game.calls == 0
 
 
 async def test_online_unverified_user_token_is_accepted_by_match() -> None:
@@ -295,3 +319,79 @@ async def test_match_page_missing_item_and_unknown_flag_are_tolerated() -> None:
 
     assert [c.media_item_id for c in page.blocks.items.data or []] == [ITEM_A]
     assert page.blocks.library.data == [ItemShelves(ITEM_A, []), ItemShelves(ITEM_B, [])]
+
+
+@pytest.mark.parametrize("status", [400, 410, 418])
+async def test_match_page_undescribed_4xx_is_unavailable_not_404(status: int) -> None:
+    library = FakeLibrary()
+    odd = UpstreamRejectedError("match", status, "match.something")
+
+    page = await match_page(FakeMatch(outcome=odd), library=library)(USER, MATCH_ID)
+
+    assert page.blocks.match.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.items.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.library.status is BlockStatus.UNAVAILABLE
+    assert library.calls == []
+
+
+@dataclass
+class InFlight:
+    """Счётчик одновременных вызовов catalog и library (общий Limiter запроса)."""
+
+    now: int = 0
+    peak: int = 0
+
+    async def hold(self) -> None:
+        self.now += 1
+        self.peak = max(self.peak, self.now)
+        await asyncio.sleep(0.005)
+        self.now -= 1
+
+
+@dataclass
+class CountingCatalog(FakeCatalog):
+    flight: InFlight = field(default_factory=InFlight)
+
+    async def get_item(self, item_id: UUID) -> Item:
+        await self.flight.hold()
+        return item(item_id)
+
+
+@dataclass
+class CountingLibrary(FakeLibrary):
+    flight: InFlight = field(default_factory=InFlight)
+
+    async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
+        await self.flight.hold()
+        return ItemShelves(media_item_id, [])
+
+
+async def test_match_page_limiter_holds_concurrency_threshold() -> None:
+    ids = [UUID(int=i + 1) for i in range(25)]
+    flight = InFlight()
+    catalog, library = CountingCatalog(flight=flight), CountingLibrary(flight=flight)
+
+    page = await match_page(FakeMatch(outcome=result(*ids)), catalog, library, concurrency=3)(
+        USER, MATCH_ID
+    )
+
+    assert len(page.blocks.items.data or []) == len(page.blocks.library.data or []) == 25
+    assert flight.peak == 3  # 50 вызовов, но не больше 3 одновременно (match уже ответил)
+
+
+@dataclass
+class SlowCatalog(FakeCatalog):
+    async def get_item(self, item_id: UUID) -> Item:
+        await asyncio.sleep(10)
+        raise AssertionError("должен был сработать дедлайн")
+
+
+async def test_match_page_items_deadline_hides_slow_block_only() -> None:
+    started = time.monotonic()
+
+    page = await match_page(FakeMatch(), SlowCatalog(), deadline_s=0.05)(USER, MATCH_ID)
+
+    assert time.monotonic() - started < 1
+    assert page.blocks.match.is_ok
+    assert page.blocks.items.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.library.is_ok

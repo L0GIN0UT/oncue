@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from uuid import UUID
 
 import structlog
@@ -50,13 +51,20 @@ from gv_core.errors import ForbiddenError, UnauthenticatedError
 log = structlog.get_logger(__name__)
 
 AUTH_REQUIRED = OnlinePage(status=OnlineStatus.AUTH_REQUIRED)
+SESSION_EXPIRED = OnlinePage(status=OnlineStatus.SESSION_EXPIRED)
 
 
-def _is_auth_rejection(value: object) -> bool:
-    """match не признал субъекта пользователем: 401 или 403 гостя (непроверенный токен)."""
-    return isinstance(value, UpstreamRejectedError) and (
-        value.status == HTTP_UNAUTHORIZED
-        or (value.status == HTTP_FORBIDDEN and value.code == GUEST_FORBIDDEN)
+def _is_unauthenticated(value: object) -> bool:
+    """match не принял токен (истёк, отозван): фронту — обновить сессию."""
+    return isinstance(value, UpstreamRejectedError) and value.status == HTTP_UNAUTHORIZED
+
+
+def _is_guest(value: object) -> bool:
+    """match распознал гостя по непроверенному токену (JWKS был недоступен)."""
+    return (
+        isinstance(value, UpstreamRejectedError)
+        and value.status == HTTP_FORBIDDEN
+        and value.code == GUEST_FORBIDDEN
     )
 
 
@@ -78,10 +86,14 @@ class GetOnlinePage:
     async def __call__(self, viewer: Viewer) -> OnlinePage:
         """Собрать хаб.
 
-        Гость (claim ``gst``) и аноним — ``auth_required`` без вызовов. Непроверенный токен
-        (JWKS недоступен) уходит в match: его 401 или 403 гостя тоже дают ``auth_required``.
+        Гость (claim ``gst``) и аноним — ``auth_required`` без вызовов; токен, не прошедший
+        локальную проверку, — ``session_expired`` без вызовов. Непроверенный токен (JWKS
+        недоступен) уходит в match: его 401 даёт ``session_expired``, 403 гостя —
+        ``auth_required``.
         """
-        if viewer.token is None or viewer.kind is SubjectKind.GUEST:
+        if viewer.token is None:
+            return SESSION_EXPIRED if viewer.token_rejected else AUTH_REQUIRED
+        if viewer.kind is SubjectKind.GUEST:
             return AUTH_REQUIRED
         token = viewer.token
         limiter = Limiter(self._concurrency)
@@ -90,7 +102,9 @@ class GetOnlinePage:
             limiter.attempt(self._match.my_matches(token, limit=self._matches_limit)),
             limiter.attempt(self._game.online_modes()),
         )
-        if _is_auth_rejection(rooms) or _is_auth_rejection(matches):
+        if _is_unauthenticated(rooms) or _is_unauthenticated(matches):
+            return SESSION_EXPIRED
+        if _is_guest(rooms) or _is_guest(matches):
             return AUTH_REQUIRED
         modes_block = block_of(modes, "online.modes")
         return OnlinePage(
@@ -115,9 +129,10 @@ class GetMatchPage:
         library: LibraryClient,
         *,
         concurrency: int,
+        items_deadline_s: float,
     ) -> None:
         self._match, self._catalog, self._library = match, catalog, library
-        self._concurrency = concurrency
+        self._concurrency, self._deadline_s = concurrency, items_deadline_s
 
     async def __call__(self, viewer: Viewer, match_id: UUID) -> MatchPage:
         """Собрать экран.
@@ -126,6 +141,9 @@ class GetMatchPage:
             UnauthenticatedError: аноним или match не принял токен.
             ForbiddenError: ``auth.guest_forbidden`` — гость (match не вызывается).
             NotFoundError: ``match.match_not_found`` — матча нет или он ещё идёт.
+
+        Прочие 4xx match (не описанные в контракте) — сбой источника: все блоки
+        ``unavailable``, страница 200.
         """
         if viewer.token is None:
             raise UnauthenticatedError("требуется вход")
@@ -141,10 +159,20 @@ class GetMatchPage:
                 MatchBlocks(Block.unavailable(), Block.unavailable(), Block.unavailable())
             )
         except UpstreamRejectedError as exc:
-            raise screen_error(exc, not_found="матч не найден") from exc
+            error = screen_error(exc, not_found="матч не найден")
+            if error is not None:
+                raise error from exc
+            log.warning("bff.block_unavailable", block="match", reason=exc.code)
+            return MatchPage(
+                MatchBlocks(Block.unavailable(), Block.unavailable(), Block.unavailable())
+            )
         ids = _round_item_ids(result)
+        # Общий предел обоих блоков: до 50 единиц идут волнами по concurrency, и без него
+        # страница ждала бы «волны × timeout_s». Блок, не успевший к сроку, гаснет сам.
+        deadline = asyncio.get_running_loop().time() + self._deadline_s
         items, shelves = await asyncio.gather(
-            self._items(limiter, ids), self._shelves(limiter, token, ids)
+            _until(deadline, self._items(limiter, ids), "match.items"),
+            _until(deadline, self._shelves(limiter, token, ids), "match.library"),
         )
         return MatchPage(MatchBlocks(match=Block.ok(result), items=items, library=shelves))
 
@@ -179,6 +207,16 @@ class GetMatchPage:
                 return Block.unavailable()
             flags.append(block.data)
         return Block.ok(flags)
+
+
+async def _until[T](deadline: float, call: Awaitable[Block[T]], block: str) -> Block[T]:
+    """Блок к сроку ``deadline`` (время цикла событий) или ``unavailable``."""
+    try:
+        async with asyncio.timeout_at(deadline):
+            return await call
+    except TimeoutError:
+        log.warning("bff.block_unavailable", block=block, reason="deadline")
+        return Block.unavailable()
 
 
 def _round_item_ids(result: MatchResult) -> list[UUID]:

@@ -1261,3 +1261,82 @@ async def test_match_page_blocked_item_is_skipped(bff: Bff) -> None:
 async def test_match_page_id_must_be_uuid(bff: Bff) -> None:
     response = await bff.client.get("/v1/pages/match/123", headers=bff.bearer(bff.issuer.issue()))
     assert response.status_code == 422
+
+
+# ----------------------------------------------------------------------------- ревью 4a
+async def test_online_page_expired_token_is_session_expired_without_calls(bff: Bff) -> None:
+    from datetime import timedelta
+
+    rooms, matches, modes = _online_routes(bff)
+    expired = bff.issuer.issue(ttl=timedelta(seconds=-120))
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(expired))
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json() == {"status": "session_expired", "blocks": None}
+    assert rooms.call_count == matches.call_count == modes.call_count == 0
+
+
+async def test_online_page_match_401_is_session_expired(bff: Bff) -> None:
+    rooms, _, _ = _online_routes(bff)
+    rooms.respond(401, json={"code": "auth.session_revoked", "title": "Unauth", "status": 401})
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.json() == {"status": "session_expired", "blocks": None}
+
+
+async def test_online_page_match_429_is_unavailable_block(bff: Bff) -> None:
+    _, matches, _ = _online_routes(bff)
+    matches.respond(429, json={"code": "core.rate_limited", "title": "Too many", "status": 429})
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["my_matches"] == UNAVAILABLE
+    assert blocks["open_rooms"]["status"] == "ok"
+
+
+@pytest.mark.parametrize("status", [429, 400, 410])
+async def test_match_page_match_429_or_undescribed_4xx_is_unavailable(
+    bff: Bff, status: int
+) -> None:
+    result, _, _ = _match_routes(bff)
+    result.respond(status, json={"code": "match.odd", "title": "Odd", "status": status})
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "blocks": {"match": UNAVAILABLE, "items": UNAVAILABLE, "library": UNAVAILABLE}
+    }
+
+
+async def test_match_page_foreign_match_id_in_answer_is_contract_violation(bff: Bff) -> None:
+    result, _, _ = _match_routes(bff)
+    other = {**SAMPLES["match_result"], "match_id": "0192a3b4-c5d6-7e8f-9a0b-000000000dff"}
+    result.respond(200, json=other)
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    assert response.json()["blocks"]["match"] == UNAVAILABLE
+
+
+async def test_match_page_foreign_item_in_shelves_answer_is_contract_violation(bff: Bff) -> None:
+    _, _, shelves_1 = _match_routes(bff)
+    shelves_1.respond(200, json={"media_item_id": str(ITEM_2), "shelves": ["system:watched"]})
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    blocks = response.json()["blocks"]
+    assert blocks["library"] == UNAVAILABLE  # флаг чужой единицы не приписываем нашей
+    assert blocks["items"]["status"] == "ok"

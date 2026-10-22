@@ -127,7 +127,7 @@ async def test_online_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> 
         matches_limit=10,
     )
 
-    for viewer in (USER, Viewer()):
+    for viewer in (USER, Viewer(token_rejected=True), Viewer()):
         page = OnlinePage.model_validate(await query(viewer), from_attributes=True)
         body = page.model_dump(mode="json")
         assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/online"), body) == []
@@ -140,6 +140,7 @@ async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> N
         HttpCatalogClient(_http("catalog", "http://catalog.test"), item_ttl_s=1, cache_prefix="t:"),
         HttpLibraryClient(_http("library", "http://library.test")),
         concurrency=10,
+        items_deadline_s=5,
     )
 
     page = MatchPage.model_validate(await query(USER, MATCH_ID), from_attributes=True)
