@@ -35,6 +35,7 @@ CATALOG = "http://catalog.test:8000"
 MEDIA = "http://media.test:8000"
 GAME = "http://game.test:8000"
 COLLECTIONS = "http://collections.test:8000"
+MATCH = "http://match.test:8000"
 JWKS = f"{IDENTITY}/.well-known/jwks.json"
 ADMIN_PERMS = (
     "admin.access",
@@ -55,9 +56,12 @@ ADMIN_PERMS = (
     "collections.curate",
     "collections.unpublish",
     "collections.restrict_author",
+    "match.spectate",
+    "match.manage",
 )
 # Модератор этапа 2 (docs/plans/stage-2.md §2.7): конфиги — только просмотр, наборы дня — курация;
-# этап 3b (identity 0007): сборники — просмотр и скрытие.
+# этап 3b (identity 0007): сборники — просмотр и скрытие; этап 4 (identity 0008): наблюдение
+# за матчами, без match.manage.
 MODERATOR_PERMS = (
     "admin.access",
     "users.view",
@@ -68,6 +72,7 @@ MODERATOR_PERMS = (
     "game.daily.curate",
     "collections.view",
     "collections.unpublish",
+    "match.spectate",
 )
 
 
@@ -126,6 +131,7 @@ def gv_settings(settings: Any) -> Any:
         "media_pipeline": MEDIA,
         "game": GAME,
         "collections": COLLECTIONS,
+        "match": MATCH,
     }
     settings.GV_IP_ALLOWLIST = ["127.0.0.0/8"]
     # Счётчики лимита входа (кэш в памяти процесса) не должны переходить между тестами.
@@ -313,6 +319,12 @@ def game() -> Iterator[ContractStub]:
 def collections() -> Iterator[ContractStub]:
     """Заглушка collections (по contracts/openapi/collections.json, admin-API — этап 3b)."""
     yield from _contract_stub(COLLECTIONS, "collections")
+
+
+@pytest.fixture
+def match() -> Iterator[ContractStub]:
+    """Заглушка match (по contracts/openapi/match.json, admin-API — план этапа 4 §2.5)."""
+    yield from _contract_stub(MATCH, "match")
 
 
 def _session_body(

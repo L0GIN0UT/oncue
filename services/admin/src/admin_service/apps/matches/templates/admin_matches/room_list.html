@@ -1,0 +1,32 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get">
+  {{ form.phase.label_tag }} {{ form.phase }} <input type="submit" value="Показать">
+  {{ form.errors }}
+</form>
+<form method="get" action="{% url 'matches:lookup' %}">
+  <p>Итог матча: {{ lookup_form.match_id.label_tag }} {{ lookup_form.match_id }} <input type="submit" value="Открыть"></p>
+</form>
+<table>
+  <thead><tr><th>Код</th><th>Режим</th><th>Вид</th><th>Фаза</th><th>Игроков</th><th>Видимость</th><th>Хост</th><th>Владелец (эпоха)</th><th>Создана</th><th>Матч</th><th></th></tr></thead>
+  {% for r in rooms %}
+  <tr>
+    <td><code>{{ r.code }}</code></td>
+    <td>{{ r.mode.key }}{% if r.mode.version %} v{{ r.mode.version }}{% endif %}{% if r.mode.ranked %} <strong>(рейтинговый)</strong>{% endif %}</td>
+    <td>{{ r.mode.kind }}</td>
+    <td>{{ r.phase }}</td>
+    <td>{{ r.players }}</td>
+    <td>{{ r.visibility }}</td>
+    <td>{{ r.host_id }}</td>
+    <td>{% if r.owner_epoch is not None %}{{ r.owner_epoch }}{% else %}<strong>нет владельца</strong>{% endif %}</td>
+    <td>{{ r.created_at }}</td>
+    <td>{% if r.match_url %}<a href="{{ r.match_url }}">итог</a>{% else %}—{% endif %}</td>
+    <td>{% if r.abort_url %}<a href="{{ r.abort_url }}">Завершить…</a>{% endif %}</td>
+  </tr>
+  {% empty %}
+  {% if not error %}<tr><td colspan="11">Активных комнат нет</td></tr>{% endif %}
+  {% endfor %}
+</table>
+{% if next_url %}<p><a href="{{ next_url }}">Дальше →</a></p>{% endif %}
+{% endblock %}
