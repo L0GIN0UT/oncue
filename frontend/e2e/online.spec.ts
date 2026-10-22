@@ -65,6 +65,7 @@ test("гость и аноним видят «Онлайн доступен по
 test("дуэль: лобби → готовность → матч → «Соперник сдался» → итог и «Мои матчи»", async ({
   page,
   player,
+  scenario,
   expectAccessible,
 }) => {
   await login(page);
@@ -80,6 +81,13 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await page.getByTestId("ready-toggle").click();
   await rival.getByTestId("ready-toggle").click();
   await expect(page.getByTestId("player-rival").getByTestId("ready-state")).toHaveText("Готов");
+
+  // Срыв старта (план раундов не получен): причина видна всем, кнопка старта снова доступна.
+  await scenario({ match: { startFailOnce: "match.game_unavailable" } });
+  await page.getByTestId("start-match").click();
+  for (const p of [page, rival])
+    await expect(p.getByTestId("start-error")).toContainText("Онлайн временно недоступен");
+  await expect(page.getByTestId("start-match")).toBeEnabled();
   await page.getByTestId("start-match").click();
 
   // Отсчёт и первый уровень у обоих.

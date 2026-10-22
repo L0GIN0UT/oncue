@@ -1373,11 +1373,18 @@ export interface components {
             /** Players Min */
             players_min: number;
             /**
+             * Rematch Code
+             * @description Код комнаты реванша, когда согласились все (у кастомного лобби — свой код: комната возвращается в лобби); старая комната дуэли и party закрывается
+             */
+            rematch_code?: string | null;
+            /**
              * Server Now
              * Format: date-time
              */
             server_now: string;
             settings: components["schemas"]["RoomSettings"];
+            /** @description Почему не начался матч (старт мог ответить 202 до отказа game); сбрасывается при следующем старте или смене настроек */
+            start_error?: components["schemas"]["StartError"] | null;
             /** Version */
             version: number;
             /**
@@ -1443,6 +1450,9 @@ export interface components {
         /**
          * SettingsOptions
          * @description Что хост может выбрать (``session.lobby.overridable`` шаблона, D12); ``null`` — нельзя.
+         *
+         *     ``answer_format`` и ``clue_type`` в 4a всегда ``null``: план game их пока не принимает
+         *     (выбор — 422 ``match.setting_not_allowed``, ``details.reason = not_supported_yet``).
          */
         SettingsOptions: {
             /** Answer Format */
@@ -1505,6 +1515,22 @@ export interface components {
             op_id: string;
             /** Round Index */
             round_index: number;
+        };
+        /**
+         * StartError
+         * @description Последний отказ старта матча (план game не получен) — виден всем в лобби.
+         */
+        StartError: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Code
+             * @description `match.game_unavailable`, `match.pool_too_small` и т. п.
+             */
+            code: string;
         };
         /**
          * StartRequest

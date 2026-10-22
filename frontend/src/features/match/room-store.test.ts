@@ -234,7 +234,7 @@ describe("roomReducer", () => {
     expect(viaDelta.rematchCode).toBe("K7MQ2XWQ");
     const viaSnapshot = roomReducer(initialRoomStore, {
       type: "snapshot",
-      state: { room: { ...room({ phase: "closed" }), rematch_code: "K7MQ2XWR" } as RoomView },
+      state: { room: room({ phase: "closed", rematch_code: "K7MQ2XWR" }) },
     });
     expect(viaSnapshot.rematchCode).toBe("K7MQ2XWR");
     expect(snapshot().rematchCode).toBeNull();

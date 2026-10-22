@@ -359,6 +359,16 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
         const online = room.players.filter((p) => p.presence === "online");
         if (online.length < room.def.min) return problem(409, "match.not_enough_players");
         if (!online.every((p) => p.ready)) return problem(409, "match.not_all_ready");
+        if (mw.scenario.startFailOnce) {
+          room.startError = {
+            code: mw.scenario.startFailOnce,
+            at: new Date(mw.now()).toISOString(),
+          };
+          mw.scenario.startFailOnce = undefined;
+          mw.publishLobby(room);
+          return roomResult(room);
+        }
+        room.startError = null;
         mw.start(room);
         return roomResult(room);
       }),

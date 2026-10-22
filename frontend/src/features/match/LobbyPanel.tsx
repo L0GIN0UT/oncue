@@ -59,6 +59,19 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
   const online = room.players.filter((p) => p.presence === "online");
   const allReady = online.length > 0 && online.every((p) => p.ready);
   const enough = online.length >= room.players_min;
+  // Старт в пути, пока не сменилась фаза или не пришёл новый `start_error` (план game упал).
+  const startErrorAt = room.start_error?.at ?? null;
+  const [startPendingSince, setStartPendingSince] = useState<string | null | false>(false);
+  const starting = startPendingSince !== false && startPendingSince === startErrorAt;
+  const start = async () => {
+    setStartPendingSince(startErrorAt);
+    try {
+      await commands.start();
+    } catch (e) {
+      setStartPendingSince(false);
+      throw e;
+    }
+  };
 
   const copyLink = async () => {
     const link = `${window.location.origin}/room/${room.code}`;
@@ -155,6 +168,8 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
         />
       )}
 
+      {room.start_error && !starting && <StartError code={room.start_error.code} />}
+
       <div className="flex flex-wrap items-center gap-3">
         {me && (
           <Button
@@ -171,8 +186,8 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
         {isHost && (
           <Button
             size="lg"
-            disabled={!allReady || !enough}
-            onClick={() => act(commands.start)}
+            disabled={!allReady || !enough || starting}
+            onClick={() => act(start)}
             data-testid="start-match"
           >
             <Play aria-hidden />
@@ -202,6 +217,22 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
         </p>
       )}
     </div>
+  );
+}
+
+/** Срыв старта (`RoomView.start_error`): понятная причина по коду `match.*`, видна всем. */
+function StartError({ code }: { code: string }) {
+  const t = useTranslations();
+  const dt = useDynamicT();
+  const key = code.startsWith("match.") ? `match.error.${code.slice(6)}` : "match.error.generic";
+  return (
+    <p
+      role="alert"
+      className="rounded-[var(--radius-control)] bg-miss/15 px-4 py-3 text-miss ring-1 ring-miss/40"
+      data-testid="start-error"
+    >
+      {t("match.lobby.startFailed", { reason: dt(key, t("match.error.generic")) })}
+    </p>
   );
 }
 

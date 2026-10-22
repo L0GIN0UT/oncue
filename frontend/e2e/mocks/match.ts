@@ -21,6 +21,8 @@ export type MatchScenario = {
   feedDown?: boolean;
   /** Слова, на которые чат отвечает 422 `match.chat_rejected` (denylist). */
   chatDeny?: string[];
+  /** Следующий старт сорвётся: `RoomView.start_error` с этим кодом (план раундов не получен). */
+  startFailOnce?: string;
   /** Следующая команда ответит 202 `CommandAccepted` (владелец не успел), применившись. */
   acceptOnce?: boolean;
   /** Без tick дольше — «Отключён». */
@@ -204,6 +206,7 @@ type MockRoom = {
   memory: Set<string>;
   rematch: Set<string>;
   rematchCode: string | null;
+  startError: { code: string; at: string } | null;
   createdAt: string;
 };
 
@@ -298,6 +301,7 @@ export class MatchWorld {
       memory: new Set(),
       rematch: new Set(),
       rematchCode: null,
+      startError: null,
       createdAt: new Date(this.now()).toISOString(),
     };
     this.rooms.set(code, room);
@@ -337,8 +341,8 @@ export class MatchWorld {
       host_id: room.hostId,
       match_id: room.matchId,
       memory_size: room.memory.size,
-      // Поле RoomView.rematch_code (контракт потока R): код комнаты реванша.
-      ...(room.rematchCode ? { rematch_code: room.rematchCode } : {}),
+      rematch_code: room.rematchCode,
+      start_error: room.startError,
       mode: room.def.ref,
       options: room.def.options,
       players: room.players.map(({ lastSeen: _, ...p }) => ({

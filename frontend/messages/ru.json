@@ -907,7 +907,8 @@
       "resetMemory": "Сбросить память ({count})",
       "leave": "Выйти из комнаты",
       "collections": "Сборники",
-      "collectionUnknown": "Сборник"
+      "collectionUnknown": "Сборник",
+      "startFailed": "Матч не начался: {reason}"
     },
     "settings": {
       "title": "Настройки",

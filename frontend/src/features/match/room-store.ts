@@ -84,7 +84,7 @@ function fromSnapshot(store: RoomStore, state: RoomState): RoomStore {
     reveal,
     meStale: false,
     closedReason: state.room.phase === "closed" ? (store.closedReason ?? "closed") : null,
-    rematchCode: rematchCodeOf(state.room) ?? store.rematchCode,
+    rematchCode: state.room.rematch_code ?? store.rematchCode,
     summary: state.room.phase === "summary" || state.room.phase === "closed" ? store.summary : null,
   };
 }
@@ -283,15 +283,6 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
         rematchCode: m.delta.rematch_code ?? store.rematchCode,
       };
   }
-}
-
-/**
- * `RoomView.rematch_code` (поток R добавляет поле в снимок; пока его нет в сгенерированных
- * типах, читается без привязки к схеме).
- */
-function rematchCodeOf(room: RoomView): string | null {
-  const code = (room as RoomView & { rematch_code?: unknown }).rematch_code;
-  return typeof code === "string" && code ? code : null;
 }
 
 /** Мой слот в комнате по `user_id`; `null` — не участник (или ещё не знаем, кто я). */
