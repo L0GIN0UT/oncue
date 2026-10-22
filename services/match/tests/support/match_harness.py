@@ -11,6 +11,7 @@ from match_doubles import (
     MemoryPlayerRooms,
     MemoryRecords,
     MemoryStore,
+    MemorySubscriptions,
     factory,
     plan_factory,
     seed_bodies,
@@ -38,8 +39,12 @@ class Harness:
     store: MemoryStore = field(default_factory=MemoryStore)
     player_rooms: MemoryPlayerRooms = field(default_factory=MemoryPlayerRooms)
     records: MemoryRecords = field(default_factory=MemoryRecords)
+    subscriptions: MemorySubscriptions = field(default_factory=MemorySubscriptions)
+    seeds: list[str] = field(default_factory=list)
     offline: set[UUID] = field(default_factory=set)
     seen: dict[UUID, int] = field(default_factory=dict)
+    op_window: int = 64
+    poison_limit: int = 3
     _ops: int = 0
 
     def __post_init__(self) -> None:
@@ -54,14 +59,27 @@ class Harness:
             player_rooms=self.player_rooms,
             clock=self.clock,
             random=FakeRandom(7),
-            new_id=uuid7,
+            new_id=self._new_id,
+            seeds=self._seed,
+            subscriptions=self.subscriptions,
             settings=OwnerSettings(
-                op_window=64,
+                op_window=self.op_window,
                 memory_limit=500,
                 idle_ms=IDLE_MS,
                 presence_timeout_ms=PRESENCE_TIMEOUT_MS,
+                poison_limit=self.poison_limit,
             ),
         )
+
+    fixed_id: UUID | None = None
+
+    def _new_id(self) -> UUID:
+        return self.fixed_id or uuid7()
+
+    def _seed(self) -> str:
+        seed = uuid7().hex + uuid7().hex
+        self.seeds.append(seed)
+        return seed
 
     def now_ms(self) -> int:
         return int(self.clock.now().timestamp() * 1000)
@@ -94,7 +112,9 @@ class Harness:
         """Команда владельцу (новый ``op_id`` на каждый вызов)."""
         self._ops += 1
         cmd = RoomCommand(op_id=op_id or f"op-{uuid7().hex}", kind=command, user_id=user, data=data)
-        return await self.owner.handle(room, cmd)
+        reply = await self.owner.handle(room, cmd)
+        await self.owner.persist(room)  # как runner: после снимка
+        return reply
 
     async def ok(self, room: Room, user: UUID, command: str, **data: Any) -> dict[str, Any]:
         """Команда, которая должна пройти; тело ответа."""
@@ -121,6 +141,7 @@ class Harness:
             if seat.user_id not in self.offline:
                 self.seen[seat.user_id] = now
         await self.owner.tick(room, dict(self.seen))
+        await self.owner.persist(room)
 
     async def until(self, room: Room, *phases: Phase, limit_s: int = 600) -> None:
         """Идти по секунде, пока комната не окажется в одной из ``phases``."""

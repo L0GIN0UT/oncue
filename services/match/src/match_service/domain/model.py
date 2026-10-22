@@ -168,6 +168,7 @@ class Seat:
     slot: int
     nickname: str
     joined_at_ms: int
+    """Вход или возврат по ссылке: нижняя граница heartbeat (D10)."""
     presence: Presence = Presence.ONLINE
     away: bool = False
     ready: bool = False

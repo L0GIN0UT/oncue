@@ -33,7 +33,13 @@ class MatchSettings(BaseModel):
         realtime_tokens_per_user_per_min: Выдача subscription-токенов.
         rate_per_user_per_hour: Оценки игроков после матча.
         room_idle_close_min: Простой лобби и показ итога до закрытия комнаты.
-        op_window: Сколько последних ответов команд помнит комната (повтор ``op_id``).
+        op_window: Сколько последних итогов команд помнит комната на игрока (повтор ``op_id``).
+        poison_limit: Сбоев обработки комнаты подряд до её прерывания (``internal_error``).
+        tick_per_player_per_min: Heartbeat игрока в минуту (без WebSocket — раз в секунду).
+        state_per_player_per_min: ``GET /state`` игрока в минуту (ресинк).
+        join_by_code_per_user_per_min: Поиск комнаты по коду пользователем (fail-closed).
+        emote_per_player_per_min: Эмоции и фразы игрока в минуту.
+        create_lock_ms: Замок от параллельного создания комнат одним игроком.
         memory_limit: Сколько сыгранных единиц помнит лобби (``exclude_ids`` ≤ 5000).
         rooms_poll_ms: Максимальная пауза цикла владельца (таймеры, присутствие).
         orphan_scan_s: Проверка комнат без владельца (захват после падения).
@@ -69,7 +75,13 @@ class MatchSettings(BaseModel):
     realtime_tokens_per_user_per_min: int = Field(default=30, ge=1)
     rate_per_user_per_hour: int = Field(default=60, ge=1)
     room_idle_close_min: float = Field(default=30, gt=0)
-    op_window: int = Field(default=256, ge=8, le=4096)
+    op_window: int = Field(default=32, ge=4, le=1024)
+    poison_limit: int = Field(default=3, ge=1, le=100)
+    tick_per_player_per_min: int = Field(default=150, ge=1)
+    state_per_player_per_min: int = Field(default=60, ge=1)
+    join_by_code_per_user_per_min: int = Field(default=20, ge=1)
+    emote_per_player_per_min: int = Field(default=30, ge=1)
+    create_lock_ms: int = Field(default=5000, ge=100, le=60_000)
     memory_limit: int = Field(default=2000, ge=0, le=5000)
     rooms_poll_ms: int = Field(default=250, ge=5, le=1500)
     orphan_scan_s: float = Field(default=2, gt=0, le=60)

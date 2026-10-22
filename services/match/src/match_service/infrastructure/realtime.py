@@ -37,6 +37,7 @@ class CentrifugoPublisher:
         if settings.api_url is None or settings.api_key is None:
             raise ValueError("нужны GV_REALTIME__API_URL и GV_REALTIME__API_KEY")
         self._url = settings.api_url.rstrip("/") + "/publish"
+        self._unsubscribe_url = settings.api_url.rstrip("/") + "/unsubscribe"
         self._headers = {"X-API-Key": settings.api_key.get_secret_value()}
         self._client = client or httpx.AsyncClient(timeout=settings.timeout_s)
 
@@ -65,6 +66,22 @@ class CentrifugoPublisher:
             return
         REALTIME_PUBLISH.labels("ok").inc()
 
+    async def unsubscribe(self, user_id: UUID, channel: str) -> None:
+        """Отписать пользователя от канала (``POST /api/unsubscribe``); отказ — лог."""
+        try:
+            response = await self._client.post(
+                self._unsubscribe_url,
+                json={"user": str(user_id), "channel": channel},
+                headers=self._headers,
+            )
+        except httpx.HTTPError as exc:
+            REALTIME_PUBLISH.labels("unsubscribe_network").inc()
+            log.warning("match.realtime_unsubscribe_failed", error_type=type(exc).__name__)
+            return
+        if response.status_code != httpx.codes.OK:
+            REALTIME_PUBLISH.labels("unsubscribe_error").inc()
+            log.warning("match.realtime_unsubscribe_rejected", status=response.status_code)
+
 
 class NullPublisher:
     """Centrifugo не настроен (``GV_REALTIME__*`` нет): матч идёт на HTTP-tick (D10)."""
@@ -72,6 +89,9 @@ class NullPublisher:
     async def publish(self, channel: str, message: dict[str, Any]) -> None:  # noqa: ARG002 — порт
         """Ничего не делает."""
         REALTIME_PUBLISH.labels("disabled").inc()
+
+    async def unsubscribe(self, user_id: UUID, channel: str) -> None:
+        """Подписок нет — отзывать нечего."""
 
 
 class SubscriptionTokenIssuer:

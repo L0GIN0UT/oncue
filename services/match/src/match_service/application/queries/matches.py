@@ -30,11 +30,11 @@ def _mode(row: MatchRow) -> Json:
     }
 
 
-def match_result(row: MatchRow) -> Json:
-    """``MatchResult`` (публичный итог: ники, места, очки — без личных данных)."""
+def match_result(row: MatchRow, *, participant: bool) -> Json:
+    """``MatchResult``: публичный итог (ники, места, очки); код комнаты — только участникам."""
     return {
         "match_id": str(row.match_id),
-        "room_code": row.room_code,
+        "room_code": row.room_code if participant else None,
         "mode": _mode(row),
         "started_at": row.started_at.isoformat(),
         "finished_at": row.finished_at.isoformat(),
@@ -70,12 +70,13 @@ class MatchQueries:
     def __init__(self, records: MatchRecords) -> None:
         self._records = records
 
-    async def get(self, match_id: UUID) -> Json:
-        """Завершённый матч (идущий — 404)."""
+    async def get(self, match_id: UUID, viewer: UUID | None = None) -> Json:
+        """Завершённый матч (идущий — 404); ``viewer=None`` — админка (всё)."""
         row = await self._records.get(match_id)
         if row is None:
             raise MatchNotFoundError("матча нет или он идёт", code=errors.MATCH_NOT_FOUND)
-        return match_result(row)
+        participant = viewer is None or any(p["user_id"] == viewer for p in row.players)
+        return match_result(row, participant=participant)
 
     async def mine(self, user_id: UUID, cursor: str | None, limit: int) -> Json:
         """Матчи пользователя, новые первыми (keyset ``finished_at``, ``match_id``)."""

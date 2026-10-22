@@ -17,17 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gv_core.clock import Clock
 from gv_core.domain import DomainEvent
+from gv_core.ids import uuid7
 from gv_db.idempotency import SqlIdempotencyStore, run_idempotent
 from gv_messaging import EventEnvelope, OutboxWriter
-from match_service.application.ports import Json, MatchRow, MyMatchRow
+from match_service.application.ports import AdminAction, Json, MatchRow, MyMatchRow
 from match_service.domain import errors
 from match_service.domain.errors import MatchConflictError
-from match_service.domain.events import MatchStarted, PlayerRated, match_finished
+from match_service.domain.events import ANONYMOUS, MatchStarted, PlayerRated, match_finished
 from match_service.domain.model import MatchState
 from match_service.domain.room import Room
 from match_service.infrastructure.db.tables import (
     ROUND_PARTITION_PREFIX,
     TABLES,
+    admin_actions,
     idempotency_keys,
     match_players,
     match_rounds,
@@ -94,10 +96,17 @@ class SqlMatchRecords(_Events):
             return True
 
     async def record_finished(self, room: Room, match: MatchState) -> bool:
-        """Итог одной транзакцией с ``MatchFinished``; ``False`` — уже записан."""
-        started = _dt(match.started_at_ms or match.created_at_ms)
-        finished = _dt(match.finished_at_ms or match.started_at_ms or match.created_at_ms)
-        event = match_finished(room, match, started_at=started, finished_at=finished)
+        """Итог одной транзакцией с ``MatchFinished``; ``False`` — уже записан.
+
+        Матч, прерванный до конца отсчёта (``MatchStarted`` не было), не пишется вовсе:
+        матча не было. Удалённые к этому моменту аккаунты (``users_proj.deleted``)
+        обезличиваются в той же транзакции: строка игрока без ``user_id``, в событии и
+        результатах раундов — анонимный идентификатор.
+        """
+        if match.started_at_ms is None:
+            return False
+        started = _dt(match.started_at_ms)
+        finished = _dt(match.finished_at_ms or match.started_at_ms)
         meta = {
             "title_key": room.mode.title_key,
             "clue_type": room.settings.clue_type,
@@ -122,6 +131,17 @@ class SqlMatchRecords(_Events):
             "created_at": self._clock.now(),
         }
         async with self._sessions() as session, session.begin():
+            hidden = frozenset(
+                await session.scalars(
+                    select(users_proj.c.user_id).where(
+                        users_proj.c.user_id.in_(list(match.players)),
+                        users_proj.c.deleted.is_(True),
+                    )
+                )
+            ) | frozenset(room.forgotten)
+            event = match_finished(
+                room, match, started_at=started, finished_at=finished, hidden=hidden
+            )
             stmt = (
                 insert(matches)
                 .values(base)
@@ -145,7 +165,7 @@ class SqlMatchRecords(_Events):
                     {
                         "match_id": match.match_id,
                         "slot": s.slot,
-                        "user_id": s.user_id,
+                        "user_id": None if s.user_id in hidden else s.user_id,
                         "score": s.score,
                         "place": s.place,
                         "outcome": s.outcome,
@@ -167,7 +187,7 @@ class SqlMatchRecords(_Events):
                             "void": r.void,
                             "results": [
                                 {
-                                    "user_id": str(x.user_id),
+                                    "user_id": str(ANONYMOUS if x.user_id in hidden else x.user_id),
                                     "level": x.level,
                                     "partial": x.partial,
                                     "score": x.score,
@@ -334,6 +354,37 @@ class SqlMatchRecords(_Events):
             return executed
 
 
+class SqlAdminAudit:
+    """``AdminAudit``: ``admin_actions`` (повтор запроса с тем же ключом — без новой строки)."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def record(self, action: AdminAction) -> bool:
+        """Записать действие одной транзакцией."""
+        async with self._sessions() as session, session.begin():
+            row = (
+                await session.execute(
+                    insert(admin_actions)
+                    .values(
+                        id=uuid7(),
+                        actor_id=action.actor_id,
+                        action=action.action,
+                        room_code=action.room_code,
+                        match_id=action.match_id,
+                        reason=action.reason,
+                        idempotency_key=action.idempotency_key,
+                        created_at=action.at,
+                    )
+                    .on_conflict_do_nothing(
+                        index_elements=[admin_actions.c.actor_id, admin_actions.c.idempotency_key]
+                    )
+                    .returning(admin_actions.c.id)
+                )
+            ).first()
+            return row is not None
+
+
 class SqlUsers:
     """Проекция профилей identity (``users_proj``)."""
 
@@ -390,6 +441,9 @@ class SqlUsers:
         )
         await session.execute(
             update(match_players).where(match_players.c.user_id == user_id).values(user_id=None)
+        )
+        await session.execute(
+            delete(idempotency_keys).where(idempotency_keys.c.actor_id == user_id)
         )
         # Результаты раундов хранят user_id в JSON: заменить на анонимный (UUID(int=0)).
         await session.execute(

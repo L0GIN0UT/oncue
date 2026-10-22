@@ -298,10 +298,14 @@ class MediaLinks(_Client):
         if response.status_code != httpx.codes.OK:
             log.warning("match.media_rejected", status=response.status_code)
             raise self._unavailable()
-        body = response.json()
-        return ClueAsset(
-            level=int(body["level"]),
-            url=str(body["url"]),
-            expires_at=datetime.fromisoformat(body["expires_at"]),
-            mime=str(body["mime"]),
-        )
+        try:
+            body = response.json()
+            return ClueAsset(
+                level=int(body["level"]),
+                url=str(body["url"]),
+                expires_at=datetime.fromisoformat(body["expires_at"]),
+                mime=str(body["mime"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            log.exception("match.media_unparsable")
+            raise self._unavailable() from exc

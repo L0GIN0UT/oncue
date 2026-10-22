@@ -71,9 +71,17 @@ class PlayerRated(_MatchEvent):
     at: datetime
 
 
-def _standing(s: Standing) -> dict[str, Any]:  # Any: примитивы JSON
+ANONYMOUS = UUID(int=0)
+"""Игрок с удалённым аккаунтом в итоге: его идентификатор не публикуется (ПДн)."""
+
+
+def _hide(user_id: UUID, hidden: frozenset[UUID]) -> UUID:
+    return ANONYMOUS if user_id in hidden else user_id
+
+
+def _standing(s: Standing, hidden: frozenset[UUID]) -> dict[str, Any]:  # Any: примитивы JSON
     return {
-        "user_id": s.user_id,
+        "user_id": _hide(s.user_id, hidden),
         "slot": s.slot,
         "score": s.score,
         "place": s.place,
@@ -82,13 +90,13 @@ def _standing(s: Standing) -> dict[str, Any]:  # Any: примитивы JSON
     }
 
 
-def _round(r: RoundRecord) -> dict[str, Any]:  # Any: примитивы JSON
+def _round(r: RoundRecord, hidden: frozenset[UUID]) -> dict[str, Any]:  # Any: JSON
     return {
         "index": r.index,
         "media_item_id": r.media_item_id,
         "results": [
             {
-                "user_id": x.user_id,
+                "user_id": _hide(x.user_id, hidden),
                 "level": x.level,
                 "partial": x.partial,
                 "score": x.score,
@@ -122,9 +130,14 @@ def match_started(room: Room, match: MatchState, started_at: datetime) -> MatchS
 
 
 def match_finished(
-    room: Room, match: MatchState, *, started_at: datetime, finished_at: datetime
+    room: Room,
+    match: MatchState,
+    *,
+    started_at: datetime,
+    finished_at: datetime,
+    hidden: frozenset[UUID] = frozenset(),
 ) -> MatchFinished:
-    """Событие итога матча."""
+    """Событие итога матча; ``hidden`` — удалённые аккаунты (без их идентификаторов)."""
     mode = room.mode
     return MatchFinished(
         aggregate_id=str(match.match_id),
@@ -137,8 +150,8 @@ def match_finished(
         format=mode.kind,
         ranked=mode.ranked,
         ladder=mode.ladder,
-        players=[_standing(s) for s in match.standings],
-        rounds=[_round(r) for r in match.records if not r.void],
+        players=[_standing(s, hidden) for s in match.standings],
+        rounds=[_round(r, hidden) for r in match.records if not r.void],
         collection_ids=[cid for cid, _ in match.collections],
         aborted=match.abort_reason is not None,
         abort_reason=match.abort_reason,

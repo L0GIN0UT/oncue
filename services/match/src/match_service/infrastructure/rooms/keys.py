@@ -57,6 +57,11 @@ def player(user_id: UUID) -> str:
     return f"player:{user_id}:room"
 
 
+def creating(user_id: UUID) -> str:
+    """Игрок прямо сейчас создаёт комнату (замок от параллельных созданий)."""
+    return f"player:{user_id}:creating"
+
+
 def create_idempotency(user_id: UUID, key: str) -> str:
     """Ключ ``Idempotency-Key`` создания комнаты."""
     return f"match:idem:create:{user_id}:{key}"

@@ -531,8 +531,8 @@ def build_public_router(services: ServicesProvider) -> APIRouter:
         ),
         responses=problem_responses(401, 403, 404, 422, 501),
     )
-    async def get_match(match_id: MatchId, user: User) -> MatchResult:  # noqa: ARG001
-        return MatchResult.model_validate(await services().matches.get(match_id))
+    async def get_match(match_id: MatchId, user: User) -> MatchResult:
+        return MatchResult.model_validate(await services().matches.get(match_id, user.user_id))
 
     @router.get(
         "/me/matches",

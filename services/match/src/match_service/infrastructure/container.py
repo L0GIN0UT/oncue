@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import secrets
 import socket
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -27,6 +28,7 @@ from match_service.application.ports import (
     RateLimiter,
     RealtimePublisher,
     RoundPlanPort,
+    Subscriptions,
 )
 from match_service.application.queries.matches import MatchQueries, RatePlayer
 from match_service.application.queries.rooms import QueryLimits, RoomQueries
@@ -38,7 +40,12 @@ from match_service.infrastructure.clients import (
     TokenProvider,
     UnconfiguredTokens,
 )
-from match_service.infrastructure.db.repositories import SqlMatchRecords, SqlModeHeads, SqlUsers
+from match_service.infrastructure.db.repositories import (
+    SqlAdminAudit,
+    SqlMatchRecords,
+    SqlModeHeads,
+    SqlUsers,
+)
 from match_service.infrastructure.limits import RedisRateLimiter
 from match_service.infrastructure.realtime import (
     CentrifugoPublisher,
@@ -96,6 +103,7 @@ class MatchAdapters:
     plans: RoundPlanPort | None = None
     assets: AssetPort | None = None
     publisher: RealtimePublisher | None = None
+    subscriptions: Subscriptions | None = None
     modes: ModeSource | None = None
     limiter: RateLimiter | None = None
     random: Random = field(default_factory=SystemRandom)
@@ -225,6 +233,23 @@ class MatchContainer:
         return publisher
 
     @cached_property
+    def subscriptions(self) -> Subscriptions:
+        """Отзыв подписок (server API Centrifugo или выключен)."""
+        if self.adapters.subscriptions is not None:
+            return self.adapters.subscriptions
+        publisher = self.publisher
+        if isinstance(publisher, CentrifugoPublisher | NullPublisher):
+            return publisher
+        return NullPublisher()
+
+    @cached_property
+    def audit(self) -> SqlAdminAudit:
+        """Аудит админских действий."""
+        if self.infra.sessions is None:
+            raise DependencyUnavailableError("база данных не настроена (GV_DATABASE_URL)")
+        return SqlAdminAudit(self.infra.sessions)
+
+    @cached_property
     def tokens(self) -> SubscriptionTokenIssuer:
         """Subscription-токены."""
         return SubscriptionTokenIssuer(self.settings.realtime)
@@ -249,11 +274,15 @@ class MatchContainer:
             clock=self.infra.clock,
             random=self.adapters.random,
             new_id=uuid7,
+            # Seed плана — криптостойкий секрет только в снимке (аудит, блокер 1).
+            seeds=lambda: secrets.token_hex(32),
+            subscriptions=self.subscriptions,
             settings=OwnerSettings(
                 op_window=m.op_window,
                 memory_limit=m.memory_limit,
                 idle_ms=int(m.room_idle_close_min * 60 * MS),
                 presence_timeout_ms=m.presence_timeout_s * MS,
+                poison_limit=m.poison_limit,
             ),
         )
 
@@ -282,7 +311,11 @@ class MatchContainer:
                 commands_per_s=m.commands_per_player_per_s,
                 chat_per_min=m.chat_per_player_per_min,
                 chat_slow_interval_s=m.chat_slow_interval_s,
+                join_by_code_per_user_per_min=m.join_by_code_per_user_per_min,
+                emote_per_min=m.emote_per_player_per_min,
+                create_lock_ms=m.create_lock_ms,
             ),
+            audit=self.audit if self.infra.sessions is not None else None,
         )
 
     @cached_property
@@ -298,6 +331,9 @@ class MatchContainer:
             limits=QueryLimits(
                 join_by_code_per_ip_per_min=m.join_by_code_per_ip_per_min,
                 tokens_per_min=m.realtime_tokens_per_user_per_min,
+                join_by_code_per_user_per_min=m.join_by_code_per_user_per_min,
+                tick_per_min=m.tick_per_player_per_min,
+                state_per_min=m.state_per_player_per_min,
             ),
         )
 

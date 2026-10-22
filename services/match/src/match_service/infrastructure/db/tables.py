@@ -9,6 +9,7 @@ Postgres — история и проекции; горячее состояни
   создаёт периодическая задача ``match.partitions.ensure``, остальное — в ``_default``);
 * ``player_ratings_given`` — похвалы и жалобы (``PlayerRated``, один раз на пару и вид);
 * ``users_proj`` — ники из identity; ``mode_heads`` — текущие версии онлайн-шаблонов game;
+* ``admin_actions`` — аудит админских действий (принудительное завершение);
 * ``idempotency_keys`` — ``Idempotency-Key`` оценок.
 """
 
@@ -29,6 +30,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Table,
+    UniqueConstraint,
     Uuid,
     text,
 )
@@ -158,6 +160,21 @@ mode_heads = Table(
     Column("archived", Boolean, nullable=False, server_default=text("false")),
     _ts("updated_at"),
     CheckConstraint("version >= 1", name="version_positive"),
+)
+
+admin_actions = Table(
+    "admin_actions",
+    _md,
+    Column("id", Uuid(as_uuid=True), primary_key=True),
+    Column("actor_id", Uuid(as_uuid=True), nullable=False),
+    Column("action", String(64), nullable=False),
+    Column("room_code", String(8), nullable=False),
+    Column("match_id", Uuid(as_uuid=True), nullable=True),
+    Column("reason", String(500), nullable=False),
+    Column("idempotency_key", String(128), nullable=False),
+    _ts("created_at"),
+    UniqueConstraint("actor_id", "idempotency_key"),
+    Index("ix_admin_actions_room", "room_code", "created_at"),
 )
 
 idempotency_keys = idempotency_table(_md)

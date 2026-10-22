@@ -144,29 +144,43 @@ class RoomActor:
     async def _run(self, stop: asyncio.Event) -> None:
         room = await self._store.load(self.code)
         if room is None:
+            # Снимка нет (истёк или нечитаем — см. лог и метрику стора): комнату не
+            # переподхватывать бесконечно — убрать из индексов.
+            await self._store.forget(self.code)
             await self._lease.release(self.grant)
             return
         self._room = room
         self._written = self._signature(room)
         self._renewed = time.monotonic()
         while not stop.is_set():
-            if room.is_closed:
+            # Закрытую комнату не отпускаем, пока итог не записан в Postgres (D8).
+            if room.is_closed and not self._owner.unpersisted(room):
                 await self._close(room)
                 return
             try:
                 if not await self._iteration(room, stop):
                     return
-            except (RedisError, OSError, TimeoutError) as exc:
-                # Сбой Redis посреди итерации: состояние в памяти могло уйти вперёд снимка —
-                # перечитать снимок (команды без снимка применятся заново с курсора).
-                log.warning("match.room_iteration_failed", room=self.code, error=type(exc).__name__)
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), self._settings.poll_ms / 1000)
-                reloaded = await self._store.load(self.code)
+            except Exception:
+                # Сбой посреди итерации (Redis, Postgres, баг): состояние в памяти могло
+                # уйти вперёд снимка — перечитать снимок (команды без снимка применятся
+                # заново с курсора).
+                log.exception("match.room_iteration_failed", room=self.code)
+                reloaded = await self._reload(stop)
                 if reloaded is None:
                     return
                 room = self._room = reloaded
                 self._written = self._signature(room)
+
+    async def _reload(self, stop: asyncio.Event) -> Room | None:
+        """Перечитать снимок после сбоя; ждать и повторять, пока Redis недоступен."""
+        while not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), self._settings.poll_ms / 1000)
+            try:
+                return await self._store.load(self.code)
+            except (AppError, RedisError, OSError, TimeoutError) as exc:
+                log.warning("match.room_reload_failed", room=self.code, error=type(exc).__name__)
+        return None
 
     async def _iteration(self, room: Room, stop: asyncio.Event) -> bool:
         """Одна итерация цикла; ``False`` — выйти (остановка или потеря lease)."""
@@ -182,7 +196,13 @@ class RoomActor:
         replies = []
         for entry_id, command in entries:
             if command is not None:
-                replies.append((command, await self._owner.handle(room, command)))
+                try:
+                    reply = await self._owner.handle(room, command)
+                except Exception:
+                    # Владелец ловит сбои сам; это последний рубеж: курсор идёт дальше.
+                    log.exception("match.command_crashed", room=self.code, kind=command.kind)
+                    reply = {"status": 500, "code": "match.unavailable", "message": "сбой"}
+                replies.append((command, reply))
             else:
                 log.warning("match.command_unreadable", room=self.code)
             room.cursor = entry_id
@@ -199,6 +219,8 @@ class RoomActor:
             for command, reply in replies:
                 await self._stream.reply(self.code, command, reply)
             await self._store.index(room)
+        # Итог в Postgres + outbox — только после успешного снимка этого состояния (D8).
+        await self._owner.persist(room)
         if (time.monotonic() - self._renewed) * 1000 >= self._settings.renew_ms:
             if not await self._lease.renew(self.grant):
                 self._lose("renew")

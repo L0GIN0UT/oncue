@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from prometheus_client import Counter
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -21,6 +22,10 @@ from match_service.infrastructure.rooms import keys
 from match_service.infrastructure.rooms.codec import SnapshotError, dumps, loads
 
 log = structlog.get_logger(__name__)
+
+SNAPSHOT_UNREADABLE = Counter(
+    "gv_match_snapshot_unreadable_total", "Нечитаемые снимки комнат (версия, повреждение)"
+)
 
 
 def is_open(room: Room) -> bool:
@@ -51,6 +56,7 @@ class RedisRoomStore:
         try:
             return loads(raw)
         except SnapshotError:
+            SNAPSHOT_UNREADABLE.inc()
             log.exception("match.snapshot_unreadable", room=code)
             return None
 
@@ -147,6 +153,13 @@ class RedisRoomStore:
                 pipe.zadd(keys.OPEN, {room.code: room.created_at_ms})
             else:
                 pipe.zrem(keys.OPEN, room.code)
+            await pipe.execute()
+
+    async def forget(self, code: str) -> None:
+        """Комнаты нет (снимок истёк или нечитаем): убрать из индексов."""
+        async with self._redis.pipeline(transaction=False) as pipe:
+            pipe.zrem(keys.ACTIVE, code)
+            pipe.zrem(keys.OPEN, code)
             await pipe.execute()
 
     async def signal_orphan(self, code: str) -> None:

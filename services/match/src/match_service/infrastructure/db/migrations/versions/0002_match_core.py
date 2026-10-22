@@ -178,6 +178,24 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("user_id", name=op.f("pk_users_proj")),
     )
     op.create_table(
+        "admin_actions",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("actor_id", sa.Uuid(), nullable=False),
+        sa.Column("action", sa.String(length=64), nullable=False),
+        sa.Column("room_code", sa.String(length=8), nullable=False),
+        sa.Column("match_id", sa.Uuid(), nullable=True),
+        sa.Column("reason", sa.String(length=500), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=128), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_admin_actions")),
+        sa.UniqueConstraint(
+            "actor_id", "idempotency_key", name=op.f("uq_admin_actions_actor_id_idempotency_key")
+        ),
+    )
+    op.create_index(
+        "ix_admin_actions_room", "admin_actions", ["room_code", "created_at"], unique=False
+    )
+    op.create_table(
         "mode_heads",
         sa.Column("mode_key", sa.String(length=100), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
@@ -191,6 +209,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("mode_heads")
+    op.drop_index("ix_admin_actions_room", table_name="admin_actions")
+    op.drop_table("admin_actions")
     op.drop_table("users_proj")
     op.drop_index("ix_player_ratings_given_to", table_name="player_ratings_given")
     op.drop_index("ix_player_ratings_given_from", table_name="player_ratings_given")

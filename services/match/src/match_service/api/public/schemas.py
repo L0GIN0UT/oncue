@@ -536,7 +536,7 @@ class MatchResult(BaseModel):
     """Итог матча (``GET /v1/matches/{id}``)."""
 
     match_id: UUID
-    room_code: RoomCode
+    room_code: RoomCode | None = Field(description="Только участникам матча (не участнику — null)")
     mode: ModeRef
     started_at: datetime
     finished_at: datetime

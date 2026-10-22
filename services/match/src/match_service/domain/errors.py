@@ -57,6 +57,7 @@ MATCH_NOT_FOUND = "match.match_not_found"
 CANNOT_RATE_SELF = "match.cannot_rate_self"
 ALREADY_RATED = "match.already_rated"
 ROOM_CLOSED = "match.room_closed"
+COMMAND_UNKNOWN = "match.command_unknown"
 
 
 class MatchNotFoundError(NotFoundError):
