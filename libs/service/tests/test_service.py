@@ -462,6 +462,7 @@ class TestRealtimeSettings:
                 "различаться",
             ),
             ({"api_url": "centrifugo:8000"}, "api_url"),
+            ({"token_ttl_s": 601}, "token_ttl_s"),
         ],
     )
     def test_rejects_weak_config(self, fields: dict[str, str], error: str) -> None:

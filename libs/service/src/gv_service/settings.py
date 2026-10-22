@@ -128,7 +128,7 @@ class RealtimeSettings(BaseModel):
             ``GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET``).
         token_audience: ``aud`` токенов; совпадает с ``client.token.audience`` и
             ``client.subscription_token.audience`` в ``infra/centrifugo/config.json``.
-        token_ttl_s: Время жизни выдаваемых токенов.
+        token_ttl_s: Время жизни выдаваемых токенов; не больше 10 минут (D9 этапа 4).
         timeout_s: Таймаут запроса к server API.
     """
 
@@ -139,7 +139,7 @@ class RealtimeSettings(BaseModel):
     connection_token_secret: SecretStr | None = None
     subscription_token_secret: SecretStr | None = None
     token_audience: str = Field(default="centrifugo", min_length=1, max_length=64)
-    token_ttl_s: int = Field(default=600, ge=60, le=3600)
+    token_ttl_s: int = Field(default=600, ge=60, le=600)
     timeout_s: float = Field(default=2.0, gt=0, le=30)
 
     @field_validator("api_key", "connection_token_secret", "subscription_token_secret")
