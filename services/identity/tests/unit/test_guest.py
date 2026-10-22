@@ -223,7 +223,7 @@ async def test_guest_refresh_never_becomes_admin_or_works_without_guest_issuer(w
 async def test_end_revokes_only_guest_sessions(world: Any) -> None:
     guest = await start(world)(ip=None, refresh_token=None, authenticated=False)
     await world.make_user()
-    user = await world.uc.login("neo_2026", "correct horse battery", ip=None)
+    user = await world.login("neo_2026", "correct horse battery", ip=None)
     end = EndGuestSession(world.uow, Revocation(world), world.clock)
 
     assert await end(refresh_token=user.refresh_token) is False

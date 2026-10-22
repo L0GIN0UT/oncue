@@ -147,3 +147,79 @@ async def test_0008_seeds_online_perms_and_is_reversible(database_url: str) -> N
     # Повторный upgrade идемпотентен по отношению к уже существующей матрице.
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["moderator"] & ONLINE_PERMS == {"match.spectate"}
+
+
+async def _tables(database_url: str) -> set[str]:
+    from sqlalchemy import text
+
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+            )
+            return set(rows.scalars())
+    finally:
+        await engine.dispose()
+
+
+async def test_0009_0010_codes_replace_email_tokens_and_are_reversible(database_url: str) -> None:
+    """ADR 0041: head — коды и устройства без email_tokens; откат возвращает прежнюю схему."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    head = await _tables(database_url)
+    assert {"email_challenges", "trusted_devices"} <= head
+    assert "email_tokens" not in head
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0009")
+    assert "email_tokens" in await _tables(database_url)
+    await asyncio.to_thread(command.downgrade, config, "0008")
+    tables = await _tables(database_url)
+    assert "email_tokens" in tables
+    assert not {"email_challenges", "trusted_devices"} & tables
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert {"email_challenges", "trusted_devices"} <= await _tables(database_url)
+
+
+async def test_0011_invariants_and_cleanup_indexes_are_reversible(database_url: str) -> None:
+    """Ревью ADR 0041: CHECK-инварианты и индексы очистки добавляются и откатываются."""
+    import asyncio
+
+    from alembic import command
+    from sqlalchemy import text
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    names = (
+        "ck_email_challenges_attempts_within_max",
+        "ck_email_challenges_closed_once",
+        "ix_email_challenges_user_id",
+        "ix_trusted_devices_expires_at",
+    )
+
+    async def present() -> set[str]:
+        engine = create_async_engine(database_url)
+        try:
+            async with engine.connect() as conn:
+                rows = await conn.execute(
+                    text("SELECT conname FROM pg_constraint UNION SELECT indexname FROM pg_indexes")
+                )
+                return {row[0] for row in rows}
+        finally:
+            await engine.dispose()
+
+    assert set(names) <= await present()
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0010")
+    assert not set(names) & await present()
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert set(names) <= await present()

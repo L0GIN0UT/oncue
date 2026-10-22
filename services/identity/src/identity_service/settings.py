@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from gv_auth import DEFAULT_LEEWAY_S
 from gv_service import ServiceSettings
@@ -51,8 +51,6 @@ class EmailSettings(BaseModel):
 
     backend: Literal["log", "smtp"] = "log"
     sender: str = "Guessverse <no-reply@guessverse.local>"
-    verify_link: str = "https://guessverse.local/auth/verify-email?token={token}"
-    reset_link: str = "https://guessverse.local/auth/reset-password?token={token}"
 
 
 class SmtpSettings(BaseModel):
@@ -63,6 +61,55 @@ class SmtpSettings(BaseModel):
     username: str | None = None
     password: SecretStr | None = None
     start_tls: bool = True
+    use_tls: bool = False
+    """Неявный TLS (порт 465); взаимоисключающ со ``start_tls``."""
+    timeout_s: float = Field(default=10.0, gt=0, le=120)
+
+    @model_validator(mode="after")
+    def _one_tls_mode(self) -> SmtpSettings:
+        if self.use_tls and self.start_tls:
+            raise ValueError("GV_SMTP__USE_TLS и GV_SMTP__START_TLS взаимоисключающие")
+        return self
+
+
+class EmailCodeSettings(BaseModel):
+    """Одноразовые коды из писем и доверенные устройства (ADR 0041): ``GV_EMAIL_CODE__*``."""
+
+    length: int = Field(default=6, ge=4, le=10)
+    ttl_s: int = Field(default=600, ge=60, le=3600)
+    max_attempts: int = Field(default=5, ge=1, le=10)
+    resend_after_s: int = Field(default=60, ge=10, le=600)
+    daily_fail_limit: int = Field(default=20, ge=1)
+    """Неудачных вводов в сутки на субъекта; исчерпание — ``auth.code_limit_exceeded``."""
+    request_per_ip_per_min: int = Field(default=5, ge=1)
+    """Запросов кода (register, login, forgot, resend, password/change) с одного IP в минуту."""
+    confirm_per_ip_per_min: int = Field(default=20, ge=1)
+    """Вводов кода с одного IP в минуту."""
+    hmac_key: SecretStr | None = None
+    """Ключ HMAC кода; без него — только local/ci (временный ключ процесса)."""
+    device_cookie_ttl_days: int = Field(default=180, ge=1, le=365)
+    max_lifetime_s: int = Field(default=3600, ge=300, le=43_200)
+    """Абсолютный срок жизни записи кода от ``created_at``: resend не продлевает его дальше.
+
+    Иначе запись удерживали бы живой повторными отправками, пока она не выпадет из суточного
+    окна потолка неудач (``failures_since`` считает записи по ``created_at``)."""
+    check_concurrency: int = Field(default=3, ge=1, le=16)
+    """Одновременных проверок кода на процесс: каждая держит два соединения БД (основное и
+    отдельное для списания попытки), пул конечен."""
+    purge_interval_s: float = Field(default=3600, gt=0)
+    purge_jitter_s: float = Field(default=300, ge=0)
+    purge_batch: int = Field(default=1000, ge=1, le=10_000)
+    purge_max_batches: int = Field(default=20, ge=1)
+    purge_retention_s: int = Field(default=172_800, ge=86_400)
+    """Сколько хранить код после истечения срока; не меньше суток — окна потолка неудач."""
+    device_revoked_retention_s: int = Field(default=604_800, ge=0)
+    """Сколько хранить отозванное доверенное устройство до удаления."""
+
+    @model_validator(mode="after")
+    def _lifetime_covers_ttl(self) -> EmailCodeSettings:
+        if self.max_lifetime_s < self.ttl_s:
+            raise ValueError("GV_EMAIL_CODE__MAX_LIFETIME_S не может быть меньше TTL кода")
+        return self
 
 
 class LoginLimitSettings(BaseModel):
@@ -202,6 +249,7 @@ class Settings(ServiceSettings):
     yandex: YandexSettings = YandexSettings()
     email: EmailSettings = EmailSettings()
     smtp: SmtpSettings = SmtpSettings()
+    email_code: EmailCodeSettings = EmailCodeSettings()
     login_limit: LoginLimitSettings = LoginLimitSettings()
     email_limit: EmailLimitSettings = EmailLimitSettings()
     argon2: Argon2Settings = Argon2Settings()

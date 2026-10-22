@@ -8,7 +8,7 @@ from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
-from sqlalchemy import Row, and_, delete, insert, or_, select, update
+from sqlalchemy import Row, and_, case, delete, func, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -19,7 +19,12 @@ from gv_core.errors import ConflictError
 from gv_db.idempotency import SqlIdempotencyStore
 from gv_db.uow import SqlAlchemyUnitOfWork
 from gv_messaging.outbox import OutboxWriter
-from identity_service.application.ports import EmailToken, EmailTokenPurpose, RoleChange
+from identity_service.application.ports import (
+    ChallengePurpose,
+    EmailChallenge,
+    RoleChange,
+    TrustedDevice,
+)
 from identity_service.domain import (
     AuthIdentity,
     Consent,
@@ -38,7 +43,7 @@ from identity_service.domain.guest import subject_kind
 from identity_service.infrastructure.db.tables import (
     TABLES,
     auth_identities,
-    email_tokens,
+    email_challenges,
     idempotency_keys,
     password_credentials,
     permissions,
@@ -47,6 +52,7 @@ from identity_service.infrastructure.db.tables import (
     role_permissions,
     roles,
     sessions,
+    trusted_devices,
     user_roles,
     users,
 )
@@ -66,6 +72,9 @@ def _constraint(exc: IntegrityError) -> str:
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+UNIQUE_VIOLATION = "23505"  # SQLSTATE нарушения уникальности (PostgreSQL)
 
 
 class SqlUserRepository:
@@ -477,56 +486,242 @@ class SqlConsentRepository:
         return [Consent(r.user_id, r.kind, r.version, r.granted_at) for r in rows]
 
 
-class SqlEmailTokenRepository:
-    """Одноразовые токены из писем."""
+def _rowcount(result: Any) -> int:
+    """Число затронутых строк у UPDATE/DELETE (``CursorResult``)."""
+    return int(result.rowcount or 0)
+
+
+def _challenge(row: Row[Any]) -> EmailChallenge:
+    return EmailChallenge(
+        id=row.id,
+        purpose=ChallengePurpose(row.purpose),
+        subject_hash=row.subject_hash,
+        user_id=row.user_id,
+        code_hash=row.code_hash,
+        attempts=row.attempts,
+        max_attempts=row.max_attempts,
+        send_count=row.send_count,
+        device_hash=row.device_hash,
+        session_id=row.session_id,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        last_sent_at=row.last_sent_at,
+        consumed_at=row.consumed_at,
+        cancelled_at=row.cancelled_at,
+    )
+
+
+class SqlEmailChallengeRepository:
+    """Коды из писем: все переходы состояния — условные UPDATE с проверкой rowcount."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def add(self, token: EmailToken) -> None:
-        """Сохранить."""
-        await self._s.execute(
-            insert(email_tokens).values(
-                id=token.id,
-                user_id=token.user_id,
-                purpose=token.purpose.value,
-                token_hash=token.token_hash,
-                created_at=token.created_at,
-                expires_at=token.expires_at,
-            )
-        )
+    async def add(self, challenge: EmailChallenge) -> None:
+        """Сохранить; второй активный код того же (субъект, назначение) — ``ConflictError``."""
+        try:
+            async with self._s.begin_nested():
+                await self._s.execute(
+                    insert(email_challenges).values(
+                        id=challenge.id,
+                        purpose=challenge.purpose.value,
+                        subject_hash=challenge.subject_hash,
+                        user_id=challenge.user_id,
+                        code_hash=challenge.code_hash,
+                        attempts=challenge.attempts,
+                        max_attempts=challenge.max_attempts,
+                        send_count=challenge.send_count,
+                        device_hash=challenge.device_hash,
+                        session_id=challenge.session_id,
+                        created_at=challenge.created_at,
+                        expires_at=challenge.expires_at,
+                        last_sent_at=challenge.last_sent_at,
+                        consumed_at=challenge.consumed_at,
+                        cancelled_at=challenge.cancelled_at,
+                    )
+                )
+        except IntegrityError as exc:
+            # Только нарушение уникальности активного кода — конфликт; остальное (CHECK, FK)
+            # — ошибка кода, её нельзя выдавать за «код уже есть».
+            if getattr(exc.orig, "sqlstate", None) != UNIQUE_VIOLATION:
+                raise
+            raise ConflictError(
+                "активный код уже существует", code="auth.code_active_exists"
+            ) from exc
 
-    async def consume(
-        self, token_hash: str, purpose: EmailTokenPurpose, now: datetime
-    ) -> UUID | None:
-        """Погасить атомарно одним UPDATE (повтор и гонка невозможны)."""
-        user_id: UUID | None = await self._s.scalar(
-            update(email_tokens)
-            .where(
-                email_tokens.c.token_hash == token_hash,
-                email_tokens.c.purpose == purpose.value,
-                email_tokens.c.used_at.is_(None),
-                email_tokens.c.expires_at > now,
+    async def get(self, challenge_id: UUID) -> EmailChallenge | None:
+        """По id."""
+        row = (
+            await self._s.execute(
+                select(email_challenges).where(email_challenges.c.id == challenge_id)
             )
-            .values(used_at=now)
-            .returning(email_tokens.c.user_id)
-        )
-        return user_id
+        ).first()
+        return _challenge(row) if row else None
 
-    async def invalidate_for_user(
-        self, user_id: UUID, purpose: EmailTokenPurpose, now: datetime
+    async def cancel_active(
+        self, subject_hash: str, purpose: ChallengePurpose, now: datetime
     ) -> int:
-        """Погасить все непогашенные токены пользователя этой цели одним UPDATE."""
+        """Отменить непогашенный код (в том числе истёкший: он занимает частичный UNIQUE)."""
         result = await self._s.execute(
-            update(email_tokens)
+            update(email_challenges)
             .where(
-                email_tokens.c.user_id == user_id,
-                email_tokens.c.purpose == purpose.value,
-                email_tokens.c.used_at.is_(None),
+                email_challenges.c.subject_hash == subject_hash,
+                email_challenges.c.purpose == purpose.value,
+                email_challenges.c.consumed_at.is_(None),
+                email_challenges.c.cancelled_at.is_(None),
             )
-            .values(used_at=now)
+            .values(cancelled_at=now)
         )
-        return int(result.rowcount or 0)  # type: ignore[attr-defined]  # CursorResult у UPDATE
+        return _rowcount(result)
+
+    async def replace_code(
+        self, challenge_id: UUID, *, code_hash: str, expires_at: datetime, now: datetime
+    ) -> bool:
+        """Новый код в той же записи: ``send_count + 1``, попытки сброшены, срок обновлён."""
+        result = await self._s.execute(
+            update(email_challenges)
+            .where(*self._active(challenge_id, now))
+            .values(
+                code_hash=code_hash,
+                expires_at=expires_at,
+                last_sent_at=now,
+                attempts=0,
+                send_count=email_challenges.c.send_count + 1,
+            )
+        )
+        return _rowcount(result) == 1
+
+    async def consume(self, challenge_id: UUID, now: datetime) -> bool:
+        """Погасить действующий код; ``False`` — уже погашен/отменён/истёк (гонка)."""
+        result = await self._s.execute(
+            update(email_challenges).where(*self._active(challenge_id, now)).values(consumed_at=now)
+        )
+        return _rowcount(result) == 1
+
+    async def delete_for_subjects(self, user_id: UUID, subject_hashes: Iterable[str]) -> int:
+        """Удалить коды пользователя и коды с этими субъектами (удаление аккаунта)."""
+        result = await self._s.execute(
+            delete(email_challenges).where(
+                or_(
+                    email_challenges.c.user_id == user_id,
+                    email_challenges.c.subject_hash.in_(list(subject_hashes)),
+                )
+            )
+        )
+        return _rowcount(result)
+
+    async def failures_since(self, subject_hash: str, since: datetime) -> int:
+        """Неудачные вводы по субъекту (все назначения) у кодов, созданных с ``since``.
+
+        Считаются списанные попытки за всё время жизни записи (``spent_total``, resend её не
+        обнуляет); успешный ввод вычитается.
+        """
+        failures = email_challenges.c.spent_total - case(
+            (email_challenges.c.consumed_at.is_not(None), 1), else_=0
+        )
+        total = await self._s.scalar(
+            select(func.coalesce(func.sum(failures), 0)).where(
+                email_challenges.c.subject_hash == subject_hash,
+                email_challenges.c.created_at >= since,
+            )
+        )
+        return int(total or 0)
+
+    @staticmethod
+    def _active(challenge_id: UUID, now: datetime) -> tuple[Any, ...]:
+        return (
+            email_challenges.c.id == challenge_id,
+            email_challenges.c.consumed_at.is_(None),
+            email_challenges.c.cancelled_at.is_(None),
+            email_challenges.c.expires_at > now,
+        )
+
+
+class SqlChallengeAttempts:
+    """Списание попытки в СВОЕЙ сессии и СВОЁМ коммите (ADR 0041).
+
+    Откат внешней транзакции use-case не возвращает попытку — иначе перебор кода бесконечен.
+    """
+
+    def __init__(self, sessions_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = sessions_factory
+
+    async def spend(self, challenge_id: UUID, now: datetime) -> EmailChallenge | None:
+        """Атомарно ``attempts + 1`` у действующего кода с ``attempts < max_attempts``."""
+        async with self._factory() as session, session.begin():
+            row = (
+                await session.execute(
+                    update(email_challenges)
+                    .where(
+                        email_challenges.c.id == challenge_id,
+                        email_challenges.c.consumed_at.is_(None),
+                        email_challenges.c.cancelled_at.is_(None),
+                        email_challenges.c.expires_at > now,
+                        email_challenges.c.attempts < email_challenges.c.max_attempts,
+                    )
+                    .values(
+                        attempts=email_challenges.c.attempts + 1,
+                        spent_total=email_challenges.c.spent_total + 1,
+                    )
+                    .returning(*email_challenges.c)
+                )
+            ).first()
+        return _challenge(row) if row else None
+
+
+class SqlTrustedDeviceRepository:
+    """Доверенные устройства."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, device: TrustedDevice) -> None:
+        """Доверить; повтор для пары (пользователь, устройство) продлевает срок и снимает отзыв."""
+        stmt = pg_insert(trusted_devices).values(
+            id=device.id,
+            user_id=device.user_id,
+            device_hash=device.device_hash,
+            created_at=device.created_at,
+            expires_at=device.expires_at,
+            revoked_at=device.revoked_at,
+        )
+        await self._s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[trusted_devices.c.user_id, trusted_devices.c.device_hash],
+                set_={"expires_at": device.expires_at, "revoked_at": None},
+            )
+        )
+
+    async def is_trusted(self, user_id: UUID, device_hash: str, now: datetime) -> bool:
+        """Доверено, не отозвано, не истекло."""
+        found = await self._s.scalar(
+            select(trusted_devices.c.id).where(
+                trusted_devices.c.user_id == user_id,
+                trusted_devices.c.device_hash == device_hash,
+                trusted_devices.c.revoked_at.is_(None),
+                trusted_devices.c.expires_at > now,
+            )
+        )
+        return found is not None
+
+    async def revoke_for_user(
+        self, user_id: UUID, now: datetime, *, except_hash: str | None = None
+    ) -> int:
+        """Отозвать все действующие устройства пользователя, кроме ``except_hash``."""
+        conditions = [trusted_devices.c.user_id == user_id, trusted_devices.c.revoked_at.is_(None)]
+        if except_hash is not None:
+            conditions.append(trusted_devices.c.device_hash != except_hash)
+        result = await self._s.execute(
+            update(trusted_devices).where(*conditions).values(revoked_at=now)
+        )
+        return _rowcount(result)
+
+    async def delete_for_user(self, user_id: UUID) -> int:
+        """Удалить все устройства пользователя (удаление аккаунта)."""
+        result = await self._s.execute(
+            delete(trusted_devices).where(trusted_devices.c.user_id == user_id)
+        )
+        return _rowcount(result)
 
 
 class SqlIdentityUnitOfWork:
@@ -549,7 +744,8 @@ class SqlIdentityUnitOfWork:
         self.identities = SqlAuthIdentityRepository(s)
         self.roles = SqlRoleRepository(s)
         self.consents = SqlConsentRepository(s)
-        self.email_tokens = SqlEmailTokenRepository(s)
+        self.email_challenges = SqlEmailChallengeRepository(s)
+        self.trusted_devices = SqlTrustedDeviceRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         return self
 

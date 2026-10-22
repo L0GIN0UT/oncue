@@ -28,6 +28,26 @@ def hash_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode()).hexdigest()
 
 
+def email_subject_hash(address: str) -> str:
+    """Хэш субъекта кода для адреса (register/reset): в БД нет e-mail открытым текстом."""
+    return hashlib.sha256(f"email:{address.casefold()}".encode()).hexdigest()
+
+
+def decoy_subject_hash(address: str) -> str:
+    """Субъект «пустышки» для адреса: детерминирован, как у настоящего кода.
+
+    Повторный запрос отменяет прежнюю пустышку, а суточный потолок неудач считается по ней
+    так же, как по настоящему субъекту, — иначе по ``attempts_left`` и 429 адрес с аккаунтом
+    отличался бы от адреса без него.
+    """
+    return hashlib.sha256(f"decoy:{address.casefold()}".encode()).hexdigest()
+
+
+def user_subject_hash(user_id: object) -> str:
+    """Хэш субъекта кода для пользователя (login/password_change)."""
+    return hashlib.sha256(f"user:{user_id}".encode()).hexdigest()
+
+
 def pkce_challenge(verifier: str) -> str:
     """``code_challenge`` для метода S256 (RFC 7636 §4.2)."""
     digest = hashlib.sha256(verifier.encode("ascii")).digest()

@@ -20,13 +20,14 @@ from pydantic import SecretStr
 from redis.asyncio import Redis
 from structlog.testing import capture_logs
 
-from gv_auth import CSRF_COOKIE, CSRF_HEADER
+from gv_auth import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from gv_core.ids import uuid7
 from gv_messaging import EventEnvelope
 from gv_service import Infrastructure, create_app
 from gv_testkit import InfraProvider, apply_migrations, outbox_envelopes, service_client
 
 ORIGIN = "https://gv.test"
+REFRESH_COOKIE = "gv_refresh"
 PASSWORD = "correct horse battery"
 YA_TOKEN = "https://ya.test/token"
 YA_INFO = "https://ya.test/info"
@@ -92,9 +93,24 @@ class Service:
         """Заголовки браузерной мутации с cookie-аутентификацией."""
         return {"Origin": ORIGIN, CSRF_HEADER: self.client.cookies.get(CSRF_COOKIE) or ""}
 
-    def last_link_token(self) -> str:
-        links = [e["link"] for e in self.logs if e.get("event") == "email.logged" and "link" in e]
-        return str(links[-1]).rsplit("token=", 1)[1]
+    def forget_session(self) -> None:
+        """Убрать cookie сессии, оставив доверенное устройство (``gv_device``)."""
+        names = {ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE}
+        jar = self.client.cookies.jar
+        for cookie in [c for c in jar if c.name in names]:
+            jar.clear(cookie.domain, cookie.path, cookie.name)
+
+    def code_for(self, challenge_id: str) -> str:
+        """Код из письма по ``challenge_id`` (backend=log пишет его в лог только в local/ci)."""
+        codes = [
+            str(e["code"])
+            for e in self.logs
+            if e.get("event") == "email.logged"
+            and e.get("challenge_id") == challenge_id
+            and "code" in e
+        ]
+        assert codes, f"письма с кодом для {challenge_id} нет"
+        return codes[-1]
 
     async def events(self) -> list[EventEnvelope]:
         assert self.infra.sessions is not None and DEFINITION.tables is not None
@@ -103,7 +119,8 @@ class Service:
 
     async def register(
         self, nickname: str = "neo_2026", email: str = "neo@example.com", *, verify: bool = True
-    ) -> None:
+    ) -> dict[str, Any]:
+        """Зарегистрироваться; с ``verify`` ещё и ввести код (сессия и gv_device — в cookie)."""
         response = await self.client.post(
             "/v1/auth/register",
             json={
@@ -118,11 +135,18 @@ class Service:
             headers={"Origin": ORIGIN},
         )
         assert response.status_code == 202, response.text
+        challenge: dict[str, Any] = response.json()
         if verify:
             ok = await self.client.post(
-                "/v1/auth/verify-email", json={"token": self.last_link_token()}
+                "/v1/auth/verify-email",
+                json={
+                    "challenge_id": challenge["challenge_id"],
+                    "code": self.code_for(challenge["challenge_id"]),
+                },
+                headers={"Origin": ORIGIN},
             )
-            assert ok.status_code == 204, ok.text
+            assert ok.status_code == 200, ok.text
+        return challenge
 
     async def login(self, login: str = "neo_2026", password: str = PASSWORD) -> httpx.Response:
         return await self.client.post(

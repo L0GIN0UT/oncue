@@ -7,12 +7,16 @@ from dataclasses import dataclass
 from identity_service.application.commands.account import DeleteAccount, GrantConsents
 from identity_service.application.commands.auth import (
     AdminLogin,
+    ConfirmLogin,
+    ConfirmPasswordChange,
     LoginWithPassword,
     Logout,
     LogoutAll,
     RefreshSession,
     RegisterWithEmail,
+    RequestPasswordChange,
     RequestPasswordReset,
+    ResendCode,
     ResetPassword,
     VerifyEmail,
 )
@@ -43,6 +47,10 @@ class IdentityUseCases:
     register: RegisterWithEmail
     verify_email: VerifyEmail
     login: LoginWithPassword
+    confirm_login: ConfirmLogin
+    resend_code: ResendCode
+    request_password_change: RequestPasswordChange
+    confirm_password_change: ConfirmPasswordChange
     admin_login: AdminLogin
     refresh: RefreshSession
     logout: Logout

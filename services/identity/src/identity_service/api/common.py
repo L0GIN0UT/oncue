@@ -24,6 +24,7 @@ from identity_service.application.sessions import IssuedSession
 from identity_service.settings import Settings
 
 REFRESH_COOKIE = "gv_refresh"
+DEVICE_COOKIE = "gv_device"
 OAUTH_COOKIE = "gv_oauth"
 
 
@@ -134,3 +135,20 @@ def clear_session_cookies(response: Response, settings: Settings) -> None:
     response.delete_cookie(ACCESS_COOKIE, path="/", httponly=True, **kw)
     response.delete_cookie(REFRESH_COOKIE, path=settings.cookies.refresh_path, httponly=True, **kw)
     response.delete_cookie(CSRF_COOKIE, path="/", **kw)
+
+
+def device_token(request: Request) -> str | None:
+    """Значение cookie доверенного устройства (``None`` — устройство неизвестно)."""
+    return request.cookies.get(DEVICE_COOKIE) or None
+
+
+def set_device_cookie(response: Response, token: str, settings: Settings) -> None:
+    """Cookie ``gv_device`` (ADR 0041): только ручки auth, HttpOnly, срок — из настроек."""
+    response.set_cookie(
+        DEVICE_COOKIE,
+        token,
+        max_age=settings.email_code.device_cookie_ttl_days * 86_400,
+        path=settings.cookies.refresh_path,
+        httponly=True,
+        **_cookie_kwargs(settings),
+    )

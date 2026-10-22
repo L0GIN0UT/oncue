@@ -1,6 +1,7 @@
 """Домен identity: чистый Python без фреймворков и IO."""
 
 from identity_service.domain.auth_identity import AuthIdentity, Consent
+from identity_service.domain.challenge import ChallengePurpose, EmailChallenge, TrustedDevice
 from identity_service.domain.events import (
     ExternalAccountLinked,
     ExternalAccountUnlinked,
@@ -30,10 +31,12 @@ from identity_service.domain.values import DisplayName, EmailAddress, Nickname, 
 __all__ = [
     "DEFAULT_ROLE",
     "AuthIdentity",
+    "ChallengePurpose",
     "Consent",
     "ConsentRequirement",
     "DisplayName",
     "EmailAddress",
+    "EmailChallenge",
     "ExternalAccountLinked",
     "ExternalAccountUnlinked",
     "Nickname",
@@ -45,6 +48,7 @@ __all__ = [
     "Rotated",
     "Session",
     "SessionKind",
+    "TrustedDevice",
     "User",
     "UserDeleted",
     "UserProfileBasicsChanged",

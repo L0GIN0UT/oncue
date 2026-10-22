@@ -176,18 +176,82 @@ consents = Table(
     PrimaryKeyConstraint("user_id", "kind", "version"),
 )
 
-email_tokens = Table(
-    "email_tokens",
+# Одноразовые коды из писем (ADR 0041, миграция 0009): в БД только HMAC кода.
+email_challenges = Table(
+    "email_challenges",
+    _md,
+    Column("id", Uuid, primary_key=True),
+    Column("purpose", String(32), nullable=False),
+    Column("subject_hash", Text, nullable=False),
+    Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=True),
+    Column("code_hash", Text, nullable=False),
+    Column("attempts", Integer, nullable=False, server_default=text("0")),
+    Column("max_attempts", Integer, nullable=False),
+    Column("send_count", Integer, nullable=False, server_default=text("1")),
+    # Всего списанных попыток за жизнь записи: resend обнуляет attempts, но не это (потолок).
+    Column("spent_total", Integer, nullable=False, server_default=text("0")),
+    Column("device_hash", Text, nullable=True),
+    Column("session_id", Uuid, nullable=True),
+    Column("created_at", _TS, nullable=False),
+    Column("expires_at", _TS, nullable=False),
+    Column("last_sent_at", _TS, nullable=False),
+    Column("consumed_at", _TS, nullable=True),
+    Column("cancelled_at", _TS, nullable=True),
+    CheckConstraint(
+        "purpose IN ('register', 'login', 'reset', 'password_change')", name="purpose_known"
+    ),
+    CheckConstraint("attempts >= 0", name="attempts_non_negative"),
+    CheckConstraint("max_attempts > 0", name="max_attempts_positive"),
+    CheckConstraint("send_count >= 1", name="send_count_positive"),
+    CheckConstraint("spent_total >= 0", name="spent_total_non_negative"),
+    # Инварианты, которые иначе держатся только кодом (миграция 0011).
+    CheckConstraint("attempts <= max_attempts", name="attempts_within_max"),
+    CheckConstraint("spent_total >= attempts", name="spent_covers_attempts"),
+    CheckConstraint("expires_at > created_at", name="expires_after_created"),
+    CheckConstraint(
+        "NOT (consumed_at IS NOT NULL AND cancelled_at IS NOT NULL)", name="closed_once"
+    ),
+    CheckConstraint(
+        "purpose NOT IN ('login', 'password_change') OR user_id IS NOT NULL",
+        name="user_bound_purposes_have_user",
+    ),
+    # Один активный код на (субъект, назначение).
+    Index(
+        "uq_email_challenges_active",
+        "subject_hash",
+        "purpose",
+        unique=True,
+        postgresql_where=text("consumed_at IS NULL AND cancelled_at IS NULL"),
+    ),
+    # failures_since и очистка по сроку.
+    Index("ix_email_challenges_subject_created", "subject_hash", "created_at"),
+    Index("ix_email_challenges_expires_at", "expires_at"),
+    # Каскад по ``users`` и удаление кодов аккаунта (DeleteAccount) без seq scan.
+    Index(
+        "ix_email_challenges_user_id",
+        "user_id",
+        postgresql_where=text("user_id IS NOT NULL"),
+    ),
+)
+
+# Доверенные устройства (ADR 0041): sha256 cookie ``gv_device``.
+trusted_devices = Table(
+    "trusted_devices",
     _md,
     Column("id", Uuid, primary_key=True),
     Column("user_id", Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-    Column("purpose", String(16), nullable=False),
-    Column("token_hash", String(64), nullable=False, unique=True),
+    Column("device_hash", Text, nullable=False),
     Column("created_at", _TS, nullable=False),
     Column("expires_at", _TS, nullable=False),
-    Column("used_at", _TS, nullable=True),
-    CheckConstraint("purpose IN ('verify', 'reset')", name="purpose_known"),
-    Index("ix_email_tokens_user_id", "user_id"),
+    Column("revoked_at", _TS, nullable=True),
+    UniqueConstraint("user_id", "device_hash"),
+    # Очистка (PurgeEmailChallenges): истёкшие и давно отозванные устройства.
+    Index("ix_trusted_devices_expires_at", "expires_at"),
+    Index(
+        "ix_trusted_devices_revoked_at",
+        "revoked_at",
+        postgresql_where=text("revoked_at IS NOT NULL"),
+    ),
 )
 
 # Ключи идемпотентности admin-мутаций (gv_db.idempotency; миграция 0004).

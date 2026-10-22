@@ -167,6 +167,7 @@ async def test_guest_token_does_not_pass_account_admin_and_internal(service: Any
 
 async def test_login_from_guest_session_revokes_it(service: Any) -> None:
     await service.register()
+    service.forget_session()  # регистрация с кодом сразу открывает сессию; гость стартует без неё
     await _start(service)
     guest_access = service.client.cookies.get(ACCESS_COOKIE)
     guest_bearer = {"Authorization": f"Bearer {guest_access}"}

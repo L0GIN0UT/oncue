@@ -34,6 +34,25 @@ class RegisterCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class ChallengeIssued:
+    """Ответ на запрос кода: одинаков для существующего и несуществующего адреса (ADR 0041).
+
+    Attributes:
+        challenge_id: Идентификатор кода (для подавленного письма — фиктивный).
+        purpose: ``register`` | ``login`` | ``reset`` | ``password_change``.
+        code_length: Цифр в коде.
+        expires_in_s: Сколько секунд код действует.
+        resend_after_s: Через сколько секунд можно запросить повтор.
+    """
+
+    challenge_id: UUID
+    purpose: str
+    code_length: int
+    expires_in_s: int
+    resend_after_s: int
+
+
+@dataclass(frozen=True, slots=True)
 class LinkedAccountView:
     """Привязанный аккаунт для профиля (без внешнего идентификатора)."""
 

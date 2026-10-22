@@ -37,30 +37,62 @@ class LimitConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CodeConfig:
+    """Одноразовые коды из писем и доверенные устройства (ADR 0041, ``GV_EMAIL_CODE__*``).
+
+    Attributes:
+        length: Цифр в коде.
+        ttl_s: Время жизни кода.
+        max_attempts: Вводов на один код.
+        resend_after_s: Минимальный интервал между отправками одного кода.
+        daily_fail_limit: Неудачных вводов в сутки на субъекта.
+        request_per_ip_per_min: Запросов кода (вход с нового устройства, resend, смена пароля)
+            с одного IP в минуту.
+        confirm_per_ip_per_min: Вводов кода с одного IP в минуту.
+        device_ttl_s: Срок доверия устройству (``device_cookie_ttl_days`` в секундах).
+        max_lifetime_s: Абсолютный срок жизни записи кода от создания (resend не продлевает).
+        check_concurrency: Одновременных проверок кода на процесс (пул соединений конечен).
+        purge_retention_s / device_revoked_retention_s / purge_batch / purge_max_batches:
+            Очистка просроченных кодов и отозванных устройств.
+    """
+
+    length: int = 6
+    ttl_s: int = 600
+    max_attempts: int = 5
+    resend_after_s: int = 60
+    daily_fail_limit: int = 20
+    request_per_ip_per_min: int = 5
+    confirm_per_ip_per_min: int = 20
+    device_ttl_s: int = 15_552_000
+    max_lifetime_s: int = 3600
+    check_concurrency: int = 3
+    purge_retention_s: int = 172_800
+    device_revoked_retention_s: int = 604_800
+    purge_batch: int = 1000
+    purge_max_batches: int = 20
+
+
+@dataclass(frozen=True, slots=True)
 class AuthConfig:
     """Настройки входа, токенов и писем.
 
     Attributes:
         access_ttl_s: Время жизни access-токена (и записи в denylist ``sid``).
         refresh_ttl_s: Время жизни refresh-токена (скользящее: каждая ротация продлевает).
-        verify_ttl_s / reset_ttl_s: Время жизни ссылок из писем.
         required_consents: Согласия, без которых нельзя зарегистрироваться.
         bootstrap_admin_emails: Нормализованные адреса, получающие роль ``admin`` после
             подтверждения e-mail (первичная настройка).
-        verify_link / reset_link: Шаблоны ссылок с ``{token}``.
+        codes: Параметры одноразовых кодов и доверенных устройств.
         return_to_prefixes: Разрешённые относительные пути возврата после OAuth.
         oauth_state_ttl_s: Время жизни ``state``.
     """
 
     access_ttl_s: int = 900
     refresh_ttl_s: int = 2_592_000
-    verify_ttl_s: int = 86_400
-    reset_ttl_s: int = 3_600
     oauth_state_ttl_s: int = 600
     required_consents: tuple[ConsentRequirement, ...] = ()
     bootstrap_admin_emails: frozenset[str] = frozenset()
-    verify_link: str = "https://guessverse.local/auth/verify-email?token={token}"
-    reset_link: str = "https://guessverse.local/auth/reset-password?token={token}"
     return_to_prefixes: tuple[str, ...] = ("/",)
     password_policy: PasswordPolicy = field(default_factory=PasswordPolicy)
     limits: LimitConfig = field(default_factory=LimitConfig)
+    codes: CodeConfig = field(default_factory=CodeConfig)

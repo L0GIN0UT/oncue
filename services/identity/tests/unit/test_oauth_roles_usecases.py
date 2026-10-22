@@ -33,7 +33,7 @@ Y = Provider.YANDEX
 
 async def _actor(world: Any, nickname: str = "neo_2026", email: str = "neo@example.com") -> Actor:
     user_id = await world.make_user(nickname, email)
-    issued = await world.uc.login(nickname, PASSWORD, ip=None)
+    issued = await world.login(nickname, PASSWORD, ip=None)
     return Actor(user_id, issued.roles, issued.perms, issued.session_id)
 
 
@@ -307,9 +307,9 @@ async def test_delete_account(world: Any) -> None:
     assert neo.session_id in world.revoked
     assert world.data.identities == {}
     with pytest.raises(UnauthenticatedError):
-        await world.uc.login("neo_2026", PASSWORD, ip=None)
+        await world.login("neo_2026", PASSWORD, ip=None)
     # Ник и e-mail свободны.
-    again = await world.uc.register(
+    await world.uc.register(
         RegisterCommand(
             nickname="neo_2026",
             email="neo@example.com",
@@ -317,7 +317,7 @@ async def test_delete_account(world: Any) -> None:
             consents=world.config.required_consents,
         )
     )
-    assert again is not None and again != neo.user_id
+    assert len(world.data.users) == 2  # прежний пользователь помечен удалённым, новый создан
 
 
 async def test_grant_consents_and_get_user(world: Any) -> None:

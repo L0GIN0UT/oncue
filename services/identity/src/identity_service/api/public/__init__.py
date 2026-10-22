@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query, Request, Response, status
@@ -23,12 +23,15 @@ from identity_service.api.common import (
     actor_of,
     clear_session_cookies,
     client_ip,
+    device_token,
     session_user,
+    set_device_cookie,
     set_session_cookies,
 )
 from identity_service.api.public.guest import end_guest_session
+from identity_service.application.commands.codes import VerifiedSession
 from identity_service.application.commands.oauth import PURPOSE_LINK, PURPOSE_LOGIN
-from identity_service.application.dto import RegisterCommand
+from identity_service.application.dto import ChallengeIssued, RegisterCommand
 from identity_service.application.security import OAuthStateError
 from identity_service.domain import ConsentRequirement, Provider, SessionKind
 
@@ -53,16 +56,27 @@ class RegisterRequest(BaseModel):
     consents: list[ConsentIn] = Field(default_factory=list, max_length=20)
 
 
-class AcceptedResponse(BaseModel):
-    """Запрос принят; результат придёт письмом."""
+class ChallengeResponse(BaseModel):
+    """Код отправлен на почту (ADR 0041). Одинаков для существующего и нет адреса."""
 
-    status: str
+    challenge_id: UUID
+    purpose: Literal["register", "login", "reset", "password_change"]
+    code_length: int
+    expires_in_s: int
+    resend_after_s: int
 
 
-class TokenRequest(BaseModel):
-    """Одноразовый токен из письма."""
+class CodeRequest(BaseModel):
+    """Ввод кода из письма."""
 
-    token: str = Field(min_length=1, max_length=256)
+    challenge_id: UUID
+    code: str = Field(min_length=4, max_length=10, pattern=r"^[0-9]+$")
+
+
+class ResendRequest(BaseModel):
+    """Повторная отправка кода."""
+
+    challenge_id: UUID
 
 
 class LoginRequest(BaseModel):
@@ -79,6 +93,19 @@ class SessionResponse(BaseModel):
     expires_in: int
 
 
+class LoginResponse(BaseModel):
+    """Результат входа: сессия (``authenticated``) или нужен код с почты (``code_required``).
+
+    При ``authenticated`` заполнены ``user`` и ``expires_in``, при ``code_required`` — только
+    ``challenge``; cookie сессии при этом не выдаются.
+    """
+
+    status: Literal["authenticated", "code_required"]
+    user: SessionUser | None = None
+    expires_in: int | None = None
+    challenge: ChallengeResponse | None = None
+
+
 class ForgotRequest(BaseModel):
     """Запрос сброса пароля."""
 
@@ -86,10 +113,25 @@ class ForgotRequest(BaseModel):
 
 
 class ResetRequest(BaseModel):
-    """Новый пароль по токену из письма."""
+    """Новый пароль по коду из письма."""
 
-    token: str = Field(min_length=1, max_length=256)
+    challenge_id: UUID
+    code: str = Field(min_length=4, max_length=10, pattern=r"^[0-9]+$")
     password: str = _PASSWORD
+
+
+class PasswordChangeRequest(BaseModel):
+    """Начало смены пароля в профиле: подтверждение текущим паролем."""
+
+    current_password: str = _PASSWORD
+
+
+class PasswordChangeConfirmRequest(BaseModel):
+    """Завершение смены пароля: код из письма и новый пароль."""
+
+    challenge_id: UUID
+    code: str = Field(min_length=4, max_length=10, pattern=r"^[0-9]+$")
+    new_password: str = _PASSWORD
 
 
 class LinkedAccount(BaseModel):
@@ -156,6 +198,16 @@ class AuthorizeResponse(BaseModel):
     authorize_url: str
 
 
+def _challenge(issued: ChallengeIssued) -> ChallengeResponse:
+    return ChallengeResponse(
+        challenge_id=issued.challenge_id,
+        purpose=issued.purpose,
+        code_length=issued.code_length,
+        expires_in_s=issued.expires_in_s,
+        resend_after_s=issued.resend_after_s,
+    )
+
+
 def _consents(items: list[ConsentIn]) -> tuple[ConsentRequirement, ...]:
     return tuple(ConsentRequirement(c.kind, c.version) for c in items)
 
@@ -189,6 +241,17 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
             ) from None
         return provider
 
+    async def _open_session(
+        request: Request, response: Response, verified: VerifiedSession
+    ) -> SessionResponse:
+        # Вход в аккаунт из гостевой сессии отзывает её; устройство становится доверенным.
+        await end_guest_session(deps, request)
+        set_session_cookies(response, verified.session, settings)
+        set_device_cookie(response, verified.device_token, settings)
+        return SessionResponse(
+            user=session_user(verified.session), expires_in=verified.session.expires_in
+        )
+
     @router.get("/meta", response_model=ServiceMeta, summary="Сведения о сервисе")
     async def meta() -> ServiceMeta:
         return ServiceMeta(service=settings.service_name, status="active")
@@ -198,12 +261,13 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
     @router.post(
         "/auth/register",
         status_code=status.HTTP_202_ACCEPTED,
-        response_model=AcceptedResponse,
+        response_model=ChallengeResponse,
         dependencies=same_origin,
-        summary="Регистрация по никнейму, e-mail и паролю",
+        summary="Регистрация по никнейму, e-mail и паролю; код подтверждения уходит на почту",
     )
-    async def register(body: RegisterRequest, request: Request) -> AcceptedResponse:
-        await uc.register(
+    async def register(body: RegisterRequest, request: Request) -> ChallengeResponse:
+        # Ответ не зависит от того, был ли e-mail занят (защита от перечисления).
+        issued = await uc.register(
             RegisterCommand(
                 nickname=body.nickname,
                 email=body.email,
@@ -214,28 +278,63 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
                 ip=client_ip(request),
             )
         )
-        # Ответ не зависит от того, был ли e-mail занят (защита от перечисления).
-        return AcceptedResponse(status="verification_sent")
+        return _challenge(issued)
 
     @router.post(
         "/auth/verify-email",
-        status_code=status.HTTP_204_NO_CONTENT,
-        summary="Подтвердить e-mail по ссылке из письма",
+        response_model=SessionResponse,
+        dependencies=same_origin,
+        summary="Подтвердить e-mail кодом из письма; открывает сессию и доверяет устройству",
     )
-    async def verify_email(body: TokenRequest) -> None:
-        await uc.verify_email(body.token)
+    async def verify_email(
+        body: CodeRequest, request: Request, response: Response
+    ) -> SessionResponse:
+        verified = await uc.verify_email(body.challenge_id, body.code, ip=client_ip(request))
+        return await _open_session(request, response, verified)
 
     @router.post(
         "/auth/login",
+        response_model=LoginResponse,
+        dependencies=same_origin,
+        summary="Вход по e-mail или никнейму и паролю; с нового устройства нужен код с почты",
+    )
+    async def login(body: LoginRequest, request: Request, response: Response) -> LoginResponse:
+        result = await uc.login(
+            body.login, body.password, ip=client_ip(request), device_token=device_token(request)
+        )
+        if result.session is None:
+            # Неизвестное устройство: cookie сессии не выдаём до ввода кода.
+            assert result.challenge is not None  # noqa: S101 — инвариант LoginResult
+            return LoginResponse(status="code_required", challenge=_challenge(result.challenge))
+        await end_guest_session(deps, request)
+        set_session_cookies(response, result.session, settings)
+        return LoginResponse(
+            status="authenticated",
+            user=session_user(result.session),
+            expires_in=result.session.expires_in,
+        )
+
+    @router.post(
+        "/auth/login/confirm",
         response_model=SessionResponse,
         dependencies=same_origin,
-        summary="Вход по e-mail или никнейму и паролю",
+        summary="Подтвердить вход с нового устройства кодом из письма",
     )
-    async def login(body: LoginRequest, request: Request, response: Response) -> SessionResponse:
-        issued = await uc.login(body.login, body.password, ip=client_ip(request))
-        await end_guest_session(deps, request)
-        set_session_cookies(response, issued, settings)
-        return SessionResponse(user=session_user(issued), expires_in=issued.expires_in)
+    async def login_confirm(
+        body: CodeRequest, request: Request, response: Response
+    ) -> SessionResponse:
+        verified = await uc.confirm_login(body.challenge_id, body.code, ip=client_ip(request))
+        return await _open_session(request, response, verified)
+
+    @router.post(
+        "/auth/codes/resend",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=ChallengeResponse,
+        dependencies=same_origin,
+        summary="Отправить код повторно (не раньше resend_after_s)",
+    )
+    async def resend_code(body: ResendRequest, request: Request) -> ChallengeResponse:
+        return _challenge(await uc.resend_code(body.challenge_id, ip=client_ip(request)))
 
     @router.post(
         "/auth/refresh",
@@ -276,30 +375,78 @@ def build_public_router(deps: ApiDeps) -> APIRouter:  # noqa: PLR0915 — пло
         status_code=status.HTTP_204_NO_CONTENT,
         summary="Выйти на всех устройствах",
     )
-    async def logout_all(principal: Current, response: Response) -> None:
-        await uc.logout_all(principal.user_id)
+    async def logout_all(principal: Current, request: Request, response: Response) -> None:
+        await uc.logout_all(principal.user_id, device_token=device_token(request))
         clear_session_cookies(response, settings)
 
     @router.post(
         "/auth/password/forgot",
         status_code=status.HTTP_202_ACCEPTED,
-        response_model=AcceptedResponse,
+        response_model=ChallengeResponse,
         dependencies=same_origin,
-        summary="Запросить ссылку для сброса пароля",
+        summary="Запросить код для сброса пароля (ответ одинаков для любого адреса)",
     )
-    async def forgot(body: ForgotRequest, request: Request) -> AcceptedResponse:
-        await uc.request_password_reset(body.email, ip=client_ip(request))
-        return AcceptedResponse(status="accepted")
+    async def forgot(body: ForgotRequest, request: Request) -> ChallengeResponse:
+        issued = await uc.request_password_reset(body.email, ip=client_ip(request))
+        return _challenge(issued)
 
     @router.post(
         "/auth/password/reset",
+        response_model=SessionResponse,
+        dependencies=same_origin,
+        summary=(
+            "Задать новый пароль по коду из письма: прежние сессии и устройства отзываются, "
+            "владелец сразу входит и доверяет это устройство"
+        ),
+    )
+    async def reset(body: ResetRequest, request: Request, response: Response) -> SessionResponse:
+        verified = await uc.reset_password(
+            body.challenge_id,
+            body.code,
+            body.password,
+            ip=client_ip(request),
+        )
+        return await _open_session(request, response, verified)
+
+    @router.post(
+        "/auth/password/change",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=ChallengeResponse,
+        dependencies=same_origin,
+        summary="Начать смену пароля в профиле: текущий пароль, код уходит на почту",
+    )
+    async def change_password(
+        body: PasswordChangeRequest, principal: Current, request: Request
+    ) -> ChallengeResponse:
+        issued = await uc.request_password_change(
+            principal.user_id,
+            body.current_password,
+            session_id=actor_of(principal).session_id,
+            ip=client_ip(request),
+        )
+        return _challenge(issued)
+
+    @router.post(
+        "/auth/password/change/confirm",
         status_code=status.HTTP_204_NO_CONTENT,
         dependencies=same_origin,
-        summary="Задать новый пароль по ссылке из письма",
+        summary="Завершить смену пароля кодом; другие сессии и устройства отзываются",
     )
-    async def reset(body: ResetRequest, response: Response) -> None:
-        await uc.reset_password(body.token, body.password)
-        clear_session_cookies(response, settings)
+    async def change_password_confirm(
+        body: PasswordChangeConfirmRequest,
+        principal: Current,
+        request: Request,
+        response: Response,
+    ) -> None:
+        token = await uc.confirm_password_change(
+            principal.user_id,
+            body.challenge_id,
+            body.code,
+            body.new_password,
+            session_id=actor_of(principal).session_id,
+            ip=client_ip(request),
+        )
+        set_device_cookie(response, token, settings)
 
     # --------------------------------------------------------------- профиль
 

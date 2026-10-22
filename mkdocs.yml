@@ -96,6 +96,7 @@ nav:
       - adr/0034-rooms-process-lease-snapshots.md
       - adr/0035-realtime-centrifugo-tokens-and-tick.md
       - adr/0036-online-account-only-chat-and-ratings.md
+      - adr/0041-email-codes-trusted-devices.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

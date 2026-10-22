@@ -68,9 +68,25 @@ async def test_login_by_nickname_and_same_error_for_unknown(service: Any) -> Non
     assert unknown["title"] == wrong["title"]
 
 
-async def test_unverified_cannot_login(service: Any) -> None:
+async def test_unverified_login_reissues_verification_code(service: Any) -> None:
+    """Пароль верен, e-mail не подтверждён: сессии нет, вместо отказа — новый код регистрации."""
     await service.register(verify=False)
-    assert_problem(await service.login(), 403, "auth.email_not_verified")
+    response = await service.login()
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "code_required"
+    assert body["challenge"]["purpose"] == "register"
+    assert body["user"] is None
+    assert ACCESS_COOKIE not in response.cookies
+    verify = await service.client.post(
+        "/v1/auth/verify-email",
+        json={
+            "challenge_id": body["challenge"]["challenge_id"],
+            "code": service.code_for(body["challenge"]["challenge_id"]),
+        },
+        headers={"Origin": ORIGIN},
+    )
+    assert verify.status_code == 200, verify.text
 
 
 async def test_refresh_reuse_revokes_session(service: Any) -> None:
@@ -155,13 +171,22 @@ async def test_password_reset(service: Any) -> None:
         "/v1/auth/password/forgot", json={"email": "neo@example.com"}, headers={"Origin": ORIGIN}
     )
     assert forgot.status_code == 202
+    challenge_id = forgot.json()["challenge_id"]
     reset = await service.client.post(
         "/v1/auth/password/reset",
-        json={"token": service.last_link_token(), "password": "a brand new passphrase"},
+        json={
+            "challenge_id": challenge_id,
+            "code": service.code_for(challenge_id),
+            "password": "a brand new passphrase",
+        },
         headers={"Origin": ORIGIN},
     )
-    assert reset.status_code == 204, reset.text
-    assert (await service.login(password="a brand new passphrase")).status_code == 200
+    assert reset.status_code == 200, reset.text
+    # Сброс сразу открывает сессию и доверяет устройство: ни входа, ни кода повторно.
+    assert reset.json()["user"]["kind"] == "user"
+    assert (await service.client.get("/v1/me")).status_code == 200
+    relogin = await service.login(password="a brand new passphrase")
+    assert relogin.json()["status"] == "authenticated"
     me = await service.client.get("/v1/me", headers={"Authorization": f"Bearer {old_access}"})
     assert_problem(me, 401, "auth.session_revoked")
 

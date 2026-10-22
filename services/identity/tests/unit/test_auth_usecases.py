@@ -16,6 +16,7 @@ from identity_service.domain import (
 from gv_core import (
     ConflictError,
     ForbiddenError,
+    GoneError,
     InvalidInputError,
     RateLimitedError,
     UnauthenticatedError,
@@ -42,12 +43,13 @@ def _cmd(**overrides: Any) -> RegisterCommand:
 # ------------------------------------------------------------------------ регистрация
 
 
-async def test_register_creates_user_event_consents_and_verification_mail(world: Any) -> None:
-    user_id = await world.uc.register(_cmd())
-    user = world.data.users[user_id]
+async def test_register_creates_user_event_consents_and_code_mail(world: Any) -> None:
+    resp = await world.uc.register(_cmd())
+    (user,) = world.data.users.values()
     assert user.email.value == "neo@example.com"
     assert user.roles == {"user"}
-    assert world.data.creds[user_id] == f"h${PASSWORD}"
+    assert not user.email_verified
+    assert world.data.creds[user.id] == f"h${PASSWORD}"
     assert {(c.kind, c.version) for c in world.data.consents} == {
         ("terms", "2026-10"),
         ("privacy", "2026-10"),
@@ -56,20 +58,38 @@ async def test_register_creates_user_event_consents_and_verification_mail(world:
     assert isinstance(event, UserRegistered)
     assert event.nickname == "neo_2026"
     (mail,) = world.emails
-    assert mail.purpose == "verify"
-    assert mail.link.startswith("https://gv.test/verify?token=")
-    # В БД — только хэш токена из письма.
-    assert world.last_link_token() not in str(world.data.email_tokens)
+    assert mail.purpose == "code_register"
+    assert mail.link is None
+    assert len(mail.code) == 6
+    assert (resp.purpose, resp.code_length, resp.expires_in_s, resp.resend_after_s) == (
+        "register",
+        6,
+        600,
+        60,
+    )
+    stored = world.data.challenges[resp.challenge_id]
+    assert stored.user_id == user.id
+    assert stored.code_hash != mail.code  # в БД только хэш кода
 
 
 async def test_register_taken_email_looks_like_success(world: Any) -> None:
-    await world.uc.register(_cmd())
+    first = await world.uc.register(_cmd())
     world.events.clear()
-    result = await world.uc.register(_cmd(nickname="other_nick"))
-    assert result is None
+    world.emails.clear()
+    resp = await world.uc.register(_cmd(nickname="other_nick"))
+    assert (resp.purpose, resp.code_length, resp.expires_in_s, resp.resend_after_s) == (
+        first.purpose,
+        first.code_length,
+        first.expires_in_s,
+        first.resend_after_s,
+    )
+    assert resp.challenge_id != first.challenge_id
     assert world.events == []
-    assert world.emails[-1].purpose == "already_registered"
-    assert world.emails[-1].link is None
+    (mail,) = world.emails
+    assert (mail.purpose, mail.link, mail.code) == ("already_registered", None, None)
+    # Код настоящего пользователя не отменён чужой регистрацией.
+    assert world.data.challenges[first.challenge_id].cancelled_at is None
+    assert len(world.data.users) == 1
 
 
 async def test_register_taken_nickname_is_conflict_case_insensitive(world: Any) -> None:
@@ -106,28 +126,47 @@ async def test_register_rate_limited_by_ip(world: Any) -> None:
 # ------------------------------------------------------------------------ подтверждение
 
 
+async def test_verify_email_opens_session_and_trusts_device(world: Any) -> None:
+    resp = await world.uc.register(_cmd())
+    result = await world.uc.verify_email(resp.challenge_id, world.last_code())
+    session = result.session
+    (user,) = world.data.users.values()
+    assert user.email_verified
+    assert session.user_id == user.id
+    assert world.data.sessions[session.session_id].kind is SessionKind.WEB
+    assert result.device_token
+    # Выданное устройство доверено: следующий вход — без кода.
+    again = await world.uc.login("neo_2026", PASSWORD, ip=None, device_token=result.device_token)
+    assert again.session is not None
+    assert result.device_token not in str(world.data.devices)  # в БД только хэш
+
+
 async def test_verify_email_is_single_use(world: Any) -> None:
-    user_id = await world.uc.register(_cmd())
-    token = world.last_link_token()
-    await world.uc.verify_email(token)
-    assert world.data.users[user_id].email_verified
+    resp = await world.uc.register(_cmd())
+    code = world.last_code()
+    await world.uc.verify_email(resp.challenge_id, code)
     with pytest.raises(InvalidInputError) as info:
-        await world.uc.verify_email(token)
-    assert info.value.code == "auth.email_token_invalid"
+        await world.uc.verify_email(resp.challenge_id, code)
+    assert info.value.code == "auth.code_invalid"
 
 
-async def test_verify_expired_token(world: Any) -> None:
-    await world.uc.register(_cmd())
-    world.clock.advance(hours=25)
-    with pytest.raises(InvalidInputError):
-        await world.uc.verify_email(world.last_link_token())
+async def test_verify_expired_code(world: Any) -> None:
+    resp = await world.uc.register(_cmd())
+    world.clock.advance(seconds=601)
+    with pytest.raises(GoneError) as info:
+        await world.uc.verify_email(resp.challenge_id, world.last_code())
+    assert info.value.code == "auth.code_expired"
+    (user,) = world.data.users.values()
+    assert not user.email_verified
 
 
 async def test_bootstrap_admin_only_after_verification(world: Any) -> None:
-    user_id = await world.uc.register(_cmd(email="boss@example.com"))
-    assert world.data.users[user_id].roles == {"user"}
-    await world.uc.verify_email(world.last_link_token())
-    assert world.data.users[user_id].roles == {"user", "admin"}
+    resp = await world.uc.register(_cmd(email="boss@example.com"))
+    (user,) = world.data.users.values()
+    assert user.roles == {"user"}
+    result = await world.uc.verify_email(resp.challenge_id, world.last_code())
+    assert world.data.users[user.id].roles == {"user", "admin"}
+    assert "roles.manage" in result.session.perms
     changed = [e for e in world.events if isinstance(e, UserRolesChanged)]
     assert changed[0].reason == "bootstrap_admin"
     assert "roles.manage" in changed[0].perms
@@ -140,7 +179,7 @@ async def test_bootstrap_admin_only_after_verification(world: Any) -> None:
 @pytest.mark.parametrize("login", ["neo@example.com", "NEO@example.com", "neo_2026", "Neo_2026"])
 async def test_login_by_email_or_nickname(world: Any, login: str) -> None:
     user_id = await world.make_user()
-    issued = await world.uc.login(login, PASSWORD, ip="10.0.0.1")
+    issued = await world.login(login, PASSWORD, ip="10.0.0.1")
     assert issued.user_id == user_id
     session = world.data.sessions[issued.session_id]
     assert session.kind is SessionKind.WEB
@@ -153,7 +192,7 @@ async def test_unknown_user_and_wrong_password_are_indistinguishable(world: Any)
     errors = []
     for login, password in [("ghost@example.com", PASSWORD), ("neo_2026", "wrong password!")]:
         with pytest.raises(UnauthenticatedError) as info:
-            await world.uc.login(login, password, ip=None)
+            await world.login(login, password, ip=None)
         errors.append((info.value.code, info.value.message))
     assert errors[0] == errors[1] == ("auth.invalid_credentials", errors[0][1])
     assert world.hasher.dummy_calls == 1  # для несуществующего — фиктивная проверка
@@ -161,39 +200,50 @@ async def test_unknown_user_and_wrong_password_are_indistinguishable(world: Any)
 
 async def test_invalid_login_format_is_just_invalid_credentials(world: Any) -> None:
     with pytest.raises(UnauthenticatedError):
-        await world.uc.login("a b c", PASSWORD, ip=None)
+        await world.login("a b c", PASSWORD, ip=None)
     assert world.hasher.dummy_calls == 1
 
 
-async def test_unverified_email_cannot_login(world: Any) -> None:
+async def test_unverified_email_gets_verification_code_instead_of_session(world: Any) -> None:
+    """ADR 0041: верный пароль + неподтверждённый e-mail → новый код регистрации, сессии нет."""
     await world.make_user(verified=False)
-    with pytest.raises(ForbiddenError) as info:
-        await world.uc.login("neo_2026", PASSWORD, ip=None)
-    assert info.value.code == "auth.email_not_verified"
+
+    result = await world.login_result("neo_2026", PASSWORD, ip=None, device_token="any-device")
+
+    assert result.session is None and result.status == "code_required"
+    assert result.challenge is not None and result.challenge.purpose == "register"
+    verified = await world.uc.verify_email(result.challenge.challenge_id, world.last_code())
+    assert verified.session.user_id is not None
+
+
+async def test_unverified_email_wrong_password_is_still_rejected(world: Any) -> None:
+    await world.make_user(verified=False)
+    with pytest.raises(UnauthenticatedError):
+        await world.login_result("neo_2026", "wrong password!", ip=None)
 
 
 async def test_account_lockout_after_failures(world: Any) -> None:
     await world.make_user()
     for _ in range(5):
         with pytest.raises(UnauthenticatedError):
-            await world.uc.login("neo_2026", "wrong password!", ip=None)
+            await world.login("neo_2026", "wrong password!", ip=None)
     with pytest.raises(RateLimitedError) as info:
-        await world.uc.login("neo_2026", PASSWORD, ip=None)
+        await world.login("neo_2026", PASSWORD, ip=None)
     assert info.value.details["retry_after"] >= 1
 
 
 async def test_ip_limit(world: Any) -> None:
     await world.make_user()
     for _ in range(10):
-        await world.uc.login("neo_2026", PASSWORD, ip="9.9.9.9")
+        await world.login("neo_2026", PASSWORD, ip="9.9.9.9")
     with pytest.raises(RateLimitedError):
-        await world.uc.login("neo_2026", PASSWORD, ip="9.9.9.9")
+        await world.login("neo_2026", PASSWORD, ip="9.9.9.9")
 
 
 async def test_rehash_on_login(world: Any) -> None:
     user_id = await world.make_user()
     world.data.creds[user_id] = f"old${PASSWORD}"
-    await world.uc.login("neo_2026", PASSWORD, ip=None)
+    await world.login("neo_2026", PASSWORD, ip=None)
     assert world.data.creds[user_id] == f"h${PASSWORD}"
 
 
@@ -213,7 +263,7 @@ async def test_admin_login_requires_admin_access(world: Any) -> None:
 
 async def test_refresh_rotates(world: Any) -> None:
     await world.make_user()
-    first = await world.uc.login("neo_2026", PASSWORD, ip=None)
+    first = await world.login("neo_2026", PASSWORD, ip=None)
     world.clock.advance(minutes=20)
     second = await world.uc.refresh(first.refresh_token, kind=SessionKind.WEB)
     assert second.session_id == first.session_id
@@ -224,7 +274,7 @@ async def test_refresh_rotates(world: Any) -> None:
 
 async def test_refresh_reuse_revokes_session_and_denylists_sid(world: Any) -> None:
     await world.make_user()
-    first = await world.uc.login("neo_2026", PASSWORD, ip=None)
+    first = await world.login("neo_2026", PASSWORD, ip=None)
     second = await world.uc.refresh(first.refresh_token, kind=SessionKind.WEB)
     with pytest.raises(UnauthenticatedError) as info:
         await world.uc.refresh(first.refresh_token, kind=SessionKind.WEB)
@@ -239,7 +289,7 @@ async def test_refresh_reuse_revokes_session_and_denylists_sid(world: Any) -> No
 
 async def test_refresh_unknown_and_wrong_kind(world: Any) -> None:
     await world.make_user()
-    issued = await world.uc.login("neo_2026", PASSWORD, ip=None)
+    issued = await world.login("neo_2026", PASSWORD, ip=None)
     for token, kind in [("nope", SessionKind.WEB), (issued.refresh_token, SessionKind.ADMIN)]:
         with pytest.raises(UnauthenticatedError) as info:
             await world.uc.refresh(token, kind=kind)
@@ -261,14 +311,14 @@ async def test_admin_refresh_rechecks_permission(world: Any) -> None:
 
 async def test_logout_and_logout_all(world: Any) -> None:
     user_id = await world.make_user()
-    a = await world.uc.login("neo_2026", PASSWORD, ip=None)
-    b = await world.uc.login("neo_2026", PASSWORD, ip=None)
-    c = await world.uc.login("neo_2026", PASSWORD, ip=None)
+    a = await world.login("neo_2026", PASSWORD, ip=None)
+    b = await world.login("neo_2026", PASSWORD, ip=None)
+    c = await world.login("neo_2026", PASSWORD, ip=None)
     await world.uc.logout(session_id=a.session_id)
     await world.uc.logout(refresh_token=b.refresh_token)
     assert world.revoked == {a.session_id, b.session_id}
     await world.uc.logout(session_id=a.session_id)  # повтор — без ошибок
-    assert await world.uc.logout_all(user_id) == 1
+    assert await world.uc.logout_all(user_id) == 2  # c и сессия подтверждения регистрации
     assert c.session_id in world.revoked
     with pytest.raises(UnauthenticatedError):
         await world.uc.refresh(c.refresh_token, kind=SessionKind.WEB)
@@ -279,20 +329,28 @@ async def test_logout_and_logout_all(world: Any) -> None:
 
 async def test_password_reset_flow(world: Any) -> None:
     user_id = await world.make_user()
-    session = await world.uc.login("neo_2026", PASSWORD, ip=None)
-    await world.uc.request_password_reset("neo@example.com", ip="1.1.1.1")
-    token = world.last_link_token()
-    assert world.emails[-1].purpose == "reset"
-    with pytest.raises(InvalidInputError):
-        await world.uc.reset_password(token, "short")
-    await world.uc.reset_password(token, "brand new passphrase")
+    session = await world.login("neo_2026", PASSWORD, ip=None)
+    resp = await world.uc.request_password_reset("neo@example.com", ip="1.1.1.1")
+    assert world.emails[-1].purpose == "code_reset"
+    code = world.last_code()
+    with pytest.raises(InvalidInputError) as weak:
+        await world.uc.reset_password(resp.challenge_id, code, "short")
+    assert weak.value.code == "auth.password_weak"
+    await world.uc.reset_password(resp.challenge_id, code, "brand new passphrase")
     assert world.data.creds[user_id] == "h$brand new passphrase"
     assert session.session_id in world.revoked
     with pytest.raises(InvalidInputError):
-        await world.uc.reset_password(token, "another new passphrase")  # одноразовый
+        await world.uc.reset_password(
+            resp.challenge_id, code, "another new passphrase"
+        )  # одноразовый
 
 
-async def test_password_reset_for_unknown_email_is_silent(world: Any) -> None:
-    await world.uc.request_password_reset("ghost@example.com", ip=None)
-    await world.uc.request_password_reset("not-an-email", ip=None)
-    assert world.emails == []
+async def test_password_reset_for_unknown_email_looks_the_same(world: Any) -> None:
+    await world.make_user()
+    world.emails.clear()
+    real = await world.uc.request_password_reset("neo@example.com", ip=None)
+    ghost = await world.uc.request_password_reset("ghost@example.com", ip=None)
+    junk = await world.uc.request_password_reset("not-an-email", ip=None)
+    shape = lambda r: (r.purpose, r.code_length, r.expires_in_s, r.resend_after_s)  # noqa: E731
+    assert shape(real) == shape(ghost) == shape(junk)
+    assert len(world.emails) == 1  # письмо ушло только владельцу

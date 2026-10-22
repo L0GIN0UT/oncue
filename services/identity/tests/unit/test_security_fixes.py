@@ -33,7 +33,7 @@ MakeWorld = Callable[..., Any]
 async def _fail(world: World, login: str, *, ip: str | None = None) -> type[Exception]:
     """Неудачная попытка входа; возвращает класс ошибки."""
     try:
-        await world.uc.login(login, WRONG, ip=ip)
+        await world.login(login, WRONG, ip=ip)
     except (UnauthenticatedError, RateLimitedError) as exc:
         return type(exc)
     raise AssertionError("вход с неверным паролем прошёл")
@@ -56,7 +56,7 @@ async def test_login_limit_shared_by_unicode_variants_and_email(world: World) ->
         assert await _fail(world, login) is UnauthenticatedError
     # Шестая попытка (через e-mail того же аккаунта) — уже лимит, даже с верным паролем.
     with pytest.raises(RateLimitedError):
-        await world.uc.login("KEVIN@example.com", PASSWORD, ip=None)
+        await world.login("KEVIN@example.com", PASSWORD, ip=None)
 
 
 # ------------------------------------------------------------------------ H1b: атомарность
@@ -66,7 +66,7 @@ async def test_parallel_attempts_cannot_exceed_account_limit(world: World) -> No
     """peek→verify→hit пропускал параллельные запросы: теперь hit до проверки пароля."""
     await world.make_user()
     results = await asyncio.gather(
-        *(world.uc.login("neo_2026", WRONG, ip=None) for _ in range(20)),
+        *(world.login("neo_2026", WRONG, ip=None) for _ in range(20)),
         return_exceptions=True,
     )
     invalid = [r for r in results if isinstance(r, UnauthenticatedError)]
@@ -81,7 +81,7 @@ async def test_successful_login_is_not_punished(world: World) -> None:
     for _ in range(4):
         await _fail(world, "neo_2026")
     for _ in range(3):  # успешные входы не расходуют лимит неудач
-        await world.uc.login("neo_2026", PASSWORD, ip=None)
+        await world.login("neo_2026", PASSWORD, ip=None)
     assert await _fail(world, "neo_2026") is UnauthenticatedError
 
 
@@ -95,18 +95,18 @@ async def test_account_limit_is_per_subnet_with_soft_global_limit(make_world: Ma
         await _fail(world, "neo_2026", ip="198.51.100.7")
     # Та же /24 — заблокирована, владелец из другой сети входит.
     with pytest.raises(RateLimitedError):
-        await world.uc.login("neo_2026", PASSWORD, ip="198.51.100.200")
-    await world.uc.login("neo_2026", PASSWORD, ip="203.0.113.5")
+        await world.login("neo_2026", PASSWORD, ip="198.51.100.200")
+    await world.login("neo_2026", PASSWORD, ip="203.0.113.5")
     # IPv6: одна /64 — один счётчик.
     for suffix in ("1", "2", "3"):
         await _fail(world, "neo_2026", ip=f"2001:db8:0:1::{suffix}")
     with pytest.raises(RateLimitedError):
-        await world.uc.login("neo_2026", PASSWORD, ip="2001:db8:0:1::ffff")
+        await world.login("neo_2026", PASSWORD, ip="2001:db8:0:1::ffff")
     # Распределённый перебор из многих сетей упирается в общий мягкий лимит.
     for n in range(4):
         await _fail(world, "neo_2026", ip=f"192.0.{n}.1")
     with pytest.raises(RateLimitedError):
-        await world.uc.login("neo_2026", PASSWORD, ip="10.20.30.40")
+        await world.login("neo_2026", PASSWORD, ip="10.20.30.40")
 
 
 # ------------------------------------------------------------------------ H1c: admin-сессии
@@ -136,7 +136,7 @@ async def test_demotion_revokes_sessions(world: World) -> None:
     admin = await _admin(world)
     mod_id = await world.make_user("mod_1", "mod@example.com")
     await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "помощь", "k-up-0001")
-    web = await world.uc.login("mod_1", PASSWORD, ip=None)
+    web = await world.login("mod_1", PASSWORD, ip=None)
     adm = await world.uc.admin_login("mod_1", PASSWORD, ip=None)
     assert not world.revoked  # повышение ничего не отзывает
 
@@ -150,7 +150,7 @@ async def test_matrix_perm_removal_revokes_affected_sessions(world: World) -> No
     admin = await _admin(world)
     mod_id = await world.make_user("mod_1", "mod@example.com")
     await world.uc.assign_roles(admin, mod_id, frozenset({"moderator"}), "помощь", "k-up-0001")
-    mod_session = await world.uc.login("mod_1", PASSWORD, ip=None)
+    mod_session = await world.login("mod_1", PASSWORD, ip=None)
     roles = dict(world.data.matrix.roles)
     roles["moderator"] = roles["moderator"] | {"catalog.import"}
     await world.uc.update_role_matrix(admin, roles, "расширение", "k-matrix-01")
@@ -204,7 +204,7 @@ def _state(url: str) -> str:
 
 async def _actor(world: World) -> Actor:
     user_id = await world.make_user()
-    issued = await world.uc.login("neo_2026", PASSWORD, ip=None)
+    issued = await world.login("neo_2026", PASSWORD, ip=None)
     return Actor(user_id, issued.roles, issued.perms, issued.session_id)
 
 
@@ -293,8 +293,8 @@ async def test_password_reset_reports_linked_accounts_and_keeps_them(world: Worl
         actor=actor,
         ip=None,
     )
-    await world.uc.request_password_reset("neo@example.com", ip=None)
-    await world.uc.reset_password(world.last_link_token(), "brand new passphrase")
+    resp = await world.uc.request_password_reset("neo@example.com", ip=None)
+    await world.uc.reset_password(resp.challenge_id, world.last_code(), "brand new passphrase")
     assert actor.session_id in world.revoked
     mail = world.emails[-1]
     assert (mail.purpose, mail.providers) == ("password_changed", ("yandex",))
@@ -304,40 +304,17 @@ async def test_password_reset_reports_linked_accounts_and_keeps_them(world: Worl
 # ------------------------------------------------------------------------ M3: старые токены
 
 
-async def test_new_reset_token_invalidates_previous(world: World) -> None:
+async def test_new_reset_code_invalidates_previous(world: World) -> None:
     await world.make_user()
-    await world.uc.request_password_reset("neo@example.com", ip=None)
-    old = world.last_link_token()
-    await world.uc.request_password_reset("neo@example.com", ip=None)
-    new = world.last_link_token()
-    with pytest.raises(InvalidInputError):
-        await world.uc.reset_password(old, "brand new passphrase")
-    await world.uc.reset_password(new, "brand new passphrase")
-
-
-async def test_reset_consumption_invalidates_other_live_tokens(world: World) -> None:
-    """Даже если живых токенов несколько (гонка выдачи), погашение одного гасит все."""
-    user_id = await world.make_user()
-    await world.uc.request_password_reset("neo@example.com", ip=None)
-    first = world.last_link_token()
-    # Второй токен «в обход» выдачи — как при параллельных запросах forgot.
-    from identity_service.application.commands.auth import _issue_email_token
-    from identity_service.application.ports import EmailTokenPurpose
-
-    async with world.uow() as uow:
-        second = await _issue_email_token(
-            uow,
-            world.secrets,
-            world.clock,
-            user_id=user_id,
-            purpose=EmailTokenPurpose.RESET,
-            ttl_s=3600,
-            invalidate_previous=False,
-        )
-        await uow.commit()
-    await world.uc.reset_password(first, "brand new passphrase")
-    with pytest.raises(InvalidInputError):
-        await world.uc.reset_password(second, "another passphrase!")
+    old = await world.uc.request_password_reset("neo@example.com", ip=None)
+    old_code = world.last_code()
+    new = await world.uc.request_password_reset("neo@example.com", ip=None)
+    new_code = world.last_code()
+    assert old.challenge_id != new.challenge_id
+    with pytest.raises(InvalidInputError) as info:
+        await world.uc.reset_password(old.challenge_id, old_code, "brand new passphrase")
+    assert info.value.code == "auth.code_invalid"
+    await world.uc.reset_password(new.challenge_id, new_code, "brand new passphrase")
 
 
 # ------------------------------------------------------------------------ L4: письма жертве
@@ -345,7 +322,7 @@ async def test_reset_consumption_invalidates_other_live_tokens(world: World) -> 
 
 async def test_mail_to_one_address_is_rate_limited(make_world: MakeWorld) -> None:
     world = make_world(email_per_address=2)
-    await world.make_user()  # письмо verify — первое на этот адрес
+    await world.make_user()  # письмо с кодом регистрации — первое на этот адрес
     world.emails.clear()
     for _ in range(5):
         await world.uc.request_password_reset("neo@example.com", ip=None)
@@ -388,7 +365,7 @@ async def test_delete_account_password_check_is_rate_limited(world: World) -> No
 async def test_admin_session_revoke_is_idempotent_and_admin_only(world: World) -> None:
     await world.make_user(roles=frozenset({"user", "moderator"}))
     adm = await world.uc.admin_login("neo_2026", PASSWORD, ip=None)
-    web = await world.uc.login("neo_2026", PASSWORD, ip=None)
+    web = await world.login("neo_2026", PASSWORD, ip=None)
     await world.uc.logout(refresh_token=web.refresh_token, kind=SessionKind.ADMIN)
     assert web.session_id not in world.revoked  # чужой вид сессии не трогаем
     await world.uc.logout(refresh_token=adm.refresh_token, kind=SessionKind.ADMIN)

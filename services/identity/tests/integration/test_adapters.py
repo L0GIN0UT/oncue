@@ -16,7 +16,7 @@ import pytest
 import respx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519
-from identity_service.application.ports import EmailToken, EmailTokenPurpose, OAuthState
+from identity_service.application.ports import OAuthState
 from identity_service.application.security import OAuthStateError
 from identity_service.domain import (
     AuthIdentity,
@@ -29,7 +29,7 @@ from identity_service.domain import (
     SessionKind,
     User,
 )
-from identity_service.infrastructure.clients import LogEmailSender, YandexOAuthProvider
+from identity_service.infrastructure.clients import YandexOAuthProvider
 from identity_service.infrastructure.db.repositories import SqlIdentityUnitOfWork
 from identity_service.infrastructure.redis_stores import (
     RedisOAuthStateStore,
@@ -46,7 +46,6 @@ from identity_service.infrastructure.security import (
 from identity_service.main import DEFINITION
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from structlog.testing import capture_logs
 
 from gv_auth import JwtVerifier, RedisRevocationChecker
 from gv_core import ConflictError, DependencyUnavailableError
@@ -175,11 +174,6 @@ async def test_sessions_tokens_identities(
         await uow.sessions.add(session)
         await uow.sessions.add_refresh(token)
         await uow.identities.add(AuthIdentity(user.id, Provider.YANDEX, "ya-1", "neo", now))
-        await uow.email_tokens.add(
-            EmailToken(
-                uuid7(), user.id, EmailTokenPurpose.VERIFY, "b" * 64, now, now + timedelta(hours=1)
-            )
-        )
         await uow.commit()
 
     async with _uow(sessions, fake_clock) as uow:
@@ -196,25 +190,6 @@ async def test_sessions_tokens_identities(
         again = await uow.sessions.find_refresh_for_update("a" * 64)
         assert again is not None and again.used_at == now
         assert await uow.sessions.active_for_user(user.id) == []
-        # Токен из письма гасится ровно один раз и не другой целью.
-        assert await uow.email_tokens.consume("b" * 64, EmailTokenPurpose.RESET, now) is None
-        assert await uow.email_tokens.consume("b" * 64, EmailTokenPurpose.VERIFY, now) == user.id
-        assert await uow.email_tokens.consume("b" * 64, EmailTokenPurpose.VERIFY, now) is None
-        # Погашение всех непогашенных токенов пользователя одной цели (M3).
-        for n, purpose in enumerate([EmailTokenPurpose.RESET, EmailTokenPurpose.RESET]):
-            await uow.email_tokens.add(
-                EmailToken(uuid7(), user.id, purpose, f"{n}" * 64, now, now + timedelta(hours=1))
-            )
-        await uow.email_tokens.add(
-            EmailToken(
-                uuid7(), other.id, EmailTokenPurpose.RESET, "9" * 64, now, now + timedelta(hours=1)
-            )
-        )
-        assert (
-            await uow.email_tokens.invalidate_for_user(user.id, EmailTokenPurpose.RESET, now) == 2
-        )
-        assert await uow.email_tokens.consume("0" * 64, EmailTokenPurpose.RESET, now) is None
-        assert await uow.email_tokens.consume("9" * 64, EmailTokenPurpose.RESET, now) == other.id
         await uow.commit()
 
     async with _uow(sessions, fake_clock) as uow:
@@ -498,17 +473,3 @@ async def test_yandex_errors() -> None:
         mock.post("https://oauth.yandex.ru/token").mock(side_effect=httpx.ConnectError("x"))
         with pytest.raises(DependencyUnavailableError):
             await _yandex().exchange_code(code="c", code_verifier="v")
-
-
-async def test_log_email_sender_hides_link_in_production() -> None:
-    from identity_service.application.ports import EmailMessage
-
-    message = EmailMessage(
-        EmailAddress.parse("neo@example.com"), "verify", "https://x/?token=SECRET"
-    )
-    with capture_logs() as logs:
-        await LogEmailSender(include_links=False).send(message)
-        await LogEmailSender(include_links=True).send(message)
-    assert "SECRET" not in str(logs[0])
-    assert "SECRET" in str(logs[1])
-    assert "neo@example.com" not in str(logs)  # получатель не логируется никогда

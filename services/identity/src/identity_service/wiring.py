@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import secrets as stdlib_secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -18,20 +19,27 @@ from gv_auth import Authenticator, JwtVerifier, RedisRevocationChecker, ServiceA
 from gv_core.errors import DependencyUnavailableError
 from gv_service import Environment, Infrastructure, PeriodicJob
 from identity_service.api.common import ApiDeps
+from identity_service.application.code_service import MIN_KEY_BYTES, HmacCodeService
 from identity_service.application.commands.account import DeleteAccount, GrantConsents
 from identity_service.application.commands.auth import (
     AdminLogin,
+    ConfirmLogin,
+    ConfirmPasswordChange,
     LoginWithPassword,
     Logout,
     LogoutAll,
     PasswordAuthenticator,
     RefreshSession,
     RegisterWithEmail,
+    RequestPasswordChange,
     RequestPasswordReset,
+    ResendCode,
     ResetPassword,
     VerifyEmail,
 )
 from identity_service.application.commands.bootstrap import EnsureBootstrapAdmin
+from identity_service.application.commands.challenge_purge import PurgeEmailChallenges
+from identity_service.application.commands.codes import CodeChallenges
 from identity_service.application.commands.guest import (
     EndGuestSession,
     GuestUseCases,
@@ -55,7 +63,7 @@ from identity_service.application.commands.service_tokens import (
     IssueServiceToken,
     ServiceTokenConfig,
 )
-from identity_service.application.config import AuthConfig, LimitConfig
+from identity_service.application.config import AuthConfig, CodeConfig, LimitConfig
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.ports import (
     EmailSender,
@@ -82,8 +90,12 @@ from identity_service.infrastructure.clients import (
     SmtpEmailSender,
     YandexOAuthProvider,
 )
+from identity_service.infrastructure.db.challenge_purger import SqlChallengePurger
 from identity_service.infrastructure.db.guest_sessions import SqlGuestSessionPurger
-from identity_service.infrastructure.db.repositories import SqlIdentityUnitOfWork
+from identity_service.infrastructure.db.repositories import (
+    SqlChallengeAttempts,
+    SqlIdentityUnitOfWork,
+)
 from identity_service.infrastructure.db.tables import TABLES
 from identity_service.infrastructure.realtime import HmacRealtimeTokenSigner
 from identity_service.infrastructure.redis_stores import (
@@ -135,12 +147,50 @@ def auth_config(settings: Settings) -> AuthConfig:
         bootstrap_admin_emails=frozenset(
             EmailAddress.parse(e).value for e in settings.bootstrap_admin_emails
         ),
-        verify_link=settings.email.verify_link,
-        reset_link=settings.email.reset_link,
+        codes=code_config(settings),
         return_to_prefixes=settings.oauth.return_to_prefixes,
         password_policy=PasswordPolicy(banned=common_passwords()),
         limits=limit_config(settings),
     )
+
+
+def code_config(settings: Settings) -> CodeConfig:
+    """Коды из писем и доверенные устройства: настройки → параметры use-cases (ADR 0041)."""
+    c = settings.email_code
+    return CodeConfig(
+        length=c.length,
+        ttl_s=c.ttl_s,
+        max_attempts=c.max_attempts,
+        resend_after_s=c.resend_after_s,
+        daily_fail_limit=c.daily_fail_limit,
+        request_per_ip_per_min=c.request_per_ip_per_min,
+        confirm_per_ip_per_min=c.confirm_per_ip_per_min,
+        device_ttl_s=c.device_cookie_ttl_days * 86_400,
+        max_lifetime_s=c.max_lifetime_s,
+        check_concurrency=c.check_concurrency,
+        purge_retention_s=c.purge_retention_s,
+        device_revoked_retention_s=c.device_revoked_retention_s,
+        purge_batch=c.purge_batch,
+        purge_max_batches=c.purge_max_batches,
+    )
+
+
+def code_hmac_key(settings: Settings) -> bytes:
+    """Ключ HMAC кодов: из ``GV_EMAIL_CODE__HMAC_KEY``; в local/ci без него — временный.
+
+    Временный ключ живёт до перезапуска процесса: непогашенные коды перестают подходить
+    (допустимо локально). Вне local/ci пустой ключ отвергает ``check_email_codes_config``.
+
+    Raises:
+        KeyConfigError: ключа нет вне local/ci.
+    """
+    key = settings.email_code.hmac_key
+    raw = key.get_secret_value().encode() if key is not None else b""
+    if raw:
+        return raw
+    if settings.environment in (Environment.LOCAL, Environment.CI):
+        return stdlib_secrets.token_bytes(MIN_KEY_BYTES * 2)
+    raise KeyConfigError("GV_EMAIL_CODE__HMAC_KEY обязателен вне local/ci")
 
 
 def limit_config(settings: Settings) -> LimitConfig:
@@ -267,6 +317,30 @@ def bootstrap_admin_credentials(settings: Settings) -> BootstrapAdminCredentials
     )
 
 
+MIN_PROD_CODE_LENGTH = 6
+
+
+def check_email_codes_config(settings: Settings) -> None:
+    """Код из письма — секрет: ``backend=log`` и временный ключ HMAC допустимы только в local/ci.
+
+    Проверка на старте процесса, а не в валидаторе ``Settings``: экспорт контрактов строит
+    настройки в окружении по умолчанию (production) и не должен падать (ADR 0041).
+
+    Raises:
+        KeyConfigError: ``backend=log`` или пустой ``GV_EMAIL_CODE__HMAC_KEY`` в staging/production.
+    """
+    if settings.environment in (Environment.LOCAL, Environment.CI):
+        return
+    if settings.email.backend == "log":
+        raise KeyConfigError("GV_EMAIL__BACKEND=log допустим только в local/ci")
+    if settings.email_code.hmac_key is None or not settings.email_code.hmac_key.get_secret_value():
+        raise KeyConfigError("GV_EMAIL_CODE__HMAC_KEY обязателен вне local/ci")
+    if settings.email_code.length < MIN_PROD_CODE_LENGTH:
+        raise KeyConfigError(
+            f"GV_EMAIL_CODE__LENGTH вне local/ci не меньше {MIN_PROD_CODE_LENGTH} цифр"
+        )
+
+
 async def ensure_bootstrap_admin(settings: Settings) -> None:
     """Идемпотентно создать bootstrap-админа (команда ``migrate``, после миграций).
 
@@ -310,7 +384,7 @@ class _Unavailable:
     async def _fail(self, *_args: object, **_kwargs: object) -> Any:
         raise DependencyUnavailableError("redis не настроен")
 
-    hit = forgive = reset = revoke = put = pop = _fail
+    hit = forgive = reset = revoke = put = pop = spend = _fail
 
 
 def build_api_deps(infra: Infrastructure) -> ApiDeps:
@@ -322,6 +396,8 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
     # Защита в глубину: заданные bootstrap-creds вне local/ci валят старт любого процесса
     # (сам bootstrap выполняется в migrate — см. ensure_bootstrap_admin).
     bootstrap_admin_credentials(settings)
+    if serving:  # экспорт контрактов собирает deps без БД и в окружении по умолчанию
+        check_email_codes_config(settings)
     clock, config = infra.clock, auth_config(settings)
     keys = StaticKeyProvider(signing_keys(settings, serving=serving), clock)
 
@@ -361,6 +437,18 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
     authn = PasswordAuthenticator(hasher, limiter, clock, config)
     email = _email_sender(settings)
     providers = _providers(settings)
+    # Списание попытки кода идёт в своей транзакции — ей нужна фабрика сессий, а не uow.
+    attempts: Any = (
+        SqlChallengeAttempts(infra.sessions) if infra.sessions is not None else _Unavailable()
+    )
+    codes = CodeChallenges(
+        codes=HmacCodeService(code_hmac_key(settings) if serving else b"\0" * MIN_KEY_BYTES),
+        attempts=attempts,
+        limiter=limiter,
+        secrets=secrets,
+        clock=clock,
+        config=config,
+    )
 
     use_cases = IdentityUseCases(
         config=config,
@@ -369,20 +457,32 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
             hasher=hasher,
             limiter=limiter,
             email=email,
-            secrets=secrets,
+            codes=codes,
             clock=clock,
             config=config,
         ),
-        verify_email=VerifyEmail(uow, clock, config),
-        login=LoginWithPassword(uow, authn, issuer),
+        verify_email=VerifyEmail(uow, clock, config, codes=codes, sessions=issuer),
+        login=LoginWithPassword(
+            uow, authn, issuer, codes=codes, limiter=limiter, email=email, config=config
+        ),
+        confirm_login=ConfirmLogin(uow, codes=codes, sessions=issuer),
+        resend_code=ResendCode(uow, codes=codes, limiter=limiter, email=email, config=config),
+        request_password_change=RequestPasswordChange(
+            uow, authn, codes=codes, limiter=limiter, email=email, config=config
+        ),
+        confirm_password_change=ConfirmPasswordChange(
+            uow, hasher, revocation, clock, config, email=email, codes=codes
+        ),
         admin_login=AdminLogin(uow, authn, issuer),
         refresh=RefreshSession(uow, issuer, revocation, clock, guests=guest_issuer),
         logout=Logout(uow, revocation, clock),
         logout_all=LogoutAll(uow, revocation, clock),
         request_password_reset=RequestPasswordReset(
-            uow, limiter=limiter, email=email, secrets=secrets, clock=clock, config=config
+            uow, limiter=limiter, email=email, codes=codes, clock=clock, config=config
         ),
-        reset_password=ResetPassword(uow, hasher, revocation, clock, config, email=email),
+        reset_password=ResetPassword(
+            uow, hasher, revocation, clock, config, email=email, codes=codes, sessions=issuer
+        ),
         start_oauth=StartOAuth(uow, providers, states, secrets, config, authenticator=authn),
         complete_oauth=CompleteOAuth(
             uow,
@@ -485,8 +585,15 @@ def build_periodic_jobs(infra: Infrastructure) -> list[PeriodicJob]:
     purge = PurgeGuestSessions(
         SqlGuestSessionPurger(infra.sessions), infra.clock, guest_config(settings)
     )
+    codes = settings.email_code
+    purge_codes = PurgeEmailChallenges(
+        SqlChallengePurger(infra.sessions), infra.clock, code_config(settings)
+    )
     return [
-        PeriodicJob("guest_sessions.purge", guest.purge_interval_s, purge, guest.purge_jitter_s)
+        PeriodicJob("guest_sessions.purge", guest.purge_interval_s, purge, guest.purge_jitter_s),
+        PeriodicJob(
+            "email_challenges.purge", codes.purge_interval_s, purge_codes, codes.purge_jitter_s
+        ),
     ]
 
 
@@ -500,9 +607,14 @@ def _email_sender(settings: Settings) -> EmailSender:
             username=smtp.username,
             password=smtp.password.get_secret_value() if smtp.password else None,
             start_tls=smtp.start_tls,
+            use_tls=smtp.use_tls,
+            timeout_s=smtp.timeout_s,
+            code_ttl_s=settings.email_code.ttl_s,
         )
-    # Ссылки с секретом пишем в лог только вне production (демонстрация этапа 1).
-    return LogEmailSender(include_links=not settings.is_production)
+    # Код из письма — секрет: в лог его пишем только в local/ci (e2e читают его оттуда).
+    return LogEmailSender(
+        include_secrets=settings.environment in (Environment.LOCAL, Environment.CI)
+    )
 
 
 def _providers(settings: Settings) -> dict[Provider, OAuthProvider]:
