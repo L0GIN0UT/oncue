@@ -199,7 +199,6 @@ def my_round_view(room: Room, user_id: UUID) -> Json | None:
             and pr.active
             and not pr.state.finished
             and pr.state.level == contest.level
-            and str(user_id) not in match.skipped
         ):
             attempts_left = max(0, match.attempts_per_level - pr.state.attempts_on_level)
     options: list[Json] = []

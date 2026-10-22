@@ -8,15 +8,12 @@ from uuid import UUID
 
 from match_doubles import (
     START,
-    FakeAssets,
-    FakePlans,
     MemoryPlayerRooms,
     MemoryRecords,
     MemoryStore,
-    duel_body,
     factory,
-    lobby_body,
-    party_body,
+    plan_factory,
+    seed_bodies,
 )
 from match_service.application.owner import OwnerSettings, RoomOwner
 from match_service.application.ports import RoomCommand
@@ -25,6 +22,7 @@ from match_service.domain.room import Room, SettingsChange, apply_settings, defa
 
 from gv_core.ids import uuid7
 from gv_testkit import FakeClock, FakeRandom
+from gv_testkit.match import FakeLinkPort, FakeRoundPlanPort
 
 PRESENCE_TIMEOUT_MS = 12_000
 IDLE_MS = 30 * 60_000
@@ -35,16 +33,8 @@ class Harness:
     """Владелец комнаты, часы и двойники портов."""
 
     clock: FakeClock = field(default_factory=lambda: FakeClock(START))
-    plans: FakePlans = field(
-        default_factory=lambda: FakePlans(
-            {
-                "music.duel.classic": duel_body(),
-                "film.party.frame": party_body(),
-                "film.lobby.collection": lobby_body(),
-            }
-        )
-    )
-    assets: FakeAssets = field(default_factory=FakeAssets)
+    bodies: dict[str, dict[str, Any]] = field(default_factory=seed_bodies)
+    assets: FakeLinkPort = field(default_factory=FakeLinkPort)
     store: MemoryStore = field(default_factory=MemoryStore)
     player_rooms: MemoryPlayerRooms = field(default_factory=MemoryPlayerRooms)
     records: MemoryRecords = field(default_factory=MemoryRecords)
@@ -53,6 +43,7 @@ class Harness:
     _ops: int = 0
 
     def __post_init__(self) -> None:
+        self.plans = FakeRoundPlanPort(factory=plan_factory(self.bodies))
         self.factory = factory()
         self.owner = RoomOwner(
             factory=self.factory,
@@ -79,7 +70,7 @@ class Harness:
         self, key: str = "music.duel.classic", *, code: str = "K7MQ2ZXA", **change: Any
     ) -> tuple[Room, UUID]:
         """Комната шаблона ``key``; возвращает комнату и хоста."""
-        tpl = self.factory.template(key, 1, self.plans.bodies[key])
+        tpl = self.factory.template(key, 1, self.bodies[key])
         settings = apply_settings(
             tpl.template, default_settings(tpl.template), SettingsChange(**change)
         )
@@ -102,9 +93,7 @@ class Harness:
     ) -> dict[str, Any]:
         """Команда владельцу (новый ``op_id`` на каждый вызов)."""
         self._ops += 1
-        cmd = RoomCommand(
-            op_id=op_id or f"op-{self._ops:08d}", kind=command, user_id=user, data=data
-        )
+        cmd = RoomCommand(op_id=op_id or f"op-{uuid7().hex}", kind=command, user_id=user, data=data)
         return await self.owner.handle(room, cmd)
 
     async def ok(self, room: Room, user: UUID, command: str, **data: Any) -> dict[str, Any]:
@@ -155,6 +144,12 @@ class Harness:
             "expected_version": room.version,
             "answer": {"text": text},
         }
+
+    def turn(self, room: Room) -> dict[str, Any]:
+        """Поля команды фазы (пас): раунд, уровень, версия."""
+        data = self.guess_data(room, "")
+        del data["answer"]
+        return data
 
     def title(self, room: Room) -> str:
         assert room.match is not None

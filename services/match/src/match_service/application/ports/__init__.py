@@ -115,26 +115,27 @@ class PlayerRooms(Protocol):
 
 
 # ----------------------------------------------------------------------------- внешние
-class RoundPlanPort(Protocol):
-    """План раундов от game (D5).
+@dataclass(frozen=True, slots=True)
+class RoundPlanRequest:
+    """Запрос плана матча (``RoundPlanRequest`` internal API game, D5)."""
 
-    Raises (реализации):
-        MatchInvalidError: ``match.pool_too_small`` | ``match.collection_required`` |
-            ``match.too_many_collections``.
-        MatchNotFoundError: ``match.mode_not_found`` | ``match.collection_not_found``.
-        MatchUnavailableError: ``match.game_unavailable`` (таймаут, breaker, 5xx).
+    mode_key: str
+    version: int
+    seed: str
+    rounds: int
+    collection_ids: tuple[UUID, ...] = ()
+    exclude_ids: tuple[UUID, ...] = ()
+
+
+class RoundPlanPort(Protocol):
+    """План раундов от game (D5); фейк — ``gv_testkit.match.FakeRoundPlanPort``.
+
+    Ошибки реализаций — ``AppError`` с кодом ``game.*`` или ``match.*``; application
+    переводит их в коды match (``owner.plan_error``): ``match.pool_too_small``,
+    ``match.collection_not_found``, ``match.game_unavailable`` и т. д.
     """
 
-    async def plan(
-        self,
-        *,
-        mode_key: str,
-        version: int,
-        seed: str,
-        rounds: int,
-        collection_ids: Sequence[UUID],
-        exclude_ids: Sequence[UUID],
-    ) -> RoundPlan:
+    async def create_round_plan(self, request: RoundPlanRequest) -> RoundPlan:
         """Разыграть план матча."""
         ...
 

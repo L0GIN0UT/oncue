@@ -32,9 +32,11 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from gv_core.clock import Clock
+from gv_core.errors import AppError
 from match_service.application.owner import RoomOwner
 from match_service.application.ports import RealtimePublisher
 from match_service.application.views import messages
+from match_service.domain.model import Change
 from match_service.domain.room import Room
 from match_service.infrastructure.rooms import keys
 from match_service.infrastructure.rooms.codec import dumps
@@ -180,8 +182,7 @@ class RoomActor:
                 self._lose("snapshot")
                 return False
             self._written = signature
-            for message in messages(room, changes, self._now_ms()):
-                await self._publisher.publish(_channel(self.code), message)
+            await self._publish(room, changes)
             await self._stream.ack(self.code, [e for e, _ in entries])
             for command, reply in replies:
                 await self._stream.reply(self.code, command, reply)
@@ -192,6 +193,15 @@ class RoomActor:
                 return False
             self._renewed = time.monotonic()
         return True
+
+    async def _publish(self, room: Room, changes: list[Change]) -> None:
+        """Сообщения канала; отказ Centrifugo не мешает матчу (клиенты — на HTTP-tick)."""
+        for message in messages(room, changes, self._now_ms()):
+            try:
+                await self._publisher.publish(_channel(self.code), message)
+            except AppError as exc:
+                log.warning("match.realtime_publish_failed", room=self.code, code=exc.code)
+                return
 
     def _lose(self, stage: str) -> None:
         self.lost = True

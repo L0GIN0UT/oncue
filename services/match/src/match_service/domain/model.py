@@ -350,7 +350,6 @@ class MatchState:
         levels_count: Уровней загадки (виды строятся без ядра — в процессе api).
         attempts_per_level: Ответов на уровень.
         statuses: Статусы игроков в раунде (``PlayerStatus``), обновляет владелец.
-        skipped: Кто пропустил текущий уровень (ждёт следующего).
         clue_pending: Уровень открыт, ссылка ещё запрашивается (ходы и закрытие ждут).
         paused_at_ms: Когда началась пауза (сдвиг окна уровня при возобновлении).
     """
@@ -380,7 +379,6 @@ class MatchState:
     levels_count: int = 1
     attempts_per_level: int = 1
     statuses: dict[str, str] = field(default_factory=dict)
-    skipped: tuple[str, ...] = ()
     clue_pending: bool = False
     paused_at_ms: int | None = None
 

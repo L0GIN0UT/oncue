@@ -15,15 +15,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from match_doubles import (
-    FakeAssets,
-    FakePlans,
-    MemoryPublisher,
-    MemoryRecords,
-    duel_body,
-    factory,
-    lobby_body,
-)
+from match_doubles import MemoryRecords, factory, plan_factory, seed_bodies
 from match_service.application.owner import OwnerSettings, RoomOwner
 from match_service.application.ports import RoomCommand
 from match_service.domain.model import Phase
@@ -42,6 +34,7 @@ from gv_core.random import SystemRandom
 from gv_service.runners import supervise_runners
 from gv_service.settings import RunnersSettings
 from gv_testkit import InfraProvider
+from gv_testkit.match import FakeLinkPort, FakeRealtime, FakeRoundPlanPort
 
 pytestmark = pytest.mark.integration
 
@@ -72,7 +65,7 @@ class Node:
 @dataclass
 class Cluster:
     redis: Redis
-    publisher: MemoryPublisher = field(default_factory=MemoryPublisher)
+    publisher: FakeRealtime = field(default_factory=FakeRealtime)
     nodes: list[Node] = field(default_factory=list)
     ops: int = 0
 
@@ -80,14 +73,14 @@ class Cluster:
         self.store = RedisRoomStore(self.redis, snapshot_ttl_ms=3_600_000)
         self.bus = RedisCommandBus(self.redis, maxlen=1000)
         self.factory = factory()
-        self.bodies = {"music.duel.classic": duel_body(), "film.lobby.collection": lobby_body()}
+        self.bodies = seed_bodies()
 
     def node(self, name: str, *, supervised: bool = True) -> Node:
         """Инстанс; без супервизора отмена задачи — «kill -9» (без handoff)."""
         owner = RoomOwner(
             factory=self.factory,
-            plans=FakePlans(self.bodies),
-            assets=FakeAssets(),
+            plans=FakeRoundPlanPort(factory=plan_factory(self.bodies)),
+            assets=FakeLinkPort(),
             records=MemoryRecords(),
             store=self.store,
             player_rooms=RedisPlayerRooms(self.redis),
@@ -188,7 +181,7 @@ async def test_command_gets_reply_and_snapshot_has_cursor(cluster: Cluster) -> N
     assert room is not None and len(room.seats) == 2 and room.cursor != "0-0"
     # Применённая команда удалена из потока (подтверждение — курсор снимка).
     assert await cluster.redis.xlen(keys.commands(code)) == 0
-    lobby = [m for m in cluster.publisher.of(f"room:{code}") if m["kind"] == "lobby"]
+    lobby = [m for m in cluster.publisher.room(code) if m["kind"] == "lobby"]
     assert lobby and lobby[-1]["version"] == room.version
     del host
 

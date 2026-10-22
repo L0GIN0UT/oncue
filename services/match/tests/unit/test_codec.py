@@ -35,16 +35,18 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
 async def test_live_room_round_trips_through_snapshot() -> None:
     h = Harness()
     room, a = await h.room()
-    await h.join(room, 1)
+    (b,) = await h.join(room, 1)
     await h.start(room, a)
     await h.ok(room, a, "guess", **h.guess_data(room, h.title(room)))
     room.pull_changes()
     again = loads(dumps(room))
     assert encode(again) == encode(room)
     # Восстановленная комната продолжает играть у нового владельца.
-    h2 = Harness(clock=h.clock, plans=h.plans)
-    await h2.tick(again, 3)
+    h2 = Harness(clock=h.clock, bodies=h.bodies)
+    await h2.ok(again, b, "guess", **h2.guess_data(again, h2.title(again)))
+    await h2.tick(again, 5)
     assert again.match is not None and again.match.round_index == 1
+    assert again.match.players[a].score == 12 and again.match.players[b].score == 6
 
 
 def test_future_or_broken_snapshot_is_rejected() -> None:

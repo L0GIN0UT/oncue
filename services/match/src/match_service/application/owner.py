@@ -34,8 +34,7 @@ from gv_game_kernel import (
     AssetPort,
     ClueView,
     ConfigError,
-    Guess,
-    GuessKind,
+    ContestRoundState,
     LevelLockedError,
     OptionNotFoundError,
     RoundFinishedError,
@@ -47,6 +46,7 @@ from match_service.application.ports import (
     RoomCommand,
     RoomStore,
     RoundPlanPort,
+    RoundPlanRequest,
 )
 from match_service.application.rules import KernelMatchRules, RulesFactory, effective_body
 from match_service.application.views import iso, my_round_view, room_view
@@ -56,6 +56,7 @@ from match_service.domain.errors import (
     MatchForbiddenError,
     MatchInvalidError,
     MatchNotFoundError,
+    MatchUnavailableError,
     status_of,
 )
 from match_service.domain.events import match_started
@@ -71,6 +72,40 @@ COMMAND_APPLY_SECONDS = Histogram(
 SERVER_ERROR = 500
 
 type Builder = Callable[[], Json]
+
+
+_PLAN_ERRORS: dict[str, tuple[type[AppError], str]] = {
+    "game.mode_not_found": (MatchNotFoundError, errors.MODE_NOT_FOUND),
+    "game.mode_not_online": (MatchInvalidError, errors.MODE_NOT_ONLINE),
+    "game.collection_not_found": (MatchNotFoundError, errors.COLLECTION_NOT_FOUND),
+    "game.collection_domain_mismatch": (MatchNotFoundError, errors.COLLECTION_NOT_FOUND),
+    "game.collection_required": (MatchInvalidError, errors.COLLECTION_REQUIRED),
+    "game.collection_not_supported": (MatchInvalidError, errors.SETTING_NOT_ALLOWED),
+    "game.too_many_collections": (MatchInvalidError, errors.TOO_MANY_COLLECTIONS),
+    "game.pool_too_small": (MatchInvalidError, errors.POOL_TOO_SMALL),
+    "game.assets_unavailable": (MatchUnavailableError, errors.CONTENT_UNAVAILABLE),
+}
+
+
+def plan_error(error: AppError) -> AppError:
+    """Отказ плана game → ошибка match (комната остаётся в лобби, ADR 0033)."""
+    if error.code.startswith("match."):
+        return error
+    mapped = _PLAN_ERRORS.get(error.code)
+    if mapped is None:
+        # Таймаут, breaker, 5xx и всё неизвестное: «онлайн временно недоступен».
+        return MatchUnavailableError("онлайн временно недоступен", code=errors.GAME_UNAVAILABLE)
+    cls, code = mapped
+    details = dict(error.details) if error.details else None
+    if code == errors.SETTING_NOT_ALLOWED:
+        details = {"field": "collection_ids"}
+    return cls("план матча не получен", code=code, details=details)
+
+
+def _contest(match: MatchState) -> ContestRoundState:
+    if match.contest is None:
+        raise MatchConflictError("раунд не идёт", code=errors.PHASE_MISMATCH)
+    return match.contest
 
 
 def new_code(random: Random) -> str:
@@ -261,13 +296,16 @@ class RoomOwner:
         match = room.match
         if match is None:
             return []
-        subject = f"room:{room.code}"
+        # Субъект выдачи — комната и раунд (D11): одна ссылка на (комната, раунд, уровень).
+        subject = f"room:{room.code}:{need.round_index}"
         round_ = match.plan[need.round_index]
         try:
             if isinstance(need, NeedClue):
                 view = await rules.clue(round_, need.level, assets=self._assets, subject=subject)
             else:
-                view = await rules.final_clue(round_, assets=self._assets, subject=subject)
+                view = await rules.final_clue(
+                    round_, assets=self._assets, subject=f"{subject}:reveal"
+                )
         except AppError as exc:
             # Ассет недоступен или media-pipeline лежит: уровень без ссылки — раунд void.
             log.warning("match.clue_unavailable", room=room.code, code=exc.code)
@@ -406,14 +444,18 @@ class RoomOwner:
     async def _start(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
         room.require_startable(cmd.user_id)
         match_id = self._new_id()
-        plan = await self._plans.plan(
+        request = RoundPlanRequest(
             mode_key=room.mode.key,
             version=room.mode.version,
             seed=match_id.hex,
             rounds=room.settings.rounds,
-            collection_ids=list(room.settings.collection_ids),
-            exclude_ids=list(room.memory),
+            collection_ids=tuple(room.settings.collection_ids),
+            exclude_ids=tuple(room.memory),
         )
+        try:
+            plan = await self._plans.create_round_plan(request)
+        except AppError as exc:
+            raise plan_error(exc) from exc
         try:
             body = effective_body(plan.body, room.settings, room.template)
             rules = self._factory.build(body)
@@ -487,7 +529,7 @@ class RoomOwner:
                 room.rematch_code = code
                 room.emit("lobby")
                 return
-        raise errors.MatchUnavailableError("не удалось создать комнату реванша")
+        raise MatchUnavailableError("не удалось создать комнату реванша")
 
     # ------------------------------------------------------------------ матч
     async def _guess(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
@@ -500,7 +542,6 @@ class RoomOwner:
             round_index=round_index,
             level=level,
             expected_version=int(data["expected_version"]),
-            rules=rules,
         )
         match = room.match
         assert match is not None  # noqa: S101 — require_turn проверил матч
@@ -513,23 +554,24 @@ class RoomOwner:
             option_id=str(option) if option is not None else None,
         )
         try:
-            result = rules.check(answer, match.current)
+            step = rules.guess(
+                _contest(match),
+                str(cmd.user_id),
+                answer,
+                match.current,
+                display=self._display(answer, match),
+                now_ms=now,
+            )
         except AnswerKindError as exc:
             raise MatchInvalidError(
                 "режим не принимает такой ответ", code=errors.ANSWER_KIND_UNSUPPORTED
             ) from exc
         except OptionNotFoundError as exc:
             raise MatchInvalidError("такого варианта нет", code=errors.OPTION_UNKNOWN) from exc
-        guess = Guess(
-            kind=GuessKind(answer.input_kind),
-            level=level,
-            verdict=result.verdict,
-            display=self._display(answer, match),
-        )
-        try:
-            match_fsm.apply_guess(room, rules, cmd.user_id, guess, now)
         except (LevelLockedError, RoundFinishedError) as exc:
             raise MatchConflictError("уровень закрыт", code=errors.LEVEL_LOCKED) from exc
+        result = step.match
+        match_fsm.commit(room, rules, cmd.user_id, step.state, now)
 
         def build() -> Json:
             me = my_round_view(room, cmd.user_id) or {
@@ -578,9 +620,14 @@ class RoomOwner:
             round_index=int(data["round_index"]),
             level=int(data["level"]),
             expected_version=int(data["expected_version"]),
-            rules=rules,
         )
-        match_fsm.skip(room, cmd.user_id, now)
+        match = room.match
+        assert match is not None  # noqa: S101 — require_turn проверил матч
+        try:
+            state = rules.skip(_contest(match), str(cmd.user_id), now)
+        except (LevelLockedError, RoundFinishedError) as exc:
+            raise MatchConflictError("уровень закрыт", code=errors.LEVEL_LOCKED) from exc
+        match_fsm.commit(room, rules, cmd.user_id, state, now)
         return self._version(room)
 
     async def _forfeit(self, room: Room, cmd: RoomCommand, now: int) -> Builder:

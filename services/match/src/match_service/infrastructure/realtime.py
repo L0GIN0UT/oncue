@@ -34,6 +34,8 @@ class CentrifugoPublisher:
     """``RealtimePublisher`` поверх server API Centrifugo."""
 
     def __init__(self, settings: RealtimeSettings, client: httpx.AsyncClient | None = None) -> None:
+        if settings.api_url is None or settings.api_key is None:
+            raise ValueError("нужны GV_REALTIME__API_URL и GV_REALTIME__API_KEY")
         self._url = settings.api_url.rstrip("/") + "/publish"
         self._headers = {"X-API-Key": settings.api_key.get_secret_value()}
         self._client = client or httpx.AsyncClient(timeout=settings.timeout_s)

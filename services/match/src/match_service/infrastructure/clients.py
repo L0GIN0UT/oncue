@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
@@ -25,6 +24,7 @@ from prometheus_client import Counter
 
 from gv_core.errors import AppError, DependencyUnavailableError, GoneError
 from gv_game_kernel import AssetRef, ClueAsset
+from match_service.application.ports import RoundPlanRequest
 from match_service.domain import errors
 from match_service.domain.errors import (
     MatchInvalidError,
@@ -154,16 +154,7 @@ class GameClient(_Client):
     def _unavailable(self) -> AppError:
         return MatchUnavailableError("онлайн временно недоступен", code=errors.GAME_UNAVAILABLE)
 
-    async def plan(
-        self,
-        *,
-        mode_key: str,
-        version: int,
-        seed: str,
-        rounds: int,
-        collection_ids: Sequence[UUID],
-        exclude_ids: Sequence[UUID],
-    ) -> RoundPlan:
+    async def create_round_plan(self, request: RoundPlanRequest) -> RoundPlan:
         """План матча (D5).
 
         Raises:
@@ -174,12 +165,12 @@ class GameClient(_Client):
             "POST",
             PLANS_PATH,
             {
-                "mode_key": mode_key,
-                "version": version,
-                "seed": seed,
-                "rounds": rounds,
-                "collection_ids": [str(c) for c in collection_ids],
-                "exclude_ids": [str(x) for x in exclude_ids],
+                "mode_key": request.mode_key,
+                "version": request.version,
+                "seed": request.seed,
+                "rounds": request.rounds,
+                "collection_ids": [str(c) for c in request.collection_ids],
+                "exclude_ids": [str(x) for x in request.exclude_ids],
             },
         )
         if response.status_code != httpx.codes.OK:

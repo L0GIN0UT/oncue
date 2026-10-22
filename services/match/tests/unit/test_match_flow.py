@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from match_doubles import game_down, pool_too_small
 from match_harness import IDLE_MS, Harness
 from match_service.domain.model import MatchFinish, Phase, Presence
 
@@ -84,27 +83,27 @@ async def test_start_requires_ready_players_and_calls_plan_once() -> None:
 
     await h.ok(room, host, "start", expected_version=room.version)
     assert room.phase is Phase.COUNTDOWN
-    assert len(h.plans.calls) == 1 and h.plans.calls[0]["rounds"] == 2
+    assert len(h.plans.requests) == 1 and h.plans.requests[0].rounds == 10
     await h.tick(room, 3)
     assert room.phase is Phase.LEVEL_OPEN
     assert room.match is not None and room.match.clue is not None
     assert len(h.records.started) == 1
-    assert h.assets.calls[-1][2] == f"room:{room.code}"
+    assert h.assets.subjects() == [f"room:{room.code}:0"]
 
 
 async def test_plan_errors_keep_lobby_and_transient_error_is_not_remembered() -> None:
     h = Harness()
     room, host = await h.room()
     await h.join(room, 1)
-    h.plans.error = pool_too_small()
+    h.plans.pool_too_small(available=1)
     small = await h.cmd(room, host, "start", expected_version=room.version, op_id="op-start-1")
     assert small["status"] == 422 and _code(small) == "match.pool_too_small"
     assert room.phase is Phase.LOBBY
 
-    h.plans.error = game_down()
+    h.plans.unavailable()
     down = await h.cmd(room, host, "start", expected_version=room.version, op_id="op-start-2")
     assert down["status"] == 503 and _code(down) == "match.game_unavailable"
-    h.plans.error = None
+    h.plans.heal()
     retried = await h.cmd(room, host, "start", expected_version=room.version, op_id="op-start-2")
     assert retried["status"] == 200 and room.phase is Phase.COUNTDOWN
 
@@ -118,11 +117,16 @@ async def test_duel_exact_answer_closes_level_for_both() -> None:
     stale = h.guess_data(room, "мимо")
     win = await h.ok(room, a, "guess", **h.guess_data(room, h.title(room)))
     assert win["result"] == "exact" and win["level_closed"] is True
-    assert room.phase is Phase.REVEAL
-    assert room.match is not None and room.match.players[a].score == 12
-
+    # Опережение: уровень 1 закрыт для обоих, сопернику открыт уровень 2 со своим окном.
+    match = room.match
+    assert match is not None and match.contest is not None
+    assert room.phase is Phase.LEVEL_OPEN and match.contest.level == 2
     late = await h.cmd(room, b, "guess", **stale)
     assert late["status"] == 409 and _code(late) == "match.phase_mismatch"
+
+    second = await h.ok(room, b, "guess", **h.guess_data(room, h.title(room)))
+    assert second["result"] == "exact" and room.phase is Phase.REVEAL
+    assert match.players[a].score == 12 and match.players[b].score == 6
 
 
 async def test_duel_attempts_and_window_open_next_level() -> None:
@@ -136,12 +140,14 @@ async def test_duel_attempts_and_window_open_next_level() -> None:
     locked = await h.cmd(room, b, "guess", **h.guess_data(room, "ещё"))
     assert locked["status"] == 409 and _code(locked) == "match.level_locked"
     assert room.match is not None and room.match.contest is not None
-    assert room.match.contest.level == 1
+    assert room.match.contest.level == 1 and room.match.statuses[str(b)] == "answered"
 
-    await h.tick(room, 10)
+    await h.tick(room, 20)
     assert room.match.contest.level == 2 and room.phase is Phase.LEVEL_OPEN
     late = await h.ok(room, a, "guess", **h.guess_data(room, h.title(room)))
-    assert late["result"] == "exact" and room.match.players[a].score == 6
+    assert late["result"] == "exact"
+    # Опережение на последнем уровне завершает раунд.
+    assert room.phase is Phase.REVEAL and room.match.players[a].score == 6
 
 
 async def test_repeated_op_id_returns_saved_reply_without_reapplying() -> None:
@@ -201,7 +207,7 @@ async def test_duel_disconnect_beyond_grace_is_tech_win() -> None:
     await h.start(room, a)
     h.offline.add(b)
     await h.tick(room, 13)
-    await h.tick(room, 21)
+    await h.tick(room, 31)
     match = room.match
     assert match is not None and match.finish is MatchFinish.TECH_WIN
     finishes = {s.user_id: s.finish.value for s in match.standings}
@@ -243,9 +249,9 @@ async def test_party_all_answered_closes_level_early_and_skip_waits() -> None:
     assert room.phase is Phase.LEVEL_OPEN
     assert room.match is not None and room.match.statuses[str(b)] == "answered"
     await h.ok(room, c, "guess", **h.guess_data(room, h.title(room)))
+    # Ответили все: уровень закрыт досрочно, пасовавшему открыт следующий.
     assert room.match.contest is not None and room.match.contest.level == 2
-    for user in (b, c):
-        assert room.match.contest.players[str(user)].active
+    assert room.match.statuses == {str(host): "guessed", str(b): "thinking", str(c): "guessed"}
 
 
 async def test_party_full_match_to_summary_and_lobby_rematch_keeps_memory() -> None:
@@ -294,7 +300,7 @@ async def test_unavailable_asset_voids_round() -> None:
     await h.ok(room, a, "start", expected_version=room.version)
     match = room.match
     assert match is not None
-    h.assets.gone.add(match.plan[0].levels[0].asset_set_id)
+    h.assets.gone(match.plan[0].levels[0].asset_set_id)
     await h.tick(room, 3)
     assert room.phase is Phase.REVEAL
     assert match.records[0].void is True
@@ -305,12 +311,12 @@ async def test_emotes_and_chat_rules() -> None:
     h = Harness()
     room, a = await h.room()
     await h.join(room, 1)
-    await h.ok(room, a, "emote", kind="emote", key="emote.gg")
-    unknown = await h.cmd(room, a, "emote", kind="phrase", key="emote.gg")
+    await h.ok(room, a, "emote", kind="emote", key="match.emotes.gg")
+    unknown = await h.cmd(room, a, "emote", kind="phrase", key="match.emotes.gg")
     assert _code(unknown) == "match.emote_unknown"
     disabled = await h.cmd(room, a, "chat", text="привет")
     assert disabled["status"] == 403 and _code(disabled) == "match.chat_disabled"
-    outsider = await h.cmd(room, uuid7(), "emote", kind="emote", key="emote.gg")
+    outsider = await h.cmd(room, uuid7(), "emote", kind="emote", key="match.emotes.gg")
     assert _code(outsider) == "match.not_participant"
 
 

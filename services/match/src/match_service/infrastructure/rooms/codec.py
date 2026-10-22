@@ -224,7 +224,6 @@ def _match(m: MatchState | None) -> Json | None:
         "levels_count": m.levels_count,
         "attempts_per_level": m.attempts_per_level,
         "statuses": m.statuses,
-        "skipped": list(m.skipped),
         "clue_pending": m.clue_pending,
         "paused_at_ms": m.paused_at_ms,
     }
@@ -490,7 +489,6 @@ def _read_match(d: Json | None) -> MatchState | None:
         levels_count=int(d.get("levels_count", 1)),
         attempts_per_level=int(d.get("attempts_per_level", 1)),
         statuses=dict(d.get("statuses", {})),
-        skipped=tuple(d.get("skipped", [])),
         clue_pending=bool(d.get("clue_pending", False)),
         paused_at_ms=d.get("paused_at_ms"),
     )

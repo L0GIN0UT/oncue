@@ -5,32 +5,27 @@ match не ветвится по виду матча: всё, что отлич�
 тело конфига (из плана game или internal-ручки конфига), применяет переопределения хоста
 кастомного лобби и собирает ``KernelMatchRules`` — реализацию ``MatchRules`` автомата.
 
-Плагины ``ContestRule`` подключает ядро (поток A этапа 4a); фабрика получает их функцией
-поиска ``contest_of(key)``, места — функцией ``ranker`` (по умолчанию ``MatchOutcome.rank``).
+Раунд ведёт только фасад ядра ``ModeEngine.contest_*``, места — ``MatchOutcome.rank``.
 """
 
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from gv_game_kernel import (
+    ONLINE_SESSIONS,
     AnswerInput,
     AssetPort,
     AssetRef,
     ClueView,
-    ConfigError,
     ContestRoundState,
-    ContestRule,
+    ContestStep,
     EngineFactory,
-    Guess,
     MatchOutcome,
-    MatchResult,
     MediaItemRef,
     ModeConfig,
     ModeEngine,
@@ -55,16 +50,7 @@ from match_service.domain.model import (
     SettingsOptions,
 )
 
-ONLINE_SESSIONS = frozenset({"duel", "party", "lobby"})
 MS = 1000
-
-type ContestLookup = Callable[[str], ContestRule | None]
-type Ranker = Callable[[Mapping[str, int], Collection[str]], list[Placement]]
-
-
-def default_ranker(scores: Mapping[str, int], left: Collection[str]) -> list[Placement]:
-    """Места по ``MatchOutcome.rank`` ядра."""
-    return MatchOutcome.rank(scores, left=left)
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,30 +92,16 @@ def _draw(round_: PlannedRound) -> RoundDraw:
 
 
 class KernelMatchRules:
-    """``MatchRules`` поверх ``ModeEngine`` и ``ContestRule`` (реализация автомата).
+    """``MatchRules`` поверх фасада ``ModeEngine.contest_*`` (реализация автомата).
 
     Args:
-        engine: Движок режима (загадка, matcher, scorer).
-        contest: Плагин состязания.
-        contest_params: Разобранные параметры ``session.contest``.
-        session: Онлайн-сессия конфига.
-        ranker: Места матча.
+        engine: Движок онлайн-режима (загадка, matcher, ``ContestRule``, scorer).
     """
 
-    def __init__(
-        self,
-        engine: ModeEngine,
-        contest: ContestRule,
-        contest_params: BaseModel,
-        session: OnlineSessionSpec,
-        ranker: Ranker,
-    ) -> None:
+    def __init__(self, engine: ModeEngine) -> None:
         self.engine = engine
-        self.contest = contest
-        self.params = contest_params
-        self.session = session
-        self._ranker = ranker
-        self._rules = contest.round_rules(contest_params)
+        self.session = engine.online_session
+        self._attempts = engine.round_rules.attempts_per_level
 
     # ------------------------------------------------------------------ параметры
     @property
@@ -155,58 +127,51 @@ class KernelMatchRules:
     @property
     def attempts_per_level(self) -> int:
         """Ответов на уровень."""
-        return self._rules.attempts_per_level
-
-    def window_ms(self, level: int) -> int:
-        """Окно уровня (с 1); за пределами списка — последнее окно."""
-        windows = self.session.level_windows_s
-        return windows[min(level, len(windows)) - 1] * MS
+        return self._attempts
 
     # ------------------------------------------------------------------ раунд
     def start_round(self, player_ids: Sequence[str], now_ms: int) -> ContestRoundState:
         """Уровень 1 для всех."""
-        return self.contest.start_round(
-            player_ids, now_ms=now_ms, window_ms=self.window_ms(1), params=self.params
+        return self.engine.contest_start(player_ids, now_ms=now_ms)
+
+    def guess(
+        self,
+        state: ContestRoundState,
+        player_id: str,
+        answer: AnswerInput,
+        round_: PlannedRound,
+        *,
+        display: str,
+        now_ms: int,
+    ) -> ContestStep:
+        """Сверить ответ с ключом раунда и применить ход (ошибки — как у ядра)."""
+        return self.engine.contest_guess(
+            state, player_id, answer, _draw(round_), display=display, now_ms=now_ms
         )
 
-    def apply_guess(
-        self, state: ContestRoundState, player_id: str, guess: Guess, now_ms: int
-    ) -> ContestRoundState:
-        """Сверенный ход."""
-        return self.contest.apply_guess(
-            state,
-            player_id,
-            guess,
-            levels_count=self.levels_count,
-            now_ms=now_ms,
-            params=self.params,
-        )
+    def skip(self, state: ContestRoundState, player_id: str, now_ms: int) -> ContestRoundState:
+        """Пас."""
+        return self.engine.contest_skip(state, player_id, now_ms=now_ms)
 
     def level_closed(self, state: ContestRoundState, now_ms: int) -> bool:
         """Уровень закрыт."""
-        return self.contest.level_closed(state, now_ms=now_ms, params=self.params)
+        return self.engine.contest_level_closed(state, now_ms=now_ms)
 
     def next_level(self, state: ContestRoundState, now_ms: int) -> ContestRoundState:
-        """Следующий уровень."""
-        return self.contest.next_level(
-            state,
-            levels_count=self.levels_count,
-            now_ms=now_ms,
-            window_ms=self.window_ms(state.level + 1),
-            params=self.params,
-        )
+        """Следующий уровень или конец раунда."""
+        return self.engine.contest_advance(state, now_ms=now_ms)
 
     def round_finished(self, state: ContestRoundState) -> bool:
         """Раунд окончен."""
-        return self.contest.round_finished(state, params=self.params)
+        return self.engine.contest_round_finished(state)
 
     def leave(self, state: ContestRoundState, player_id: str) -> ContestRoundState:
         """Выход игрока."""
-        return self.contest.leave(state, player_id)
+        return self.engine.contest_leave(state, player_id)
 
     def outcome(self, state: ContestRoundState, player_id: str) -> RoundOutcome:
         """Итог раунда игрока."""
-        return self.contest.outcome(state, player_id, params=self.params)
+        return self.engine.contest_outcome(state, player_id)
 
     def score(self, outcome: RoundOutcome) -> int:
         """Очки."""
@@ -214,18 +179,13 @@ class KernelMatchRules:
 
     def views(self, state: ContestRoundState) -> list[PlayerRoundView]:
         """Статусы игроков."""
-        return self.contest.views(state)
+        return self.engine.contest_views(state)
 
     def rank(self, scores: Mapping[str, int], left: Collection[str]) -> list[Placement]:
-        """Места."""
-        return self._ranker(scores, left)
+        """Места (``MatchOutcome.rank``)."""
+        return MatchOutcome.rank(scores, left=left)
 
-    # ------------------------------------------------------------------ ответ и ассеты
-    def check(self, answer: AnswerInput, round_: PlannedRound) -> MatchResult:
-        """Сверить ответ с ключом раунда (``AnswerKindError``/``OptionNotFoundError`` ядра)."""
-        draw = _draw(round_)
-        return self.engine.check(answer, draw.target, draw if round_.options else None)
-
+    # ------------------------------------------------------------------ ассеты
     async def clue(
         self, round_: PlannedRound, level: int, *, assets: AssetPort, subject: str
     ) -> ClueView | None:
@@ -295,30 +255,18 @@ def effective_body(
 
 
 class RulesFactory:
-    """Разбор конфигов онлайн-режимов и сборка правил (кэш по телу не нужен: дёшево).
+    """Разбор конфигов онлайн-режимов и сборка правил.
 
     Args:
-        registry: Реестр плагинов ядра.
-        contest_of: Поиск ``ContestRule`` по ключу.
-        ranker: Места матча.
+        registry: Реестр плагинов ядра (встроенные, включая ``ContestRule``).
     """
 
-    def __init__(
-        self, registry: PluginRegistry, contest_of: ContestLookup, ranker: Ranker = default_ranker
-    ) -> None:
+    def __init__(self, registry: PluginRegistry) -> None:
         self._factory = EngineFactory(registry, supported_sessions=ONLINE_SESSIONS)
-        self._contest_of = contest_of
-        self._ranker = ranker
 
-    def _engine(self, config: ModeConfig) -> tuple[ModeEngine, ContestRule, BaseModel]:
-        session = _online(config)
-        contest = self._contest_of(session.contest.type)
-        if contest is None:
-            raise ConfigError(
-                details={"errors": [{"path": "session.contest.type", "code": "config.unknown"}]}
-            )
-        params = contest.params_schema.model_validate(session.contest.params)
-        return self._factory.build(config), contest, params
+    def _engine(self, config: ModeConfig) -> ModeEngine:
+        _online(config)
+        return self._factory.build(config)
 
     def template(self, key: str, version: int, body: Mapping[str, Any]) -> ModeTemplate:
         """Шаблон комнаты из опубликованного конфига.
@@ -329,7 +277,7 @@ class RulesFactory:
         """
         config = parse_mode_config(body)
         session = _online(config)
-        engine, _, _ = self._engine(config)
+        engine = self._engine(config)
         lobby = session.lobby
         options = None
         if lobby is not None:
@@ -379,9 +327,7 @@ class RulesFactory:
         Raises:
             ConfigError: конфиг не собирается.
         """
-        config = parse_mode_config(body)
-        engine, contest, params = self._engine(config)
-        return KernelMatchRules(engine, contest, params, _online(config), self._ranker)
+        return KernelMatchRules(self._engine(parse_mode_config(body)))
 
 
 def media_ids(plan: Sequence[PlannedRound]) -> list[UUID]:

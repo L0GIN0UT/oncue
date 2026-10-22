@@ -26,8 +26,9 @@ from typing import Protocol
 from uuid import UUID
 
 from gv_game_kernel import (
+    AnswerInput,
     ContestRoundState,
-    Guess,
+    ContestStep,
     PlayerRoundView,
     PlayerStatus,
     RoundOutcome,
@@ -43,6 +44,7 @@ from match_service.domain.model import (
     MatchState,
     Paused,
     Phase,
+    PlannedRound,
     PlayerFinish,
     PlayerRoundResult,
     Presence,
@@ -90,10 +92,21 @@ class MatchRules(Protocol):
         """Открыть уровень 1 раунда."""
         ...
 
-    def apply_guess(
-        self, state: ContestRoundState, player_id: str, guess: Guess, now_ms: int
-    ) -> ContestRoundState:
-        """Применить сверенный ход (``LevelLockedError`` ядра — уровень закрыт)."""
+    def guess(
+        self,
+        state: ContestRoundState,
+        player_id: str,
+        answer: AnswerInput,
+        round_: PlannedRound,
+        *,
+        display: str,
+        now_ms: int,
+    ) -> ContestStep:
+        """Сверить и применить ход (``LevelLockedError`` ядра — уровень закрыт)."""
+        ...
+
+    def skip(self, state: ContestRoundState, player_id: str, now_ms: int) -> ContestRoundState:
+        """Пас на открытом уровне."""
         ...
 
     def level_closed(self, state: ContestRoundState, now_ms: int) -> bool:
@@ -204,7 +217,6 @@ def require_turn(
     round_index: int,
     level: int,
     expected_version: int,
-    rules: MatchRules,
 ) -> MatchPlayer:
     """Ход игрока допустим: фаза уровня, тот же раунд и уровень, свежая версия, есть попытки.
 
@@ -232,14 +244,7 @@ def require_turn(
             details={"round_index": match.round_index, "level": contest.level if contest else None},
         )
     pr = contest.players.get(_pid(user_id))
-    if (
-        pr is None
-        or not pr.active
-        or pr.state.finished
-        or pr.state.level != contest.level
-        or pr.state.attempts_on_level >= rules.attempts_per_level
-        or _pid(user_id) in match.skipped
-    ):
+    if pr is None or not pr.active or pr.state.finished:
         raise MatchConflictError("уровень для вас закрыт", code=errors.LEVEL_LOCKED)
     return player
 
@@ -248,26 +253,17 @@ def _status_of(rules: MatchRules, contest: ContestRoundState, pid: str) -> Playe
     return next((v.status for v in rules.views(contest) if v.player_id == pid), None)
 
 
-def apply_guess(room: Room, rules: MatchRules, user_id: UUID, guess: Guess, now_ms: int) -> None:
-    """Применить сверенный ход (после ``require_turn``)."""
+def commit(
+    room: Room, rules: MatchRules, user_id: UUID, state: ContestRoundState, now_ms: int
+) -> None:
+    """Принять состояние раунда после хода игрока (ответ или пас)."""
     match = _match(room)
-    contest = match.contest
-    if contest is None:  # pragma: no cover — require_turn уже проверил
-        raise MatchConflictError("раунд не идёт", code=errors.PHASE_MISMATCH)
     pid = _pid(user_id)
-    before = _status_of(rules, contest, pid)
-    match.contest = rules.apply_guess(contest, pid, guess, now_ms)
+    before = _status_of(rules, _contest(match), pid)
+    match.contest = state
     room.touch(now_ms)
-    if _status_of(rules, match.contest, pid) != before:
+    if _status_of(rules, state, pid) != before:
         room.emit("player", user_id=pid)
-
-
-def skip(room: Room, user_id: UUID, now_ms: int) -> None:
-    """Пропустить уровень: игрок ждёт следующего (статус «ответил» до закрытия уровня)."""
-    match = _match(room)
-    match.skipped = (*match.skipped, _pid(user_id))
-    room.touch(now_ms)
-    room.emit("player", user_id=_pid(user_id))
 
 
 def refresh_statuses(room: Room, rules: MatchRules) -> None:
@@ -288,29 +284,7 @@ def player_status(room: Room, rules: MatchRules, user_id: UUID) -> PlayerStatus 
     match = room.match
     if match is None or match.contest is None or room.phase is not Phase.LEVEL_OPEN:
         return None
-    pid = _pid(user_id)
-    status = _status_of(rules, match.contest, pid)
-    if status is PlayerStatus.THINKING and pid in match.skipped:
-        return PlayerStatus.ANSWERED
-    return status
-
-
-def _all_done(match: MatchState, rules: MatchRules) -> bool:
-    """Все активные игроки закончили уровень (угадали, исчерпали попытки или пропустили)."""
-    contest = match.contest
-    if contest is None:
-        return False
-    for uid in match.active_ids():
-        pid = _pid(uid)
-        pr = contest.players.get(pid)
-        if pr is None or not pr.active or pr.state.finished or pid in match.skipped:
-            continue
-        if (
-            pr.state.level == contest.level
-            and pr.state.attempts_on_level < rules.attempts_per_level
-        ):
-            return False
-    return True
+    return _status_of(rules, match.contest, _pid(user_id))
 
 
 # ----------------------------------------------------------------------------- таймеры
@@ -374,11 +348,7 @@ def _step_level(room: Room, rules: MatchRules, timing: Timing, now_ms: int) -> l
     match = room.match
     if match is None or match.contest is None or match.clue_pending:
         return None
-    if (
-        rules.level_closed(match.contest, now_ms)
-        or _all_done(match, rules)
-        or _expired(room, now_ms)
-    ):
+    if rules.level_closed(match.contest, now_ms) or _expired(room, now_ms):
         return _close_level(room, rules, now_ms)
     return None
 
@@ -422,7 +392,6 @@ def _open_level(room: Room, now_ms: int) -> list[Need]:
     contest = _contest(match)
     match.clue = None
     match.final_clue = None
-    match.skipped = ()
     match.clue_pending = True
     room.touch(now_ms)
     room.set_phase(

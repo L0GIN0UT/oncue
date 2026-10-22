@@ -13,11 +13,14 @@
  "template": {
   "players_min": 3,
   "players_max": 6,
-  "rounds": 2,
+  "rounds": 10,
   "level_windows_s": [
-   15,
-   15,
-   15
+   20,
+   20,
+   20,
+   20,
+   20,
+   20
   ],
   "answer_format": "classic",
   "clue_type": "frame_progressive",
@@ -25,11 +28,17 @@
   "options": null,
   "chat": {
    "emotes": [
-    "emote.gg",
-    "emote.wow"
+    "match.emotes.wow",
+    "match.emotes.gg",
+    "match.emotes.fire",
+    "match.emotes.laugh",
+    "match.emotes.think"
    ],
    "phrases": [
-    "phrase.good_luck"
+    "match.phrases.good_luck",
+    "match.phrases.well_played",
+    "match.phrases.nice_one",
+    "match.phrases.so_close"
    ],
    "free_text": false
   },
@@ -37,7 +46,7 @@
   "max_collections": 0
  },
  "settings": {
-  "rounds": 2,
+  "rounds": 10,
   "level_window_s": null,
   "answer_format": "classic",
   "clue_type": "frame_progressive",
@@ -45,10 +54,10 @@
   "visibility": "private",
   "collection_ids": []
  },
- "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+ "host_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
  "seats": [
   {
-   "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+   "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
    "slot": 0,
    "nickname": "host",
    "joined_at_ms": 1792670400000,
@@ -57,7 +66,7 @@
    "ready": false
   },
   {
-   "user_id": "01a16250-316a-7649-9449-336a1330401d",
+   "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
    "slot": 1,
    "nickname": "p0",
    "joined_at_ms": 1792670400000,
@@ -66,7 +75,7 @@
    "ready": false
   },
   {
-   "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+   "user_id": "01a16258-c314-727c-a1c8-69b6c032c308",
    "slot": 2,
    "nickname": "p1",
    "joined_at_ms": 1792670400000,
@@ -78,18 +87,19 @@
  "created_at_ms": 1792670400000,
  "activity_at_ms": 1792670403000,
  "phase": "level_open",
- "phase_ends_at_ms": 1792670418000,
- "version": 9,
+ "phase_ends_at_ms": 1792670423000,
+ "version": 10,
  "phase_version": 7,
  "kicked": [],
  "memory": [],
  "match": {
-  "match_id": "01a16250-316b-76a9-a84b-0729f8507c66",
-  "seed": "01a16250316b76a9a84b0729f8507c66",
+  "match_id": "01a16258-c315-7560-a468-dc5015d90f48",
+  "seed": "01a16258c3157560a468dc5015d90f48",
   "mode_version": 1,
   "body": {
    "key": "film.party.frame",
    "title_i18n": "modes.film.party.frame.title",
+   "description_i18n": "modes.film.party.frame.description",
    "domain": "film",
    "source": {
     "type": "random",
@@ -98,7 +108,7 @@
       "kinds": [
        "film"
       ],
-      "min_playable": 2
+      "min_playable": 20
      }
     }
    },
@@ -107,12 +117,27 @@
     "params": {
      "levels": [
       {
+       "blur_px": 48,
+       "crop": 0.35,
+       "max_width": 960
+      },
+      {
        "blur_px": 32,
        "crop": 0.5,
        "max_width": 960
       },
       {
+       "blur_px": 20,
+       "crop": 0.7,
+       "max_width": 960
+      },
+      {
        "blur_px": 12,
+       "crop": 1.0,
+       "max_width": 960
+      },
+      {
+       "blur_px": 6,
        "crop": 1.0,
        "max_width": 960
       },
@@ -157,29 +182,38 @@
      "min": 3,
      "max": 6
     },
-    "rounds": 2,
+    "rounds": 10,
     "countdown_s": 3,
     "level_windows_s": [
-     15,
-     15,
-     15
+     20,
+     20,
+     20,
+     20,
+     20,
+     20
     ],
-    "reveal_s": 4,
+    "reveal_s": 5,
     "contest": {
      "type": "parallel",
      "params": {
-      "attempts_per_level": 2,
+      "attempts_per_level": 1,
       "end_when_all_answered": true
      }
     },
     "disconnect_grace_s": 30,
     "chat": {
      "emotes": [
-      "emote.gg",
-      "emote.wow"
+      "match.emotes.wow",
+      "match.emotes.gg",
+      "match.emotes.fire",
+      "match.emotes.laugh",
+      "match.emotes.think"
      ],
      "phrases": [
-      "phrase.good_luck"
+      "match.phrases.good_luck",
+      "match.phrases.well_played",
+      "match.phrases.nice_one",
+      "match.phrases.so_close"
      ]
     }
    }
@@ -188,7 +222,7 @@
    {
     "index": 0,
     "answer": {
-     "media_item_id": "01a16250-316b-76aa-b162-f166bec21e84",
+     "media_item_id": "01a16258-c315-7561-837c-d8f96dc95bc5",
      "domain": "film",
      "kind": "film",
      "title": "Брат",
@@ -201,9 +235,9 @@
      ],
      "persons": [
       {
-       "person_id": "01a16250-316b-76ab-af7b-816946012ccf",
-       "name": "Режиссёр",
-       "normalized": "режиссер",
+       "person_id": "01a16258-c315-7562-af0e-e1c1ca2f4f37",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
        "role": "director"
       }
      ],
@@ -212,15 +246,27 @@
     "levels": [
      {
       "level": 1,
-      "asset_set_id": "01a16250-316b-76ac-83b1-1d3274819f29"
+      "asset_set_id": "01a16258-c315-7563-aedd-b269dac8e4ff"
      },
      {
       "level": 2,
-      "asset_set_id": "01a16250-316b-76ad-85a4-9b309053c024"
+      "asset_set_id": "01a16258-c315-7564-8358-d455e88aabb4"
      },
      {
       "level": 3,
-      "asset_set_id": "01a16250-316b-76ae-892f-b1ff3989c124"
+      "asset_set_id": "01a16258-c315-7565-8154-b8c498e044dd"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-7566-9299-d73a1a66d326"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-7567-a4d9-d4bedb961ce5"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7568-bba2-ffedab6777c6"
      }
     ],
     "options": [],
@@ -229,7 +275,7 @@
    {
     "index": 1,
     "answer": {
-     "media_item_id": "01a16250-316b-76af-9127-9ffc63581dc9",
+     "media_item_id": "01a16258-c315-7569-a586-c4514ffb516c",
      "domain": "film",
      "kind": "film",
      "title": "Сталкер",
@@ -242,9 +288,9 @@
      ],
      "persons": [
       {
-       "person_id": "01a16250-316b-76b0-ad4d-d2c33a9fba98",
-       "name": "Режиссёр",
-       "normalized": "режиссер",
+       "person_id": "01a16258-c315-756a-8457-62fed709f645",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
        "role": "director"
       }
      ],
@@ -253,15 +299,451 @@
     "levels": [
      {
       "level": 1,
-      "asset_set_id": "01a16250-316b-76b1-a0fa-b6408a6d949b"
+      "asset_set_id": "01a16258-c315-756b-885f-56d5a77d2212"
      },
      {
       "level": 2,
-      "asset_set_id": "01a16250-316b-76b2-8c2d-8706a3740d2f"
+      "asset_set_id": "01a16258-c315-756c-b022-dada2fe971e5"
      },
      {
       "level": 3,
-      "asset_set_id": "01a16250-316b-76b3-8915-2c5314102685"
+      "asset_set_id": "01a16258-c315-756d-ba6a-f325504b073b"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-756e-8d70-b743c98bfe6b"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-756f-b1f1-269a7225a757"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7570-9e86-148a455ca5fc"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 2,
+    "answer": {
+     "media_item_id": "01a16258-c315-7571-a491-1f60df74517b",
+     "domain": "film",
+     "kind": "film",
+     "title": "Солярис",
+     "year": 1992,
+     "aliases": [
+      "солярис"
+     ],
+     "title_aliases": [
+      "солярис"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-7572-8533-8f9baf3cc78e",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-7573-a565-17b2da2d6adb"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-7574-8e5a-00cbffd9e301"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-7575-b7ae-a63437c41e90"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-7576-b9d8-53f70a614345"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-7577-830e-be77d14eb607"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7578-aadb-94010142b4a9"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 3,
+    "answer": {
+     "media_item_id": "01a16258-c315-7579-b29d-84543133bfa6",
+     "domain": "film",
+     "kind": "film",
+     "title": "Зеркало",
+     "year": 1993,
+     "aliases": [
+      "зеркало"
+     ],
+     "title_aliases": [
+      "зеркало"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-757a-b5c6-3e61243477c9",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-757b-848f-6048f1923a24"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-757c-93cc-7f89927162db"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-757d-a01c-9a167b564fd2"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-757e-8e1c-f2a0aaa4917a"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-757f-bd25-5604c3a6c6fa"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7580-b44b-2f43c401eb1b"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 4,
+    "answer": {
+     "media_item_id": "01a16258-c315-7581-9f96-ca943df6337b",
+     "domain": "film",
+     "kind": "film",
+     "title": "Ирония судьбы",
+     "year": 1994,
+     "aliases": [
+      "ирония судьбы"
+     ],
+     "title_aliases": [
+      "ирония судьбы"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-7582-b156-99be6cce1317",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-7583-b721-eafc0b6da4a5"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-7584-956b-979ffd126624"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-7585-8cd4-78d9f484c537"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-7586-8ab4-503d25f871da"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-7587-8535-10ee396797fc"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7588-9360-c7fc2084d090"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 5,
+    "answer": {
+     "media_item_id": "01a16258-c315-7589-befe-111e8b3894ea",
+     "domain": "film",
+     "kind": "film",
+     "title": "Кин-дза-дза",
+     "year": 1995,
+     "aliases": [
+      "кин дза дза"
+     ],
+     "title_aliases": [
+      "кин дза дза"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-758a-8d66-5ada65e42e9e",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-758b-8009-1084dc6cea6c"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-758c-acbe-510b0e643efa"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-758d-924b-3c2d63fbd4d5"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-758e-8b03-c926bb1243f5"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-758f-9e33-bec9e7607ba9"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7590-a176-c1a37c8ffaf7"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 6,
+    "answer": {
+     "media_item_id": "01a16258-c315-7591-b682-90c26b05050b",
+     "domain": "film",
+     "kind": "film",
+     "title": "Брат",
+     "year": 1996,
+     "aliases": [
+      "брат"
+     ],
+     "title_aliases": [
+      "брат"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-7592-8089-1f8640e141df",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-7593-b26f-22e297110a5b"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-7594-ab04-3ba4322abaac"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-7595-9390-7a30db1f3120"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-7596-8003-df298716ae91"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-7597-8db5-4a851d39e266"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-7598-aefc-9c9286f60c28"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 7,
+    "answer": {
+     "media_item_id": "01a16258-c315-7599-8db8-7b6b2d65fae8",
+     "domain": "film",
+     "kind": "film",
+     "title": "Сталкер",
+     "year": 1997,
+     "aliases": [
+      "сталкер"
+     ],
+     "title_aliases": [
+      "сталкер"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-759a-8dc9-6779eb795e87",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-759b-b161-baa517962d56"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-759c-b622-ae63d24fa385"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-759d-8c98-2ca6979f3300"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-759e-90ef-0e40fce16fd8"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-759f-add2-e6a22629fcd3"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-75a0-a7ae-3e970474de3b"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 8,
+    "answer": {
+     "media_item_id": "01a16258-c315-75a1-b7f1-b0935fc9731b",
+     "domain": "film",
+     "kind": "film",
+     "title": "Солярис",
+     "year": 1998,
+     "aliases": [
+      "солярис"
+     ],
+     "title_aliases": [
+      "солярис"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-75a2-a209-7a998d6040e7",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-75a3-af87-f6c4c11f76b4"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-75a4-a1c5-59369c31569b"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-75a5-84b2-899043d29bb9"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-75a6-82f8-0dd87b75b477"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-75a7-ad64-edd7b23109a9"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-75a8-96ce-cf693a649623"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 9,
+    "answer": {
+     "media_item_id": "01a16258-c315-75a9-b119-03b0e8f217e8",
+     "domain": "film",
+     "kind": "film",
+     "title": "Зеркало",
+     "year": 1999,
+     "aliases": [
+      "зеркало"
+     ],
+     "title_aliases": [
+      "зеркало"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16258-c315-75aa-a45e-5c8000f64120",
+       "name": "Алексей Балабанов",
+       "normalized": "алексей балабанов",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16258-c315-75ab-90df-ffb4fdbf01dc"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16258-c315-75ac-89ec-59e8ab3e9cbe"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16258-c315-75ad-97b1-c80c5dee0094"
+     },
+     {
+      "level": 4,
+      "asset_set_id": "01a16258-c315-75ae-baa4-08c616e86900"
+     },
+     {
+      "level": 5,
+      "asset_set_id": "01a16258-c315-75af-a254-c1b30e15f487"
+     },
+     {
+      "level": 6,
+      "asset_set_id": "01a16258-c315-75b0-b95e-be60035c482f"
      }
     ],
     "options": [],
@@ -271,21 +753,21 @@
   "collections": [],
   "players": [
    {
-    "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+    "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
     "slot": 0,
     "score": 0,
     "finish": null,
     "disconnected_at_ms": null
    },
    {
-    "user_id": "01a16250-316a-7649-9449-336a1330401d",
+    "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
     "slot": 1,
     "score": 0,
     "finish": null,
     "disconnected_at_ms": null
    },
    {
-    "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+    "user_id": "01a16258-c314-727c-a1c8-69b6c032c308",
     "slot": 2,
     "score": 0,
     "finish": null,
@@ -297,11 +779,11 @@
   "contest": {
    "level": 1,
    "level_opened_at_ms": 1792670403000,
-   "level_ends_at_ms": 1792670418000,
+   "level_ends_at_ms": 1792670423000,
    "level_locked": false,
    "finished": false,
    "players": {
-    "01a16250-316a-7648-b11c-1dc3fc7f9ed1": {
+    "01a16258-c314-727a-a25d-16a4b0e173aa": {
      "active": true,
      "answered_at_ms": null,
      "state": {
@@ -312,12 +794,12 @@
       "guesses": []
      }
     },
-    "01a16250-316a-7649-9449-336a1330401d": {
+    "01a16258-c314-727b-8b10-3668e2bc4019": {
      "active": true,
      "answered_at_ms": null,
      "state": {
-      "level": 1,
-      "attempts_on_level": 1,
+      "level": 2,
+      "attempts_on_level": 0,
       "outcome": null,
       "partial_awarded_level": null,
       "guesses": [
@@ -330,7 +812,7 @@
       ]
      }
     },
-    "01a16250-316a-764a-9443-5112396d7c92": {
+    "01a16258-c314-727c-a1c8-69b6c032c308": {
      "active": true,
      "answered_at_ms": 1792670403000,
      "state": {
@@ -353,12 +835,12 @@
   "clue": {
    "level": 1,
    "kind": "image",
-   "url": "/media/a/01a16250316c753a8cc5d97c5d4e9951.jpg",
-   "expires_at_ms": 1893456000000,
-   "mime": "image/jpeg",
+   "url": "/media/a/01a16258c3157563aeddb269dac8e4ff01.bin",
+   "expires_at_ms": 1767225660000,
+   "mime": "application/octet-stream",
    "meta": {
-    "blur_px": 32.0,
-    "crop": 0.5
+    "blur_px": 48.0,
+    "crop": 0.35
    }
   },
   "final_clue": null,
@@ -372,14 +854,13 @@
   "started_written": true,
   "finished_written": false,
   "grace_ms": 30000,
-  "levels_count": 3,
-  "attempts_per_level": 2,
+  "levels_count": 6,
+  "attempts_per_level": 1,
   "statuses": {
-   "01a16250-316a-7648-b11c-1dc3fc7f9ed1": "thinking",
-   "01a16250-316a-7649-9449-336a1330401d": "thinking",
-   "01a16250-316a-764a-9443-5112396d7c92": "guessed"
+   "01a16258-c314-727a-a25d-16a4b0e173aa": "thinking",
+   "01a16258-c314-727b-8b10-3668e2bc4019": "answered",
+   "01a16258-c314-727c-a1c8-69b6c032c308": "guessed"
   },
-  "skipped": [],
   "clue_pending": false,
   "paused_at_ms": null
  },
@@ -389,7 +870,7 @@
  "close_reason": null,
  "cursor": "0-0",
  "ops": {
-  "01a16250-316a-7649-9449-336a1330401d:op-00000001": {
+  "01a16258-c314-727b-8b10-3668e2bc4019:op-00000001": {
    "status": 200,
    "body": {
     "version": 2,
@@ -406,11 +887,11 @@
       "answer_format": "classic",
       "ranked": false
      },
-     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "host_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
      "players": [
       {
        "slot": 0,
-       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
        "nickname": "host",
        "is_host": true,
        "presence": "online",
@@ -420,7 +901,7 @@
       },
       {
        "slot": 1,
-       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
        "nickname": "p0",
        "is_host": false,
        "presence": "online",
@@ -431,8 +912,8 @@
      ],
      "players_min": 3,
      "settings": {
-      "rounds": 2,
-      "level_window_s": 15,
+      "rounds": 10,
+      "level_window_s": 20,
       "answer_format": "classic",
       "clue_type": "frame_progressive",
       "players_max": 6,
@@ -442,11 +923,17 @@
      "options": null,
      "chat": {
       "emotes": [
-       "emote.gg",
-       "emote.wow"
+       "match.emotes.wow",
+       "match.emotes.gg",
+       "match.emotes.fire",
+       "match.emotes.laugh",
+       "match.emotes.think"
       ],
       "phrases": [
-       "phrase.good_luck"
+       "match.phrases.good_luck",
+       "match.phrases.well_played",
+       "match.phrases.nice_one",
+       "match.phrases.so_close"
       ],
       "free_text": false
      },
@@ -459,7 +946,7 @@
     }
    }
   },
-  "01a16250-316a-7649-9449-336a1330401d:op-00000002": {
+  "01a16258-c314-727b-8b10-3668e2bc4019:op-00000002": {
    "status": 200,
    "body": {
     "version": 3,
@@ -476,11 +963,11 @@
       "answer_format": "classic",
       "ranked": false
      },
-     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "host_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
      "players": [
       {
        "slot": 0,
-       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
        "nickname": "host",
        "is_host": true,
        "presence": "online",
@@ -490,7 +977,7 @@
       },
       {
        "slot": 1,
-       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
        "nickname": "p0",
        "is_host": false,
        "presence": "online",
@@ -501,8 +988,8 @@
      ],
      "players_min": 3,
      "settings": {
-      "rounds": 2,
-      "level_window_s": 15,
+      "rounds": 10,
+      "level_window_s": 20,
       "answer_format": "classic",
       "clue_type": "frame_progressive",
       "players_max": 6,
@@ -512,11 +999,17 @@
      "options": null,
      "chat": {
       "emotes": [
-       "emote.gg",
-       "emote.wow"
+       "match.emotes.wow",
+       "match.emotes.gg",
+       "match.emotes.fire",
+       "match.emotes.laugh",
+       "match.emotes.think"
       ],
       "phrases": [
-       "phrase.good_luck"
+       "match.phrases.good_luck",
+       "match.phrases.well_played",
+       "match.phrases.nice_one",
+       "match.phrases.so_close"
       ],
       "free_text": false
      },
@@ -529,7 +1022,7 @@
     }
    }
   },
-  "01a16250-316a-764a-9443-5112396d7c92:op-00000003": {
+  "01a16258-c314-727c-a1c8-69b6c032c308:op-00000003": {
    "status": 200,
    "body": {
     "version": 4,
@@ -546,11 +1039,11 @@
       "answer_format": "classic",
       "ranked": false
      },
-     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "host_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
      "players": [
       {
        "slot": 0,
-       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
        "nickname": "host",
        "is_host": true,
        "presence": "online",
@@ -560,7 +1053,7 @@
       },
       {
        "slot": 1,
-       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
        "nickname": "p0",
        "is_host": false,
        "presence": "online",
@@ -570,7 +1063,7 @@
       },
       {
        "slot": 2,
-       "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+       "user_id": "01a16258-c314-727c-a1c8-69b6c032c308",
        "nickname": "p1",
        "is_host": false,
        "presence": "online",
@@ -581,8 +1074,8 @@
      ],
      "players_min": 3,
      "settings": {
-      "rounds": 2,
-      "level_window_s": 15,
+      "rounds": 10,
+      "level_window_s": 20,
       "answer_format": "classic",
       "clue_type": "frame_progressive",
       "players_max": 6,
@@ -592,11 +1085,17 @@
      "options": null,
      "chat": {
       "emotes": [
-       "emote.gg",
-       "emote.wow"
+       "match.emotes.wow",
+       "match.emotes.gg",
+       "match.emotes.fire",
+       "match.emotes.laugh",
+       "match.emotes.think"
       ],
       "phrases": [
-       "phrase.good_luck"
+       "match.phrases.good_luck",
+       "match.phrases.well_played",
+       "match.phrases.nice_one",
+       "match.phrases.so_close"
       ],
       "free_text": false
      },
@@ -609,7 +1108,7 @@
     }
    }
   },
-  "01a16250-316a-764a-9443-5112396d7c92:op-00000004": {
+  "01a16258-c314-727c-a1c8-69b6c032c308:op-00000004": {
    "status": 200,
    "body": {
     "version": 5,
@@ -626,11 +1125,11 @@
       "answer_format": "classic",
       "ranked": false
      },
-     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "host_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
      "players": [
       {
        "slot": 0,
-       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
        "nickname": "host",
        "is_host": true,
        "presence": "online",
@@ -640,7 +1139,7 @@
       },
       {
        "slot": 1,
-       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
        "nickname": "p0",
        "is_host": false,
        "presence": "online",
@@ -650,7 +1149,7 @@
       },
       {
        "slot": 2,
-       "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+       "user_id": "01a16258-c314-727c-a1c8-69b6c032c308",
        "nickname": "p1",
        "is_host": false,
        "presence": "online",
@@ -661,8 +1160,8 @@
      ],
      "players_min": 3,
      "settings": {
-      "rounds": 2,
-      "level_window_s": 15,
+      "rounds": 10,
+      "level_window_s": 20,
       "answer_format": "classic",
       "clue_type": "frame_progressive",
       "players_max": 6,
@@ -672,11 +1171,17 @@
      "options": null,
      "chat": {
       "emotes": [
-       "emote.gg",
-       "emote.wow"
+       "match.emotes.wow",
+       "match.emotes.gg",
+       "match.emotes.fire",
+       "match.emotes.laugh",
+       "match.emotes.think"
       ],
       "phrases": [
-       "phrase.good_luck"
+       "match.phrases.good_luck",
+       "match.phrases.well_played",
+       "match.phrases.nice_one",
+       "match.phrases.so_close"
       ],
       "free_text": false
      },
@@ -689,7 +1194,7 @@
     }
    }
   },
-  "01a16250-316a-7648-b11c-1dc3fc7f9ed1:op-00000005": {
+  "01a16258-c314-727a-a25d-16a4b0e173aa:op-00000005": {
    "status": 200,
    "body": {
     "version": 6,
@@ -706,11 +1211,11 @@
       "answer_format": "classic",
       "ranked": false
      },
-     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "host_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
      "players": [
       {
        "slot": 0,
-       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "user_id": "01a16258-c314-727a-a25d-16a4b0e173aa",
        "nickname": "host",
        "is_host": true,
        "presence": "online",
@@ -720,7 +1225,7 @@
       },
       {
        "slot": 1,
-       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "user_id": "01a16258-c314-727b-8b10-3668e2bc4019",
        "nickname": "p0",
        "is_host": false,
        "presence": "online",
@@ -730,7 +1235,7 @@
       },
       {
        "slot": 2,
-       "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+       "user_id": "01a16258-c314-727c-a1c8-69b6c032c308",
        "nickname": "p1",
        "is_host": false,
        "presence": "online",
@@ -741,8 +1246,8 @@
      ],
      "players_min": 3,
      "settings": {
-      "rounds": 2,
-      "level_window_s": 15,
+      "rounds": 10,
+      "level_window_s": 20,
       "answer_format": "classic",
       "clue_type": "frame_progressive",
       "players_max": 6,
@@ -752,34 +1257,40 @@
      "options": null,
      "chat": {
       "emotes": [
-       "emote.gg",
-       "emote.wow"
+       "match.emotes.wow",
+       "match.emotes.gg",
+       "match.emotes.fire",
+       "match.emotes.laugh",
+       "match.emotes.think"
       ],
       "phrases": [
-       "phrase.good_luck"
+       "match.phrases.good_luck",
+       "match.phrases.well_played",
+       "match.phrases.nice_one",
+       "match.phrases.so_close"
       ],
       "free_text": false
      },
      "phase": "countdown",
      "phase_ends_at": "2026-10-22T12:00:03+00:00",
-     "match_id": "01a16250-316b-76a9-a84b-0729f8507c66",
+     "match_id": "01a16258-c315-7560-a468-dc5015d90f48",
      "memory_size": 0,
      "version": 6,
      "server_now": "2026-10-22T12:00:00+00:00"
     }
    }
   },
-  "01a16250-316a-7649-9449-336a1330401d:op-00000006": {
+  "01a16258-c314-727b-8b10-3668e2bc4019:op-00000006": {
    "status": 200,
    "body": {
     "result": "miss",
-    "attempts_left": 1,
-    "level_closed": false,
-    "version": 8,
+    "attempts_left": 0,
+    "level_closed": true,
+    "version": 9,
     "me": {
      "round_index": 0,
-     "status": "thinking",
-     "attempts_left": 1,
+     "status": "answered",
+     "attempts_left": 0,
      "guesses": [
       {
        "level": 1,
@@ -792,13 +1303,13 @@
     }
    }
   },
-  "01a16250-316a-764a-9443-5112396d7c92:op-00000007": {
+  "01a16258-c314-727c-a1c8-69b6c032c308:op-00000007": {
    "status": 200,
    "body": {
     "result": "exact",
     "attempts_left": 0,
     "level_closed": true,
-    "version": 9,
+    "version": 10,
     "me": {
      "round_index": 0,
      "status": "guessed",
