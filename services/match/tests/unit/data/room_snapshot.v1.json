@@ -1,0 +1,819 @@
+{
+ "schema_version": 1,
+ "code": "K7MQ2ZXA",
+ "mode": {
+  "key": "film.party.frame",
+  "version": 1,
+  "domain": "film",
+  "kind": "party",
+  "title_key": "modes.film.party.frame.title",
+  "ranked": false,
+  "ladder": null
+ },
+ "template": {
+  "players_min": 3,
+  "players_max": 6,
+  "rounds": 2,
+  "level_windows_s": [
+   15,
+   15,
+   15
+  ],
+  "answer_format": "classic",
+  "clue_type": "frame_progressive",
+  "visibility": "private",
+  "options": null,
+  "chat": {
+   "emotes": [
+    "emote.gg",
+    "emote.wow"
+   ],
+   "phrases": [
+    "phrase.good_luck"
+   ],
+   "free_text": false
+  },
+  "uses_collection": false,
+  "max_collections": 0
+ },
+ "settings": {
+  "rounds": 2,
+  "level_window_s": null,
+  "answer_format": "classic",
+  "clue_type": "frame_progressive",
+  "players_max": 6,
+  "visibility": "private",
+  "collection_ids": []
+ },
+ "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+ "seats": [
+  {
+   "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+   "slot": 0,
+   "nickname": "host",
+   "joined_at_ms": 1792670400000,
+   "presence": "online",
+   "away": false,
+   "ready": false
+  },
+  {
+   "user_id": "01a16250-316a-7649-9449-336a1330401d",
+   "slot": 1,
+   "nickname": "p0",
+   "joined_at_ms": 1792670400000,
+   "presence": "online",
+   "away": false,
+   "ready": false
+  },
+  {
+   "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+   "slot": 2,
+   "nickname": "p1",
+   "joined_at_ms": 1792670400000,
+   "presence": "online",
+   "away": false,
+   "ready": false
+  }
+ ],
+ "created_at_ms": 1792670400000,
+ "activity_at_ms": 1792670403000,
+ "phase": "level_open",
+ "phase_ends_at_ms": 1792670418000,
+ "version": 9,
+ "phase_version": 7,
+ "kicked": [],
+ "memory": [],
+ "match": {
+  "match_id": "01a16250-316b-76a9-a84b-0729f8507c66",
+  "seed": "01a16250316b76a9a84b0729f8507c66",
+  "mode_version": 1,
+  "body": {
+   "key": "film.party.frame",
+   "title_i18n": "modes.film.party.frame.title",
+   "domain": "film",
+   "source": {
+    "type": "random",
+    "params": {
+     "pool": {
+      "kinds": [
+       "film"
+      ],
+      "min_playable": 2
+     }
+    }
+   },
+   "clue": {
+    "type": "frame_progressive",
+    "params": {
+     "levels": [
+      {
+       "blur_px": 32,
+       "crop": 0.5,
+       "max_width": 960
+      },
+      {
+       "blur_px": 12,
+       "crop": 1.0,
+       "max_width": 960
+      },
+      {
+       "blur_px": 0,
+       "crop": 1.0,
+       "max_width": 960
+      }
+     ]
+    }
+   },
+   "answer": {
+    "format": "classic",
+    "matcher": {
+     "type": "title_alias",
+     "params": {
+      "typo": [
+       {
+        "min_len": 5,
+        "max_distance": 1
+       },
+       {
+        "min_len": 10,
+        "max_distance": 2
+       }
+      ],
+      "accept_same_title": true
+     }
+    },
+    "partial": []
+   },
+   "scoring": {
+    "type": "party_speed",
+    "params": {
+     "max_points": 100,
+     "partial_ratio": 0.5
+    }
+   },
+   "session": {
+    "kind": "party",
+    "players": {
+     "min": 3,
+     "max": 6
+    },
+    "rounds": 2,
+    "countdown_s": 3,
+    "level_windows_s": [
+     15,
+     15,
+     15
+    ],
+    "reveal_s": 4,
+    "contest": {
+     "type": "parallel",
+     "params": {
+      "attempts_per_level": 2,
+      "end_when_all_answered": true
+     }
+    },
+    "disconnect_grace_s": 30,
+    "chat": {
+     "emotes": [
+      "emote.gg",
+      "emote.wow"
+     ],
+     "phrases": [
+      "phrase.good_luck"
+     ]
+    }
+   }
+  },
+  "plan": [
+   {
+    "index": 0,
+    "answer": {
+     "media_item_id": "01a16250-316b-76aa-b162-f166bec21e84",
+     "domain": "film",
+     "kind": "film",
+     "title": "Брат",
+     "year": 1990,
+     "aliases": [
+      "брат"
+     ],
+     "title_aliases": [
+      "брат"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16250-316b-76ab-af7b-816946012ccf",
+       "name": "Режиссёр",
+       "normalized": "режиссер",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16250-316b-76ac-83b1-1d3274819f29"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16250-316b-76ad-85a4-9b309053c024"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16250-316b-76ae-892f-b1ff3989c124"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   },
+   {
+    "index": 1,
+    "answer": {
+     "media_item_id": "01a16250-316b-76af-9127-9ffc63581dc9",
+     "domain": "film",
+     "kind": "film",
+     "title": "Сталкер",
+     "year": 1991,
+     "aliases": [
+      "сталкер"
+     ],
+     "title_aliases": [
+      "сталкер"
+     ],
+     "persons": [
+      {
+       "person_id": "01a16250-316b-76b0-ad4d-d2c33a9fba98",
+       "name": "Режиссёр",
+       "normalized": "режиссер",
+       "role": "director"
+      }
+     ],
+     "partial": []
+    },
+    "levels": [
+     {
+      "level": 1,
+      "asset_set_id": "01a16250-316b-76b1-a0fa-b6408a6d949b"
+     },
+     {
+      "level": 2,
+      "asset_set_id": "01a16250-316b-76b2-8c2d-8706a3740d2f"
+     },
+     {
+      "level": 3,
+      "asset_set_id": "01a16250-316b-76b3-8915-2c5314102685"
+     }
+    ],
+    "options": [],
+    "reveal_asset_set_id": null
+   }
+  ],
+  "collections": [],
+  "players": [
+   {
+    "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+    "slot": 0,
+    "score": 0,
+    "finish": null,
+    "disconnected_at_ms": null
+   },
+   {
+    "user_id": "01a16250-316a-7649-9449-336a1330401d",
+    "slot": 1,
+    "score": 0,
+    "finish": null,
+    "disconnected_at_ms": null
+   },
+   {
+    "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+    "slot": 2,
+    "score": 0,
+    "finish": null,
+    "disconnected_at_ms": null
+   }
+  ],
+  "created_at_ms": 1792670400000,
+  "round_index": 0,
+  "contest": {
+   "level": 1,
+   "level_opened_at_ms": 1792670403000,
+   "level_ends_at_ms": 1792670418000,
+   "level_locked": false,
+   "finished": false,
+   "players": {
+    "01a16250-316a-7648-b11c-1dc3fc7f9ed1": {
+     "active": true,
+     "answered_at_ms": null,
+     "state": {
+      "level": 1,
+      "attempts_on_level": 0,
+      "outcome": null,
+      "partial_awarded_level": null,
+      "guesses": []
+     }
+    },
+    "01a16250-316a-7649-9449-336a1330401d": {
+     "active": true,
+     "answered_at_ms": null,
+     "state": {
+      "level": 1,
+      "attempts_on_level": 1,
+      "outcome": null,
+      "partial_awarded_level": null,
+      "guesses": [
+       {
+        "kind": "text",
+        "level": 1,
+        "verdict": "miss",
+        "display": "мимо"
+       }
+      ]
+     }
+    },
+    "01a16250-316a-764a-9443-5112396d7c92": {
+     "active": true,
+     "answered_at_ms": 1792670403000,
+     "state": {
+      "level": 1,
+      "attempts_on_level": 1,
+      "outcome": "exact",
+      "partial_awarded_level": null,
+      "guesses": [
+       {
+        "kind": "text",
+        "level": 1,
+        "verdict": "exact",
+        "display": "Брат"
+       }
+      ]
+     }
+    }
+   }
+  },
+  "clue": {
+   "level": 1,
+   "kind": "image",
+   "url": "/media/a/01a16250316c753a8cc5d97c5d4e9951.jpg",
+   "expires_at_ms": 1893456000000,
+   "mime": "image/jpeg",
+   "meta": {
+    "blur_px": 32.0,
+    "crop": 0.5
+   }
+  },
+  "final_clue": null,
+  "records": [],
+  "finish": null,
+  "abort_reason": null,
+  "paused": null,
+  "started_at_ms": 1792670403000,
+  "finished_at_ms": null,
+  "standings": [],
+  "started_written": true,
+  "finished_written": false,
+  "grace_ms": 30000,
+  "levels_count": 3,
+  "attempts_per_level": 2,
+  "statuses": {
+   "01a16250-316a-7648-b11c-1dc3fc7f9ed1": "thinking",
+   "01a16250-316a-7649-9449-336a1330401d": "thinking",
+   "01a16250-316a-764a-9443-5112396d7c92": "guessed"
+  },
+  "skipped": [],
+  "clue_pending": false,
+  "paused_at_ms": null
+ },
+ "last_match_id": null,
+ "rematch_votes": [],
+ "rematch_code": null,
+ "close_reason": null,
+ "cursor": "0-0",
+ "ops": {
+  "01a16250-316a-7649-9449-336a1330401d:op-00000001": {
+   "status": 200,
+   "body": {
+    "version": 2,
+    "room": {
+     "code": "K7MQ2ZXA",
+     "visibility": "private",
+     "mode": {
+      "key": "film.party.frame",
+      "version": 1,
+      "domain": "film",
+      "kind": "party",
+      "title_key": "modes.film.party.frame.title",
+      "clue_type": "frame_progressive",
+      "answer_format": "classic",
+      "ranked": false
+     },
+     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "players": [
+      {
+       "slot": 0,
+       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "nickname": "host",
+       "is_host": true,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      },
+      {
+       "slot": 1,
+       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "nickname": "p0",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      }
+     ],
+     "players_min": 3,
+     "settings": {
+      "rounds": 2,
+      "level_window_s": 15,
+      "answer_format": "classic",
+      "clue_type": "frame_progressive",
+      "players_max": 6,
+      "visibility": "private",
+      "collection_ids": []
+     },
+     "options": null,
+     "chat": {
+      "emotes": [
+       "emote.gg",
+       "emote.wow"
+      ],
+      "phrases": [
+       "phrase.good_luck"
+      ],
+      "free_text": false
+     },
+     "phase": "lobby",
+     "phase_ends_at": null,
+     "match_id": null,
+     "memory_size": 0,
+     "version": 2,
+     "server_now": "2026-10-22T12:00:00+00:00"
+    }
+   }
+  },
+  "01a16250-316a-7649-9449-336a1330401d:op-00000002": {
+   "status": 200,
+   "body": {
+    "version": 3,
+    "room": {
+     "code": "K7MQ2ZXA",
+     "visibility": "private",
+     "mode": {
+      "key": "film.party.frame",
+      "version": 1,
+      "domain": "film",
+      "kind": "party",
+      "title_key": "modes.film.party.frame.title",
+      "clue_type": "frame_progressive",
+      "answer_format": "classic",
+      "ranked": false
+     },
+     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "players": [
+      {
+       "slot": 0,
+       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "nickname": "host",
+       "is_host": true,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      },
+      {
+       "slot": 1,
+       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "nickname": "p0",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": true,
+       "score": 0
+      }
+     ],
+     "players_min": 3,
+     "settings": {
+      "rounds": 2,
+      "level_window_s": 15,
+      "answer_format": "classic",
+      "clue_type": "frame_progressive",
+      "players_max": 6,
+      "visibility": "private",
+      "collection_ids": []
+     },
+     "options": null,
+     "chat": {
+      "emotes": [
+       "emote.gg",
+       "emote.wow"
+      ],
+      "phrases": [
+       "phrase.good_luck"
+      ],
+      "free_text": false
+     },
+     "phase": "lobby",
+     "phase_ends_at": null,
+     "match_id": null,
+     "memory_size": 0,
+     "version": 3,
+     "server_now": "2026-10-22T12:00:00+00:00"
+    }
+   }
+  },
+  "01a16250-316a-764a-9443-5112396d7c92:op-00000003": {
+   "status": 200,
+   "body": {
+    "version": 4,
+    "room": {
+     "code": "K7MQ2ZXA",
+     "visibility": "private",
+     "mode": {
+      "key": "film.party.frame",
+      "version": 1,
+      "domain": "film",
+      "kind": "party",
+      "title_key": "modes.film.party.frame.title",
+      "clue_type": "frame_progressive",
+      "answer_format": "classic",
+      "ranked": false
+     },
+     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "players": [
+      {
+       "slot": 0,
+       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "nickname": "host",
+       "is_host": true,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      },
+      {
+       "slot": 1,
+       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "nickname": "p0",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": true,
+       "score": 0
+      },
+      {
+       "slot": 2,
+       "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+       "nickname": "p1",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      }
+     ],
+     "players_min": 3,
+     "settings": {
+      "rounds": 2,
+      "level_window_s": 15,
+      "answer_format": "classic",
+      "clue_type": "frame_progressive",
+      "players_max": 6,
+      "visibility": "private",
+      "collection_ids": []
+     },
+     "options": null,
+     "chat": {
+      "emotes": [
+       "emote.gg",
+       "emote.wow"
+      ],
+      "phrases": [
+       "phrase.good_luck"
+      ],
+      "free_text": false
+     },
+     "phase": "lobby",
+     "phase_ends_at": null,
+     "match_id": null,
+     "memory_size": 0,
+     "version": 4,
+     "server_now": "2026-10-22T12:00:00+00:00"
+    }
+   }
+  },
+  "01a16250-316a-764a-9443-5112396d7c92:op-00000004": {
+   "status": 200,
+   "body": {
+    "version": 5,
+    "room": {
+     "code": "K7MQ2ZXA",
+     "visibility": "private",
+     "mode": {
+      "key": "film.party.frame",
+      "version": 1,
+      "domain": "film",
+      "kind": "party",
+      "title_key": "modes.film.party.frame.title",
+      "clue_type": "frame_progressive",
+      "answer_format": "classic",
+      "ranked": false
+     },
+     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "players": [
+      {
+       "slot": 0,
+       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "nickname": "host",
+       "is_host": true,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      },
+      {
+       "slot": 1,
+       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "nickname": "p0",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": true,
+       "score": 0
+      },
+      {
+       "slot": 2,
+       "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+       "nickname": "p1",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": true,
+       "score": 0
+      }
+     ],
+     "players_min": 3,
+     "settings": {
+      "rounds": 2,
+      "level_window_s": 15,
+      "answer_format": "classic",
+      "clue_type": "frame_progressive",
+      "players_max": 6,
+      "visibility": "private",
+      "collection_ids": []
+     },
+     "options": null,
+     "chat": {
+      "emotes": [
+       "emote.gg",
+       "emote.wow"
+      ],
+      "phrases": [
+       "phrase.good_luck"
+      ],
+      "free_text": false
+     },
+     "phase": "lobby",
+     "phase_ends_at": null,
+     "match_id": null,
+     "memory_size": 0,
+     "version": 5,
+     "server_now": "2026-10-22T12:00:00+00:00"
+    }
+   }
+  },
+  "01a16250-316a-7648-b11c-1dc3fc7f9ed1:op-00000005": {
+   "status": 200,
+   "body": {
+    "version": 6,
+    "room": {
+     "code": "K7MQ2ZXA",
+     "visibility": "private",
+     "mode": {
+      "key": "film.party.frame",
+      "version": 1,
+      "domain": "film",
+      "kind": "party",
+      "title_key": "modes.film.party.frame.title",
+      "clue_type": "frame_progressive",
+      "answer_format": "classic",
+      "ranked": false
+     },
+     "host_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+     "players": [
+      {
+       "slot": 0,
+       "user_id": "01a16250-316a-7648-b11c-1dc3fc7f9ed1",
+       "nickname": "host",
+       "is_host": true,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      },
+      {
+       "slot": 1,
+       "user_id": "01a16250-316a-7649-9449-336a1330401d",
+       "nickname": "p0",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      },
+      {
+       "slot": 2,
+       "user_id": "01a16250-316a-764a-9443-5112396d7c92",
+       "nickname": "p1",
+       "is_host": false,
+       "presence": "online",
+       "away": false,
+       "ready": false,
+       "score": 0
+      }
+     ],
+     "players_min": 3,
+     "settings": {
+      "rounds": 2,
+      "level_window_s": 15,
+      "answer_format": "classic",
+      "clue_type": "frame_progressive",
+      "players_max": 6,
+      "visibility": "private",
+      "collection_ids": []
+     },
+     "options": null,
+     "chat": {
+      "emotes": [
+       "emote.gg",
+       "emote.wow"
+      ],
+      "phrases": [
+       "phrase.good_luck"
+      ],
+      "free_text": false
+     },
+     "phase": "countdown",
+     "phase_ends_at": "2026-10-22T12:00:03+00:00",
+     "match_id": "01a16250-316b-76a9-a84b-0729f8507c66",
+     "memory_size": 0,
+     "version": 6,
+     "server_now": "2026-10-22T12:00:00+00:00"
+    }
+   }
+  },
+  "01a16250-316a-7649-9449-336a1330401d:op-00000006": {
+   "status": 200,
+   "body": {
+    "result": "miss",
+    "attempts_left": 1,
+    "level_closed": false,
+    "version": 8,
+    "me": {
+     "round_index": 0,
+     "status": "thinking",
+     "attempts_left": 1,
+     "guesses": [
+      {
+       "level": 1,
+       "kind": "text",
+       "display": "мимо",
+       "result": "miss"
+      }
+     ],
+     "options": []
+    }
+   }
+  },
+  "01a16250-316a-764a-9443-5112396d7c92:op-00000007": {
+   "status": 200,
+   "body": {
+    "result": "exact",
+    "attempts_left": 0,
+    "level_closed": true,
+    "version": 9,
+    "me": {
+     "round_index": 0,
+     "status": "guessed",
+     "attempts_left": 0,
+     "guesses": [
+      {
+       "level": 1,
+       "kind": "text",
+       "display": "Брат",
+       "result": "exact"
+      }
+     ],
+     "options": []
+    }
+   }
+  }
+ }
+}

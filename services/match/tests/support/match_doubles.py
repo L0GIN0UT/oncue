@@ -47,7 +47,6 @@ from gv_game_kernel import (
     PluginRegistry,
     RoundOutcome,
     RoundResult,
-    RoundState,
     register_builtin,
     register_collection,
 )
@@ -627,4 +626,14 @@ def later(seconds: float) -> timedelta:
     return timedelta(seconds=seconds)
 
 
-__all__ = ["RoundState"]
+@dataclass
+class MemoryPublisher:
+    """``RealtimePublisher`` в памяти: сообщения по каналам (до ``gv_testkit.FakeRealtime``)."""
+
+    messages: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+
+    async def publish(self, channel: str, message: dict[str, Any]) -> None:
+        self.messages.append((channel, message))
+
+    def of(self, channel: str) -> list[dict[str, Any]]:
+        return [m for c, m in self.messages if c == channel]
