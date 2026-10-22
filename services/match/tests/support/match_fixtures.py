@@ -54,6 +54,18 @@ async def migrated_url(database_url: str) -> str:
 AppFactory = Callable[..., Awaitable[MatchApp]]
 
 
+class SlowPlans(FakeRoundPlanPort):
+    """План game, который отвечает дольше ``GV_MATCH__REPLY_TIMEOUT_MS`` (старт — 202)."""
+
+    def __init__(self, delay_s: float) -> None:
+        super().__init__()
+        self._delay_s = delay_s
+
+    async def create_round_plan(self, request: Any) -> Any:
+        await asyncio.sleep(self._delay_s)
+        return await super().create_round_plan(request)
+
+
 @pytest.fixture
 async def app_factory(
     migrated_url: str, redis_url: str, token_issuer: TestTokenIssuer
@@ -64,12 +76,13 @@ async def app_factory(
     await flush.flushdb()
     await flush.aclose()
 
-    async def build(*, rooms: bool = True, **match: Any) -> MatchApp:
+    async def build(*, rooms: bool = True, plan_delay_s: float = 0, **match: Any) -> MatchApp:
         clock = FakeClock(START)
         infra = await Infrastructure.open(settings(migrated_url, redis_url, **match), TABLES, clock)
         stack.push_async_callback(infra.close)
         bodies = seed_bodies()
-        plans = FakeRoundPlanPort(factory=plan_factory(bodies))
+        plans = SlowPlans(plan_delay_s) if plan_delay_s else FakeRoundPlanPort()
+        plans._factory = plan_factory(bodies)
         links = FakeLinkPort(now=START, ttl_s=3600)
         realtime = FakeRealtime()
         adapters = MatchAdapters(

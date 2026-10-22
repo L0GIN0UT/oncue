@@ -443,6 +443,14 @@ class RoomOwner:
 
     async def _start(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
         room.require_startable(cmd.user_id)
+        try:
+            return await self._start_match(room, now)
+        except AppError as exc:
+            # Ответ команды мог уже уйти 202: причина отказа — в лобби-дельте всем.
+            room.fail_start(exc.code, now)
+            raise
+
+    async def _start_match(self, room: Room, now: int) -> Builder:
         match_id = self._new_id()
         request = RoundPlanRequest(
             mode_key=room.mode.key,

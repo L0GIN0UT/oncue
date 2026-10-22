@@ -377,6 +377,42 @@ async def test_open_lobbies_list_and_room_not_found(svc: MatchApp) -> None:
     assert_problem(missing, 404, "match.room_not_found")
 
 
+async def test_start_failure_after_202_is_visible_in_lobby(app_factory: Any) -> None:
+    svc = await app_factory(plan_delay_s=0.3, reply_timeout_ms=50)
+    a, b = svc.user(), svc.user()
+    code = (await svc.create(a, "film.lobby.collection", collection_ids=[str(uuid7())]))["code"]
+    await svc.join(code, b)
+    svc.plans.unavailable()
+    version = (await svc.state(a, code))["room"]["version"]
+    accepted = await svc.post(a, code, "start", expected_version=version)
+    assert accepted.status_code == 202, accepted.text
+    state = await svc.until(a, code, lambda s: s["room"]["start_error"] is not None)
+    assert state["room"]["phase"] == "lobby"
+    assert state["room"]["start_error"]["code"] == "match.game_unavailable"
+    lobby = [m for m in _channel(svc, code) if m["kind"] == "lobby"]
+    assert lobby[-1]["delta"]["room"]["start_error"]["code"] == "match.game_unavailable"
+    svc.realtime.assert_versions_contiguous(f"room:{code}")
+    # Смена настроек сбрасывает причину.
+    changed = await svc.ok(a, code, "settings", settings={"rounds": 10})
+    assert changed["room"]["start_error"] is None
+
+
+async def test_clue_and_format_overrides_not_supported_yet(svc: MatchApp) -> None:
+    a = svc.user()
+    room = await svc.create(a, "film.lobby.collection", collection_ids=[str(uuid7())])
+    assert room["options"]["clue_type"] is None and room["options"]["answer_format"] is None
+    for field, value in (("clue_type", "frame_progressive"), ("answer_format", "classic")):
+        response = await svc.post(a, room["code"], "settings", settings={field: value})
+        problem = assert_problem(response, 422, "match.setting_not_allowed")
+        assert problem["details"] == {"field": field, "reason": "not_supported_yet"}
+    created = await svc.client.post(
+        "/v1/rooms",
+        json={"mode_key": "music.duel.classic", "settings": {"answer_format": "classic"}},
+        headers={**svc.user().headers, "Idempotency-Key": "idem-override-1"},
+    )
+    assert_problem(created, 422, "match.setting_not_allowed")
+
+
 async def test_plan_failure_keeps_lobby_and_admin_abort(svc: MatchApp) -> None:
     a, b = svc.user(), svc.user()
     code = (await svc.create(a, "music.duel.classic"))["code"]
@@ -385,6 +421,8 @@ async def test_plan_failure_keeps_lobby_and_admin_abort(svc: MatchApp) -> None:
     version = (await svc.state(a, code))["room"]["version"]
     small = await svc.post(a, code, "start", expected_version=version)
     assert_problem(small, 422, "match.pool_too_small")
+    failed = (await svc.state(a, code))["room"]["start_error"]
+    assert failed["code"] == "match.pool_too_small"
     svc.plans.unavailable()
     down = await svc.post(a, code, "start", expected_version=version)
     assert_problem(down, 503, "match.game_unavailable")

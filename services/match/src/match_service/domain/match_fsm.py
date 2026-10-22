@@ -195,6 +195,7 @@ def _match(room: Room) -> MatchState:
 def begin(room: Room, match: MatchState, rules: MatchRules, now_ms: int) -> None:
     """Матч получен (план есть): отсчёт ``countdown_s``."""
     room.match = match
+    room.start_error = None
     room.rematch_votes.clear()
     room.rematch_code = None
     for seat in room.seats:

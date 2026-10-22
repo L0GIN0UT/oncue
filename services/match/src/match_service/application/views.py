@@ -90,8 +90,9 @@ def room_view(room: Room, now_ms: int) -> Json:
         options = {
             "rounds": list(o.rounds) if o.rounds else None,
             "level_window_s": list(o.level_window_s) if o.level_window_s else None,
-            "answer_format": list(o.answer_format) if o.answer_format else None,
-            "clue_type": list(o.clue_type) if o.clue_type else None,
+            # Хвост 4a: загадку и формат план game пока не принимает (не предлагаем).
+            "answer_format": None,
+            "clue_type": None,
             "players_max": list(o.players_max) if o.players_max else None,
             "visibility": list(o.visibility) if o.visibility else None,
             "max_collections": t.max_collections if t.uses_collection else None,
@@ -128,6 +129,11 @@ def room_view(room: Room, now_ms: int) -> Json:
         "match_id": str(match_id) if match_id is not None else None,
         "memory_size": len(room.memory),
         "rematch_code": room.rematch_code,
+        "start_error": (
+            {"code": room.start_error[0], "at": iso(room.start_error[1])}
+            if room.start_error is not None
+            else None
+        ),
         "version": room.version,
         "server_now": iso(now_ms),
     }

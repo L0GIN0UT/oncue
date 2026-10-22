@@ -57,6 +57,11 @@ class SettingsChange:
     collection_ids: tuple[UUID, ...] | None = None
 
 
+NOT_SUPPORTED_YET = frozenset({"answer_format", "clue_type"})
+"""Переопределения, которых пока нет в плане game (``RoundPlanRequest`` без загадки и
+формата): хвост 4a — 422 ``match.setting_not_allowed`` с ``reason = not_supported_yet``."""
+
+
 def _not_allowed(name: str) -> MatchInvalidError:
     return MatchInvalidError(
         "значение настройки не разрешено шаблоном",
@@ -76,7 +81,14 @@ def apply_settings(
     """
     options = template.options
     values: dict[str, Any] = {}  # Any: значения разных типов полей RoomSettings
-    for name in ("rounds", "level_window_s", "answer_format", "clue_type", "players_max"):
+    for name in sorted(NOT_SUPPORTED_YET):
+        if getattr(change, name) is not None:
+            raise MatchInvalidError(
+                "переопределение пока не поддерживается",
+                code=errors.SETTING_NOT_ALLOWED,
+                details={"field": name, "reason": "not_supported_yet"},
+            )
+    for name in ("rounds", "level_window_s", "players_max"):
         value = getattr(change, name)
         if value is None:
             continue
@@ -131,6 +143,8 @@ class Room:
         memory: Сыгранные единицы лобби (``exclude_ids`` плана, D12).
         phase_version: Версия, с которой действует текущая фаза и уровень: команда фазы
             с ``expected_version`` меньше неё — из прошлой фазы (409).
+        start_error: Последний отказ старта ``(код, мс)``: команда могла получить 202, а
+            план game не пришёл — игроки видят причину в ``RoomView.start_error``.
         changes: Изменения с последнего снимка (в снимок не входят).
     """
 
@@ -156,6 +170,7 @@ class Room:
     cursor: str = "0-0"
     ops: dict[str, dict[str, Any]] = field(default_factory=dict)  # Any: JSON ответа
     schema_version: int = SCHEMA_VERSION
+    start_error: tuple[str, int] | None = None
     changes: list[Change] = field(default_factory=list)
 
     # ------------------------------------------------------------------ создание
@@ -384,6 +399,7 @@ class Room:
                 "игроков больше нового числа мест", code=errors.PLAYERS_OVER_LIMIT
             )
         self.settings = settings
+        self.start_error = None
         for seat in self.seats:
             seat.ready = False
         self.touch(now_ms)
@@ -430,6 +446,12 @@ class Room:
         """Добавить единицы матча в память лобби (не больше ``limit`` последних)."""
         merged = list(dict.fromkeys([*self.memory, *items]))
         self.memory = merged[-limit:] if limit > 0 else []
+
+    def fail_start(self, code: str, now_ms: int) -> None:
+        """Старт не удался (план game): причина видна всем в лобби."""
+        self.start_error = (code, now_ms)
+        self.touch(now_ms)
+        self.emit("lobby")
 
     def require_startable(self, user_id: UUID) -> None:
         """Проверки старта: хост, лобби, игроков ≥ минимума, остальные готовы.

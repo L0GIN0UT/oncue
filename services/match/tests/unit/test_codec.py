@@ -29,7 +29,11 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
     guessed = [p for p in room.match.contest.players.values() if p.state.guesses]
     assert len(guessed) == 2
     if SCHEMA_VERSION == 1:
-        assert encode(room) == data
+        # Поля, добавленные после сохранения снимка (start_error), читаются по умолчанию,
+        # остальное не меняется при перезаписи.
+        encoded = encode(room)
+        assert {k: encoded[k] for k in data} == data
+        assert encoded["start_error"] is None
 
 
 async def test_live_room_round_trips_through_snapshot() -> None:

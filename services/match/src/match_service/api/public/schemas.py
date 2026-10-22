@@ -105,7 +105,11 @@ class RoomSettings(BaseModel):
 
 
 class SettingsOptions(BaseModel):
-    """Что хост может выбрать (``session.lobby.overridable`` шаблона, D12); ``null`` — нельзя."""
+    """Что хост может выбрать (``session.lobby.overridable`` шаблона, D12); ``null`` — нельзя.
+
+    ``answer_format`` и ``clue_type`` в 4a всегда ``null``: план game их пока не принимает
+    (выбор — 422 ``match.setting_not_allowed``, ``details.reason = not_supported_yet``).
+    """
 
     rounds: list[int] | None = None
     level_window_s: list[int] | None = None
@@ -135,6 +139,13 @@ class PlayerSlot(BaseModel):
     away: bool = Field(default=False, description="Игрок отметил «отошёл» (`match/away`)")
     ready: bool = Field(description="Готовность в лобби; сбрасывается при смене настроек")
     score: int = Field(default=0, ge=0, description="Очки в текущем матче")
+
+
+class StartError(BaseModel):
+    """Последний отказ старта матча (план game не получен) — виден всем в лобби."""
+
+    code: str = Field(description="`match.game_unavailable`, `match.pool_too_small` и т. п.")
+    at: datetime
 
 
 class RoomView(BaseModel):
@@ -167,6 +178,13 @@ class RoomView(BaseModel):
         description=(
             "Код комнаты реванша, когда согласились все (у кастомного лобби — свой код: "
             "комната возвращается в лобби); старая комната дуэли и party закрывается"
+        ),
+    )
+    start_error: StartError | None = Field(
+        default=None,
+        description=(
+            "Почему не начался матч (старт мог ответить 202 до отказа game); "
+            "сбрасывается при следующем старте или смене настроек"
         ),
     )
     version: int = Field(ge=0)
