@@ -8,8 +8,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { devApiOrigin } from "@/shared/lib/dev-api";
 
-/** Политика для страниц. `style-src-attr 'unsafe-inline'` — только атрибуты `style` (React SSR). */
-export function buildCsp(nonce: string, dev: boolean): string {
+/** Хост из заголовка `Host` (gateway передаёт свой) — только безопасный вид `имя[:порт]`. */
+const HOST_RE = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?$/i;
+
+export function wsSourceOf(host: string | null | undefined): string | null {
+  return host && HOST_RE.test(host) ? `wss://${host.toLowerCase()}` : null;
+}
+
+/**
+ * Политика для страниц. `style-src-attr 'unsafe-inline'` — только атрибуты `style` (React SSR).
+ * `connect-src` явно разрешает `wss://` своего хоста: realtime комнат (Centrifugo за gateway,
+ * ADR 0035), а `'self'` для WebSocket браузеры трактуют неодинаково (D5 плана этапа 4).
+ */
+export function buildCsp(nonce: string, dev: boolean, host: string | null = null): string {
+  const ws = wsSourceOf(host);
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -19,7 +31,7 @@ export function buildCsp(nonce: string, dev: boolean): string {
     "img-src 'self' blob: data:",
     "media-src 'self' blob:",
     "font-src 'self'",
-    `connect-src 'self'${dev ? " ws:" : ""}`,
+    `connect-src 'self'${ws ? ` ${ws}` : ""}${dev ? " ws:" : ""}`,
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -39,7 +51,11 @@ export function proxy(request: NextRequest): NextResponse {
   if (rewritten) return rewritten;
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = buildCsp(nonce, process.env.NODE_ENV === "development");
+  const csp = buildCsp(
+    nonce,
+    process.env.NODE_ENV === "development",
+    request.headers.get("host") ?? request.nextUrl.host,
+  );
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", csp);

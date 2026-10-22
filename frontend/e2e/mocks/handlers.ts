@@ -7,6 +7,8 @@ import type { MockWorld } from "./world";
 import { MODES, itemById } from "./world";
 import { audioWav, frameSvg } from "./media";
 import { createUgcHandlers } from "./handlers-3b";
+import { createMatchHandlers } from "./handlers-match";
+import { onlineModesOut, type MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
 const CSRF = "gv_csrf";
@@ -62,7 +64,7 @@ function withCookies(response: Response, cookies: string[]): Response {
   return response;
 }
 
-export function createHandlers(world: MockWorld): HttpHandler[] {
+export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpHandler[] {
   const g = "*/api/game/v1";
 
   /** Общая обвязка хода: субъект, CSRF, идемпотентность, версия. */
@@ -130,6 +132,11 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
       const params = new URL(request.url).searchParams;
       const domain = params.get("domain");
       const kind = params.get("kind") ?? "play";
+      if (params.get("session") === "online")
+        return HttpResponse.json(
+          onlineModesOut().filter((m) => !domain || m.domain === domain),
+          { headers: { "Cache-Control": "public, max-age=30" } },
+        );
       if (kind !== "play" && kind !== "collection") return problem(422, "common.validation_failed");
       const list = kind === "collection" ? COLLECTION_MODES : MODES;
       return HttpResponse.json(
@@ -401,6 +408,9 @@ export function createHandlers(world: MockWorld): HttpHandler[] {
 
     // ---------------------------------------------------------------- этап 3b
     ...createUgcHandlers(world),
+
+    // ---------------------------------------------------------------- этап 4a: онлайн
+    ...(matchWorld ? createMatchHandlers(world, matchWorld) : []),
 
     // ---------------------------------------------------------------- identity
     http.post("*/api/identity/v1/auth/guest", ({ request }) => {
