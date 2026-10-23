@@ -146,3 +146,20 @@ export type LeaderboardCard = B["LeaderboardCard"];
 export type LeaderboardEntry = B["LeaderboardEntryCard"];
 export type LadderCard = B["LadderCard"];
 export type { MatchChange, MatchChanges } from "./rating-types";
+
+// Этап 5a: прогрессия (bff — профиль и свёртка главной; спин колеса — прямо в progression).
+export type ProfilePage = B["ProfilePage"];
+export type PlayerPage = B["PlayerPage"];
+export type PublicProgressCard = B["PublicProgressCard"];
+export type ProgressCard = B["ProgressCard"];
+export type StreakCard = B["StreakCard"];
+export type WalletCard = B["WalletCard"];
+export type QuestCard = B["QuestCard"];
+export type QuestsCard = B["QuestsCard"];
+export type BadgeCard = B["BadgeCard"];
+export type WheelCard = B["WheelCard"];
+export type WheelSectorCard = B["WheelSectorCard"];
+export type SpinCard = B["SpinCard"];
+export type PrizeCard = B["PrizeCard"];
+export type HomeProgressCard = B["HomeProgressCard"];
+export type { SpinResult } from "./progression-types";

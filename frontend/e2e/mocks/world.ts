@@ -18,6 +18,7 @@ import type {
   Suggestion,
 } from "@/shared/api/types";
 import { dayIn, nextMidnight } from "@/features/daily/countdown-time";
+import { ProgressionWorld } from "./progression";
 import { COLLECTION_MODES, UgcWorld } from "./ugc";
 
 export type Domain = "music" | "film";
@@ -419,6 +420,14 @@ export type Scenario = {
    * свежую ссылку даёт только `POST .../final-clue`.
    */
   staleRevealLinks?: boolean;
+  /** Этап 5a: блоки профиля (`progress`, `wallet`, `quests`, `badges`, `wheel`) и `home`, которые гаснут. */
+  progressDown?: string[];
+  /** Этап 5a: спин колеса отвечает 409 `progression.wheel_disabled`. */
+  spinConflict?: boolean;
+  /** Этап 5a: первый спин обрывается сетью (повтор проходит). */
+  spinNetworkOnce?: boolean;
+  /** Этап 5a: игрок уже крутил в другой вкладке — первый спин вернёт `repeated: true`. */
+  spunElsewhere?: boolean;
 };
 
 type Asset =
@@ -474,6 +483,8 @@ export class MockWorld {
   users: MockUser[] = BASE_USERS.map((u) => ({ ...u }));
   /** Сборники и медиатека (этап 3b). */
   ugc = new UgcWorld();
+  /** Прогрессия (этап 5a): сегодняшние спины колеса. */
+  progression = new ProgressionWorld();
   scenario: Scenario = {};
   /** Субъекты, чья refresh-сессия отозвана (refresh отвечает 401). */
   revokedRefresh = new Set<string>();
@@ -499,6 +510,7 @@ export class MockWorld {
     this.finalClueCalls = 0;
     this.users = BASE_USERS.map((u) => ({ ...u }));
     this.ugc.reset();
+    this.progression.reset();
     this.seq = 0;
   }
 
