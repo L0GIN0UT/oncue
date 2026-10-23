@@ -84,6 +84,12 @@ test("рейтинговая дуэль: очередь → матч → сда�
     for (const p of players) {
       await expect(p.page.getByTestId("match-round")).toContainText("Раунд 1", { timeout: 60_000 });
     }
+    // Сдача до конца отсчёта — срыв отсчёта: матч не записывается, рейтинг не меняется
+    // (ADR 0038). Поэтому ждём, пока отсчёт закончится и раунд пойдёт по-настоящему.
+    for (const p of players) {
+      await expect(p.page.getByTestId("countdown")).toHaveCount(0, { timeout: 30_000 });
+      await expect(p.page.getByTestId("phase-timer")).toBeVisible();
+    }
     // В идущем матче элемента `room-code` нет (он только в лобби) — код берём из адреса.
     await expect(a.page).toHaveURL(`/room/${code}`);
   });
