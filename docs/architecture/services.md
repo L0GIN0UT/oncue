@@ -33,7 +33,7 @@
 - **Реализация:** Nginx (на VPS) → Envoy/Ingress (в Kubernetes). Конфиг декларативный и лежит в `infra/`.
 
 ### bff-web
-- **Отвечает за:** агрегацию данных под экраны веб-клиента — `GET /api/web/v1/session`, `/pages/home`, `/pages/solo`, `/pages/results/{session_id}`, `/pages/online`, `/pages/match/{id}`; источник данных для SSR Next.js.
+- **Отвечает за:** агрегацию данных под экраны веб-клиента — `GET /api/web/v1/session`, `/pages/home`, `/pages/solo`, `/pages/results/{session_id}`, `/pages/online`, `/pages/leaderboards`, `/pages/match/{id}`; источник данных для SSR Next.js.
 - **Не отвечает за:** доменную логику, хранение данных и **команды**: bff только читает ([ADR 0017](../adr/0017-frontend-nextjs-bff-read-only.md)). Ходы игры браузер шлёт прямо в game, автокомплит — в catalog.
 - **Данные:** нет БД; Redis — кэш публичных данных (`game /v1/modes` 30 с, карточки catalog 5 мин). Личные блоки не кэшируются. Онлайн только с аккаунтом: гость получает `{status: "auth_required"}` без вызовов ([ADR 0036](../adr/0036-online-account-only-chat-and-ratings.md)); детали — `services/bff_web/CLAUDE.md`.
 - **Вызывает:** game (`/v1/modes`, `/v1/daily`, `/v1/sessions/{id}/result`), identity (`/v1/me`), catalog (`/v1/items/{id}`), match (открытые комнаты, «Мои матчи», итог матча), library (флаги «в медиатеке» для итога матча) — с токеном пользователя как `Bearer`; токен проверяется локально по JWKS.
@@ -177,7 +177,7 @@
 
 | Вызывающий | Вызываемый | Зачем | Если недоступен |
 |---|---|---|---|
-| bff-web | game, identity, catalog, collections, library, match | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
+| bff-web | game, identity, catalog, collections, library, match, rating | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
 | game | media-pipeline (internal, сервисный токен) | Подписанная ссылка на ассет уровня и ревила | Ретрай; 503 `game.assets_unavailable` |
 | game, admin | identity (internal) | Сервисный токен (client credentials) | Старый токен до `exp`, затем вызов не выполняется |
 | match | game (internal `round-plans`, тело конфига режима) | План раундов при старте матча, [ADR 0033](../adr/0033-match-round-plan-from-game.md) | Отказ старта: `start_error` в лобби, повтор хостом |
