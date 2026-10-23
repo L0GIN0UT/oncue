@@ -530,6 +530,7 @@ services:
       GV_DATABASE_URL: postgresql+asyncpg://progression:${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}@postgres:5432/progression
       GV_DATABASE_POOL_SIZE: "5"
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
     depends_on:
       progression-migrate: {condition: service_completed_successfully}
       redpanda: {condition: service_healthy}
