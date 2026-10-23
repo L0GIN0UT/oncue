@@ -287,7 +287,7 @@ class RandomSource:
 
     key: ClassVar[str] = "random"
     params_schema: ClassVar[type[BaseModel]] = RandomParams
-    answer_formats: ClassVar[frozenset[str]] = CLASSIC_ONLY
+    answer_formats: ClassVar[frozenset[str]] = frozenset({CLASSIC_FORMAT, PICK_FORMAT})
 
     async def draw(self, ctx: DrawContext, params: BaseModel, n: int) -> list[MediaItemRef]:
         """``n`` единиц пула ∧ фильтров пресета ``ctx.preset_id``.

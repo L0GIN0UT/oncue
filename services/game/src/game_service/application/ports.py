@@ -21,6 +21,7 @@ from game_service.domain.projection import (
     ClueAssets,
     CollectionItem,
     CollectionProj,
+    LadderProj,
 )
 from game_service.domain.session import GameSession, PlayerRef
 from gv_core.uow import UnitOfWork
@@ -223,6 +224,18 @@ class CollectionRepository(Protocol):
         ...
 
 
+class LadderRepository(Protocol):
+    """Проекция ключей ladder-ов из ``rating.rating.v1`` (ADR 0037)."""
+
+    async def get(self, ladder: str, *, for_update: bool = False) -> LadderProj | None:
+        """Ladder или ``None`` (rating ещё не публиковал)."""
+        ...
+
+    async def save(self, proj: LadderProj) -> None:
+        """Записать (создать или заменить) ladder."""
+        ...
+
+
 # ---------------------------------------------------------------- сессии
 class SessionRepository(Protocol):
     """Соло-сессии."""
@@ -374,6 +387,7 @@ class GameUnitOfWork(UnitOfWork, Protocol):
     bracket_stats: BracketStatsRepository
     asset_requests: AssetRequestRepository
     collections: CollectionRepository
+    ladders: LadderRepository
 
     def candidates_for(self, also: PlayableFor | None) -> CandidatePort:
         """``CandidatePort`` с дополнительным требованием второго набора ассетов."""

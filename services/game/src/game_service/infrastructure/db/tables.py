@@ -162,6 +162,19 @@ collection_items_proj = Table(
     CheckConstraint("position >= 0 AND position < 200", name="position_valid"),
 )
 
+# Этап 4b (ADR 0037): ключи ladder-ов rating из ``rating.LadderPublished`` — game проверяет
+# ими ``session.ladder`` режима, не обращаясь к rating. Порядок защищает ``version``.
+ladders_proj = Table(
+    "ladders_proj",
+    _md,
+    Column("ladder", String(64), primary_key=True),
+    Column("domain", String(16), nullable=False),
+    Column("version", BigInteger, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("version >= 1", name="version_positive"),
+    CheckConstraint("domain IN ('music', 'film')", name="domain_valid"),
+)
+
 # ---------------------------------------------------------------- наборы дня
 daily_sets = Table(
     "daily_sets",

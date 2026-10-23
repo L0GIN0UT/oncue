@@ -707,3 +707,7 @@ class DistractorSource(Protocol):
             PoolTooSmallError: подходящих кандидатов меньше ``count`` или ``min_pool``.
         """
         ...
+
+    def cross_check(self, params: BaseModel, *, count: int) -> list[ParamIssue]:
+        """Перекрёстная проверка параметров с ``answer.params.distractors.count``."""
+        ...

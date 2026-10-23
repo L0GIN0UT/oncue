@@ -37,6 +37,7 @@ from game_service.application.ports import (
     CollectionRepository,
     DailySetRepository,
     DailyStatsRepository,
+    LadderRepository,
     ModeConfigRepository,
     PlayerRecord,
     ProjectionRepository,
@@ -55,6 +56,7 @@ from game_service.domain.projection import (
     CollectionProj,
     CollectionStatus,
     ItemStatus,
+    LadderProj,
 )
 from game_service.domain.session import (
     STATE_SCHEMA,
@@ -81,6 +83,7 @@ from game_service.infrastructure.db.tables import (
     daily_sets,
     game_sessions,
     idempotency_keys,
+    ladders_proj,
     mode_config_drafts,
     mode_configs,
     player_records,
@@ -937,6 +940,43 @@ class SqlCollectionRepository:
         return [_to_item(r).to_ref() for r in rows]
 
 
+class SqlLadderRepository:
+    """Проекция ключей ladder-ов (``ladders_proj``, ADR 0037)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, ladder: str, *, for_update: bool = False) -> LadderProj | None:
+        """Ladder или ``None``."""
+        query = select(ladders_proj).where(ladders_proj.c.ladder == ladder)
+        if for_update:
+            query = query.with_for_update()
+        row = (await self._s.execute(query)).mappings().first()
+        if row is None:
+            return None
+        return LadderProj(
+            ladder=row["ladder"],
+            domain=row["domain"],
+            version=row["version"],
+            updated_at=row["updated_at"],
+        )
+
+    async def save(self, proj: LadderProj) -> None:
+        """Создать или заменить ladder."""
+        values = {"domain": proj.domain, "version": proj.version, "updated_at": proj.updated_at}
+        await self._s.execute(
+            pg_insert(ladders_proj)
+            .values(ladder=proj.ladder, **values)
+            .on_conflict_do_update(
+                index_elements=[ladders_proj.c.ladder],
+                set_=values,
+                # Порядок защищает версия и на уровне SQL: параллельная устаревшая запись
+                # (гонка двух потребителей) не перезапишет более новую.
+                where=ladders_proj.c.version < pg_insert(ladders_proj).excluded.version,
+            )
+        )
+
+
 class SqlCollectionPort:
     """``CollectionPort`` ядра поверх проекции сборников (ограничение — ``candidate_limit``).
 
@@ -1579,6 +1619,7 @@ class SqlGameUnitOfWork:
     bracket_stats: BracketStatsRepository
     asset_requests: AssetRequestRepository
     collections: CollectionRepository
+    ladders: LadderRepository
 
     def __init__(
         self,
@@ -1627,6 +1668,7 @@ class SqlGameUnitOfWork:
         self.asset_requests = SqlAssetRequestRepository(s)
         self._collections = SqlCollectionRepository(s)
         self.collections = self._collections
+        self.ladders = SqlLadderRepository(s)
         self._projection = projection
         return self
 

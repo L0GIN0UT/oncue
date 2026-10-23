@@ -301,6 +301,7 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         PreferenceParams,
         RaceParams,
         RandomParams,
+        SimilarDistractorParams,
         SoundtrackParams,
         StreakParams,
         TitleAliasParams,
@@ -336,6 +337,7 @@ def _plugin_models() -> list[tuple[str, type[BaseModel], Path]]:
         ("lives", LivesParams, params / "end.lives.v1.json"),
         ("race", RaceParams, params / "contest.race.v1.json"),
         ("parallel", ParallelParams, params / "contest.parallel.v1.json"),
+        ("similar", SimilarDistractorParams, params / "distractor.similar.v1.json"),
     ]
 
 

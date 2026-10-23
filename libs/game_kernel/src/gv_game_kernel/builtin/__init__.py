@@ -9,7 +9,8 @@
 * matcher-ы ``title_alias`` и ``metric_compare``, ``preference``; частичный ответ ``artist``;
 * очки ``by_level``, ``by_speed`` и ``streak``, ``none``, ``party_speed`` (этап 4);
 * форматы ответа ``classic``, ``pick``; правила завершения ``all_rounds``, ``lives``;
-* правила состязания матча ``race``, ``parallel`` (этап 4, ADR 0032).
+* правила состязания матча ``race``, ``parallel`` (этап 4, ADR 0032);
+* источники дистракторов ``similar`` (этап 4b, ADR 0040).
 
 Источник ``collection`` готов, но регистрируется отдельно (``register_collection``) — в
 game вместе с проекциями сборников (этап 3b).
@@ -46,6 +47,7 @@ from gv_game_kernel.builtin.contests import (
     RaceContest,
     RaceParams,
 )
+from gv_game_kernel.builtin.distractors import SimilarDistractorParams, SimilarDistractors
 from gv_game_kernel.builtin.end_rules import AllRoundsEnd, AllRoundsParams, LivesEnd, LivesParams
 from gv_game_kernel.builtin.matching import (
     HIGHER,
@@ -131,6 +133,7 @@ def register_builtin(registry: PluginRegistry) -> PluginRegistry:
     registry.register_end_rule(LivesEnd())
     registry.register_contest(RaceContest())
     registry.register_contest(ParallelContest())
+    registry.register_distractors(SimilarDistractors())
     return registry
 
 
@@ -199,6 +202,8 @@ __all__ = [
     "RaceParams",
     "RandomParams",
     "RandomSource",
+    "SimilarDistractorParams",
+    "SimilarDistractors",
     "SoundtrackClue",
     "SoundtrackParams",
     "StreakParams",

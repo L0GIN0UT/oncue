@@ -43,6 +43,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from gv_core.errors import GoneError
+from gv_core.random import SeededRandom
 from gv_game_kernel.contest import ContestRoundState, PlayerRoundView
 from gv_game_kernel.errors import (
     AnswerKindError,
@@ -65,6 +66,7 @@ from gv_game_kernel.plugins import (
     Comparison,
     ComparisonSource,
     ContestRule,
+    DistractorSource,
     DrawContext,
     EndRule,
     LevelSpec,
@@ -108,6 +110,9 @@ from gv_game_kernel.round import (
 )
 from gv_game_kernel.spec import ModeConfig, OnlineSessionSpec, SoloSessionSpec, solo_end
 from gv_text import CONJUNCTION_REPLACEMENTS, NormalizerConfig, TitleNormalizer
+
+DISTRACTOR_SEED_SUFFIX = b"|distractors"
+"""Соль seed розыгрыша дистракторов: поток случайности отделён от выбора загаданных единиц."""
 
 DEFAULT_CANDIDATE_LIMIT = 5000
 """Сколько кандидатов запросить у ``CandidatePort``, если game не задал своё значение."""
@@ -200,6 +205,7 @@ class ModeEngine:
         reveal: Тип загадки ревила (``clue.reveal``) или ``None``.
         normalizer: Нормализатор ответов (по умолчанию ``answer_normalizer()``).
         contest: Правило состязания онлайн-сессии (``session.contest``) или ``None``.
+        distractors: Источник дистракторов (``answer.params.distractors``) или ``None``.
 
     Raises:
         pydantic.ValidationError: параметры не проходят схему плагина (``build`` такой
@@ -220,6 +226,7 @@ class ModeEngine:
         reveal: ClueType | None = None,
         normalizer: TitleNormalizer | None = None,
         contest: ContestRule | None = None,
+        distractors: DistractorSource | None = None,
     ) -> None:
         self.config = config
         self.clue = clue
@@ -231,6 +238,14 @@ class ModeEngine:
         self.end_rule = end_rule
         self.reveal = reveal
         self.contest = contest
+        self.distractors = distractors
+        spec = config.answer.params.distractors if config.answer.params is not None else None
+        self.distractor_count: int | None = spec.count if spec is not None else None
+        self.distractor_params: BaseModel | None = (
+            distractors.params_schema.model_validate(spec.params)
+            if distractors is not None and spec is not None
+            else None
+        )
         session = config.session
         self.contest_params: BaseModel | None = (
             contest.params_schema.model_validate(session.contest.params)
@@ -387,8 +402,12 @@ class ModeEngine:
         )
 
     def min_playable(self) -> int:
-        """Минимум играбельных единиц пула для публикации конфига."""
-        return self.source.min_playable(self.source_params, rounds=self.config.session.rounds)
+        """Минимум играбельных единиц пула для публикации конфига.
+
+        С дистракторами (ADR 0040) — не меньше ``count + 1``: верный вариант и неверные.
+        """
+        base = self.source.min_playable(self.source_params, rounds=self.config.session.rounds)
+        return max(base, (self.distractor_count or 0) + 1)
 
     def draw_context(
         self,
@@ -470,10 +489,60 @@ class ModeEngine:
         count = n or self.config.session.rounds
         if isinstance(self.source, RoundSource):
             return await self.source.draw_rounds(ctx, self.source_params, count)
-        return [
+        draws = [
             RoundDraw(target=item)
             for item in await self.source.draw(ctx, self.source_params, count)
         ]
+        return await self._with_distractors(ctx, draws)
+
+    async def _with_distractors(self, ctx: DrawContext, draws: list[RoundDraw]) -> list[RoundDraw]:
+        """Варианты ``pick`` раундам без них: верная единица + неверные из пула (ADR 0040).
+
+        Пул — играбельные единицы домена того же вида, что загаданная (один запрос на
+        розыгрыш). ``option_id`` — случайные непрозрачные токены, порядок вариантов
+        перемешан тем же детерминированным ``rng``: верный не выводится ни из id, ни из
+        позиции. Без настроенных дистракторов раунды возвращаются как есть.
+
+        Raises:
+            PoolTooSmallError: единиц для вариантов не хватает.
+        """
+        if (
+            self.distractors is None
+            or self.distractor_params is None
+            or self.distractor_count is None
+        ):
+            return draws
+        # Пул — как у розыгрыша (фильтры пула и пресета ``ctx.preset_id``), но без
+        # ``exclude_ids``: память сыгранного избегает повторов загаданных, а не вариантов.
+        base = self.pool_query(ctx.preset_id) or PoolQuery(
+            domain=ctx.domain, playable_for=self.playable_for
+        )
+        everyone = await ctx.candidates.candidates(
+            replace(base, exclude_ids=frozenset()), ctx.candidate_limit
+        )
+        rng = SeededRandom(ctx.seed + DISTRACTOR_SEED_SUFFIX)
+        result: list[RoundDraw] = []
+        for draw in draws:
+            pool = [i for i in everyone if i.kind == draw.target.kind]
+            wrong = self.distractors.pick(
+                draw.target,
+                pool,
+                count=self.distractor_count,
+                params=self.distractor_params,
+                rng=rng,
+            )
+            items = [draw.target, *wrong]
+            rng.shuffle(items)
+            tokens: set[str] = set()
+            options: list[OptionSpec] = []
+            for item in items:
+                token = f"{rng.randrange(1 << 32):08x}"
+                while token in tokens:
+                    token = f"{rng.randrange(1 << 32):08x}"
+                tokens.add(token)
+                options.append(OptionSpec(id=token, item=item))
+            result.append(replace(draw, options=tuple(options)))
+        return result
 
     @property
     def uses_collection(self) -> bool:

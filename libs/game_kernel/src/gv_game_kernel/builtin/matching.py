@@ -69,6 +69,7 @@ def item_titles(item: MediaItemRef, normalizer: TitleNormalizer) -> set[str]:
 class TitleAliasMatcher:
     """Сверка по названию и алиасам.
 
+    * ``{option_id}`` (``pick``) → вариант раунда сверяется как выбор его единицы;
     * ``{media_item_id}`` → ``exact``, если выбрана загаданная единица, или
       (``accept_same_title``) основное название выбранной совпадает с названием или
       алиасом вида ``title``/``alt`` загаданной (дубли названий, ремейки);
@@ -79,7 +80,7 @@ class TitleAliasMatcher:
 
     key: ClassVar[str] = "title_alias"
     params_schema: ClassVar[type[BaseModel]] = TitleAliasParams
-    answer_formats: ClassVar[frozenset[str]] = frozenset({CLASSIC_FORMAT})
+    answer_formats: ClassVar[frozenset[str]] = frozenset({CLASSIC_FORMAT, PICK_FORMAT})
     requires_comparison: ClassVar[bool] = False
 
     def match(
@@ -87,12 +88,28 @@ class TitleAliasMatcher:
     ) -> MatchResult:
         """Точное попадание, частичное или промах (см. описание класса)."""
         p = typed(params, TitleAliasParams)
+        if answer.option_id is not None:
+            # Формат pick с дистракторами (ADR 0040): вариант раунда — единица каталога.
+            answer = self._option_answer(answer, ctx)
         if self._exact(answer, item, p, ctx.normalizer):
             return MatchResult(MatchVerdict.EXACT)
         for rule in ctx.partial_rules:
             if rule.check(answer, item, ctx):
                 return MatchResult(MatchVerdict.PARTIAL, partial_kind=rule.kind)
         return MatchResult(MatchVerdict.MISS)
+
+    @staticmethod
+    def _option_answer(answer: AnswerInput, ctx: MatchContext) -> AnswerInput:
+        """Ответ-вариант как выбор единицы: ``{media_item_id, selected}`` варианта раунда.
+
+        Raises:
+            ValueError: нет состава раунда, варианта или единицы за вариантом.
+        """
+        option_id, draw = _require_draw(answer, ctx)
+        chosen = next(o.item for o in draw.options if o.id == option_id)
+        if chosen is None:
+            raise ValueError("у варианта нет единицы: title_alias не может его сверить")
+        return AnswerInput(media_item_id=chosen.id, selected=chosen)
 
     @staticmethod
     def _exact(

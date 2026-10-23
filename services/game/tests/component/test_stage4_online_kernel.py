@@ -39,6 +39,13 @@ ONLINE = {
     "film.party.frame",
     "music.lobby.classic",
     "film.lobby.collection",
+    # 4b: «лайт» и рейтинговые шаблоны (шаг 0b)
+    "music.duel.lite",
+    "film.duel.lite",
+    "music.ranked.classic",
+    "music.ranked.lite",
+    "film.ranked.classic",
+    "film.ranked.lite",
 }
 LOBBY = "film.lobby.collection"
 FRAME_ASSETS = "film.collection.frame"
