@@ -257,3 +257,39 @@ async def test_0012_mail_key_column_is_reversible(database_url: str) -> None:
     assert not await has_column()
     await asyncio.to_thread(command.upgrade, config, "head")
     assert await has_column()
+
+
+PROGRESSION_PERMS = {
+    "progression.config.manage",
+    "progression.config.publish",
+    "progression.ledger.grant",
+    "progression.ledger.reverse",
+    "progression.ledger.read",
+}
+
+
+async def test_0013_seeds_progression_perms_for_admin_only_and_is_reversible(
+    database_url: str,
+) -> None:
+    """План этапа 5, §2.5: все права progression — только admin (ledger — зона безопасности)."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= PROGRESSION_PERMS
+    assert grants["admin"] >= PROGRESSION_PERMS
+    assert not grants["moderator"] & PROGRESSION_PERMS
+    assert not grants.get("user", set()) & PROGRESSION_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0012")
+    after = await _grants(database_url)
+    assert not after["*"] & PROGRESSION_PERMS
+    assert after["admin"] >= ONLINE_PERMS  # права 0008 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= PROGRESSION_PERMS
