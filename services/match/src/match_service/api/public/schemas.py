@@ -565,3 +565,74 @@ class MyMatchesPage(BaseModel):
 
     items: list[MyMatchCard]
     next_cursor: str | None = None
+
+
+# ------------------------------------------------------------------ 4b: очередь, наблюдение
+QueueFormat = Literal["classic", "lite"]
+QueueState = Literal["searching", "matched"]
+LadderKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
+
+
+class QueueEnterRequest(_Request):
+    """Встать в очередь рейтинговой дуэли (ADR 0038).
+
+    Рейтинг общий на ladder (домен), очередь — отдельная на формат: игрок состоит ровно в
+    одной очереди. Шаблон режима выбирает match по ``ladder`` и ``format`` (рейтинговая
+    дуэль домена с ``answer.format`` = ``classic`` или ``pick``).
+    """
+
+    ladder: LadderKey
+    format: QueueFormat
+
+
+class QueueTicket(BaseModel):
+    """Состояние игрока в очереди (ответ ``enter`` и ``tick``)."""
+
+    ladder: LadderKey
+    format: QueueFormat
+    state: QueueState
+    entered_at: datetime
+    tick_s: int | None = Field(
+        default=None,
+        ge=1,
+        description="Период heartbeat `POST /queue/tick`, с (`GV_MATCH__TICK_S`)",
+    )
+    wait_s: int = Field(ge=0, description="Сколько секунд игрок ждёт")
+    window: int = Field(ge=0, description="Текущее окно подбора ±, очков (из конфига ladder-а)")
+    slow: bool = Field(
+        description="Ждёт дольше `slow_hint_after_s`: показать «ищем дольше обычного»"
+    )
+    room_code: RoomCode | None = Field(
+        default=None, description="Комната дуэли, когда `state = matched` (сразу в `countdown`)"
+    )
+
+
+class QueuePoolEntry(BaseModel):
+    """Сколько игроков ищут матч в очереди ladder-а и формата."""
+
+    ladder: LadderKey
+    format: QueueFormat
+    searching: int = Field(ge=0)
+
+
+class QueuePool(BaseModel):
+    """Размер очередей (хаб онлайна); без списка игроков."""
+
+    items: list[QueuePoolEntry]
+
+
+class SpectateRoomCard(BaseModel):
+    """Идущая комната в списке наблюдения (``match.spectate``)."""
+
+    code: RoomCode
+    mode: ModeRef
+    phase: Phase
+    players: int = Field(ge=1, le=MAX_PLAYERS)
+    started_at: datetime
+
+
+class SpectateRoomsPage(BaseModel):
+    """Страница комнат для наблюдения (keyset-курсор)."""
+
+    items: list[SpectateRoomCard]
+    next_cursor: str | None = None

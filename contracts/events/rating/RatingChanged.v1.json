@@ -1,0 +1,128 @@
+{
+  "$id": "urn:guessverse:contracts:events:rating:RatingChanged:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Рейтинг игрока изменился после рейтингового матча (дуэль, ADR 0037). aggregate_id — user_id: порядок по игроку сохраняется. Рейтинг общий на ladder (домен), формат очереди влияет только на множитель дельты. Во время калибровки `tier` = null (звание скрыто), `calibration_left` — сколько матчей осталось; рейтинг при этом реальный и нужен подбору. `version` монотонна по (user_id, ladder): потребитель отбрасывает событие с version не больше применённой. Потребитель — match (проекция рейтинга для очереди, без синхронного вызова rating); progression — этап 5.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "calibrating": {
+      "description": "Игрок ещё в калибровке после этого матча",
+      "type": "boolean"
+    },
+    "calibration_left": {
+      "description": "Сколько матчей осталось до конца калибровки (0 — завершена)",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "delta": {
+      "description": "new − old, включая штраф за выход/сдачу и множитель формата",
+      "type": "integer"
+    },
+    "format": {
+      "description": "Формат очереди (ключ из `formats` ladder-а): classic — ввод названия, lite — 4 варианта",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "ladder": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "leaver_penalty": {
+      "description": "Дополнительные очки, снятые за выход или сдачу (входят в delta); 0 — штрафа нет",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "match_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "matches_played": {
+      "description": "Рейтинговых матчей в сезоне, включая этот",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "new": {
+      "type": "integer"
+    },
+    "old": {
+      "type": "integer"
+    },
+    "old_tier": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Звание до матча; null — в калибровке"
+    },
+    "outcome": {
+      "description": "Исход матча для игрока",
+      "enum": [
+        "win",
+        "loss",
+        "draw"
+      ],
+      "type": "string"
+    },
+    "season_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "tier": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Звание после матча (ключ из конфига ladder-а, например `silver_2`); null — в калибровке"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия по (user_id, ladder)",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "user_id",
+    "ladder",
+    "format",
+    "season_id",
+    "match_id",
+    "version",
+    "old",
+    "new",
+    "delta",
+    "tier",
+    "old_tier",
+    "calibrating",
+    "calibration_left",
+    "matches_played",
+    "outcome",
+    "leaver_penalty",
+    "at"
+  ],
+  "title": "rating.RatingChanged v1",
+  "type": "object",
+  "x-aggregate-type": "rating",
+  "x-topic": "rating.rating.v1"
+}

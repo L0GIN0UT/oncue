@@ -22,6 +22,7 @@ from game_service.domain.projection import (
     CollectionProj,
     CollectionStatus,
     ItemStatus,
+    LadderProj,
     is_newer,
     scoped_keep,
 )
@@ -172,6 +173,21 @@ class ApplyCollectionEvent:
         log.info(
             "game.collection_deleted", collection_id=str(collection_id), scoped_removed=removed
         )
+        return True
+
+
+class ApplyLadderEvent:
+    """``rating.LadderPublished`` → ``ladders_proj`` (ADR 0037): ключи ladder-ов для проверки
+    ``session.ladder`` режимов. Порядок защищает монотонная ``version`` конфига ladder-а."""
+
+    async def published(self, uow: GameUnitOfWork, data: LadderProj) -> bool:
+        """Записать ladder; ``False`` — событие устарело (повтор или перестановка)."""
+        current = await uow.ladders.get(data.ladder, for_update=True)
+        if not is_newer(data.version, current.version if current else None):
+            log.info("game.ladder_event_stale", ladder=data.ladder)
+            return False
+        await uow.ladders.save(data)
+        log.info("game.ladder_projected", ladder=data.ladder, version=data.version)
         return True
 
 

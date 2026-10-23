@@ -55,8 +55,10 @@ from gv_game_kernel.plugins import (
     CollectionBasedSource,
     ComparisonSource,
     ContestRule,
+    DistractorSource,
     EndRule,
     PartialRule,
+    RoundSource,
     Scorer,
     Source,
 )
@@ -127,6 +129,16 @@ FREE_TEXT_LOBBY_ONLY = "config.free_text_lobby_only"
 OVERRIDE_DEFAULT_MISSING = "config.override_default_missing"
 """Код проблемы: значения шаблона нет среди вариантов ``lobby.overridable``."""
 
+OPTIONS_SOURCE_MISSING = "config.options_source_missing"
+"""Код проблемы: формат с вариантами (``pick``), а варианты никто не строит — источник не
+составляет раунды сам и ``answer.params.distractors`` не задан (ADR 0040)."""
+
+DISTRACTORS_UNSUPPORTED_SOURCE = "config.distractors_unsupported_source"
+"""Код проблемы: дистракторы заданы при источнике, который сам составляет варианты."""
+
+DISTRACTORS_FORMAT = "config.distractors_format"
+"""Код проблемы: ``answer.params.distractors`` задан при формате без вариантов (не ``pick``)."""
+
 SOLO_SESSIONS = frozenset({"solo"})
 """Виды сессий, которые играет game."""
 
@@ -170,6 +182,7 @@ class PluginRegistry:
         self._formats: dict[str, AnswerFormat] = {}
         self._end_rules: dict[str, EndRule] = {}
         self._contests: dict[str, ContestRule] = {}
+        self._distractors: dict[str, DistractorSource] = {}
 
     @staticmethod
     def _add[P](bucket: dict[str, P], key: str, plugin: P, kind: str) -> None:
@@ -208,6 +221,14 @@ class PluginRegistry:
     def register_contest(self, plugin: ContestRule) -> None:
         """Зарегистрировать правило состязания матча. Raises: DuplicatePluginError."""
         self._add(self._contests, plugin.key, plugin, "ContestRule")
+
+    def register_distractors(self, plugin: DistractorSource) -> None:
+        """Зарегистрировать источник дистракторов. Raises: DuplicatePluginError."""
+        self._add(self._distractors, plugin.key, plugin, "DistractorSource")
+
+    def distractor(self, key: str) -> DistractorSource | None:
+        """Источник дистракторов по ключу или ``None``."""
+        return self._distractors.get(key)
 
     def contest(self, key: str) -> ContestRule | None:
         """Правило состязания по ключу или ``None``."""
@@ -298,6 +319,7 @@ class EngineFactory:
         if reveal_spec is not None and reveal is None:
             issues.append(ConfigIssue("clue.reveal.type", UNKNOWN_PLUGIN))
         issues.extend(self._partial_issues(config))
+        issues.extend(self._distractor_issues(config, answer_format, source))
 
         clue_params = _parse(clue, config.clue.params, "clue.params", issues)
         source_params = _parse(source, config.source.params, "source.params", issues)
@@ -492,6 +514,36 @@ class EngineFactory:
             seen.add(kind)
         return issues
 
+    def _distractor_issues(
+        self, config: ModeConfig, answer_format: AnswerFormat | None, source: Source | None
+    ) -> list[ConfigIssue]:
+        """``answer.params.distractors`` (ADR 0040): плагин известен, параметры верны,
+        формат даёт варианты (``needs_options``), ``min_pool ≥ count + 1`` (``cross_check``)."""
+        spec = config.answer.params.distractors if config.answer.params is not None else None
+        base = "answer.params.distractors"
+        builds_options = isinstance(source, RoundSource)
+        if spec is None:
+            needs = answer_format is not None and answer_format.needs_options
+            if needs and source is not None and not builds_options:
+                return [ConfigIssue(base, OPTIONS_SOURCE_MISSING)]
+            return []
+        issues: list[ConfigIssue] = []
+        if builds_options:
+            issues.append(ConfigIssue(base, DISTRACTORS_UNSUPPORTED_SOURCE))
+        if answer_format is not None and not answer_format.needs_options:
+            issues.append(ConfigIssue(base, DISTRACTORS_FORMAT))
+        plugin = self._registry.distractor(spec.type)
+        if plugin is None:
+            issues.append(ConfigIssue(f"{base}.type", UNKNOWN_PLUGIN))
+            return issues
+        params = _parse(plugin, spec.params, f"{base}.params", issues)
+        if params is not None:
+            issues.extend(
+                ConfigIssue(_join(f"{base}.params", i.path), i.code)
+                for i in plugin.cross_check(params, count=spec.count)
+            )
+        return issues
+
     def build(self, config: ModeConfig) -> ModeEngine:
         """Собрать движок режима.
 
@@ -512,6 +564,8 @@ class EngineFactory:
         reveal = r.clue(config.clue.reveal.type) if config.clue.reveal else None
         partials = tuple(r.partial(kind) for kind in config.answer.partial)
         session = config.session
+        distractor_spec = config.answer.params.distractors if config.answer.params else None
+        distractors = r.distractor(distractor_spec.type) if distractor_spec is not None else None
         contest = (
             r.contest(session.contest.type) if isinstance(session, OnlineSessionSpec) else None
         )
@@ -536,6 +590,7 @@ class EngineFactory:
             reveal=reveal,
             normalizer=self._normalizer,
             contest=contest,
+            distractors=distractors,
         )
 
 
@@ -597,7 +652,14 @@ def _single_answer_issues(config: ModeConfig, levels_count: int) -> list[ConfigI
 
 
 def _parse(
-    plugin: ClueType | Source | AnswerMatcher | Scorer | EndRule | ContestRule | None,
+    plugin: ClueType
+    | Source
+    | AnswerMatcher
+    | Scorer
+    | EndRule
+    | ContestRule
+    | DistractorSource
+    | None,
     params: Mapping[str, Any],  # Any: params плагина — произвольный JSON-объект
     prefix: str,
     issues: list[ConfigIssue],
@@ -627,6 +689,8 @@ __all__ = [
     "ANSWER_FORMAT_UNSUPPORTED",
     "COMPARISON_REQUIRED",
     "DEFAULT_END_RULE",
+    "DISTRACTORS_FORMAT",
+    "DISTRACTORS_UNSUPPORTED_SOURCE",
     "DOMAIN_UNSUPPORTED",
     "DUPLICATE_PARTIAL",
     "END_RULE_REQUIRED",
@@ -636,6 +700,7 @@ __all__ = [
     "LOBBY_REQUIRED",
     "LOBBY_UNEXPECTED",
     "ONLINE_SESSIONS",
+    "OPTIONS_SOURCE_MISSING",
     "OVERRIDE_DEFAULT_MISSING",
     "PARTIAL_DOMAIN_UNSUPPORTED",
     "PARTIAL_UNSUPPORTED",

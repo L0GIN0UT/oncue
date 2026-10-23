@@ -73,6 +73,16 @@ def seed_bodies() -> dict[str, dict[str, Any]]:
     return {key: seed_body(key) for key in ONLINE_KEYS}
 
 
+def ranked_bodies() -> dict[str, dict[str, Any]]:
+    """Рейтинговые дуэли ladder-ов ``music``/``film`` для очередей (сиды 4b — шаг 0b)."""
+    music = seed_body("music.duel.classic", ranked=True, ladder="music")
+    film = seed_body("film.duel.frame", ranked=True, ladder="film")
+    return {
+        "music.duel.ranked": {**music, "key": "music.duel.ranked"},
+        "film.duel.ranked": {**film, "key": "film.duel.ranked"},
+    }
+
+
 # ----------------------------------------------------------------------------- план
 _NORM = TitleNormalizer()
 TITLES = ["Брат", "Сталкер", "Солярис", "Зеркало", "Ирония судьбы", "Кин-дза-дза"] * 9
@@ -152,6 +162,9 @@ class MemoryStore:
 
     async def active_rooms(self, cursor: Any, limit: int) -> Any:
         return [], None
+
+    async def discard(self, code: str) -> None:
+        self.rooms.pop(code, None)
 
 
 @dataclass

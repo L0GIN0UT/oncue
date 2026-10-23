@@ -1,0 +1,23 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0002",
+  "aggregate_type": "rating",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0004",
+  "event_type": "rating.SeasonStarted",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "ends_at": "2026-12-18T00:00:00Z",
+    "ladder": "film",
+    "ladder_version": 1,
+    "number": 2,
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0002",
+    "soft_reset": {
+      "ratio": 0.5,
+      "target": 1000
+    },
+    "starts_at": "2026-10-23T00:00:00Z"
+  },
+  "producer": "rating"
+}

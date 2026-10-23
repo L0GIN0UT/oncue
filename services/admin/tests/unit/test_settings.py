@@ -62,3 +62,7 @@ def test_game_is_in_default_service_urls() -> None:
 
 def test_collections_is_in_default_service_urls() -> None:
     assert AdminConfig().service_urls["collections"].startswith("http://collections")
+
+
+def test_rating_is_in_default_service_urls() -> None:
+    assert AdminConfig().service_urls["rating"].startswith("http://rating")

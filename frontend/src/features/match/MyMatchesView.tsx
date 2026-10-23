@@ -8,7 +8,9 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Button } from "@/shared/ui/button";
 import { useSessionInfo } from "@/features/auth/session";
+import { blockData, hasBlock, useOnlinePage } from "@/features/online/bff";
 import { MyMatchList } from "@/features/online/lists";
+import { RatingPanel } from "@/features/rating/RatingPanel";
 import { OnlineGate } from "@/features/online/OnlineGate";
 import { fetchMyMatches } from "./api";
 
@@ -30,6 +32,9 @@ function MyProfile() {
     getNextPageParam: (last) => last.next_cursor ?? null,
   });
   const matches = query.data?.pages.flatMap((p) => p.items) ?? [];
+  // Звание и сезон — из блоков 4b хаба (тот же запрос, что у /online, кэш общий).
+  const online = useOnlinePage();
+  const blocks = online.data?.status === "ok" ? online.data.blocks : null;
 
   return (
     <div className="flex flex-col gap-10 pt-6 sm:pt-10">
@@ -44,6 +49,14 @@ function MyProfile() {
           {t("nav.myCollections")}
         </Link>
       </header>
+      {hasBlock(blocks?.ratings) && (
+        <section aria-labelledby="me-ratings" className="flex flex-col gap-4">
+          <h2 id="me-ratings" className="font-display text-xl font-semibold">
+            {t("rating.mine.title")}
+          </h2>
+          <RatingPanel ratings={blockData(blocks?.ratings)} seasons={blockData(blocks?.seasons)} />
+        </section>
+      )}
       <section aria-labelledby="me-matches" className="flex flex-col gap-4">
         <h2 id="me-matches" className="font-display text-xl font-semibold">
           {t("online.myMatches.title")}

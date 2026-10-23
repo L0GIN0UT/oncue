@@ -32,6 +32,7 @@ from game_service.application.commands.projection import (
     ApplyAssetsEvent,
     ApplyCatalogEvent,
     ApplyCollectionEvent,
+    ApplyLadderEvent,
     ForgetUser,
 )
 from game_service.application.ports import (
@@ -274,6 +275,7 @@ class GameContainer:
     catalog_events = ApplyCatalogEvent()
     assets_events = ApplyAssetsEvent()
     collection_events = ApplyCollectionEvent()
+    ladder_events = ApplyLadderEvent()
     forget_user = ForgetUser()
 
 

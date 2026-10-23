@@ -8,6 +8,7 @@ import { MODES, itemById } from "./world";
 import { audioWav, frameSvg } from "./media";
 import { createUgcHandlers } from "./handlers-3b";
 import { createMatchHandlers } from "./handlers-match";
+import { createRatingHandlers } from "./handlers-rating";
 import { onlineModesOut, type MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
@@ -422,6 +423,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
 
     // ---------------------------------------------------------------- этап 4a: онлайн
     ...(matchWorld ? createMatchHandlers(world, matchWorld) : []),
+    ...(matchWorld ? createRatingHandlers(world, matchWorld) : []),
 
     // ---------------------------------------------------------------- identity
     http.post("*/api/identity/v1/auth/guest", ({ request }) => {

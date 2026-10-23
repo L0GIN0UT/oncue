@@ -60,6 +60,24 @@ class MatchSettings(BaseModel):
         breaker_cooldown_s: Пауза разомкнутого breaker-а.
         partitions_ahead_months: На сколько месяцев вперёд создавать партиции раундов.
         partitions_interval_s: Период задачи партиций.
+        default_start_rating: Рейтинг новичка, пока проекция не знает сезона со сбросом (в
+            событиях rating нет ``elo.start``; обычно ``soft_reset.target`` ladder-а).
+        queue_ttl_s: Запись в очереди без heartbeat (``POST /queue/tick``) исчезает через
+            столько секунд; не меньше двух ``tick_s`` (один пропуск не выбивает из очереди).
+        queue_matched_ttl_s: Сколько живёт запись игрока после подбора (идёт в комнату).
+        queue_reserved_ttl_s: Жизнь записи с зарезервированной парой, пока создаётся комната
+            (короче ``queue_matched_ttl_s``; ``tick`` её продлевает).
+        queue_reserved_stale_s: Резерв старше этого срока считается брошенным упавшим матчером:
+            игрок возвращается в поиск (меньше ``queue_reserved_ttl_s``).
+        rate_window_s: Окно лимитов очереди и наблюдения (лимиты названы «в минуту»).
+        queue_batch_max: Игроков очереди в одном батче матчера.
+        matcher_poll_ms: Пауза цикла матчера (периоды очередей — ``interval_s`` ladder-а).
+        matcher_lease_ttl_s: TTL lease очереди (fencing-эпоха, как у комнат).
+        ladder_cache_s: Кэш проекции ladder-ов в процессе.
+        queue_enter_per_user_per_min: Входов игрока в очередь в минуту.
+        queue_tick_per_user_per_min: Heartbeat очереди игрока в минуту.
+        spectate_per_user_per_min: Запросы наблюдателя (список, снимок, токен) в минуту.
+        spectate_scan_pages: Сколько страниц индекса комнат просматривает список наблюдения.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -104,6 +122,20 @@ class MatchSettings(BaseModel):
     breaker_cooldown_s: float = Field(default=15, gt=0)
     partitions_ahead_months: int = Field(default=3, ge=1, le=24)
     partitions_interval_s: float = Field(default=21600, gt=0)
+    default_start_rating: int = Field(default=1000, ge=0)
+    queue_ttl_s: float = Field(default=20, gt=0, le=600)
+    queue_matched_ttl_s: float = Field(default=120, gt=0, le=3600)
+    queue_reserved_ttl_s: float = Field(default=30, gt=0, le=600)
+    queue_reserved_stale_s: float = Field(default=10, gt=0, le=600)
+    rate_window_s: int = Field(default=60, ge=1, le=3600)
+    queue_batch_max: int = Field(default=2000, ge=2, le=20_000)
+    matcher_poll_ms: int = Field(default=250, ge=5, le=1500)
+    matcher_lease_ttl_s: float = Field(default=10, gt=0, le=120)
+    ladder_cache_s: float = Field(default=5, ge=0, le=300)
+    queue_enter_per_user_per_min: int = Field(default=20, ge=1)
+    queue_tick_per_user_per_min: int = Field(default=150, ge=1)
+    spectate_per_user_per_min: int = Field(default=60, ge=1)
+    spectate_scan_pages: int = Field(default=10, ge=1, le=100)
 
     @model_validator(mode="after")
     def _timings(self) -> MatchSettings:
@@ -111,6 +143,16 @@ class MatchSettings(BaseModel):
             raise ValueError("GV_MATCH__LEASE_RENEW_S должен быть не больше половины LEASE_TTL_S")
         if self.rooms_poll_ms >= _REDIS_SOCKET_TIMEOUT_MS:
             raise ValueError("GV_MATCH__ROOMS_POLL_MS должен быть меньше socket_timeout Redis")
+        if self.matcher_poll_ms >= _REDIS_SOCKET_TIMEOUT_MS:
+            raise ValueError("GV_MATCH__MATCHER_POLL_MS должен быть меньше socket_timeout Redis")
+        if self.queue_ttl_s < self.tick_s * 2:
+            raise ValueError("GV_MATCH__QUEUE_TTL_S должен быть не меньше двух TICK_S")
+        if not self.queue_reserved_stale_s < self.queue_reserved_ttl_s < self.queue_matched_ttl_s:
+            raise ValueError(
+                "нужно QUEUE_RESERVED_STALE_S < QUEUE_RESERVED_TTL_S < QUEUE_MATCHED_TTL_S"
+            )
+        if self.matcher_poll_ms / 1000 * 2 > self.matcher_lease_ttl_s:
+            raise ValueError("GV_MATCH__MATCHER_LEASE_TTL_S слишком мал для MATCHER_POLL_MS")
         return self
 
 

@@ -303,6 +303,11 @@ def test_generated_compose_passes_stage2_settings() -> None:
     assert dev["game"]["environment"]["GV_GAME__BOOTSTRAP_MODES_DIR"] == "/seeds/game/modes"
     assert dev["game"]["volumes"] == ["../../seeds/game/modes:/seeds/game/modes:ro"]
     assert (ROOT / "infra/compose" / "../../seeds/game/modes").resolve().is_dir()
+    assert dev["rating"]["environment"]["GV_RATING__BOOTSTRAP_LADDERS_DIR"] == (
+        "/seeds/rating/ladders"
+    )
+    assert dev["rating"]["volumes"] == ["../../seeds/rating/ladders:/seeds/rating/ladders:ro"]
+    assert (ROOT / "seeds/rating/ladders").is_dir()
     mail = dev["identity"]["environment"]
     assert mail["GV_EMAIL__BACKEND"] == "${GV_EMAIL__BACKEND:-log}"
     assert not any("LINK" in key for key in mail)  # ссылок с токенами нет (ADR 0041)

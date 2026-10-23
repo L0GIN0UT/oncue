@@ -152,6 +152,9 @@ describe("messages/ru.json", () => {
         (k) => `match.error.${k}`,
       ),
       ...CHAT_REJECT_REASONS.map((k) => `match.error.chat_rejected_${k}`),
+      // Этап 4b: рейтинг — ladder-ы и форматы очереди, подсказки форматов.
+      ...["film", "music"].map((k) => `rating.ladder.${k}`),
+      ...["classic", "lite"].flatMap((k) => [`rating.format.${k}`, `rating.formatHint.${k}`]),
       // Базовые эмоции и фразы онлайн-шаблонов (session.chat в сидах режимов).
       ...["wow", "gg", "fire", "laugh", "think"].map((k) => `match.emotes.${k}`),
       ...["good_luck", "well_played", "nice_one", "so_close"].map((k) => `match.phrases.${k}`),
@@ -203,6 +206,35 @@ describe("messages/ru.json", () => {
     );
     expect(keys.length).toBeGreaterThan(0);
     expect(keys.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
+  });
+
+  it("переводит звания ladder-ов (title_key) из примеров контракта и сидов rating", () => {
+    const sources = [
+      path.resolve(root, "..", "contracts", "rating", "examples"),
+      path.resolve(root, "..", "seeds", "rating", "ladders"),
+    ];
+    const keys = sources.flatMap((dir) =>
+      readdirSync(dir).flatMap((f) =>
+        [
+          ...readFileSync(path.join(dir, f), "utf8").matchAll(/title_key"?:\s*"?(rating\.[\w.]+)/g),
+        ].map((m) => m[1]!),
+      ),
+    );
+    expect(keys.length).toBeGreaterThan(5);
+    expect(keys.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
+  });
+
+  it("в разделе rating нет мёртвых ключей: каждый используется в исходниках", () => {
+    // Звания, ladder-ы и форматы приходят с сервера — они проверяются отдельно (по сидам и контракту).
+    const dynamicGroups = new Set(["tier", "ladder", "format", "formatHint"]);
+    const source = files(path.join(root, "src"))
+      .map((f) => readFileSync(f, "utf8"))
+      .join("\n");
+    const dead = leaves(messages.rating)
+      .map(([key]) => key)
+      .filter((key) => !dynamicGroups.has(key.split(".")[0]!))
+      .filter((key) => !source.includes(`"rating.${key}"`));
+    expect(dead).toEqual([]);
   });
 
   it("не содержит пустых значений", () => {

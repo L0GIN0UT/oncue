@@ -8,6 +8,7 @@
  */
 import { http, HttpResponse, type HttpHandler } from "msw";
 import { csrfOk, problem, subjectOf } from "./handlers";
+import { ratingBlocks } from "./handlers-rating";
 import { ONLINE_MODES, type MatchWorld } from "./match";
 import type { MockWorld } from "./world";
 
@@ -485,6 +486,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
         {
           status: "ok",
           blocks: {
+            ...ratingBlocks(mw),
             open_rooms: { status: "ok", data: { items: mw.openRooms(), next_cursor: null } },
             my_matches: { status: "ok", data: { items: mw.myMatches(userId), next_cursor: null } },
             modes: {
@@ -505,8 +507,8 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
                   rounds: d.rounds,
                   level_windows_s: Array.from({ length: d.levels }, () => d.windowS),
                   contest_type: d.race ? "race" : "parallel",
-                  ranked: false,
-                  ladder: null,
+                  ranked: d.ref.ranked,
+                  ladder: d.ref.ranked ? d.ref.domain : null,
                   max_collections: d.options?.max_collections ?? null,
                   lobby: d.options ? { overridable: d.options } : null,
                   chat: d.chat,

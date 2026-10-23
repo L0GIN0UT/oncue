@@ -96,6 +96,10 @@ nav:
       - adr/0034-rooms-process-lease-snapshots.md
       - adr/0035-realtime-centrifugo-tokens-and-tick.md
       - adr/0036-online-account-only-chat-and-ratings.md
+      - adr/0037-rating-elo-calibration-ladder-config.md
+      - adr/0038-matchmaking-queues.md
+      - adr/0039-seasons-weekly-top-leaderboards.md
+      - adr/0040-lite-format-distractor-source.md
       - adr/0041-email-codes-trusted-devices.md
   - Справочник libs:
       - api/index.md

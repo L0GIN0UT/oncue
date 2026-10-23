@@ -71,6 +71,21 @@
       "minItems": 2,
       "type": "array"
     },
+    "queue_format": {
+      "anyOf": [
+        {
+          "enum": [
+            "classic",
+            "lite"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Формат очереди подбора (classic — ввод названия, lite — 4 варианта); null вне очереди. Rating берёт по нему множитель дельты (4b, ADR 0037). Необязательное поле: отсутствие = null."
+    },
     "ranked": {
       "type": "boolean"
     },

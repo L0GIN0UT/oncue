@@ -220,3 +220,23 @@ def scoped_keep(status: CollectionStatus, items: Sequence[CollectionItem]) -> fr
     if status is not CollectionStatus.PUBLISHED:
         return frozenset()
     return frozenset(i.media_item_id for i in items if i.custom)
+
+
+@dataclass(frozen=True, slots=True)
+class LadderProj:
+    """Ключ ladder-а rating в проекции game (``rating.LadderPublished``, ADR 0037).
+
+    game хранит только то, чем проверяет ссылку ``session.ladder``: ключ и домен. Окна
+    подбора и форматы очереди нужны match, а не game.
+
+    Attributes:
+        ladder: Ключ ladder-а.
+        domain: ``music`` | ``film``.
+        version: Монотонная версия конфига ladder-а.
+        updated_at: Момент события.
+    """
+
+    ladder: str
+    domain: str
+    version: int
+    updated_at: datetime

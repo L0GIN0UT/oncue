@@ -66,6 +66,7 @@ from bff_web_service.application.queries.common import (
 )
 from bff_web_service.application.queries.library import GetLibraryPage, GetLibraryShelfPage
 from bff_web_service.application.queries.online import GetMatchPage, GetOnlinePage
+from bff_web_service.application.queries.rating import GetLeaderboardsPage
 from bff_web_service.domain import Block
 from gv_core.errors import ConflictError, ForbiddenError, NotFoundError, UnauthenticatedError
 
@@ -76,6 +77,7 @@ __all__ = [
     "GetCollectionPage",
     "GetCollectionsPage",
     "GetHomePage",
+    "GetLeaderboardsPage",
     "GetLibraryPage",
     "GetLibraryShelfPage",
     "GetMatchPage",

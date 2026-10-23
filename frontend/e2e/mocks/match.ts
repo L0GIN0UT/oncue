@@ -14,6 +14,9 @@ type S = components["schemas"];
 type Phase = S["RoomView"]["phase"];
 type Status = NonNullable<S["MatchPlayerView"]["status"]>;
 
+/** Период heartbeat очереди в моке (`QueueTicket.tick_s`), с: короткий, чтобы e2e не ждали 5 с. */
+export const QUEUE_TICK_S = 2;
+
 export type MatchScenario = {
   /** Следующее опубликованное сообщение в ленту не попадёт (дыра в версиях → ресинк). */
   dropNextMessage?: boolean;
@@ -30,6 +33,12 @@ export type MatchScenario = {
   /** Без tick дольше — «Отключён». */
   disconnectAfterMs?: number;
   countdownMs?: number;
+  /** Очередь: «ищем дольше обычного» с первого ответа (`slow`). */
+  queueSlow?: boolean;
+  /** rating: через сколько мс после итога матча отвечает `/changes` (до этого 404), по умолчанию 1500. */
+  ratingDelayMs?: number;
+  /** rating недоступен: `/changes` отвечает 503. */
+  ratingDown?: boolean;
   revealMs?: number;
 };
 
@@ -59,6 +68,7 @@ const ref = (
   domain: "music" | "film",
   kind: "duel" | "party" | "lobby",
   clue: string,
+  ranked = false,
 ): S["ModeRef"] => ({
   key,
   version: 1,
@@ -67,7 +77,7 @@ const ref = (
   title_key: `modes.${key}.title`,
   clue_type: clue,
   answer_format: "classic",
-  ranked: false,
+  ranked,
 });
 
 export const ONLINE_MODES: ModeDef[] = [
@@ -142,6 +152,30 @@ export const ONLINE_MODES: ModeDef[] = [
   },
 ];
 
+/** Рейтинговые дуэли: по шаблону на ladder (домен) и формат очереди (ADR 0038). */
+const RANKED_MODES: ModeDef[] = (["music", "film"] as const).flatMap((domain) =>
+  (["classic", "lite"] as const).map((format): ModeDef => ({
+    ref: ref(
+      `${domain}.ranked.${format}`,
+      domain,
+      "duel",
+      domain === "music" ? "audio" : "frame",
+      true,
+    ),
+    min: 2,
+    max: 2,
+    rounds: 2,
+    windowS: 20,
+    levels: 2,
+    attempts: 3,
+    points: [12, 6],
+    race: true,
+    chat: { emotes: EMOTES, phrases: PHRASES, free_text: false },
+    options: null,
+  })),
+);
+ONLINE_MODES.push(...RANKED_MODES);
+
 /** Онлайн-шаблоны в форме `game /v1/modes?session=online` (`ModeOut` с блоком `online`). */
 export function onlineModesOut() {
   return ONLINE_MODES.map((d) => ({
@@ -162,8 +196,8 @@ export function onlineModesOut() {
       rounds: d.rounds,
       level_windows_s: Array.from({ length: d.levels }, () => d.windowS),
       contest_type: d.race ? "race" : "parallel",
-      ranked: false,
-      ladder: null,
+      ranked: d.ref.ranked,
+      ladder: d.ref.ranked ? d.ref.domain : null,
       max_collections: d.options?.max_collections ?? null,
       lobby: d.options ? { overridable: d.options } : null,
       chat: d.chat,
@@ -222,6 +256,13 @@ export class MatchWorld {
   results = new Map<string, S["MatchResult"]>();
   ops = new Map<string, { status: number; body: unknown }>();
   ratings = new Set<string>();
+  /** Очередь рейтинговых дуэлей: user_id → запись ожидания. */
+  queue = new Map<
+    string,
+    { ladder: string; format: "classic" | "lite"; enteredAt: number; ticks: number }
+  >();
+  /** Игроки, чей подбор состоялся: user_id → код комнаты. */
+  queueMatched = new Map<string, { ladder: string; format: "classic" | "lite"; code: string }>();
   scenario: MatchScenario = {};
   private seq = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -234,6 +275,8 @@ export class MatchWorld {
     this.results.clear();
     this.ops.clear();
     this.ratings.clear();
+    this.queue.clear();
+    this.queueMatched.clear();
     this.scenario = {};
     this.seq = 0;
   }

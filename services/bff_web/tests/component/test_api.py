@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -28,6 +28,7 @@ pytestmark = pytest.mark.component
 GAME, CATALOG, IDENTITY = "http://game.test", "http://catalog.test", "http://identity.test"
 COLLECTIONS, LIBRARY = "http://collections.test", "http://library.test"
 MATCH = "http://match.test"
+RATING = "http://rating.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -211,6 +212,7 @@ class Stubs:
     collections: ServiceStub
     library: ServiceStub
     match: ServiceStub
+    rating: ServiceStub
 
 
 @dataclass
@@ -218,6 +220,7 @@ class Bff:
     client: httpx.AsyncClient
     stubs: Stubs
     issuer: TestTokenIssuer
+    rating_routes: dict[str, respx.Route] = field(default_factory=dict)
 
     def bearer(self, token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {token}"}
@@ -233,6 +236,7 @@ def stubs() -> Iterator[Stubs]:
             collections=stack.enter_context(stub_service(COLLECTIONS, service="collections")),
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
             match=stack.enter_context(stub_service(MATCH, service="match")),
+            rating=stack.enter_context(stub_service(RATING, service="rating")),
         )
 
 
@@ -251,6 +255,7 @@ async def bff(
             "collections_url": COLLECTIONS,
             "library_url": LIBRARY,
             "match_url": MATCH,
+            "rating_url": RATING,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -1033,6 +1038,9 @@ SAMPLES: dict[str, Any] = json.loads(
 )
 MATCH_ID = UUID(SAMPLES["match_result"]["match_id"])
 ITEM_2 = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a2")
+RATING_SAMPLES: dict[str, Any] = json.loads(
+    (Path(__file__).parents[1] / "data" / "rating.json").read_text(encoding="utf-8")
+)
 UNAVAILABLE = {"status": "unavailable", "data": None}
 
 
@@ -1042,7 +1050,33 @@ def _online_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
         200, json=SAMPLES["my_matches"]
     )
     modes = bff.stubs.game.route("GET", "/v1/modes").respond(200, json=SAMPLES["online_modes"])
+    _rating_routes(bff)
     return rooms, matches, modes
+
+
+def _rating_routes(bff: Bff) -> dict[str, respx.Route]:
+    """Источники 4b: очередь match и ручки rating (проверяются по OpenAPI-снимкам)."""
+    bff.rating_routes = {
+        "pool": bff.stubs.match.route("GET", "/v1/queue/pool").respond(
+            200, json=RATING_SAMPLES["queue_pool"]
+        ),
+        "ladders": bff.stubs.rating.route("GET", "/v1/ladders").respond(
+            200, json=RATING_SAMPLES["ladders"]
+        ),
+        "mine": bff.stubs.rating.route("GET", "/v1/me/ratings").respond(
+            200, json=RATING_SAMPLES["my_ratings"]
+        ),
+        "weekly": bff.stubs.rating.route("GET", "/v1/ladders/film/weekly").respond(
+            200, json=RATING_SAMPLES["weekly"]
+        ),
+        "weekly_music": bff.stubs.rating.route("GET", "/v1/ladders/music/weekly").respond(
+            200, json={**RATING_SAMPLES["weekly"], "ladder": "music"}
+        ),
+        "board": bff.stubs.rating.route("GET", "/v1/ladders/film/leaderboard").respond(
+            200, json=RATING_SAMPLES["leaderboard"]
+        ),
+    }
+    return bff.rating_routes
 
 
 async def test_online_page_for_user_all_blocks(bff: Bff) -> None:
@@ -1094,6 +1128,87 @@ async def test_online_page_for_user_all_blocks(bff: Bff) -> None:
     assert "authorization" not in modes.calls.last.request.headers  # публичный, кэшируемый
 
 
+async def test_online_page_4b_blocks(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    _online_routes(bff)
+    routes = bff.rating_routes
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    blocks = response.json()["blocks"]
+    assert blocks["queues"] == {"status": "ok", "data": RATING_SAMPLES["queue_pool"]["items"]}
+    film, music = blocks["ratings"]["data"]
+    assert (film["rating"], film["tier"]["title_key"], film["place"]) == (
+        1234,
+        "rating.tier.silver",
+        42,
+    )
+    assert (music["rating"], music["tier"], music["calibrating"], music["calibration_left"]) == (
+        None,
+        None,
+        True,
+        7,
+    )
+    assert blocks["seasons"]["data"] == [
+        {
+            "ladder": "film",
+            "number": 4,
+            "starts_at": "2026-10-19T00:00:00Z",
+            "ends_at": "2026-12-14T00:00:00Z",
+        }
+    ]
+    weekly = blocks["weekly"]["data"]
+    assert [w["ladder"] for w in weekly] == ["film", "music"]
+    assert len(weekly[0]["items"]) == 3  # меньше online_weekly_limit
+    assert routes["mine"].calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert routes["pool"].calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert routes["weekly"].calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert "authorization" not in routes["ladders"].calls.last.request.headers  # публичный
+
+
+async def test_online_page_4b_rating_down_hides_rating_blocks_only(bff: Bff) -> None:
+    _online_routes(bff)
+    routes = bff.rating_routes
+    routes["ladders"].respond(503)
+    routes["mine"].mock(side_effect=httpx.ReadTimeout("slow"))
+    routes["pool"].respond(
+        501, json={"code": "core.not_implemented", "title": "Not implemented", "status": 501}
+    )
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    for name in ("queues", "ratings", "seasons", "weekly"):
+        assert blocks[name] == UNAVAILABLE, name
+    assert blocks["open_rooms"]["status"] == blocks["modes"]["status"] == "ok"
+
+
+async def test_online_page_4b_rating_401_is_session_expired(bff: Bff) -> None:
+    _online_routes(bff)
+    bff.rating_routes["mine"].respond(
+        401, json={"code": "auth.session_revoked", "title": "Unauth", "status": 401}
+    )
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.json() == {"status": "session_expired", "blocks": None}
+
+
+async def test_online_page_ladders_are_cached_but_personal_blocks_are_not(bff: Bff) -> None:
+    _online_routes(bff)
+    routes = bff.rating_routes
+    headers = bff.bearer(bff.issuer.issue())
+
+    await bff.client.get("/v1/pages/online", headers=headers)
+    await bff.client.get("/v1/pages/online", headers=headers)
+
+    assert routes["ladders"].call_count == 1  # общий, 10 с
+    assert routes["mine"].call_count == routes["weekly"].call_count == 2  # личные
+    assert routes["pool"].call_count == 2
+
+
 async def test_online_page_guest_and_anonymous_get_auth_required_without_calls(bff: Bff) -> None:
     rooms, matches, modes = _online_routes(bff)
 
@@ -1130,13 +1245,24 @@ async def test_online_page_match_stub_501_and_game_down_are_unavailable(bff: Bff
     bff.stubs.match.route("GET", "/v1/rooms/open").respond(501, json=problem)
     bff.stubs.match.route("GET", "/v1/me/matches").respond(501, json=problem)
     bff.stubs.game.route("GET", "/v1/modes").respond(503)
+    bff.stubs.match.route("GET", "/v1/queue/pool").respond(501, json=problem)
+    bff.stubs.rating.route("GET", "/v1/ladders").respond(501, json=problem)
+    bff.stubs.rating.route("GET", "/v1/me/ratings").respond(501, json=problem)
 
     response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "blocks": {"open_rooms": UNAVAILABLE, "my_matches": UNAVAILABLE, "modes": UNAVAILABLE},
+        "blocks": {
+            "open_rooms": UNAVAILABLE,
+            "my_matches": UNAVAILABLE,
+            "modes": UNAVAILABLE,
+            "queues": UNAVAILABLE,
+            "ratings": UNAVAILABLE,
+            "seasons": UNAVAILABLE,
+            "weekly": UNAVAILABLE,
+        },
     }
 
 
@@ -1373,3 +1499,149 @@ async def test_online_modes_without_online_block_are_contract_violation(bff: Bff
     blocks = response.json()["blocks"]
     assert blocks["modes"] == UNAVAILABLE
     assert blocks["open_rooms"]["status"] == "ok"
+
+
+LB_PUBLIC = "public, max-age=10, stale-while-revalidate=60"
+
+
+async def test_leaderboards_page_is_public_and_cached_10s(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+
+    first = await bff.client.get("/v1/pages/leaderboards", params={"ladder": "film"})
+    second = await bff.client.get("/v1/pages/leaderboards", params={"ladder": "film"})
+
+    assert first.status_code == second.status_code == 200, first.text
+    assert first.headers["cache-control"] == LB_PUBLIC
+    assert first.headers["vary"] == "Authorization, Cookie"
+    blocks = first.json()["blocks"]
+    assert [x["key"] for x in blocks["ladders"]["data"]] == ["film", "music"]
+    film = blocks["ladders"]["data"][0]
+    assert film["season"]["number"] == 4 and film["tiers"][0]["key"] == "iron_1"
+    board = blocks["leaderboard"]["data"]
+    assert board["next_cursor"] == "c2" and board["items"][0]["nickname"] == "neo"
+    assert board["items"][0]["tier"]["title_key"] == "rating.tier.cinephile"
+    assert blocks["weekly"]["data"]["items"][0]["delta"] == 55
+    # Общие данные: токен в rating не уходит, повтор — из Redis.
+    for name in ("ladders", "board", "weekly"):
+        assert routes[name].call_count == 1, name
+        assert "authorization" not in routes[name].calls.last.request.headers
+
+
+async def test_leaderboards_page_defaults_to_first_ladder_and_passes_cursor(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+
+    response = await bff.client.get("/v1/pages/leaderboards", params={"cursor": "c1"})
+
+    assert response.status_code == 200, response.text
+    assert dict(routes["board"].calls.last.request.url.params) == {"cursor": "c1"}
+    assert routes["weekly"].call_count == 1
+
+
+async def test_leaderboards_page_around_me_is_personal(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+    token = bff.issuer.issue()
+    me = {**RATING_SAMPLES["leaderboard"]["items"][0], "place": 42, "nickname": "me"}
+    routes["board"].respond(200, json={**RATING_SAMPLES["leaderboard"], "me": me})
+
+    response = await bff.client.get(
+        "/v1/pages/leaderboards",
+        params={"ladder": "film", "around": "me"},
+        headers=bff.bearer(token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json()["blocks"]["leaderboard"]["data"]["me"]["place"] == 42
+    request = routes["board"].calls.last.request
+    assert request.headers["authorization"] == f"Bearer {token}"
+    assert dict(request.url.params) == {"around": "me"}
+    assert routes["weekly"].calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_leaderboards_page_around_me_without_session_is_401(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+
+    response = await bff.client.get("/v1/pages/leaderboards", params={"around": "me"})
+
+    assert_problem(response, 401, "auth.unauthenticated")
+    assert routes["board"].call_count == 0
+
+
+async def test_leaderboards_page_around_me_in_calibration_returns_first_page(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+    not_ranked = {"code": "rating.not_ranked", "title": "Not ranked", "status": 404}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("around"):
+            return httpx.Response(404, json=not_ranked)
+        return httpx.Response(200, json=RATING_SAMPLES["leaderboard"])
+
+    routes["board"].mock(side_effect=answer)
+
+    response = await bff.client.get(
+        "/v1/pages/leaderboards",
+        params={"ladder": "film", "around": "me"},
+        headers=bff.bearer(bff.issuer.issue()),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["blocks"]["leaderboard"]["data"]["items"][0]["place"] == 1
+    assert routes["board"].call_count == 2
+
+
+async def test_leaderboards_page_ignores_guest_token(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+
+    response = await bff.client.get(
+        "/v1/pages/leaderboards",
+        params={"ladder": "film"},
+        headers=bff.bearer(bff.issuer.issue_guest()),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == LB_PUBLIC
+    assert "authorization" not in routes["board"].calls.last.request.headers
+
+
+async def test_leaderboards_page_unknown_ladder_is_404(bff: Bff) -> None:
+    _rating_routes(bff)
+    missing = {"code": "rating.ladder_not_found", "title": "Not found", "status": 404}
+    for path in ("leaderboard", "weekly"):
+        bff.stubs.rating.route("GET", f"/v1/ladders/nope/{path}").respond(404, json=missing)
+
+    response = await bff.client.get("/v1/pages/leaderboards", params={"ladder": "nope"})
+
+    assert_problem(response, 404, "rating.ladder_not_found")
+
+
+async def test_leaderboards_page_foreign_cursor_is_422(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+    routes["board"].respond(
+        422, json={"code": "core.invalid_input", "title": "Bad cursor", "status": 422}
+    )
+
+    response = await bff.client.get(
+        "/v1/pages/leaderboards", params={"ladder": "film", "cursor": "zzz"}
+    )
+
+    assert_problem(response, 422, "core.invalid_input")
+
+
+async def test_leaderboards_page_rating_down_degrades_blocks_with_200(bff: Bff) -> None:
+    routes = _rating_routes(bff)
+    routes["ladders"].respond(503)
+    routes["board"].mock(side_effect=httpx.ReadTimeout("slow"))
+    routes["weekly"].respond(200, json={"junk": True})  # ответ вне контракта
+
+    response = await bff.client.get("/v1/pages/leaderboards", params={"ladder": "film"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "blocks": {"ladders": UNAVAILABLE, "leaderboard": UNAVAILABLE, "weekly": UNAVAILABLE}
+    }
+
+
+async def test_leaderboards_page_validates_query(bff: Bff) -> None:
+    for params in ({"ladder": "Film!"}, {"around": "all"}, {"cursor": "bad cursor"}):
+        response = await bff.client.get("/v1/pages/leaderboards", params=params)
+        assert response.status_code == 422, params

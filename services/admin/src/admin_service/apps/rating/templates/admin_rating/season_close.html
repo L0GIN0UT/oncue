@@ -1,0 +1,11 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'rating:ladder' key=key %}">← к ladder-у</a></p>
+<p>Сезон <code>{{ season_id }}</code> ladder-а <code>{{ key }}</code> закроется сейчас: мягкий сброс рейтингов
+   по конфигу, событие <code>SeasonFinished</code> с итоговыми местами, следующий сезон откроется автоматически.
+   Действие необратимо; причина попадёт в аудит.</p>
+<form method="post" action="{% url 'rating:season_close' key=key season_id=season_id %}">
+  {% csrf_token %}{{ form.as_p }}<button type="submit">Закрыть сезон</button>
+</form>
+{% endblock %}

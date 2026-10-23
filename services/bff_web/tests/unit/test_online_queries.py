@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 import pytest
@@ -16,6 +16,9 @@ from bff_web_service.application.dto import (
     Domain,
     Item,
     ItemShelves,
+    LadderCard,
+    LeaderboardCard,
+    LeaderboardEntryCard,
     MatchMode,
     MatchResult,
     MatchRound,
@@ -26,17 +29,32 @@ from bff_web_service.application.dto import (
     OnlineStatus,
     OpenRooms,
     PersonalRecord,
+    QueuePoolCard,
+    RatingCard,
+    SeasonCard,
     SessionResult,
     Shelf,
     ShelfItems,
     SubjectKind,
+    TierCard,
     Viewer,
+    WeeklyEntryCard,
+    WeeklyTopCard,
 )
-from bff_web_service.application.ports import UpstreamRejectedError, UpstreamUnavailableError
-from bff_web_service.application.queries import GetMatchPage, GetOnlinePage
+from bff_web_service.application.ports import (
+    RatingClient,
+    UpstreamRejectedError,
+    UpstreamUnavailableError,
+)
+from bff_web_service.application.queries import GetLeaderboardsPage, GetMatchPage, GetOnlinePage
 from bff_web_service.domain import BlockStatus
 
-from gv_core.errors import ForbiddenError, NotFoundError, UnauthenticatedError
+from gv_core.errors import (
+    ForbiddenError,
+    InvalidInputError,
+    NotFoundError,
+    UnauthenticatedError,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -102,7 +120,16 @@ class FakeMatch:
     rooms: OpenRooms | Exception = field(default_factory=lambda: OpenRooms([], None))
     matches: MyMatches | Exception = field(default_factory=lambda: MyMatches([], None))
     outcome: MatchResult | Exception = field(default_factory=lambda: result(ITEM_A, ITEM_B))
+    pool: list[QueuePoolCard] | Exception = field(
+        default_factory=lambda: [QueuePoolCard("film", "classic", 3)]
+    )
     calls: list[tuple[str, ...]] = field(default_factory=list)
+
+    async def queue_pool(self, token: str) -> list[QueuePoolCard]:
+        self.calls.append(("pool", token))
+        if isinstance(self.pool, Exception):
+            raise self.pool
+        return self.pool
 
     async def open_rooms(self, token: str, *, limit: int) -> OpenRooms:
         self.calls.append(("rooms", token, str(limit)))
@@ -182,9 +209,21 @@ class FakeLibrary:
         raise AssertionError("итог матча не читает полку")
 
 
-def online(match: FakeMatch, game: FakeGame | None = None) -> GetOnlinePage:
+def online(
+    match: FakeMatch,
+    game: FakeGame | None = None,
+    rating: RatingClient | None = None,
+    *,
+    weekly_limit: int = 2,
+) -> GetOnlinePage:
     return GetOnlinePage(
-        match, game or FakeGame(), concurrency=10, rooms_limit=20, matches_limit=10
+        match,
+        game or FakeGame(),
+        rating or FakeRating(),
+        concurrency=10,
+        rooms_limit=20,
+        matches_limit=10,
+        weekly_limit=weekly_limit,
     )
 
 
@@ -217,7 +256,11 @@ async def test_online_user_gets_all_blocks_with_limits() -> None:
     cards = page.blocks.modes.data or []
     assert [m.key for m in cards] == ["film.duel.frame"]
     assert cards[0].online is ONLINE_MODE.online
-    assert sorted(match.calls) == [("matches", "user-token", "10"), ("rooms", "user-token", "20")]
+    assert sorted(match.calls) == [
+        ("matches", "user-token", "10"),
+        ("pool", "user-token"),
+        ("rooms", "user-token", "20"),
+    ]
 
 
 @pytest.mark.parametrize("viewer", [ANONYMOUS, GUEST], ids=["anonymous", "guest"])
@@ -409,3 +452,262 @@ async def test_match_page_items_deadline_hides_slow_block_only() -> None:
     assert page.blocks.match.is_ok
     assert page.blocks.items.status is BlockStatus.UNAVAILABLE
     assert page.blocks.library.is_ok
+
+
+# ----------------------------------------------------------------------------- 4b
+USER_ID = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000e01")
+SILVER = TierCard("silver_2", "silver", 2, "rating.tier.silver")
+SEASON = SeasonCard("film", 4, AT, datetime(2026, 12, 17, 12, 0, tzinfo=UTC))
+LADDER = LadderCard(
+    key="film", domain="film", formats=["classic", "lite"], season=SEASON, tiers=[SILVER]
+)
+LADDER_MUSIC = LadderCard(key="music", domain="music", formats=["classic"], season=None, tiers=[])
+RATING = RatingCard(
+    ladder="film",
+    rating=1234,
+    tier=SILVER,
+    next_tier_at=1500,
+    calibrating=False,
+    calibration_left=0,
+    matches_played=15,
+    place=42,
+)
+CALIBRATING = RatingCard(
+    ladder="music", rating=None, tier=None, calibrating=True, calibration_left=7, matches_played=3
+)
+ENTRY = WeeklyEntryCard(1, USER_ID, "neo", 55)
+WEEKLY = WeeklyTopCard("film", date(2026, 10, 19), [ENTRY, ENTRY, ENTRY], me=ENTRY)
+BOARD_ROW = LeaderboardEntryCard(1, USER_ID, "neo", 1800, SILVER, 40)
+BOARD = LeaderboardCard("film", [BOARD_ROW], next_cursor="c2")
+
+
+@dataclass
+class FakeRating:
+    """Фейк `RatingClient`: значение или исключение на каждый метод, журнал вызовов."""
+
+    ladder_list: list[LadderCard] | Exception = field(
+        default_factory=lambda: [LADDER, LADDER_MUSIC]
+    )
+    mine: list[RatingCard] | Exception = field(default_factory=lambda: [RATING, CALIBRATING])
+    board: LeaderboardCard | Exception = field(default_factory=lambda: BOARD)
+    board_around: LeaderboardCard | Exception | None = None
+    top: WeeklyTopCard | Exception = field(default_factory=lambda: WEEKLY)
+    calls: list[tuple[object, ...]] = field(default_factory=list)
+
+    async def ladders(self) -> list[LadderCard]:
+        self.calls.append(("ladders",))
+        if isinstance(self.ladder_list, Exception):
+            raise self.ladder_list
+        return self.ladder_list
+
+    async def my_ratings(self, token: str) -> list[RatingCard]:
+        self.calls.append(("mine", token))
+        if isinstance(self.mine, Exception):
+            raise self.mine
+        return self.mine
+
+    async def leaderboard(
+        self, ladder: str, *, token: str | None, cursor: str | None, around_me: bool
+    ) -> LeaderboardCard:
+        self.calls.append(("board", ladder, token, cursor, around_me))
+        value = self.board_around if around_me and self.board_around is not None else self.board
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    async def weekly(self, ladder: str, *, token: str | None) -> WeeklyTopCard:
+        self.calls.append(("weekly", ladder, token))
+        if isinstance(self.top, Exception):
+            raise self.top
+        return WeeklyTopCard(ladder, self.top.week_start, self.top.items, self.top.me)
+
+
+RATING_DOWN = UpstreamUnavailableError("rating", "timeout")
+NOT_RANKED = UpstreamRejectedError("rating", 404, "rating.not_ranked")
+NO_LADDER = UpstreamRejectedError("rating", 404, "rating.ladder_not_found")
+
+
+def leaderboards(rating: FakeRating) -> GetLeaderboardsPage:
+    return GetLeaderboardsPage(rating, concurrency=10)
+
+
+# ----------------------------------------------------------------------------- хаб онлайна
+async def test_hub_fills_4b_blocks() -> None:
+    match, rating = FakeMatch(), FakeRating()
+
+    page = await online(match, rating=rating)(USER)
+
+    blocks = page.blocks
+    assert blocks is not None
+    assert [(q.ladder, q.format, q.searching) for q in blocks.queues.data or []] == [
+        ("film", "classic", 3)
+    ]
+    assert blocks.ratings.data == [RATING, CALIBRATING]
+    assert blocks.seasons.data == [SEASON]  # ladder без сезона в блок не попадает
+    weekly = blocks.weekly.data or []
+    assert [w.ladder for w in weekly] == ["film", "music"]
+    assert all(len(w.items) == 2 and w.me is not None for w in weekly)  # weekly_limit
+    assert ("mine", "user-token") in rating.calls
+    assert ("weekly", "film", "user-token") in rating.calls
+
+
+async def test_hub_rating_down_hides_its_blocks_only() -> None:
+    rating = FakeRating(ladder_list=RATING_DOWN, mine=RATING_DOWN)
+
+    page = await online(FakeMatch(), rating=rating)(USER)
+
+    blocks = page.blocks
+    assert blocks is not None
+    for hidden in (blocks.ratings, blocks.seasons, blocks.weekly):
+        assert hidden.status is BlockStatus.UNAVAILABLE
+    assert blocks.queues.status is BlockStatus.OK
+    assert blocks.open_rooms.status is BlockStatus.OK
+
+
+async def test_hub_weekly_failure_of_one_ladder_hides_weekly_block() -> None:
+    page = await online(FakeMatch(), rating=FakeRating(top=RATING_DOWN))(USER)
+
+    assert page.blocks is not None
+    assert page.blocks.weekly.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.seasons.status is BlockStatus.OK
+
+
+async def test_hub_match_pool_down_hides_queues_only() -> None:
+    page = await online(FakeMatch(pool=UpstreamUnavailableError("match", "timeout")))(USER)
+
+    assert page.blocks is not None
+    assert page.blocks.queues.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.ratings.status is BlockStatus.OK
+
+
+async def test_hub_rating_401_is_session_expired() -> None:
+    expired = UpstreamRejectedError("rating", 401, "auth.unauthenticated")
+
+    page = await online(FakeMatch(), rating=FakeRating(mine=expired))(USER)
+
+    assert page.status is OnlineStatus.SESSION_EXPIRED
+
+
+async def test_hub_rating_guest_403_is_auth_required() -> None:
+    guest = UpstreamRejectedError("rating", 403, "auth.guest_forbidden")
+
+    page = await online(FakeMatch(), rating=FakeRating(mine=guest))(USER)
+
+    assert page.status is OnlineStatus.AUTH_REQUIRED
+
+
+async def test_hub_anonymous_does_not_call_rating() -> None:
+    rating, match = FakeRating(), FakeMatch()
+
+    await online(match, rating=rating)(ANONYMOUS)
+
+    assert rating.calls == [] and match.calls == []
+
+
+# ----------------------------------------------------------------------------- лидерборды
+async def test_leaderboards_default_ladder_is_first_and_page_is_public() -> None:
+    rating = FakeRating()
+
+    page = await leaderboards(rating)(ANONYMOUS, None, None, around_me=False)
+
+    assert page.personal is False
+    assert page.blocks.ladders.data == [LADDER, LADDER_MUSIC]
+    assert page.blocks.leaderboard.data == BOARD
+    assert (page.blocks.weekly.data or None) is not None
+    assert ("board", "film", None, None, False) in rating.calls
+    assert ("weekly", "film", None) in rating.calls
+
+
+async def test_leaderboards_explicit_ladder_and_cursor() -> None:
+    rating = FakeRating()
+
+    await leaderboards(rating)(ANONYMOUS, "music", "c1", around_me=False)
+
+    assert ("board", "music", None, "c1", False) in rating.calls
+    assert ("weekly", "music", None) in rating.calls
+
+
+async def test_leaderboards_guest_and_rejected_token_are_public() -> None:
+    rating = FakeRating()
+
+    for viewer in (GUEST, Viewer(token_rejected=True)):
+        page = await leaderboards(rating)(viewer, "film", None, around_me=False)
+        assert page.personal is False
+    assert all(c[2] is None for c in rating.calls if c[0] in {"board", "weekly"})
+
+
+async def test_leaderboards_user_gets_personal_page() -> None:
+    rating = FakeRating()
+
+    page = await leaderboards(rating)(USER, "film", None, around_me=True)
+
+    assert page.personal is True
+    assert ("board", "film", "user-token", None, True) in rating.calls
+    assert ("weekly", "film", "user-token") in rating.calls
+
+
+async def test_leaderboards_user_without_around_is_still_public_leaderboard() -> None:
+    """Без `around=me` токен не нужен: страница общая и кэшируется."""
+    rating = FakeRating()
+
+    page = await leaderboards(rating)(USER, "film", None, around_me=False)
+
+    assert page.personal is False
+    assert ("board", "film", None, None, False) in rating.calls
+
+
+@pytest.mark.parametrize("viewer", [ANONYMOUS, GUEST], ids=["anonymous", "guest"])
+async def test_leaderboards_around_me_needs_a_user(viewer: Viewer) -> None:
+    rating = FakeRating()
+
+    with pytest.raises(UnauthenticatedError):
+        await leaderboards(rating)(viewer, "film", None, around_me=True)
+    assert rating.calls == []
+
+
+async def test_leaderboards_around_me_in_calibration_falls_back_to_plain_page() -> None:
+    rating = FakeRating(board_around=NOT_RANKED)
+
+    page = await leaderboards(rating)(USER, "film", None, around_me=True)
+
+    assert page.blocks.leaderboard.data == BOARD
+    assert ("board", "film", "user-token", None, False) in rating.calls
+
+
+async def test_leaderboards_unknown_ladder_is_404() -> None:
+    with pytest.raises(NotFoundError) as exc:
+        await leaderboards(FakeRating())(ANONYMOUS, "nope", None, around_me=False)
+    assert exc.value.code == "rating.ladder_not_found"
+
+    # Список ladder-ов недоступен — решает сам rating.
+    with pytest.raises(NotFoundError):
+        await leaderboards(FakeRating(board=NO_LADDER, ladder_list=RATING_DOWN))(
+            ANONYMOUS, "nope", None, around_me=False
+        )
+
+
+async def test_leaderboards_bad_cursor_is_422() -> None:
+    bad = UpstreamRejectedError("rating", 422, "core.invalid_input")
+
+    with pytest.raises(InvalidInputError):
+        await leaderboards(FakeRating(board=bad))(ANONYMOUS, "film", "zzz", around_me=False)
+
+
+async def test_leaderboards_rating_down_degrades_blocks() -> None:
+    page = await leaderboards(
+        FakeRating(ladder_list=RATING_DOWN, board=RATING_DOWN, top=RATING_DOWN)
+    )(ANONYMOUS, "film", None, around_me=False)
+
+    blocks = page.blocks
+    for block in (blocks.ladders, blocks.leaderboard, blocks.weekly):
+        assert block.status is BlockStatus.UNAVAILABLE
+
+
+async def test_leaderboards_without_ladders_and_key_blocks_hide() -> None:
+    rating = FakeRating(ladder_list=RATING_DOWN)
+
+    page = await leaderboards(rating)(ANONYMOUS, None, None, around_me=False)
+
+    assert page.blocks.leaderboard.status is BlockStatus.UNAVAILABLE
+    assert page.blocks.weekly.status is BlockStatus.UNAVAILABLE
+    assert [c[0] for c in rating.calls] == ["ladders"]

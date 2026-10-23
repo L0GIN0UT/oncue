@@ -38,6 +38,10 @@ services:
     ports: ["127.0.0.1:8105:8000"]
     environment:
       GV_LOG_JSON: "false"
+      # Сиды ladder-ов создаются при старте (rating.ladders.bootstrap).
+      GV_RATING__BOOTSTRAP_LADDERS_DIR: /seeds/rating/ladders
+    volumes:
+      - ../../seeds/rating/ladders:/seeds/rating/ladders:ro
   collections:
     ports: ["127.0.0.1:8106:8000"]
     environment:

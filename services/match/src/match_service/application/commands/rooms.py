@@ -83,12 +83,14 @@ class Actor:
     Attributes:
         chat_muted: Санкция ``CHAT_MUTE`` из claim.
         chat_slow: Санкция ``CHAT_SLOW`` из claim.
+        ranked_banned: Санкция ``RANKED`` из claim (нет рейтинговых игр).
         ip: IP клиента (лимит перебора кодов).
     """
 
     user_id: UUID
     chat_muted: bool = False
     chat_slow: bool = False
+    ranked_banned: bool = False
     ip: str | None = None
 
 

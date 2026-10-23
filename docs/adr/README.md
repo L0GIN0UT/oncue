@@ -40,4 +40,8 @@
 | [0034](0034-rooms-process-lease-snapshots.md) | Процесс `rooms`: команды через Redis Stream, lease с fencing-эпохой, снимки, итог в Postgres |
 | [0035](0035-realtime-centrifugo-tokens-and-tick.md) | Realtime: токены Centrifugo, namespace-ы, версии и recovery, HTTP-tick |
 | [0036](0036-online-account-only-chat-and-ratings.md) | Онлайн только с аккаунтом; эмоции и фразы, чат в лобби, оценки игроков |
+| [0037](0037-rating-elo-calibration-ladder-config.md) | Рейтинг: Эло дуэли, калибровка, ladder-ы `music`/`film`, звания — конфиг rating |
+| [0038](0038-matchmaking-queues.md) | Матчмейкинг: очереди Redis по ladder и формату, батчевый матчер, окно рейтинга |
+| [0039](0039-seasons-weekly-top-leaderboards.md) | Сезоны, топ недели, лидерборды: ZSET как хранилище чтения с пересборкой |
+| [0040](0040-lite-format-distractor-source.md) | Формат `lite`: дистракторы — возможность источника (`DistractorSource`) |
 | [0041](0041-email-codes-trusted-devices.md) | Одноразовые коды по почте и доверенные устройства вместо ссылок с токенами |

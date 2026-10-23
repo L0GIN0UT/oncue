@@ -1,0 +1,76 @@
+# Дуэль «лайт» (film, рейтинговая): выбор из 4 вариантов (`pick`), один уровень, одна попытка; дистракторы подбирает ядро (ADR 0040). Очки за скорость (`party_speed`).
+# clue.params — одноуровневый статический профиль media-pipeline (как у `pair`-режимов, D7).
+key: film.ranked.lite
+title_i18n: modes.film.ranked.lite.title
+description_i18n: modes.film.ranked.lite.description
+domain: film
+source:
+  type: random
+  params:
+    pool:
+      kinds:
+      - film
+      min_playable: 20
+clue:
+  type: frame_progressive
+  params:
+    levels:
+    - blur_px: 0
+      crop: 1
+      max_width: 960
+answer:
+  format: pick
+  matcher:
+    type: title_alias
+    params:
+      typo:
+      - min_len: 5
+        max_distance: 1
+      - min_len: 10
+        max_distance: 2
+      accept_same_title: true
+  partial: []
+  params:
+    distractors:
+      type: similar
+      count: 3
+      params:
+        same_genre: false
+        year_window: 15
+        popularity_ratio: null
+        min_pool: 8
+scoring:
+  type: party_speed
+  params:
+    max_points: 100
+    partial_ratio: 0.5
+session:
+  kind: duel
+  players:
+    min: 2
+    max: 2
+  rounds: 7
+  countdown_s: 3
+  level_windows_s:
+  - 20
+  reveal_s: 5
+  contest:
+    type: parallel
+    params:
+      attempts_per_level: 1
+      end_when_all_answered: true
+  disconnect_grace_s: 30
+  chat:
+    emotes:
+    - match.emotes.wow
+    - match.emotes.gg
+    - match.emotes.fire
+    - match.emotes.laugh
+    - match.emotes.think
+    phrases:
+    - match.phrases.good_luck
+    - match.phrases.well_played
+    - match.phrases.nice_one
+    - match.phrases.so_close
+  ranked: true
+  ladder: film

@@ -60,6 +60,11 @@ PUBLIC: list[tuple[str, str, dict[str, Any] | None, bool]] = [
     ("POST", f"/v1/matches/{MATCH_ID}/rate", {"to_user_id": USER_ID, "kind": "praise"}, True),
     ("GET", f"/v1/matches/{MATCH_ID}", None, False),
     ("GET", "/v1/me/matches", None, False),
+    ("POST", "/v1/queue/enter", {"ladder": "film", "format": "classic"}, True),
+    ("POST", "/v1/queue/tick", None, False),
+    ("POST", "/v1/queue/leave", None, True),
+    ("GET", "/v1/queue/pool", None, False),
+    ("GET", "/v1/rooms/spectate", None, False),
 ]
 ADMIN: list[tuple[str, str, dict[str, Any] | None, bool]] = [
     ("GET", "/admin/v1/rooms", None, False),

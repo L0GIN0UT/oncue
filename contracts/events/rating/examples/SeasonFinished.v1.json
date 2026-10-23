@@ -1,0 +1,20 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001",
+  "aggregate_type": "rating",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0005",
+  "event_type": "rating.SeasonFinished",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "closed_by": "schedule",
+    "finished_at": "2026-10-23T00:00:00Z",
+    "ladder": "film",
+    "number": 1,
+    "players_count": 128,
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001",
+    "standings_ref": "/v1/ladders/film/leaderboard?season=0192a3b4-c5d6-7e8f-9a0b-0000000a0001"
+  },
+  "producer": "rating"
+}

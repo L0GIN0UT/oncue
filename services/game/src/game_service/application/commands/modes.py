@@ -37,7 +37,14 @@ from game_service.domain.modes import ConfigVersion, Draft, ModeLine, domain_of
 from gv_core.clock import Clock
 from gv_core.ids import uuid7
 from gv_db.idempotency import request_fingerprint, run_idempotent
-from gv_game_kernel import ConfigError, PluginSpec, params_hash, parse_mode_config
+from gv_game_kernel import (
+    ConfigError,
+    ModeConfig,
+    OnlineSessionSpec,
+    PluginSpec,
+    params_hash,
+    parse_mode_config,
+)
 from gv_game_kernel.spec import OnlineKind
 
 log = structlog.get_logger(__name__)
@@ -47,6 +54,8 @@ POOL_TOO_SMALL = "config.pool_too_small"
 PROFILE_MISSING = "assets.profile_missing"
 """Предупреждение: под параметры загадки (или ревила) в проекции нет ни одного ассета —
 профиля media-pipeline, видимо, нет; админ может запросить ассеты (ADR 0025)."""
+LADDER_UNKNOWN = "config.ladder_unknown"
+LADDER_DOMAIN_MISMATCH = "config.ladder_domain_mismatch"
 MESSAGE_KEY_PREFIX = "admin.mode_config.errors."
 
 
@@ -145,6 +154,20 @@ class ValidateModeConfig:
                 warnings.append({"code": PROFILE_MISSING, "path": path})
         return warnings
 
+    @staticmethod
+    async def _ladder_issues(uow: GameUnitOfWork, config: ModeConfig) -> list[dict[str, str]]:
+        """``session.ladder`` обязан быть в проекции ключей rating, того же домена (ADR 0037)."""
+        session = config.session
+        if not isinstance(session, OnlineSessionSpec) or session.ladder is None:
+            return []
+        path = "session.ladder"
+        proj = await uow.ladders.get(session.ladder)
+        if proj is None:
+            return [{"path": path, "code": LADDER_UNKNOWN}]
+        if proj.domain != config.domain:
+            return [{"path": path, "code": LADDER_DOMAIN_MISMATCH}]
+        return []
+
     def check_size(self, body: Mapping[str, Any]) -> None:
         """Тело не больше ``GV_GAME__MODE_CONFIG_MAX_BYTES`` (§9 п. 9).
 
@@ -164,6 +187,7 @@ class ValidateModeConfig:
         *,
         key: str | None = None,
         check_pool: bool = True,
+        check_ladder: bool = True,
     ) -> Json:
         """Итог проверки ``{ok, errors, warnings, pool}``.
 
@@ -173,6 +197,8 @@ class ValidateModeConfig:
             key: Ожидаемый ключ (из пути); ``None`` — не сверять.
             check_pool: Пул меньше ``min_playable`` — ошибка; иначе — предупреждение
                 (bootstrap сидов в local/ci, когда контент ещё не загружен).
+            check_ladder: Неизвестный ladder — ошибка; иначе — предупреждение (bootstrap
+                сидов: ``LadderPublished`` rating может дойти позже старта game).
         """
         self.check_size(body)
         check = self._factory.check(body)
@@ -180,6 +206,12 @@ class ValidateModeConfig:
         warnings: list[dict[str, str]] = []
         if check.config is not None and key is not None and check.config.key != key:
             errors.append({"path": "key", "code": KEY_MISMATCH})
+        if check.config is not None:
+            for issue in await self._ladder_issues(uow, check.config):
+                if check_ladder:
+                    errors.append(issue)
+                else:
+                    warnings.append(issue)
         pool_info: Json | None = None
         rules = check.rules
         if rules is not None:
@@ -625,7 +657,9 @@ class BootstrapModes:
                 line = await uow.modes.get_line(key, for_update=True)
                 if line.latest is not None:
                     continue
-                validation = await self._validator.execute(uow, body, key=key, check_pool=False)
+                validation = await self._validator.execute(
+                    uow, body, key=key, check_pool=False, check_ladder=False
+                )
                 if not validation["ok"]:
                     log.error(
                         "game.bootstrap_config_invalid",

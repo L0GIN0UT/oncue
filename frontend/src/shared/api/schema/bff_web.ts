@@ -76,6 +76,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/leaderboards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Лидерборды
+         * @description Публичная страница: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`; без `ladder` — первый из списка) и топ недели (rating). Блоки деградируют независимо. Без `around` ответ общий: `public, max-age=10`. `around=me` — окно вокруг пользователя и строки `me`: нужен вход (иначе 401), ответ `private, no-store`; в калибровке — обычная первая страница. Нет ladder-а — 404 `rating.ladder_not_found`, чужой курсор — 422.
+         */
+        get: operations["leaderboards_page_v1_pages_leaderboards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/library": {
         parameters: {
             query?: never;
@@ -145,7 +165,7 @@ export interface paths {
         };
         /**
          * Хаб онлайна
-         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
+         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
          */
         get: operations["online_page_v1_pages_online_get"];
         put?: never;
@@ -238,6 +258,15 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[LeaderboardCard] */
+        Block_LeaderboardCard_: {
+            data?: components["schemas"]["LeaderboardCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[CollectionModeCard]] */
         Block_list_CollectionModeCard__: {
             /** Data */
@@ -278,6 +307,16 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[LadderCard]] */
+        Block_list_LadderCard__: {
+            /** Data */
+            data?: components["schemas"]["LadderCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[ModeCard]] */
         Block_list_ModeCard__: {
             /** Data */
@@ -308,6 +347,26 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[QueuePoolCard]] */
+        Block_list_QueuePoolCard__: {
+            /** Data */
+            data?: components["schemas"]["QueuePoolCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[RatingCard]] */
+        Block_list_RatingCard__: {
+            /** Data */
+            data?: components["schemas"]["RatingCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[RecordCard]] */
         Block_list_RecordCard__: {
             /** Data */
@@ -318,10 +377,30 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[list[SeasonCard]] */
+        Block_list_SeasonCard__: {
+            /** Data */
+            data?: components["schemas"]["SeasonCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[list[ShelfCard]] */
         Block_list_ShelfCard__: {
             /** Data */
             data?: components["schemas"]["ShelfCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[WeeklyTopCard]] */
+        Block_list_WeeklyTopCard__: {
+            /** Data */
+            data?: components["schemas"]["WeeklyTopCard"][] | null;
             /**
              * Status
              * @enum {string}
@@ -367,6 +446,15 @@ export interface components {
         /** Block[ShelfItems] */
         Block_ShelfItems_: {
             data?: components["schemas"]["ShelfItems"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[WeeklyTopCard] */
+        Block_WeeklyTopCard_: {
+            data?: components["schemas"]["WeeklyTopCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -768,6 +856,73 @@ export interface components {
         };
         JsonValue: unknown;
         /**
+         * LadderCard
+         * @description Ladder для переключателя на странице лидербордов.
+         */
+        LadderCard: {
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Formats */
+            formats: ("classic" | "lite")[];
+            /** Key */
+            key: string;
+            season?: components["schemas"]["SeasonCard"] | null;
+            /** Tiers */
+            tiers: components["schemas"]["TierCard"][];
+        };
+        /**
+         * LeaderboardCard
+         * @description Страница лидерборда; `next_cursor` — для `rating /v1/ladders/{key}/leaderboard`.
+         */
+        LeaderboardCard: {
+            /** Items */
+            items: components["schemas"]["LeaderboardEntryCard"][];
+            /** Ladder */
+            ladder: string;
+            me?: components["schemas"]["LeaderboardEntryCard"] | null;
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * LeaderboardEntryCard
+         * @description Строка лидерборда.
+         */
+        LeaderboardEntryCard: {
+            /** Matches Played */
+            matches_played: number;
+            /** Nickname */
+            nickname: string;
+            /** Place */
+            place: number;
+            /** Rating */
+            rating: number;
+            tier: components["schemas"]["TierCard"];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * LeaderboardsBlocks
+         * @description Блоки страницы лидербордов; каждый деградирует независимо.
+         */
+        LeaderboardsBlocks: {
+            ladders: components["schemas"]["Block_list_LadderCard__"];
+            leaderboard: components["schemas"]["Block_LeaderboardCard_"];
+            weekly: components["schemas"]["Block_WeeklyTopCard_"];
+        };
+        /**
+         * LeaderboardsPage
+         * @description ``GET /v1/pages/leaderboards``: публичная страница, кэш 10 с (с ``around=me`` — личная).
+         */
+        LeaderboardsPage: {
+            blocks: components["schemas"]["LeaderboardsBlocks"];
+        };
+        /**
          * LibraryBlocks
          * @description Блоки медиатеки.
          */
@@ -1047,6 +1202,14 @@ export interface components {
             modes: components["schemas"]["Block_list_OnlineModeCard__"];
             my_matches: components["schemas"]["Block_MyMatchesList_"];
             open_rooms: components["schemas"]["Block_OpenRoomsList_"];
+            /** @description 4b: сколько игроков ищет матч (`match /v1/queue/pool`) */
+            queues: components["schemas"]["Block_list_QueuePoolCard__"];
+            /** @description 4b: мои звания и калибровка (`rating /v1/me/ratings`); в калибровке `rating`/`tier` — null, «осталось N матчей» — `calibration_left` */
+            ratings: components["schemas"]["Block_list_RatingCard__"];
+            /** @description 4b: действующие сезоны (ladder без сезона пропускается) */
+            seasons: components["schemas"]["Block_list_SeasonCard__"];
+            /** @description 4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`) */
+            weekly: components["schemas"]["Block_list_WeeklyTopCard__"];
         };
         /**
          * OnlineChatCard
@@ -1243,6 +1406,45 @@ export interface components {
             type: string;
         };
         /**
+         * QueuePoolCard
+         * @description Очередь ladder-а и формата: сколько игроков ищет матч (ADR 0038).
+         */
+        QueuePoolCard: {
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "classic" | "lite";
+            /** Ladder */
+            ladder: string;
+            /** Searching */
+            searching: number;
+        };
+        /**
+         * RatingCard
+         * @description Рейтинг пользователя в ladder-е; в калибровке `rating` и `tier` — null (ADR 0037).
+         */
+        RatingCard: {
+            /** Calibrating */
+            calibrating: boolean;
+            /**
+             * Calibration Left
+             * @description «Осталось N матчей»
+             */
+            calibration_left: number;
+            /** Ladder */
+            ladder: string;
+            /** Matches Played */
+            matches_played: number;
+            /** Next Tier At */
+            next_tier_at?: number | null;
+            /** Place */
+            place?: number | null;
+            /** Rating */
+            rating: number | null;
+            tier: components["schemas"]["TierCard"] | null;
+        };
+        /**
          * RecordCard
          * @description Личный рекорд режима (``game /v1/me/records``).
          */
@@ -1409,6 +1611,27 @@ export interface components {
             user_id: string;
         };
         /**
+         * SeasonCard
+         * @description Действующий сезон ladder-а.
+         */
+        SeasonCard: {
+            /**
+             * Ends At
+             * Format: date-time
+             * @description «Осталось X д.» считает клиент
+             */
+            ends_at: string;
+            /** Ladder */
+            ladder: string;
+            /** Number */
+            number: number;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
+        /**
          * ServiceMeta
          * @description Сведения о сервисе.
          */
@@ -1549,6 +1772,56 @@ export interface components {
             max: number;
             /** Roles */
             roles: string[];
+        };
+        /**
+         * TierCard
+         * @description Звание ladder-а (ключи i18n из конфига rating).
+         */
+        TierCard: {
+            /** Family */
+            family: string;
+            /** Key */
+            key: string;
+            /**
+             * Step
+             * @description Градация внутри звания; null — без градации
+             */
+            step: number | null;
+            /** Title Key */
+            title_key: string;
+        };
+        /**
+         * WeeklyEntryCard
+         * @description Строка топа недели.
+         */
+        WeeklyEntryCard: {
+            /** Delta */
+            delta: number;
+            /** Nickname */
+            nickname: string;
+            /** Place */
+            place: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * WeeklyTopCard
+         * @description Топ недели ladder-а (прирост с понедельника, ADR 0039).
+         */
+        WeeklyTopCard: {
+            /** Items */
+            items: components["schemas"]["WeeklyEntryCard"][];
+            /** Ladder */
+            ladder: string;
+            me?: components["schemas"]["WeeklyEntryCard"] | null;
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
         };
     };
     responses: never;
@@ -1695,6 +1968,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomePage"];
+                };
+            };
+        };
+    };
+    leaderboards_page_v1_pages_leaderboards_get: {
+        parameters: {
+            query?: {
+                around?: "me" | null;
+                cursor?: string | null;
+                ladder?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaderboardsPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

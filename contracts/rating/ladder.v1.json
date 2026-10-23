@@ -1,0 +1,322 @@
+{
+  "$id": "urn:guessverse:contracts:rating:ladder:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Конфиг ladder-а rating (ADR 0037–0039): версионируемый, YAML-сиды `seeds/rating/ladders` и admin-API rating. Эло, калибровка, звания, подбор, сезоны — только здесь, в коде значений нет. Правка = новая версия; публикация шлёт `LadderPublished`.",
+  "properties": {
+    "calibration": {
+      "additionalProperties": false,
+      "properties": {
+        "hide_tier": {
+          "description": "Скрывать звание, пока идёт калибровка",
+          "type": "boolean"
+        },
+        "matches": {
+          "description": "Сколько матчей длится калибровка",
+          "maximum": 10000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "matches",
+        "hide_tier"
+      ],
+      "type": "object"
+    },
+    "domain": {
+      "enum": [
+        "music",
+        "film"
+      ],
+      "type": "string"
+    },
+    "elo": {
+      "additionalProperties": false,
+      "properties": {
+        "format_multiplier": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "type": "number"
+          },
+          "description": "Множитель дельты по формату очереди; ключи — форматы из `formats` (проверка домена)",
+          "propertyNames": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "type": "object"
+        },
+        "k": {
+          "description": "K после калибровки",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "number"
+        },
+        "k_calibrating": {
+          "description": "K в калибровке",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "number"
+        },
+        "leaver_penalty": {
+          "description": "Доп. очки, снимаемые за выход или сдачу; побег — поражение по Эло плюс это",
+          "maximum": 100000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scale": {
+          "description": "Масштаб ожидания (400 — классический Эло)",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "number"
+        },
+        "start": {
+          "description": "Стартовый рейтинг",
+          "maximum": 1000000,
+          "minimum": -1000000,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "k_calibrating",
+        "k",
+        "scale",
+        "format_multiplier",
+        "leaver_penalty"
+      ],
+      "type": "object"
+    },
+    "formats": {
+      "items": {
+        "description": "Формат очереди (ключ): набор задаёт ladder; множители обязаны ему соответствовать",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "type": "string"
+      },
+      "maxItems": 10,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "key": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "leaderboard": {
+      "additionalProperties": false,
+      "properties": {
+        "min_matches": {
+          "description": "С какого числа матчей игрок попадает в лидерборд",
+          "maximum": 100000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "page_size": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "min_matches",
+        "page_size"
+      ],
+      "type": "object"
+    },
+    "matchmaking": {
+      "additionalProperties": false,
+      "description": "Подбор соперника: окно рейтинга растёт со временем ожидания (ADR 0038)",
+      "properties": {
+        "interval_s": {
+          "description": "Период батчевого матчера, с",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "slow_hint_after_s": {
+          "description": "Через сколько с показать «ищем дольше обычного»; игрок остаётся в очереди",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "window": {
+          "additionalProperties": false,
+          "properties": {
+            "base": {
+              "description": "Начальное окно ±, очков",
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "max": {
+              "description": "Потолок окна ±, очков",
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "step": {
+              "description": "Прирост окна за шаг, очков",
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "step_every_s": {
+              "description": "Длина шага, с",
+              "maximum": 86400,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "base",
+            "step",
+            "step_every_s",
+            "max"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "window",
+        "slow_hint_after_s",
+        "interval_s"
+      ],
+      "type": "object"
+    },
+    "season": {
+      "additionalProperties": false,
+      "properties": {
+        "length_days": {
+          "maximum": 366,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "soft_reset": {
+          "additionalProperties": false,
+          "description": "Мягкий сброс: новый рейтинг = target + ratio × (старый − target)",
+          "properties": {
+            "ratio": {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            "target": {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "target",
+            "ratio"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "length_days",
+        "soft_reset"
+      ],
+      "type": "object"
+    },
+    "tiers": {
+      "description": "Звания по возрастанию; `below` строго растёт, у последнего — null (проверка домена)",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "below": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": -1000000,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Звание действует при рейтинге строго ниже; null — высшее звание без верхней границы"
+          },
+          "family": {
+            "description": "Семейство звания (`bronze`, `silver`…)",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Градация внутри семейства (1, 2, 3); null — без градации"
+          },
+          "title_key": {
+            "description": "Ключ i18n названия",
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9_.]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "family",
+          "step",
+          "title_key",
+          "below"
+        ],
+        "type": "object"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "type": "array"
+    },
+    "weekly": {
+      "additionalProperties": false,
+      "properties": {
+        "timezone": {
+          "description": "IANA-зона недели (начало — понедельник)",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "top_size": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "timezone",
+        "top_size"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "key",
+    "domain",
+    "formats",
+    "elo",
+    "calibration",
+    "tiers",
+    "matchmaking",
+    "season",
+    "weekly",
+    "leaderboard"
+  ],
+  "title": "Ladder config v1",
+  "type": "object"
+}

@@ -139,6 +139,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/queue/enter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Встать в очередь
+         * @description Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока (повтор с тем же ключом или тем же ladder/format — то же состояние). Рейтинг для подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 `match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 `match.queue_format_unavailable`, 409 `match.active_room_conflict` (`details.code` — комната, `details.queue` — другая очередь), 409 `idempotency.key_reused`, 429 `match.rate_limited`, 503 `match.game_unavailable`.
+         */
+        post: operations["queue_enter_v1_queue_enter_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/queue/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Выйти из очереди
+         * @description Идемпотентно: вне очереди — тоже 204. Уход из очереди до матча — без штрафа; если подбор уже состоялся, а отсчёт идёт, — выход из комнаты без штрафа (срыв отсчёта, соперник возвращается в очередь); когда матч идёт — ничего не делает (сдача и выход — команды комнаты). Пока пара резервируется и создаётся комната — 409 `match.queue_matching` (повторить через секунду).
+         */
+        post: operations["queue_leave_v1_queue_leave_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/queue/pool": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Размер очередей
+         * @description Сколько игроков ищут матч по каждому ладдеру и формату (для хаба онлайна).
+         */
+        get: operations["queue_pool_v1_queue_pool_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/queue/tick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Состояние очереди (heartbeat)
+         * @description Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при `matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 `match.not_in_queue`; 429 `match.rate_limited`.
+         */
+        post: operations["queue_tick_v1_queue_tick_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rooms": {
         parameters: {
             query?: never;
@@ -390,7 +470,7 @@ export interface paths {
         put?: never;
         /**
          * Токен подписки на канал комнаты
-         * @description Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.
+         * @description Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.
          */
         post: operations["realtime_token_v1_rooms__code__realtime_token_post"];
         delete?: never;
@@ -488,7 +568,7 @@ export interface paths {
         };
         /**
          * Снимок комнаты
-         * @description Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — только в `me`; до `reveal` нет единицы раунда и ключей ответа. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`.
+         * @description Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — только в `me`; до `reveal` нет единицы раунда и ключей ответа. Наблюдатель (`match.spectate`) видит идущий матч без `me`. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`.
          */
         get: operations["room_state_v1_rooms__code__state_get"];
         put?: never;
@@ -551,6 +631,26 @@ export interface paths {
          * @description Публичные комнаты в фазе `lobby` со свободными местами, новые первыми.
          */
         get: operations["open_rooms_v1_rooms_open_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/rooms/spectate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Комнаты для наблюдения
+         * @description Идущие матчи без задержки; только с правом `match.spectate` (модератор, админ) — иначе 403 `auth.forbidden` (D19). Только чтение: подписка на канал — `POST /rooms/{code}/realtime-token`, снимок — `GET /rooms/{code}/state` (оба — с тем же правом), вид без личных данных игроков (`me` пуст, ответов до ревила нет). Лобби и завершённые матчи не показываются. Ошибки: 422 `match.cursor_invalid`, 429 `match.rate_limited` (`GV_MATCH__SPECTATE_PER_USER_PER_MIN`).
+         */
+        get: operations["spectate_rooms_v1_rooms_spectate_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -767,6 +867,11 @@ export interface components {
             result: ("exact" | "partial" | "miss") | null;
             /** Version */
             version: number;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
         };
         /**
          * ItemAnswer
@@ -1167,6 +1272,94 @@ export interface components {
             type: string;
         };
         /**
+         * QueueEnterRequest
+         * @description Встать в очередь рейтинговой дуэли (ADR 0038).
+         *
+         *     Рейтинг общий на ladder (домен), очередь — отдельная на формат: игрок состоит ровно в
+         *     одной очереди. Шаблон режима выбирает match по ``ladder`` и ``format`` (рейтинговая
+         *     дуэль домена с ``answer.format`` = ``classic`` или ``pick``).
+         */
+        QueueEnterRequest: {
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "classic" | "lite";
+            /** Ladder */
+            ladder: string;
+        };
+        /**
+         * QueuePool
+         * @description Размер очередей (хаб онлайна); без списка игроков.
+         */
+        QueuePool: {
+            /** Items */
+            items: components["schemas"]["QueuePoolEntry"][];
+        };
+        /**
+         * QueuePoolEntry
+         * @description Сколько игроков ищут матч в очереди ladder-а и формата.
+         */
+        QueuePoolEntry: {
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "classic" | "lite";
+            /** Ladder */
+            ladder: string;
+            /** Searching */
+            searching: number;
+        };
+        /**
+         * QueueTicket
+         * @description Состояние игрока в очереди (ответ ``enter`` и ``tick``).
+         */
+        QueueTicket: {
+            /**
+             * Entered At
+             * Format: date-time
+             */
+            entered_at: string;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "classic" | "lite";
+            /** Ladder */
+            ladder: string;
+            /**
+             * Room Code
+             * @description Комната дуэли, когда `state = matched` (сразу в `countdown`)
+             */
+            room_code?: string | null;
+            /**
+             * Slow
+             * @description Ждёт дольше `slow_hint_after_s`: показать «ищем дольше обычного»
+             */
+            slow: boolean;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "searching" | "matched";
+            /**
+             * Tick S
+             * @description Период heartbeat `POST /queue/tick`, с (`GV_MATCH__TICK_S`)
+             */
+            tick_s?: number | null;
+            /**
+             * Wait S
+             * @description Сколько секунд игрок ждёт
+             */
+            wait_s: number;
+            /**
+             * Window
+             * @description Текущее окно подбора ±, очков (из конфига ladder-а)
+             */
+            window: number;
+        };
+        /**
          * RateRequest
          * @description Похвала или жалоба на игрока после матча (``PlayerRated``, обработка — этап 5).
          */
@@ -1520,6 +1713,37 @@ export interface components {
             round_index: number;
         };
         /**
+         * SpectateRoomCard
+         * @description Идущая комната в списке наблюдения (``match.spectate``).
+         */
+        SpectateRoomCard: {
+            /** Code */
+            code: string;
+            mode: components["schemas"]["ModeRef"];
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "lobby" | "countdown" | "level_open" | "level_closed" | "reveal" | "summary" | "paused" | "closed";
+            /** Players */
+            players: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
+        /**
+         * SpectateRoomsPage
+         * @description Страница комнат для наблюдения (keyset-курсор).
+         */
+        SpectateRoomsPage: {
+            /** Items */
+            items: components["schemas"]["SpectateRoomCard"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
          * StartError
          * @description Последний отказ старта матча (план game не получен) — виден всем в лобби.
          */
@@ -1593,6 +1817,19 @@ export interface components {
             state?: components["schemas"]["RoomState"] | null;
             /** Version */
             version: number;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
         };
     };
     responses: never;
@@ -2080,6 +2317,273 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServiceMeta"];
+                };
+            };
+        };
+    };
+    queue_enter_v1_queue_enter_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueueEnterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTicket"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    queue_leave_v1_queue_leave_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    queue_pool_v1_queue_pool_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuePool"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    queue_tick_v1_queue_tick_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueTicket"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4320,6 +4824,69 @@ export interface operations {
             };
             /** @description Не реализовано */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    spectate_rooms_v1_rooms_spectate_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpectateRoomsPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

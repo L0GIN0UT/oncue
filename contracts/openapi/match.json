@@ -511,6 +511,19 @@
         "title": "GuessResult",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "ItemAnswer": {
         "additionalProperties": false,
         "description": "Ответ выбором из автокомплита каталога.",
@@ -1398,6 +1411,166 @@
           "code"
         ],
         "title": "Problem",
+        "type": "object"
+      },
+      "QueueEnterRequest": {
+        "additionalProperties": false,
+        "description": "Встать в очередь рейтинговой дуэли (ADR 0038).\n\nРейтинг общий на ladder (домен), очередь — отдельная на формат: игрок состоит ровно в\nодной очереди. Шаблон режима выбирает match по ``ladder`` и ``format`` (рейтинговая\nдуэль домена с ``answer.format`` = ``classic`` или ``pick``).",
+        "properties": {
+          "format": {
+            "enum": [
+              "classic",
+              "lite"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ladder",
+          "format"
+        ],
+        "title": "QueueEnterRequest",
+        "type": "object"
+      },
+      "QueuePool": {
+        "description": "Размер очередей (хаб онлайна); без списка игроков.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueuePoolEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "QueuePool",
+        "type": "object"
+      },
+      "QueuePoolEntry": {
+        "description": "Сколько игроков ищут матч в очереди ladder-а и формата.",
+        "properties": {
+          "format": {
+            "enum": [
+              "classic",
+              "lite"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "searching": {
+            "minimum": 0.0,
+            "title": "Searching",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ladder",
+          "format",
+          "searching"
+        ],
+        "title": "QueuePoolEntry",
+        "type": "object"
+      },
+      "QueueTicket": {
+        "description": "Состояние игрока в очереди (ответ ``enter`` и ``tick``).",
+        "properties": {
+          "entered_at": {
+            "format": "date-time",
+            "title": "Entered At",
+            "type": "string"
+          },
+          "format": {
+            "enum": [
+              "classic",
+              "lite"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "room_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Комната дуэли, когда `state = matched` (сразу в `countdown`)",
+            "title": "Room Code"
+          },
+          "slow": {
+            "description": "Ждёт дольше `slow_hint_after_s`: показать «ищем дольше обычного»",
+            "title": "Slow",
+            "type": "boolean"
+          },
+          "state": {
+            "enum": [
+              "searching",
+              "matched"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tick_s": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Период heartbeat `POST /queue/tick`, с (`GV_MATCH__TICK_S`)",
+            "title": "Tick S"
+          },
+          "wait_s": {
+            "description": "Сколько секунд игрок ждёт",
+            "minimum": 0.0,
+            "title": "Wait S",
+            "type": "integer"
+          },
+          "window": {
+            "description": "Текущее окно подбора ±, очков (из конфига ladder-а)",
+            "minimum": 0.0,
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ladder",
+          "format",
+          "state",
+          "entered_at",
+          "wait_s",
+          "window",
+          "slow"
+        ],
+        "title": "QueueTicket",
         "type": "object"
       },
       "RateRequest": {
@@ -2305,6 +2478,81 @@
         "title": "SkipRequest",
         "type": "object"
       },
+      "SpectateRoomCard": {
+        "description": "Идущая комната в списке наблюдения (``match.spectate``).",
+        "properties": {
+          "code": {
+            "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ModeRef"
+          },
+          "phase": {
+            "enum": [
+              "lobby",
+              "countdown",
+              "level_open",
+              "level_closed",
+              "reveal",
+              "summary",
+              "paused",
+              "closed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "players": {
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Players",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "mode",
+          "phase",
+          "players",
+          "started_at"
+        ],
+        "title": "SpectateRoomCard",
+        "type": "object"
+      },
+      "SpectateRoomsPage": {
+        "description": "Страница комнат для наблюдения (keyset-курсор).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpectateRoomCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SpectateRoomsPage",
+        "type": "object"
+      },
       "StartError": {
         "description": "Последний отказ старта матча (план game не получен) — виден всем в лобби.",
         "properties": {
@@ -2438,6 +2686,46 @@
           "server_now"
         ],
         "title": "TickResult",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       }
     }
@@ -3263,6 +3551,402 @@
         ]
       }
     },
+    "/v1/queue/enter": {
+      "post": {
+        "description": "Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока (повтор с тем же ключом или тем же ladder/format — то же состояние). Рейтинг для подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 `match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 `match.queue_format_unavailable`, 409 `match.active_room_conflict` (`details.code` — комната, `details.queue` — другая очередь), 409 `idempotency.key_reused`, 429 `match.rate_limited`, 503 `match.game_unavailable`.",
+        "operationId": "queue_enter_v1_queue_enter_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueueEnterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTicket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Встать в очередь",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/queue/leave": {
+      "post": {
+        "description": "Идемпотентно: вне очереди — тоже 204. Уход из очереди до матча — без штрафа; если подбор уже состоялся, а отсчёт идёт, — выход из комнаты без штрафа (срыв отсчёта, соперник возвращается в очередь); когда матч идёт — ничего не делает (сдача и выход — команды комнаты). Пока пара резервируется и создаётся комната — 409 `match.queue_matching` (повторить через секунду).",
+        "operationId": "queue_leave_v1_queue_leave_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          }
+        },
+        "summary": "Выйти из очереди",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/queue/pool": {
+      "get": {
+        "description": "Сколько игроков ищут матч по каждому ладдеру и формату (для хаба онлайна).",
+        "operationId": "queue_pool_v1_queue_pool_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePool"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Размер очередей",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/queue/tick": {
+      "post": {
+        "description": "Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при `matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 `match.not_in_queue`; 429 `match.rate_limited`.",
+        "operationId": "queue_tick_v1_queue_tick_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueTicket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          }
+        },
+        "summary": "Состояние очереди (heartbeat)",
+        "tags": [
+          "match"
+        ]
+      }
+    },
     "/v1/rooms": {
       "post": {
         "description": "Комната по онлайн-шаблону (`session.kind` ∈ duel/party/lobby); создатель — хост в слоте 0. Переопределения — только из `session.lobby.overridable` (D12). Ошибки: 404 `match.mode_not_found` (нет опубликованного онлайн-шаблона), 422 `match.mode_not_online`, 422 `match.setting_not_allowed` (`details.field`), 422 `match.collection_required`, 422 `match.too_many_collections`, 404 `match.collection_not_found`, 403 `match.ranked_forbidden` (рейтинговые комнаты — только из очереди), 409 `match.active_room_conflict` (`details.code` — текущая комната), 429 `match.rate_limited` (`GV_MATCH__LOBBY_CREATE_PER_USER_PER_HOUR`), 503 `match.game_unavailable`.",
@@ -3543,6 +4227,119 @@
           }
         },
         "summary": "Открытые лобби",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/rooms/spectate": {
+      "get": {
+        "description": "Идущие матчи без задержки; только с правом `match.spectate` (модератор, админ) — иначе 403 `auth.forbidden` (D19). Только чтение: подписка на канал — `POST /rooms/{code}/realtime-token`, снимок — `GET /rooms/{code}/state` (оба — с тем же правом), вид без личных данных игроков (`me` пуст, ответов до ревила нет). Лобби и завершённые матчи не показываются. Ошибки: 422 `match.cursor_invalid`, 429 `match.rate_limited` (`GV_MATCH__SPECTATE_PER_USER_PER_MIN`).",
+        "operationId": "spectate_rooms_v1_rooms_spectate_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpectateRoomsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          }
+        },
+        "summary": "Комнаты для наблюдения",
         "tags": [
           "match"
         ]
@@ -5469,7 +6266,7 @@
     },
     "/v1/rooms/{code}/realtime-token": {
       "post": {
-        "description": "Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.",
+        "description": "Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.",
         "operationId": "realtime_token_v1_rooms__code__realtime_token_post",
         "parameters": [
           {
@@ -6314,7 +7111,7 @@
     },
     "/v1/rooms/{code}/state": {
       "get": {
-        "description": "Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — только в `me`; до `reveal` нет единицы раунда и ключей ответа. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`.",
+        "description": "Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — только в `me`; до `reveal` нет единицы раунда и ключей ответа. Наблюдатель (`match.spectate`) видит идущий матч без `me`. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`.",
         "operationId": "room_state_v1_rooms__code__state_get",
         "parameters": [
           {

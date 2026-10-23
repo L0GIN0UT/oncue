@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Ladder</th><th>Действующая версия</th><th>Черновик</th><th>Текущий сезон</th></tr></thead>
+  {% for l in ladders %}
+  <tr>
+    <td><a href="{% url 'rating:ladder' key=l.key %}">{{ l.key }}</a></td>
+    <td>{% if l.published_version %}v{{ l.published_version }}{% else %}—{% endif %}</td>
+    <td>{% if l.draft_version %}v{{ l.draft_version }}{% else %}—{% endif %}</td>
+    <td>{% if l.season_id %}<code>{{ l.season_id }}</code>{% else %}нет{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="4">Ladder-ов нет</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

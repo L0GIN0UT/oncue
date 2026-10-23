@@ -14,7 +14,9 @@ from gv_game_kernel import (
     ConfigError,
     ConfigIssue,
     EngineFactory,
+    OptionSpec,
     PluginRegistry,
+    RoundDraw,
     parse_mode_config,
     register_builtin,
     register_collection,
@@ -396,6 +398,14 @@ def test_compatibility_is_declared_by_plugins(seed_body: SeedBody) -> None:
     class PickRandom(RandomSource):
         key = "pick_random"
         answer_formats = frozenset({"pick"})
+
+        # Источник сам отдаёт варианты pick — поэтому ему не нужны дистракторы.
+        async def draw_rounds(self, ctx: Any, params: Any, n: int) -> list[Any]:
+            items = await self.draw(ctx, params, n)
+            return [RoundDraw(target=i, options=(OptionSpec(id="a", item=i),)) for i in items]
+
+        def compose_rounds(self, params: Any, items: Any) -> list[Any]:
+            return [RoundDraw(target=i) for i in items]
 
     registry = register_builtin(PluginRegistry())
     registry.register_source(PickRandom())

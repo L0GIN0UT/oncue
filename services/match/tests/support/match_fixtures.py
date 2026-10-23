@@ -10,8 +10,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import pytest
-from match_app import START, MatchApp, MemoryModes, settings
-from match_doubles import MemorySubscriptions, plan_factory, seed_bodies
+from match_app import START, MatchApp, MemoryModeKeys, MemoryModes, settings
+from match_doubles import MemorySubscriptions, plan_factory, ranked_bodies, seed_bodies
 from match_service.infrastructure.container import MatchAdapters
 from match_service.infrastructure.db.tables import TABLES
 from match_service.main import (
@@ -80,7 +80,7 @@ async def app_factory(
         clock = FakeClock(START)
         infra = await Infrastructure.open(settings(migrated_url, redis_url, **match), TABLES, clock)
         stack.push_async_callback(infra.close)
-        bodies = seed_bodies()
+        bodies = seed_bodies() | ranked_bodies()
         plans = SlowPlans(plan_delay_s) if plan_delay_s else FakeRoundPlanPort()
         plans._factory = plan_factory(bodies)
         links = FakeLinkPort(now=START, ttl_s=3600)
@@ -92,6 +92,7 @@ async def app_factory(
             publisher=realtime,
             subscriptions=subscriptions,
             modes=MemoryModes(bodies),
+            mode_keys=MemoryModeKeys(bodies),
             random=SystemRandom(),
             instance=f"test-{uuid7().hex[-8:]}",
         )

@@ -58,6 +58,10 @@ CANNOT_RATE_SELF = "match.cannot_rate_self"
 ALREADY_RATED = "match.already_rated"
 ROOM_CLOSED = "match.room_closed"
 COMMAND_UNKNOWN = "match.command_unknown"
+LADDER_NOT_FOUND = "match.ladder_not_found"
+QUEUE_FORMAT_UNAVAILABLE = "match.queue_format_unavailable"
+NOT_IN_QUEUE = "match.not_in_queue"
+QUEUE_MATCHING = "match.queue_matching"
 
 
 class MatchNotFoundError(NotFoundError):

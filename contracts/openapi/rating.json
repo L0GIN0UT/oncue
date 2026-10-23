@@ -1,6 +1,1045 @@
 {
   "components": {
     "schemas": {
+      "AdminLadderCard": {
+        "description": "Ladder в админке: действующая и черновая версии.",
+        "properties": {
+          "draft_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Version"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "published_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — ещё не публиковался",
+            "title": "Published Version"
+          },
+          "season_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Текущий сезон; null — между сезонами",
+            "title": "Season Id"
+          }
+        },
+        "required": [
+          "key",
+          "published_version",
+          "draft_version",
+          "season_id"
+        ],
+        "title": "AdminLadderCard",
+        "type": "object"
+      },
+      "AdminLadderList": {
+        "description": "Ladder-ы админки.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminLadderCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdminLadderList",
+        "type": "object"
+      },
+      "CloseSeasonRequest": {
+        "additionalProperties": false,
+        "description": "Закрыть сезон досрочно: мягкий сброс, `SeasonFinished`, следующий сезон открывается.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CloseSeasonRequest",
+        "type": "object"
+      },
+      "CreateSeasonRequest": {
+        "additionalProperties": false,
+        "description": "Создать сезон: по умолчанию — следующий сразу после текущего, длина — из конфига.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "С часовым поясом; окно дат — настройки сервиса. null — после текущего сезона",
+            "title": "Starts At"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CreateSeasonRequest",
+        "type": "object"
+      },
+      "HistoryItem": {
+        "description": "Изменение рейтинга за матч.",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "format": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Format",
+            "type": "string"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "new": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New"
+          },
+          "old": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null в калибровке: числа скрыты",
+            "title": "Old"
+          },
+          "outcome": {
+            "enum": [
+              "win",
+              "loss",
+              "draw"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TierView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "match_id",
+          "at",
+          "format",
+          "outcome",
+          "old",
+          "new",
+          "delta",
+          "tier"
+        ],
+        "title": "HistoryItem",
+        "type": "object"
+      },
+      "HistoryPage": {
+        "description": "История рейтинга пользователя, новые первыми.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "HistoryPage",
+        "type": "object"
+      },
+      "JsonValue": {},
+      "LadderList": {
+        "description": "Опубликованные ladder-ы.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LadderView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LadderList",
+        "type": "object"
+      },
+      "LadderVersionBody": {
+        "description": "Версия ladder-а с телом конфига.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/LadderVersionCard"
+          },
+          "config": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "description": "По `contracts/rating/ladder.v1.json`",
+            "title": "Config",
+            "type": "object"
+          }
+        },
+        "required": [
+          "card",
+          "config"
+        ],
+        "title": "LadderVersionBody",
+        "type": "object"
+      },
+      "LadderVersionCard": {
+        "description": "Версия конфига ladder-а.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "status",
+          "created_at",
+          "created_by"
+        ],
+        "title": "LadderVersionCard",
+        "type": "object"
+      },
+      "LadderVersionList": {
+        "description": "Версии ladder-а, новые первыми.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LadderVersionCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LadderVersionList",
+        "type": "object"
+      },
+      "LadderView": {
+        "description": "Ladder (в 4b — по одному на домен) с действующим сезоном.",
+        "properties": {
+          "calibration_matches": {
+            "description": "Длина калибровки, матчей",
+            "minimum": 0.0,
+            "title": "Calibration Matches",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "formats": {
+            "items": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "season": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeasonView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — между сезонами"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/TierView"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "version": {
+            "description": "Версия опубликованного конфига",
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "domain",
+          "formats",
+          "version",
+          "calibration_matches",
+          "tiers",
+          "season"
+        ],
+        "title": "LadderView",
+        "type": "object"
+      },
+      "LeaderboardEntry": {
+        "description": "Строка лидерборда (ник — из проекции профиля, ПДн не отдаются).",
+        "properties": {
+          "matches_played": {
+            "minimum": 0.0,
+            "title": "Matches Played",
+            "type": "integer"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "place": {
+            "minimum": 1.0,
+            "title": "Place",
+            "type": "integer"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "integer"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/TierView"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "place",
+          "user_id",
+          "nickname",
+          "rating",
+          "tier",
+          "matches_played"
+        ],
+        "title": "LeaderboardEntry",
+        "type": "object"
+      },
+      "LeaderboardPage": {
+        "description": "Страница лидерборда: keyset-курсор или окно вокруг пользователя (``around=me``).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "me": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeaderboardEntry"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Строка пользователя; только с токеном и вне калибровки"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "season_id": {
+            "format": "uuid",
+            "title": "Season Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ladder",
+          "season_id",
+          "items"
+        ],
+        "title": "LeaderboardPage",
+        "type": "object"
+      },
+      "MatchChange": {
+        "description": "Дельта одного игрока за матч (для итога, ``GET /v1/matches/{id}/changes``).",
+        "properties": {
+          "calibrating": {
+            "title": "Calibrating",
+            "type": "boolean"
+          },
+          "calibration_left": {
+            "minimum": 0.0,
+            "title": "Calibration Left",
+            "type": "integer"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "format": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Format",
+            "type": "string"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "leaver_penalty": {
+            "description": "Штраф за выход или сдачу, входит в delta",
+            "minimum": 0.0,
+            "title": "Leaver Penalty",
+            "type": "integer"
+          },
+          "new": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New"
+          },
+          "old": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null в калибровке",
+            "title": "Old"
+          },
+          "old_tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TierView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "win",
+              "loss",
+              "draw"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TierView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "ladder",
+          "format",
+          "outcome",
+          "old",
+          "new",
+          "delta",
+          "old_tier",
+          "tier",
+          "calibrating",
+          "calibration_left",
+          "leaver_penalty"
+        ],
+        "title": "MatchChange",
+        "type": "object"
+      },
+      "MatchChanges": {
+        "description": "Дельты матча: итог опрашивает ручку до 10 с, пока консьюмер не применит событие.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MatchChange"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "match_id",
+          "items"
+        ],
+        "title": "MatchChanges",
+        "type": "object"
+      },
+      "MyRatings": {
+        "description": "Рейтинги пользователя по ladder-ам (``GET /v1/me/ratings``, ``/users/{id}/ratings``).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RatingView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MyRatings",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).\n\nAttributes:\n    type: URN проблемы ``urn:guessverse:problem:<code>``.\n    title: Человекочитаемый заголовок.\n    status: HTTP-статус.\n    code: Машинный код ошибки — на него опираются клиенты.\n    detail: Пояснение.\n    correlation_id: Идентификатор цепочки запроса (для поиска в логах).\n    details: Безопасные для клиента подробности (``AppError.details``).\n    errors: Ошибки валидации полей запроса.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ошибки валидации: loc, msg, type",
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "description": "Опубликовать версию (черновик становится действующим, уходит `LadderPublished`).",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "reason"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
+      },
+      "RatingView": {
+        "description": "Рейтинг игрока в ladder-е в текущем сезоне.",
+        "properties": {
+          "calibrating": {
+            "title": "Calibrating",
+            "type": "boolean"
+          },
+          "calibration_left": {
+            "description": "Сколько матчей осталось до звания",
+            "minimum": 0.0,
+            "title": "Calibration Left",
+            "type": "integer"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "matches_played": {
+            "minimum": 0.0,
+            "title": "Matches Played",
+            "type": "integer"
+          },
+          "next_tier_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Рейтинг следующего звания; null — высшее или калибровка",
+            "title": "Next Tier At"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Место в лидерборде; null — вне его",
+            "title": "Place"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null, пока идёт калибровка (число скрыто)",
+            "title": "Rating"
+          },
+          "season_id": {
+            "format": "uuid",
+            "title": "Season Id",
+            "type": "string"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TierView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null, пока идёт калибровка"
+          }
+        },
+        "required": [
+          "ladder",
+          "season_id",
+          "rating",
+          "tier",
+          "calibrating",
+          "calibration_left",
+          "matches_played"
+        ],
+        "title": "RatingView",
+        "type": "object"
+      },
+      "RebuildAccepted": {
+        "description": "Пересборка принята (выполняет задача ``rating.leaderboards.rebuild``).",
+        "properties": {
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "season_id": {
+            "format": "uuid",
+            "title": "Season Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "accepted",
+            "default": "accepted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ladder",
+          "season_id"
+        ],
+        "title": "RebuildAccepted",
+        "type": "object"
+      },
+      "RebuildRequest": {
+        "additionalProperties": false,
+        "description": "Пересобрать лидерборд сезона из Postgres.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RebuildRequest",
+        "type": "object"
+      },
+      "RollbackRequest": {
+        "additionalProperties": false,
+        "description": "Откатить ladder к ранее опубликованной версии (публикуется новой версией-копией).",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "to_version": {
+            "minimum": 1.0,
+            "title": "To Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "to_version",
+          "reason"
+        ],
+        "title": "RollbackRequest",
+        "type": "object"
+      },
+      "SaveDraftRequest": {
+        "additionalProperties": false,
+        "description": "Сохранить черновик конфига ladder-а.",
+        "properties": {
+          "config": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "description": "По `contracts/rating/ladder.v1.json`; ключ в теле равен ключу в пути",
+            "title": "Config",
+            "type": "object"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "reason"
+        ],
+        "title": "SaveDraftRequest",
+        "type": "object"
+      },
+      "SeasonCard": {
+        "description": "Сезон ladder-а.",
+        "properties": {
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "number": {
+            "minimum": 1.0,
+            "title": "Number",
+            "type": "integer"
+          },
+          "season_id": {
+            "format": "uuid",
+            "title": "Season Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "scheduled",
+              "active",
+              "finished"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "season_id",
+          "ladder",
+          "number",
+          "status",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "SeasonCard",
+        "type": "object"
+      },
+      "SeasonView": {
+        "description": "Сезон ladder-а.",
+        "properties": {
+          "ends_at": {
+            "description": "«Осталось X д.» считает клиент по этому полю",
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "number": {
+            "minimum": 1.0,
+            "title": "Number",
+            "type": "integer"
+          },
+          "season_id": {
+            "format": "uuid",
+            "title": "Season Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "season_id",
+          "number",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "SeasonView",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -19,6 +1058,138 @@
         ],
         "title": "ServiceMeta",
         "type": "object"
+      },
+      "TierView": {
+        "description": "Звание ladder-а: семейство и градация внутри него.",
+        "properties": {
+          "below": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Звание действует при рейтинге строго ниже; null — высшее",
+            "title": "Below"
+          },
+          "family": {
+            "description": "Семейство звания; набор семейств задаёт конфиг ladder-а",
+            "title": "Family",
+            "type": "string"
+          },
+          "key": {
+            "description": "Ключ из конфига ladder-а, например `silver_2`",
+            "title": "Key",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Градация (1, 2, 3); null — без градации",
+            "title": "Step"
+          },
+          "title_key": {
+            "description": "Ключ i18n названия",
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "family",
+          "step",
+          "title_key",
+          "below"
+        ],
+        "title": "TierView",
+        "type": "object"
+      },
+      "WeeklyEntry": {
+        "description": "Строка топа недели.",
+        "properties": {
+          "delta": {
+            "description": "Прирост рейтинга с понедельника",
+            "title": "Delta",
+            "type": "integer"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "place": {
+            "minimum": 1.0,
+            "title": "Place",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "place",
+          "user_id",
+          "nickname",
+          "delta"
+        ],
+        "title": "WeeklyEntry",
+        "type": "object"
+      },
+      "WeeklyTop": {
+        "description": "Топ недели ladder-а (прирост с понедельника в зоне конфига, ADR 0039).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ladder": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Ladder",
+            "type": "string"
+          },
+          "me": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeeklyEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_id": {
+            "format": "uuid",
+            "title": "Season Id",
+            "type": "string"
+          },
+          "week_start": {
+            "format": "date",
+            "title": "Week Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ladder",
+          "season_id",
+          "week_start",
+          "items"
+        ],
+        "title": "WeeklyTop",
+        "type": "object"
       }
     }
   },
@@ -29,6 +1200,1643 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/v1/ladders": {
+      "get": {
+        "description": "Все ladder-ы с действующей и черновой версиями.",
+        "operationId": "ladders_admin_v1_ladders_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLadderList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Ladder-ы",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/draft": {
+      "put": {
+        "description": "Валидация по `contracts/rating/ladder.v1.json` и инвариантам домена (звания по возрастанию, `below` растёт, ключ в теле равен ключу в пути): 422 `rating.ladder_invalid` с путями ошибок.",
+        "operationId": "save_draft_admin_v1_ladders__ladder__draft_put",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Сохранить черновик",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/leaderboard/rebuild": {
+      "post": {
+        "description": "Ставит запрос на пересборку лидерборда текущего сезона; выполняет задача `rating.leaderboards.rebuild`. Ошибки: 404 `rating.ladder_not_found`, 404 `rating.season_not_found`.",
+        "operationId": "rebuild_leaderboard_admin_v1_ladders__ladder__leaderboard_rebuild_post",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RebuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RebuildAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Пересобрать лидерборд",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/publish": {
+      "post": {
+        "description": "Версия становится действующей для новых матчей; уходит `LadderPublished`. Ошибки: 404 `rating.version_not_found`, 409 `rating.version_not_draft`.",
+        "operationId": "publish_admin_v1_ladders__ladder__publish_post",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Опубликовать версию",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/rollback": {
+      "post": {
+        "description": "Копия ранее опубликованной версии публикуется новой версией (история не переписывается). Ошибки: 404 `rating.version_not_found`, 409 `rating.version_not_published` (версия никогда не публиковалась).",
+        "operationId": "rollback_admin_v1_ladders__ladder__rollback_post",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Откатить ladder",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/seasons": {
+      "post": {
+        "description": "Длина — из конфига ladder-а. Ошибки: 409 `rating.season_overlap` (пересечение с существующим сезоном).",
+        "operationId": "create_season_admin_v1_ladders__ladder__seasons_post",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSeasonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeasonCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Создать сезон",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/versions": {
+      "get": {
+        "description": "Черновик, действующая и архивные версии, новые первыми.",
+        "operationId": "versions_admin_v1_ladders__ladder__versions_get",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderVersionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Версии ladder-а",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/ladders/{ladder}/versions/{version}": {
+      "get": {
+        "description": "Тело конфига по `contracts/rating/ladder.v1.json` (для diff в админке).",
+        "operationId": "version_admin_v1_ladders__ladder__versions__version__get",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Версия ladder-а с конфигом",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/admin/v1/seasons/{season_id}/close": {
+      "post": {
+        "description": "Мягкий сброс по конфигу, `SeasonFinished`, следующий сезон открывается автоматически. Ошибки: 404 `rating.season_not_found`, 409 `rating.season_not_active`.",
+        "operationId": "close_season_admin_v1_seasons__season_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "season_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Season Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseSeasonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeasonCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Закрыть сезон",
+        "tags": [
+          "rating-admin"
+        ]
+      }
+    },
+    "/v1/ladders": {
+      "get": {
+        "description": "Опубликованные ladder-ы с действующим сезоном, званиями и длиной калибровки (всё из конфига ladder-а). Публично, кэшируется.",
+        "operationId": "ladders_v1_ladders_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LadderList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          }
+        },
+        "summary": "Ladder-ы",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/ladders/{ladder}/leaderboard": {
+      "get": {
+        "description": "Сезонный лидерборд: курсор или `around=me` (окно вокруг пользователя, нужен токен — иначе 401; в калибровке — 404 `rating.not_ranked`). `season` — прошлый сезон по `SeasonFinished.standings_ref`; без него — текущий. `limit` по умолчанию — `leaderboard.page_size` конфига. Ошибки: 404 `rating.ladder_not_found`, 404 `rating.season_not_found`. Публично, кэш 10 с.",
+        "operationId": "leaderboard_v1_ladders__ladder__leaderboard_get",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а (`music`, `film`)",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а (`music`, `film`)",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "around",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "me",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Around"
+            }
+          },
+          {
+            "in": "query",
+            "name": "season",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Season"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Лидерборд ladder-а",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/ladders/{ladder}/weekly": {
+      "get": {
+        "description": "Прирост рейтинга с понедельника (зона и размер — из конфига ladder-а, ADR 0039). Ошибки: 404 `rating.ladder_not_found`. Публично, кэш 10 с.",
+        "operationId": "weekly_v1_ladders__ladder__weekly_get",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а (`music`, `film`)",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а (`music`, `film`)",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyTop"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Топ недели",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/matches/{match_id}/changes": {
+      "get": {
+        "description": "Изменения рейтинга игроков матча для экрана итога; только участник. Пока событие `MatchFinished` не обработано — 404 `rating.match_not_rated` (клиент опрашивает до 10 с); не рейтинговый матч и чужой матч — тоже 404. В калибровке числа `null`.",
+        "operationId": "match_changes_v1_matches__match_id__changes_get",
+        "parameters": [
+          {
+            "description": "Идентификатор матча",
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор матча",
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchChanges"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Дельты матча",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/me/ratings": {
+      "get": {
+        "description": "Рейтинг, звание и калибровка по каждому ladder-у в текущем сезоне.",
+        "operationId": "my_ratings_v1_me_ratings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRatings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Мои рейтинги",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/me/ratings/{ladder}/history": {
+      "get": {
+        "description": "Изменения рейтинга за матчи, новые первыми (курсор).",
+        "operationId": "history_v1_me_ratings__ladder__history_get",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а (`music`, `film`)",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а (`music`, `film`)",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "История рейтинга",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
     "/v1/meta": {
       "get": {
         "operationId": "meta_v1_meta_get",
@@ -45,6 +2853,102 @@
           }
         },
         "summary": "Сведения о сервисе",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/users/{user_id}/ratings": {
+      "get": {
+        "description": "Публичный профиль: звания и места; в калибровке числа скрыты. Ошибки: 404 `rating.user_not_found` (нет или удалён).",
+        "operationId": "user_ratings_v1_users__user_id__ratings_get",
+        "parameters": [
+          {
+            "description": "Идентификатор пользователя",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор пользователя",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyRatings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Рейтинги пользователя",
         "tags": [
           "rating"
         ]

@@ -516,6 +516,107 @@ class MyMatchesList(BaseModel):
     next_cursor: str | None = None
 
 
+class TierCard(BaseModel):
+    """Звание ladder-а (ключи i18n из конфига rating)."""
+
+    key: str
+    family: str
+    step: int | None = Field(ge=1, description="Градация внутри звания; null — без градации")
+    title_key: str
+
+
+class QueuePoolCard(BaseModel):
+    """Очередь ladder-а и формата: сколько игроков ищет матч (ADR 0038)."""
+
+    ladder: str
+    format: Literal["classic", "lite"]
+    searching: int = Field(ge=0)
+
+
+class RatingCard(BaseModel):
+    """Рейтинг пользователя в ladder-е; в калибровке `rating` и `tier` — null (ADR 0037)."""
+
+    ladder: str
+    rating: int | None
+    tier: TierCard | None
+    next_tier_at: int | None = None
+    calibrating: bool
+    calibration_left: int = Field(ge=0, description="«Осталось N матчей»")
+    matches_played: int = Field(ge=0)
+    place: int | None = Field(default=None, ge=1)
+
+
+class SeasonCard(BaseModel):
+    """Действующий сезон ladder-а."""
+
+    ladder: str
+    number: int = Field(ge=1)
+    starts_at: datetime
+    ends_at: datetime = Field(description="«Осталось X д.» считает клиент")
+
+
+class WeeklyEntryCard(BaseModel):
+    """Строка топа недели."""
+
+    place: int = Field(ge=1)
+    user_id: UUID
+    nickname: str
+    delta: int
+
+
+class WeeklyTopCard(BaseModel):
+    """Топ недели ladder-а (прирост с понедельника, ADR 0039)."""
+
+    ladder: str
+    week_start: date
+    items: list[WeeklyEntryCard]
+    me: WeeklyEntryCard | None = None
+
+
+class LadderCard(BaseModel):
+    """Ladder для переключателя на странице лидербордов."""
+
+    key: str
+    domain: Domain
+    formats: list[Literal["classic", "lite"]]
+    season: SeasonCard | None = None
+    tiers: list[TierCard]
+
+
+class LeaderboardEntryCard(BaseModel):
+    """Строка лидерборда."""
+
+    place: int = Field(ge=1)
+    user_id: UUID
+    nickname: str
+    rating: int
+    tier: TierCard
+    matches_played: int = Field(ge=0)
+
+
+class LeaderboardCard(BaseModel):
+    """Страница лидерборда; `next_cursor` — для `rating /v1/ladders/{key}/leaderboard`."""
+
+    ladder: str
+    items: list[LeaderboardEntryCard]
+    next_cursor: str | None = None
+    me: LeaderboardEntryCard | None = None
+
+
+class LeaderboardsBlocks(BaseModel):
+    """Блоки страницы лидербордов; каждый деградирует независимо."""
+
+    ladders: Block[list[LadderCard]]
+    leaderboard: Block[LeaderboardCard]
+    weekly: Block[WeeklyTopCard]
+
+
+class LeaderboardsPage(BaseModel):
+    """``GET /v1/pages/leaderboards``: публичная страница, кэш 10 с (с ``around=me`` — личная)."""
+
+    blocks: LeaderboardsBlocks
+
+
 class OnlineChatCard(BaseModel):
     """Эмоции и готовые фразы (ключи i18n ``match.emotes.*``/``match.phrases.*``)."""
 
@@ -566,6 +667,21 @@ class OnlineBlocks(BaseModel):
     my_matches: Block[MyMatchesList]
     modes: Block[list[OnlineModeCard]] = Field(
         description="Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
+    )
+    queues: Block[list[QueuePoolCard]] = Field(
+        description="4b: сколько игроков ищет матч (`match /v1/queue/pool`)"
+    )
+    ratings: Block[list[RatingCard]] = Field(
+        description=(
+            "4b: мои звания и калибровка (`rating /v1/me/ratings`); в калибровке "
+            "`rating`/`tier` — null, «осталось N матчей» — `calibration_left`"
+        )
+    )
+    seasons: Block[list[SeasonCard]] = Field(
+        description="4b: действующие сезоны (ladder без сезона пропускается)"
+    )
+    weekly: Block[list[WeeklyTopCard]] = Field(
+        description="4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`)"
     )
 
 

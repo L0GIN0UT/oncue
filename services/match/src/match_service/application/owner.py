@@ -44,10 +44,12 @@ from match_service.application.ports import (
     Json,
     MatchRecords,
     PlayerRooms,
+    RankedHooks,
     RoomCommand,
     RoomStore,
     RoundPlanPort,
     RoundPlanRequest,
+    SpectatorRegistry,
     Subscriptions,
 )
 from match_service.application.rules import KernelMatchRules, RulesFactory, effective_body
@@ -63,11 +65,21 @@ from match_service.domain.errors import (
 )
 from match_service.domain.events import match_started
 from match_service.domain.match_fsm import NeedClue, NeedFinalClue, Timing
-from match_service.domain.model import Clue, MatchPlayer, MatchState, Phase, Presence
+from match_service.domain.model import (
+    Clue,
+    MatchPlayer,
+    MatchState,
+    Phase,
+    PlayerFinish,
+    Presence,
+)
 from match_service.domain.room import ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, Room, SettingsChange
 
 log = structlog.get_logger(__name__)
 
+RANKED_DROPS = Counter(
+    "gv_match_ranked_countdown_dropped_total", "Игроки, сорвавшие отсчёт рейтинговой комнаты"
+)
 PERSIST_FAILURES = Counter(
     "gv_match_persist_failures_total", "Неудачные записи начала или итога матча в Postgres"
 )
@@ -338,6 +350,8 @@ class RoomOwner:
         subscriptions: Subscriptions,
         settings: OwnerSettings,
         transient: Callable[[BaseException], bool] = is_transient,
+        ranked: RankedHooks | None = None,
+        spectators: SpectatorRegistry | None = None,
     ) -> None:
         self._factory = factory
         self._plans = plans
@@ -351,6 +365,10 @@ class RoomOwner:
         self._seeds = seeds
         self._subscriptions = subscriptions
         self._transient = transient
+        self._ranked = ranked
+        self._requeued: set[str] = set()
+        self._spectators = spectators
+        self._spectators_done: set[str] = set()
         self._failures: dict[str, tuple[str, int]] = {}
         self._tick_failures: dict[str, int] = {}
         self._persist_backoff: dict[str, tuple[int, int]] = {}
@@ -400,6 +418,8 @@ class RoomOwner:
         self._failures.pop(room.code, None)
         self._tick_failures.pop(room.code, None)
         self._persist_backoff.pop(room.code, None)
+        self._requeued.discard(room.code)
+        self._spectators_done.discard(room.code)
 
     def _forget_rules(self, room: Room) -> None:
         if room.match is not None:
@@ -528,6 +548,8 @@ class RoomOwner:
                 needs.extend(await self._resolve(room, rules, need))
         if rules is not None:
             match_fsm.refresh_statuses(room, rules)
+        await self._ranked_abort(room)
+        await self._drop_spectators(room)
         if room.is_closed or room.phase is Phase.LOBBY:
             # Матч сыгран (реванш, возврат в лобби, закрытие): правила больше не нужны —
             # иначе кэш владельца растёт с каждым матчем (ревью §10).
@@ -535,6 +557,67 @@ class RoomOwner:
         if room.is_closed:
             for seat in room.seats:
                 await self._player_rooms.release(seat.user_id, room.code)
+
+    async def _drop_spectators(self, room: Room) -> None:
+        """Матч закончился: подписки наблюдателей отзываются (как при кике).
+
+        Токен наблюдателя выдаётся только идущему матчу, но подписка живёт до ``exp``:
+        без отзыва наблюдатель читал бы итог и закрытую комнату дальше. Сбой — только лог.
+        """
+        if (
+            self._spectators is None
+            or room.phase not in (Phase.SUMMARY, Phase.CLOSED)
+            or room.code in self._spectators_done
+        ):
+            return
+        self._spectators_done.add(room.code)
+        try:
+            watchers = await self._spectators.drain(room.code)
+        except Exception:
+            log.exception("match.spectators_drain_failed", room=room.code)
+            self._spectators_done.discard(room.code)
+            return
+        for user_id in watchers:
+            await self._unsubscribe(user_id, room)
+
+    async def _ranked_abort(self, room: Room) -> None:
+        """Срыв отсчёта рейтинговой комнаты (ADR 0038): без штрафа, соперник — в очередь.
+
+        Срыв — выход, сдача или отключение до конца отсчёта (``MatchStarted`` не было) либо
+        отказ старта (план game). Комната закрывается, указатели игроков освобождаются
+        (``settle``), оставшиеся возвращаются в поиск с прежним ``entered_at``. Матч в
+        Postgres не пишется: матча не было.
+        """
+        if not room.mode.ranked or room.code in self._requeued:
+            return
+        match = room.match
+        failed_start = room.start_error is not None
+        dropped = match is not None and match.finish is not None and match.started_at_ms is None
+        if not failed_start and not dropped:
+            return
+        gone = {
+            p.user_id
+            for p in (match.players.values() if match is not None else ())
+            if p.finish in (PlayerFinish.LEFT, PlayerFinish.FORFEIT, PlayerFinish.TECH_LOSS)
+        }
+        survivors = [
+            s.user_id
+            for s in room.seats
+            if s.presence is not Presence.LEFT and s.user_id not in gone
+        ]
+        self._requeued.add(room.code)
+        for user_id in gone:
+            # Для детектора аномалий этапа 5 (сталкинг очереди): штрафа нет, но срыв виден.
+            RANKED_DROPS.inc()
+            log.info("match.ranked_countdown_dropped", room=room.code, user_id=str(user_id))
+        if not room.is_closed:
+            room.close("start_failed" if failed_start else "countdown_aborted", self._now())
+        if self._ranked is not None:
+            try:
+                await self._ranked.aborted(room, survivors)
+            except Exception:
+                # Записи очереди истекут сами; комната уже закрыта — не ломаем команду.
+                log.exception("match.ranked_requeue_failed", room=room.code)
 
     async def _resolve(
         self, room: Room, rules: KernelMatchRules, need: NeedClue | NeedFinalClue
@@ -606,6 +689,7 @@ class RoomOwner:
             return
         try:
             if match.started_at_ms is not None and not match.started_written:
+                await self._ranked_started(room)
                 event = match_started(room, match, to_dt(match.started_at_ms))
                 await self._records.record_started(event, self._meta(room))
                 match.started_written = True
@@ -619,6 +703,15 @@ class RoomOwner:
             self._persist_backoff[room.code] = (failures + 1, self._now() + delay_ms)
         else:
             self._persist_backoff.pop(room.code, None)
+
+    async def _ranked_started(self, room: Room) -> None:
+        """Отсчёт закончился: записи очереди обоих игроков больше не нужны."""
+        if self._ranked is None or not room.mode.ranked:
+            return
+        try:
+            await self._ranked.started(room)
+        except Exception:
+            log.exception("match.ranked_release_failed", room=room.code)
 
     @staticmethod
     def _meta(room: Room) -> Json:
@@ -779,6 +872,12 @@ class RoomOwner:
         return self._room_result(room)
 
     async def _rematch(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
+        if room.mode.ranked:
+            # Рейтинговый матч — только из очереди (иначе реванш обходит подбор и
+            # упрощает win-trading, ADR 0038).
+            raise MatchForbiddenError(
+                "рейтинговые матчи — только из очереди", code=errors.RANKED_FORBIDDEN
+            )
         if match_fsm.vote_rematch(room, cmd.user_id, now):
             if room.template.options is not None:
                 match_fsm.back_to_lobby(room, now)

@@ -21,6 +21,7 @@ from game_service.domain.projection import (
     CollectionProj,
     CollectionStatus,
     ItemStatus,
+    LadderProj,
     catalog_metrics,
 )
 from game_service.infrastructure.container import GameContainer
@@ -34,6 +35,7 @@ CONSUMED_TOPICS: tuple[str, ...] = (
     "media_pipeline.asset_set.v1",
     "identity.user.v1",
     "collections.collection.v1",
+    "rating.rating.v1",
 )
 
 ITEM_CREATED = "catalog.MediaItemCreated"
@@ -46,6 +48,7 @@ USER_DELETED = "identity.UserDeleted"
 COLLECTION_PUBLISHED = "collections.CollectionPublished"
 COLLECTION_UPDATED = "collections.CollectionUpdated"
 COLLECTION_DELETED = "collections.CollectionDeleted"
+LADDER_PUBLISHED = "rating.LadderPublished"
 # Максимум единиц сборника (контракт ``collections.collection.v1``, ADR 0028).
 MAX_COLLECTION_ITEMS = 200
 # Виды алиасов, которые считаются названием единицы (``MediaItemRef.title_aliases``).
@@ -135,6 +138,13 @@ class _CollectionDeletedPayload(_Payload):
     deleted_at: datetime
 
 
+class _LadderPayload(_Payload):
+    # Окна подбора, форматы очереди и версия конфига нужны match; game — ключ и домен.
+    ladder: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+    version: int = Field(ge=1)
+    domain: Literal["music", "film"]
+
+
 class _FailedPayload(_Payload):
     asset_set_id: UUID
     media_item_id: UUID
@@ -186,7 +196,7 @@ def _collection_snapshot(p: _CollectionPayload, at: datetime) -> CollectionSnaps
     return snapshot
 
 
-def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
+def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:  # noqa: PLR0915 — реестр: по обработчику на событие
     """Реестр обработчиков событий."""
     registry = EventHandlerRegistry()
 
@@ -251,6 +261,15 @@ def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
             await container.collection_events.deleted(uow, p.collection_id, p.version, p.deleted_at)
             await uow.commit()
 
+    async def on_ladder(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_LadderPayload, envelope.payload)
+        proj = LadderProj(
+            ladder=p.ladder, domain=p.domain, version=p.version, updated_at=envelope.occurred_at
+        )
+        async with container.uow_factory(session)() as uow:
+            await container.ladder_events.published(uow, proj)
+            await uow.commit()
+
     async def on_failed(envelope: EventEnvelope, session: AsyncSession) -> None:
         p = _parse(_FailedPayload, envelope.payload)
         async with container.uow_factory(session)() as uow:
@@ -273,4 +292,5 @@ def build_event_handlers(container: GameContainer) -> EventHandlerRegistry:
     registry.register(COLLECTION_PUBLISHED, on_collection)
     registry.register(COLLECTION_UPDATED, on_collection)
     registry.register(COLLECTION_DELETED, on_collection_deleted)
+    registry.register(LADDER_PUBLISHED, on_ladder)
     return registry

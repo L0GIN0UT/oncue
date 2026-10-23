@@ -55,6 +55,33 @@
         "title": "Block[CollectionResults]",
         "type": "object"
       },
+      "Block_LeaderboardCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeaderboardCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[LeaderboardCard]",
+        "type": "object"
+      },
       "Block_MatchSummary_": {
         "properties": {
           "data": {
@@ -190,6 +217,33 @@
         "title": "Block[ShelfItems]",
         "type": "object"
       },
+      "Block_WeeklyTopCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeeklyTopCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[WeeklyTopCard]",
+        "type": "object"
+      },
       "Block_list_CollectionModeCard__": {
         "properties": {
           "data": {
@@ -314,6 +368,37 @@
         "title": "Block[list[ItemShelvesCard]]",
         "type": "object"
       },
+      "Block_list_LadderCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LadderCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[LadderCard]]",
+        "type": "object"
+      },
       "Block_list_ModeCard__": {
         "properties": {
           "data": {
@@ -407,6 +492,68 @@
         "title": "Block[list[OnlineModeCard]]",
         "type": "object"
       },
+      "Block_list_QueuePoolCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/QueuePoolCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[QueuePoolCard]]",
+        "type": "object"
+      },
+      "Block_list_RatingCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RatingCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[RatingCard]]",
+        "type": "object"
+      },
       "Block_list_RecordCard__": {
         "properties": {
           "data": {
@@ -438,6 +585,37 @@
         "title": "Block[list[RecordCard]]",
         "type": "object"
       },
+      "Block_list_SeasonCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SeasonCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[SeasonCard]]",
+        "type": "object"
+      },
       "Block_list_ShelfCard__": {
         "properties": {
           "data": {
@@ -467,6 +645,37 @@
           "status"
         ],
         "title": "Block[list[ShelfCard]]",
+        "type": "object"
+      },
+      "Block_list_WeeklyTopCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WeeklyTopCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[WeeklyTopCard]]",
         "type": "object"
       },
       "BracketPick": {
@@ -1383,6 +1592,177 @@
         "type": "object"
       },
       "JsonValue": {},
+      "LadderCard": {
+        "description": "Ladder для переключателя на странице лидербордов.",
+        "properties": {
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "formats": {
+            "items": {
+              "enum": [
+                "classic",
+                "lite"
+              ],
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "season": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeasonCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/TierCard"
+            },
+            "title": "Tiers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "domain",
+          "formats",
+          "tiers"
+        ],
+        "title": "LadderCard",
+        "type": "object"
+      },
+      "LeaderboardCard": {
+        "description": "Страница лидерборда; `next_cursor` — для `rating /v1/ladders/{key}/leaderboard`.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntryCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ladder": {
+            "title": "Ladder",
+            "type": "string"
+          },
+          "me": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeaderboardEntryCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "ladder",
+          "items"
+        ],
+        "title": "LeaderboardCard",
+        "type": "object"
+      },
+      "LeaderboardEntryCard": {
+        "description": "Строка лидерборда.",
+        "properties": {
+          "matches_played": {
+            "minimum": 0.0,
+            "title": "Matches Played",
+            "type": "integer"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "place": {
+            "minimum": 1.0,
+            "title": "Place",
+            "type": "integer"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "integer"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/TierCard"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "place",
+          "user_id",
+          "nickname",
+          "rating",
+          "tier",
+          "matches_played"
+        ],
+        "title": "LeaderboardEntryCard",
+        "type": "object"
+      },
+      "LeaderboardsBlocks": {
+        "description": "Блоки страницы лидербордов; каждый деградирует независимо.",
+        "properties": {
+          "ladders": {
+            "$ref": "#/components/schemas/Block_list_LadderCard__"
+          },
+          "leaderboard": {
+            "$ref": "#/components/schemas/Block_LeaderboardCard_"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/Block_WeeklyTopCard_"
+          }
+        },
+        "required": [
+          "ladders",
+          "leaderboard",
+          "weekly"
+        ],
+        "title": "LeaderboardsBlocks",
+        "type": "object"
+      },
+      "LeaderboardsPage": {
+        "description": "``GET /v1/pages/leaderboards``: публичная страница, кэш 10 с (с ``around=me`` — личная).",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/LeaderboardsBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "LeaderboardsPage",
+        "type": "object"
+      },
       "LibraryBlocks": {
         "description": "Блоки медиатеки.",
         "properties": {
@@ -1969,12 +2349,32 @@
           },
           "open_rooms": {
             "$ref": "#/components/schemas/Block_OpenRoomsList_"
+          },
+          "queues": {
+            "$ref": "#/components/schemas/Block_list_QueuePoolCard__",
+            "description": "4b: сколько игроков ищет матч (`match /v1/queue/pool`)"
+          },
+          "ratings": {
+            "$ref": "#/components/schemas/Block_list_RatingCard__",
+            "description": "4b: мои звания и калибровка (`rating /v1/me/ratings`); в калибровке `rating`/`tier` — null, «осталось N матчей» — `calibration_left`"
+          },
+          "seasons": {
+            "$ref": "#/components/schemas/Block_list_SeasonCard__",
+            "description": "4b: действующие сезоны (ladder без сезона пропускается)"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/Block_list_WeeklyTopCard__",
+            "description": "4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`)"
           }
         },
         "required": [
           "open_rooms",
           "my_matches",
-          "modes"
+          "modes",
+          "queues",
+          "ratings",
+          "seasons",
+          "weekly"
         ],
         "title": "OnlineBlocks",
         "type": "object"
@@ -2398,6 +2798,113 @@
         "title": "Problem",
         "type": "object"
       },
+      "QueuePoolCard": {
+        "description": "Очередь ladder-а и формата: сколько игроков ищет матч (ADR 0038).",
+        "properties": {
+          "format": {
+            "enum": [
+              "classic",
+              "lite"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "ladder": {
+            "title": "Ladder",
+            "type": "string"
+          },
+          "searching": {
+            "minimum": 0.0,
+            "title": "Searching",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ladder",
+          "format",
+          "searching"
+        ],
+        "title": "QueuePoolCard",
+        "type": "object"
+      },
+      "RatingCard": {
+        "description": "Рейтинг пользователя в ladder-е; в калибровке `rating` и `tier` — null (ADR 0037).",
+        "properties": {
+          "calibrating": {
+            "title": "Calibrating",
+            "type": "boolean"
+          },
+          "calibration_left": {
+            "description": "«Осталось N матчей»",
+            "minimum": 0.0,
+            "title": "Calibration Left",
+            "type": "integer"
+          },
+          "ladder": {
+            "title": "Ladder",
+            "type": "string"
+          },
+          "matches_played": {
+            "minimum": 0.0,
+            "title": "Matches Played",
+            "type": "integer"
+          },
+          "next_tier_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Tier At"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TierCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ladder",
+          "rating",
+          "tier",
+          "calibrating",
+          "calibration_left",
+          "matches_played"
+        ],
+        "title": "RatingCard",
+        "type": "object"
+      },
       "RecordCard": {
         "description": "Личный рекорд режима (``game /v1/me/records``).",
         "properties": {
@@ -2782,6 +3289,39 @@
         "title": "RoundPlayerResultCard",
         "type": "object"
       },
+      "SeasonCard": {
+        "description": "Действующий сезон ladder-а.",
+        "properties": {
+          "ends_at": {
+            "description": "«Осталось X д.» считает клиент",
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "ladder": {
+            "title": "Ladder",
+            "type": "string"
+          },
+          "number": {
+            "minimum": 1.0,
+            "title": "Number",
+            "type": "integer"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ladder",
+          "number",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "SeasonCard",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -3141,6 +3681,113 @@
         ],
         "title": "SubjectPickCard",
         "type": "object"
+      },
+      "TierCard": {
+        "description": "Звание ladder-а (ключи i18n из конфига rating).",
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Градация внутри звания; null — без градации",
+            "title": "Step"
+          },
+          "title_key": {
+            "title": "Title Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "family",
+          "step",
+          "title_key"
+        ],
+        "title": "TierCard",
+        "type": "object"
+      },
+      "WeeklyEntryCard": {
+        "description": "Строка топа недели.",
+        "properties": {
+          "delta": {
+            "title": "Delta",
+            "type": "integer"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "place": {
+            "minimum": 1.0,
+            "title": "Place",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "place",
+          "user_id",
+          "nickname",
+          "delta"
+        ],
+        "title": "WeeklyEntryCard",
+        "type": "object"
+      },
+      "WeeklyTopCard": {
+        "description": "Топ недели ladder-а (прирост с понедельника, ADR 0039).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WeeklyEntryCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ladder": {
+            "title": "Ladder",
+            "type": "string"
+          },
+          "me": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeeklyEntryCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "week_start": {
+            "format": "date",
+            "title": "Week Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ladder",
+          "week_start",
+          "items"
+        ],
+        "title": "WeeklyTopCard",
+        "type": "object"
       }
     }
   },
@@ -3453,6 +4100,127 @@
         ]
       }
     },
+    "/v1/pages/leaderboards": {
+      "get": {
+        "description": "Публичная страница: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`; без `ladder` — первый из списка) и топ недели (rating). Блоки деградируют независимо. Без `around` ответ общий: `public, max-age=10`. `around=me` — окно вокруг пользователя и строки `me`: нужен вход (иначе 401), ответ `private, no-store`; в калибровке — обычная первая страница. Нет ladder-а — 404 `rating.ladder_not_found`, чужой курсор — 422.",
+        "operationId": "leaderboards_page_v1_pages_leaderboards_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ladder",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ladder"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "around",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "me",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Around"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardsPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Лидерборды",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
     "/v1/pages/library": {
       "get": {
         "description": "Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Упавший library — `shelves: unavailable`, страница 200. Всегда `private, no-store`.",
@@ -3712,7 +4480,7 @@
     },
     "/v1/pages/online": {
       "get": {
-        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.",
+        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.",
         "operationId": "online_page_v1_pages_online_get",
         "responses": {
           "200": {

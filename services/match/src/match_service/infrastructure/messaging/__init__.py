@@ -7,6 +7,10 @@
 * ``game.ModeConfigPublished`` / ``ModeConfigArchived`` — текущие версии шаблонов
   (``mode_heads``): по ним ``POST /rooms`` фиксирует версию.
 
+* ``rating.LadderPublished`` / ``SeasonStarted`` / ``RatingChanged`` — проекция для подбора
+  (``ladders_proj``, ``ratings_proj``, ADR 0038): рейтинг игрока — только по возрастанию
+  ``version``, мягкий сброс сезона применяет сам match; синхронных вызовов rating нет;
+
 Обработчик работает в транзакции ``EventProcessor`` (отметка inbox + изменения атомарно);
 повтор события — ``DUPLICATE`` по inbox, устаревшая ``version`` профиля — без изменений.
 Команды владельцу — с ``op_id`` от ``event_id``: повторная доставка не применит их дважды
@@ -15,28 +19,43 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Annotated, Any
 from uuid import UUID
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from prometheus_client import Counter
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError
 from match_service.application.ports import RoomCommand
+from match_service.domain.queue import FORMAT_ANSWER
 from match_service.infrastructure.container import MatchContainer
+from match_service.infrastructure.db.ladders import SqlLadders, ladder_config
 from match_service.infrastructure.db.repositories import SqlModeHeads, SqlUsers
 
 log = structlog.get_logger(__name__)
 
-CONSUMED_TOPICS: tuple[str, ...] = ("identity.user.v1", "game.mode_config.v1")
+UNKNOWN_FORMATS = Counter(
+    "gv_match_ladder_unknown_formats_total", "LadderPublished с форматами вне FORMAT_ANSWER"
+)
+
+CONSUMED_TOPICS: tuple[str, ...] = (
+    "identity.user.v1",
+    "game.mode_config.v1",
+    "rating.rating.v1",
+)
 
 USER_REGISTERED = "identity.UserRegistered"
 USER_PROFILE_CHANGED = "identity.UserProfileBasicsChanged"
 USER_DELETED = "identity.UserDeleted"
 MODE_PUBLISHED = "game.ModeConfigPublished"
 MODE_ARCHIVED = "game.ModeConfigArchived"
+LADDER_PUBLISHED = "rating.LadderPublished"
+SEASON_STARTED = "rating.SeasonStarted"
+RATING_CHANGED = "rating.RatingChanged"
 
 
 class _Payload(BaseModel):
@@ -65,6 +84,39 @@ class _ModeArchived(_Payload):
     version: int = Field(ge=1)
 
 
+LadderKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
+"""Ключ ladder-а: попадает в ключи Redis и таблицы — только по схеме события."""
+
+
+class _LadderPublished(_Payload):
+    ladder: LadderKey
+    version: int = Field(ge=1)
+    domain: str
+    formats: list[LadderKey] = Field(min_length=1)
+    matchmaking: dict[str, Any]  # Any: блок схемы LadderPublished (проверяется потребителем)
+
+
+class _SoftReset(_Payload):
+    target: int = Field(ge=0)
+    ratio: float = Field(ge=0, le=1)
+
+
+class _SeasonStarted(_Payload):
+    season_id: UUID
+    ladder: LadderKey
+    starts_at: datetime
+    soft_reset: _SoftReset | None
+
+
+class _RatingChanged(_Payload):
+    user_id: UUID
+    ladder: LadderKey
+    season_id: UUID
+    version: int = Field(ge=1)
+    new: int
+    at: datetime
+
+
 def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
     try:
         return model.model_validate(payload)
@@ -74,7 +126,7 @@ def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
         ) from exc
 
 
-def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:
+def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:  # noqa: PLR0915 — обработчик на событие
     """Реестр обработчиков событий."""
     registry = EventHandlerRegistry()
 
@@ -95,6 +147,9 @@ def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:
     async def on_user_deleted(envelope: EventEnvelope, session: AsyncSession) -> None:
         p = _parse(_UserDeletedPayload, envelope.payload)
         await SqlUsers.forget(session, p.user_id, p.version)
+        await SqlLadders.forget_user(session, p.user_id)
+        if container.infra.redis is not None:
+            await container.ranked_queue.remove(p.user_id)  # запись очереди идемпотентно
         await notify_room(p.user_id, "remove", envelope, {})
         log.info("match.user_forgotten")
 
@@ -108,6 +163,56 @@ def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:
         p = _parse(_ModeArchived, envelope.payload)
         await SqlModeHeads.archived(session, p.mode_key, p.version, container.infra.clock.now())
 
+    async def on_ladder(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_LadderPublished, envelope.payload)
+        try:
+            ladder_config(p.matchmaking)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PermanentError("matchmaking не соответствует контракту") from exc
+        unknown = sorted(set(p.formats) - set(FORMAT_ANSWER))
+        if unknown:
+            # Формат без шаблона-ответа очередью не обслуживается: enter вернёт 422.
+            UNKNOWN_FORMATS.inc()
+            log.warning("match.ladder_unknown_formats", ladder=p.ladder, formats=unknown)
+        await SqlLadders.published(
+            session,
+            ladder=p.ladder,
+            version=p.version,
+            domain=p.domain,
+            formats=p.formats,
+            matchmaking=p.matchmaking,
+            now=container.infra.clock.now(),
+        )
+        container.ladders.invalidate()
+
+    async def on_season(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_SeasonStarted, envelope.payload)
+        await SqlLadders.season_started(
+            session,
+            ladder=p.ladder,
+            season_id=p.season_id,
+            starts_at=p.starts_at,
+            reset=p.soft_reset.model_dump() if p.soft_reset is not None else None,
+            now=container.infra.clock.now(),
+        )
+        container.ladders.invalidate()
+
+    async def on_rating(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_RatingChanged, envelope.payload)
+        await SqlLadders.rating_changed(
+            session,
+            user_id=p.user_id,
+            ladder=p.ladder,
+            new=p.new,
+            version=p.version,
+            season_id=p.season_id,
+            at=p.at,
+            now=container.infra.clock.now(),
+        )
+
+    registry.register(LADDER_PUBLISHED, on_ladder)
+    registry.register(SEASON_STARTED, on_season)
+    registry.register(RATING_CHANGED, on_rating)
     registry.register(USER_REGISTERED, on_user)
     registry.register(USER_PROFILE_CHANGED, on_user)
     registry.register(USER_DELETED, on_user_deleted)

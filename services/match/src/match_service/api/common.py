@@ -14,6 +14,7 @@ from gv_auth import Principal, Sanction
 from gv_core.errors import AppError
 from gv_service.problems import problem, retry_after_seconds, status_for
 from match_service.api.public.schemas import ROOM_CODE_PATTERN
+from match_service.application.commands.queue import QueueService
 from match_service.application.commands.rooms import Actor, CommandOutcome, RoomService
 from match_service.application.queries.matches import MatchQueries, RatePlayer
 from match_service.application.queries.rooms import RoomQueries
@@ -78,6 +79,11 @@ class MatchServices(Protocol):
         ...
 
     @property
+    def queue(self) -> QueueService:
+        """Очередь рейтинговой дуэли."""
+        ...
+
+    @property
     def matches(self) -> MatchQueries:
         """История матчей."""
         ...
@@ -99,6 +105,7 @@ def actor_of(principal: Principal, request: Request | None = None) -> Actor:
         user_id=principal.user_id,
         chat_muted=principal.is_sanctioned(Sanction.CHAT_MUTE),
         chat_slow=principal.is_sanctioned(Sanction.CHAT_SLOW),
+        ranked_banned=principal.is_sanctioned(Sanction.RANKED),
         ip=ip,
     )
 
