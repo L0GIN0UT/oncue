@@ -2,11 +2,23 @@
 
 > Обновлено: 2026-10-23. Новая сессия начинается с чтения этого файла. Реализуется только 5a (progression); 5b и 5c — в плане как модель.
 
-## Состояние
-- Шаг 0 (Next 16.4.1, актуализация roadmap и handoff 4b) — PR #25, ждёт слияния владельцем.
-- План и ADR 0042–0044 (черновики) закоммичены в `stage5/plan` (`92a279b`), не запушены.
-- Шаг 0a выполнен в ветке `stage5a/contracts` (от `stage5/plan`), **не закоммичен**: `rating.SeasonStandingsFinalized` (схема, пример, публикация при закрытии сезона, настройки `GV_RATING__STANDINGS_*`), события `progression.*` (7 схем и примеров), `contracts/progression/progression_config.v1.json`, OpenAPI progression `/v1` и `/admin/v1` (501), `/v1/pages/profile` и необязательный `progress` в `/v1/pages/home` (bff), права identity (миграция `0013`), `services/progression/CLAUDE.md`, `docs/architecture/services.md`. `gv lint`, `gv contracts check`, `gv gen --check`, `mkdocs --strict` зелёные; тесты rating 252, progression 31, identity 399, bff_web 207.
-- Дальше: P1 ∥ P4, затем P2 ∥ P3, 0b.
+## Состояние (конец 5a, 2026-10-23)
+- Шаг 0 (Next 16.4.1, актуализация roadmap и handoff 4b) — PR #25, ждёт слияния владельцем; после него `git merge origin/main` в `stage5a/integration` (вероятные конфликты: `frontend/package.json`, `pnpm-lock.yaml`).
+- Весь код 5a собран в `stage5a/integration` (запушена): 0a (контракты, rating-событие, права identity), P1 (домен, ledger, миграция `0002`, начисления), P2 (задания, бейджи, колесо, бусты, миграция `0003`), P3 (admin-API, раздел админки, миграция `0004`), P4 (bff `/pages/profile`, `/pages/players/{id}`, прогресс на главной; фронтенд `/profile`, `/players/[id]`, колесо), 0b (сид `seeds/progression/config.yaml`, задача `progression.config.bootstrap`, `e2e/progression.spec.ts`). Единственный PR — `stage5a/integration` → `main`.
+- Проверки на integration: `gv lint` зелёный; progression 375, bff_web 252, tools/gv 157, rating 252, identity 399; frontend lint, typecheck, `next build` зелёные, vitest 373 (один тест `GameScreen.modes` нестабилен под нагрузкой, отдельно проходит); admin по разделу прогрессии 31. Не проверено: `e2e/progression.spec.ts` (нужен живой стек), Playwright на моках в integration после слияния.
+- Давний хвост admin (Windows): `test_runtime::test_api_serves_django_and_metrics_then_stops` падает и на базовой ветке (`/health/live` не отвечает) — не из-за 5a.
+
+## Чек-лист ручной проверки владельцем (перед слиянием PR integration → main)
+Ledger — зона повышенной безопасности (`docs/10-ai-assistant.md` §3), требуется ручная проверка владельцем:
+1. Роли Postgres: журналы защищены триггерами (`xp_ledger`, `currency_ledger`, `admin_actions` — UPDATE/DELETE/TRUNCATE), но роль сервиса владеет таблицами и может отключить триггер. Разделение ролей (REVOKE) — этап 7, риск принят.
+2. Миграции `0002`–`0004`: откат `0002` и `0004` прерывается, если есть проводки/аудит; `0003` откатывается без проверок (теряется история спинов — повторный спин в те же сутки). Прогнать `gv test progression --level integration` на чистой БД.
+3. Начисления: дубль события (в т.ч. с новым `event_id`) даёт одну проводку; потолки соло и онлайн-Версов (`verses.online_daily_cap` = 200 в сиде) не обходятся параллельными матчами около полуночи; онлайн-опыт без потолка (решение владельца) — фарм вторым аккаунтом закрывает будущий детектор win-trading (хвост ADR 0038).
+4. Конфиг: верхние границы сумм в схеме и домене (`maximum` до 100 млн); публикация привязана к хешу тела черновика; админ с `config.manage` без `publish` публиковать не может.
+5. Ручная выдача и сторно: только `earned`, сторно только кредитов, суточный лимит считает и сторнированные выдачи, причина не попадает в события, `no-store`.
+6. Награды сезона/недели: ключи `season:{season_id}:{user}`, `weekly_top:{ladder}:{week_start}:{user}`; проверить на стенде, что `rating` публикует `SeasonStandingsFinalized` при закрытии сезона, а progression начисляет по пачкам.
+7. Живая проверка на compose (`gv dev up`, `gv dev seed`): `e2e/progression.spec.ts`; профиль `/profile`, колесо (один спин в сутки, повтор — тот же результат), админка «Прогрессия» (черновик → публикация → откат, выдача и сторно).
+8. Хвосты 4b (не 5a): ручные проверки identity (realtime-токен), match (античит), rating; допущения сидов 4b (K Эло, пороги званий, фильтры `similar`).
+9. Пароль сид-админа локального стенда был выведен в вывод инструмента при поиске по `infra/` (файл `.env`, не в коммитах): при необходимости сменить.
 
 ## Решения, принятые ассистентом (не из списка владельца)
 Полный список — [план](../plans/stage-5.md) §1, R1–R11. Ждут подтверждения владельца.
@@ -33,7 +45,7 @@
 ## P1 и P4 (в работе, не закоммичены)
 - P1 (ветка `stage5a/p1-domain-ledger`): домен, ledger, миграция `0002`, consumers, `me/progress`, `me/wallet`, `users/{id}/progress`; 209 тестов progression, покрытие 98%. Ревью code-reviewer и security-reviewer учтены. review-migration (`0002_progression_core.py`, путь указан явно): Safe to merge; замечания — нет индексов по FK `config_version` и явного `ON DELETE` (config_versions не удаляются), `CHECK domain IN ('music','film')` в `daily_streaks` требует миграции при новом домене. Решения P1 записаны в ADR 0042/0043.
 - P4 (worktree `.claude/worktrees/agent-accec8825a26da59a`, ветка `stage5a/p4-web`): bff `/pages/profile`, `/pages/players/{id}`, блок `progress` главной; фронтенд `/profile`, `/players/[id]`, колесо; bff 252 теста, vitest 373, Playwright 48.
-- **Решено владельцем (ledger, требуется ручная проверка):** consumers остаются в `infrastructure/messaging/__init__.py` (как rating/match); роли Postgres (REVOKE) - этап 7, риск принят; инкрементальная сверка - этап 7; нулевая проводка-отметка предмета (`accrual_marks`) - сделано; онлайн-потолок Версов `verses.online_daily_cap` = 500 - сделано (опыт онлайна без потолка); значение 500 для сида - в шаге 0b.
+- **Решено владельцем (ledger, требуется ручная проверка):** consumers остаются в `infrastructure/messaging/__init__.py` (как rating/match); роли Postgres (REVOKE) - этап 7, риск принят; инкрементальная сверка - этап 7; нулевая проводка-отметка предмета (`accrual_marks`) - сделано; онлайн-потолок Версов `verses.online_daily_cap` - сделано (опыт онлайна без потолка); значение в сиде 0b = 200 (в примере контракта 500, для тестов).
 
 ## Хвосты 0a
 - P3: `Cache-Control: no-store` в admin-ручках progression ставится до `raise` и в заглушках не действует — проверить на успешных ответах.
