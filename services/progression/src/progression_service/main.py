@@ -18,7 +18,9 @@ from progression_service.settings import Settings
 def build_routers(infra: Infrastructure) -> list[APIRouter]:
     """Роутеры: use-cases контейнера процесса передаются в слой api."""
     c = container_for(infra)
-    return build_api_routers(infra, c.queries, c.quest_queries, c.badge_queries, c.wheel)
+    return build_api_routers(
+        infra, c.queries, c.quest_queries, c.badge_queries, wheel=c.wheel, admin=c.admin
+    )
 
 
 DEFINITION = ServiceDefinition(

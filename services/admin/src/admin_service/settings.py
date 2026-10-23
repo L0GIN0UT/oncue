@@ -73,6 +73,7 @@ class AdminConfig(BaseModel):
             "collections": "http://collections:8000",
             "match": "http://match:8000",
             "rating": "http://rating:8000",
+            "progression": "http://progression:8000",
         }
     )
     service_timeout_s: float = Field(default=10.0, gt=0)

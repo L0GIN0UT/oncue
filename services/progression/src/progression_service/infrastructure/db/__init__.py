@@ -1,6 +1,10 @@
-"""PostgreSQL: таблицы, репозитории, миграции."""
+"""PostgreSQL: таблицы, репозитории, миграции.
 
-from progression_service.infrastructure.db import tables_rewards as _tables_rewards
+Импорт пакета регистрирует в общих метаданных (``tables.TABLES``) таблицы наград (P2,
+``tables_rewards``) и админки (P3, ``tables_admin``): любой импорт ``infrastructure.db.*``
+сначала выполняет этот модуль и видит полную схему.
+"""
 
-# Таблицы P2 регистрируются в тех же метаданных: любой импорт db.* видит полную схему.
-__all__ = ["_tables_rewards"]
+from progression_service.infrastructure.db import tables_admin, tables_rewards
+
+__all__ = ["tables_admin", "tables_rewards"]

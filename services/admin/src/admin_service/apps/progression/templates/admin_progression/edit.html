@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'progression:configs' %}">← к версиям</a> ·
+   <a href="?fmt=yaml">YAML</a> / <a href="?fmt=json">JSON</a> (перечитать с сервера)</p>
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+{% if based_status %}<p>Основа: {{ based_status }} v{{ based_on }}. Сохранение заменяет единственный черновик; полную проверку выполняет progression.</p>{% endif %}
+{% if field_errors %}
+<ul class="messagelist"><li class="error">Ошибки проверки: {{ field_errors|length }}</li></ul>
+<table>
+  <thead><tr><th>Строка</th><th>Поле</th><th>Причина</th></tr></thead>
+  {% for e in field_errors %}
+  <tr><td>{{ e.line|default:"—" }}</td><td><code>{{ e.path }}</code></td><td>{{ e.message }}</td></tr>
+  {% endfor %}
+</table>
+<div class="gv-lines">{% for l in lines %}<div{% if l.error %} class="err"{% endif %}><span class="num">{{ l.number }}</span>{{ l.text }}</div>{% endfor %}</div>
+{% endif %}
+{% if form %}
+<form method="post">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.fmt.errors }}<p>{{ form.fmt.label_tag }} {{ form.fmt }}</p>
+  {{ form.text.errors }}{{ form.text }}
+  {{ form.base_revision }}{{ form.idempotency_key }}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  <button type="submit" name="action" value="save">Сохранить черновик</button>
+</form>
+{% endif %}
+{% endblock %}

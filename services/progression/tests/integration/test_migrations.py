@@ -151,3 +151,17 @@ async def test_downgrade_0003_drops_reward_tables_only_and_reapplies(database_ur
     assert {"xp_ledger", "currency_ledger", "balances", "progress"} <= tables
 
     await apply_migrations(database_url, DEFINITION.migrations_path)
+
+
+def test_alembic_has_single_head_and_linear_chain() -> None:
+    """Ревизии идут цепочкой 0001 → 0002 → 0003 → 0004: после слияния потоков голова одна."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    assert DEFINITION.migrations_path is not None
+    config = Config()
+    config.set_main_option("script_location", str(DEFINITION.migrations_path))
+    script = ScriptDirectory.from_config(config)
+    assert script.get_heads() == ["0004"]
+    chain = [rev.revision for rev in script.walk_revisions()]
+    assert chain == ["0004", "0003", "0002", "0001"]

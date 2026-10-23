@@ -13,6 +13,10 @@ from progression_service.application.accrual.daily import AccrueDaily
 from progression_service.application.accrual.match import AccrueMatch
 from progression_service.application.accrual.rating_rewards import AccrueSeason, AccrueWeeklyTop
 from progression_service.application.accrual.solo import AccrueSolo
+from progression_service.application.admin import AdminServices
+from progression_service.application.admin.configs import ConfigCommands, ConfigQueries
+from progression_service.application.admin.ledger import LedgerCommands, LedgerQueries
+from progression_service.application.admin.ports import AdminUowFactory
 from progression_service.application.badges import BadgeQueries
 from progression_service.application.boosts import BoostRewardHook
 from progression_service.application.ports import RewardHook, UnitOfWorkFactory
@@ -20,6 +24,7 @@ from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
 from progression_service.application.quests.tracker import ProgressTracker
 from progression_service.application.wheel import WheelService
+from progression_service.infrastructure.db.admin_repositories import SqlAdminUnitOfWork
 from progression_service.infrastructure.db.repositories import SqlProgressionUnitOfWork
 from progression_service.settings import Settings
 
@@ -106,6 +111,30 @@ class ProgressionContainer:
             self.uow_factory(),
             self.infra.clock,
             recent_limit=self.settings.progression.wallet_recent_limit,
+        )
+
+    # ------------------------------------------------------------------ админка (поток P3)
+    def admin_uow_factory(self) -> AdminUowFactory:
+        """Фабрика UoW админки (своя транзакция)."""
+        infra = self.infra
+        producer = self.settings.service_name
+
+        def factory() -> SqlAdminUnitOfWork:
+            if infra.sessions is None:
+                raise DependencyUnavailableError("база данных не настроена (GV_DATABASE_URL)")
+            return SqlAdminUnitOfWork(producer=producer, clock=infra.clock, sessions=infra.sessions)
+
+        return factory
+
+    @cached_property
+    def admin(self) -> AdminServices:
+        """Use-cases admin-API."""
+        factory = self.admin_uow_factory()
+        return AdminServices(
+            configs=ConfigCommands(factory, self.infra.clock),
+            config_queries=ConfigQueries(factory),
+            ledger=LedgerCommands(factory, self.infra.clock),
+            ledger_queries=LedgerQueries(factory),
         )
 
 

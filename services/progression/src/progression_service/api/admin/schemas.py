@@ -31,6 +31,10 @@ class ConfigVersionCard(BaseModel):
     created_at: datetime
     published_at: datetime | None = None
     created_by: UUID
+    body_sha256: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="sha256 канонического JSON тела; публикация привязана к нему",
+    )
 
 
 class ConfigVersionList(BaseModel):
@@ -58,7 +62,11 @@ class SaveDraftRequest(_Request):
 class PublishRequest(_Request):
     """Опубликовать черновик: новая версия действует со следующего периода заданий."""
 
-    version: int = Field(ge=1, description="Версия черновика (защита от гонки правок)")
+    version: int = Field(ge=1, description="Версия черновика")
+    body_sha256: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="`body_sha256` черновика, который видел админ (иначе 409 `draft_changed`)",
+    )
     reason: Reason
 
 
@@ -72,7 +80,9 @@ class GrantRequest(_Request):
     """Ручная выдача Версов."""
 
     amount: int = Field(ge=1, description="Версы; верхний предел — `admin.grant_max_amount`")
-    bucket: Bucket = "earned"
+    bucket: Literal["earned"] = Field(
+        default="earned", description="В 5a ручная выдача только в `earned` (`paid` - с 5b)"
+    )
     reason: Reason
 
 
@@ -110,6 +120,7 @@ class AdminLedgerPage(BaseModel):
 class LedgerOperation(BaseModel):
     """Итог ручной операции: проводка и баланс после неё."""
 
+    user_id: UUID = Field(description="Владелец проводки")
     entry: AdminLedgerEntry
     balance_after: int = Field(ge=0)
 
@@ -122,7 +133,9 @@ class AdminQuestCard(BaseModel):
     title: str
     reward: Reward
     enabled: bool
-    completed_total: int = Field(ge=0)
+    completed_total: int | None = Field(
+        default=None, ge=0, description="null - счётчиков ещё нет (данные появятся с заданиями)"
+    )
 
 
 class AdminQuestList(BaseModel):
@@ -138,7 +151,9 @@ class AdminBadgeCard(BaseModel):
     key: Key
     title: str
     enabled: bool
-    unlocked_total: int = Field(ge=0)
+    unlocked_total: int | None = Field(
+        default=None, ge=0, description="null - счётчиков ещё нет (данные появятся с бейджами)"
+    )
 
 
 class AdminBadgeList(BaseModel):
