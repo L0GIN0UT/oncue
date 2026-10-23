@@ -21,4 +21,5 @@
 - Метрики P2 обновляются в одной транзакции с начислением P1 (`messaging/rewards.py`): ошибка P2 откатывает и P1, событие повторяется; payload разбирает P1, P2 не строже.
 - Буст опыта: `BoostRewardHook` тратит матч буста в транзакции матча (только при базовом опыте > 0, `boost_spends` PK `(user_id, match_id)`); Версы и соло бустом не множатся.
 - Колесо: `wheel_spins` PK `(user_id, day)`, сектор выбирает порт `Random` (`container.random`), приз выдаётся в той же транзакции; `GET /me/quests` пишет назначение.
+- Сид конфига — `seeds/progression/config.yaml`; задача relay `progression.config.bootstrap` (`GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, только local/ci) публикует версию 1, если опубликованной нет (актор `UUID(int=0)`); начисления до неё повторяются.
 - Нет синхронных вызовов game/match/rating; места сезона — из `rating.SeasonStandingsFinalized`, топ недели — топ-100 (решение владельца).

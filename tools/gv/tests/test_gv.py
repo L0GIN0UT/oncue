@@ -308,6 +308,11 @@ def test_generated_compose_passes_stage2_settings() -> None:
     )
     assert dev["rating"]["volumes"] == ["../../seeds/rating/ladders:/seeds/rating/ladders:ro"]
     assert (ROOT / "seeds/rating/ladders").is_dir()
+    assert dev["progression"]["environment"]["GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR"] == (
+        "/seeds/progression"
+    )
+    assert dev["progression"]["volumes"] == ["../../seeds/progression:/seeds/progression:ro"]
+    assert (ROOT / "seeds/progression/config.yaml").is_file()
     mail = dev["identity"]["environment"]
     assert mail["GV_EMAIL__BACKEND"] == "${GV_EMAIL__BACKEND:-log}"
     assert not any("LINK" in key for key in mail)  # ссылок с токенами нет (ADR 0041)

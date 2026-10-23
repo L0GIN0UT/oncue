@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
+from uuid import UUID
 
 import structlog
 
@@ -144,6 +145,34 @@ class ConfigCommands:
                 "progression.admin.config_published", actor_id=str(ctx.actor_id), version=version
             )
         return response
+
+    async def bootstrap(self, raw: Mapping[str, Any], *, actor_id: UUID, reason: str) -> bool:
+        """Опубликовать сид, если опубликованной версии ещё нет (local/ci); иначе no-op.
+
+        Те же команды, что у админа (черновик + публикация); ключи идемпотентности фиксированы,
+        параллельный запуск безопасен: записи сериализует ``lock_writes``.
+
+        Returns:
+            ``True``, если версия опубликована сейчас.
+
+        Raises:
+            ConfigDraftInvalidError: сид не проходит проверку (ничего не сохранено).
+        """
+        async with self._uow() as uow:
+            if await uow.configs.published() is not None:
+                return False
+        card = await self.save_draft(
+            raw,
+            ctx=AdminContext(actor_id=actor_id, reason=reason, idempotency_key="bootstrap:draft"),
+        )
+        draft = card["card"]
+        assert isinstance(draft, dict)  # noqa: S101 - форма ответа save_draft
+        await self.publish(
+            int(draft["version"]),
+            str(draft["body_sha256"]),
+            ctx=AdminContext(actor_id=actor_id, reason=reason, idempotency_key="bootstrap:publish"),
+        )
+        return True
 
     async def rollback(self, version: int, *, ctx: AdminContext) -> Json:
         """Копия когда-то действовавшей версии становится черновиком (заменяет текущий).

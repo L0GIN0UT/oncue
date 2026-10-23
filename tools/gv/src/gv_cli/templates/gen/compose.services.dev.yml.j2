@@ -22,6 +22,12 @@ services:
     volumes:
       - ../../seeds/rating/ladders:/seeds/rating/ladders:ro
 {% endif %}
+{% if s.name == "progression" %}
+      # Стартовый конфиг публикуется версией 1, если опубликованной нет (progression.config.bootstrap).
+      GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR: /seeds/progression
+    volumes:
+      - ../../seeds/progression:/seeds/progression:ro
+{% endif %}
 {% if s.name == "catalog" %}
       # Файлы импорта каталога (`gv dev seed`): воркер читает их из этого каталога.
       GV_IMPORTS__FILES_DIR: /seeds/catalog
