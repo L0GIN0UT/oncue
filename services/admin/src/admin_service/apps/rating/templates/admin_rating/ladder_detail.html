@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'rating:ladders' %}">← к списку</a></p>
+{% if not_found %}
+<p>Ladder-а <code>{{ key }}</code> нет.</p>
+{% elif error %}
+<ul class="messagelist"><li class="error">{{ error }}</li></ul>
+{% else %}
+<table>
+  <tr><th>Ключ</th><td>{{ key }}</td></tr>
+  <tr><th>Действующая версия</th><td>{% if published %}v{{ published }}{% else %}—{% endif %}</td></tr>
+  <tr><th>Черновик</th><td>{% if draft %}v{{ draft }}{% else %}—{% endif %}</td></tr>
+  <tr><th>Текущий сезон</th><td>{% if season_id %}<code>{{ season_id }}</code>{% else %}нет{% endif %}</td></tr>
+</table>
+
+<h2>Конфиг</h2>
+<p><a href="{% url 'rating:edit' key=key %}">Редактировать (новая версия-черновик)</a></p>
+
+{% if diff_error %}<ul class="messagelist"><li class="error">{{ diff_error }}</li></ul>{% endif %}
+{% if diff %}
+<h3>Отличия v{{ diff_from }} → v{{ diff_to }}</h3>
+{% include "admin_game_config/_diff.html" %}
+{% elif diff_from and diff_to %}<p>v{{ diff_from }} и v{{ diff_to }} совпадают.</p>{% endif %}
+
+{% if draft %}
+<h3>Публикация</h3>
+<form method="post" action="{% url 'rating:publish' key=key %}">
+  {% csrf_token %}{{ publish_form.as_p }}<input type="submit" value="Опубликовать v{{ draft }}">
+</form>
+{% endif %}
+
+<h2>Версии</h2>
+<table>
+  <thead><tr><th>Версия</th><th>Статус</th><th>Создана</th><th>Автор</th><th>Опубликована</th><th>Сравнить</th></tr></thead>
+  {% for v in versions %}
+  <tr>
+    <td><a href="?version={{ v.version }}">v{{ v.version }}</a></td>
+    <td>{{ v.status }}</td><td>{{ v.created_at }}</td><td><code>{{ v.created_by }}</code></td><td>{{ v.published_at|default:"" }}</td>
+    <td>{% if published and v.version != published %}<a href="?from={{ published }}&amp;to={{ v.version }}">с действующей</a>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6">Версий нет</td></tr>
+  {% endfor %}
+</table>
+{% if shown_error %}<ul class="messagelist"><li class="error">{{ shown_error }}</li></ul>{% endif %}
+{% if shown_text %}<h3>Конфиг v{{ shown }}</h3><pre class="gv-lines">{{ shown_text }}</pre>{% endif %}
+
+<h2>Откат</h2>
+<form method="post" action="{% url 'rating:rollback' key=key %}">
+  {% csrf_token %}{{ rollback_form.as_p }}<input type="submit" value="Опубликовать выбранную версию заново">
+</form>
+
+{% if can_seasons %}
+<h2>Сезоны</h2>
+<form method="post" action="{% url 'rating:season_create' key=key %}">
+  {% csrf_token %}{{ season_form.as_p }}<input type="submit" value="Создать сезон">
+</form>
+{% if season_id %}
+<p><a href="{% url 'rating:season_close' key=key season_id=season_id %}">Закрыть текущий сезон…</a></p>
+{% endif %}
+<h2>Лидерборд</h2>
+<form method="post" action="{% url 'rating:rebuild' key=key %}">
+  {% csrf_token %}{{ rebuild_form.as_p }}<input type="submit" value="Пересобрать лидерборд">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

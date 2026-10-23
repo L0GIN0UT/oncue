@@ -94,6 +94,7 @@ INSTALLED_APPS = [
     "admin_service.apps.game_daily",
     "admin_service.apps.collections",
     "admin_service.apps.matches",
+    "admin_service.apps.rating",
 ]
 
 MIDDLEWARE = [
