@@ -1,0 +1,5 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="javascript:history.back()">← назад</a> · <a href="{% url 'admin:index' %}">на главную</a></p>
+{% endblock %}

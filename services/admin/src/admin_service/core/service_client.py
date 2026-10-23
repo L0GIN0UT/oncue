@@ -92,7 +92,54 @@ _MESSAGES: Mapping[str, str] = {
     "collections.publish_limit": "Слишком много публикаций за сутки — повторите позже",
     "collections.rate_limited": "Слишком много запросов — повторите позже",
     "collections.limiter_unavailable": "Лимитер публикаций недоступен — повторите позже",
+    # progression, этап 5b: магазин и промокоды
+    "progression.item_key_taken": "Предмет с таким ключом уже есть",
+    "progression.item_key_immutable": "Ключ предмета после создания не меняется",
+    "progression.item_not_found": "Предмет не найден",
+    "progression.item_slot_unknown": "Слот не описан в действующем конфиге магазина",
+    "progression.item_rarity_unknown": "Редкость не описана в действующем конфиге магазина",
+    "progression.item_media_missing": "Активный предмет нужно сначала снабдить картинкой",
+    "progression.item_media_invalid": "Файл не подходит: проверьте формат, размеры и длительность",
+    "progression.item_media_too_large": "Файл больше допустимого для этого вида предмета",
+    "progression.pack_key_taken": "Пак с таким ключом уже есть",
+    "progression.pack_not_found": "Пак не найден",
+    "progression.pack_invalid": "Пак не прошёл проверку: проверьте состав предметов",
+    "progression.promo_not_found": "Партия промокодов не найдена",
+    "progression.promo_reward_invalid": "Награда партии не подходит: проверьте Версы или предмет",
+    "progression.codes_already_shown": (
+        "Коды этой партии уже были показаны один раз и больше недоступны: "
+        "отзовите партию и создайте новую"
+    ),
+    "progression.promo_batch_too_large": "Партия больше допустимого размера",
+    "progression.promo_actor_daily_cap_exceeded": "Вы исчерпали суточный лимит выпуска кодов",
+    "progression.promo_total_daily_cap_exceeded": "Исчерпан общий суточный лимит выпуска кодов",
+    "progression.promo_rate_limited": "Слишком много запросов по промокодам — повторите позже",
+    # media-pipeline, этап 5b: UGC-изображения
+    "ugc.not_pending": "Изображение уже обработано или снято — обновите очередь",
+    "ugc.not_found": "Изображение не найдено",
+    "ugc.reason_unknown": "Код причины не описан в настройках модерации",
 }
+
+# Коды отказов по суточным и пакетным потолкам: к сообщению добавляются числа из ``details``.
+_CAP_CODES = frozenset(
+    {
+        "progression.promo_batch_too_large",
+        "progression.promo_actor_daily_cap_exceeded",
+        "progression.promo_total_daily_cap_exceeded",
+    }
+)
+
+
+def _with_cap_details(message: str, details: Any) -> str:
+    """Дописать к сообщению о потолке эмиссии ``limit``/``used``/``requested`` из details."""
+    if not isinstance(details, dict):
+        return message
+    parts = [
+        f"{label} {details[key]}"
+        for key, label in (("limit", "лимит"), ("used", "использовано"), ("requested", "запрошено"))
+        if isinstance(details.get(key), int) and not isinstance(details.get(key), bool)
+    ]
+    return f"{message} ({', '.join(parts)})" if parts else message
 
 
 class ServiceError(Exception):
@@ -153,6 +200,8 @@ def problem_to_error(service: str, response: httpx.Response) -> ServiceError:
         )
         message = f"{message}: {details}"
     raw_details = body.get("details")
+    if code in _CAP_CODES:
+        message = _with_cap_details(message, raw_details)
     return ServiceError(
         service,
         response.status_code,
@@ -231,9 +280,19 @@ class ServiceClient:
         """
         return self._send("POST", path, safe=True, json=json)
 
-    def put(self, path: str, *, idempotency_key: str, json: Any) -> Any:
-        """PUT-мутация."""
-        return self._send("PUT", path, idempotency_key=idempotency_key, json=json)
+    def put(
+        self,
+        path: str,
+        *,
+        idempotency_key: str,
+        json: Any = None,
+        data: Mapping[str, str] | None = None,
+        files: Mapping[str, tuple[str, Any, str]] | None = None,
+    ) -> Any:
+        """PUT-мутация (JSON или multipart — загрузка картинки предмета)."""
+        return self._send(
+            "PUT", path, idempotency_key=idempotency_key, json=json, data=data, files=files
+        )
 
     def delete(self, path: str, *, idempotency_key: str, json: Any = None) -> Any:
         """DELETE-мутация (тело — причина действия, если сервис её требует)."""

@@ -1,0 +1,8 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p>Рассылка уходит игрокам, у которых включены объявления. Перед отправкой будет страница подтверждения.</p>
+<form method="post" action="{% url 'broadcasts:new' %}">
+  {% csrf_token %}{{ form.as_p }}<input type="submit" value="Далее">
+</form>
+{% endblock %}

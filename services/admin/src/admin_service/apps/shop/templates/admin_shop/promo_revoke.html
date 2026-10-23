@@ -1,0 +1,9 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_shop/_nav.html" %}
+<p>Отозванные коды перестанут погашаться.</p>
+<form method="post">
+  {% csrf_token %}{{ form.as_p }}<input type="submit" value="Отозвать партию">
+</form>
+{% endblock %}

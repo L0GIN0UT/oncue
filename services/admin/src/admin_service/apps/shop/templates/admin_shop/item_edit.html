@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_shop/_nav.html" %}
+{% if config_error %}<p>Конфиг магазина недоступен ({{ config_error }}): слот и редкость вводятся текстом, проверит сервис.</p>{% endif %}
+<h2>Картинка</h2>
+{# asset_url/poster_url публичные (префикс /cosmetics/, не подписанные): кэш браузера допустим, no-store не нужен. #}
+{% if item.asset_url %}
+<p>Файл: <img src="{{ item.asset_url }}" alt="Картинка предмета" width="128"></p>
+{% if item.poster_url %}<p>Постер: <img src="{{ item.poster_url }}" alt="Постер анимации" width="128"></p>{% endif %}
+{% else %}<p>Картинки нет.</p>{% endif %}
+<p>Допустимо до {{ media_limit }} байт{% if media.max_side_px %}, сторона до {{ media.max_side_px }} px{% endif %}{% if item.media_kind == "animated" %}{% if media.animated_max_frames %}, кадров до {{ media.animated_max_frames }}{% endif %}{% if media.animated_max_duration_ms %}, длительность до {{ media.animated_max_duration_ms }} мс{% endif %}{% endif %}.</p>
+<form method="post" action="{% url 'shop:item_media' item_id=item.id %}" enctype="multipart/form-data">
+  {% csrf_token %}{{ media_form.as_p }}<input type="submit" value="Загрузить">
+</form>
+<h2>Параметры</h2>
+<form method="post">
+  {% csrf_token %}{{ form.as_p }}<input type="submit" value="Сохранить">
+</form>
+<p>Владельцев: {{ item.owners }}</p>
+{% endblock %}

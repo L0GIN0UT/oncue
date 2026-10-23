@@ -79,3 +79,45 @@ class MediaAdminClient:
             idempotency_key=idempotency_key,
             json={"position": position, "reason": reason},
         )
+
+    # ------------------------------------------------------------------ UGC-изображения (5b)
+
+    def ugc_images(
+        self,
+        *,
+        status: str = "pending",
+        purpose: str | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Any:
+        """Очередь UGC-изображений → ``{items, next_cursor}`` (``media.ugc.moderate``)."""
+        return self._client.get(
+            "/admin/v1/ugc-images",
+            params={"status": status, "purpose": purpose, "cursor": cursor, "limit": limit},
+        )
+
+    def ugc_settings(self) -> Any:
+        """Настройки модерации → ``{purposes, reasons[{code, title}]}``."""
+        return self._client.get("/admin/v1/ugc-images/settings")
+
+    def ugc_preview(self, asset_id: UUID) -> Any:
+        """Короткая подписанная ссылка на превью → ``{url, expires_at}`` (не сохранять)."""
+        return self._client.get(f"/admin/v1/ugc-images/{asset_id}/preview")
+
+    def ugc_approve(self, asset_id: UUID, *, reason: str, idempotency_key: str) -> Any:
+        """Одобрить изображение."""
+        return self._client.post(
+            f"/admin/v1/ugc-images/{asset_id}/approve",
+            idempotency_key=idempotency_key,
+            json={"reason": reason},
+        )
+
+    def ugc_reject(
+        self, asset_id: UUID, *, reason_code: str, reason: str, idempotency_key: str
+    ) -> Any:
+        """Отклонить (из ``pending``) или снять одобренное (из ``approved``)."""
+        return self._client.post(
+            f"/admin/v1/ugc-images/{asset_id}/reject",
+            idempotency_key=idempotency_key,
+            json={"reason_code": reason_code, "reason": reason},
+        )

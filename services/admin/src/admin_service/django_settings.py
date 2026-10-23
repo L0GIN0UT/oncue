@@ -96,6 +96,9 @@ INSTALLED_APPS = [
     "admin_service.apps.matches",
     "admin_service.apps.rating",
     "admin_service.apps.progression",
+    "admin_service.apps.shop",
+    "admin_service.apps.ugc",
+    "admin_service.apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -161,8 +164,16 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # крупнее — во временный файл
+# Выше потолка картинки предмета: файл крупнее лимита уходит на диск, а не в память.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # только поля формы: файлы в этот предел не входят
+FILE_UPLOAD_MAX_MEMORY_SIZE = max(
+    5 * 1024 * 1024, GV.admin.shop_media_max_bytes
+)  # крупнее — на диск
+FILE_UPLOAD_HANDLERS = [
+    "admin_service.core.uploads.LimitedUploadHandler",
+    "django.core.files.uploadhandler.MemoryFileUploadHandler",
+    "django.core.files.uploadhandler.TemporaryFileUploadHandler",
+]
 
 LANGUAGE_CODE = "ru"
 TIME_ZONE = "UTC"
@@ -184,6 +195,7 @@ GV_SERVICE_URLS = dict(GV.admin.service_urls)
 GV_SERVICE_TIMEOUT_S = GV.admin.service_timeout_s
 GV_IP_ALLOWLIST = list(GV.effective_ip_allowlist)
 GV_MAX_UPLOAD_MB = GV.admin.max_upload_mb
+GV_SHOP_MEDIA_MAX_BYTES = GV.admin.shop_media_max_bytes
 GV_MODE_CONFIG_MAX_BYTES = GV.admin.mode_config_max_bytes
 GV_DAILY_TIMEZONE = GV.admin.daily_timezone
 GV_DAILY_DEFAULT_DAYS = GV.admin.daily_default_days

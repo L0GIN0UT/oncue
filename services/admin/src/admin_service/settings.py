@@ -53,6 +53,9 @@ class AdminConfig(BaseModel):
         daily_range_max_days: Самый длинный диапазон календаря наборов за один запрос.
         collection_text_max_bytes: Предел размера YAML кураторского сборника в редакторе
             (200 единиц с эмодзи и описание укладываются с запасом).
+        shop_media_max_bytes: Жёсткий потолок размера картинки предмета (байт) независимо от
+            конфига progression: по нему настроены пределы загрузки Django и поток отвергается
+            обработчиком до записи на диск.
     """
 
     secret_key: SecretStr | None = None
@@ -74,6 +77,7 @@ class AdminConfig(BaseModel):
             "match": "http://match:8000",
             "rating": "http://rating:8000",
             "progression": "http://progression:8000",
+            "notifications": "http://notifications:8000",
         }
     )
     service_timeout_s: float = Field(default=10.0, gt=0)
@@ -84,6 +88,7 @@ class AdminConfig(BaseModel):
     daily_default_days: int = Field(default=7, ge=1)
     daily_range_max_days: int = Field(default=62, ge=1)
     collection_text_max_bytes: int = Field(default=65536, ge=1024)
+    shop_media_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
 
     @field_validator("ip_allowlist")
     @classmethod

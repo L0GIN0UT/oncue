@@ -89,3 +89,84 @@ class ProgressionAdminClient:
             idempotency_key=idempotency_key,
             json={"reason": reason},
         )
+
+    # ------------------------------------------------------------------ магазин (этап 5b)
+
+    def items(
+        self,
+        *,
+        slot: str | None = None,
+        active: bool | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> Any:
+        """Предметы магазина → ``{items, next_cursor}``."""
+        return self._client.get(
+            "/admin/v1/items",
+            params={
+                "slot": slot,
+                "active": None if active is None else str(active).lower(),
+                "cursor": cursor,
+                "limit": limit,
+            },
+        )
+
+    def create_item(self, body: dict[str, Any], *, idempotency_key: str) -> Any:
+        """Создать предмет (тело — ``CreateItemRequest`` вместе с ``reason``)."""
+        return self._client.post("/admin/v1/items", idempotency_key=idempotency_key, json=body)
+
+    def update_item(self, item_id: UUID, body: dict[str, Any], *, idempotency_key: str) -> Any:
+        """Изменить предмет (``UpdateItemRequest``; ключ неизменяем)."""
+        return self._client.put(
+            f"/admin/v1/items/{item_id}", idempotency_key=idempotency_key, json=body
+        )
+
+    def upload_item_media(
+        self,
+        item_id: UUID,
+        *,
+        reason: str,
+        file_name: str,
+        file: Any,
+        content_type: str,
+        idempotency_key: str,
+    ) -> Any:
+        """Загрузить картинку или animated WebP (multipart: файл + причина) → ``AdminItem``."""
+        return self._client.put(
+            f"/admin/v1/items/{item_id}/media",
+            idempotency_key=idempotency_key,
+            data={"reason": reason},
+            files={"file": (file_name, file, content_type)},
+        )
+
+    def packs(self) -> Any:
+        """Паки → ``{items}``."""
+        return self._client.get("/admin/v1/packs")
+
+    def create_pack(self, body: dict[str, Any], *, idempotency_key: str) -> Any:
+        """Создать пак (``SavePackRequest``)."""
+        return self._client.post("/admin/v1/packs", idempotency_key=idempotency_key, json=body)
+
+    def update_pack(self, pack_id: UUID, body: dict[str, Any], *, idempotency_key: str) -> Any:
+        """Изменить пак."""
+        return self._client.put(
+            f"/admin/v1/packs/{pack_id}", idempotency_key=idempotency_key, json=body
+        )
+
+    def promo_batches(self, *, cursor: str | None = None, limit: int = 50) -> Any:
+        """Партии промокодов (без кодов) → ``{items, next_cursor}``."""
+        return self._client.get("/admin/v1/promo-codes", params={"cursor": cursor, "limit": limit})
+
+    def create_promo(self, body: dict[str, Any], *, idempotency_key: str) -> Any:
+        """Создать партию → ``{id, label, codes}``; коды сервис отдаёт один раз."""
+        return self._client.post(
+            "/admin/v1/promo-codes", idempotency_key=idempotency_key, json=body
+        )
+
+    def revoke_promo(self, promo_id: UUID, *, reason: str, idempotency_key: str) -> Any:
+        """Отозвать партию (204)."""
+        return self._client.post(
+            f"/admin/v1/promo-codes/{promo_id}/revoke",
+            idempotency_key=idempotency_key,
+            json={"reason": reason},
+        )

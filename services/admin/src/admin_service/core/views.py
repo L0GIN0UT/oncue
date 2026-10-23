@@ -10,7 +10,8 @@ import structlog
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render
 from django.urls import reverse
 
 from admin_service.audit.services import record
@@ -49,6 +50,25 @@ def read(
             return call(client), None
     except ServiceError as exc:
         return None, exc
+
+
+def error_status(error: ServiceError) -> int:
+    """HTTP-статус страницы для отказа сервиса: права и 404 как есть, сбои — 503/502."""
+    if error.status in (401, 403, 404, 429):
+        return error.status
+    if error.status is None or error.status == 503:  # noqa: PLR2004
+        return 503
+    return 502
+
+
+def service_error_response(request: HttpRequest, error: ServiceError) -> HttpResponse:
+    """Страница с сообщением об отказе сервиса (а не «не найдено» и не 500)."""
+    return render(
+        request,
+        "admin/gv_service_error.html",
+        {"title": "Сервис не ответил", "error": error.message},
+        status=error_status(error),
+    )
 
 
 def fetch(request: HttpRequest, service: str, path: str, **params: Any) -> tuple[Any, str | None]:

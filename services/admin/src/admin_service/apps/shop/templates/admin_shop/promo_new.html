@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_shop/_nav.html" %}
+{% if items_error %}<ul class="messagelist"><li class="error">{{ items_error }}</li></ul>{% endif %}
+<p>Коды будут показаны один раз на следующей странице и нигде не сохраняются.</p>
+<form method="post">
+  {% csrf_token %}{{ form.as_p }}<input type="submit" value="Создать партию">
+</form>
+{% endblock %}
