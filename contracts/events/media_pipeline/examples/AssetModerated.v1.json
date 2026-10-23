@@ -11,6 +11,7 @@
     "asset_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0201",
     "decided_at": "2026-10-23T12:00:00Z",
     "owner_user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "public_key": null,
     "purpose": "avatar",
     "reason_code": "inappropriate",
     "status": "rejected",

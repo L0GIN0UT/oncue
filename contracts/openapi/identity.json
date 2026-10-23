@@ -1031,6 +1031,64 @@
         "title": "UnlinkRequest",
         "type": "object"
       },
+      "UserEmailItem": {
+        "description": "Подтверждённый адрес пользователя.",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "email"
+        ],
+        "title": "UserEmailItem",
+        "type": "object"
+      },
+      "UserEmailsRequest": {
+        "additionalProperties": false,
+        "description": "Набор пользователей; дубли id схлопываются.",
+        "properties": {
+          "user_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "user_ids"
+        ],
+        "title": "UserEmailsRequest",
+        "type": "object"
+      },
+      "UserEmailsResponse": {
+        "description": "Только подходящие пользователи; причины пропуска не различаются, порядок любой.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserEmailItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "UserEmailsResponse",
+        "type": "object"
+      },
       "UsersPage": {
         "description": "Страница пользователей.",
         "properties": {
@@ -1852,6 +1910,113 @@
           }
         },
         "summary": "Сервисный токен (client credentials)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/users/emails": {
+      "post": {
+        "description": "Сервисный токен со scope `users.emails.read`. Неизвестные, удалённые и пользователи без подтверждённого e-mail молча пропускаются. 429 — лимит вызовов на `client_id`.",
+        "operationId": "user_emails_internal_v1_users_emails_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserEmailsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEmailsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Подтверждённые адреса пользователей (рассылки)",
         "tags": [
           "internal"
         ]
