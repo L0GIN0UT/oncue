@@ -120,8 +120,11 @@ class AccrueMatch:
                 xp_op = f"match:{ref}:{user_id}:xp"
                 if not await uow.ledger.has_xp(xp_op):
                     multiplier = (
-                        await self._hook.online_xp_multiplier(user_id, match.match_id)
-                        if online.match_xp > 0 or online.first_win_eligible
+                        await self._hook.online_xp_multiplier(
+                            uow, user_id, match.match_id, self._clock.now()
+                        )
+                        if online.match_xp > 0
+                        or (online.first_win_eligible and cfg.xp.first_win_bonus > 0)
                         else Decimal(1)
                     )
                     await poster.xp(

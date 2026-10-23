@@ -11,6 +11,14 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from gv_core.domain import DomainEvent
+from progression_service.application.ports.rewards import (
+    BadgeRepository,
+    BoostRepository,
+    GrantRepository,
+    MetricRepository,
+    QuestRepository,
+    SpinRepository,
+)
 from progression_service.domain.config import ProgressionConfig
 from progression_service.domain.daily_streak import Streak
 from progression_service.domain.ledger import Bucket, Entry
@@ -236,6 +244,24 @@ class ProgressionUnitOfWork(Protocol):
     @property
     def rewards(self) -> RewardPeriodRepository: ...
 
+    @property
+    def quests(self) -> QuestRepository: ...
+
+    @property
+    def metrics(self) -> MetricRepository: ...
+
+    @property
+    def badges(self) -> BadgeRepository: ...
+
+    @property
+    def spins(self) -> SpinRepository: ...
+
+    @property
+    def boosts(self) -> BoostRepository: ...
+
+    @property
+    def grants(self) -> GrantRepository: ...
+
     async def __aenter__(self) -> Self: ...
 
     async def __aexit__(
@@ -268,9 +294,14 @@ class RewardHook(Protocol):
     (R3). Вызов должен быть идемпотентен по ``match_id``: повтор события не тратит буст дважды.
     Вызывается под блокировками ``FOR UPDATE`` игроков матча — I/O (сеть, чужая БД) внутри
     запрещено. Ядро режет результат границами конфига (не меньше 1, не больше ``maximum`` схемы).
+
+    Хук получает UoW транзакции матча: трату буста он пишет в ней же (без внешнего I/O), поэтому
+    откат матча возвращает буст, а повтор события его не тратит.
     """
 
-    def online_xp_multiplier(self, user_id: UUID, match_id: UUID) -> Awaitable[Decimal]:
+    def online_xp_multiplier(
+        self, uow: ProgressionUnitOfWork, user_id: UUID, match_id: UUID, now: datetime
+    ) -> Awaitable[Decimal]:
         """Множитель опыта игрока в матче; ``1`` — буста нет."""
         ...
 
@@ -278,6 +309,12 @@ class RewardHook(Protocol):
 class NoopRewardHook:
     """Хук по умолчанию: буста нет."""
 
-    async def online_xp_multiplier(self, user_id: UUID, match_id: UUID) -> Decimal:  # noqa: ARG002
+    async def online_xp_multiplier(
+        self,
+        uow: ProgressionUnitOfWork,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        match_id: UUID,  # noqa: ARG002
+        now: datetime,  # noqa: ARG002
+    ) -> Decimal:
         """Всегда ``1``."""
         return Decimal(1)

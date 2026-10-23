@@ -30,6 +30,14 @@ from progression_service.application.ports import (
 from progression_service.domain.config import ProgressionConfig
 from progression_service.domain.daily_streak import Streak
 from progression_service.domain.ledger import Bucket, Direction, Entry
+from progression_service.infrastructure.db.repositories_rewards import (
+    SqlBadges,
+    SqlBoosts,
+    SqlGrants,
+    SqlMetrics,
+    SqlQuests,
+    SqlSpins,
+)
 from progression_service.infrastructure.db.tables import (
     TABLES,
     accrual_marks,
@@ -478,6 +486,12 @@ class SqlProgressionUnitOfWork:
     marks: SqlMarks
     streaks: SqlStreaks
     rewards: SqlRewardPeriods
+    quests: SqlQuests
+    metrics: SqlMetrics
+    badges: SqlBadges
+    spins: SqlSpins
+    boosts: SqlBoosts
+    grants: SqlGrants
 
     def __init__(
         self,
@@ -518,6 +532,12 @@ class SqlProgressionUnitOfWork:
         self.marks = SqlMarks(s)
         self.streaks = SqlStreaks(s)
         self.rewards = SqlRewardPeriods(s)
+        self.quests = SqlQuests(s)
+        self.metrics = SqlMetrics(s)
+        self.badges = SqlBadges(s)
+        self.spins = SqlSpins(s)
+        self.boosts = SqlBoosts(s)
+        self.grants = SqlGrants(s)
         return self
 
     async def __aexit__(

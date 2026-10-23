@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from gv_core.clock import Clock
 from gv_core.errors import NotFoundError
 from progression_service.application.accrual.common import published_config
+from progression_service.application.boosts import BoostState, boost_state
 from progression_service.application.ports import UnitOfWorkFactory
 from progression_service.domain import levels
 from progression_service.domain.ledger import Bucket, Entry
@@ -39,6 +40,16 @@ class ProgressView:
     solo_xp_cap: int
     streaks: tuple[StreakView, ...]
     config_version: int
+    boost: BoostState
+
+
+@dataclass(frozen=True, slots=True)
+class BadgeRefView:
+    """Бейдж в публичном профиле."""
+
+    key: str
+    title: str
+    unlocked_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +59,7 @@ class PublicProgressView:
     user_id: UUID
     level: int
     total_xp: int
+    badges: tuple[BadgeRefView, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +107,7 @@ class ProgressQueries:
                     for domain, s in sorted(streaks.items())
                 ),
                 config_version=published.version,
+                boost=await boost_state(uow, user_id),
             )
 
     async def my_wallet(self, user_id: UUID) -> WalletView:
@@ -116,6 +129,17 @@ class ProgressQueries:
         """
         async with self._uow() as uow:
             row = await uow.progress.get(user_id)
-        if row is None or row.hidden:
-            raise NotFoundError("игрок не найден", code=USER_NOT_FOUND)
-        return PublicProgressView(user_id=user_id, level=row.level, total_xp=row.total_xp)
+            if row is None or row.hidden:
+                raise NotFoundError("игрок не найден", code=USER_NOT_FOUND)
+            unlocked = await uow.badges.unlocked(user_id)
+            published = await uow.configs.published()
+        titles = {} if published is None else {b.key: b.title for b in published.config.badges}
+        return PublicProgressView(
+            user_id=user_id,
+            level=row.level,
+            total_xp=row.total_xp,
+            badges=tuple(
+                BadgeRefView(key, titles.get(key, key), at)
+                for key, at in sorted(unlocked.items(), key=lambda kv: (kv[1], kv[0]))
+            ),
+        )

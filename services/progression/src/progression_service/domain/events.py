@@ -87,3 +87,62 @@ class CurrencyCredited(DomainEvent):
     actor_id: UUID | None
     config_version: int
     at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class RewardPayload:
+    """Награда задания в событии: опыт и Версы."""
+
+    xp: int
+    verses: int
+
+
+@dataclass(frozen=True, slots=True)
+class PrizePayload:
+    """Приз колеса в событии (по схеме ``WheelSpun``: xp, verses, boost, none)."""
+
+    kind: str
+    amount: int
+    multiplier: float | None
+    matches: int | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class QuestCompleted(DomainEvent):
+    """Задание выполнено, награда выдана (идемпотентно по игроку, заданию и периоду)."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    user_id: UUID
+    quest_key: str
+    period: str
+    period_start: str
+    reward: RewardPayload
+    config_version: int
+    at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class BadgeUnlocked(DomainEvent):
+    """Игрок получил бейдж (один раз)."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    user_id: UUID
+    badge_key: str
+    config_version: int
+    at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class WheelSpun(DomainEvent):
+    """Игрок крутанул колесо (один спин в сутки)."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    user_id: UUID
+    day: str
+    sector_key: str
+    prize: PrizePayload
+    config_version: int
+    at: datetime

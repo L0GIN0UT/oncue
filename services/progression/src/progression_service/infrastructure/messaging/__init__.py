@@ -40,13 +40,24 @@ from progression_service.application.accrual.rating_rewards import (
     WeeklyTop,
 )
 from progression_service.application.accrual.solo import SoloSession
+from progression_service.application.quests.tracker import DailyDone, SoloFinished
 from progression_service.domain.config import ConfigInvalidError
 from progression_service.domain.experience import Finish, MatchFormat, Outcome
 from progression_service.infrastructure.container import container_for
+from progression_service.infrastructure.messaging.rewards import (
+    COLLECTION_PUBLISHED_EVENT,
+    COLLECTIONS_TOPIC,
+    RewardHandlers,
+)
 
 log = structlog.get_logger(__name__)
 
-CONSUMED_TOPICS: tuple[str, ...] = ("game.session.v1", "match.match.v1", "rating.rating.v1")
+CONSUMED_TOPICS: tuple[str, ...] = (
+    "game.session.v1",
+    "match.match.v1",
+    "rating.rating.v1",
+    COLLECTIONS_TOPIC,
+)
 
 GAME_FINISHED = "game.GameFinished"
 DAILY_COMPLETED = "game.DailyCompleted"
@@ -61,6 +72,7 @@ CONSUMER_LAG = Gauge(
 )
 
 _VOID = "void"
+_CORRECT = "exact"  # раунд угадан полностью: метрика correct_answers
 Domain = Literal["music", "film"]
 
 
@@ -78,6 +90,7 @@ class _GameFinished(_Payload):
     session_id: UUID
     user_id: UUID | None
     is_guest: bool
+    domain: Domain
     day: date | None
     finished_at: AwareDatetime
     rounds: list[_Round] = Field(min_length=1, max_length=200)
@@ -108,6 +121,7 @@ class _Player(_Payload):
 
 class _MatchFinished(_Payload):
     match_id: UUID
+    domain: Literal["music", "film"]
     format: Literal["duel", "party", "lobby"]
     aborted: bool
     finished_at: AwareDatetime
@@ -172,6 +186,7 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
     """Реестр обработчиков событий."""
     registry = EventHandlerRegistry()
     container = container_for(infra)
+    rewards = RewardHandlers(container)
 
     def observe_lag(envelope: EventEnvelope) -> None:
         lag = (infra.clock.now() - envelope.occurred_at).total_seconds()
@@ -203,7 +218,7 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
 
     async def on_game_finished(envelope: EventEnvelope, session: AsyncSession) -> object:
         p = _parse(_GameFinished, envelope.payload)
-        return await container.accrue_solo(session).execute(
+        result = await container.accrue_solo(session).execute(
             SoloSession(
                 session_id=p.session_id,
                 # Гость пропускается по любому из признаков: is_guest или user_id = null.
@@ -213,10 +228,23 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
                 round_points=tuple(r.points for r in p.rounds if r.outcome != _VOID),
             )
         )
+        played = [r for r in p.rounds if r.outcome != _VOID]
+        await rewards.game_finished(
+            SoloFinished(
+                session_id=p.session_id,
+                user_id=None if p.is_guest else p.user_id,
+                domain=p.domain,
+                finished_at=p.finished_at,
+                rounds_played=len(played),
+                correct_answers=sum(1 for r in played if r.outcome == _CORRECT),
+            ),
+            session,
+        )
+        return result
 
     async def on_daily_completed(envelope: EventEnvelope, session: AsyncSession) -> object:
         p = _parse(_DailyCompleted, envelope.payload)
-        return await container.accrue_daily(session).execute(
+        result = await container.accrue_daily(session).execute(
             CompletedDaily(
                 session_id=p.session_id,
                 user_id=p.user_id,
@@ -225,10 +253,25 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
                 occurred_at=envelope.occurred_at,
             )
         )
+        # Серия дейлика уже обновлена P1 - метрика daily_streak берёт её из той же транзакции.
+        await rewards.daily_completed(
+            DailyDone(
+                session_id=p.session_id,
+                user_id=p.user_id,
+                domain=p.domain,
+                day=p.day,
+                occurred_at=envelope.occurred_at,
+            ),
+            session,
+        )
+        return result
 
     async def on_match_finished(envelope: EventEnvelope, session: AsyncSession) -> object:
-        match = _match(_parse(_MatchFinished, envelope.payload))
-        return await container.accrue_match(session).execute(match)
+        parsed = _parse(_MatchFinished, envelope.payload)
+        match = _match(parsed)
+        result = await container.accrue_match(session).execute(match)
+        await rewards.match_finished(match, parsed.domain, session)
+        return result
 
     async def on_weekly_top(envelope: EventEnvelope, session: AsyncSession) -> object:
         p = _parse(_WeeklyTop, envelope.payload)
@@ -243,21 +286,27 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
 
     async def on_season_standings(envelope: EventEnvelope, session: AsyncSession) -> object:
         p = _parse(_SeasonStandings, envelope.payload)
-        return await container.accrue_season(session).execute(
-            SeasonStandings(
-                season_id=p.season_id,
-                ladder=p.ladder,
-                chunk=p.chunk,
-                entries=tuple(PlacedUser(e.user_id, e.place) for e in p.entries),
-                finished_at=p.finished_at,
-            )
+        standings = SeasonStandings(
+            season_id=p.season_id,
+            ladder=p.ladder,
+            chunk=p.chunk,
+            entries=tuple(PlacedUser(e.user_id, e.place) for e in p.entries),
+            finished_at=p.finished_at,
         )
+        result = await container.accrue_season(session).execute(standings)
+        await rewards.season_standings(standings, session)
+        return result
+
+    async def on_collection_published(envelope: EventEnvelope, session: AsyncSession) -> object:
+        await rewards.collection_published(envelope, session)
+        return None
 
     registry.register(GAME_FINISHED, handler(on_game_finished))
     registry.register(DAILY_COMPLETED, handler(on_daily_completed))
     registry.register(MATCH_FINISHED, handler(on_match_finished))
     registry.register(WEEKLY_TOP_FINALIZED, handler(on_weekly_top))
     registry.register(SEASON_STANDINGS_FINALIZED, handler(on_season_standings))
+    registry.register(COLLECTION_PUBLISHED_EVENT, handler(on_collection_published))
     return registry
 
 
