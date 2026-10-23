@@ -57,6 +57,7 @@ nav:
       - Этап 3a: plans/stage-3a.md
       - Этап 3b: plans/stage-3b.md
       - Этап 4: plans/stage-4.md
+      - Этап 5: plans/stage-5.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md
@@ -101,6 +102,9 @@ nav:
       - adr/0039-seasons-weekly-top-leaderboards.md
       - adr/0040-lite-format-distractor-source.md
       - adr/0041-email-codes-trusted-devices.md
+      - adr/0042-progression-xp-levels-config.md
+      - adr/0043-currency-ledger-verses.md
+      - adr/0044-daily-wheel-and-boosts.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md
