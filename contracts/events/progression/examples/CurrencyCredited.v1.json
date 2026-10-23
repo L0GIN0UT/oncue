@@ -1,0 +1,24 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+  "aggregate_type": "progression",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000006003",
+  "event_type": "progression.CurrencyCredited",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "actor_id": null,
+    "amount": 10,
+    "at": "2026-10-23T12:00:00Z",
+    "balance_after": 110,
+    "bucket": "earned",
+    "config_version": 1,
+    "currency": "verses",
+    "op_id": "match:0192a3b4-c5d6-7e8f-9a0b-0000000d0001:0192a3b4-c5d6-7e8f-9a0b-0000000b0001:verse",
+    "reason": "duel",
+    "source_ref": "0192a3b4-c5d6-7e8f-9a0b-0000000d0001",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+  },
+  "producer": "progression"
+}

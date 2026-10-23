@@ -1,0 +1,80 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:ExperienceGained:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игроку начислен опыт (ADR 0042). aggregate_id — user_id. Одна проводка `xp_ledger`; повтор по `op_id` ничего не меняет. `amount` уже с бустом.",
+  "properties": {
+    "amount": {
+      "description": "Начислено опыта (с бустом, после потолка)",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "base_amount": {
+      "description": "До буста",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "boost_multiplier": {
+      "description": "Множитель буста; 1 — буста не было",
+      "exclusiveMinimum": 0,
+      "type": "number"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "level": {
+      "description": "Уровень после проводки",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "op_id": {
+      "description": "Идентификатор проводки (идемпотентность), например `game.session:{id}:xp`",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "source": {
+      "description": "Источник начисления: ключ из конфига (solo_round, daily, duel, party, first_win, quest, wheel, admin)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "source_ref": {
+      "description": "Предмет начисления: id сессии, матча, задания",
+      "maxLength": 200,
+      "type": "string"
+    },
+    "total_xp": {
+      "description": "Накопленный опыт после проводки",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "op_id",
+    "amount",
+    "base_amount",
+    "boost_multiplier",
+    "source",
+    "source_ref",
+    "total_xp",
+    "level",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.ExperienceGained v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

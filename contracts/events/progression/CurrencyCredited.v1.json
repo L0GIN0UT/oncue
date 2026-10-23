@@ -1,0 +1,86 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:CurrencyCredited:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игроку начислены Версы (ADR 0043). aggregate_id — user_id. Одна проводка `currency_ledger`; повтор по `op_id` ничего не меняет.",
+  "properties": {
+    "actor_id": {
+      "description": "Админ, выдавший вручную; для автоматических — null",
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "amount": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "balance_after": {
+      "description": "Баланс бакета после проводки",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "bucket": {
+      "description": "`earned` — заработаны игрой, `paid` — куплены (биллинг выключен, ADR 0043)",
+      "enum": [
+        "earned",
+        "paid"
+      ],
+      "type": "string"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "currency": {
+      "description": "Валюта; сейчас только `verses`",
+      "enum": [
+        "verses"
+      ],
+      "type": "string"
+    },
+    "op_id": {
+      "description": "Идентификатор проводки, например `match:{id}:{user}:verse`, `wheel:{user}:{day}`",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "reason": {
+      "description": "Причина: ключ из конфига (solo_round, daily, duel, party, weekly_top, season, quest, wheel, admin_grant)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "source_ref": {
+      "maxLength": 200,
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "op_id",
+    "currency",
+    "amount",
+    "bucket",
+    "reason",
+    "source_ref",
+    "balance_after",
+    "actor_id",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.CurrencyCredited v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

@@ -1,0 +1,91 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:CurrencyDebited:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "С игрока списаны Версы (ADR 0043): покупка (5b), сторно ошибочного начисления. aggregate_id — user_id. Баланс не уходит ниже нуля; сторно — проводка со ссылкой `reversal_of`.",
+  "properties": {
+    "actor_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "amount": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "balance_after": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "bucket": {
+      "enum": [
+        "earned",
+        "paid"
+      ],
+      "type": "string"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "currency": {
+      "enum": [
+        "verses"
+      ],
+      "type": "string"
+    },
+    "op_id": {
+      "description": "Идентификатор проводки, например `admin:{Idempotency-Key}`",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "reason": {
+      "description": "Причина: purchase, reversal, admin_debit",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "reversal_of": {
+      "description": "`op_id` сторнируемой проводки; иначе null",
+      "maxLength": 200,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_ref": {
+      "maxLength": 200,
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "op_id",
+    "currency",
+    "amount",
+    "bucket",
+    "reason",
+    "source_ref",
+    "reversal_of",
+    "balance_after",
+    "actor_id",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.CurrencyDebited v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

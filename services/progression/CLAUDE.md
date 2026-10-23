@@ -6,7 +6,12 @@
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
 - Публичный API: `/api/progression/v1/...` на gateway
 - Зависимости: PostgreSQL, Redpanda
-- Статус: заглушка этапа 0 (health, метрики, outbox/inbox). Домен — по roadmap.
+- Статус: этап 5a, шаг 0a — контракты и заглушки 501 (`docs/plans/stage-5.md`); домен — потоки P1–P3. Решения: ADR 0042–0044.
 
 ## Особенности
-<!-- Дописывать сюда неочевидное: инварианты, подводные камни, решения. 10–15 строк максимум. -->
+- Контракты: события `contracts/events/progression/*` (топик `progression.progression.v1`, ключ — `user_id`), конфиг `contracts/progression/progression_config.v1.json` (опыт, уровни, Версы, задания, бейджи, колесо, лимиты выдачи; значений в коде нет). Часовой пояс суток — поле `timezone` конфига.
+- Ledger (зона повышенной безопасности): `xp_ledger`/`currency_ledger` append-only, `UNIQUE(op_id)`, баланс — в той же транзакции, не ниже нуля, сторно — встречная проводка `reversal_of`. После реализации — «требуется ручная проверка владельцем».
+- Идемпотентность начислений — по предмету события (`op_id`), не по `event_id`; дейлик награждается только по `DailyCompleted`.
+- Права admin-API: `admin.access` + `progression.config.manage|publish`, `progression.ledger.grant|reverse|read` (identity `0013`).
+- `SeasonStandingsFinalized` приходит пачками без порядка: идемпотентность по `(season_id, chunk)`, награды по месту из пачки, не ждать другие пачки и `SeasonFinished`.
+- Нет синхронных вызовов game/match/rating; места сезона — из `rating.SeasonStandingsFinalized`, топ недели — топ-100 (решение владельца).
