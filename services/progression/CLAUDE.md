@@ -14,4 +14,5 @@
 - Идемпотентность начислений — по предмету события (`op_id`), не по `event_id`; дейлик награждается только по `DailyCompleted`.
 - Права admin-API: `admin.access` + `progression.config.manage|publish`, `progression.ledger.grant|reverse|read` (identity `0013`).
 - `SeasonStandingsFinalized` приходит пачками без порядка: идемпотентность по `(season_id, chunk)`, награды по месту из пачки, не ждать другие пачки и `SeasonFinished`.
+- `RewardHook.online_xp_multiplier` вызывается под `FOR UPDATE` игроков матча — I/O внутри запрещён; версия конфига выбирается по `finished_at` события (ADR 0042), не по времени обработки.
 - Нет синхронных вызовов game/match/rating; места сезона — из `rating.SeasonStandingsFinalized`, топ недели — топ-100 (решение владельца).

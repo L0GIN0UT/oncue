@@ -30,6 +30,11 @@
 - review-migration (identity `0013_seed_progression_perms.py`, путь указан явно): только `INSERT … ON CONFLICT DO NOTHING` в справочники `permissions`/`role_permissions` (малые таблицы), DDL и блокировок нет, `downgrade` удаляет права по имени (выданные вручную другим ролям — тоже) — Safe to merge.
 - code-reviewer: критичного нет; исправлены тай-брейк мест (как `ZREVRANGE`), потоковое чтение таблицы, описание порядка пачек; добавлен компонентный тест `test_season_close_publishes_standings_in_chunks_cut_by_settings` (топ 5, пачка 2: три пачки 2+2+1).
 
+## P1 и P4 (в работе, не закоммичены)
+- P1 (ветка `stage5a/p1-domain-ledger`): домен, ledger, миграция `0002`, consumers, `me/progress`, `me/wallet`, `users/{id}/progress`; 209 тестов progression, покрытие 98%. Ревью code-reviewer и security-reviewer учтены. review-migration (`0002_progression_core.py`, путь указан явно): Safe to merge; замечания — нет индексов по FK `config_version` и явного `ON DELETE` (config_versions не удаляются), `CHECK domain IN ('music','film')` в `daily_streaks` требует миграции при новом домене. Решения P1 записаны в ADR 0042/0043.
+- P4 (worktree `.claude/worktrees/agent-accec8825a26da59a`, ветка `stage5a/p4-web`): bff `/pages/profile`, `/pages/players/{id}`, блок `progress` главной; фронтенд `/profile`, `/players/[id]`, колесо; bff 252 теста, vitest 373, Playwright 48.
+- **Открыто у владельца (ledger, требуется ручная проверка):** разделение ролей Postgres/REVOKE на журналах; инкрементальная сверка; нулевая проводка-отметка предмета (повтор после повышения потолка); consumers в `consumers/` вместо `messaging/__init__.py`; потолок онлайна против фарма вторым аккаунтом (ADR 0042).
+
 ## Хвосты 0a
 - P3: `Cache-Control: no-store` в admin-ручках progression ставится до `raise` и в заглушках не действует — проверить на успешных ответах.
 - Нет теста «совпадение места в событии с реальным `ZREVRANGE` Redis» (тай-брейк проверен по коду и юнит-тестом).

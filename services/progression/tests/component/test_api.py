@@ -31,14 +31,12 @@ async def test_meta_and_health() -> None:
 UID = "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
 KEY = {"Idempotency-Key": "idem-0192a3b4c5d6"}
 REASON = {"reason": "проверка контракта"}
+# me/progress, me/wallet и users/{id}/progress реализованы потоком P1 (test_progress_api.py).
 PUBLIC_STUBS: list[tuple[str, str]] = [
-    ("GET", "/v1/me/progress"),
-    ("GET", "/v1/me/wallet"),
     ("GET", "/v1/me/quests"),
     ("GET", "/v1/me/badges"),
     ("GET", "/v1/wheel"),
     ("POST", "/v1/wheel/spin"),
-    ("GET", f"/v1/users/{UID}/progress"),
 ]
 ADMIN_STUBS: list[tuple[str, str, object, str]] = [
     ("GET", "/admin/v1/configs", None, "progression.config.manage"),

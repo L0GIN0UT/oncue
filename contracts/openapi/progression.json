@@ -2576,7 +2576,7 @@
     },
     "/v1/me/progress": {
       "get": {
-        "description": "Уровень, опыт, потолок соло, серии дейлика по доменам, буст.",
+        "description": "Уровень, опыт, потолок соло, серии дейлика по доменам. Ошибки: 503 `progression.config_unavailable` — нет опубликованного конфига.",
         "operationId": "my_progress_v1_me_progress_get",
         "responses": {
           "200": {
@@ -2619,7 +2619,7 @@
             },
             "description": "Недостаточно прав"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2632,7 +2632,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Мой прогресс",
@@ -2752,21 +2752,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Мой кошелёк",
@@ -2884,21 +2869,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Прогресс игрока",
