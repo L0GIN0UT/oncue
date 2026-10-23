@@ -66,6 +66,11 @@ from bff_web_service.application.queries.common import (
 )
 from bff_web_service.application.queries.library import GetLibraryPage, GetLibraryShelfPage
 from bff_web_service.application.queries.online import GetMatchPage, GetOnlinePage
+from bff_web_service.application.queries.progression import (
+    GetPlayerPage,
+    GetProfilePage,
+    HomeProgress,
+)
 from bff_web_service.application.queries.rating import GetLeaderboardsPage
 from bff_web_service.domain import Block
 from gv_core.errors import ConflictError, ForbiddenError, NotFoundError, UnauthenticatedError
@@ -82,9 +87,12 @@ __all__ = [
     "GetLibraryShelfPage",
     "GetMatchPage",
     "GetOnlinePage",
+    "GetPlayerPage",
+    "GetProfilePage",
     "GetResultsPage",
     "GetSession",
     "GetSoloPage",
+    "HomeProgress",
     "Limiter",
     "PageLayout",
     "collection_me",
@@ -328,17 +336,24 @@ class GetHomePage:
     """Главная: дейлики и недельные наборы субъекта, все опубликованные режимы."""
 
     def __init__(
-        self, game: GameClient, *, concurrency: int, layout: PageLayout | None = None
+        self,
+        game: GameClient,
+        *,
+        concurrency: int,
+        layout: PageLayout | None = None,
+        progress: HomeProgress | None = None,
     ) -> None:
         self._game, self._concurrency = game, concurrency
         self._layout = layout or PageLayout()
+        self._progress = progress
 
     async def __call__(self, viewer: Viewer) -> HomePage:
         """Собрать главную."""
         limiter = Limiter(self._concurrency)
-        modes, daily = await asyncio.gather(
+        modes, daily, progress = await asyncio.gather(
             limiter.attempt(self._game.list_modes()),
             _personal_daily(limiter, self._game, viewer, None),
+            self._progress(viewer) if self._progress is not None else _no_progress(),
         )
         modes_block = block_of(modes, "modes")
         daily_block = block_of(daily, "dailies")
@@ -352,9 +367,14 @@ class GetHomePage:
                 if modes_block.data is not None
                 else Block.unavailable(),
                 weekly=weekly,
+                progress=progress,
             ),
             personal=viewer.is_personal,
         )
+
+
+async def _no_progress() -> None:
+    """Прогрессия не подключена: блок ``progress`` — ``null``."""
 
 
 def _period_blocks(

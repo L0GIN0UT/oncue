@@ -18,9 +18,12 @@ from bff_web_service.application.queries import (
     GetLibraryShelfPage,
     GetMatchPage,
     GetOnlinePage,
+    GetPlayerPage,
+    GetProfilePage,
     GetResultsPage,
     GetSession,
     GetSoloPage,
+    HomeProgress,
     PageLayout,
 )
 from bff_web_service.infrastructure.cache import RedisPageCache
@@ -31,6 +34,7 @@ from bff_web_service.infrastructure.clients import (
     HttpIdentityClient,
     HttpLibraryClient,
     HttpMatchClient,
+    HttpProgressionClient,
     HttpRatingClient,
 )
 from bff_web_service.infrastructure.http import CircuitBreaker, UpstreamHttp
@@ -81,6 +85,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
     rating = HttpRatingClient(
         upstream("rating", up.rating_url), ttl_s=pc.leaderboard_ttl_s, cache_prefix=pc.key_prefix
     )
+    progression = HttpProgressionClient(upstream("progression", up.progression_url))
     pages = settings.pages
     layout = PageLayout.of(
         random_source_types=pages.random_source_types,
@@ -90,7 +95,18 @@ def build_deps(infra: Infrastructure) -> BffDeps:
     )
     return BffDeps(
         get_session=GetSession(identity),
-        get_home=GetHomePage(game, concurrency=up.max_concurrency, layout=layout),
+        get_home=GetHomePage(
+            game,
+            concurrency=up.max_concurrency,
+            layout=layout,
+            progress=HomeProgress(
+                progression,
+                concurrency=up.max_concurrency,
+                deadline_s=pages.home_progress_deadline_s,
+            ),
+        ),
+        get_profile=GetProfilePage(progression, concurrency=up.max_concurrency),
+        get_player=GetPlayerPage(progression, concurrency=up.max_concurrency),
         get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),
         get_results=GetResultsPage(game, catalog, concurrency=up.max_concurrency),
         get_collections=GetCollectionsPage(

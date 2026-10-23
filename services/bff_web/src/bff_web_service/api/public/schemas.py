@@ -140,6 +140,8 @@ class ProgressCard(BaseModel):
     total_xp: int = Field(ge=0)
     xp_in_level: int = Field(ge=0)
     xp_to_next: int | None = Field(ge=1, description="null — высший уровень")
+    solo_xp_today: int = Field(ge=0, description="Опыт из соло за сегодня")
+    solo_xp_cap: int = Field(ge=0, description="Суточный потолок опыта из соло")
     streaks: list[StreakCard]
     boost: BoostCard | None = None
 
@@ -157,6 +159,7 @@ class QuestCard(BaseModel):
 
     key: str
     title: str
+    description: str
     target: int = Field(ge=1)
     progress: int = Field(ge=0)
     completed: bool
@@ -176,9 +179,42 @@ class BadgeCard(BaseModel):
 
     key: str
     title: str
+    description: str
     target: int = Field(ge=1)
     progress: int = Field(ge=0)
     unlocked_at: datetime | None = None
+
+
+PrizeKind = Literal["xp", "verses", "boost", "item", "none"]
+
+
+class PrizeCard(BaseModel):
+    """Приз сектора колеса: тип и параметры из конфига progression."""
+
+    kind: PrizeKind
+    amount: int = Field(ge=0)
+    multiplier: float | None = None
+    matches: int | None = None
+    item_key: str | None = None
+
+
+class WheelSectorCard(BaseModel):
+    """Сектор колеса: название, шанс и приз — из ответа progression."""
+
+    key: str
+    title: str
+    chance: float = Field(ge=0, le=1)
+    prize: PrizeCard
+
+
+class SpinCard(BaseModel):
+    """Сегодняшний результат спина (если крутили)."""
+
+    day: date
+    sector_key: str
+    prize: PrizeCard
+    spun_at: datetime
+    repeated: bool
 
 
 class WheelCard(BaseModel):
@@ -187,6 +223,8 @@ class WheelCard(BaseModel):
     enabled: bool
     can_spin: bool
     next_spin_at: datetime | None = Field(description="null — можно крутить")
+    sectors: list[WheelSectorCard]
+    today: SpinCard | None = Field(default=None, description="null — сегодня не крутили")
 
 
 class HomeProgressCard(BaseModel):
@@ -214,6 +252,35 @@ class ProfilePage(BaseModel):
     """``GET /v1/pages/profile``: только пользователь с аккаунтом, ответ ``private, no-store``."""
 
     blocks: ProfileBlocks
+
+
+class BadgeRefCard(BaseModel):
+    """Полученный бейдж в публичном профиле игрока."""
+
+    key: str
+    title: str
+    unlocked_at: datetime
+
+
+class PublicProgressCard(BaseModel):
+    """Публичная часть прогресса игрока: уровень, опыт, бейджи."""
+
+    user_id: UUID
+    level: int = Field(ge=1)
+    total_xp: int = Field(ge=0)
+    badges: list[BadgeRefCard]
+
+
+class PlayerBlocks(BaseModel):
+    """Блоки профиля игрока."""
+
+    progress: Block[PublicProgressCard]
+
+
+class PlayerPage(BaseModel):
+    """``GET /v1/pages/players/{user_id}``: только пользователь с аккаунтом, `private, no-store`."""
+
+    blocks: PlayerBlocks
 
 
 class HomeBlocks(BaseModel):

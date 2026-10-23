@@ -17,6 +17,9 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, Valid
 
 from bff_web_service.application.dto import (
     AnswerFormat,
+    BadgeCard,
+    BadgeRef,
+    BoostCard,
     Bracket,
     BracketPick,
     CatalogQuery,
@@ -55,6 +58,11 @@ from bff_web_service.application.dto import (
     PersonalRecord,
     Presentation,
     Preset,
+    PrizeCard,
+    ProgressCard,
+    PublicProgress,
+    QuestCard,
+    QuestsCard,
     QueuePoolCard,
     RatingCard,
     ResultRecord,
@@ -69,10 +77,15 @@ from bff_web_service.application.dto import (
     Shelf,
     ShelfItem,
     ShelfItems,
+    SpinCard,
+    StreakCard,
     SubjectPick,
     TierCard,
+    WalletCard,
     WeeklyEntryCard,
     WeeklyTopCard,
+    WheelCard,
+    WheelSectorCard,
 )
 from bff_web_service.application.ports import UpstreamUnavailableError
 from bff_web_service.infrastructure.http import UpstreamHttp
@@ -1201,3 +1214,222 @@ class HttpRatingClient:
         if top.ladder != ladder:
             raise UpstreamUnavailableError(self._http.service, "contract_violation")
         return top.dto()
+
+
+# ----------------------------------------------------------------------------- progression
+class _StreakIn(_In):
+    domain: Domain
+    current: int = Field(ge=0)
+    best: int = Field(ge=0)
+
+
+class _BoostIn(_In):
+    multiplier: float = Field(gt=1)
+    matches_left: int = Field(ge=1)
+
+
+class _ProgressIn(_In):
+    level: int = Field(ge=1)
+    max_level: int = Field(ge=1)
+    total_xp: int = Field(ge=0)
+    xp_in_level: int = Field(ge=0)
+    xp_to_next: int | None = Field(ge=1)
+    solo_xp_today: int = Field(ge=0)
+    solo_xp_cap: int = Field(ge=0)
+    streaks: list[_StreakIn]
+    boost: _BoostIn | None
+
+    def dto(self) -> ProgressCard:
+        return ProgressCard(
+            level=self.level,
+            max_level=self.max_level,
+            total_xp=self.total_xp,
+            xp_in_level=self.xp_in_level,
+            xp_to_next=self.xp_to_next,
+            solo_xp_today=self.solo_xp_today,
+            solo_xp_cap=self.solo_xp_cap,
+            streaks=[StreakCard(s.domain, s.current, s.best) for s in self.streaks],
+            boost=BoostCard(self.boost.multiplier, self.boost.matches_left) if self.boost else None,
+        )
+
+
+class _WalletIn(_In):
+    earned: int = Field(ge=0)
+    paid: int = Field(ge=0)
+    total: int = Field(ge=0)
+
+
+class _RewardIn(_In):
+    xp: int = Field(ge=0)
+    verses: int = Field(ge=0)
+
+
+class _QuestIn(_In):
+    key: str
+    title: str
+    description: str
+    target: int = Field(ge=1)
+    progress: int = Field(ge=0)
+    completed: bool
+    reward: _RewardIn
+
+    def dto(self) -> QuestCard:
+        return QuestCard(
+            key=self.key,
+            title=self.title,
+            description=self.description,
+            target=self.target,
+            progress=self.progress,
+            completed=self.completed,
+            reward_xp=self.reward.xp,
+            reward_verses=self.reward.verses,
+        )
+
+
+class _QuestPeriodIn(_In):
+    items: list[_QuestIn]
+
+
+class _QuestsIn(_In):
+    daily: _QuestPeriodIn
+    weekly: _QuestPeriodIn
+
+
+class _BadgeIn(_In):
+    key: str
+    title: str
+    description: str
+    target: int = Field(ge=1)
+    progress: int = Field(ge=0)
+    unlocked_at: datetime | None
+
+    def dto(self) -> BadgeCard:
+        return BadgeCard(
+            self.key, self.title, self.description, self.target, self.progress, self.unlocked_at
+        )
+
+
+class _BadgesIn(_In):
+    items: list[_BadgeIn]
+
+
+class _PrizeIn(_In):
+    kind: Literal["xp", "verses", "boost", "item", "none"]
+    amount: int = Field(ge=0)
+    multiplier: float | None = None
+    matches: int | None = None
+    item_key: str | None = None
+
+    def dto(self) -> PrizeCard:
+        return PrizeCard(self.kind, self.amount, self.multiplier, self.matches, self.item_key)
+
+
+class _SectorIn(_In):
+    key: str
+    title: str
+    chance: float = Field(ge=0, le=1)
+    prize: _PrizeIn
+
+
+class _SpinIn(_In):
+    day: date
+    sector_key: str
+    prize: _PrizeIn
+    spun_at: datetime
+    repeated: bool
+
+
+class _WheelIn(_In):
+    enabled: bool
+    sectors: list[_SectorIn]
+    today: _SpinIn | None
+    next_spin_at: datetime | None
+
+    def dto(self) -> WheelCard:
+        return WheelCard(
+            enabled=self.enabled,
+            can_spin=self.enabled and self.today is None,
+            next_spin_at=self.next_spin_at,
+            sectors=[
+                WheelSectorCard(s.key, s.title, s.chance, s.prize.dto()) for s in self.sectors
+            ],
+            today=SpinCard(
+                self.today.day,
+                self.today.sector_key,
+                self.today.prize.dto(),
+                self.today.spun_at,
+                self.today.repeated,
+            )
+            if self.today
+            else None,
+        )
+
+
+class _BadgeRefIn(_In):
+    key: str
+    title: str
+    unlocked_at: datetime
+
+
+class _PublicProgressIn(_In):
+    user_id: UUID
+    level: int = Field(ge=1)
+    total_xp: int = Field(ge=0)
+    badges: list[_BadgeRefIn]
+
+
+_PUBLIC_PROGRESS = TypeAdapter(_PublicProgressIn)
+_PROGRESS = TypeAdapter(_ProgressIn)
+_WALLET = TypeAdapter(_WalletIn)
+_QUESTS = TypeAdapter(_QuestsIn)
+_BADGES = TypeAdapter(_BadgesIn)
+_WHEEL = TypeAdapter(_WheelIn)
+
+
+class HttpProgressionClient:
+    """Публичный API progression: всё личное, ничего не кэшируется."""
+
+    def __init__(self, http: UpstreamHttp) -> None:
+        self._http = http
+
+    async def progress(self, token: str) -> ProgressCard:
+        """``GET /v1/me/progress``."""
+        body = await self._http.get("/v1/me/progress", token=token)
+        return _parse(self._http.service, _PROGRESS, body).dto()
+
+    async def wallet(self, token: str) -> WalletCard:
+        """``GET /v1/me/wallet``."""
+        body = await self._http.get("/v1/me/wallet", token=token)
+        w = _parse(self._http.service, _WALLET, body)
+        return WalletCard(w.earned, w.paid, w.total)
+
+    async def quests(self, token: str) -> QuestsCard:
+        """``GET /v1/me/quests`` (дневные и недельные; разовые экран не показывает)."""
+        body = await self._http.get("/v1/me/quests", token=token)
+        q = _parse(self._http.service, _QUESTS, body)
+        return QuestsCard(
+            daily=[x.dto() for x in q.daily.items], weekly=[x.dto() for x in q.weekly.items]
+        )
+
+    async def badges(self, token: str) -> list[BadgeCard]:
+        """``GET /v1/me/badges``."""
+        body = await self._http.get("/v1/me/badges", token=token)
+        return [x.dto() for x in _parse(self._http.service, _BADGES, body).items]
+
+    async def wheel(self, token: str) -> WheelCard:
+        """``GET /v1/wheel``."""
+        body = await self._http.get("/v1/wheel", token=token)
+        return _parse(self._http.service, _WHEEL, body).dto()
+
+    async def player(self, token: str, user_id: UUID) -> PublicProgress:
+        """``GET /v1/users/{id}/progress``."""
+        body = await self._http.get(f"/v1/users/{user_id}/progress", token=token)
+        p = _parse(self._http.service, _PUBLIC_PROGRESS, body)
+        if p.user_id != user_id:
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return PublicProgress(
+            p.user_id,
+            p.level,
+            p.total_xp,
+            [BadgeRef(b.key, b.title, b.unlocked_at) for b in p.badges],
+        )
