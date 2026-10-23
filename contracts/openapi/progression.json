@@ -2552,7 +2552,7 @@
             },
             "description": "Недостаточно прав"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2565,7 +2565,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Мои бейджи",
@@ -2643,7 +2643,7 @@
     },
     "/v1/me/quests": {
       "get": {
-        "description": "Дневные, недельные и разовые задания с прогрессом; назначение — снимком на период.",
+        "description": "Дневные, недельные и разовые задания с прогрессом; назначение — снимком на период (смена конфига действует со следующего периода). Ошибки: 503 `progression.config_unavailable`.",
         "operationId": "my_quests_v1_me_quests_get",
         "responses": {
           "200": {
@@ -2686,7 +2686,7 @@
             },
             "description": "Недостаточно прав"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2699,7 +2699,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Мои задания",
@@ -2922,7 +2922,7 @@
             },
             "description": "Недостаточно прав"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2935,7 +2935,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Колесо",
@@ -2946,7 +2946,7 @@
     },
     "/v1/wheel/spin": {
       "post": {
-        "description": "Тело пустое. Один спин в сутки (`progression.timezone`): сектор выбирает сервер по весам, приз выдаётся в той же транзакции. Повтор за те же сутки возвращает тот же результат (`repeated = true`). Ошибки: 409 `progression.wheel_disabled`.",
+        "description": "Тело пустое (любое тело — 422). Один спин в сутки (`progression.timezone`): сектор выбирает сервер по весам, приз выдаётся в той же транзакции. Повтор за те же сутки возвращает тот же результат (`repeated = true`). Ошибки: 409 `progression.wheel_disabled`.",
         "operationId": "spin_v1_wheel_spin_post",
         "responses": {
           "200": {
@@ -3004,7 +3004,7 @@
             },
             "description": "Конфликт состояния"
           },
-          "501": {
+          "422": {
             "content": {
               "application/json": {
                 "schema": {
@@ -3017,7 +3017,22 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Крутить колесо",
