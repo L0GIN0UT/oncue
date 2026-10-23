@@ -1,0 +1,14 @@
+# Конфиг gitleaks: правила по умолчанию плюс исключения для заведомо не секретных значений.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Слаги бейджей и заданий в конфиге progression и тестовые Idempotency-Key вида idem-…"
+regexTarget = "secret"
+regexes = [
+  '''^(daily|weekly|once)_[a-z0-9_]+$''',
+  '''^idem-[0-9a-z-]+$''',
+]

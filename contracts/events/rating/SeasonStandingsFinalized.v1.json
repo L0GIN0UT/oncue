@@ -1,0 +1,78 @@
+{
+  "$id": "urn:guessverse:contracts:events:rating:SeasonStandingsFinalized:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Итоговые места сезона: верх таблицы пачками (ADR 0043). Публикуется вместе с `SeasonFinished`, по одному событию на пачку; aggregate_id — `{season_id}:{chunk}`, повтор той же пачки идемпотентен. Глубину таблицы задаёт настройка rating (`standings_top_size`, по умолчанию 1000), размер пачки — `standings_chunk_size`. В таблицу входят игроки лидерборда (вышли из калибровки, набрали `min_matches`), места сквозные по сезону. Пачки уходят с разными ключами партиций и не упорядочены ни между собой, ни относительно `SeasonFinished`: потребитель принимает их в любом порядке, идемпотентен по `(season_id, chunk)` и считает таблицу полной, когда получены все `chunks_total` пачек. Награды сезона — progression, этап 5.",
+  "properties": {
+    "chunk": {
+      "description": "Номер пачки с нуля",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "chunks_total": {
+      "description": "Сколько пачек у сезона",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "entries": {
+      "description": "Места по порядку; рейтинг по убыванию, при равенстве — user_id по убыванию (как в лидерборде)",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "place": {
+            "description": "Сквозное место в сезоне, с 1",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rating": {
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "place",
+          "rating"
+        ],
+        "type": "object"
+      },
+      "maxItems": 500,
+      "minItems": 1,
+      "type": "array"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "ladder": {
+      "description": "Ключ ladder-а (4b: `music`, `film` — ladder = домен)",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "number": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "season_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "season_id",
+    "ladder",
+    "number",
+    "finished_at",
+    "chunk",
+    "chunks_total",
+    "entries"
+  ],
+  "title": "rating.SeasonStandingsFinalized v1",
+  "type": "object",
+  "x-aggregate-type": "rating",
+  "x-topic": "rating.rating.v1"
+}

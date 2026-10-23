@@ -1,0 +1,119 @@
+# Сид конфига progression (версия 1): значения владельца, ADR 0042-0044, docs/plans/stage-5.md D2-D8.
+# Загружается задачей progression.config.bootstrap (только local/ci) один раз: если опубликованной
+# версии нет. Дальше конфиг правит админ (черновик -> публикация). Схема: contracts/progression/progression_config.v1.json.
+timezone: Europe/Moscow
+min_rounds_ratio: 0.5
+
+levels:
+  max_level: 100
+  base: 500
+  step: 20
+
+xp:
+  solo_round: {base: 20, score_divisor: 10, max: 40}
+  daily: {base: 50, per_streak: 10, max: 100}
+  duel: {participation: 40, per_round_won: 10, win_bonus: 60}
+  party:
+    participation: 40
+    place_bonus: [80, 50, 30]
+    other_place_bonus: 10
+  first_win_of_day: {bonus: 200}
+  solo_daily_cap: 2000
+
+# Версы: online_daily_cap - потолок онлайн-Версов в сутки (опыт онлайна потолка не имеет).
+verses:
+  solo_round: 1
+  daily: 5
+  duel: {win: 10, loss: 3}
+  party_by_place: [10, 6, 4, 2]
+  solo_daily_cap: 50
+  online_daily_cap: 200
+  weekly_top:
+    - {from: 1, to: 1, amount: 500}
+    - {from: 2, to: 2, amount: 300}
+    - {from: 3, to: 3, amount: 200}
+    - {from: 4, to: 10, amount: 100}
+    - {from: 11, to: 100, amount: 30}
+  season:
+    - {from: 1, to: 1, amount: 2000}
+    - {from: 2, to: 2, amount: 1200}
+    - {from: 3, to: 3, amount: 800}
+    - {from: 4, to: 10, amount: 400}
+    - {from: 11, to: 100, amount: 150}
+    - {from: 101, to: 1000, amount: 50}
+
+quests:
+  daily_count: 3
+  weekly_count: 10
+  items:
+    # --- ежедневные (пул 5, выдаётся 3)
+    - {key: daily_play_3, period: daily, metric: rounds_played, target: 3, weight: 10, enabled: true, domain: null,
+       title: Сыграть 3 раунда, description: Сыграйте три раунда в любом режиме., reward: {xp: 30, verses: 5}}
+    - {key: daily_guess_10, period: daily, metric: correct_answers, target: 10, weight: 10, enabled: true, domain: null,
+       title: Угадать 10 раз, description: Дайте десять верных ответов., reward: {xp: 40, verses: 5}}
+    - {key: daily_done, period: daily, metric: daily_completed, target: 1, weight: 10, enabled: true, domain: null,
+       title: Пройти дейлик, description: Завершите ежедневную загадку., reward: {xp: 50, verses: 5}}
+    - {key: daily_music_5, period: daily, metric: correct_answers, target: 5, weight: 8, enabled: true, domain: music,
+       title: Угадать 5 песен, description: Угадайте пять треков., reward: {xp: 30, verses: 5}}
+    - {key: daily_film_5, period: daily, metric: correct_answers, target: 5, weight: 8, enabled: true, domain: film,
+       title: Угадать 5 фильмов, description: Угадайте пять кадров или фильмов., reward: {xp: 30, verses: 5}}
+    # --- еженедельные (пул 12, выдаётся 10)
+    - {key: week_play_30, period: weekly, metric: rounds_played, target: 30, weight: 10, enabled: true, domain: null,
+       title: Сыграть 30 раундов, description: Сыграйте тридцать раундов за неделю., reward: {xp: 150, verses: 20}}
+    - {key: week_play_60, period: weekly, metric: rounds_played, target: 60, weight: 8, enabled: true, domain: null,
+       title: Сыграть 60 раундов, description: Сыграйте шестьдесят раундов за неделю., reward: {xp: 250, verses: 30}}
+    - {key: week_guess_50, period: weekly, metric: correct_answers, target: 50, weight: 10, enabled: true, domain: null,
+       title: Угадать 50 раз, description: Дайте пятьдесят верных ответов за неделю., reward: {xp: 200, verses: 25}}
+    - {key: week_guess_100, period: weekly, metric: correct_answers, target: 100, weight: 8, enabled: true, domain: null,
+       title: Угадать 100 раз, description: Дайте сто верных ответов за неделю., reward: {xp: 350, verses: 40}}
+    - {key: week_music_30, period: weekly, metric: correct_answers, target: 30, weight: 8, enabled: true, domain: music,
+       title: Угадать 30 песен, description: Угадайте тридцать треков за неделю., reward: {xp: 200, verses: 25}}
+    - {key: week_film_30, period: weekly, metric: correct_answers, target: 30, weight: 8, enabled: true, domain: film,
+       title: Угадать 30 фильмов, description: Угадайте тридцать фильмов за неделю., reward: {xp: 200, verses: 25}}
+    - {key: week_daily_3, period: weekly, metric: daily_completed, target: 3, weight: 10, enabled: true, domain: null,
+       title: Три дейлика, description: Пройдите дейлик три раза за неделю., reward: {xp: 200, verses: 25}}
+    - {key: week_daily_5, period: weekly, metric: daily_completed, target: 5, weight: 8, enabled: true, domain: null,
+       title: Пять дейликов, description: Пройдите дейлик пять раз за неделю., reward: {xp: 300, verses: 35}}
+    - {key: week_online_3, period: weekly, metric: online_matches, target: 3, weight: 10, enabled: true, domain: null,
+       title: Сыграть 3 онлайн-матча, description: Сыграйте три матча с другими игроками., reward: {xp: 150, verses: 20}}
+    - {key: week_online_5, period: weekly, metric: online_matches, target: 5, weight: 10, enabled: true, domain: null,
+       title: Сыграть 5 онлайн-матчей, description: Сыграйте пять матчей с другими игроками., reward: {xp: 200, verses: 30}}
+    - {key: week_wins_3, period: weekly, metric: wins, target: 3, weight: 8, enabled: true, domain: null,
+       title: Выиграть 3 раза, description: Одержите три победы за неделю., reward: {xp: 250, verses: 30}}
+    - {key: week_wins_5, period: weekly, metric: wins, target: 5, weight: 6, enabled: true, domain: null,
+       title: Выиграть 5 раз, description: Одержите пять побед за неделю., reward: {xp: 350, verses: 40}}
+    # --- разовые
+    - {key: first_duel, period: one_time, metric: online_matches, target: 1, weight: 1, enabled: true, domain: null,
+       title: Первая дуэль, description: Сыграйте первый онлайн-матч., reward: {xp: 100, verses: 10}}
+    - {key: first_collection, period: one_time, metric: collection_published, target: 1, weight: 1, enabled: true, domain: null,
+       title: Первый сборник, description: Опубликуйте свой первый сборник., reward: {xp: 150, verses: 20}}
+
+badges:
+  - {key: first_win, metric: wins, target: 1, enabled: true, title: Первая победа, description: Выиграйте первый матч.}
+  - {key: daily_streak_7, metric: daily_streak, target: 7, enabled: true, title: Неделя дейлика, description: Проходите дейлик семь дней подряд.}
+  - {key: daily_streak_30, metric: daily_streak, target: 30, enabled: true, title: Месяц дейлика, description: Проходите дейлик тридцать дней подряд.}
+  - {key: guessed_100, metric: correct_answers, target: 100, enabled: true, title: 100 угаданных, description: Дайте сто верных ответов.}
+  - {key: guessed_1000, metric: correct_answers, target: 1000, enabled: true, title: 1000 угаданных, description: Дайте тысячу верных ответов.}
+  - {key: season_tier, metric: season_tier, target: 1, enabled: true, title: Звание сезона, description: Получите звание по итогам сезона.}
+
+wheel:
+  enabled: true
+  max_boost_queue: 3
+  sectors:
+    - {key: xp_100, title: 100 опыта, weight: 18, prize: {kind: xp, amount: 100, multiplier: null, matches: null, item_key: null}}
+    - {key: xp_250, title: 250 опыта, weight: 10, prize: {kind: xp, amount: 250, multiplier: null, matches: null, item_key: null}}
+    - {key: xp_500, title: 500 опыта, weight: 4, prize: {kind: xp, amount: 500, multiplier: null, matches: null, item_key: null}}
+    - {key: verses_5, title: 5 Версов, weight: 18, prize: {kind: verses, amount: 5, multiplier: null, matches: null, item_key: null}}
+    - {key: verses_20, title: 20 Версов, weight: 10, prize: {kind: verses, amount: 20, multiplier: null, matches: null, item_key: null}}
+    - {key: verses_50, title: 50 Версов, weight: 4, prize: {kind: verses, amount: 50, multiplier: null, matches: null, item_key: null}}
+    - {key: verses_100, title: 100 Версов, weight: 2, prize: {kind: verses, amount: 100, multiplier: null, matches: null, item_key: null}}
+    - {key: boost_x15_3, title: Опыт ×1.5 на 3 матча, weight: 12, prize: {kind: boost, amount: 0, multiplier: 1.5, matches: 3, item_key: null}}
+    - {key: boost_x2_4, title: Опыт ×2 на 4 матча, weight: 6, prize: {kind: boost, amount: 0, multiplier: 2, matches: 4, item_key: null}}
+    - {key: boost_x3_5, title: Опыт ×3 на 5 матчей, weight: 3, prize: {kind: boost, amount: 0, multiplier: 3, matches: 5, item_key: null}}
+    - {key: item_cosmetic, title: Косметика, weight: 1, prize: {kind: item, amount: 0, multiplier: null, matches: null, item_key: wheel_cosmetic}}
+    - {key: nothing, title: Повезёт завтра, weight: 12, prize: {kind: none, amount: 0, multiplier: null, matches: null, item_key: null}}
+
+admin:
+  grant_max_amount: 10000
+  grant_max_per_user_day: 20000
+  reason_min_length: 10

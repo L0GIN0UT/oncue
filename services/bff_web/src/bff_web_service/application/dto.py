@@ -351,6 +351,7 @@ class HomeBlocks:
     dailies: Block[list[DailyCard]]
     modes: Block[list[ModeCard]]
     weekly: Block[list[DailyCard]]
+    progress: Block[HomeProgressCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1000,3 +1001,188 @@ class MatchPage:
     """``GET /v1/pages/match/{id}``."""
 
     blocks: MatchBlocks
+
+
+# ----------------------------------------------------------------------------- progression (5a)
+PrizeKind = Literal["xp", "verses", "boost", "item", "none"]
+
+
+@dataclass(frozen=True, slots=True)
+class StreakCard:
+    """Серия дейлика по домену."""
+
+    domain: Domain
+    current: int
+    best: int
+
+
+@dataclass(frozen=True, slots=True)
+class BoostCard:
+    """Действующий буст опыта."""
+
+    multiplier: float
+    matches_left: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressCard:
+    """Уровень и опыт (``progression GET /v1/me/progress``)."""
+
+    level: int
+    max_level: int
+    total_xp: int
+    xp_in_level: int
+    xp_to_next: int | None
+    solo_xp_today: int
+    solo_xp_cap: int
+    streaks: list[StreakCard]
+    boost: BoostCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WalletCard:
+    """Версы игрока (``GET /v1/me/wallet``)."""
+
+    earned: int
+    paid: int
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class QuestCard:
+    """Задание текущего периода."""
+
+    key: str
+    title: str
+    description: str
+    target: int
+    progress: int
+    completed: bool
+    reward_xp: int
+    reward_verses: int
+
+
+@dataclass(frozen=True, slots=True)
+class QuestsCard:
+    """Задания игрока: дневные и недельные."""
+
+    daily: list[QuestCard]
+    weekly: list[QuestCard]
+
+
+@dataclass(frozen=True, slots=True)
+class BadgeCard:
+    """Бейдж игрока."""
+
+    key: str
+    title: str
+    description: str
+    target: int
+    progress: int
+    unlocked_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PrizeCard:
+    """Приз сектора колеса."""
+
+    kind: PrizeKind
+    amount: int
+    multiplier: float | None = None
+    matches: int | None = None
+    item_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WheelSectorCard:
+    """Сектор колеса."""
+
+    key: str
+    title: str
+    chance: float
+    prize: PrizeCard
+
+
+@dataclass(frozen=True, slots=True)
+class SpinCard:
+    """Сегодняшний результат спина."""
+
+    day: date
+    sector_key: str
+    prize: PrizeCard
+    spun_at: datetime
+    repeated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class WheelCard:
+    """Колесо на сегодня (``GET /v1/wheel``); ``can_spin`` = включено и сегодня не крутили."""
+
+    enabled: bool
+    can_spin: bool
+    next_spin_at: datetime | None
+    sectors: list[WheelSectorCard]
+    today: SpinCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BadgeRef:
+    """Бейдж в публичном профиле: получен (``unlocked_at`` всегда есть)."""
+
+    key: str
+    title: str
+    unlocked_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProgress:
+    """Публичная часть прогресса игрока (``GET /v1/users/{id}/progress``)."""
+
+    user_id: UUID
+    level: int
+    total_xp: int
+    badges: list[BadgeRef]
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerBlocks:
+    """Блоки профиля чужого игрока."""
+
+    progress: Block[PublicProgress]
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerPage:
+    """``GET /v1/pages/players/{user_id}``."""
+
+    blocks: PlayerBlocks
+
+
+@dataclass(frozen=True, slots=True)
+class HomeProgressCard:
+    """Свёртка прогресса для главной."""
+
+    level: int
+    xp_in_level: int
+    xp_to_next: int | None
+    best_streak: int
+    can_spin: bool
+    quests_open: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileBlocks:
+    """Блоки профиля."""
+
+    progress: Block[ProgressCard]
+    wallet: Block[WalletCard]
+    quests: Block[QuestsCard]
+    badges: Block[list[BadgeCard]]
+    wheel: Block[WheelCard]
+
+
+@dataclass(frozen=True, slots=True)
+class ProfilePage:
+    """``GET /v1/pages/profile``."""
+
+    blocks: ProfileBlocks

@@ -1,0 +1,45 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:ProgressionLevelChanged:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Уровень игрока вырос (ADR 0042). aggregate_id — user_id. Публикуется в той же транзакции, что и проводка опыта; одним событием может быть пройдено несколько уровней.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "new_level": {
+      "minimum": 2,
+      "type": "integer"
+    },
+    "old_level": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "total_xp": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "old_level",
+    "new_level",
+    "total_xp",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.ProgressionLevelChanged v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

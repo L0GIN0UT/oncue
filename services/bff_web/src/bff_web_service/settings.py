@@ -12,7 +12,7 @@ class UpstreamSettings(BaseModel):
 
     Attributes:
         game_url / catalog_url / identity_url / collections_url / library_url / match_url /
-        rating_url:
+        rating_url / progression_url:
             Внутренние адреса (``GV_UPSTREAMS__GAME_URL``, ``GV_UPSTREAMS__MATCH_URL`` …).
         timeout_s: Общий таймаут одного вызова: медленный источник не держит страницу.
         max_concurrency: Одновременных вызовов на один запрос страницы.
@@ -30,6 +30,7 @@ class UpstreamSettings(BaseModel):
     library_url: str = "http://library:8000"
     match_url: str = "http://match:8000"
     rating_url: str = "http://rating:8000"
+    progression_url: str = "http://progression:8000"
     timeout_s: float = Field(default=1.5, gt=0, le=30)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     breaker_failures: int = Field(default=5, ge=1)
@@ -95,6 +96,8 @@ class PagesSettings(BaseModel):
         match_items_deadline_s: Общий предел на блоки ``items`` (catalog) и ``library``
             итога матча: до 50 единиц идут волнами по ``max_concurrency``, и без общего
             предела страница ждала бы ``волны × timeout_s``. Не успел — блок ``unavailable``.
+        home_progress_deadline_s: Общий предел на три вызова progression для блока
+            ``progress`` главной; не успел — блок ``unavailable``, остальная главная цела.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -110,6 +113,7 @@ class PagesSettings(BaseModel):
     online_matches_limit: int = Field(default=10, ge=1, le=50)
     online_weekly_limit: int = Field(default=5, ge=1, le=50)
     match_items_deadline_s: float = Field(default=2.0, gt=0, le=30)
+    home_progress_deadline_s: float = Field(default=1.5, gt=0, le=30)
 
 
 class Settings(ServiceSettings):

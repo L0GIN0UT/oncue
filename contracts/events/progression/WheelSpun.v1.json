@@ -1,0 +1,87 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:WheelSpun:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок крутанул колесо (ADR 0044). aggregate_id — user_id. Один спин в сутки: идемпотентно по `(user_id, day)`.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "day": {
+      "description": "Сутки в `progression.timezone`",
+      "format": "date",
+      "type": "string"
+    },
+    "prize": {
+      "additionalProperties": false,
+      "description": "Выпавший приз; для `boost` — множитель и число матчей",
+      "properties": {
+        "amount": {
+          "description": "Опыт или Версы; у boost и none — 0",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "xp",
+            "verses",
+            "boost",
+            "none"
+          ],
+          "type": "string"
+        },
+        "matches": {
+          "description": "Только boost",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "multiplier": {
+          "description": "Только boost",
+          "exclusiveMinimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "amount",
+        "multiplier",
+        "matches"
+      ],
+      "type": "object"
+    },
+    "sector_key": {
+      "description": "Ключ сектора из конфига",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "day",
+    "sector_key",
+    "prize",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.WheelSpun v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

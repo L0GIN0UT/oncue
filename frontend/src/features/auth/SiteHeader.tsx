@@ -53,6 +53,15 @@ export function SiteHeader() {
         )}
         {subject?.kind === "user" && (
           <Link
+            href="/profile"
+            className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+            data-testid="nav-profile"
+          >
+            {t("nav.profile")}
+          </Link>
+        )}
+        {subject?.kind === "user" && (
+          <Link
             href="/me/security"
             className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
             data-testid="nav-security"

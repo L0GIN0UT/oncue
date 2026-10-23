@@ -19,6 +19,7 @@ const SERVICES = [
     "library",
     "match",
     "rating",
+    "progression",
 ];
 const check = process.argv.includes("--check");
 

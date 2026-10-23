@@ -1,0 +1,37 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:BadgeUnlocked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок получил бейдж (ADR 0042). aggregate_id — user_id. Бейдж выдаётся один раз: повтор по `(user_id, badge_key)` ничего не публикует.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "badge_key": {
+      "description": "Ключ бейджа из конфига",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "badge_key",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.BadgeUnlocked v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

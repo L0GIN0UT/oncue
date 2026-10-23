@@ -99,7 +99,10 @@ describe("CodeStep", () => {
     await failWith(() => problem(429, "http.429", undefined, { "Retry-After": "7" }));
     expect(await screen.findByTestId("code-error")).toHaveTextContent("Повторите через 7 с");
     expect(screen.getByTestId("code-submit")).toBeDisabled();
-    expect(screen.getByTestId("code-submit")).toHaveTextContent("Повторить через 7 с");
+    // Счётчик обновляет now по таймеру: до первого тика ceil может дать 8 с.
+    await waitFor(() =>
+      expect(screen.getByTestId("code-submit")).toHaveTextContent("Повторить через 7 с"),
+    );
   });
 
   it("сетевая ошибка не раскрывает ничего лишнего", async () => {

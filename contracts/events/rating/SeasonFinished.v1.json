@@ -2,7 +2,7 @@
   "$id": "urn:guessverse:contracts:events:rating:SeasonFinished:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Сезон закрыт по `ends_at` или админом (ADR 0039). aggregate_id — season_id. Итоговые места не в событии (тысячи игроков): `standings_ref` указывает на выборку в API rating. Награды — progression, этап 5.",
+  "description": "Сезон закрыт по `ends_at` или админом (ADR 0039). aggregate_id — season_id. Итоговые места — в `rating.SeasonStandingsFinalized` (верх таблицы пачками); `standings_ref` указывает на полную выборку в API rating. Награды — progression, этап 5.",
   "properties": {
     "closed_by": {
       "description": "`schedule` — по ends_at; `admin` — вручную",

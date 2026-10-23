@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_progression/_nav.html" %}
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+<p>Версия:
+  {% for v in versions %}<a href="?version={{ v.version }}">v{{ v.version }}</a> ({{ v.status }}){% if not forloop.last %}, {% endif %}{% endfor %}
+  {% if version %}— показана v{{ version }}{% endif %}
+</p>
+<p>Колесо {% if enabled %}включено{% else %}выключено{% endif %}. Шанс = вес / сумма весов ({{ total_weight }}); считается здесь по телу версии.</p>
+<table>
+  <thead><tr><th>Сектор</th><th>Название</th><th>Приз</th><th>Вес</th><th>Шанс</th></tr></thead>
+  {% for s in sectors %}
+  <tr><td><code>{{ s.key }}</code></td><td>{{ s.title }}</td><td>{{ s.prize }}</td><td>{{ s.weight }}</td><td>{% widthratio s.weight total_weight 100 %}% ({{ s.chance|floatformat:2 }})</td></tr>
+  {% empty %}<tr><td colspan="5">Секторов нет</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

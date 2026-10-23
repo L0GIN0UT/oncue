@@ -48,12 +48,20 @@ async def test_tick_closes_season_by_schedule_and_starts_next_with_reset(
     assert finished[0].payload["season_id"] == str(first)
     assert finished[0].payload["players_count"] == 2
     assert started[-1].payload["number"] == 2
+    (standings,) = await rating.outbox("rating.SeasonStandingsFinalized")
+    assert_event_matches_schema(standings)
+    assert standings.aggregate_id == f"{first}:0"
+    assert standings.payload["chunks_total"] == 1
+    entries = standings.payload["entries"]
+    assert [e["place"] for e in entries] == [1, 2]
+    assert {e["user_id"] for e in entries} == {str(a), str(b)}
     assert started[-1].payload["soft_reset"] == {"target": 1000, "ratio": 0.5}
     for envelope in (*finished, *started):
         assert_event_matches_schema(envelope)
 
     await rating.run_job("rating.seasons.tick")  # идемпотентно
     assert len(await rating.outbox("rating.SeasonFinished")) == 1
+    assert len(await rating.outbox("rating.SeasonStandingsFinalized")) == 1
     assert len(await rating.outbox("rating.SeasonStarted")) == 2
     state = await rating.rating_of(a)
     assert state["season_id"] == started[-1].payload["season_id"]
@@ -122,6 +130,48 @@ async def test_finished_season_leaderboard_is_kept_without_ttl(rating: RatingSer
     await rating.run_job("rating.seasons.tick")
     assert await redis.ttl(ready) == -1
     assert await redis.zcard(f"{{lb:film:{season_id}}}") == 2
+
+
+@pytest.fixture
+def small_standings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Итоги сезона: топ 5, пачки по 2 (настройки читаются при сборке сервиса)."""
+    monkeypatch.setenv("GV_RATING__STANDINGS_TOP_SIZE", "5")
+    monkeypatch.setenv("GV_RATING__STANDINGS_CHUNK_SIZE", "2")
+
+
+@pytest.mark.usefixtures("small_standings")
+async def test_season_close_publishes_standings_in_chunks_cut_by_settings(
+    rating: RatingService,
+) -> None:
+    """Шесть игроков, топ 5, пачка 2: три пачки, последняя неполная, место 6 не публикуется."""
+    season = await rating.seed(**QUICK)
+    players = [uuid7() for _ in range(6)]
+    for winner, loser in zip(players[::2], players[1::2], strict=True):
+        await rating.play(winner, loser)
+    async with rating.container.uow_factory()() as uow:
+        active = await uow.seasons.active("film")
+    assert active is not None
+    rating.clock.advance(active.ends_at - rating.clock.now() + timedelta(seconds=1))
+
+    await rating.run_job("rating.seasons.tick")
+
+    chunks = sorted(
+        await rating.outbox("rating.SeasonStandingsFinalized"), key=lambda e: e.payload["chunk"]
+    )
+    for envelope in chunks:
+        assert_event_matches_schema(envelope)
+    assert [e.aggregate_id for e in chunks] == [f"{season}:{i}" for i in range(3)]
+    assert {e.payload["chunks_total"] for e in chunks} == {3}
+    assert [len(e.payload["entries"]) for e in chunks] == [2, 2, 1]
+    entries = [x for e in chunks for x in e.payload["entries"]]
+    assert [x["place"] for x in entries] == [1, 2, 3, 4, 5]
+    keys = [(x["rating"], x["user_id"]) for x in entries]
+    assert keys == sorted(keys, reverse=True)  # рейтинг, затем user_id по убыванию (как доска)
+    ratings = {str(p): (await rating.rating_of(p))["rating"] for p in players}
+    listed = {x["user_id"] for x in entries}
+    (cut,) = set(ratings) - listed
+    assert all(ratings[u] >= ratings[cut] for u in listed)  # обрезан худший
+    assert (await rating.outbox("rating.SeasonFinished"))[0].payload["players_count"] == 6
 
 
 # ------------------------------------------------------------------ топ недели

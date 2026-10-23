@@ -1,0 +1,24 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+  "aggregate_type": "progression",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000006001",
+  "event_type": "progression.ExperienceGained",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "amount": 24,
+    "at": "2026-10-23T12:00:00Z",
+    "base_amount": 12,
+    "boost_multiplier": 2,
+    "config_version": 1,
+    "level": 1,
+    "op_id": "game.session:0192a3b4-c5d6-7e8f-9a0b-0000000c0001:xp",
+    "source": "solo_round",
+    "source_ref": "0192a3b4-c5d6-7e8f-9a0b-0000000c0001",
+    "total_xp": 524,
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+  },
+  "producer": "progression"
+}

@@ -1,0 +1,24 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+  "aggregate_type": "progression",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-000000006007",
+  "event_type": "progression.WheelSpun",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "at": "2026-10-23T12:00:00Z",
+    "config_version": 1,
+    "day": "2026-10-23",
+    "prize": {
+      "amount": 20,
+      "kind": "verses",
+      "matches": null,
+      "multiplier": null
+    },
+    "sector_key": "verses_20",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+  },
+  "producer": "progression"
+}

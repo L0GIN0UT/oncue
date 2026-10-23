@@ -1,6 +1,79 @@
 {
   "components": {
     "schemas": {
+      "BadgeCard": {
+        "description": "Бейдж игрока.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "progress": {
+            "minimum": 0.0,
+            "title": "Progress",
+            "type": "integer"
+          },
+          "target": {
+            "minimum": 1.0,
+            "title": "Target",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unlocked At"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "target",
+          "progress"
+        ],
+        "title": "BadgeCard",
+        "type": "object"
+      },
+      "BadgeRefCard": {
+        "description": "Полученный бейдж в публичном профиле игрока.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unlocked_at": {
+            "format": "date-time",
+            "title": "Unlocked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "unlocked_at"
+        ],
+        "title": "BadgeRefCard",
+        "type": "object"
+      },
       "Block_CollectionDetail_": {
         "properties": {
           "data": {
@@ -53,6 +126,33 @@
           "status"
         ],
         "title": "Block[CollectionResults]",
+        "type": "object"
+      },
+      "Block_HomeProgressCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeProgressCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[HomeProgressCard]",
         "type": "object"
       },
       "Block_LeaderboardCard_": {
@@ -163,6 +263,87 @@
         "title": "Block[OpenRoomsList]",
         "type": "object"
       },
+      "Block_ProgressCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgressCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[ProgressCard]",
+        "type": "object"
+      },
+      "Block_PublicProgressCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProgressCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[PublicProgressCard]",
+        "type": "object"
+      },
+      "Block_QuestsCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestsCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[QuestsCard]",
+        "type": "object"
+      },
       "Block_ResultSummary_": {
         "properties": {
           "data": {
@@ -217,6 +398,33 @@
         "title": "Block[ShelfItems]",
         "type": "object"
       },
+      "Block_WalletCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WalletCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[WalletCard]",
+        "type": "object"
+      },
       "Block_WeeklyTopCard_": {
         "properties": {
           "data": {
@@ -242,6 +450,64 @@
           "status"
         ],
         "title": "Block[WeeklyTopCard]",
+        "type": "object"
+      },
+      "Block_WheelCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WheelCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[WheelCard]",
+        "type": "object"
+      },
+      "Block_list_BadgeCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BadgeCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[BadgeCard]]",
         "type": "object"
       },
       "Block_list_CollectionModeCard__": {
@@ -676,6 +942,27 @@
           "status"
         ],
         "title": "Block[list[WeeklyTopCard]]",
+        "type": "object"
+      },
+      "BoostCard": {
+        "description": "Действующий буст опыта.",
+        "properties": {
+          "matches_left": {
+            "minimum": 1.0,
+            "title": "Matches Left",
+            "type": "integer"
+          },
+          "multiplier": {
+            "exclusiveMinimum": 1.0,
+            "title": "Multiplier",
+            "type": "number"
+          }
+        },
+        "required": [
+          "multiplier",
+          "matches_left"
+        ],
+        "title": "BoostCard",
         "type": "object"
       },
       "BracketPick": {
@@ -1463,6 +1750,17 @@
           "modes": {
             "$ref": "#/components/schemas/Block_list_ModeCard__"
           },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_HomeProgressCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Прогресс игрока; null — гость или аноним"
+          },
           "weekly": {
             "$ref": "#/components/schemas/Block_list_DailyCard__",
             "description": "Наборы недели (сетка)"
@@ -1487,6 +1785,59 @@
           "blocks"
         ],
         "title": "HomePage",
+        "type": "object"
+      },
+      "HomeProgressCard": {
+        "description": "Свёртка прогресса для главной: уровень, серия, колесо.",
+        "properties": {
+          "best_streak": {
+            "description": "Наибольшая текущая серия дейлика по доменам",
+            "minimum": 0.0,
+            "title": "Best Streak",
+            "type": "integer"
+          },
+          "can_spin": {
+            "title": "Can Spin",
+            "type": "boolean"
+          },
+          "level": {
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "quests_open": {
+            "description": "Невыполненных заданий на сегодня",
+            "minimum": 0.0,
+            "title": "Quests Open",
+            "type": "integer"
+          },
+          "xp_in_level": {
+            "minimum": 0.0,
+            "title": "Xp In Level",
+            "type": "integer"
+          },
+          "xp_to_next": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xp To Next"
+          }
+        },
+        "required": [
+          "level",
+          "xp_in_level",
+          "xp_to_next",
+          "best_streak",
+          "can_spin",
+          "quests_open"
+        ],
+        "title": "HomeProgressCard",
         "type": "object"
       },
       "ItemCard": {
@@ -2700,6 +3051,32 @@
         "title": "PersonCard",
         "type": "object"
       },
+      "PlayerBlocks": {
+        "description": "Блоки профиля игрока.",
+        "properties": {
+          "progress": {
+            "$ref": "#/components/schemas/Block_PublicProgressCard_"
+          }
+        },
+        "required": [
+          "progress"
+        ],
+        "title": "PlayerBlocks",
+        "type": "object"
+      },
+      "PlayerPage": {
+        "description": "``GET /v1/pages/players/{user_id}``: только пользователь с аккаунтом, `private, no-store`.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/PlayerBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "PlayerPage",
+        "type": "object"
+      },
       "PresetCard": {
         "description": "Пресет случайного режима.",
         "properties": {
@@ -2717,6 +3094,66 @@
           "title_key"
         ],
         "title": "PresetCard",
+        "type": "object"
+      },
+      "PrizeCard": {
+        "description": "Приз сектора колеса: тип и параметры из конфига progression.",
+        "properties": {
+          "amount": {
+            "minimum": 0.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "item_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Key"
+          },
+          "kind": {
+            "enum": [
+              "xp",
+              "verses",
+              "boost",
+              "item",
+              "none"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches"
+          },
+          "multiplier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiplier"
+          }
+        },
+        "required": [
+          "kind",
+          "amount"
+        ],
+        "title": "PrizeCard",
         "type": "object"
       },
       "Problem": {
@@ -2796,6 +3233,240 @@
           "code"
         ],
         "title": "Problem",
+        "type": "object"
+      },
+      "ProfileBlocks": {
+        "description": "Блоки профиля: каждый гаснет независимо.",
+        "properties": {
+          "badges": {
+            "$ref": "#/components/schemas/Block_list_BadgeCard__"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Block_ProgressCard_"
+          },
+          "quests": {
+            "$ref": "#/components/schemas/Block_QuestsCard_"
+          },
+          "wallet": {
+            "$ref": "#/components/schemas/Block_WalletCard_"
+          },
+          "wheel": {
+            "$ref": "#/components/schemas/Block_WheelCard_"
+          }
+        },
+        "required": [
+          "progress",
+          "wallet",
+          "quests",
+          "badges",
+          "wheel"
+        ],
+        "title": "ProfileBlocks",
+        "type": "object"
+      },
+      "ProfilePage": {
+        "description": "``GET /v1/pages/profile``: только пользователь с аккаунтом, ответ ``private, no-store``.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/ProfileBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "ProfilePage",
+        "type": "object"
+      },
+      "ProgressCard": {
+        "description": "Уровень и опыт игрока (progression ``/v1/me/progress``).",
+        "properties": {
+          "boost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoostCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "max_level": {
+            "minimum": 1.0,
+            "title": "Max Level",
+            "type": "integer"
+          },
+          "solo_xp_cap": {
+            "description": "Суточный потолок опыта из соло",
+            "minimum": 0.0,
+            "title": "Solo Xp Cap",
+            "type": "integer"
+          },
+          "solo_xp_today": {
+            "description": "Опыт из соло за сегодня",
+            "minimum": 0.0,
+            "title": "Solo Xp Today",
+            "type": "integer"
+          },
+          "streaks": {
+            "items": {
+              "$ref": "#/components/schemas/StreakCard"
+            },
+            "title": "Streaks",
+            "type": "array"
+          },
+          "total_xp": {
+            "minimum": 0.0,
+            "title": "Total Xp",
+            "type": "integer"
+          },
+          "xp_in_level": {
+            "minimum": 0.0,
+            "title": "Xp In Level",
+            "type": "integer"
+          },
+          "xp_to_next": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — высший уровень",
+            "title": "Xp To Next"
+          }
+        },
+        "required": [
+          "level",
+          "max_level",
+          "total_xp",
+          "xp_in_level",
+          "xp_to_next",
+          "solo_xp_today",
+          "solo_xp_cap",
+          "streaks"
+        ],
+        "title": "ProgressCard",
+        "type": "object"
+      },
+      "PublicProgressCard": {
+        "description": "Публичная часть прогресса игрока: уровень, опыт, бейджи.",
+        "properties": {
+          "badges": {
+            "items": {
+              "$ref": "#/components/schemas/BadgeRefCard"
+            },
+            "title": "Badges",
+            "type": "array"
+          },
+          "level": {
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "total_xp": {
+            "minimum": 0.0,
+            "title": "Total Xp",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "level",
+          "total_xp",
+          "badges"
+        ],
+        "title": "PublicProgressCard",
+        "type": "object"
+      },
+      "QuestCard": {
+        "description": "Задание текущего периода.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "progress": {
+            "minimum": 0.0,
+            "title": "Progress",
+            "type": "integer"
+          },
+          "reward_verses": {
+            "minimum": 0.0,
+            "title": "Reward Verses",
+            "type": "integer"
+          },
+          "reward_xp": {
+            "minimum": 0.0,
+            "title": "Reward Xp",
+            "type": "integer"
+          },
+          "target": {
+            "minimum": 1.0,
+            "title": "Target",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "target",
+          "progress",
+          "completed",
+          "reward_xp",
+          "reward_verses"
+        ],
+        "title": "QuestCard",
+        "type": "object"
+      },
+      "QuestsCard": {
+        "description": "Задания игрока: дневные и недельные.",
+        "properties": {
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/QuestCard"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "weekly": {
+            "items": {
+              "$ref": "#/components/schemas/QuestCard"
+            },
+            "title": "Weekly",
+            "type": "array"
+          }
+        },
+        "required": [
+          "daily",
+          "weekly"
+        ],
+        "title": "QuestsCard",
         "type": "object"
       },
       "QueuePoolCard": {
@@ -3630,6 +4301,71 @@
         "title": "SoloPage",
         "type": "object"
       },
+      "SpinCard": {
+        "description": "Сегодняшний результат спина (если крутили).",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "prize": {
+            "$ref": "#/components/schemas/PrizeCard"
+          },
+          "repeated": {
+            "title": "Repeated",
+            "type": "boolean"
+          },
+          "sector_key": {
+            "title": "Sector Key",
+            "type": "string"
+          },
+          "spun_at": {
+            "format": "date-time",
+            "title": "Spun At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "sector_key",
+          "prize",
+          "spun_at",
+          "repeated"
+        ],
+        "title": "SpinCard",
+        "type": "object"
+      },
+      "StreakCard": {
+        "description": "Серия дейлика по домену.",
+        "properties": {
+          "best": {
+            "minimum": 0.0,
+            "title": "Best",
+            "type": "integer"
+          },
+          "current": {
+            "minimum": 0.0,
+            "title": "Current",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "current",
+          "best"
+        ],
+        "title": "StreakCard",
+        "type": "object"
+      },
       "Subject": {
         "description": "Кто смотрит страницу.",
         "properties": {
@@ -3720,6 +4456,33 @@
         "title": "TierCard",
         "type": "object"
       },
+      "WalletCard": {
+        "description": "Версы игрока (progression ``/v1/me/wallet``).",
+        "properties": {
+          "earned": {
+            "minimum": 0.0,
+            "title": "Earned",
+            "type": "integer"
+          },
+          "paid": {
+            "minimum": 0.0,
+            "title": "Paid",
+            "type": "integer"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "earned",
+          "paid",
+          "total"
+        ],
+        "title": "WalletCard",
+        "type": "object"
+      },
       "WeeklyEntryCard": {
         "description": "Строка топа недели.",
         "properties": {
@@ -3787,6 +4550,88 @@
           "items"
         ],
         "title": "WeeklyTopCard",
+        "type": "object"
+      },
+      "WheelCard": {
+        "description": "Состояние колеса на сегодня (progression ``/v1/wheel``).",
+        "properties": {
+          "can_spin": {
+            "title": "Can Spin",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "next_spin_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — можно крутить",
+            "title": "Next Spin At"
+          },
+          "sectors": {
+            "items": {
+              "$ref": "#/components/schemas/WheelSectorCard"
+            },
+            "title": "Sectors",
+            "type": "array"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpinCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — сегодня не крутили"
+          }
+        },
+        "required": [
+          "enabled",
+          "can_spin",
+          "next_spin_at",
+          "sectors"
+        ],
+        "title": "WheelCard",
+        "type": "object"
+      },
+      "WheelSectorCard": {
+        "description": "Сектор колеса: название, шанс и приз — из ответа progression.",
+        "properties": {
+          "chance": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Chance",
+            "type": "number"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "prize": {
+            "$ref": "#/components/schemas/PrizeCard"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "chance",
+          "prize"
+        ],
+        "title": "WheelSectorCard",
         "type": "object"
       }
     }
@@ -4495,6 +5340,152 @@
           }
         },
         "summary": "Хаб онлайна",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/players/{user_id}": {
+      "get": {
+        "description": "Публичная часть прогресса чужого (или своего) игрока. Только пользователь с аккаунтом: аноним — 401, гость — 403 `auth.guest_forbidden`, источники при этом не вызываются. Нет игрока — 404; недоступный progression — блок `unavailable`. Всегда `private, no-store`.",
+        "operationId": "player_page_v1_pages_players__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Профиль игрока: уровень, опыт, бейджи",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/profile": {
+      "get": {
+        "description": "Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блоки из progression гаснут независимо (страница 200); отказ токена источником — 401/403 экрана.",
+        "operationId": "profile_page_v1_pages_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Профиль: прогресс, кошелёк, задания, бейджи, колесо",
         "tags": [
           "bff_web"
         ]

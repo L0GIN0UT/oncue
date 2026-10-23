@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from bff_web_service.application.dto import (
+    BadgeCard,
     CatalogQuery,
     CollectionDetail,
     CollectionList,
@@ -32,12 +33,17 @@ from bff_web_service.application.dto import (
     MyMatches,
     OpenRooms,
     PersonalRecord,
+    ProgressCard,
+    PublicProgress,
+    QuestsCard,
     QueuePoolCard,
     RatingCard,
     SessionResult,
     Shelf,
     ShelfItems,
+    WalletCard,
     WeeklyTopCard,
+    WheelCard,
 )
 
 TRACE_HEADERS: ContextVar[dict[str, str] | None] = ContextVar("bff_trace_headers", default=None)
@@ -211,6 +217,37 @@ class RatingClient(Protocol):
 
     async def weekly(self, ladder: str, *, token: str | None) -> WeeklyTopCard:
         """Топ недели ladder-а; без токена — общий и кэшируется."""
+        ...
+
+
+class ProgressionClient(Protocol):
+    """Публичный API progression (5a): всё личное, не кэшируется.
+
+    Гость — ``UpstreamRejectedError(403)``, невалидный токен — 401.
+    """
+
+    async def progress(self, token: str) -> ProgressCard:
+        """Уровень, опыт, серии дейлика, буст (``/v1/me/progress``)."""
+        ...
+
+    async def wallet(self, token: str) -> WalletCard:
+        """Версы (``/v1/me/wallet``)."""
+        ...
+
+    async def quests(self, token: str) -> QuestsCard:
+        """Дневные и недельные задания (``/v1/me/quests``)."""
+        ...
+
+    async def badges(self, token: str) -> list[BadgeCard]:
+        """Бейджи (``/v1/me/badges``)."""
+        ...
+
+    async def wheel(self, token: str) -> WheelCard:
+        """Колесо: секторы и сегодняшний спин (``/v1/wheel``)."""
+        ...
+
+    async def player(self, token: str, user_id: UUID) -> PublicProgress:
+        """Публичный прогресс игрока (``/v1/users/{id}/progress``). Нет игрока — 404."""
         ...
 
 

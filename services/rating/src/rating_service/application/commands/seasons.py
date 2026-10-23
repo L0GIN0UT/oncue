@@ -25,7 +25,7 @@ from rating_service.domain.errors import (
     SeasonNotFoundError,
     SeasonOverlapError,
 )
-from rating_service.domain.season import ClosedBy, Season, SeasonStatus
+from rating_service.domain.season import ClosedBy, Season, SeasonStatus, rank_standings
 
 log = structlog.get_logger(__name__)
 
@@ -33,8 +33,10 @@ log = structlog.get_logger(__name__)
 class SeasonLifecycle:
     """Шаги жизненного цикла сезона внутри уже открытой транзакции."""
 
-    def __init__(self, clock: Clock) -> None:
+    def __init__(self, clock: Clock, *, standings_top_size: int, standings_chunk_size: int) -> None:
         self._clock = clock
+        self._standings_top_size = standings_top_size
+        self._standings_chunk_size = standings_chunk_size
 
     async def start(
         self,
@@ -81,6 +83,22 @@ class SeasonLifecycle:
         """
         now = self._clock.now()
         season.finish(now, closed_by, await uow.ratings.count(season.season_id))
+        config = published.config
+        # Таблица читается потоком: в памяти не больше 2·top_size строк, а не весь сезон.
+        top: list[tuple[UUID, int]] = []
+        async for user_id, rating, _ in uow.ratings.board(
+            season.ladder,
+            season.season_id,
+            min_matches=config.leaderboard.min_matches,
+            calibration_matches=config.calibration.matches,
+        ):
+            top.append((user_id, rating))
+            if len(top) >= 2 * self._standings_top_size:
+                top = rank_standings(top, top_size=self._standings_top_size)
+        season.record_standings(
+            rank_standings(top, top_size=self._standings_top_size),
+            chunk_size=self._standings_chunk_size,
+        )
         await uow.seasons.save(season)
         uow.track(season)
         planned = [

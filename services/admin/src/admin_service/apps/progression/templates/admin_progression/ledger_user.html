@@ -1,0 +1,47 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_progression/_nav.html" %}
+<p>Игрок <code>{{ user_id }}</code></p>
+{% if not_found %}
+<p>У игрока нет прогресса.</p>
+{% elif error %}
+<ul class="messagelist"><li class="error">{{ error }}</li></ul>
+{% else %}
+<table>
+  <tr><th>Заработано</th><td>{{ earned }}</td></tr>
+  <tr><th>Куплено</th><td>{{ paid }}</td></tr>
+</table>
+
+{% if can_grant %}
+<h2>Выдать Версы</h2>
+<form method="post" action="{% url 'progression:grant' user_id=user_id %}">
+  {% csrf_token %}{{ grant_form.as_p }}<input type="submit" value="Выдать">
+</form>
+{% endif %}
+
+{% if reverse_form_bound %}
+<form method="post" action="{% url 'progression:reverse' user_id=user_id %}">
+  {% csrf_token %}{{ reverse_form_bound.as_p }}<input type="submit" value="Сторнировать">
+</form>
+{% endif %}
+
+<h2>Журнал</h2>
+<table>
+  <thead><tr><th>Когда</th><th>Направление</th><th>Сумма</th><th>Бакет</th><th>Причина</th><th>Источник</th><th>Админ</th><th>Версия</th><th>op_id</th>{% if can_reverse %}<th>Сторно</th>{% endif %}</tr></thead>
+  {% for e in rows %}
+  <tr>
+    <td>{{ e.at }}</td><td>{{ e.direction }}</td><td>{{ e.amount }}</td><td>{{ e.bucket }}</td>
+    <td>{{ e.reason }}</td><td>{{ e.source_ref }}</td><td><code>{{ e.actor_id|default:"" }}</code></td>
+    <td>v{{ e.config_version }}</td><td><code>{{ e.op_id }}</code>{% if e.reversal_of %}<br>сторно <code>{{ e.reversal_of }}</code>{% endif %}</td>
+    {% if can_reverse %}<td>{% if e.reverse_form %}
+      <form method="post" action="{% url 'progression:reverse' user_id=user_id %}">
+        {% csrf_token %}{{ e.reverse_form.as_p }}<input type="submit" value="Сторнировать">
+      </form>{% endif %}</td>{% endif %}
+  </tr>
+  {% empty %}<tr><td colspan="10">Проводок нет</td></tr>
+  {% endfor %}
+</table>
+{% if next_cursor %}<p><a href="?cursor={{ next_cursor }}">Дальше →</a></p>{% endif %}
+{% endif %}
+{% endblock %}

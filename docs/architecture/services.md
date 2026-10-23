@@ -97,7 +97,7 @@
 ### 6. rating
 - **Отвечает за:** Эло рейтинговой дуэли (ladder = домен, [ADR 0037](../adr/0037-rating-elo-calibration-ladder-config.md)), калибровку, звания, сезоны, топ недели и сезона, все лидерборды (набор задаётся конфигом), историю рейтинга.
 - **Данные:** Postgres (ratings по `(user, ladder)`, rating_history, seasons), Redis ZSET (лидерборды).
-- **Публикует:** `RatingChanged`, `LadderPublished`, `SeasonStarted`, `SeasonFinished`, `WeeklyTopFinalized` (топик `rating.rating.v1`).
+- **Публикует:** `RatingChanged`, `LadderPublished`, `SeasonStarted`, `SeasonFinished`, `SeasonStandingsFinalized` (верх итоговой таблицы пачками, [ADR 0043](../adr/0043-currency-ledger-verses.md)), `WeeklyTopFinalized` (топик `rating.rating.v1`).
 - **Слушает:** `MatchFinished`, `DailyCompleted` (серии), `PredictionWinnerSelected`, `ProgressionLevelChanged`.
 - **Масштаб:** запись асинхронная по событиям, чтение из Redis.
 - **Деградация:** матчи не ждут rating. Пересчёт догоняет по событиям из лога Redpanda.
@@ -127,9 +127,10 @@
 ### 10. progression
 - **Отвечает за:** опыт и уровни, разблокировки по уровням, внутреннюю валюту (**append-only журнал проводок**, раздельно `earned`/`paid`), задания (метрики и периоды из конфига), бейджи и достижения (в том числе мастерство по персоне), магазин, инвентарь и косметику, оформление профиля, промокоды.
 - **Данные:** Postgres (ledger, balances как проекция, quests, quest_progress, badges, inventory, shop_items, appearance).
-- **Публикует:** `ExperienceGained`, `ProgressionLevelChanged`, `CurrencyCredited`, `CurrencyDebited`, `QuestCompleted`, `BadgeUnlocked`, `ItemPurchased`.
-- **Слушает:** `GameFinished`, `MatchFinished`, `DailyCompleted`, `CollectionPublished`, `FriendAdded`, `CommentPosted`, `SeasonFinished`, `WeeklyTopFinalized`, `EntitlementGranted`.
+- **Публикует:** `ExperienceGained`, `ProgressionLevelChanged`, `CurrencyCredited`, `CurrencyDebited`, `QuestCompleted`, `BadgeUnlocked`, `WheelSpun` (топик `progression.progression.v1`, 5a), `ItemPurchased` (5b).
+- **Слушает:** `GameFinished`, `MatchFinished`, `DailyCompleted`, `CollectionPublished`, `FriendAdded`, `CommentPosted`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`, `EntitlementGranted`. В 5a — только `GameFinished`, `DailyCompleted`, `MatchFinished`, `CollectionPublished`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`.
 - **Инварианты:** баланс не уходит в минус; каждая проводка идемпотентна (`opId`).
+- **Задачи relay:** `progression.ledger.reconcile` (сверка журнала), `progression.config.bootstrap` (local/ci: публикует версию 1 конфига из `seeds/progression/config.yaml`, `GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, если опубликованной версии нет).
 
 ### 11. payments
 - **Отвечает за:** тарифы и подписки, платёжного провайдера, вебхуки, чеки, **entitlements** (что доступно пользователю по плану). На старте выключен флагом `billing.enabled=false`, все пользователи получают план `free_all` ([../06-payments.md](../06-payments.md)).

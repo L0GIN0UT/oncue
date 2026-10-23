@@ -111,7 +111,8 @@ export async function closePlayers(players: Player[]): Promise<void> {
 
 // ----------------------------------------------------------------------------- API от имени игрока
 /** Публичный API сервиса через gateway от имени страницы: cookie + CSRF + Origin. */
-export function api(page: Page, service: "match" | "collections" | "game" | "rating") {
+export function api(page: Page, service: "match" | "collections" | "game" | "rating" | "progression",
+) {
   const base = `/api/${service}/v1`;
   const headers = async (): Promise<Record<string, string>> => {
     const csrf =

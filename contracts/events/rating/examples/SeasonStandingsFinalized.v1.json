@@ -1,0 +1,31 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001:0",
+  "aggregate_type": "rating",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0006",
+  "event_type": "rating.SeasonStandingsFinalized",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "chunk": 0,
+    "chunks_total": 1,
+    "entries": [
+      {
+        "place": 1,
+        "rating": 1840,
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+      },
+      {
+        "place": 2,
+        "rating": 1795,
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002"
+      }
+    ],
+    "finished_at": "2026-10-23T00:00:00Z",
+    "ladder": "film",
+    "number": 1,
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001"
+  },
+  "producer": "rating"
+}

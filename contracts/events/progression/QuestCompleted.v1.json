@@ -1,0 +1,72 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:QuestCompleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Задание выполнено, награда выдана (ADR 0044). aggregate_id — user_id. Идемпотентно по `(user_id, quest_key, period_start)`.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "config_version": {
+      "description": "Версия опубликованного конфига progression, по которой посчитано",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "period": {
+      "enum": [
+        "daily",
+        "weekly",
+        "one_time"
+      ],
+      "type": "string"
+    },
+    "period_start": {
+      "description": "Начало периода в `progression.timezone`; у разового — дата выполнения",
+      "format": "date",
+      "type": "string"
+    },
+    "quest_key": {
+      "description": "Ключ задания из конфига",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "reward": {
+      "additionalProperties": false,
+      "description": "Награда: опыт и Версы (0 — нет)",
+      "properties": {
+        "verses": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "xp": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "xp",
+        "verses"
+      ],
+      "type": "object"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_id",
+    "quest_key",
+    "period",
+    "period_start",
+    "reward",
+    "config_version",
+    "at"
+  ],
+  "title": "progression.QuestCompleted v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

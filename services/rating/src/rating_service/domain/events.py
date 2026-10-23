@@ -87,6 +87,30 @@ class SeasonFinished(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class StandingEntry:
+    """Строка итоговой таблицы сезона."""
+
+    user_id: UUID
+    place: int
+    rating: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class SeasonStandingsFinalized(DomainEvent):
+    """Пачка верха итоговой таблицы (``aggregate_id`` = ``{season_id}:{chunk}``)."""
+
+    aggregate_type: ClassVar[str] = RATING_AGGREGATE
+
+    season_id: UUID
+    ladder: str
+    number: int
+    finished_at: datetime
+    chunk: int
+    chunks_total: int
+    entries: tuple[StandingEntry, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
 class WeeklyTopEntry:
     """Строка топа недели."""
 

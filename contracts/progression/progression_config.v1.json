@@ -1,0 +1,659 @@
+{
+  "$id": "urn:guessverse:contracts:progression:progression_config:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Конфиг progression (ADR 0042–0044): версионируемый, YAML-сиды `seeds/progression` и admin-API progression. Опыт, уровни, Версы, задания, бейджи, колесо — только здесь, в коде значений нет. Правка = новая версия; в проводках хранится `config_version`, прошлое не пересчитывается. Семантические проверки (монотонные пороги, непрерывные полосы мест, веса > 0, метрики из реестра) — в домене progression при публикации.",
+  "properties": {
+    "admin": {
+      "additionalProperties": false,
+      "description": "Лимиты ручной выдачи и сторно",
+      "properties": {
+        "grant_max_amount": {
+          "description": "Максимум Версов в одной ручной выдаче",
+          "maximum": 100000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "grant_max_per_user_day": {
+          "description": "Максимум Версов вручную одному игроку за сутки",
+          "maximum": 100000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "reason_min_length": {
+          "description": "Минимальная длина причины выдачи и сторно",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "grant_max_amount",
+        "grant_max_per_user_day",
+        "reason_min_length"
+      ],
+      "type": "object"
+    },
+    "badges": {
+      "items": {
+        "additionalProperties": false,
+        "description": "Бейдж: выдаётся один раз, когда метрика достигла цели",
+        "properties": {
+          "description": {
+            "maxLength": 400,
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "metric": {
+            "description": "Метрика из реестра P2 (wins, daily_streak, correct_answers, season_tier и т. п.)",
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "target": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "metric",
+          "target",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "maxItems": 500,
+      "type": "array"
+    },
+    "levels": {
+      "additionalProperties": false,
+      "description": "Кривая уровней: опыт на переход к уровню n = base + step·n",
+      "properties": {
+        "base": {
+          "description": "Постоянная часть порога",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_level": {
+          "description": "Последний уровень",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "step": {
+          "description": "Прибавка порога за уровень: порог уровня n = base + step·n",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_level",
+        "base",
+        "step"
+      ],
+      "type": "object"
+    },
+    "min_rounds_ratio": {
+      "description": "Доля сыгранных раундов, ниже которой бонус за победу не даётся (антиабьюз)",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "quests": {
+      "additionalProperties": false,
+      "description": "Задания: пул и размер назначения; назначение — снимком на период",
+      "properties": {
+        "daily_count": {
+          "description": "Сколько дневных заданий назначается игроку",
+          "maximum": 20,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "description": "Задание",
+            "properties": {
+              "description": {
+                "maxLength": 400,
+                "type": "string"
+              },
+              "domain": {
+                "description": "Ограничение по домену; null — любой",
+                "enum": [
+                  "music",
+                  "film",
+                  null
+                ],
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "key": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "metric": {
+                "description": "Метрика из реестра P2 (rounds_played, online_matches, wins, correct_answers, daily_completed, collection_published и т. п.); неизвестная метрика отклоняется при публикации",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "period": {
+                "enum": [
+                  "daily",
+                  "weekly",
+                  "one_time"
+                ],
+                "type": "string"
+              },
+              "reward": {
+                "additionalProperties": false,
+                "description": "Награда задания: опыт и Версы (0 — нет)",
+                "properties": {
+                  "verses": {
+                    "maximum": 100000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "xp": {
+                    "maximum": 100000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "xp",
+                  "verses"
+                ],
+                "type": "object"
+              },
+              "target": {
+                "description": "Сколько набрать за период",
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "title": {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              "weight": {
+                "description": "Вес при случайной выдаче из пула",
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "key",
+              "period",
+              "title",
+              "metric",
+              "target",
+              "reward",
+              "enabled"
+            ],
+            "type": "object"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
+        "weekly_count": {
+          "description": "Сколько недельных",
+          "maximum": 50,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "daily_count",
+        "weekly_count",
+        "items"
+      ],
+      "type": "object"
+    },
+    "timezone": {
+      "description": "Часовой пояс суток, дейлика, периодов заданий и колеса (IANA); день события — по `finished_at`",
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    },
+    "verses": {
+      "additionalProperties": false,
+      "description": "Версы: начисление за игру и сетки наград рейтинга",
+      "properties": {
+        "daily": {
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duel": {
+          "additionalProperties": false,
+          "properties": {
+            "loss": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "win": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "win",
+            "loss"
+          ],
+          "type": "object"
+        },
+        "online_daily_cap": {
+          "description": "Потолок Версов за дуэли и party в сутки (необязательно: нет поля — нет потолка); опыт онлайна потолка не имеет",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "party_by_place": {
+          "items": {
+            "maximum": 100000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "type": "array"
+        },
+        "season": {
+          "description": "Сетка итога сезона (топ-1000)",
+          "items": {
+            "additionalProperties": false,
+            "description": "Полоса мест сетки; полосы идут подряд без пропусков, `from` ≤ `to`",
+            "properties": {
+              "amount": {
+                "description": "Версы за место",
+                "maximum": 100000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "from": {
+                "description": "Первое место полосы",
+                "maximum": 100000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "to": {
+                "description": "Последнее место полосы",
+                "maximum": 100000000,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "amount"
+            ],
+            "type": "object"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
+        },
+        "solo_daily_cap": {
+          "description": "Потолок Версов с соло в сутки",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "solo_round": {
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "weekly_top": {
+          "description": "Сетка топа недели (топ-100)",
+          "items": {
+            "additionalProperties": false,
+            "description": "Полоса мест сетки; полосы идут подряд без пропусков, `from` ≤ `to`",
+            "properties": {
+              "amount": {
+                "description": "Версы за место",
+                "maximum": 100000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "from": {
+                "description": "Первое место полосы",
+                "maximum": 100000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "to": {
+                "description": "Последнее место полосы",
+                "maximum": 100000000,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "amount"
+            ],
+            "type": "object"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "solo_round",
+        "daily",
+        "duel",
+        "party_by_place",
+        "solo_daily_cap",
+        "weekly_top",
+        "season"
+      ],
+      "type": "object"
+    },
+    "wheel": {
+      "additionalProperties": false,
+      "description": "Ежедневное колесо; сектор выбирает только сервер по весам",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_boost_queue": {
+          "description": "Сколько бустов может ждать в очереди (бусты не складываются)",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sectors": {
+          "items": {
+            "additionalProperties": false,
+            "description": "Сектор колеса",
+            "properties": {
+              "key": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "prize": {
+                "additionalProperties": false,
+                "description": "Приз колеса",
+                "properties": {
+                  "amount": {
+                    "description": "Опыт или Версы; у boost, item и none — 0",
+                    "maximum": 100000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_key": {
+                    "description": "Только item: ключ предмета инвентаря (5b; в 5a заглушка выдачи)",
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_]*$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "xp",
+                      "verses",
+                      "boost",
+                      "item",
+                      "none"
+                    ],
+                    "type": "string"
+                  },
+                  "matches": {
+                    "description": "Только boost: на сколько онлайн-матчей",
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "multiplier": {
+                    "description": "Только boost: множитель опыта",
+                    "exclusiveMinimum": 1,
+                    "maximum": 10,
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amount",
+                  "multiplier",
+                  "matches",
+                  "item_key"
+                ],
+                "type": "object"
+              },
+              "title": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              "weight": {
+                "description": "Вес сектора; шанс = вес / сумма весов (публикуется игроку)",
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "key",
+              "title",
+              "weight",
+              "prize"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled",
+        "sectors",
+        "max_boost_queue"
+      ],
+      "type": "object"
+    },
+    "xp": {
+      "additionalProperties": false,
+      "description": "Опыт за участие",
+      "properties": {
+        "daily": {
+          "additionalProperties": false,
+          "description": "Дейлик: base + per_streak·серия, не больше max",
+          "properties": {
+            "base": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "per_streak": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "base",
+            "per_streak",
+            "max"
+          ],
+          "type": "object"
+        },
+        "duel": {
+          "additionalProperties": false,
+          "description": "Дуэль",
+          "properties": {
+            "participation": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "per_round_won": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "win_bonus": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "participation",
+            "per_round_won",
+            "win_bonus"
+          ],
+          "type": "object"
+        },
+        "first_win_of_day": {
+          "additionalProperties": false,
+          "description": "Первая победа дня в онлайне",
+          "properties": {
+            "bonus": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bonus"
+          ],
+          "type": "object"
+        },
+        "party": {
+          "additionalProperties": false,
+          "description": "Party/lobby: участие, бонус за места подряд с первого, остальным — other_place_bonus",
+          "properties": {
+            "other_place_bonus": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "participation": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "place_bonus": {
+              "items": {
+                "maximum": 100000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 6,
+              "type": "array"
+            }
+          },
+          "required": [
+            "participation",
+            "place_bonus",
+            "other_place_bonus"
+          ],
+          "type": "object"
+        },
+        "solo_daily_cap": {
+          "description": "Потолок опыта с соло в сутки",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "solo_round": {
+          "additionalProperties": false,
+          "description": "Соло-раунд: base + очки/divisor, не больше max",
+          "properties": {
+            "base": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max": {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "score_divisor": {
+              "maximum": 100000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "base",
+            "score_divisor",
+            "max"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "solo_round",
+        "daily",
+        "duel",
+        "party",
+        "first_win_of_day",
+        "solo_daily_cap"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "timezone",
+    "levels",
+    "min_rounds_ratio",
+    "xp",
+    "verses",
+    "quests",
+    "badges",
+    "wheel",
+    "admin"
+  ],
+  "title": "progression config v1",
+  "type": "object"
+}

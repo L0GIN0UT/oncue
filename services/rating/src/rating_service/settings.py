@@ -32,6 +32,10 @@ class RatingSettings(BaseModel):
     leaderboard_resync_s: int = Field(default=3600, ge=60)
     # Сколько игроков копировать в новый сезон / читать при пересборке за один запрос.
     batch_size: int = Field(default=1000, ge=10, le=10000)
+    # Верх итоговой таблицы сезона в `SeasonStandingsFinalized` (награды progression) и размер
+    # пачки события; пачка не больше `maxItems` схемы (500).
+    standings_top_size: int = Field(default=1000, ge=1, le=10000)
+    standings_chunk_size: int = Field(default=500, ge=1, le=500)
     # Допуск часов продюсера: `MatchFinished.finished_at` позже «сейчас + допуск» отвергается.
     finished_at_skew_s: int = Field(default=300, ge=0)
     # Окно дат `starts_at` при создании сезона админом: назад на допуск, вперёд на N дней.

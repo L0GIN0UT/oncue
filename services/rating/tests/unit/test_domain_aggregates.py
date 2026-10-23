@@ -7,6 +7,7 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from hypothesis import given
@@ -23,12 +24,13 @@ from rating_service.domain.events import (
     LadderPublished,
     RatingChanged,
     SeasonFinished,
+    SeasonStandingsFinalized,
     SeasonStarted,
 )
 from rating_service.domain.ladder import LadderConfig, SoftReset
 from rating_service.domain.ladder_line import LadderLine, VersionStatus
 from rating_service.domain.rating import Rating, soft_reset_value
-from rating_service.domain.season import ClosedBy, Season, SeasonStatus
+from rating_service.domain.season import ClosedBy, Season, SeasonStatus, rank_standings
 from rating_service.domain.weekly import week_start
 
 from gv_core.ids import uuid7
@@ -304,3 +306,43 @@ def test_week_starts_on_monday_in_configured_zone(at: datetime, zone: str, expec
 def test_week_start_requires_aware_datetime() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         week_start(datetime(2026, 10, 19, tzinfo=None), "UTC")  # noqa: DTZ001 — проверка отказа
+
+
+def _finished_season() -> Season:
+    season = make_season()
+    season.activate(config(), reset_applied=False)
+    season.finish(NOW + timedelta(days=1), ClosedBy.SCHEDULE, 5)
+    season.pull_events()
+    return season
+
+
+def test_rank_standings_orders_by_rating_then_user_desc_and_cuts_top() -> None:
+    """Тай-брейк как у Redis ZREVRANGE (лидерборд): при равном рейтинге user_id по убыванию."""
+    a, b, c, d = (UUID(int=i) for i in (1, 2, 3, 4))
+    ranked = rank_standings([(d, 900), (a, 1000), (b, 1000), (c, 950)], top_size=3)
+    assert ranked == [(b, 1000), (a, 1000), (c, 950)]
+
+
+def test_record_standings_splits_into_chunks_with_continuous_places() -> None:
+    season = _finished_season()
+    ranked = [(UUID(int=i), 2000 - i) for i in range(1, 6)]
+    season.record_standings(ranked, chunk_size=2)
+    events = season.pending_events
+    assert all(isinstance(e, SeasonStandingsFinalized) for e in events)
+    assert [e.aggregate_id for e in events] == [f"{season.season_id}:{i}" for i in range(3)]
+    assert [(e.chunk, e.chunks_total) for e in events] == [(0, 3), (1, 3), (2, 3)]
+    assert [x.place for e in events for x in e.entries] == [1, 2, 3, 4, 5]
+    assert events[2].entries[0].rating == 1995
+
+
+def test_record_standings_without_players_publishes_nothing() -> None:
+    season = _finished_season()
+    season.record_standings([], chunk_size=500)
+    assert season.pending_events == ()
+
+
+def test_record_standings_requires_finished_season() -> None:
+    season = make_season()
+    season.activate(config(), reset_applied=False)
+    with pytest.raises(SeasonNotActiveError):
+        season.record_standings([(UUID(int=1), 1000)], chunk_size=500)

@@ -9,6 +9,7 @@ import { audioWav, frameSvg } from "./media";
 import { createUgcHandlers } from "./handlers-3b";
 import { createMatchHandlers } from "./handlers-match";
 import { createRatingHandlers } from "./handlers-rating";
+import { createProgressionHandlers, homeProgress } from "./progression";
 import { onlineModesOut, type MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
@@ -377,6 +378,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
           weekly: world.scenario.dailiesUnavailable
             ? { status: "unavailable", data: null }
             : { status: "ok", data: world.dailyCards(subject, true) },
+          progress: homeProgress(world, subject),
         },
       });
     }),
@@ -420,6 +422,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
 
     // ---------------------------------------------------------------- этап 3b
     ...createUgcHandlers(world),
+    ...createProgressionHandlers(world),
 
     // ---------------------------------------------------------------- этап 4a: онлайн
     ...(matchWorld ? createMatchHandlers(world, matchWorld) : []),

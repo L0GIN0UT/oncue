@@ -1,6 +1,1195 @@
 {
   "components": {
     "schemas": {
+      "AdminBadgeCard": {
+        "description": "Бейдж действующего конфига со статистикой.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unlocked_total": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - счётчиков ещё нет (данные появятся с бейджами)",
+            "title": "Unlocked Total"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "enabled"
+        ],
+        "title": "AdminBadgeCard",
+        "type": "object"
+      },
+      "AdminBadgeList": {
+        "description": "Бейджи действующего конфига.",
+        "properties": {
+          "config_version": {
+            "minimum": 1.0,
+            "title": "Config Version",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminBadgeCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "config_version",
+          "items"
+        ],
+        "title": "AdminBadgeList",
+        "type": "object"
+      },
+      "AdminLedgerEntry": {
+        "description": "Проводка в админке.",
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Админ; для автоматических — null",
+            "title": "Actor Id"
+          },
+          "amount": {
+            "minimum": 1.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "bucket": {
+            "enum": [
+              "earned",
+              "paid"
+            ],
+            "title": "Bucket",
+            "type": "string"
+          },
+          "config_version": {
+            "minimum": 1.0,
+            "title": "Config Version",
+            "type": "integer"
+          },
+          "direction": {
+            "enum": [
+              "credit",
+              "debit"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "op_id": {
+            "title": "Op Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Reason",
+            "type": "string"
+          },
+          "reversal_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversal Of"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "direction",
+          "amount",
+          "bucket",
+          "reason",
+          "source_ref",
+          "actor_id",
+          "config_version",
+          "at"
+        ],
+        "title": "AdminLedgerEntry",
+        "type": "object"
+      },
+      "AdminLedgerPage": {
+        "description": "Страница журнала игрока, новые первыми.",
+        "properties": {
+          "earned": {
+            "minimum": 0.0,
+            "title": "Earned",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminLedgerEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "paid": {
+            "minimum": 0.0,
+            "title": "Paid",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "earned",
+          "paid",
+          "items"
+        ],
+        "title": "AdminLedgerPage",
+        "type": "object"
+      },
+      "AdminQuestCard": {
+        "description": "Задание действующего конфига со статистикой.",
+        "properties": {
+          "completed_total": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - счётчиков ещё нет (данные появятся с заданиями)",
+            "title": "Completed Total"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "period": {
+            "enum": [
+              "daily",
+              "weekly",
+              "one_time"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/Reward"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "period",
+          "title",
+          "reward",
+          "enabled"
+        ],
+        "title": "AdminQuestCard",
+        "type": "object"
+      },
+      "AdminQuestList": {
+        "description": "Задания действующего конфига.",
+        "properties": {
+          "config_version": {
+            "minimum": 1.0,
+            "title": "Config Version",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminQuestCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "config_version",
+          "items"
+        ],
+        "title": "AdminQuestList",
+        "type": "object"
+      },
+      "BadgeRef": {
+        "description": "Бейдж в публичном профиле.",
+        "properties": {
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unlocked_at": {
+            "format": "date-time",
+            "title": "Unlocked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "unlocked_at"
+        ],
+        "title": "BadgeRef",
+        "type": "object"
+      },
+      "BadgeView": {
+        "description": "Бейдж со своим прогрессом.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "progress": {
+            "minimum": 0.0,
+            "title": "Progress",
+            "type": "integer"
+          },
+          "target": {
+            "minimum": 1.0,
+            "title": "Target",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — не получен",
+            "title": "Unlocked At"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "target",
+          "progress",
+          "unlocked_at"
+        ],
+        "title": "BadgeView",
+        "type": "object"
+      },
+      "BoostView": {
+        "description": "Буст опыта (с колеса): множитель на N онлайн-матчей.",
+        "properties": {
+          "matches_left": {
+            "minimum": 1.0,
+            "title": "Matches Left",
+            "type": "integer"
+          },
+          "multiplier": {
+            "exclusiveMinimum": 1.0,
+            "title": "Multiplier",
+            "type": "number"
+          }
+        },
+        "required": [
+          "multiplier",
+          "matches_left"
+        ],
+        "title": "BoostView",
+        "type": "object"
+      },
+      "ConfigVersionBody": {
+        "description": "Версия конфига с телом.",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/ConfigVersionCard"
+          },
+          "config": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "description": "По `contracts/progression/progression_config.v1.json`",
+            "title": "Config",
+            "type": "object"
+          }
+        },
+        "required": [
+          "card",
+          "config"
+        ],
+        "title": "ConfigVersionBody",
+        "type": "object"
+      },
+      "ConfigVersionCard": {
+        "description": "Версия конфига progression.",
+        "properties": {
+          "body_sha256": {
+            "description": "sha256 канонического JSON тела; публикация привязана к нему",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "status",
+          "created_at",
+          "created_by",
+          "body_sha256"
+        ],
+        "title": "ConfigVersionCard",
+        "type": "object"
+      },
+      "ConfigVersionList": {
+        "description": "Версии конфига, новые первыми.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigVersionCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ConfigVersionList",
+        "type": "object"
+      },
+      "DailyStreakView": {
+        "description": "Серия дейлика по домену.",
+        "properties": {
+          "best": {
+            "minimum": 0.0,
+            "title": "Best",
+            "type": "integer"
+          },
+          "current": {
+            "description": "Подряд пройденных дней; обрывается пропуском дня",
+            "minimum": 0.0,
+            "title": "Current",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "last_day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последний пройденный день; null — не проходил",
+            "title": "Last Day"
+          }
+        },
+        "required": [
+          "domain",
+          "current",
+          "best",
+          "last_day"
+        ],
+        "title": "DailyStreakView",
+        "type": "object"
+      },
+      "GrantRequest": {
+        "additionalProperties": false,
+        "description": "Ручная выдача Версов.",
+        "properties": {
+          "amount": {
+            "description": "Версы; верхний предел — `admin.grant_max_amount`",
+            "minimum": 1.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "bucket": {
+            "const": "earned",
+            "default": "earned",
+            "description": "В 5a ручная выдача только в `earned` (`paid` - с 5b)",
+            "title": "Bucket",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "reason"
+        ],
+        "title": "GrantRequest",
+        "type": "object"
+      },
+      "JsonValue": {},
+      "LedgerEntryView": {
+        "description": "Проводка кошелька.",
+        "properties": {
+          "amount": {
+            "minimum": 1.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "bucket": {
+            "enum": [
+              "earned",
+              "paid"
+            ],
+            "title": "Bucket",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "credit",
+              "debit"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "op_id": {
+            "title": "Op Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "op_id",
+          "direction",
+          "amount",
+          "bucket",
+          "reason",
+          "at"
+        ],
+        "title": "LedgerEntryView",
+        "type": "object"
+      },
+      "LedgerOperation": {
+        "description": "Итог ручной операции: проводка и баланс после неё.",
+        "properties": {
+          "balance_after": {
+            "minimum": 0.0,
+            "title": "Balance After",
+            "type": "integer"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/AdminLedgerEntry"
+          },
+          "user_id": {
+            "description": "Владелец проводки",
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "entry",
+          "balance_after"
+        ],
+        "title": "LedgerOperation",
+        "type": "object"
+      },
+      "MyBadges": {
+        "description": "Свои бейджи, полученные и нет.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BadgeView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MyBadges",
+        "type": "object"
+      },
+      "MyProgress": {
+        "description": "Свой прогресс: уровень, опыт, серии, бусты.",
+        "properties": {
+          "boost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BoostView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Действующий буст; null — нет"
+          },
+          "boosts_queued": {
+            "description": "Бустов в очереди после действующего",
+            "minimum": 0.0,
+            "title": "Boosts Queued",
+            "type": "integer"
+          },
+          "config_version": {
+            "minimum": 1.0,
+            "title": "Config Version",
+            "type": "integer"
+          },
+          "level": {
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "max_level": {
+            "description": "Последний уровень конфига",
+            "minimum": 1.0,
+            "title": "Max Level",
+            "type": "integer"
+          },
+          "solo_xp_cap": {
+            "description": "Потолок опыта с соло в сутки (конфиг)",
+            "minimum": 0.0,
+            "title": "Solo Xp Cap",
+            "type": "integer"
+          },
+          "solo_xp_today": {
+            "description": "Опыт с соло за сегодня",
+            "minimum": 0.0,
+            "title": "Solo Xp Today",
+            "type": "integer"
+          },
+          "streaks": {
+            "items": {
+              "$ref": "#/components/schemas/DailyStreakView"
+            },
+            "title": "Streaks",
+            "type": "array"
+          },
+          "total_xp": {
+            "minimum": 0.0,
+            "title": "Total Xp",
+            "type": "integer"
+          },
+          "xp_in_level": {
+            "description": "Набрано внутри текущего уровня",
+            "minimum": 0.0,
+            "title": "Xp In Level",
+            "type": "integer"
+          },
+          "xp_to_next": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "До следующего уровня; null — высший",
+            "title": "Xp To Next"
+          }
+        },
+        "required": [
+          "level",
+          "max_level",
+          "total_xp",
+          "xp_in_level",
+          "xp_to_next",
+          "solo_xp_today",
+          "solo_xp_cap",
+          "streaks",
+          "boost",
+          "boosts_queued",
+          "config_version"
+        ],
+        "title": "MyProgress",
+        "type": "object"
+      },
+      "MyQuests": {
+        "description": "Свои задания: дневные, недельные, разовые.",
+        "properties": {
+          "daily": {
+            "$ref": "#/components/schemas/QuestPeriodView"
+          },
+          "one_time": {
+            "$ref": "#/components/schemas/QuestPeriodView"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/QuestPeriodView"
+          }
+        },
+        "required": [
+          "daily",
+          "weekly",
+          "one_time"
+        ],
+        "title": "MyQuests",
+        "type": "object"
+      },
+      "MyWallet": {
+        "description": "Свой кошелёк: Версы по бакетам и последние проводки.",
+        "properties": {
+          "currency": {
+            "const": "verses",
+            "default": "verses",
+            "title": "Currency",
+            "type": "string"
+          },
+          "earned": {
+            "description": "Заработаны игрой",
+            "minimum": 0.0,
+            "title": "Earned",
+            "type": "integer"
+          },
+          "paid": {
+            "description": "Куплены (биллинг выключен — 0)",
+            "minimum": 0.0,
+            "title": "Paid",
+            "type": "integer"
+          },
+          "recent": {
+            "description": "Последние проводки, новые первыми",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntryView"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "earned",
+          "paid",
+          "total",
+          "recent"
+        ],
+        "title": "MyWallet",
+        "type": "object"
+      },
+      "PrizeView": {
+        "description": "Приз сектора колеса.",
+        "properties": {
+          "amount": {
+            "description": "Опыт или Версы; у boost, item и none — 0",
+            "minimum": 0.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "item_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только item",
+            "title": "Item Key"
+          },
+          "kind": {
+            "enum": [
+              "xp",
+              "verses",
+              "boost",
+              "item",
+              "none"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только boost",
+            "title": "Matches"
+          },
+          "multiplier": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только boost",
+            "title": "Multiplier"
+          }
+        },
+        "required": [
+          "kind",
+          "amount",
+          "multiplier",
+          "matches",
+          "item_key"
+        ],
+        "title": "PrizeView",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).\n\nAttributes:\n    type: URN проблемы ``urn:guessverse:problem:<code>``.\n    title: Человекочитаемый заголовок.\n    status: HTTP-статус.\n    code: Машинный код ошибки — на него опираются клиенты.\n    detail: Пояснение.\n    correlation_id: Идентификатор цепочки запроса (для поиска в логах).\n    details: Безопасные для клиента подробности (``AppError.details``).\n    errors: Ошибки валидации полей запроса.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ошибки валидации: loc, msg, type",
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "PublicProgress": {
+        "description": "Публичный прогресс другого игрока (профиль). Скрытие — поле модели, ручка в 5c.",
+        "properties": {
+          "badges": {
+            "items": {
+              "$ref": "#/components/schemas/BadgeRef"
+            },
+            "title": "Badges",
+            "type": "array"
+          },
+          "level": {
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "total_xp": {
+            "minimum": 0.0,
+            "title": "Total Xp",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "level",
+          "total_xp",
+          "badges"
+        ],
+        "title": "PublicProgress",
+        "type": "object"
+      },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "description": "Опубликовать черновик: новая версия действует со следующего периода заданий.",
+        "properties": {
+          "body_sha256": {
+            "description": "`body_sha256` черновика, который видел админ (иначе 409 `draft_changed`)",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "version": {
+            "description": "Версия черновика",
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "body_sha256",
+          "reason"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
+      },
+      "QuestPeriodView": {
+        "description": "Задания одного периода.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuestView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "period": {
+            "enum": [
+              "daily",
+              "weekly",
+              "one_time"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null у разовых",
+            "title": "Period End"
+          },
+          "period_start": {
+            "format": "date",
+            "title": "Period Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "period_start",
+          "period_end",
+          "items"
+        ],
+        "title": "QuestPeriodView",
+        "type": "object"
+      },
+      "QuestView": {
+        "description": "Задание игрока в текущем периоде.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "progress": {
+            "minimum": 0.0,
+            "title": "Progress",
+            "type": "integer"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/Reward"
+          },
+          "target": {
+            "minimum": 1.0,
+            "title": "Target",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "target",
+          "progress",
+          "completed",
+          "reward"
+        ],
+        "title": "QuestView",
+        "type": "object"
+      },
+      "ReverseRequest": {
+        "additionalProperties": false,
+        "description": "Сторно проводки.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ReverseRequest",
+        "type": "object"
+      },
+      "Reward": {
+        "description": "Награда: опыт и Версы.",
+        "properties": {
+          "verses": {
+            "minimum": 0.0,
+            "title": "Verses",
+            "type": "integer"
+          },
+          "xp": {
+            "minimum": 0.0,
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "xp",
+          "verses"
+        ],
+        "title": "Reward",
+        "type": "object"
+      },
+      "RollbackRequest": {
+        "additionalProperties": false,
+        "description": "Откат: копия старой версии становится новым черновиком.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RollbackRequest",
+        "type": "object"
+      },
+      "SaveDraftRequest": {
+        "additionalProperties": false,
+        "description": "Сохранить черновик конфига (заменяет текущий черновик).",
+        "properties": {
+          "config": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Config",
+            "type": "object"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "reason"
+        ],
+        "title": "SaveDraftRequest",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -19,6 +1208,144 @@
         ],
         "title": "ServiceMeta",
         "type": "object"
+      },
+      "SpinResult": {
+        "description": "Результат спина за сутки.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "prize": {
+            "$ref": "#/components/schemas/PrizeView"
+          },
+          "repeated": {
+            "description": "true — спин за эти сутки уже был, возвращён тот же",
+            "title": "Repeated",
+            "type": "boolean"
+          },
+          "sector_key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Sector Key",
+            "type": "string"
+          },
+          "spun_at": {
+            "format": "date-time",
+            "title": "Spun At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "sector_key",
+          "prize",
+          "spun_at",
+          "repeated"
+        ],
+        "title": "SpinResult",
+        "type": "object"
+      },
+      "WheelSectorView": {
+        "description": "Сектор колеса; шанс публикуется игроку.",
+        "properties": {
+          "chance": {
+            "description": "weight / сумма весов",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Chance",
+            "type": "number"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "prize": {
+            "$ref": "#/components/schemas/PrizeView"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "weight": {
+            "minimum": 1.0,
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "weight",
+          "chance",
+          "prize"
+        ],
+        "title": "WheelSectorView",
+        "type": "object"
+      },
+      "WheelView": {
+        "description": "Колесо: секторы с шансами и состояние на сегодня.",
+        "properties": {
+          "config_version": {
+            "minimum": 1.0,
+            "title": "Config Version",
+            "type": "integer"
+          },
+          "day": {
+            "description": "Текущие сутки в `progression.timezone`",
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "next_spin_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Когда обновится; null — можно крутить",
+            "title": "Next Spin At"
+          },
+          "sectors": {
+            "items": {
+              "$ref": "#/components/schemas/WheelSectorView"
+            },
+            "title": "Sectors",
+            "type": "array"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpinResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Спин за сегодня; null — ещё не крутил"
+          }
+        },
+        "required": [
+          "enabled",
+          "sectors",
+          "day",
+          "today",
+          "next_spin_at",
+          "config_version"
+        ],
+        "title": "WheelView",
+        "type": "object"
       }
     }
   },
@@ -29,6 +1356,1353 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/v1/badges": {
+      "get": {
+        "description": "Бейджи действующего конфига с числом выданных. Правка - через черновик.",
+        "operationId": "badges_admin_v1_badges_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBadgeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Бейджи",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/configs": {
+      "get": {
+        "description": "Черновик, действующая и архивные версии, новые первыми.",
+        "operationId": "versions_admin_v1_configs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigVersionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Версии конфига",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/configs/draft": {
+      "put": {
+        "description": "Заменяет черновик (он один); конфиг проверяется целиком. Ошибки: 422 `progression.config_invalid` (`details.errors` - пути и причины).",
+        "operationId": "save_draft_admin_v1_configs_draft_put",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Сохранить черновик",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/configs/draft/publish": {
+      "post": {
+        "description": "Новая версия действует для новых проводок, прошлое не пересчитывается; прежняя действующая уходит в архив. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_not_draft`, 409 `progression.draft_changed` (тело черновика изменилось).",
+        "operationId": "publish_admin_v1_configs_draft_publish_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Опубликовать черновик",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/configs/{version}": {
+      "get": {
+        "description": "Тело версии. Ошибки: 404 `progression.config_version_not_found`.",
+        "operationId": "version_admin_v1_configs__version__get",
+        "parameters": [
+          {
+            "description": "Версия конфига",
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "description": "Версия конфига",
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Версия конфига",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/configs/{version}/rollback": {
+      "post": {
+        "description": "Копия старой версии становится черновиком (заменяет текущий). Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_never_published`.",
+        "operationId": "rollback_admin_v1_configs__version__rollback_post",
+        "parameters": [
+          {
+            "description": "Версия конфига",
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "description": "Версия конфига",
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigVersionBody"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Откатить к версии",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/ledger/{op_id}/reverse": {
+      "post": {
+        "description": "Встречная проводка со ссылкой `reversal_of`; журнал не правится; только журнал Версов, только кредиты. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.not_reversible` (дебет, сторно, проводка опыта), 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).",
+        "operationId": "reverse_admin_v1_ledger__op_id__reverse_post",
+        "parameters": [
+          {
+            "description": "`op_id` проводки",
+            "in": "path",
+            "name": "op_id",
+            "required": true,
+            "schema": {
+              "description": "`op_id` проводки",
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Op Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Сторнировать проводку",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/quests": {
+      "get": {
+        "description": "Задания действующего конфига с числом выполнений. Правка - через черновик.",
+        "operationId": "quests_admin_v1_quests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminQuestList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Задания",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/users/{user_id}/ledger": {
+      "get": {
+        "description": "Проводки Версов, новые первыми, курсорная пагинация. Ошибки: 404 `progression.user_not_found`.",
+        "operationId": "ledger_admin_v1_users__user_id__ledger_get",
+        "parameters": [
+          {
+            "description": "Идентификатор пользователя",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор пользователя",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLedgerPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Журнал игрока",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/users/{user_id}/ledger/grant": {
+      "post": {
+        "description": "Проводка `admin:{Idempotency-Key}`; предел - `admin.grant_max_amount` и `admin.grant_max_per_user_day` конфига. Ошибки: 404 `progression.user_not_found`, 422 `progression.grant_limit_exceeded`, 422 `progression.reason_too_short`.",
+        "operationId": "grant_admin_v1_users__user_id__ledger_grant_post",
+        "parameters": [
+          {
+            "description": "Идентификатор пользователя",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор пользователя",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Выдать Версы вручную",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/v1/me/badges": {
+      "get": {
+        "description": "Все бейджи конфига: полученные и с прогрессом.",
+        "operationId": "my_badges_v1_me_badges_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyBadges"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Мои бейджи",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/progress": {
+      "get": {
+        "description": "Уровень, опыт, потолок соло, серии дейлика по доменам. Ошибки: 503 `progression.config_unavailable` — нет опубликованного конфига.",
+        "operationId": "my_progress_v1_me_progress_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyProgress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Мой прогресс",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/quests": {
+      "get": {
+        "description": "Дневные, недельные и разовые задания с прогрессом; назначение — снимком на период (смена конфига действует со следующего периода). Ошибки: 503 `progression.config_unavailable`.",
+        "operationId": "my_quests_v1_me_quests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyQuests"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Мои задания",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/wallet": {
+      "get": {
+        "description": "Версы по бакетам `earned` и `paid` и последние проводки.",
+        "operationId": "my_wallet_v1_me_wallet_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyWallet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Мой кошелёк",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
     "/v1/meta": {
       "get": {
         "operationId": "meta_v1_meta_get",
@@ -45,6 +2719,266 @@
           }
         },
         "summary": "Сведения о сервисе",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/users/{user_id}/progress": {
+      "get": {
+        "description": "Публичный профиль: уровень, опыт, бейджи. Ошибки: 404 `progression.user_not_found`.",
+        "operationId": "user_progress_v1_users__user_id__progress_get",
+        "parameters": [
+          {
+            "description": "Идентификатор пользователя",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор пользователя",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProgress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Прогресс игрока",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/wheel": {
+      "get": {
+        "description": "Секторы с весами и шансами, спин за сегодня и время обновления.",
+        "operationId": "wheel_v1_wheel_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WheelView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Колесо",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/wheel/spin": {
+      "post": {
+        "description": "Тело пустое (любое тело — 422). Один спин в сутки (`progression.timezone`): сектор выбирает сервер по весам, приз выдаётся в той же транзакции. Повтор за те же сутки возвращает тот же результат (`repeated = true`). Ошибки: 409 `progression.wheel_disabled`.",
+        "operationId": "spin_v1_wheel_spin_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpinResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Крутить колесо",
         "tags": [
           "progression"
         ]

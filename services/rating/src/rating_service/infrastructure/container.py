@@ -70,7 +70,12 @@ class RatingContainer:
     @cached_property
     def lifecycle(self) -> SeasonLifecycle:
         """Жизненный цикл сезона."""
-        return SeasonLifecycle(self.infra.clock)
+        s = self.settings.rating
+        return SeasonLifecycle(
+            self.infra.clock,
+            standings_top_size=s.standings_top_size,
+            standings_chunk_size=s.standings_chunk_size,
+        )
 
     @cached_property
     def ladder_commands(self) -> LadderCommands:

@@ -8,6 +8,7 @@ import type { paths as CollectionsPaths } from "./schema/collections";
 import type { paths as LibraryPaths } from "./schema/library";
 import type { paths as MatchPaths } from "./schema/match";
 import type { paths as RatingPaths } from "./schema/rating";
+import type { paths as ProgressionPaths } from "./schema/progression";
 import { ApiError, parseRetryAfter } from "./errors";
 import { apiFetch } from "./http";
 
@@ -20,6 +21,7 @@ export const API_PREFIX = {
   library: "/api/library",
   match: "/api/match",
   rating: "/api/rating",
+  progression: "/api/progression",
 } as const;
 
 type Clients = {
@@ -31,6 +33,7 @@ type Clients = {
   library: Client<LibraryPaths>;
   match: Client<MatchPaths>;
   rating: Client<RatingPaths>;
+  progression: Client<ProgressionPaths>;
 };
 
 let clients: Clients | null = null;
@@ -50,6 +53,7 @@ export function api(): Clients {
       library: make<LibraryPaths>(API_PREFIX.library),
       match: make<MatchPaths>(API_PREFIX.match),
       rating: make<RatingPaths>(API_PREFIX.rating),
+      progression: make<ProgressionPaths>(API_PREFIX.progression),
     };
   }
   return clients;

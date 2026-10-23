@@ -176,6 +176,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/players/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Профиль игрока: уровень, опыт, бейджи
+         * @description Публичная часть прогресса чужого (или своего) игрока. Только пользователь с аккаунтом: аноним — 401, гость — 403 `auth.guest_forbidden`, источники при этом не вызываются. Нет игрока — 404; недоступный progression — блок `unavailable`. Всегда `private, no-store`.
+         */
+        get: operations["player_page_v1_pages_players__user_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Профиль: прогресс, кошелёк, задания, бейджи, колесо
+         * @description Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блоки из progression гаснут независимо (страница 200); отказ токена источником — 401/403 экрана.
+         */
+        get: operations["profile_page_v1_pages_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/results/{session_id}": {
         parameters: {
             query?: never;
@@ -240,6 +280,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * BadgeCard
+         * @description Бейдж игрока.
+         */
+        BadgeCard: {
+            /** Description */
+            description: string;
+            /** Key */
+            key: string;
+            /** Progress */
+            progress: number;
+            /** Target */
+            target: number;
+            /** Title */
+            title: string;
+            /** Unlocked At */
+            unlocked_at?: string | null;
+        };
+        /**
+         * BadgeRefCard
+         * @description Полученный бейдж в публичном профиле игрока.
+         */
+        BadgeRefCard: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /**
+             * Unlocked At
+             * Format: date-time
+             */
+            unlocked_at: string;
+        };
         /** Block[CollectionDetail] */
         Block_CollectionDetail_: {
             data?: components["schemas"]["CollectionDetail"] | null;
@@ -258,9 +331,28 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[HomeProgressCard] */
+        Block_HomeProgressCard_: {
+            data?: components["schemas"]["HomeProgressCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[LeaderboardCard] */
         Block_LeaderboardCard_: {
             data?: components["schemas"]["LeaderboardCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[BadgeCard]] */
+        Block_list_BadgeCard__: {
+            /** Data */
+            data?: components["schemas"]["BadgeCard"][] | null;
             /**
              * Status
              * @enum {string}
@@ -434,6 +526,33 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[ProgressCard] */
+        Block_ProgressCard_: {
+            data?: components["schemas"]["ProgressCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[PublicProgressCard] */
+        Block_PublicProgressCard_: {
+            data?: components["schemas"]["PublicProgressCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[QuestsCard] */
+        Block_QuestsCard_: {
+            data?: components["schemas"]["QuestsCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[ResultSummary] */
         Block_ResultSummary_: {
             data?: components["schemas"]["ResultSummary"] | null;
@@ -452,6 +571,15 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[WalletCard] */
+        Block_WalletCard_: {
+            data?: components["schemas"]["WalletCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[WeeklyTopCard] */
         Block_WeeklyTopCard_: {
             data?: components["schemas"]["WeeklyTopCard"] | null;
@@ -460,6 +588,25 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "unavailable";
+        };
+        /** Block[WheelCard] */
+        Block_WheelCard_: {
+            data?: components["schemas"]["WheelCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /**
+         * BoostCard
+         * @description Действующий буст опыта.
+         */
+        BoostCard: {
+            /** Matches Left */
+            matches_left: number;
+            /** Multiplier */
+            multiplier: number;
         };
         /**
          * BracketPick
@@ -801,6 +948,8 @@ export interface components {
             /** @description Наборы дня (без недельной сетки) */
             dailies: components["schemas"]["Block_list_DailyCard__"];
             modes: components["schemas"]["Block_list_ModeCard__"];
+            /** @description Прогресс игрока; null — гость или аноним */
+            progress?: components["schemas"]["Block_HomeProgressCard_"] | null;
             /** @description Наборы недели (сетка) */
             weekly: components["schemas"]["Block_list_DailyCard__"];
         };
@@ -810,6 +959,30 @@ export interface components {
          */
         HomePage: {
             blocks: components["schemas"]["HomeBlocks"];
+        };
+        /**
+         * HomeProgressCard
+         * @description Свёртка прогресса для главной: уровень, серия, колесо.
+         */
+        HomeProgressCard: {
+            /**
+             * Best Streak
+             * @description Наибольшая текущая серия дейлика по доменам
+             */
+            best_streak: number;
+            /** Can Spin */
+            can_spin: boolean;
+            /** Level */
+            level: number;
+            /**
+             * Quests Open
+             * @description Невыполненных заданий на сегодня
+             */
+            quests_open: number;
+            /** Xp In Level */
+            xp_in_level: number;
+            /** Xp To Next */
+            xp_to_next: number | null;
         };
         /**
          * ItemCard
@@ -1357,6 +1530,20 @@ export interface components {
             role: string;
         };
         /**
+         * PlayerBlocks
+         * @description Блоки профиля игрока.
+         */
+        PlayerBlocks: {
+            progress: components["schemas"]["Block_PublicProgressCard_"];
+        };
+        /**
+         * PlayerPage
+         * @description ``GET /v1/pages/players/{user_id}``: только пользователь с аккаунтом, `private, no-store`.
+         */
+        PlayerPage: {
+            blocks: components["schemas"]["PlayerBlocks"];
+        };
+        /**
          * PresetCard
          * @description Пресет случайного режима.
          */
@@ -1365,6 +1552,25 @@ export interface components {
             id: string;
             /** Title Key */
             title_key: string;
+        };
+        /**
+         * PrizeCard
+         * @description Приз сектора колеса: тип и параметры из конфига progression.
+         */
+        PrizeCard: {
+            /** Amount */
+            amount: number;
+            /** Item Key */
+            item_key?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "xp" | "verses" | "boost" | "item" | "none";
+            /** Matches */
+            matches?: number | null;
+            /** Multiplier */
+            multiplier?: number | null;
         };
         /**
          * Problem
@@ -1404,6 +1610,105 @@ export interface components {
             title: string;
             /** Type */
             type: string;
+        };
+        /**
+         * ProfileBlocks
+         * @description Блоки профиля: каждый гаснет независимо.
+         */
+        ProfileBlocks: {
+            badges: components["schemas"]["Block_list_BadgeCard__"];
+            progress: components["schemas"]["Block_ProgressCard_"];
+            quests: components["schemas"]["Block_QuestsCard_"];
+            wallet: components["schemas"]["Block_WalletCard_"];
+            wheel: components["schemas"]["Block_WheelCard_"];
+        };
+        /**
+         * ProfilePage
+         * @description ``GET /v1/pages/profile``: только пользователь с аккаунтом, ответ ``private, no-store``.
+         */
+        ProfilePage: {
+            blocks: components["schemas"]["ProfileBlocks"];
+        };
+        /**
+         * ProgressCard
+         * @description Уровень и опыт игрока (progression ``/v1/me/progress``).
+         */
+        ProgressCard: {
+            boost?: components["schemas"]["BoostCard"] | null;
+            /** Level */
+            level: number;
+            /** Max Level */
+            max_level: number;
+            /**
+             * Solo Xp Cap
+             * @description Суточный потолок опыта из соло
+             */
+            solo_xp_cap: number;
+            /**
+             * Solo Xp Today
+             * @description Опыт из соло за сегодня
+             */
+            solo_xp_today: number;
+            /** Streaks */
+            streaks: components["schemas"]["StreakCard"][];
+            /** Total Xp */
+            total_xp: number;
+            /** Xp In Level */
+            xp_in_level: number;
+            /**
+             * Xp To Next
+             * @description null — высший уровень
+             */
+            xp_to_next: number | null;
+        };
+        /**
+         * PublicProgressCard
+         * @description Публичная часть прогресса игрока: уровень, опыт, бейджи.
+         */
+        PublicProgressCard: {
+            /** Badges */
+            badges: components["schemas"]["BadgeRefCard"][];
+            /** Level */
+            level: number;
+            /** Total Xp */
+            total_xp: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * QuestCard
+         * @description Задание текущего периода.
+         */
+        QuestCard: {
+            /** Completed */
+            completed: boolean;
+            /** Description */
+            description: string;
+            /** Key */
+            key: string;
+            /** Progress */
+            progress: number;
+            /** Reward Verses */
+            reward_verses: number;
+            /** Reward Xp */
+            reward_xp: number;
+            /** Target */
+            target: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * QuestsCard
+         * @description Задания игрока: дневные и недельные.
+         */
+        QuestsCard: {
+            /** Daily */
+            daily: components["schemas"]["QuestCard"][];
+            /** Weekly */
+            weekly: components["schemas"]["QuestCard"][];
         };
         /**
          * QueuePoolCard
@@ -1751,6 +2056,42 @@ export interface components {
             blocks: components["schemas"]["SoloBlocks"];
         };
         /**
+         * SpinCard
+         * @description Сегодняшний результат спина (если крутили).
+         */
+        SpinCard: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            prize: components["schemas"]["PrizeCard"];
+            /** Repeated */
+            repeated: boolean;
+            /** Sector Key */
+            sector_key: string;
+            /**
+             * Spun At
+             * Format: date-time
+             */
+            spun_at: string;
+        };
+        /**
+         * StreakCard
+         * @description Серия дейлика по домену.
+         */
+        StreakCard: {
+            /** Best */
+            best: number;
+            /** Current */
+            current: number;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+        };
+        /**
          * Subject
          * @description Кто смотрит страницу.
          */
@@ -1791,6 +2132,18 @@ export interface components {
             title_key: string;
         };
         /**
+         * WalletCard
+         * @description Версы игрока (progression ``/v1/me/wallet``).
+         */
+        WalletCard: {
+            /** Earned */
+            earned: number;
+            /** Paid */
+            paid: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * WeeklyEntryCard
          * @description Строка топа недели.
          */
@@ -1822,6 +2175,38 @@ export interface components {
              * Format: date
              */
             week_start: string;
+        };
+        /**
+         * WheelCard
+         * @description Состояние колеса на сегодня (progression ``/v1/wheel``).
+         */
+        WheelCard: {
+            /** Can Spin */
+            can_spin: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Next Spin At
+             * @description null — можно крутить
+             */
+            next_spin_at: string | null;
+            /** Sectors */
+            sectors: components["schemas"]["WheelSectorCard"][];
+            /** @description null — сегодня не крутили */
+            today?: components["schemas"]["SpinCard"] | null;
+        };
+        /**
+         * WheelSectorCard
+         * @description Сектор колеса: название, шанс и приз — из ответа progression.
+         */
+        WheelSectorCard: {
+            /** Chance */
+            chance: number;
+            /** Key */
+            key: string;
+            prize: components["schemas"]["PrizeCard"];
+            /** Title */
+            title: string;
         };
     };
     responses: never;
@@ -2208,6 +2593,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OnlinePage"];
+                };
+            };
+        };
+    };
+    player_page_v1_pages_players__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    profile_page_v1_pages_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfilePage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

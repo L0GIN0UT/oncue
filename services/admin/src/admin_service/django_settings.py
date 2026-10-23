@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "admin_service.apps.collections",
     "admin_service.apps.matches",
     "admin_service.apps.rating",
+    "admin_service.apps.progression",
 ]
 
 MIDDLEWARE = [

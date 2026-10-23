@@ -29,6 +29,7 @@ GAME, CATALOG, IDENTITY = "http://game.test", "http://catalog.test", "http://ide
 COLLECTIONS, LIBRARY = "http://collections.test", "http://library.test"
 MATCH = "http://match.test"
 RATING = "http://rating.test"
+PROGRESSION = "http://progression.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -213,6 +214,7 @@ class Stubs:
     library: ServiceStub
     match: ServiceStub
     rating: ServiceStub
+    progression: ServiceStub
 
 
 @dataclass
@@ -237,6 +239,7 @@ def stubs() -> Iterator[Stubs]:
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
             match=stack.enter_context(stub_service(MATCH, service="match")),
             rating=stack.enter_context(stub_service(RATING, service="rating")),
+            progression=stack.enter_context(stub_service(PROGRESSION, service="progression")),
         )
 
 
@@ -256,6 +259,7 @@ async def bff(
             "library_url": LIBRARY,
             "match_url": MATCH,
             "rating_url": RATING,
+            "progression_url": PROGRESSION,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -295,6 +299,7 @@ async def test_home_for_user_all_ok(bff: Bff) -> None:
     token = bff.issuer.issue()
     bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES)
     daily = bff.stubs.game.route("GET", "/v1/daily").respond(200, json=DAILY)
+    _progression_routes(bff)
 
     response = await bff.client.get("/v1/pages/home", headers=bff.bearer(token))
 
@@ -302,6 +307,7 @@ async def test_home_for_user_all_ok(bff: Bff) -> None:
     assert response.headers["cache-control"] == PRIVATE
     assert "Cookie" in response.headers["vary"]
     blocks = response.json()["blocks"]
+    assert blocks["progress"]["status"] == "ok"
     assert blocks["modes"]["status"] == "ok"
     assert [m["key"] for m in blocks["modes"]["data"]] == [m["key"] for m in MODES]
     assert blocks["modes"]["data"][1]["presets"] == [{"id": "y2000", "title_key": "presets.y2000"}]
@@ -353,6 +359,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
             "dailies": {"status": "unavailable", "data": None},
             "modes": {"status": "unavailable", "data": None},
             "weekly": {"status": "unavailable", "data": None},
+            "progress": None,
         }
     }
 
@@ -1645,3 +1652,447 @@ async def test_leaderboards_page_validates_query(bff: Bff) -> None:
     for params in ({"ladder": "Film!"}, {"around": "all"}, {"cursor": "bad cursor"}):
         response = await bff.client.get("/v1/pages/leaderboards", params=params)
         assert response.status_code == 422, params
+
+
+# ----------------------------------------------------------------------------- прогрессия (5a)
+PROG_PROGRESS = {
+    "level": 7,
+    "max_level": 100,
+    "total_xp": 3700,
+    "xp_in_level": 120,
+    "xp_to_next": 380,
+    "solo_xp_today": 300,
+    "solo_xp_cap": 2000,
+    "streaks": [
+        {"domain": "music", "current": 3, "best": 9, "last_day": "2026-10-22"},
+        {"domain": "film", "current": 5, "best": 5, "last_day": "2026-10-22"},
+    ],
+    "boost": {"multiplier": 1.5, "matches_left": 2},
+    "boosts_queued": 0,
+    "config_version": 1,
+}
+PROG_WALLET = {
+    "currency": "verses",
+    "earned": 40,
+    "paid": 0,
+    "total": 40,
+    "recent": [
+        {
+            "op_id": "o1",
+            "direction": "credit",
+            "amount": 5,
+            "bucket": "earned",
+            "reason": "daily",
+            "at": "2026-10-22T10:00:00Z",
+        }
+    ],
+}
+_REWARD = {"xp": 50, "verses": 5}
+PROG_QUESTS = {
+    "daily": {
+        "period": "daily",
+        "period_start": "2026-10-23",
+        "period_end": "2026-10-23",
+        "items": [
+            {
+                "key": "play_three",
+                "title": "Сыграй три раунда",
+                "description": "Любой режим",
+                "target": 3,
+                "progress": 3,
+                "completed": True,
+                "reward": _REWARD,
+            },
+            {
+                "key": "win_duel",
+                "title": "Выиграй дуэль",
+                "description": "Онлайн",
+                "target": 1,
+                "progress": 0,
+                "completed": False,
+                "reward": _REWARD,
+            },
+        ],
+    },
+    "weekly": {
+        "period": "weekly",
+        "period_start": "2026-10-19",
+        "period_end": "2026-10-25",
+        "items": [
+            {
+                "key": "streak_week",
+                "title": "Неделя дейликов",
+                "description": "7 дней",
+                "target": 7,
+                "progress": 2,
+                "completed": False,
+                "reward": {"xp": 300, "verses": 20},
+            }
+        ],
+    },
+    "one_time": {
+        "period": "one_time",
+        "period_start": "2026-10-01",
+        "period_end": None,
+        "items": [
+            {
+                "key": "first_collection",
+                "title": "Первый сборник",
+                "description": "Опубликуй сборник",
+                "target": 1,
+                "progress": 0,
+                "completed": False,
+                "reward": _REWARD,
+            }
+        ],
+    },
+}
+PROG_BADGES = {
+    "items": [
+        {
+            "key": "first_win",
+            "title": "Первая победа",
+            "description": "Выиграй дуэль",
+            "target": 1,
+            "progress": 1,
+            "unlocked_at": "2026-10-20T12:00:00Z",
+        },
+        {
+            "key": "streak_7",
+            "title": "Неделя подряд",
+            "description": "Серия 7",
+            "target": 7,
+            "progress": 3,
+            "unlocked_at": None,
+        },
+    ]
+}
+_PRIZE_NONE = {"kind": "none", "amount": 0, "multiplier": None, "matches": None, "item_key": None}
+PROG_WHEEL = {
+    "enabled": True,
+    "day": "2026-10-23",
+    "today": None,
+    "next_spin_at": None,
+    "config_version": 1,
+    "sectors": [
+        {
+            "key": "verses_5",
+            "title": "5 Версов",
+            "weight": 30,
+            "chance": 0.3,
+            "prize": {**_PRIZE_NONE, "kind": "verses", "amount": 5},
+        },
+        {"key": "empty", "title": "Пусто", "weight": 70, "chance": 0.7, "prize": _PRIZE_NONE},
+    ],
+}
+PROG_SPUN = {
+    **PROG_WHEEL,
+    "today": {
+        "day": "2026-10-23",
+        "sector_key": "empty",
+        "prize": _PRIZE_NONE,
+        "spun_at": "2026-10-23T08:00:00Z",
+        "repeated": False,
+    },
+    "next_spin_at": "2026-10-24T00:00:00Z",
+}
+
+
+def _progression_routes(bff: Bff, *, wheel: dict[str, Any] = PROG_WHEEL) -> dict[str, respx.Route]:
+    stub = bff.stubs.progression
+    return {
+        "progress": stub.route("GET", "/v1/me/progress").respond(200, json=PROG_PROGRESS),
+        "wallet": stub.route("GET", "/v1/me/wallet").respond(200, json=PROG_WALLET),
+        "quests": stub.route("GET", "/v1/me/quests").respond(200, json=PROG_QUESTS),
+        "badges": stub.route("GET", "/v1/me/badges").respond(200, json=PROG_BADGES),
+        "wheel": stub.route("GET", "/v1/wheel").respond(200, json=wheel),
+    }
+
+
+async def test_profile_page_all_blocks_ok(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    routes = _progression_routes(bff)
+
+    response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    blocks = response.json()["blocks"]
+    assert set(blocks) == {"progress", "wallet", "quests", "badges", "wheel"}
+    progress = blocks["progress"]["data"]
+    assert (progress["level"], progress["xp_in_level"], progress["xp_to_next"]) == (7, 120, 380)
+    assert progress["boost"] == {"multiplier": 1.5, "matches_left": 2}
+    assert [(s["domain"], s["current"], s["best"]) for s in progress["streaks"]] == [
+        ("music", 3, 9),
+        ("film", 5, 5),
+    ]
+    assert (progress["solo_xp_today"], progress["solo_xp_cap"]) == (300, 2000)
+    assert blocks["wallet"]["data"] == {"earned": 40, "paid": 0, "total": 40}
+    daily = blocks["quests"]["data"]["daily"]
+    assert [q["title"] for q in daily] == ["Сыграй три раунда", "Выиграй дуэль"]
+    assert daily[0]["reward_xp"] == 50 and daily[0]["completed"] is True
+    assert blocks["quests"]["data"]["weekly"][0]["reward_verses"] == 20
+    assert [b["key"] for b in blocks["badges"]["data"]] == ["first_win", "streak_7"]
+    assert blocks["badges"]["data"][1]["unlocked_at"] is None
+    wheel = blocks["wheel"]["data"]
+    assert (wheel["enabled"], wheel["can_spin"], wheel["next_spin_at"]) == (True, True, None)
+    assert [(s["key"], s["title"], s["chance"]) for s in wheel["sectors"]] == [
+        ("verses_5", "5 Версов", 0.3),
+        ("empty", "Пусто", 0.7),
+    ]
+    assert wheel["today"] is None
+    for route in routes.values():
+        assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_profile_page_wheel_already_spun(bff: Bff) -> None:
+    _progression_routes(bff, wheel=PROG_SPUN)
+
+    response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
+
+    wheel = response.json()["blocks"]["wheel"]["data"]
+    assert wheel["can_spin"] is False
+    assert wheel["next_spin_at"] == "2026-10-24T00:00:00Z"
+    assert wheel["today"]["sector_key"] == "empty"
+
+
+async def test_profile_page_anonymous_and_guest_do_not_call_sources(bff: Bff) -> None:
+    routes = _progression_routes(bff)
+    guest = bff.bearer(bff.issuer.issue_guest())
+
+    assert_problem(await bff.client.get("/v1/pages/profile"), 401, "auth.unauthenticated")
+    assert_problem(
+        await bff.client.get("/v1/pages/profile", headers=guest), 403, "auth.guest_forbidden"
+    )
+    assert all(route.call_count == 0 for route in routes.values())
+
+
+@pytest.mark.parametrize("block", ["progress", "wallet", "quests", "badges", "wheel"])
+@pytest.mark.parametrize("failure", ["503", "501", "timeout", "garbage"])
+async def test_profile_page_each_block_degrades_independently(
+    bff: Bff, block: str, failure: str
+) -> None:
+    routes = _progression_routes(bff)
+    route = routes[block]
+    if failure == "timeout":
+        route.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "garbage":
+        route.respond(200, json={"nope": 1})
+    else:
+        route.respond(int(failure), json={"code": "core.not_implemented", "status": int(failure)})
+
+    response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == PRIVATE
+    blocks = response.json()["blocks"]
+    for name, value in blocks.items():
+        if name == block:
+            assert value == UNAVAILABLE
+        else:
+            assert value["status"] == "ok", name
+
+
+async def test_profile_page_source_401_is_screen_401(bff: Bff) -> None:
+    routes = _progression_routes(bff)
+    routes["progress"].respond(
+        401, json={"code": "auth.unauthenticated", "title": "x", "status": 401}
+    )
+
+    response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
+
+    assert_problem(response, 401, "auth.unauthenticated")
+
+
+async def test_profile_page_progression_down_is_200_all_unavailable(bff: Bff) -> None:
+    bff.stubs.progression.route("GET", "/v1/me/progress").respond(503)
+    for path in ("/v1/me/wallet", "/v1/me/quests", "/v1/me/badges", "/v1/wheel"):
+        bff.stubs.progression.route("GET", path).mock(side_effect=httpx.ConnectError("refused"))
+
+    response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    assert response.json() == {"blocks": dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)}
+
+
+PROFILE_BLOCKS = ("progress", "wallet", "quests", "badges", "wheel")
+
+
+def _home_game(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[])
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=[])
+
+
+async def test_home_progress_block_for_user(bff: Bff) -> None:
+    _home_game(bff)
+    routes = _progression_routes(bff)
+    token = bff.issuer.issue()
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json()["blocks"]["progress"] == {
+        "status": "ok",
+        "data": {
+            "level": 7,
+            "xp_in_level": 120,
+            "xp_to_next": 380,
+            "best_streak": 5,
+            "can_spin": True,
+            "quests_open": 1,
+        },
+    }
+    assert routes["wallet"].call_count == 0  # главной кошелёк и бейджи не нужны
+    assert routes["badges"].call_count == 0
+
+
+async def test_home_progress_can_spin_false_when_spun(bff: Bff) -> None:
+    _home_game(bff)
+    _progression_routes(bff, wheel=PROG_SPUN)
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.json()["blocks"]["progress"]["data"]["can_spin"] is False
+
+
+async def test_home_progress_wheel_disabled_means_cannot_spin(bff: Bff) -> None:
+    _home_game(bff)
+    _progression_routes(bff, wheel={**PROG_WHEEL, "enabled": False})
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.json()["blocks"]["progress"]["data"]["can_spin"] is False
+
+
+@pytest.mark.parametrize("source", ["progress", "quests", "wheel"])
+@pytest.mark.parametrize("failure", ["503", "timeout"])
+async def test_home_progress_any_source_failure_hides_only_block(
+    bff: Bff, source: str, failure: str
+) -> None:
+    _home_game(bff)
+    route = _progression_routes(bff)[source]
+    if failure == "timeout":
+        route.mock(side_effect=httpx.ReadTimeout("slow"))
+    else:
+        route.respond(503)
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["progress"] == UNAVAILABLE
+    assert blocks["modes"]["status"] == "ok"
+    assert blocks["dailies"]["status"] == "ok"
+
+
+async def test_home_progress_is_null_for_guest_and_anonymous_without_calls(bff: Bff) -> None:
+    _home_game(bff)
+    routes = _progression_routes(bff)
+
+    anonymous = await bff.client.get("/v1/pages/home")
+    guest = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue_guest()))
+
+    assert anonymous.json()["blocks"]["progress"] is None
+    assert guest.json()["blocks"]["progress"] is None
+    assert all(route.call_count == 0 for route in routes.values())
+
+
+async def test_home_cache_headers_by_viewer(bff: Bff) -> None:
+    """Аноним — публично; гость (личные дейлики) и пользователь с блоком progress — private."""
+    _home_game(bff)
+    _progression_routes(bff)
+
+    anonymous = await bff.client.get("/v1/pages/home")
+    guest = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue_guest()))
+    user = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue()))
+
+    assert anonymous.headers["cache-control"] == PUBLIC
+    assert guest.headers["cache-control"] == PRIVATE
+    assert user.headers["cache-control"] == PRIVATE
+    assert user.json()["blocks"]["progress"]["status"] == "ok"
+
+
+async def test_home_rejected_token_does_not_reach_progression(bff: Bff) -> None:
+    _home_game(bff)
+    routes = _progression_routes(bff)
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer("not-a-jwt"))
+
+    assert response.json()["blocks"]["progress"] is None
+    assert all(route.call_count == 0 for route in routes.values())
+
+
+async def test_profile_mixed_401_403_follows_block_order(bff: Bff) -> None:
+    """Первым по порядку блоков (progress, wallet, quests, badges, wheel) решает ответ."""
+    routes = _progression_routes(bff)
+    routes["wheel"].respond(401, json={"code": "auth.unauthenticated", "status": 401})
+    routes["progress"].respond(403, json={"code": "auth.forbidden", "status": 403})
+
+    response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
+
+    assert_problem(response, 403, "auth.forbidden")
+
+
+PLAYER_ID = "0192a3b4-c5d6-7e8f-9a0b-000000000901"
+PLAYER = {
+    "user_id": PLAYER_ID,
+    "level": 5,
+    "total_xp": 2600,
+    "badges": [
+        {"key": "first_win", "title": "Первая победа", "unlocked_at": "2026-10-20T12:00:00Z"}
+    ],
+}
+
+
+async def test_player_page_ok(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    route = bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(
+        200, json=PLAYER
+    )
+
+    response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json() == {"blocks": {"progress": {"status": "ok", "data": PLAYER}}}
+    assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_player_page_anonymous_and_guest_do_not_call_sources(bff: Bff) -> None:
+    route = bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(
+        200, json=PLAYER
+    )
+    guest = bff.bearer(bff.issuer.issue_guest())
+
+    assert_problem(
+        await bff.client.get(f"/v1/pages/players/{PLAYER_ID}"), 401, "auth.unauthenticated"
+    )
+    assert_problem(
+        await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=guest),
+        403,
+        "auth.guest_forbidden",
+    )
+    assert route.call_count == 0
+
+
+async def test_player_page_unknown_player_is_404_and_down_is_unavailable(bff: Bff) -> None:
+    route = bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress")
+    headers = bff.bearer(bff.issuer.issue())
+
+    route.respond(404, json={"code": "progression.user_not_found", "status": 404})
+    assert_problem(
+        await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=headers),
+        404,
+        "progression.user_not_found",
+    )
+
+    route.respond(503)
+    response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"blocks": {"progress": UNAVAILABLE}}
+
+
+async def test_player_page_requires_uuid(bff: Bff) -> None:
+    response = await bff.client.get("/v1/pages/players/not-a-uuid")
+    assert response.status_code == 422
