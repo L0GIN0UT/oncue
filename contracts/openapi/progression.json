@@ -19,16 +19,23 @@
             "type": "string"
           },
           "unlocked_total": {
-            "minimum": 0.0,
-            "title": "Unlocked Total",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - счётчиков ещё нет (данные появятся с бейджами)",
+            "title": "Unlocked Total"
           }
         },
         "required": [
           "key",
           "title",
-          "enabled",
-          "unlocked_total"
+          "enabled"
         ],
         "title": "AdminBadgeCard",
         "type": "object"
@@ -194,9 +201,17 @@
         "description": "Задание действующего конфига со статистикой.",
         "properties": {
           "completed_total": {
-            "minimum": 0.0,
-            "title": "Completed Total",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - счётчиков ещё нет (данные появятся с заданиями)",
+            "title": "Completed Total"
           },
           "enabled": {
             "title": "Enabled",
@@ -230,8 +245,7 @@
           "period",
           "title",
           "reward",
-          "enabled",
-          "completed_total"
+          "enabled"
         ],
         "title": "AdminQuestCard",
         "type": "object"
@@ -384,6 +398,12 @@
       "ConfigVersionCard": {
         "description": "Версия конфига progression.",
         "properties": {
+          "body_sha256": {
+            "description": "sha256 канонического JSON тела; публикация привязана к нему",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -425,7 +445,8 @@
           "version",
           "status",
           "created_at",
-          "created_by"
+          "created_by",
+          "body_sha256"
         ],
         "title": "ConfigVersionCard",
         "type": "object"
@@ -503,11 +524,9 @@
             "type": "integer"
           },
           "bucket": {
+            "const": "earned",
             "default": "earned",
-            "enum": [
-              "earned",
-              "paid"
-            ],
+            "description": "В 5a ручная выдача только в `earned` (`paid` - с 5b)",
             "title": "Bucket",
             "type": "string"
           },
@@ -587,9 +606,16 @@
           },
           "entry": {
             "$ref": "#/components/schemas/AdminLedgerEntry"
+          },
+          "user_id": {
+            "description": "Владелец проводки",
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
           }
         },
         "required": [
+          "user_id",
           "entry",
           "balance_after"
         ],
@@ -963,6 +989,12 @@
         "additionalProperties": false,
         "description": "Опубликовать черновик: новая версия действует со следующего периода заданий.",
         "properties": {
+          "body_sha256": {
+            "description": "`body_sha256` черновика, который видел админ (иначе 409 `draft_changed`)",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
           "reason": {
             "maxLength": 500,
             "minLength": 3,
@@ -970,7 +1002,7 @@
             "type": "string"
           },
           "version": {
-            "description": "Версия черновика (защита от гонки правок)",
+            "description": "Версия черновика",
             "minimum": 1.0,
             "title": "Version",
             "type": "integer"
@@ -978,6 +1010,7 @@
         },
         "required": [
           "version",
+          "body_sha256",
           "reason"
         ],
         "title": "PublishRequest",
@@ -1325,7 +1358,7 @@
   "paths": {
     "/admin/v1/badges": {
       "get": {
-        "description": "Бейджи действующего конфига с числом выданных. Правка — через черновик.",
+        "description": "Бейджи действующего конфига с числом выданных. Правка - через черновик.",
         "operationId": "badges_admin_v1_badges_get",
         "responses": {
           "200": {
@@ -1368,7 +1401,7 @@
             },
             "description": "Недостаточно прав"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1381,7 +1414,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Бейджи",
@@ -1434,21 +1467,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Версии конфига",
@@ -1459,7 +1477,7 @@
     },
     "/admin/v1/configs/draft": {
       "put": {
-        "description": "Заменяет черновик; конфиг проверяется целиком. Ошибки: 422 `progression.config_invalid` (`details.errors` — пути и причины).",
+        "description": "Заменяет черновик (он один); конфиг проверяется целиком. Ошибки: 422 `progression.config_invalid` (`details.errors` - пути и причины).",
         "operationId": "save_draft_admin_v1_configs_draft_put",
         "parameters": [
           {
@@ -1561,21 +1579,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сохранить черновик",
@@ -1586,7 +1589,7 @@
     },
     "/admin/v1/configs/draft/publish": {
       "post": {
-        "description": "Новая версия действует для новых проводок; задания меняются со следующего периода. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_not_draft`.",
+        "description": "Новая версия действует для новых проводок, прошлое не пересчитывается; прежняя действующая уходит в архив. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_not_draft`, 409 `progression.draft_changed` (тело черновика изменилось).",
         "operationId": "publish_admin_v1_configs_draft_publish_post",
         "parameters": [
           {
@@ -1703,21 +1706,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Опубликовать черновик",
@@ -1814,21 +1802,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Версия конфига",
@@ -1839,7 +1812,7 @@
     },
     "/admin/v1/configs/{version}/rollback": {
       "post": {
-        "description": "Копия старой версии становится новым черновиком. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_never_published`.",
+        "description": "Копия старой версии становится черновиком (заменяет текущий). Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_never_published`.",
         "operationId": "rollback_admin_v1_configs__version__rollback_post",
         "parameters": [
           {
@@ -1968,21 +1941,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Откатить к версии",
@@ -1993,7 +1951,7 @@
     },
     "/admin/v1/ledger/{op_id}/reverse": {
       "post": {
-        "description": "Встречная проводка со ссылкой `reversal_of`; журнал не правится. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).",
+        "description": "Встречная проводка со ссылкой `reversal_of`; журнал не правится; только журнал Версов, только кредиты. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.not_reversible` (дебет, сторно, проводка опыта), 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).",
         "operationId": "reverse_admin_v1_ledger__op_id__reverse_post",
         "parameters": [
           {
@@ -2124,7 +2082,7 @@
             },
             "description": "Некорректные данные"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2137,7 +2095,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Сторнировать проводку",
@@ -2148,7 +2106,7 @@
     },
     "/admin/v1/quests": {
       "get": {
-        "description": "Задания действующего конфига с числом выполнений. Правка — через черновик.",
+        "description": "Задания действующего конфига с числом выполнений. Правка - через черновик.",
         "operationId": "quests_admin_v1_quests_get",
         "responses": {
           "200": {
@@ -2191,7 +2149,7 @@
             },
             "description": "Недостаточно прав"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2204,7 +2162,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Задания",
@@ -2215,7 +2173,7 @@
     },
     "/admin/v1/users/{user_id}/ledger": {
       "get": {
-        "description": "Проводки Версов, новые первыми, курсорная пагинация.",
+        "description": "Проводки Версов, новые первыми, курсорная пагинация. Ошибки: 404 `progression.user_not_found`.",
         "operationId": "ledger_admin_v1_users__user_id__ledger_get",
         "parameters": [
           {
@@ -2330,21 +2288,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Журнал игрока",
@@ -2355,7 +2298,7 @@
     },
     "/admin/v1/users/{user_id}/ledger/grant": {
       "post": {
-        "description": "Проводка `admin:{Idempotency-Key}`; предел — `admin.grant_max_amount` и `admin.grant_max_per_user_day` конфига. Ошибки: 404 `progression.user_not_found`, 422 `progression.grant_limit_exceeded`.",
+        "description": "Проводка `admin:{Idempotency-Key}`; предел - `admin.grant_max_amount` и `admin.grant_max_per_user_day` конфига. Ошибки: 404 `progression.user_not_found`, 422 `progression.grant_limit_exceeded`, 422 `progression.reason_too_short`.",
         "operationId": "grant_admin_v1_users__user_id__ledger_grant_post",
         "parameters": [
           {
@@ -2485,7 +2428,7 @@
             },
             "description": "Некорректные данные"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2498,7 +2441,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Выдать Версы вручную",
