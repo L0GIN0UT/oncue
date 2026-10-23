@@ -64,7 +64,7 @@
 `ExperienceGained`, `ProgressionLevelChanged`, `CurrencyCredited`, `CurrencyDebited`, `QuestCompleted`, `BadgeUnlocked`, `WheelSpun` — JSON Schema + примеры в `contracts/events/progression/`. Ключ партиции — `user_id`. В событиях `CurrencyCredited/Debited` — `op_id`, `bucket`, `reason`, `actor_id` (для ручных).
 
 ### 2.2. Правка rating (входные данные для наград)
-- **Новое событие `rating.SeasonStandingsFinalized` v1:** топ-1000 пачками ≤ 500, aggregate `{season}:{chunk}`. Причина: в `SeasonFinished` мест нет, синхронный вызов rating запрещён.
+- **Новое событие `rating.SeasonStandingsFinalized` v1:** топ-1000 пачками ≤ 500, aggregate `{season}:{chunk}`. Причина: в `SeasonFinished` мест нет, синхронный вызов rating запрещён. Глубина и размер пачки — настройки rating `standings_top_size`/`standings_chunk_size` (`GV_RATING__*`); в таблицу входят игроки лидерборда (вне калибровки, `min_matches`), порядок: рейтинг по убыванию, затем `user_id`. Реализовано в 0a.
 - **`WeeklyTopFinalized` не меняется:** топ недели — топ-100, разряды 101–1000 только у сезона. Решение владельца (см. D5), не ограничение.
 - Правка `services/rating/**` — только публикация нового события; делает оркестратор в 0a.
 
