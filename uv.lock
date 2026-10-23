@@ -1860,21 +1860,25 @@ name = "guessverse-progression"
 version = "0.1.0"
 source = { editable = "services/progression" }
 dependencies = [
+    { name = "aioboto3" },
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "pillow" },
     { name = "python-multipart" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aioboto3", specifier = ">=13" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "pillow", specifier = ">=13" },
     { name = "python-multipart", specifier = ">=0.0.12" },
 ]
 

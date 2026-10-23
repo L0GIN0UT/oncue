@@ -65,11 +65,12 @@ identity подписывает connection-токены, match — subscription-
 """
 
 
-REALTIME_PUBLISHERS: frozenset[str] = frozenset({"match"})
+REALTIME_PUBLISHERS: frozenset[str] = frozenset({"match", "notifications"})
 """Сервисы, которые публикуют в Centrifugo через server API (получают ``GV_REALTIME__API_*``).
 
 identity только подписывает connection-токены: ключ server API ему не нужен (минимум прав —
-утечка env identity не даёт публиковать в каналы комнат). rating добавится на этапе 4b.
+утечка env identity не даёт публиковать в каналы комнат). notifications (5b) публикует в личные
+каналы ``personal:#<user>``, токенов не выдаёт и не подписывает.
 Сервис из этого множества обязан иметь ``realtime = true`` в реестре (проверяет ``gv gen``).
 """
 

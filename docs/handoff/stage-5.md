@@ -56,7 +56,14 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 | 0a контракты (события, конфиг, OpenAPI, права identity) | сделано, ждёт ревью и коммита (ниже) |
 | S1 ∥ S2 → S3 ∥ S4 → S5 → 0b | — |
 
-### Шаг 0a (сделано, не закоммичено)
+### Решения владельца после 0a (2026-10-23)
+- Типы уведомлений — файловый конфиг в пакете notifications (как профили media-pipeline), не версии в БД; admin-API позже только для включения и выключения типа (хвост в roadmap).
+- Картинки и анимации предметов грузит и хранит progression (S3-адаптер, Pillow, бакет `GV_COSMETICS_BUCKET`/`gv-cosmetics`, публичный префикс `/cosmetics/c/<hex>.webp|png` на gateway). Модерация публичным предметам не нужна.
+- Копия `SmtpEmailSender` в notifications принята, вынос в `libs/` — хвост.
+- Шаг 0a.1 (инфраструктура, orchestrator): `services.toml` — progression `redis`+`s3`, notifications `redis`+`realtime` (`REALTIME_PUBLISHERS` в `generate.py`), nginx `/cosmetics/` и `GV_COSMETICS_BUCKET`, зависимости progression `Pillow`, `aioboto3`. Политику анонимного чтения префикса `c/` и создание бакета делает S1 в job migrate (по образцу media-pipeline).
+- Потоки: S1 `stage5b/s1-shop`, S2 `stage5b/s2-notifications` (worktree-ы от `stage5b/integration`, по `tdd-guide`); после каждого один ревьюер (S1 — `security-reviewer`, S2 — только unsubscribe и рассылка); коммиты потоков — после «да» владельца.
+
+### Шаг 0a (сделано, закоммичено `c25d138`)
 - События: `progression.{ItemPurchased,ItemEquipped,PromoRedeemed}` и `media_pipeline.AssetModerated` (топик `media_pipeline.ugc_image.v1`) со схемами и примерами; `contracts/notifications/notification_types.v1.json` (схема типов уведомлений и пример; контрактный тест сверяет поля с схемами событий).
 - Конфиг progression: необязательные секции `shop`, `promo`, `spend` (схема и пример); домен их пока не разбирает — поток S1 (в `test_config_bounds.py` префиксы `shop.|promo.|spend.` временно в `OTHER_STREAMS`, S1 их убирает).
 - Заглушки 501: progression `api/public/shop*.py`, `api/admin/shop*.py`; media_pipeline `api/ugc.py` (internal приём + admin-очередь); notifications `api/{public,admin,schemas}`; bff `/pages/shop`, `/pages/shell`, null-блоки `appearance|inventory|avatar` (профиль, игрок, итог матча). Зависимость `python-multipart` добавлена в progression.

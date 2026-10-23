@@ -358,7 +358,8 @@ class TestRealtime:
 
     def test_registry_flags(self) -> None:
         realtime = {s.name for s in load_services(ROOT) if s.realtime}
-        assert realtime == {"identity", "match"}  # rating — в 4b
+        # notifications (5b) публикует в личный канал `personal:#<user>`, токенов не выдаёт
+        assert realtime == {"identity", "match", "notifications"}
 
     def test_flag_defaults_to_false(self, tmp_path: Path) -> None:
         (service,) = load_services(_registry(tmp_path, '[services.a]\ndescription="x"\n'))
@@ -383,9 +384,14 @@ class TestRealtime:
             "${CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET:?"
         )
         assert "GV_REALTIME__CONNECTION_TOKEN_SECRET" not in match
+        # notifications публикует (ключ server API), но токенов не подписывает.
+        notifications = services["notifications"]["environment"]
+        assert notifications["GV_REALTIME__API_KEY"].startswith("${CENTRIFUGO_API_KEY:?")
+        assert "GV_REALTIME__CONNECTION_TOKEN_SECRET" not in notifications
+        assert "GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET" not in notifications
         # API-ключ — только у сервисов с realtime = true.
         for name, svc in services.items():
-            if name not in {"identity", "match"}:
+            if name not in {"identity", "match", "notifications"}:
                 env = svc.get("environment", {})
                 assert not any(k.startswith("GV_REALTIME__") for k in env), name
 

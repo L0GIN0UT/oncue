@@ -161,6 +161,9 @@
 - этап 7: разделение ролей Postgres для журналов progression (владелец миграций / рабочая роль SELECT, INSERT) - риск принят владельцем.
 - этап 7: инкрементальная сверка журнала progression вместе с партиционированием.
 - этап 7: ретенция metric_marks / quest_progress (очистка или партиционирование).
+- после 5b: admin-API для включения и выключения типов уведомлений (сами типы, шаблоны и маппинг остаются файловым конфигом в пакете notifications: новый тип требует кода consumer-а и рендера на фронте) — решение владельца 2026-10-23.
+- после 5b: вынести `SmtpEmailSender`/`LogEmailSender`/`BackgroundEmailSender` из identity и notifications в `libs/` (в 5b — копия в notifications «по образцу identity»).
+- 5b (S3): `client_max_body_size 2m` на gateway ограничивает загрузку своей аватарки; лимит размера в конфиге media-pipeline не выше него.
 
 ## Этап 6. Интеграции и биллинг
 - integrations: Shikimori/AniList, Trakt, Spotify, Яндекс (после проверки API). Экспорт и синхронизация.

@@ -510,8 +510,12 @@ services:
       <<: *common-env
       GV_SERVICE_NAME: progression
       GV_DATABASE_URL: postgresql+asyncpg://progression:${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}@postgres:5432/progression
+      GV_S3__ENDPOINT: http://s3:9000
+      GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
+      GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
     depends_on:
       postgres: {condition: service_healthy}
+      s3: {condition: service_healthy}
     deploy:
       resources:
         limits: {memory: 256M}
@@ -529,11 +533,17 @@ services:
       GV_SERVICE_NAME: progression
       GV_DATABASE_URL: postgresql+asyncpg://progression:${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}@postgres:5432/progression
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
+      GV_S3__ENDPOINT: http://s3:9000
+      GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
+      GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
       GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
     depends_on:
       progression-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
+      s3: {condition: service_healthy}
     deploy:
       resources:
         limits: {memory: 256M}
@@ -656,11 +666,17 @@ services:
       GV_SERVICE_NAME: notifications
       GV_DATABASE_URL: postgresql+asyncpg://notifications:${PG_PASSWORD_NOTIFICATIONS:?задайте PG_PASSWORD_NOTIFICATIONS}@postgres:5432/notifications
       GV_DATABASE_POOL_SIZE: "5"
+      GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+      # Centrifugo (D9 этапа 4): server API для публикаций — только публикующим сервисам.
+      GV_REALTIME__API_URL: http://centrifugo:8000/api
+      GV_REALTIME__API_KEY: ${CENTRIFUGO_API_KEY:?задайте CENTRIFUGO_API_KEY}
+      # Секрет токенов Centrifugo — свой у каждого сервиса (D9).
       GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
     depends_on:
       notifications-migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
       redpanda: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     deploy:

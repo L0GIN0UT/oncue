@@ -28,6 +28,7 @@ services:
       # не стартует, а пустое значение дало бы ссылки, которые подделает кто угодно.
       GV_MEDIA_SIGNING_SECRET: ${GV_MEDIA_SIGNING_SECRET:?задайте GV_MEDIA_SIGNING_SECRET}
       GV_MEDIA_ASSETS_BUCKET: ${GV_MEDIA_ASSETS_BUCKET:-gv-assets}
+      GV_COSMETICS_BUCKET: ${GV_COSMETICS_BUCKET:-gv-cosmetics}
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../nginx/generated:/etc/nginx/generated:ro
