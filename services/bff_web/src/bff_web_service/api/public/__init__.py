@@ -30,6 +30,7 @@ from bff_web_service.api.public.schemas import (
     LibraryShelfPage,
     MatchPage,
     OnlinePage,
+    PlayerPage,
     ProfilePage,
     ResultsPage,
     SessionInfo,
@@ -41,8 +42,6 @@ from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
 from gv_core.errors import (
     DependencyUnavailableError,
-    ForbiddenError,
-    NotImplementedYetError,
     UnauthenticatedError,
 )
 from gv_service import problem_responses
@@ -167,19 +166,34 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         summary="Профиль: прогресс, кошелёк, задания, бейджи, колесо",
         description=(
             "Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. "
-            "Блоки из progression гаснут независимо. Шаг 0a: контракт, до потока P4 — 501."
+            "Блоки из progression гаснут независимо (страница 200); отказ токена "
+            "источником — 401/403 экрана."
         ),
-        responses=problem_responses(401, 403, 501),
+        responses=problem_responses(401, 403),
     )
     async def profile_page(viewer: CurrentViewer, response: Response) -> ProfilePage:
-        if viewer.token is None:
-            raise UnauthenticatedError("требуется вход")
-        if viewer.kind is SubjectKind.GUEST:
-            raise ForbiddenError(
-                "профиль доступен только пользователям", code="auth.guest_forbidden"
-            )
+        page = await deps.get_profile(viewer)
         _cache_headers(response, personal=True, policy=policy)
-        raise NotImplementedYetError("профиль появится в потоке P4 этапа 5a")
+        return ProfilePage.model_validate(page, from_attributes=True)
+
+    @router.get(
+        "/pages/players/{user_id}",
+        response_model=PlayerPage,
+        summary="Профиль игрока: уровень, опыт, бейджи",
+        description=(
+            "Публичная часть прогресса чужого (или своего) игрока. Только пользователь с "
+            "аккаунтом: аноним — 401, гость — 403 `auth.guest_forbidden`, источники при этом не "
+            "вызываются. Нет игрока — 404; недоступный progression — блок `unavailable`. "
+            "Всегда `private, no-store`."
+        ),
+        responses=problem_responses(401, 403, 404, 422),
+    )
+    async def player_page(
+        viewer: CurrentViewer, response: Response, user_id: Annotated[UUID, Path()]
+    ) -> PlayerPage:
+        _cache_headers(response, personal=True, policy=policy)
+        page = await deps.get_player(viewer, user_id)
+        return PlayerPage.model_validate(page, from_attributes=True)
 
     @router.get(
         "/pages/solo",
