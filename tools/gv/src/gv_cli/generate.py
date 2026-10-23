@@ -43,11 +43,12 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
 
 
 COOKIE_MUTATION_SERVICES: frozenset[str] = frozenset(
-    {"identity", "game", "collections", "library", "match"}
+    {"identity", "game", "collections", "library", "match", "progression"}
 )
 """Сервисы с мутациями по cookie (CSRF-проверка Origin по ``GV_PUBLIC_ORIGINS``).
 
-bff_web только читает (GET), admin — Django со своей CSRF-защитой.
+progression (этап 5a) — спин колеса. bff_web только читает (GET), admin — Django со своей
+CSRF-защитой.
 """
 
 
