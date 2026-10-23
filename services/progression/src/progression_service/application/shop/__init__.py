@@ -18,6 +18,7 @@ from gv_core.clock import Clock
 from progression_service.application.accrual.common import published_config
 from progression_service.application.accrual.posting import Poster
 from progression_service.application.appearance import AppearanceService
+from progression_service.application.avatar import AvatarService
 from progression_service.application.inventory import (
     InventoryService,
     shop_config,
@@ -72,6 +73,8 @@ class ShopServices:
     appearance: AppearanceService
     promo: PromoService
     public_url: Callable[[str], str]
+    avatars: AvatarService
+    ugc_url: Callable[[str], str]
 
 
 class ShopService:

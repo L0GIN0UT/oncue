@@ -11,7 +11,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
@@ -21,19 +21,24 @@ from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import (
     ANY_SCOPE,
     AdminAction,
+    EncodedImage,
     FetchedSource,
     ImageOps,
     NormalizedMedia,
+    ObjectPage,
     ProfileSetCount,
     RenderedImage,
     ScopeFilter,
     StorageArea,
+    StoredObject,
 )
 from media_pipeline_service.domain.asset_set import AssetSet
 from media_pipeline_service.domain.collections import CollectionState
 from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
+from media_pipeline_service.domain.errors import InvalidUgcImageError
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
 from media_pipeline_service.domain.sources import AssetScope, SourceMedia
+from media_pipeline_service.domain.ugc import UgcImage, UgcPurpose, UgcStatus
 
 from gv_core.domain import AggregateRoot, DomainEvent
 from gv_core.errors import ConflictError
@@ -59,6 +64,8 @@ class MemoryDb:
     events: list[DomainEvent] = field(default_factory=list)
     profiles: dict[UUID, DynamicProfile] = field(default_factory=dict)
     collections: dict[UUID, CollectionState] = field(default_factory=dict)
+    ugc: dict[UUID, UgcImage] = field(default_factory=dict)
+    purge: dict[str, datetime] = field(default_factory=dict)
 
 
 class _Repo:
@@ -335,6 +342,77 @@ class FakeIdempotency(_Repo):
         )
 
 
+class FakeUgc(_Repo):
+    async def add(self, image: UgcImage) -> None:
+        self.db.ugc[image.id] = image
+
+    async def get(self, image_id: UUID, *, for_update: bool = False) -> UgcImage | None:
+        return self.db.ugc.get(image_id)
+
+    async def save(self, image: UgcImage) -> None:
+        self.db.ugc[image.id] = image
+
+    async def list_approved_for_owner(
+        self, owner_user_id: UUID, purpose: str, *, exclude: UUID
+    ) -> list[UgcImage]:
+        return [
+            i
+            for i in self.db.ugc.values()
+            if i.owner_user_id == owner_user_id
+            and i.purpose == purpose
+            and i.status is UgcStatus.APPROVED
+            and i.id != exclude
+        ]
+
+    async def pending_keys(self, keys: Sequence[str]) -> set[str]:
+        return {
+            i.pending_key
+            for i in self.db.ugc.values()
+            if i.status is UgcStatus.PENDING and i.pending_key in keys
+        }  # type: ignore[misc]  # pending_key у pending не None
+
+    async def enqueue_purge(self, keys: Sequence[str], now: datetime) -> None:
+        for key in keys:
+            self.db.purge.setdefault(key, now)
+
+    async def claim_purge(self, limit: int) -> list[str]:
+        return sorted(self.db.purge, key=lambda k: (self.db.purge[k], k))[:limit]
+
+    async def forget_purge(self, keys: Sequence[str]) -> None:
+        for key in keys:
+            self.db.purge.pop(key, None)
+
+    async def lock_owner(self, owner_user_id: UUID, purpose: str) -> None:
+        return None
+
+    async def list_pending_for_owner(self, owner_user_id: UUID, purpose: str) -> list[UgcImage]:
+        return [
+            i
+            for i in self.db.ugc.values()
+            if i.owner_user_id == owner_user_id
+            and i.purpose == purpose
+            and i.status is UgcStatus.PENDING
+        ]
+
+    async def queue(
+        self,
+        status: UgcStatus,
+        purpose: str | None,
+        *,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> list[UgcImage]:
+        rows = [
+            i
+            for i in self.db.ugc.values()
+            if i.status is status and (purpose is None or i.purpose == purpose)
+        ]
+        rows.sort(key=lambda i: (i.submitted_at, i.id))
+        if after is not None:
+            rows = [i for i in rows if (i.submitted_at, i.id) > after]
+        return rows[:limit]
+
+
 class FakeAudit(_Repo):
     async def record(self, action: AdminAction) -> None:
         self.db.audit.append(action)
@@ -368,6 +446,7 @@ class FakeMediaUnitOfWork:
         self.links = FakeLinks(self)
         self.profiles = FakeProfiles(self)
         self.collections = FakeCollections(self)
+        self.ugc = FakeUgc(self)
         self.idempotency = FakeIdempotency(self)
         self.audit = FakeAudit(self)
 
@@ -401,6 +480,8 @@ class FakeMediaUnitOfWork:
             "idempotency",
             "profiles",
             "collections",
+            "ugc",
+            "purge",
         ):
             setattr(self._db, name, getattr(self.view, name))
         self._db.links[:] = self.view.links
@@ -422,6 +503,10 @@ class FakeStorage:
 
     objects: dict[tuple[StorageArea, str], tuple[bytes, str]] = field(default_factory=dict)
     fail_put: bool = False
+    fail_copy: bool = False
+    fail_delete: bool = False
+    # Время изменения объектов для листинга; нет записи - «давно» (2000 год).
+    modified: dict[str, datetime] = field(default_factory=dict)
 
     async def put(self, area: StorageArea, key: str, data: bytes, content_type: str) -> None:
         if self.fail_put:
@@ -435,8 +520,27 @@ class FakeStorage:
         return data
 
     async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
+        if self.fail_delete:
+            raise ConnectionError("S3 недоступен (фейк)")
         for key in keys:
             self.objects.pop((area, key), None)
+            self.modified.pop(key, None)
+
+    async def list_objects(
+        self, area: StorageArea, prefix: str, *, limit: int, token: str | None = None
+    ) -> ObjectPage:
+        keys = sorted(k for a, k in self.objects if a is area and k.startswith(prefix))
+        start = int(token) if token else 0
+        chunk = keys[start : start + limit]
+        epoch = datetime(2000, 1, 1, tzinfo=UTC)
+        items = [StoredObject(k, self.modified.get(k, epoch)) for k in chunk]
+        nxt = str(start + limit) if start + limit < len(keys) else None
+        return ObjectPage(items, nxt)
+
+    async def copy(self, area: StorageArea, source_key: str, target_key: str) -> None:
+        if self.fail_copy:
+            raise ConnectionError("S3 недоступен (фейк)")
+        self.objects[(area, target_key)] = self.objects[(area, source_key)]
 
     def keys(self, area: StorageArea) -> list[str]:
         return [k for a, k in self.objects if a is area]
@@ -502,6 +606,20 @@ class FakeImageProcessor:
         self.ops.append(ops)
         payload = f"{ops.crop}|{ops.blur_px}|{ops.pixel_block}|{ops.max_width}".encode()
         return RenderedImage(payload, ops.max_width, ops.max_width)
+
+
+@dataclass
+class FakeUgcEncoder:
+    """«Кодек» UGC: байты `bad` - не изображение, иначе результат = `webp:` + вход."""
+
+    calls: int = 0
+
+    async def encode(self, data: bytes, purpose: UgcPurpose) -> EncodedImage:
+        self.calls += 1
+        if data.startswith(b"bad"):
+            raise InvalidUgcImageError("файл не является допустимым изображением")
+        out = b"webp:" + data
+        return EncodedImage(out, purpose.output_side_px, purpose.output_side_px, "0" * 64)
 
 
 class FakeSigner:
@@ -571,7 +689,7 @@ TEST_PROFILES: dict[str, Any] = {
 class MediaHarness:
     """Use-cases сервиса, собранные на фейках портов."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0915 - сборка use-cases harness
         self,
         *,
         max_attempts: int = 3,
@@ -581,7 +699,6 @@ class MediaHarness:
         backfill_batch: int = 2,
         profiles: dict[str, Any] | None = None,
     ) -> None:
-        from datetime import timedelta
 
         from media_pipeline_service.application.commands.catalog import (
             DisableItemAssets,
@@ -727,6 +844,44 @@ class MediaHarness:
             uow, self.clock, self.directory, self.plan, self.storage, batch=backfill_batch
         )
         self.list_profiles = ListProfiles(uow, self.directory)
+
+        from media_pipeline_service.application.commands.ugc import (
+            ModerateUgcImage,
+            PreviewUgcImage,
+            SubmitUgcImage,
+            SweepOrphanUgcObjects,
+            UgcObjectPurger,
+            UgcUseCases,
+        )
+        from media_pipeline_service.application.queries.ugc import ListUgcQueue
+        from media_pipeline_service.infrastructure.config import load_ugc_catalog
+
+        self.ugc_catalog = load_ugc_catalog()
+        self.ugc_encoder = FakeUgcEncoder()
+        purger = UgcObjectPurger(uow, self.storage, batch=2)
+        self.ugc = UgcUseCases(
+            catalog=self.ugc_catalog,
+            submit=SubmitUgcImage(
+                uow,
+                self.clock,
+                self.ugc_encoder,
+                self.storage,
+                self.tokens,
+                self.ugc_catalog,
+                purger,
+            ),
+            moderate=ModerateUgcImage(
+                uow, self.clock, self.storage, self.tokens, self.ugc_catalog, purger
+            ),
+            preview=PreviewUgcImage(
+                uow, self.clock, FakeSigner(), ttl_s=120, public_base_url="/ugc/"
+            ),
+            queue=ListUgcQueue(uow),
+            purger=purger,
+            orphans=SweepOrphanUgcObjects(
+                uow, self.storage, self.clock, ttl=timedelta(hours=24), page_size=2
+            ),
+        )
 
     @property
     def sync_collection(self) -> SyncCollectionAssets:

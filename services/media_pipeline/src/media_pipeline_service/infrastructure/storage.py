@@ -16,19 +16,22 @@ from botocore.exceptions import ClientError
 
 from gv_core.errors import DependencyUnavailableError
 from media_pipeline_service.application.errors import GenerationError
-from media_pipeline_service.application.ports import StorageArea
+from media_pipeline_service.application.ports import ObjectPage, StorageArea, StoredObject
 from media_pipeline_service.domain.links import ASSET_PREFIX
+from media_pipeline_service.domain.ugc import PENDING_PREFIX, PUBLIC_PREFIX
 from media_pipeline_service.settings import S3Settings
 
 _DELETE_BATCH = 1000  # предел DeleteObjects в S3
 
 
 def assets_read_policy(bucket: str) -> str:
-    """Политика бакета ассетов: анонимное чтение только объектов ``a/*`` (ADR 0012).
+    """Политика бакета ассетов: анонимное чтение ``a/*``, ``p/*``, ``u/*`` (ADR 0012, 0048).
 
     Хранилище доступно лишь во внутренней сети: читает его gateway, который сам проверяет
     подпись ссылки (``secure_link``) и не передаёт хранилищу query и заголовки клиента.
-    Запись, удаление, листинг и любые объекты вне префикса остаются только по ключам.
+    Снаружи ``a/`` и ``p/`` (UGC на модерации) доступны только по подписанной ссылке, ``u/``
+    (одобренные UGC) - публично через ``/ugc/``. Запись, удаление, листинг и любые объекты
+    вне префиксов остаются только по ключам.
     """
     return json.dumps(
         {
@@ -39,7 +42,10 @@ def assets_read_policy(bucket: str) -> str:
                     "Effect": "Allow",
                     "Principal": "*",
                     "Action": ["s3:GetObject"],
-                    "Resource": [f"arn:aws:s3:::{bucket}/{ASSET_PREFIX}*"],
+                    "Resource": [
+                        f"arn:aws:s3:::{bucket}/{prefix}*"
+                        for prefix in (ASSET_PREFIX, PENDING_PREFIX, PUBLIC_PREFIX)
+                    ],
                 }
             ],
         },
@@ -124,6 +130,34 @@ class S3Storage:
         if len(data) > max_bytes:
             raise GenerationError("source.too_large", retryable=False)
         return data
+
+    async def copy(self, area: StorageArea, source_key: str, target_key: str) -> None:
+        """Скопировать объект внутри бакета (серверная копия, метаданные и тип сохраняются)."""
+        bucket = self.bucket(area)
+        async with self._client() as s3:
+            await s3.copy_object(
+                Bucket=bucket,
+                Key=target_key,
+                CopySource={"Bucket": bucket, "Key": source_key},
+                MetadataDirective="COPY",
+            )
+
+    async def list_objects(
+        self, area: StorageArea, prefix: str, *, limit: int, token: str | None = None
+    ) -> ObjectPage:
+        """Одна страница листинга префикса (``ListObjectsV2``)."""
+        params: dict[str, Any] = {
+            "Bucket": self.bucket(area),
+            "Prefix": prefix,
+            "MaxKeys": limit,
+        }
+        if token is not None:
+            params["ContinuationToken"] = token
+        async with self._client() as s3:
+            response = await s3.list_objects_v2(**params)
+        items = [StoredObject(o["Key"], o["LastModified"]) for o in response.get("Contents", [])]
+        next_token = response.get("NextContinuationToken") if response.get("IsTruncated") else None
+        return ObjectPage(items, next_token)
 
     async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
         """Удалить объекты пачками."""

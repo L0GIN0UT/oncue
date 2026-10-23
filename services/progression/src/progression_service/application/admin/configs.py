@@ -20,6 +20,7 @@ from gv_db.idempotency import request_fingerprint, run_idempotent
 from progression_service.application.accrual.common import published_config
 from progression_service.application.admin.common import (
     AdminContext,
+    ConfigDraftInvalidError,
     ConfigNeverPublishedError,
     ConfigNotDraftError,
     ConfigVersionNotFoundError,
@@ -35,6 +36,8 @@ from progression_service.application.admin.ports import (
     ConfigVersionRow,
     Json,
 )
+from progression_service.domain.config import ProgressionConfig
+from progression_service.domain.shop import CustomAvatarItemError, validate_custom_avatar
 
 log = structlog.get_logger(__name__)
 
@@ -122,7 +125,7 @@ class ConfigCommands:
                 raise ConfigNotDraftError
             if body_sha256(row.body) != body_hash:
                 raise DraftChangedError
-            validate_config(row.body)
+            await self._check_custom_avatar(uow, validate_config(row.body))
             now = self._clock.now()
             previous = await uow.configs.published()
             published = await uow.config_admin.publish(version, now=now)
@@ -214,6 +217,31 @@ class ConfigCommands:
                 version=version,
             )
         return response
+
+    @staticmethod
+    async def _check_custom_avatar(uow: AdminUnitOfWork, config: ProgressionConfig) -> None:
+        """Товар «своя аватарка» из конфига должен существовать и продаваться (ADR 0048).
+
+        Проверка при публикации, не при сохранении черновика: предмет админ заводит отдельно и
+        может сделать это после черновика. Иначе игрок не смог бы получить право на заявки.
+
+        Raises:
+            ConfigDraftInvalidError: ``progression.config_invalid`` с путём и причиной.
+        """
+        shop_cfg = config.shop
+        key = None if shop_cfg is None else shop_cfg.custom_avatar_item_key
+        if shop_cfg is None or key is None:
+            return
+        item = await uow.items.get_by_key(key)
+        try:
+            validate_custom_avatar(
+                shop_cfg,
+                {} if item is None else {item.key: item.slot},
+                sellable=() if item is None or item.price is None else (item.key,),
+            )
+        except CustomAvatarItemError as exc:
+            path, _, reason = exc.message.partition(": ")
+            raise ConfigDraftInvalidError([{"path": path, "reason": reason}]) from exc
 
     async def _put_draft(
         self, uow: AdminUnitOfWork, body: dict[str, Any], ctx: AdminContext

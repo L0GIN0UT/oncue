@@ -1,4 +1,4 @@
-"""Политика бакета ассетов: gateway читает только ``a/*`` (ADR 0012, ADR 0021)."""
+"""Политика бакета ассетов: gateway читает только ``a/*``, ``p/*``, ``u/*`` (ADR 0048)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,11 @@ def test_policy_allows_only_anonymous_get_of_asset_prefix() -> None:
     assert statement["Effect"] == "Allow"
     assert statement["Principal"] == "*"
     assert statement["Action"] == ["s3:GetObject"]  # ни записи, ни удаления, ни листинга
-    assert statement["Resource"] == [f"arn:aws:s3:::gv-assets/{ASSET_PREFIX}*"]
+    # a/ - ассеты загадок, p/ - UGC на модерации (только по подписанной ссылке на gateway),
+    # u/ - одобренные UGC (публично через /ugc/); вне этих префиксов читать нечего.
+    assert statement["Resource"] == [
+        f"arn:aws:s3:::gv-assets/{prefix}*" for prefix in (ASSET_PREFIX, "p/", "u/")
+    ]
 
 
 def test_policy_is_deterministic() -> None:

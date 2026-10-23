@@ -152,6 +152,10 @@ def test_custom_avatar_item_must_exist_in_known_slot(shop_cfg: ShopConfig) -> No
     with pytest.raises(shop.CustomAvatarItemError):
         shop.validate_custom_avatar(shop_cfg, {"custom_avatar": "wings"})
     shop.validate_custom_avatar(replace(shop_cfg, custom_avatar_item_key=None), {})
+    # продаваемость (ADR 0048): без цены игрок не получит право на заявки
+    shop.validate_custom_avatar(shop_cfg, {"custom_avatar": "avatar"}, sellable={"custom_avatar"})
+    with pytest.raises(shop.CustomAvatarItemError, match="без цены"):
+        shop.validate_custom_avatar(shop_cfg, {"custom_avatar": "avatar"}, sellable=())
 
 
 # ------------------------------------------------------------------ медиа

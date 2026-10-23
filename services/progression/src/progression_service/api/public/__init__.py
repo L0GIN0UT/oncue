@@ -26,6 +26,13 @@ from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
 from progression_service.application.shop import ShopServices
 from progression_service.application.wheel import WheelService
+from progression_service.settings import ProgressionSettings, Settings
+
+
+def _progression_settings(infra: Infrastructure) -> ProgressionSettings:
+    if not isinstance(infra.settings, Settings):
+        raise TypeError("ожидаются настройки progression")
+    return infra.settings.progression
 
 
 def build_public_router(
@@ -48,5 +55,5 @@ def build_public_router(
     register_wallet_routes(router, queries)
     register_reward_routes(router, quests, badges, wheel)
     register_shop_routes(router, shop)
-    register_avatar_routes(router)
+    register_avatar_routes(router, shop, _progression_settings(infra))
     return router
