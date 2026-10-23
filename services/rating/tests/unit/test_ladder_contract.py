@@ -41,10 +41,6 @@ def _drop_start(c: dict[str, Any]) -> None:
     del c["elo"]["start"]
 
 
-def _party_multiplier(c: dict[str, Any]) -> None:
-    c["elo"]["format_multiplier"]["party"] = 1.0
-
-
 def _zero_multiplier(c: dict[str, Any]) -> None:
     c["elo"]["format_multiplier"]["lite"] = 0
 
@@ -63,7 +59,7 @@ def _extra_field(c: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize(
     "patch",
-    [_drop_start, _party_multiplier, _zero_multiplier, _drop_window_max, _bad_domain, _extra_field],
+    [_drop_start, _zero_multiplier, _drop_window_max, _bad_domain, _extra_field],
 )
 def test_broken_ladder_is_rejected(patch: Callable[[dict[str, Any]], None]) -> None:
     config = copy.deepcopy(_load("examples/ladder.film.v1.json"))

@@ -3,7 +3,7 @@ name = "guessverse-rating"
 version = "0.1.0"
 description = "Эло, калибровка, звания, сезоны, топы недели и сезона, лидерборды"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "pyyaml>=6"]
 
 [project.scripts]
 rating = "rating_service.main:run"

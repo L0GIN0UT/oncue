@@ -16,6 +16,12 @@ services:
     volumes:
       - ../../seeds/game/modes:/seeds/game/modes:ro
 {% endif %}
+{% if s.name == "rating" %}
+      # Сиды ladder-ов создаются при старте (rating.ladders.bootstrap).
+      GV_RATING__BOOTSTRAP_LADDERS_DIR: /seeds/rating/ladders
+    volumes:
+      - ../../seeds/rating/ladders:/seeds/rating/ladders:ro
+{% endif %}
 {% if s.name == "catalog" %}
       # Файлы импорта каталога (`gv dev seed`): воркер читает их из этого каталога.
       GV_IMPORTS__FILES_DIR: /seeds/catalog

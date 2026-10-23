@@ -13,6 +13,7 @@
         },
         "matches": {
           "description": "Сколько матчей длится калибровка",
+          "maximum": 10000,
           "minimum": 0,
           "type": "integer"
         }
@@ -36,39 +37,44 @@
         "format_multiplier": {
           "additionalProperties": {
             "exclusiveMinimum": 0,
+            "maximum": 100,
             "type": "number"
           },
-          "description": "Множитель дельты по формату очереди (lite < 1)",
+          "description": "Множитель дельты по формату очереди; ключи — форматы из `formats` (проверка домена)",
           "propertyNames": {
-            "enum": [
-              "classic",
-              "lite"
-            ]
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
           },
           "type": "object"
         },
         "k": {
           "description": "K после калибровки",
-          "exclusiveMinimum": 0,
+          "maximum": 1000,
+          "minimum": 1,
           "type": "number"
         },
         "k_calibrating": {
           "description": "K в калибровке",
-          "exclusiveMinimum": 0,
+          "maximum": 1000,
+          "minimum": 1,
           "type": "number"
         },
         "leaver_penalty": {
           "description": "Доп. очки, снимаемые за выход или сдачу; побег — поражение по Эло плюс это",
+          "maximum": 100000,
           "minimum": 0,
           "type": "integer"
         },
         "scale": {
           "description": "Масштаб ожидания (400 — классический Эло)",
-          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "minimum": 1,
           "type": "number"
         },
         "start": {
           "description": "Стартовый рейтинг",
+          "maximum": 1000000,
+          "minimum": -1000000,
           "type": "integer"
         }
       },
@@ -84,13 +90,12 @@
     },
     "formats": {
       "items": {
-        "description": "Формат очереди: classic — ввод названия, lite — 4 варианта",
-        "enum": [
-          "classic",
-          "lite"
-        ],
+        "description": "Формат очереди (ключ): набор задаёт ladder; множители обязаны ему соответствовать",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]*$",
         "type": "string"
       },
+      "maxItems": 10,
       "minItems": 1,
       "type": "array",
       "uniqueItems": true
@@ -106,6 +111,7 @@
       "properties": {
         "min_matches": {
           "description": "С какого числа матчей игрок попадает в лидерборд",
+          "maximum": 100000,
           "minimum": 0,
           "type": "integer"
         },
@@ -127,11 +133,13 @@
       "properties": {
         "interval_s": {
           "description": "Период батчевого матчера, с",
+          "maximum": 3600,
           "minimum": 1,
           "type": "integer"
         },
         "slow_hint_after_s": {
           "description": "Через сколько с показать «ищем дольше обычного»; игрок остаётся в очереди",
+          "maximum": 86400,
           "minimum": 1,
           "type": "integer"
         },
@@ -140,21 +148,25 @@
           "properties": {
             "base": {
               "description": "Начальное окно ±, очков",
+              "maximum": 1000000,
               "minimum": 1,
               "type": "integer"
             },
             "max": {
               "description": "Потолок окна ±, очков",
+              "maximum": 1000000,
               "minimum": 1,
               "type": "integer"
             },
             "step": {
               "description": "Прирост окна за шаг, очков",
+              "maximum": 1000000,
               "minimum": 1,
               "type": "integer"
             },
             "step_every_s": {
               "description": "Длина шага, с",
+              "maximum": 86400,
               "minimum": 1,
               "type": "integer"
             }
@@ -179,6 +191,7 @@
       "additionalProperties": false,
       "properties": {
         "length_days": {
+          "maximum": 366,
           "minimum": 1,
           "type": "integer"
         },
@@ -192,6 +205,7 @@
               "type": "number"
             },
             "target": {
+              "maximum": 1000000,
               "minimum": 0,
               "type": "integer"
             }
@@ -217,6 +231,8 @@
           "below": {
             "anyOf": [
               {
+                "maximum": 1000000,
+                "minimum": -1000000,
                 "type": "integer"
               },
               {
@@ -264,6 +280,7 @@
         ],
         "type": "object"
       },
+      "maxItems": 100,
       "minItems": 1,
       "type": "array"
     },

@@ -110,7 +110,7 @@
                 "type": "null"
               }
             ],
-            "description": "null — после текущего сезона",
+            "description": "С часовым поясом; окно дат — настройки сервиса. null — после текущего сезона",
             "title": "Starts At"
           }
         },
@@ -140,10 +140,8 @@
             "title": "Delta"
           },
           "format": {
-            "enum": [
-              "classic",
-              "lite"
-            ],
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
             "title": "Format",
             "type": "string"
           },
@@ -361,10 +359,8 @@
           },
           "formats": {
             "items": {
-              "enum": [
-                "classic",
-                "lite"
-              ],
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
               "type": "string"
             },
             "title": "Formats",
@@ -530,10 +526,8 @@
             "title": "Delta"
           },
           "format": {
-            "enum": [
-              "classic",
-              "lite"
-            ],
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
             "title": "Format",
             "type": "string"
           },
@@ -1081,7 +1075,7 @@
             "title": "Below"
           },
           "family": {
-            "description": "Семейство (`bronze`, `silver`, `gold`, `platinum`, `diamond`)",
+            "description": "Семейство звания; набор семейств задаёт конфиг ladder-а",
             "title": "Family",
             "type": "string"
           },
@@ -1250,21 +1244,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Ladder-ы",
@@ -1405,21 +1384,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сохранить черновик",
@@ -1430,8 +1394,8 @@
     },
     "/admin/v1/ladders/{ladder}/leaderboard/rebuild": {
       "post": {
-        "description": "Ставит задачу `rating.leaderboards.rebuild` для текущего сезона.",
-        "operationId": "rebuild_admin_v1_ladders__ladder__leaderboard_rebuild_post",
+        "description": "Ставит запрос на пересборку лидерборда текущего сезона; выполняет задача `rating.leaderboards.rebuild`. Ошибки: 404 `rating.ladder_not_found`, 404 `rating.season_not_found`.",
+        "operationId": "rebuild_leaderboard_admin_v1_ladders__ladder__leaderboard_rebuild_post",
         "parameters": [
           {
             "description": "Ключ ladder-а",
@@ -1545,21 +1509,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Пересобрать лидерборд",
@@ -1700,21 +1649,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Опубликовать версию",
@@ -1725,7 +1659,7 @@
     },
     "/admin/v1/ladders/{ladder}/rollback": {
       "post": {
-        "description": "Копия ранее опубликованной версии публикуется новой версией (история не переписывается). Ошибки: 404 `rating.version_not_found`.",
+        "description": "Копия ранее опубликованной версии публикуется новой версией (история не переписывается). Ошибки: 404 `rating.version_not_found`, 409 `rating.version_not_published` (версия никогда не публиковалась).",
         "operationId": "rollback_admin_v1_ladders__ladder__rollback_post",
         "parameters": [
           {
@@ -1855,21 +1789,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Откатить ladder",
@@ -2010,21 +1929,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать сезон",
@@ -2122,21 +2026,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Версии ladder-а",
@@ -2244,21 +2133,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Версия ladder-а с конфигом",
@@ -2396,21 +2270,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Закрыть сезон",
@@ -2434,7 +2293,7 @@
             },
             "description": "Successful Response"
           },
-          "501": {
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2447,7 +2306,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Не аутентифицирован"
           }
         },
         "summary": "Ladder-ы",
@@ -2458,7 +2317,7 @@
     },
     "/v1/ladders/{ladder}/leaderboard": {
       "get": {
-        "description": "Сезонный лидерборд: keyset-курсор или `around=me` (окно вокруг пользователя, нужен токен — иначе 401; в калибровке — 404 `rating.not_ranked`). `season` — прошлый сезон по `SeasonFinished.standings_ref`; без него — текущий. Ошибки: 404 `rating.ladder_not_found`, 404 `rating.season_not_found`. Публично, кэш 10 с.",
+        "description": "Сезонный лидерборд: курсор или `around=me` (окно вокруг пользователя, нужен токен — иначе 401; в калибровке — 404 `rating.not_ranked`). `season` — прошлый сезон по `SeasonFinished.standings_ref`; без него — текущий. `limit` по умолчанию — `leaderboard.page_size` конфига. Ошибки: 404 `rating.ladder_not_found`, 404 `rating.season_not_found`. Публично, кэш 10 с.",
         "operationId": "leaderboard_v1_ladders__ladder__leaderboard_get",
         "parameters": [
           {
@@ -2530,11 +2389,17 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           }
         ],
@@ -2544,6 +2409,103 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/LeaderboardPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Лидерборд ladder-а",
+        "tags": [
+          "rating"
+        ]
+      }
+    },
+    "/v1/ladders/{ladder}/weekly": {
+      "get": {
+        "description": "Прирост рейтинга с понедельника (зона и размер — из конфига ladder-а, ADR 0039). Ошибки: 404 `rating.ladder_not_found`. Публично, кэш 10 с.",
+        "operationId": "weekly_v1_ladders__ladder__weekly_get",
+        "parameters": [
+          {
+            "description": "Ключ ladder-а (`music`, `film`)",
+            "in": "path",
+            "name": "ladder",
+            "required": true,
+            "schema": {
+              "description": "Ключ ladder-а (`music`, `film`)",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Ladder",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyTop"
                 }
               }
             },
@@ -2593,103 +2555,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
-          }
-        },
-        "summary": "Лидерборд ladder-а",
-        "tags": [
-          "rating"
-        ]
-      }
-    },
-    "/v1/ladders/{ladder}/weekly": {
-      "get": {
-        "description": "Прирост рейтинга с понедельника (зона и размер — из конфига ladder-а, ADR 0039). Ошибки: 404 `rating.ladder_not_found`. Публично, кэш 10 с.",
-        "operationId": "weekly_v1_ladders__ladder__weekly_get",
-        "parameters": [
-          {
-            "description": "Ключ ladder-а (`music`, `film`)",
-            "in": "path",
-            "name": "ladder",
-            "required": true,
-            "schema": {
-              "description": "Ключ ladder-а (`music`, `film`)",
-              "maxLength": 64,
-              "pattern": "^[a-z][a-z0-9_]*$",
-              "title": "Ladder",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WeeklyTop"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не найдено"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Топ недели",
@@ -2700,7 +2565,7 @@
     },
     "/v1/matches/{match_id}/changes": {
       "get": {
-        "description": "Изменения рейтинга игроков матча для экрана итога; только участник. Пока событие `MatchFinished` не обработано — 404 `rating.match_not_rated` (клиент опрашивает до 10 с); не рейтинговый матч — тоже 404. В калибровке числа `null`.",
+        "description": "Изменения рейтинга игроков матча для экрана итога; только участник. Пока событие `MatchFinished` не обработано — 404 `rating.match_not_rated` (клиент опрашивает до 10 с); не рейтинговый матч и чужой матч — тоже 404. В калибровке числа `null`.",
         "operationId": "match_changes_v1_matches__match_id__changes_get",
         "parameters": [
           {
@@ -2786,21 +2651,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Дельты матча",
@@ -2853,21 +2703,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Мои рейтинги",
@@ -2878,7 +2713,7 @@
     },
     "/v1/me/ratings/{ladder}/history": {
       "get": {
-        "description": "Изменения рейтинга за матчи, новые первыми (keyset-курсор).",
+        "description": "Изменения рейтинга за матчи, новые первыми (курсор).",
         "operationId": "history_v1_me_ratings__ladder__history_get",
         "parameters": [
           {
@@ -2994,21 +2829,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "История рейтинга",
@@ -3126,21 +2946,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Рейтинги пользователя",

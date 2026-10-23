@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 
 LadderKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
 Reason = Annotated[str, StringConstraints(min_length=3, max_length=500)]
@@ -97,7 +97,10 @@ class SeasonCard(BaseModel):
 class CreateSeasonRequest(_Request):
     """Создать сезон: по умолчанию — следующий сразу после текущего, длина — из конфига."""
 
-    starts_at: datetime | None = Field(default=None, description="null — после текущего сезона")
+    starts_at: AwareDatetime | None = Field(
+        default=None,
+        description="С часовым поясом; окно дат — настройки сервиса. null — после текущего сезона",
+    )
     reason: Reason
 
 

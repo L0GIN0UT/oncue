@@ -56,6 +56,6 @@
   ],
   "title": "rating.WeeklyTopFinalized v1",
   "type": "object",
-  "x-aggregate-type": "ladder",
+  "x-aggregate-type": "rating",
   "x-topic": "rating.rating.v1"
 }

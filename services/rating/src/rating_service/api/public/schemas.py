@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field, StringConstraints
 
 LadderKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
 Cursor = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,512}$")]
-QueueFormat = Literal["classic", "lite"]
+# Форматы очереди задаёт конфиг ladder-а (`formats`), в схеме — только форма ключа.
+QueueFormat = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
 Domain = Literal["music", "film"]
 Outcome = Literal["win", "loss", "draw"]
 
@@ -25,7 +26,7 @@ class TierView(BaseModel):
     """Звание ladder-а: семейство и градация внутри него."""
 
     key: str = Field(description="Ключ из конфига ladder-а, например `silver_2`")
-    family: str = Field(description="Семейство (`bronze`, `silver`, `gold`, `platinum`, `diamond`)")
+    family: str = Field(description="Семейство звания; набор семейств задаёт конфиг ladder-а")
     step: int | None = Field(ge=1, description="Градация (1, 2, 3); null — без градации")
     title_key: str = Field(description="Ключ i18n названия")
     below: int | None = Field(

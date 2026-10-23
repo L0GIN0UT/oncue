@@ -22,11 +22,9 @@
       "type": "integer"
     },
     "format": {
-      "description": "Формат очереди: classic — ввод названия, lite — 4 варианта",
-      "enum": [
-        "classic",
-        "lite"
-      ],
+      "description": "Формат очереди (ключ из `formats` ladder-а): classic — ввод названия, lite — 4 варианта",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
       "type": "string"
     },
     "ladder": {

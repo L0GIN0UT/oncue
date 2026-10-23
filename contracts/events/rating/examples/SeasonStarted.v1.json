@@ -1,6 +1,6 @@
 {
   "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0002",
-  "aggregate_type": "season",
+  "aggregate_type": "rating",
   "causation_id": null,
   "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
   "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000005a0004",

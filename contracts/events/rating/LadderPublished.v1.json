@@ -14,13 +14,12 @@
     "formats": {
       "description": "Форматы очереди, доступные в ladder-е",
       "items": {
-        "description": "Формат очереди: classic — ввод названия, lite — 4 варианта",
-        "enum": [
-          "classic",
-          "lite"
-        ],
+        "description": "Формат очереди (ключ): набор задаёт конфиг ladder-а",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_]*$",
         "type": "string"
       },
+      "maxItems": 10,
       "minItems": 1,
       "type": "array",
       "uniqueItems": true
@@ -104,6 +103,6 @@
   ],
   "title": "rating.LadderPublished v1",
   "type": "object",
-  "x-aggregate-type": "ladder",
+  "x-aggregate-type": "rating",
   "x-topic": "rating.rating.v1"
 }

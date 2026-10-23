@@ -52,6 +52,6 @@
   ],
   "title": "rating.SeasonFinished v1",
   "type": "object",
-  "x-aggregate-type": "season",
+  "x-aggregate-type": "rating",
   "x-topic": "rating.rating.v1"
 }
