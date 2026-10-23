@@ -109,3 +109,45 @@ async def test_downgrade_with_ledger_rows_is_refused(
         await engine.dispose()
     assert rows == 1
     assert version == "0002"
+
+
+async def test_downgrade_0003_drops_reward_tables_only_and_reapplies(database_url: str) -> None:
+    """Откат ``0003`` убирает только таблицы P2 (денежных журналов в нём нет), ядро P1 цело."""
+    import asyncio
+
+    from alembic import command
+    from sqlalchemy import text
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    await asyncio.to_thread(command.downgrade, config, "0002")
+
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            tables = {
+                r[0]
+                for r in await conn.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                )
+            }
+    finally:
+        await engine.dispose()
+    reward_tables = {
+        "quest_assignments",
+        "quest_progress",
+        "badges_unlocked",
+        "metric_counters",
+        "metric_marks",
+        "wheel_spins",
+        "boosts",
+        "boost_spends",
+        "grants_log",
+    }
+    assert not tables & reward_tables
+    assert {"xp_ledger", "currency_ledger", "balances", "progress"} <= tables
+
+    await apply_migrations(database_url, DEFINITION.migrations_path)

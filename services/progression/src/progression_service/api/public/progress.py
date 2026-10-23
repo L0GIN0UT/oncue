@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, Path, Response
 from gv_auth import Principal, require_user
 from gv_service import problem_responses
 from progression_service.api.public.schemas import (
+    BadgeRef,
+    BoostView,
     DailyStreakView,
     MyProgress,
     PublicProgress,
@@ -59,8 +61,14 @@ def register_progress_routes(router: APIRouter, queries: ProgressQueries) -> Non
                 )
                 for s in view.streaks
             ],
-            boost=None,
-            boosts_queued=0,
+            boost=(
+                None
+                if view.boost.multiplier is None
+                else BoostView(
+                    multiplier=float(view.boost.multiplier), matches_left=view.boost.matches_left
+                )
+            ),
+            boosts_queued=view.boost.queued,
             config_version=view.config_version,
         )
 
@@ -77,5 +85,13 @@ def register_progress_routes(router: APIRouter, queries: ProgressQueries) -> Non
         response.headers["Cache-Control"] = PUBLIC_PROFILE
         view = await queries.public_progress(user_id)
         return PublicProgress(
-            user_id=view.user_id, level=view.level, total_xp=view.total_xp, badges=[]
+            user_id=view.user_id,
+            level=view.level,
+            total_xp=view.total_xp,
+            badges=[
+                BadgeRef.model_validate(
+                    {"key": b.key, "title": b.title, "unlocked_at": b.unlocked_at}
+                )
+                for b in view.badges
+            ],
         )

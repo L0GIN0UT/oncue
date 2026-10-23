@@ -39,6 +39,7 @@ from gv_service import Infrastructure, JobResult, create_app
 from gv_testkit import (
     FakeClock,
     FakeDeadLetterSink,
+    FakeRandom,
     InfraProvider,
     TestTokenIssuer,
     apply_migrations,
@@ -75,6 +76,26 @@ def config_body(**patch: Any) -> dict[str, Any]:
     return raw
 
 
+class RiggedRandom(FakeRandom):
+    """``Random`` колеса: ``randrange`` всегда возвращает ``roll`` (заданный сектор)."""
+
+    def __init__(self, roll: int) -> None:
+        super().__init__()
+        self._roll = roll
+
+    def randrange(self, start: int, stop: int | None = None, step: int = 1) -> int:
+        return self._roll
+
+
+def _body(rewards: bool, patch: dict[str, Any]) -> dict[str, Any]:
+    """Тело для публикации: без ``rewards`` пул заданий пуст (тесты начисления P1 не видят наград
+    заданий в сумме опыта); ``rewards=True`` - задания из примера контракта (тесты P2)."""
+    body = config_body(**patch)
+    if not rewards:
+        body["quests"].update(items=[], daily_count=0, weekly_count=0)
+    return body
+
+
 def exact_round(index: int, points: int, outcome: str = "exact") -> dict[str, Any]:
     """Раунд ``GameFinished``."""
     return {
@@ -102,7 +123,12 @@ class ProgressionService:
 
     # ------------------------------------------------------------------ конфиг
     async def publish_config(
-        self, version: int = 1, *, at: datetime | None = None, **patch: Any
+        self,
+        version: int = 1,
+        *,
+        at: datetime | None = None,
+        rewards: bool = False,
+        **patch: Any,
     ) -> int:
         """Опубликовать версию конфига (предыдущая действующая уходит в архив).
 
@@ -120,7 +146,7 @@ class ProgressionService:
                 config_versions.insert().values(
                     version=version,
                     status="published",
-                    body=config_body(**patch),
+                    body=_body(rewards, patch),
                     created_by=ADMIN,
                     created_at=self.clock.now(),
                     published_at=published_at,
@@ -323,6 +349,52 @@ class ProgressionService:
         return base.model_copy(
             update={"aggregate_id": f"{ladder}:{week_start.isoformat()}", "payload": payload}
         )
+
+    def collection_published(
+        self, author: UUID | None, *, collection_id: UUID | None = None, status: str = "published"
+    ) -> EventEnvelope:
+        """``collections.CollectionPublished`` (новый ``event_id`` на каждый вызов)."""
+        base = load_example("collections.CollectionPublished")
+        cid = collection_id or uuid7()
+        payload = {
+            **base.payload,
+            "collection_id": str(cid),
+            "author_id": None if author is None else str(author),
+            "status": status,
+        }
+        return base.model_copy(update={"aggregate_id": str(cid), "payload": payload})
+
+    # ------------------------------------------------------------------ HTTP и колесо
+    async def get(self, path: str, user: UUID) -> httpx.Response:
+        return await self.client.get(path, headers=self.user(user))
+
+    async def spin(self, user: UUID, **kwargs: Any) -> httpx.Response:
+        return await self.client.post("/v1/wheel/spin", headers=self.user(user), **kwargs)
+
+    def rig_wheel(self, sector_key: str, *, config: dict[str, Any] | None = None) -> None:
+        """Следующие спины выпадают на сектор ``sector_key`` (порт ``Random`` подменён)."""
+        sectors = (config or config_body())["wheel"]["sectors"]
+        start = 0
+        for sector in sectors:
+            if sector["key"] == sector_key:
+                self.container.random = RiggedRandom(start)
+                return
+            start += sector["weight"]
+        raise KeyError(sector_key)
+
+    async def rows(self, table: str, user: UUID | None = None, **where: Any) -> list[Any]:
+        """Строки таблицы (чтение для проверок): ``where`` - равенства по колонкам."""
+        assert self.infra.sessions is not None
+        sql = f"SELECT * FROM {table} WHERE true"  # noqa: S608 - имя таблицы из тестов
+        params: dict[str, Any] = {}
+        if user is not None:
+            sql += " AND user_id = :user_id"
+            params["user_id"] = user
+        for column, value in where.items():
+            sql += f" AND {column} = :{column}"
+            params[column] = value
+        async with self.infra.sessions() as session:
+            return list((await session.execute(text(sql), params)).all())
 
     def season_standings(
         self,

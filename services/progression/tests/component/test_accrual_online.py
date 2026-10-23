@@ -186,7 +186,9 @@ async def test_reward_hook_multiplies_online_xp_only(progression: Service) -> No
     from decimal import Decimal
 
     class Boost:
-        async def online_xp_multiplier(self, user_id: UUID, match_id: UUID) -> Decimal:
+        async def online_xp_multiplier(
+            self, uow: Any, user_id: UUID, match_id: UUID, now: datetime
+        ) -> Decimal:
             return Decimal("1.5")
 
     progression.container.reward_hook = Boost()
@@ -337,7 +339,9 @@ async def test_foreign_reward_hook_multiplier_is_clamped_by_config_maximum(
     from decimal import Decimal
 
     class Hook:
-        async def online_xp_multiplier(self, user_id: UUID, match_id: UUID) -> Decimal:
+        async def online_xp_multiplier(
+            self, uow: Any, user_id: UUID, match_id: UUID, now: datetime
+        ) -> Decimal:
             return Decimal(hook_value)
 
     progression.container.reward_hook = Hook()

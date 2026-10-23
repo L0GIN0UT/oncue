@@ -7,13 +7,19 @@ from functools import cached_property
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_core.errors import DependencyUnavailableError
+from gv_core.random import Random, SystemRandom
 from gv_service import Infrastructure
 from progression_service.application.accrual.daily import AccrueDaily
 from progression_service.application.accrual.match import AccrueMatch
 from progression_service.application.accrual.rating_rewards import AccrueSeason, AccrueWeeklyTop
 from progression_service.application.accrual.solo import AccrueSolo
-from progression_service.application.ports import NoopRewardHook, RewardHook, UnitOfWorkFactory
+from progression_service.application.badges import BadgeQueries
+from progression_service.application.boosts import BoostRewardHook
+from progression_service.application.ports import RewardHook, UnitOfWorkFactory
 from progression_service.application.queries import ProgressQueries
+from progression_service.application.quests import QuestQueries
+from progression_service.application.quests.tracker import ProgressTracker
+from progression_service.application.wheel import WheelService
 from progression_service.infrastructure.db.repositories import SqlProgressionUnitOfWork
 from progression_service.settings import Settings
 
@@ -21,13 +27,17 @@ from progression_service.settings import Settings
 class ProgressionContainer:
     """Use-cases сервиса поверх инфраструктуры процесса."""
 
-    def __init__(self, infra: Infrastructure, hook: RewardHook | None = None) -> None:
+    def __init__(
+        self, infra: Infrastructure, hook: RewardHook | None = None, rng: Random | None = None
+    ) -> None:
         if not isinstance(infra.settings, Settings):
             raise TypeError("ожидаются настройки progression")
         self.infra = infra
         self.settings: Settings = infra.settings
-        # P2 подменяет хук (бусты опыта) здесь, не меняя ядро начисления.
-        self.reward_hook: RewardHook = hook or NoopRewardHook()
+        # Бусты опыта (P2) подключены через порт, ядро начисления о них не знает.
+        self.reward_hook: RewardHook = hook or BoostRewardHook()
+        # Сектор колеса выбирается криптостойким источником; тесты подставляют детерминированный.
+        self.random: Random = rng or SystemRandom()
 
     def uow_factory(self, session: AsyncSession | None = None) -> UnitOfWorkFactory:
         """Фабрика UoW: своя транзакция или SAVEPOINT в транзакции consumer."""
@@ -68,7 +78,27 @@ class ProgressionContainer:
         """Итог сезона."""
         return AccrueSeason(self.uow_factory(session), self.infra.clock)
 
+    def tracker(self, session: AsyncSession) -> ProgressTracker:
+        """Метрики, задания и бейджи в транзакции consumer."""
+        return ProgressTracker(self.uow_factory(session), self.infra.clock)
+
     # ------------------------------------------------------------------ чтение
+    @property
+    def quest_queries(self) -> QuestQueries:
+        """Задания игрока."""
+        return QuestQueries(self.uow_factory(), self.infra.clock)
+
+    @property
+    def badge_queries(self) -> BadgeQueries:
+        """Бейджи игрока."""
+        return BadgeQueries(self.uow_factory())
+
+    @property
+    def wheel(self) -> WheelService:
+        """Колесо: просмотр и спин."""
+        # Источник читается при каждом спине: тесты подменяют ``random`` после сборки роутеров.
+        return WheelService(self.uow_factory(), self.infra.clock, lambda: self.random)
+
     @cached_property
     def queries(self) -> ProgressQueries:
         """Чтение прогресса и кошелька."""

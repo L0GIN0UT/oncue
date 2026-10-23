@@ -31,8 +31,9 @@ async def test_meta_and_health() -> None:
 UID = "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
 KEY = {"Idempotency-Key": "idem-0192a3b4c5d6"}
 REASON = {"reason": "проверка контракта"}
-# me/progress, me/wallet и users/{id}/progress реализованы потоком P1 (test_progress_api.py).
-PUBLIC_STUBS: list[tuple[str, str]] = [
+# me/progress, me/wallet и users/{id}/progress - поток P1 (test_progress_api.py), задания,
+# бейджи и колесо - поток P2 (test_rewards_api.py); здесь только проверка доступа.
+PUBLIC_REWARD_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/me/quests"),
     ("GET", "/v1/me/badges"),
     ("GET", "/v1/wheel"),
@@ -74,16 +75,15 @@ async def stub_client() -> AsyncIterator[tuple[httpx.AsyncClient, TestTokenIssue
         await infra.close()
 
 
-@pytest.mark.parametrize(("method", "path"), PUBLIC_STUBS)
-async def test_public_stubs_need_account_and_answer_501(
+@pytest.mark.parametrize(("method", "path"), PUBLIC_REWARD_ROUTES)
+async def test_public_reward_routes_need_account(
     stub_client: tuple[httpx.AsyncClient, TestTokenIssuer], method: str, path: str
 ) -> None:
+    """Задания, бейджи, колесо реализованы (P2): без токена 401, гостю 403."""
     client, issuer = stub_client
     assert_problem(await client.request(method, path), 401, "auth.unauthenticated")
     guest = {"Authorization": f"Bearer {issuer.issue_guest()}"}
     assert_problem(await client.request(method, path, headers=guest), 403, "auth.guest_forbidden")
-    user = {"Authorization": f"Bearer {issuer.issue()}"}
-    assert_problem(await client.request(method, path, headers=user), 501, "common.not_implemented")
 
 
 @pytest.mark.parametrize(("method", "path", "body", "perm"), ADMIN_STUBS)

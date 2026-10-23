@@ -22,16 +22,9 @@ SCHEMA = (
     Path(__file__).resolve().parents[4] / "contracts" / "progression" / "progression_config.v1.json"
 )
 
-# Поля, которые разбирают другие потоки (P2 — задания, бейджи, колесо; P3 — admin): домену P1
-# их границы не нужны, но все остальные границы схемы обязаны быть в BOUNDS.
-OTHER_STREAMS = (
-    "admin.",
-    "badges",
-    "quests.",
-    "wheel.max_boost_queue",
-    "wheel.sectors[].prize.amount",
-    "wheel.sectors[].prize.matches",
-)
+# Поля, которые разбирает другой поток (P3 — admin): домену границы не нужны, все остальные
+# границы схемы (в том числе задания, бейджи и колесо - P2) обязаны быть в BOUNDS.
+OTHER_STREAMS = ("admin.",)
 
 
 def _walk(node: Any, path: str, out: dict[str, Any]) -> None:
