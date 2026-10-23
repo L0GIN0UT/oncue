@@ -104,10 +104,17 @@ test("party на 4: статусы, закрытая вкладка и возв�
     c.page = back;
   });
 
-  await test.step("C продолжает: раунд доигрывается всеми, в раунде 2 ход C виден остальным", async () => {
+  await test.step("C продолжает: раунд доигрывается всеми, в следующем раунде ход C виден остальным", async () => {
     // Доиграть раунд 1 до ревила: ходы C с вернувшейся вкладки принимает сервер.
+    // Пока C переподключался, таймеры могли прокрутить несколько раундов: номер читаем сейчас.
+    const roundLabel = c.page.getByTestId("match-round");
+    const roundNow = async (): Promise<number> =>
+      Number(/Раунд (\d+)/.exec((await roundLabel.textContent()) ?? "")?.[1] ?? 0);
+    const before = await roundNow();
     await passUntil(players, (p) => p.getByTestId("match-reveal"));
-    await expect(c.page.getByTestId("match-round")).toHaveText(`Раунд 2 из ${ROUNDS}`, { timeout: 30_000 });
+    if (before < ROUNDS) {
+      await expect.poll(roundNow, { timeout: 30_000 }).toBeGreaterThan(before);
+    }
     await wrongGuess(c.page, `мимо-${RUN}-вернулся`);
     // Уровень 1 из 6: после промаха — «Ответил» (или «Мимо», если окно уровня уже ушло дальше).
     await expect(playerStatus(a.page, c.nickname)).toHaveText(/Ответил|Мимо/);
