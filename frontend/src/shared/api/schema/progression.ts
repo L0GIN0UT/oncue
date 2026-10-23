@@ -11,7 +11,7 @@ export interface paths {
         };
         /**
          * Бейджи
-         * @description Бейджи действующего конфига с числом выданных. Правка — через черновик.
+         * @description Бейджи действующего конфига с числом выданных. Правка - через черновик.
          */
         get: operations["badges_admin_v1_badges_get"];
         put?: never;
@@ -73,7 +73,7 @@ export interface paths {
         put?: never;
         /**
          * Откатить к версии
-         * @description Копия старой версии становится новым черновиком. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_never_published`.
+         * @description Копия старой версии становится черновиком (заменяет текущий). Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_never_published`.
          */
         post: operations["rollback_admin_v1_configs__version__rollback_post"];
         delete?: never;
@@ -92,7 +92,7 @@ export interface paths {
         get?: never;
         /**
          * Сохранить черновик
-         * @description Заменяет черновик; конфиг проверяется целиком. Ошибки: 422 `progression.config_invalid` (`details.errors` — пути и причины).
+         * @description Заменяет черновик (он один); конфиг проверяется целиком. Ошибки: 422 `progression.config_invalid` (`details.errors` - пути и причины).
          */
         put: operations["save_draft_admin_v1_configs_draft_put"];
         post?: never;
@@ -113,7 +113,7 @@ export interface paths {
         put?: never;
         /**
          * Опубликовать черновик
-         * @description Новая версия действует для новых проводок; задания меняются со следующего периода. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_not_draft`.
+         * @description Новая версия действует для новых проводок, прошлое не пересчитывается; прежняя действующая уходит в архив. Ошибки: 404 `progression.config_version_not_found`, 409 `progression.config_not_draft`, 409 `progression.draft_changed` (тело черновика изменилось).
          */
         post: operations["publish_admin_v1_configs_draft_publish_post"];
         delete?: never;
@@ -133,7 +133,7 @@ export interface paths {
         put?: never;
         /**
          * Сторнировать проводку
-         * @description Встречная проводка со ссылкой `reversal_of`; журнал не правится. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).
+         * @description Встречная проводка со ссылкой `reversal_of`; журнал не правится; только журнал Версов, только кредиты. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.not_reversible` (дебет, сторно, проводка опыта), 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).
          */
         post: operations["reverse_admin_v1_ledger__op_id__reverse_post"];
         delete?: never;
@@ -151,7 +151,7 @@ export interface paths {
         };
         /**
          * Задания
-         * @description Задания действующего конфига с числом выполнений. Правка — через черновик.
+         * @description Задания действующего конфига с числом выполнений. Правка - через черновик.
          */
         get: operations["quests_admin_v1_quests_get"];
         put?: never;
@@ -171,7 +171,7 @@ export interface paths {
         };
         /**
          * Журнал игрока
-         * @description Проводки Версов, новые первыми, курсорная пагинация.
+         * @description Проводки Версов, новые первыми, курсорная пагинация. Ошибки: 404 `progression.user_not_found`.
          */
         get: operations["ledger_admin_v1_users__user_id__ledger_get"];
         put?: never;
@@ -193,7 +193,7 @@ export interface paths {
         put?: never;
         /**
          * Выдать Версы вручную
-         * @description Проводка `admin:{Idempotency-Key}`; предел — `admin.grant_max_amount` и `admin.grant_max_per_user_day` конфига. Ошибки: 404 `progression.user_not_found`, 422 `progression.grant_limit_exceeded`.
+         * @description Проводка `admin:{Idempotency-Key}`; предел - `admin.grant_max_amount` и `admin.grant_max_per_user_day` конфига. Ошибки: 404 `progression.user_not_found`, 422 `progression.grant_limit_exceeded`, 422 `progression.reason_too_short`.
          */
         post: operations["grant_admin_v1_users__user_id__ledger_grant_post"];
         delete?: never;
@@ -231,7 +231,7 @@ export interface paths {
         };
         /**
          * Мой прогресс
-         * @description Уровень, опыт, потолок соло, серии дейлика по доменам, буст.
+         * @description Уровень, опыт, потолок соло, серии дейлика по доменам. Ошибки: 503 `progression.config_unavailable` — нет опубликованного конфига.
          */
         get: operations["my_progress_v1_me_progress_get"];
         put?: never;
@@ -251,7 +251,7 @@ export interface paths {
         };
         /**
          * Мои задания
-         * @description Дневные, недельные и разовые задания с прогрессом; назначение — снимком на период.
+         * @description Дневные, недельные и разовые задания с прогрессом; назначение — снимком на период (смена конфига действует со следующего периода). Ошибки: 503 `progression.config_unavailable`.
          */
         get: operations["my_quests_v1_me_quests_get"];
         put?: never;
@@ -350,7 +350,7 @@ export interface paths {
         put?: never;
         /**
          * Крутить колесо
-         * @description Тело пустое. Один спин в сутки (`progression.timezone`): сектор выбирает сервер по весам, приз выдаётся в той же транзакции. Повтор за те же сутки возвращает тот же результат (`repeated = true`). Ошибки: 409 `progression.wheel_disabled`.
+         * @description Тело пустое (любое тело — 422). Один спин в сутки (`progression.timezone`): сектор выбирает сервер по весам, приз выдаётся в той же транзакции. Повтор за те же сутки возвращает тот же результат (`repeated = true`). Ошибки: 409 `progression.wheel_disabled`.
          */
         post: operations["spin_v1_wheel_spin_post"];
         delete?: never;
@@ -374,8 +374,11 @@ export interface components {
             key: string;
             /** Title */
             title: string;
-            /** Unlocked Total */
-            unlocked_total: number;
+            /**
+             * Unlocked Total
+             * @description null - счётчиков ещё нет (данные появятся с бейджами)
+             */
+            unlocked_total?: number | null;
         };
         /**
          * AdminBadgeList
@@ -449,8 +452,11 @@ export interface components {
          * @description Задание действующего конфига со статистикой.
          */
         AdminQuestCard: {
-            /** Completed Total */
-            completed_total: number;
+            /**
+             * Completed Total
+             * @description null - счётчиков ещё нет (данные появятся с заданиями)
+             */
+            completed_total?: number | null;
             /** Enabled */
             enabled: boolean;
             /** Key */
@@ -540,6 +546,11 @@ export interface components {
          */
         ConfigVersionCard: {
             /**
+             * Body Sha256
+             * @description sha256 канонического JSON тела; публикация привязана к нему
+             */
+            body_sha256: string;
+            /**
              * Created At
              * Format: date-time
              */
@@ -602,10 +613,11 @@ export interface components {
             amount: number;
             /**
              * Bucket
+             * @description В 5a ручная выдача только в `earned` (`paid` - с 5b)
              * @default earned
-             * @enum {string}
+             * @constant
              */
-            bucket: "earned" | "paid";
+            bucket: "earned";
             /** Reason */
             reason: string;
         };
@@ -645,6 +657,12 @@ export interface components {
             /** Balance After */
             balance_after: number;
             entry: components["schemas"]["AdminLedgerEntry"];
+            /**
+             * User Id
+             * Format: uuid
+             * @description Владелец проводки
+             */
+            user_id: string;
         };
         /**
          * MyBadges
@@ -830,11 +848,16 @@ export interface components {
          * @description Опубликовать черновик: новая версия действует со следующего периода заданий.
          */
         PublishRequest: {
+            /**
+             * Body Sha256
+             * @description `body_sha256` черновика, который видел админ (иначе 409 `draft_changed`)
+             */
+            body_sha256: string;
             /** Reason */
             reason: string;
             /**
              * Version
-             * @description Версия черновика (защита от гонки правок)
+             * @description Версия черновика
              */
             version: number;
         };
@@ -1042,8 +1065,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1084,16 +1107,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1157,16 +1170,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1255,16 +1258,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     save_draft_admin_v1_configs_draft_put: {
@@ -1324,16 +1317,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1411,16 +1394,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1509,8 +1482,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1559,8 +1532,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1627,16 +1600,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1725,8 +1688,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1775,8 +1738,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1825,8 +1788,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1875,8 +1838,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1917,16 +1880,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2018,16 +1971,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     wheel_v1_wheel_get: {
@@ -2068,8 +2011,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2128,8 +2071,18 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
