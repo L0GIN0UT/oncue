@@ -1,12 +1,12 @@
 # Передача: этап 4b «Рейтинг и подбор»
 
-> Обновлено: 2026-10-23, все потоки 4b реализованы и отревьюены. Новая сессия начинается с чтения этого файла.
+> Обновлено: 2026-10-23, 4b влит в `main` (PR #22–#24). Файл — справка по решениям 4b; текущая работа — в `stage-5.md`.
 
 ## Состояние
-- Ветка `stage4b/contracts` от `origin/main` (51d2078). Закоммичен только шаг 0a (132ac86, 2a085ad). **Потоки G, A2/B2, Q, C2, E2, D2 и шаг 0b реализованы, не закоммичены** — ждут «да» владельца.
-- Ревью по каждому потоку проведено (code-reviewer; security-reviewer для rating и match), правки внесены. `gv lint` зелёный; тесты rating, match, game, bff_web, admin и frontend зелёные. Не зелёное: `services/admin test_runtime` (Windows, `add_signal_handler`, старое), плавающие тайминговые тесты match/game в полном прогоне.
-- Не проверено живьём: `e2e/ranked.spec.ts` и `gv dev seed` на поднятом стеке; `next build` один раз падал с `SecurityFatalError` (уязвимость версии Next.js) — решение об обновлении Next за владельцем.
-- В `git stash list` остался `stash@{0}` от параллельного агента — содержимое целиком есть в рабочей копии, можно `git stash drop`.
+- **4b влит в `main`:** PR #22 (`stage4b/contracts`: контракты, rating, game lite, match, bff, admin, frontend, сиды), PR #23 и #24 (исправления `e2e/ranked.spec.ts`). Ветки и stash больше не нужны. Этап 5 ведётся в `docs/handoff/stage-5.md`.
+- Ревью по каждому потоку проведено (code-reviewer; security-reviewer для rating и match), правки внесены. Не зелёное известное: `services/admin test_runtime` (Windows, `add_signal_handler`), плавающие тайминговые тесты match/game в полном прогоне.
+- **Открыто, не закрывать без владельца:** ручные проверки identity, match и rating; подтверждение допущений сидов (K Эло, пороги званий, фильтры `similar`).
+- `next build` падал с `SecurityFatalError` из-за уязвимости Next.js 16.4.0; закрыто обновлением до 16.4.1 (ветка `chore/next-update-and-docs`).
 - План: [stage-4.md](../plans/stage-4.md) (решения 4b — в конце файла и приоритетнее текста), ADR [0037](../adr/0037-rating-elo-calibration-ladder-config.md)–[0040](../adr/0040-lite-format-distractor-source.md).
 
 ## Шаг 0a — что сделано
@@ -37,12 +37,8 @@
 9. Права `match.spectate`, `rating.ladders.publish`, `rating.seasons.manage` уже в identity `0008` (4a) — миграция не нужна.
 10. Шаблоны `*.duel.lite` и ranked-шаблоны для `music`/`film`, сиды `seeds/rating/ladders` — шаг 0b (`stage4b/seed`), не 0a.
 
-## Дальше (порядок владельца)
-1. Коммит 0a после «да» владельца (автор L0GIN0UT, без `Co-Authored-By`, Conventional Commits, scope: `feat(contracts): ...`).
-2. **G (rating)** сразу: домен `Ladder`/`EloCalculator`, миграция `0002_rating_core`, consumer `MatchFinished` (только `ranked`, не `aborted`), лидерборды ZSET, задачи сезонов/недели. Один `tdd-guide`, один ревьюер; `security-reviewer` — для admin-ручек.
-3. **A2/B2 (lite)** параллельно с G: `DistractorSource` + `similar` в ядре, подбор в game (`round-plans` отдаёт `options`).
-4. **Q (match)** после контрактов G: очереди, матчер под lease, `Sanction.RANKED`, проекция `RatingChanged`/`LadderPublished`, наблюдение (security-reviewer для Q2/Q3).
-5. **C2/D2/E2** в конце; 0b — сиды и `e2e/ranked.spec.ts`.
+## Дальше
+Все потоки 4b (G, A2/B2, Q, C2, D2, E2, шаг 0b) выполнены и влиты. Остаётся только то, что в «Открытое / риски» и в хвостах [roadmap](../09-roadmap.md); следующий этап — 5 («Прогрессия и социальное»).
 
 ## Открытое / риски
 - Срыв отсчёта без штрафа — сталкинг очереди возможен (принято владельцем).
