@@ -84,7 +84,10 @@ async def _infra(database_url: str, environment: Environment) -> AsyncIterator[I
     settings = Settings(
         database_url=SecretStr(database_url),
         environment=environment,
-        progression=ProgressionSettings(bootstrap_config_dir=SEEDS),
+        progression=ProgressionSettings(
+            bootstrap_config_dir=SEEDS,
+            promo_hmac_key=SecretStr("k" * 32),  # вне local/ci ключ кодов обязателен
+        ),
     )
     infra = await Infrastructure.open(settings, TABLES)
     try:

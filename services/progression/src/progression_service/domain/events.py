@@ -146,3 +146,52 @@ class WheelSpun(DomainEvent):
     prize: PrizePayload
     config_version: int
     at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class ItemPurchased(DomainEvent):
+    """Игрок купил предмет за Версы.
+
+    Проводка ``CurrencyDebited`` публикуется отдельным событием с тем же ``op_id``.
+    """
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    user_id: UUID
+    item_id: UUID
+    item_key: str
+    slot: str
+    rarity: str
+    price: int
+    balance_after: int
+    op_id: str
+    at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class ItemEquipped(DomainEvent):
+    """Игрок надел или снял предмет в слоте (снятие - ``item_id = None``)."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    user_id: UUID
+    slot: str
+    item_id: UUID | None
+    item_key: str | None
+    at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class PromoRedeemed(DomainEvent):
+    """Игрок погасил промокод; самого кода в событии нет."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    user_id: UUID
+    promo_id: UUID
+    reward_kind: str
+    amount: int | None
+    item_id: UUID | None
+    item_key: str | None
+    op_id: str
+    at: datetime

@@ -19,6 +19,13 @@ from progression_service.application.ports.rewards import (
     QuestRepository,
     SpinRepository,
 )
+from progression_service.application.ports.shop import (
+    EquippedRepository,
+    InventoryRepository,
+    ItemRepository,
+    PackRepository,
+    PromoRepository,
+)
 from progression_service.domain.config import ProgressionConfig
 from progression_service.domain.daily_streak import Streak
 from progression_service.domain.ledger import Bucket, Entry
@@ -261,6 +268,21 @@ class ProgressionUnitOfWork(Protocol):
 
     @property
     def grants(self) -> GrantRepository: ...
+
+    @property
+    def items(self) -> ItemRepository: ...
+
+    @property
+    def inventory(self) -> InventoryRepository: ...
+
+    @property
+    def equipped(self) -> EquippedRepository: ...
+
+    @property
+    def promos(self) -> PromoRepository: ...
+
+    @property
+    def packs(self) -> PackRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

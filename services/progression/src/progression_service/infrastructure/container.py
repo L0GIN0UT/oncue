@@ -17,15 +17,37 @@ from progression_service.application.admin import AdminServices
 from progression_service.application.admin.configs import ConfigCommands, ConfigQueries
 from progression_service.application.admin.ledger import LedgerCommands, LedgerQueries
 from progression_service.application.admin.ports import AdminUowFactory
+from progression_service.application.admin.shop import (
+    ItemCommands,
+    ItemQueries,
+    PackCommands,
+    PackQueries,
+    PromoCommands,
+    PromoQueries,
+)
+from progression_service.application.appearance import AppearanceService
 from progression_service.application.badges import BadgeQueries
 from progression_service.application.boosts import BoostRewardHook
+from progression_service.application.inventory import InventoryService
 from progression_service.application.ports import RewardHook, UnitOfWorkFactory
+from progression_service.application.ports.shop import AttemptLimiter
+from progression_service.application.promo import PromoService
 from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
 from progression_service.application.quests.tracker import ProgressTracker
+from progression_service.application.shop import ShopService, ShopServices
 from progression_service.application.wheel import WheelService
+from progression_service.infrastructure.adapters import (
+    LazyCodeHasher,
+    PillowMediaInspector,
+    RedisAttemptLimiter,
+    SecretsTokenSource,
+    UnconfiguredLimiter,
+    hmac_key,
+)
 from progression_service.infrastructure.db.admin_repositories import SqlAdminUnitOfWork
 from progression_service.infrastructure.db.repositories import SqlProgressionUnitOfWork
+from progression_service.infrastructure.storage import S3MediaStore
 from progression_service.settings import Settings
 
 
@@ -43,6 +65,8 @@ class ProgressionContainer:
         self.reward_hook: RewardHook = hook or BoostRewardHook()
         # Сектор колеса выбирается криптостойким источником; тесты подставляют детерминированный.
         self.random: Random = rng or SystemRandom()
+        # Коды промокодов - отдельный криптостойкий источник: тесты колеса подменяют ``random``.
+        self.code_random: Random = SystemRandom()
 
     def uow_factory(self, session: AsyncSession | None = None) -> UnitOfWorkFactory:
         """Фабрика UoW: своя транзакция или SAVEPOINT в транзакции consumer."""
@@ -130,12 +154,83 @@ class ProgressionContainer:
     def admin(self) -> AdminServices:
         """Use-cases admin-API."""
         factory = self.admin_uow_factory()
-        return AdminServices(
-            configs=ConfigCommands(factory, self.infra.clock),
-            config_queries=ConfigQueries(factory),
-            ledger=LedgerCommands(factory, self.infra.clock),
-            ledger_queries=LedgerQueries(factory),
+        clock = self.infra.clock
+        items = ItemCommands(
+            factory,
+            clock,
+            store=self.media_store,
+            inspector=PillowMediaInspector(),
+            tokens=SecretsTokenSource(),
         )
+        return AdminServices(
+            configs=ConfigCommands(factory, clock),
+            config_queries=ConfigQueries(factory),
+            ledger=LedgerCommands(factory, clock),
+            ledger_queries=LedgerQueries(factory),
+            items=items,
+            item_queries=ItemQueries(factory, items),
+            packs=PackCommands(factory, clock),
+            pack_queries=PackQueries(factory),
+            promos=PromoCommands(factory, clock, hasher=self.hasher, rng=self.code_random),
+            promo_queries=PromoQueries(factory, clock),
+        )
+
+    # ------------------------------------------------------------------ магазин (поток S1)
+    @cached_property
+    def media_store(self) -> S3MediaStore:
+        """Хранилище картинок предметов (подключение - при первом обращении)."""
+        p = self.settings.progression
+        return S3MediaStore(
+            self.settings.s3, bucket=p.cosmetics_bucket, base_url=p.cosmetics_base_url
+        )
+
+    @cached_property
+    def hasher(self) -> LazyCodeHasher:
+        """HMAC кодов промокодов (ключ - при первом использовании)."""
+        return LazyCodeHasher(lambda: hmac_key(self.settings))
+
+    @cached_property
+    def limiter(self) -> AttemptLimiter:
+        """Лимитер попыток ввода кода: Redis, без Redis - ввод закрыт (fail-closed)."""
+        retry = self.settings.progression.limiter_retry_after_s
+        if self.infra.redis is None:
+            return UnconfiguredLimiter(retry)
+        return RedisAttemptLimiter(self.infra.redis, retry_after_s=retry)
+
+    @property
+    def shop_services(self) -> ShopServices:
+        """Use-cases магазина для публичного API."""
+        return ShopServices(
+            shop=self.shop,
+            inventory=self.inventory,
+            appearance=self.appearance,
+            promo=self.promo,
+            public_url=self.media_store.public_url,
+        )
+
+    @property
+    def shop(self) -> ShopService:
+        """Витрина и покупка."""
+        return ShopService(
+            self.uow_factory(),
+            self.infra.clock,
+            billing_enabled=self.settings.progression.billing_enabled,
+        )
+
+    @property
+    def inventory(self) -> InventoryService:
+        """Инвентарь."""
+        return InventoryService(self.uow_factory(), self.infra.clock)
+
+    @property
+    def appearance(self) -> AppearanceService:
+        """Оформление."""
+        return AppearanceService(self.uow_factory(), self.infra.clock)
+
+    @property
+    def promo(self) -> PromoService:
+        """Погашение промокодов."""
+        return PromoService(self.uow_factory(), self.infra.clock, self.hasher, self.limiter)
 
 
 _ATTR = "_progression_container"

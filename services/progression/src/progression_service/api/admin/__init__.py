@@ -246,5 +246,5 @@ def build_admin_router(services: AdminServices) -> APIRouter:
         response.headers["Cache-Control"] = NO_STORE
         return result
 
-    register_shop_admin_routes(router)
+    register_shop_admin_routes(router, services)
     return router

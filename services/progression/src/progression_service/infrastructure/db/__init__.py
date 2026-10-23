@@ -5,6 +5,6 @@
 сначала выполняет этот модуль и видит полную схему.
 """
 
-from progression_service.infrastructure.db import tables_admin, tables_rewards
+from progression_service.infrastructure.db import tables_admin, tables_rewards, tables_shop
 
-__all__ = ["tables_admin", "tables_rewards"]
+__all__ = ["tables_admin", "tables_rewards", "tables_shop"]

@@ -38,6 +38,13 @@ from progression_service.infrastructure.db.repositories_rewards import (
     SqlQuests,
     SqlSpins,
 )
+from progression_service.infrastructure.db.repositories_shop import (
+    SqlEquipped,
+    SqlInventory,
+    SqlItems,
+    SqlPacks,
+    SqlPromos,
+)
 from progression_service.infrastructure.db.tables import (
     TABLES,
     accrual_marks,
@@ -492,6 +499,11 @@ class SqlProgressionUnitOfWork:
     spins: SqlSpins
     boosts: SqlBoosts
     grants: SqlGrants
+    items: SqlItems
+    inventory: SqlInventory
+    equipped: SqlEquipped
+    promos: SqlPromos
+    packs: SqlPacks
 
     def __init__(
         self,
@@ -538,6 +550,11 @@ class SqlProgressionUnitOfWork:
         self.spins = SqlSpins(s)
         self.boosts = SqlBoosts(s)
         self.grants = SqlGrants(s)
+        self.items = SqlItems(s)
+        self.inventory = SqlInventory(s)
+        self.equipped = SqlEquipped(s)
+        self.promos = SqlPromos(s)
+        self.packs = SqlPacks(s)
         return self
 
     async def __aexit__(

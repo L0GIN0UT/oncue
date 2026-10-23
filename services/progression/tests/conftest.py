@@ -18,6 +18,8 @@ from uuid import UUID
 
 import httpx
 import pytest
+from progression_service.application.accrual.common import published_config
+from progression_service.application.accrual.posting import Poster
 from progression_service.infrastructure.container import ProgressionContainer, container_for
 from progression_service.infrastructure.db.tables import (
     TABLES,
@@ -27,8 +29,9 @@ from progression_service.infrastructure.db.tables import (
     progress,
     xp_ledger,
 )
+from progression_service.infrastructure.db.tables_shop import items
 from progression_service.main import DEFINITION
-from progression_service.settings import Settings
+from progression_service.settings import ProgressionSettings, S3Settings, Settings
 from pydantic import SecretStr
 from sqlalchemy import func, select, text, update
 
@@ -396,6 +399,67 @@ class ProgressionService:
         async with self.infra.sessions() as session:
             return list((await session.execute(text(sql), params)).all())
 
+    # ------------------------------------------------------------------ магазин (5b)
+    async def add_item(
+        self,
+        key: str = "frame_gold",
+        slot: str = "frame",
+        rarity: str = "rare",
+        *,
+        price: int | None = 30,
+        level_required: int | None = None,
+        active: bool = True,
+        media_kind: str = "static",
+    ) -> UUID:
+        """Предмет в таблице ``items`` (картинка-заглушка у активного)."""
+        assert self.infra.sessions is not None
+        item_id = uuid7()
+        async with self.infra.sessions() as session, session.begin():
+            await session.execute(
+                items.insert().values(
+                    id=item_id,
+                    key=key,
+                    slot=slot,
+                    rarity=rarity,
+                    title=key,
+                    media_kind=media_kind,
+                    asset_key=f"c/{uuid7().hex[-32:]}.webp" if active else None,
+                    poster_key=None,
+                    level_required=level_required,
+                    price=price,
+                    active=active,
+                    created_at=self.clock.now(),
+                    updated_at=self.clock.now(),
+                )
+            )
+        return item_id
+
+    async def grant_verses(self, user_id: UUID, amount: int) -> None:
+        """Начислить Версы настоящим путём ledger (нужна опубликованная версия конфига)."""
+        async with self.container.uow_factory()() as uow:
+            published = await published_config(uow)
+            poster = Poster(uow, published, self.clock.now())
+            await poster.verses(
+                user_id, op_id=f"test:{uuid7()}", amount=amount, reason="test", source_ref="test"
+            )
+            await uow.commit()
+
+    async def set_level(self, user_id: UUID, level: int) -> None:
+        """Уровень игрока (строка прогресса создаётся при отсутствии)."""
+        async with self.container.uow_factory()() as uow:
+            published = await published_config(uow)
+            row = await Poster(uow, published, self.clock.now()).lock_user(user_id)
+            row.level = level
+            await uow.progress.save(row)
+            await uow.commit()
+
+    async def purchase(
+        self, user_id: UUID, item_id: UUID, key: str | None = None
+    ) -> httpx.Response:
+        """``POST /v1/shop/items/{id}/purchase``."""
+        headers = {**self.user(user_id), "Idempotency-Key": key or f"idem-{uuid7().hex}"}
+        return await self.client.post(f"/v1/shop/items/{item_id}/purchase", headers=headers)
+
     def season_standings(
         self,
         places: list[tuple[UUID, int]],
@@ -438,9 +502,22 @@ async def progression(
     """Сервис progression: реальный Postgres, события через EventProcessor."""
     assert DEFINITION.migrations_path is not None
     await apply_migrations(database_url, DEFINITION.migrations_path)
-    settings = Settings(database_url=SecretStr(database_url))
+    s3 = infra.s3_endpoint()
+    settings = Settings(
+        database_url=SecretStr(database_url),
+        redis_url=SecretStr(infra.redis_url()),
+        s3=S3Settings(
+            endpoint=s3.url,
+            access_key=SecretStr(s3.access_key),
+            secret_key=SecretStr(s3.secret_key),
+        ),
+        progression=ProgressionSettings(cosmetics_bucket=f"gv-cosmetics-{uuid7().hex[-12:]}"),
+    )
     runtime = await Infrastructure.open(settings, TABLES, clock=fake_clock_start)
+    assert runtime.redis is not None
+    await runtime.redis.flushdb()  # счётчики попыток прошлых тестов общего Redis
     container = container_for(runtime)
+    await container.media_store.ensure_bucket()
     assert runtime.sessions is not None
     assert DEFINITION.build_event_handlers is not None
     dead_letters = FakeDeadLetterSink()

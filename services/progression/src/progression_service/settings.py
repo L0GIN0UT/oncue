@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from gv_service import ServiceSettings
 
@@ -31,6 +31,27 @@ class ProgressionSettings(BaseModel):
     # и только пока нет ни одной опубликованной версии.
     bootstrap_config_dir: Path | None = None
     bootstrap_interval_s: float = Field(default=60.0, gt=0)
+    # Магазин 5b (ADR 0045, 0046): бакет косметики и публичный префикс gateway для картинок.
+    cosmetics_bucket: str = Field(default="gv-cosmetics", pattern=r"^[a-z0-9][a-z0-9.-]{2,62}$")
+    cosmetics_base_url: str = Field(default="/cosmetics/", pattern=r"^(https?://[^/]+)?/[^?#]*/$")
+    # Ключ HMAC хешей промокодов (ADR 0048). Вне local/ci обязателен: без него сервис не стартует.
+    promo_hmac_key: SecretStr | None = Field(default=None, min_length=32)
+    # Паки скрыты, пока биллинг выключен (ADR 0007); включает владелец, не код.
+    billing_enabled: bool = False
+    # Подсказка клиенту, когда лимитер попыток (Redis) недоступен и ввод кода закрыт (503).
+    limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
+
+
+class S3Settings(BaseModel):
+    """S3-совместимое хранилище (SeaweedFS на VPS, ADR 0021): ``GV_S3__*``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    endpoint: str | None = None
+    access_key: SecretStr | None = None
+    secret_key: SecretStr | None = None
+    region: str = "us-east-1"
+    timeout_s: float = Field(default=10.0, gt=0)
 
 
 class Settings(ServiceSettings):
@@ -38,3 +59,6 @@ class Settings(ServiceSettings):
 
     service_name: str = "progression"
     progression: ProgressionSettings = ProgressionSettings()
+    s3: S3Settings = S3Settings()
+    # Ключ кодов (ADR 0048) вне local/ci обязателен, но проверяется не здесь: инструменты
+    # контрактов строят ``Settings()`` без env. См. ``infrastructure.adapters.hmac_key``.
