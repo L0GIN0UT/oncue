@@ -1,0 +1,130 @@
+{
+  "$id": "urn:guessverse:contracts:notifications:notification_types:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Конфиг типов уведомлений (ADR 0047): маппинг «событие → тип», каналы, шаблоны с локализацией. Значений и текстов в коде сервиса нет; новый тип - данные. Нет шаблона на default_locale - конфиг не проходит проверку при старте.",
+  "properties": {
+    "default_locale": {
+      "pattern": "^[a-z]{2}$",
+      "type": "string"
+    },
+    "types": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "additionalProperties": false,
+            "description": "Каналы по умолчанию; игрок может отключить in_app и email по типу, если user_mutable",
+            "properties": {
+              "email": {
+                "type": "boolean"
+              },
+              "in_app": {
+                "type": "boolean"
+              },
+              "push": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "in_app",
+              "email",
+              "push"
+            ],
+            "type": "object"
+          },
+          "dedup_key": {
+            "description": "Шаблон ключа дедупликации из полей события, например `level:{payload.user_id}:{payload.level}`; не event_id",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "filter": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Условие по полям payload (равенство); пусто - любое событие",
+            "type": "object"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "maxLength": 120,
+              "pattern": "^[a-z_][a-z0-9_.]*$",
+              "type": "string"
+            },
+            "description": "Подстановки шаблона: имя -> путь в событии (payload.level)",
+            "type": "object"
+          },
+          "recipient": {
+            "description": "Путь к user_id получателя в событии",
+            "maxLength": 120,
+            "pattern": "^[a-z_][a-z0-9_.]*$",
+            "type": "string"
+          },
+          "source_event": {
+            "description": "Тип события-источника: `progression.BadgeUnlocked`",
+            "pattern": "^[a-z_]+\\.[A-Za-z]+$",
+            "type": "string"
+          },
+          "templates": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "body"
+              ],
+              "type": "object"
+            },
+            "description": "Шаблоны по локали; плейсхолдеры `{имя}` из params",
+            "minProperties": 1,
+            "type": "object"
+          },
+          "user_mutable": {
+            "description": "Игрок может отключить тип в настройках",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "source_event",
+          "recipient",
+          "channels",
+          "user_mutable",
+          "dedup_key",
+          "params",
+          "templates"
+        ],
+        "type": "object"
+      },
+      "maxItems": 200,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "default_locale",
+    "types"
+  ],
+  "title": "notifications.notification_types v1",
+  "type": "object"
+}

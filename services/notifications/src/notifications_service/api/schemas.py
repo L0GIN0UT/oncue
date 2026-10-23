@@ -114,7 +114,12 @@ class Device(BaseModel):
 class BroadcastRequest(_Request):
     """Информационная рассылка подписчикам."""
 
-    subject: str = Field(min_length=1, max_length=150)
+    subject: str = Field(
+        min_length=1,
+        max_length=150,
+        pattern=r"^[^\x00-\x1f\x7f]+$",
+        description="Тема письма: без управляющих символов (защита заголовков письма)",
+    )
     body: str = Field(min_length=1, max_length=5000)
     reason: Reason
 

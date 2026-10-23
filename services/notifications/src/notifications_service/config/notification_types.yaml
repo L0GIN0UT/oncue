@@ -1,0 +1,99 @@
+# Типы уведомлений 5b (ADR 0047): маппинг «событие -> уведомление», каналы, шаблоны.
+# Формат - contracts/notifications/notification_types.v1.json. Тексты и типы живут только здесь:
+# новый тип - данные, не код. Нет шаблона на default_locale или плейсхолдер без параметра -
+# сервис не стартует.
+default_locale: ru
+types:
+  - key: level_up
+    source_event: progression.ProgressionLevelChanged
+    recipient: payload.user_id
+    dedup_key: "level_up:{payload.user_id}:{payload.new_level}"
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      level: payload.new_level
+    templates:
+      ru:
+        title: Новый уровень
+        body: Вы достигли уровня {level}.
+
+  - key: badge_unlocked
+    source_event: progression.BadgeUnlocked
+    recipient: payload.user_id
+    dedup_key: "badge:{payload.user_id}:{payload.badge_key}"
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      badge: payload.badge_key
+    templates:
+      ru:
+        title: Новый бейдж
+        body: "Вы получили бейдж «{badge}»."
+
+  - key: quest_completed
+    source_event: progression.QuestCompleted
+    recipient: payload.user_id
+    dedup_key: "quest:{payload.user_id}:{payload.quest_key}:{payload.period_start}"
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      quest: payload.quest_key
+    templates:
+      ru:
+        title: Задание выполнено
+        body: "Задание «{quest}» выполнено, награда начислена."
+
+  - key: weekly_top_reward
+    source_event: progression.CurrencyCredited
+    recipient: payload.user_id
+    dedup_key: "weekly:{payload.op_id}"
+    filter: {reason: weekly_top}
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      amount: payload.amount
+    templates:
+      ru:
+        title: Награда недели
+        body: За место в топе недели начислено {amount} Версов.
+
+  - key: season_reward
+    source_event: progression.CurrencyCredited
+    recipient: payload.user_id
+    dedup_key: "season:{payload.op_id}"
+    filter: {reason: season}
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      amount: payload.amount
+    templates:
+      ru:
+        title: Награда сезона
+        body: За итог сезона начислено {amount} Версов.
+
+  - key: avatar_approved
+    source_event: media_pipeline.AssetModerated
+    recipient: payload.owner_user_id
+    dedup_key: "avatar:{payload.asset_id}:{payload.version}"
+    filter: {purpose: avatar, status: approved}
+    user_mutable: false
+    channels: {in_app: true, email: false, push: false}
+    params: {}
+    templates:
+      ru:
+        title: Аватарка одобрена
+        body: Ваша аватарка прошла модерацию.
+
+  - key: avatar_rejected
+    source_event: media_pipeline.AssetModerated
+    recipient: payload.owner_user_id
+    dedup_key: "avatar:{payload.asset_id}:{payload.version}"
+    filter: {purpose: avatar, status: rejected}
+    user_mutable: false
+    channels: {in_app: true, email: false, push: false}
+    params:
+      reason: payload.reason_code
+    templates:
+      ru:
+        title: Аватарка отклонена
+        body: "Аватарка не прошла модерацию: {reason}."

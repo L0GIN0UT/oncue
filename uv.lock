@@ -1818,20 +1818,28 @@ name = "guessverse-notifications"
 version = "0.1.0"
 source = { editable = "services/notifications" }
 dependencies = [
+    { name = "aiosmtplib" },
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosmtplib", specifier = ">=3.0" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
