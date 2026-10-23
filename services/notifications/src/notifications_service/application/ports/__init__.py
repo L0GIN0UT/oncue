@@ -260,8 +260,19 @@ class EmailSender(Protocol):
         ...
 
 
+DIRECTORY_UNCONFIGURED = "notifications.email_directory_unconfigured"
+DIRECTORY_FORBIDDEN = "notifications.email_directory_forbidden"
+DIRECTORY_UNAVAILABLE = "notifications.email_directory_unavailable"
+PERMANENT_DIRECTORY_CODES = frozenset({DIRECTORY_UNCONFIGURED, DIRECTORY_FORBIDDEN})
+"""Коды ``DependencyUnavailableError`` справочника, при которых повтор бесполезен (настройка)."""
+
+
 class EmailDirectory(Protocol):
-    """Адреса получателей. Адреса принадлежат identity, notifications их не хранит."""
+    """Адреса получателей. Адреса принадлежат identity, notifications их не хранит.
+
+    Повторяемый сбой - ``DependencyUnavailableError`` (код ``DIRECTORY_UNAVAILABLE``);
+    неповторяемый (настройка, права) - с кодом из ``PERMANENT_DIRECTORY_CODES``.
+    """
 
     async def resolve(self, user_ids: list[UUID]) -> list[Recipient]:
         """Адреса для игроков; без адреса или с неподтверждённым - пропускаются."""

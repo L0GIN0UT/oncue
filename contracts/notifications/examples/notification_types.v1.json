@@ -147,14 +147,37 @@
         "status": "rejected"
       },
       "key": "avatar_rejected",
-      "params": {
-        "reason": "payload.reason_code"
+      "lookups": {
+        "reason": {
+          "fallback": {
+            "ru": "не прошла модерацию"
+          },
+          "path": "payload.reason_code",
+          "texts": {
+            "copyright": {
+              "ru": "отклонена: нарушает чужие авторские права"
+            },
+            "inappropriate": {
+              "ru": "отклонена: нарушает правила сообщества"
+            },
+            "low_quality": {
+              "ru": "отклонена: низкого качества"
+            },
+            "other": {
+              "ru": "отклонена: не соответствует требованиям"
+            },
+            "personal_data": {
+              "ru": "отклонена: содержит личные данные"
+            }
+          }
+        }
       },
+      "params": {},
       "recipient": "payload.owner_user_id",
       "source_event": "media_pipeline.AssetModerated",
       "templates": {
         "ru": {
-          "body": "Аватарка не прошла модерацию: {reason}.",
+          "body": "Ваша аватарка {reason}.",
           "title": "Аватарка отклонена"
         }
       },

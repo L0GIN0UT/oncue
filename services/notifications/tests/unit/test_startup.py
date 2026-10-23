@@ -11,11 +11,16 @@ from notifications_service.infrastructure.container import (
     StartupConfigError,
 )
 from notifications_service.infrastructure.db.tables import TABLES
+from notifications_service.infrastructure.email import (
+    HttpEmailDirectory,
+    UnconfiguredEmailDirectory,
+)
 from notifications_service.settings import NotificationsSettings, Settings
 from pydantic import SecretStr, ValidationError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from gv_service import Environment, Infrastructure
+from gv_service.settings import ServiceAuthSettings
 
 pytestmark = pytest.mark.unit
 
@@ -69,6 +74,24 @@ def test_local_and_ci_get_temporary_key_and_log_email(environment: Environment) 
     user, broadcast = uuid4(), uuid4()
     assert c.tokens.verify(c.tokens.issue(user, broadcast)) == (user, broadcast)  # ключ создан
     assert c.public_base_url.startswith("http")
+
+
+def test_without_service_auth_directory_is_unconfigured() -> None:
+    c = container(Environment.LOCAL)
+    assert isinstance(c.directory, UnconfiguredEmailDirectory)
+
+
+def test_with_service_auth_directory_is_http_identity() -> None:
+    settings = Settings(
+        environment=Environment.LOCAL,
+        service_auth=ServiceAuthSettings(
+            token_url="http://identity:8000/internal/v1/service-tokens",
+            client_secret=SecretStr("s" * 40),
+        ),
+    )
+    infra = Infrastructure(settings=settings, tables=TABLES)
+    assert isinstance(NotificationsContainer(infra).directory, HttpEmailDirectory)
+    assert settings.notifications.identity_url == "http://identity:8000"
 
 
 def test_openapi_export_needs_no_secrets() -> None:

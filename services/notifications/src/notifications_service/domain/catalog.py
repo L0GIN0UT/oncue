@@ -39,6 +39,26 @@ class Template:
 
 
 @dataclass(frozen=True, slots=True)
+class Lookup:
+    """Справочник текстов по коду из события (например, причина отклонения).
+
+    Attributes:
+        path: Путь к коду в событии (``payload.reason_code``).
+        texts: Код -> локаль -> текст фрагмента.
+        fallback: Локаль -> текст для неизвестного или пустого кода.
+    """
+
+    path: str
+    texts: Mapping[str, Mapping[str, str]]
+    fallback: Mapping[str, str]
+
+    def resolve(self, code: str, locale: str, default_locale: str) -> str:
+        """Текст по коду; нет кода - fallback; нет локали - ``default_locale``."""
+        by_locale = self.texts.get(code, self.fallback)
+        return by_locale.get(locale) or by_locale[default_locale]
+
+
+@dataclass(frozen=True, slots=True)
 class NotificationType:
     """Тип уведомления: что слушаем, кому, что показываем.
 
@@ -63,11 +83,31 @@ class NotificationType:
     params: Mapping[str, str]
     templates: Mapping[str, Template]
     filter: Mapping[str, FilterValue] = field(default_factory=dict)
+    lookups: Mapping[str, Lookup] = field(default_factory=dict)
 
 
 def _require_payload_path(type_key: str, field_name: str, path: str) -> None:
     if not path.startswith(f"{PAYLOAD_ROOT}.") or path == f"{PAYLOAD_ROOT}.":
         raise ConfigError(f"{type_key}: {field_name} должен начинаться с `{PAYLOAD_ROOT}.`: {path}")
+
+
+def _parse_lookups(
+    key: str, raw: Mapping[str, Any], params: Mapping[str, str], default_locale: str
+) -> dict[str, Lookup]:
+    lookups: dict[str, Lookup] = {}
+    for name, item in raw.items():
+        if name in params:
+            raise ConfigError(f"{key}: `{name}` одновременно в params и lookups")
+        _require_payload_path(key, f"lookups.{name}.path", item["path"])
+        fallback = dict(item["fallback"])
+        if default_locale not in fallback:
+            raise ConfigError(f"{key}: lookups.{name}.fallback без `{default_locale}`")
+        texts = {code: dict(by_locale) for code, by_locale in item["texts"].items()}
+        for code, by_locale in texts.items():
+            if default_locale not in by_locale:
+                raise ConfigError(f"{key}: lookups.{name}.texts.{code} без `{default_locale}`")
+        lookups[name] = Lookup(path=item["path"], texts=texts, fallback=fallback)
+    return lookups
 
 
 def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType:
@@ -76,6 +116,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
     params: dict[str, str] = dict(raw["params"])
     for name, path in params.items():
         _require_payload_path(key, f"params.{name}", path)
+    lookups = _parse_lookups(key, raw.get("lookups", {}), params, default_locale)
     refs = DEDUP_PLACEHOLDER.findall(raw["dedup_key"])
     if not refs:
         raise ConfigError(f"{key}: dedup_key без подстановок из полей события")
@@ -89,7 +130,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
         raise ConfigError(f"{key}: нет шаблона на default_locale `{default_locale}`")
     for locale, template in templates.items():
         for text in (template.title, template.body):
-            unknown = set(PLACEHOLDER.findall(text)) - set(params)
+            unknown = set(PLACEHOLDER.findall(text)) - set(params) - set(lookups)
             if unknown:
                 raise ConfigError(
                     f"{key}: шаблон `{locale}` ссылается на неизвестные параметры {sorted(unknown)}"
@@ -105,6 +146,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
         params=params,
         templates=templates,
         filter=dict(raw.get("filter", {})),
+        lookups=lookups,
     )
 
 

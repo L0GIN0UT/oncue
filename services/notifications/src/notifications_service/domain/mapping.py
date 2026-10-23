@@ -109,6 +109,9 @@ def map_event(
     values = {
         name: _text(resolve_path(payload, path)) for name, path in notification_type.params.items()
     }
+    for name, lookup in notification_type.lookups.items():
+        code = _text(resolve_path(payload, lookup.path))
+        values[name] = lookup.resolve(code, locale, default_locale)
     template = (
         notification_type.templates.get(locale) or notification_type.templates[default_locale]
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from notifications_service.main import DEFINITION
 
 from gv_core.ids import uuid7
 from gv_messaging import Outcome
+from gv_testkit import assert_realtime_message_matches_schema
+from gv_testkit.contracts import contracts_dir
 
 pytestmark = pytest.mark.component
 
@@ -106,12 +109,14 @@ async def test_avatar_rejected_goes_to_owner_with_reason_code(notifications: Ser
     owner = uuid7()
     svc = notifications
     await svc.deliver(
-        svc.event("media_pipeline.AssetModerated", owner_user_id=str(owner), reason_code="blurry")
+        svc.event(
+            "media_pipeline.AssetModerated", owner_user_id=str(owner), reason_code="copyright"
+        )
     )
     [row] = await svc.rows(notifications_table)
     assert row.user_id == owner
     assert row.type == "avatar_rejected"
-    assert "blurry" in row.body
+    assert row.body == "Ваша аватарка отклонена: нарушает чужие авторские права."
 
 
 async def test_broken_payload_goes_to_dlq_as_permanent(notifications: Service) -> None:
@@ -197,6 +202,16 @@ async def test_realtime_message_goes_to_personal_channel_after_commit(
     assert message["type"] == "notification.created"
     assert message["notification"]["type"] == "level_up"
     assert UUID(message["notification"]["id"])
+    assert_realtime_message_matches_schema(message, "notification.created")
+
+
+def test_realtime_example_matches_schema() -> None:
+    example = json.loads(
+        (contracts_dir() / "realtime" / "examples" / "notification.created.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert_realtime_message_matches_schema(example, "notification.created")
 
 
 async def test_realtime_is_not_published_when_transaction_rolls_back(
