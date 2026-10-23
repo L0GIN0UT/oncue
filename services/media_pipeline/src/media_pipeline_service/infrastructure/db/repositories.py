@@ -8,7 +8,7 @@ from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Table, delete, func, insert, select, text, update
+from sqlalchemy import ColumnElement, Table, delete, func, insert, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
@@ -33,6 +33,7 @@ from media_pipeline_service.application.ports import (
     ProfileSetCount,
     ScopeFilter,
     SourceMediaRepository,
+    UgcImageRepository,
 )
 from media_pipeline_service.domain.asset_set import AssetLevel, AssetSet, AssetSetStatus
 from media_pipeline_service.domain.collections import CollectionState
@@ -47,6 +48,7 @@ from media_pipeline_service.domain.sources import (
     SourceOrigin,
     SourceStatus,
 )
+from media_pipeline_service.domain.ugc import UgcImage, UgcStatus
 from media_pipeline_service.infrastructure.db.tables import (
     TABLES,
     admin_actions,
@@ -58,6 +60,8 @@ from media_pipeline_service.infrastructure.db.tables import (
     link_issuance,
     media_items_state,
     source_media,
+    ugc_images,
+    ugc_object_purge,
 )
 
 
@@ -640,6 +644,168 @@ class SqlCollectionStateRepository:
         return result.first() is not None
 
 
+# ---------------------------------------------------------------- UGC-изображения
+def _to_ugc(row: RowMapping) -> UgcImage:
+    return UgcImage(
+        row["id"],
+        owner_user_id=row["owner_user_id"],
+        purpose=row["purpose"],
+        status=UgcStatus(row["status"]),
+        reason_code=row["reason_code"],
+        pending_key=row["pending_key"],
+        public_key=row["public_key"],
+        width=row["width"],
+        height=row["height"],
+        size_bytes=row["bytes"],
+        sha256=row["sha256"],
+        submitted_at=row["submitted_at"],
+        decided_at=row["decided_at"],
+        moderator_id=row["moderator_id"],
+        version=row["version"],
+    )
+
+
+def _ugc_values(image: UgcImage) -> dict[str, Any]:
+    return {
+        "owner_user_id": image.owner_user_id,
+        "purpose": image.purpose,
+        "status": image.status.value,
+        "reason_code": image.reason_code,
+        "pending_key": image.pending_key,
+        "public_key": image.public_key,
+        "width": image.width,
+        "height": image.height,
+        "bytes": image.size_bytes,
+        "sha256": image.sha256,
+        "submitted_at": image.submitted_at,
+        "decided_at": image.decided_at,
+        "moderator_id": image.moderator_id,
+        "version": image.version,
+    }
+
+
+class SqlUgcImageRepository:
+    """UGC-изображения: решения сериализуются блокировкой строки (``FOR UPDATE``)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, image: UgcImage) -> None:
+        """Вставить заявку."""
+        await self._s.execute(insert(ugc_images).values(id=image.id, **_ugc_values(image)))
+
+    async def get(self, image_id: UUID, *, for_update: bool = False) -> UgcImage | None:
+        """Ассет по id."""
+        query = select(ugc_images).where(ugc_images.c.id == image_id)
+        if for_update:
+            query = query.with_for_update()
+        row = (await self._s.execute(query)).mappings().first()
+        return _to_ugc(row) if row else None
+
+    async def save(self, image: UgcImage) -> None:
+        """Записать изменения."""
+        await self._s.execute(
+            update(ugc_images).where(ugc_images.c.id == image.id).values(**_ugc_values(image))
+        )
+
+    async def list_approved_for_owner(
+        self, owner_user_id: UUID, purpose: str, *, exclude: UUID
+    ) -> list[UgcImage]:
+        """Одобренные изображения владельца кроме ``exclude`` (строки блокируются)."""
+        c = ugc_images.c
+        query = (
+            select(ugc_images)
+            .where(
+                c.owner_user_id == owner_user_id,
+                c.purpose == purpose,
+                c.status == UgcStatus.APPROVED.value,
+                c.id != exclude,
+            )
+            .order_by(c.submitted_at, c.id)
+            .with_for_update()
+        )
+        return [_to_ugc(r) for r in (await self._s.execute(query)).mappings().all()]
+
+    async def pending_keys(self, keys: Sequence[str]) -> set[str]:
+        """Ключи, за которыми есть ``pending``-заявка."""
+        if not keys:
+            return set()
+        c = ugc_images.c
+        rows = await self._s.execute(
+            select(c.pending_key).where(
+                c.status == UgcStatus.PENDING.value, c.pending_key.in_(list(keys))
+            )
+        )
+        return {r[0] for r in rows}
+
+    async def enqueue_purge(self, keys: Sequence[str], now: datetime) -> None:
+        """Записать ключи на удаление; повтор ключа не ошибка."""
+        if not keys:
+            return
+        await self._s.execute(
+            pg_insert(ugc_object_purge)
+            .values([{"key": k, "created_at": now} for k in dict.fromkeys(keys)])
+            .on_conflict_do_nothing(index_elements=[ugc_object_purge.c.key])
+        )
+
+    async def claim_purge(self, limit: int) -> list[str]:
+        """Старые ключи первыми; ``SKIP LOCKED``: параллельные запуски не пересекаются."""
+        rows = await self._s.execute(
+            select(ugc_object_purge.c.key)
+            .order_by(ugc_object_purge.c.created_at, ugc_object_purge.c.key)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return [r[0] for r in rows]
+
+    async def forget_purge(self, keys: Sequence[str]) -> None:
+        """Стереть строки очереди."""
+        if keys:
+            await self._s.execute(
+                delete(ugc_object_purge).where(ugc_object_purge.c.key.in_(list(keys)))
+            )
+
+    async def lock_owner(self, owner_user_id: UUID, purpose: str) -> None:
+        """Рекомендательная блокировка транзакции: заявки владельца идут по очереди."""
+        await self._s.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"ugc:{owner_user_id}:{purpose}"},
+        )
+
+    async def list_pending_for_owner(self, owner_user_id: UUID, purpose: str) -> list[UgcImage]:
+        """Ожидающие заявки владельца (строки блокируются)."""
+        c = ugc_images.c
+        query = (
+            select(ugc_images)
+            .where(
+                c.owner_user_id == owner_user_id,
+                c.purpose == purpose,
+                c.status == UgcStatus.PENDING.value,
+            )
+            .order_by(c.submitted_at, c.id)
+            .with_for_update()
+        )
+        return [_to_ugc(r) for r in (await self._s.execute(query)).mappings().all()]
+
+    async def queue(
+        self,
+        status: UgcStatus,
+        purpose: str | None,
+        *,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> list[UgcImage]:
+        """Страница очереди по ``(submitted_at, id)``."""
+        c = ugc_images.c
+        query = select(ugc_images).where(c.status == status.value)
+        if purpose is not None:
+            query = query.where(c.purpose == purpose)
+        if after is not None:
+            query = query.where(tuple_(c.submitted_at, c.id) > tuple_(after[0], after[1]))
+        query = query.order_by(c.submitted_at, c.id).limit(limit)
+        return [_to_ugc(r) for r in (await self._s.execute(query)).mappings().all()]
+
+
 # ---------------------------------------------------------------- журнал и аудит
 class SqlLinkIssuanceJournal:
     """Журнал выдачи ссылок."""
@@ -723,6 +889,7 @@ class SqlMediaUnitOfWork:
     links: LinkIssuanceJournal
     profiles: DynamicProfileRepository
     collections: CollectionStateRepository
+    ugc: UgcImageRepository
     idempotency: IdempotencyStore
     audit: AdminAuditLog
 
@@ -763,6 +930,7 @@ class SqlMediaUnitOfWork:
         self.links = SqlLinkIssuanceJournal(s)
         self.profiles = SqlDynamicProfileRepository(s)
         self.collections = SqlCollectionStateRepository(s)
+        self.ugc = SqlUgcImageRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         self.audit = SqlAdminAuditLog(s)
         return self

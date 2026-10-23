@@ -20,6 +20,7 @@ from media_pipeline_service.domain.collections import CollectionState
 from media_pipeline_service.domain.dynamic_profiles import DynamicProfile
 from media_pipeline_service.domain.media_items import MediaItemState
 from media_pipeline_service.domain.sources import AssetScope, SourceMedia
+from media_pipeline_service.domain.ugc import UgcImage, UgcPurpose, UgcStatus
 
 
 # ---------------------------------------------------------------- хранилище
@@ -28,6 +29,22 @@ class StorageArea(StrEnum):
 
     SOURCES = "sources"
     ASSETS = "assets"
+
+
+@dataclass(frozen=True, slots=True)
+class StoredObject:
+    """Объект в хранилище: ключ и время последнего изменения."""
+
+    key: str
+    last_modified: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ObjectPage:
+    """Страница листинга; ``next_token`` - ``None`` на последней странице."""
+
+    items: list[StoredObject]
+    next_token: str | None
 
 
 class ObjectStorage(Protocol):
@@ -43,6 +60,16 @@ class ObjectStorage(Protocol):
 
     async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
         """Удалить объекты (отсутствующие — не ошибка)."""
+        ...
+
+    async def copy(self, area: StorageArea, source_key: str, target_key: str) -> None:
+        """Скопировать объект внутри бакета области (одобрение UGC: ``p/`` → ``u/``)."""
+        ...
+
+    async def list_objects(
+        self, area: StorageArea, prefix: str, *, limit: int, token: str | None = None
+    ) -> ObjectPage:
+        """Страница объектов с префиксом (для чистки осиротевших объектов UGC)."""
         ...
 
 
@@ -134,6 +161,29 @@ class ImageProcessor(SourceNormalizer, Protocol):
 
     async def render(self, data: bytes, ops: ImageOps) -> RenderedImage:
         """Применить преобразования уровня."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class EncodedImage:
+    """Перекодированное UGC-изображение: WebP без метаданных."""
+
+    data: bytes
+    width: int
+    height: int
+    sha256: str
+
+
+class UgcImageEncoder(Protocol):
+    """Проверка и перекодирование пользовательского изображения (безопасность файла)."""
+
+    async def encode(self, data: bytes, purpose: UgcPurpose) -> EncodedImage:
+        """Проверить по содержимому и пересобрать из пикселей.
+
+        Raises:
+            InvalidUgcImageError: не изображение допустимого формата, анимация, повреждён,
+                «бомба» или стороны вне лимитов назначения.
+        """
         ...
 
 
@@ -395,9 +445,67 @@ class AdminAuditLog(Protocol):
         ...
 
 
+class UgcImageRepository(Protocol):
+    """UGC-изображения."""
+
+    async def add(self, image: UgcImage) -> None:
+        """Сохранить новую заявку."""
+        ...
+
+    async def get(self, image_id: UUID, *, for_update: bool = False) -> UgcImage | None:
+        """Ассет по id (``for_update`` сериализует конкурирующие решения)."""
+        ...
+
+    async def save(self, image: UgcImage) -> None:
+        """Сохранить изменения решения."""
+        ...
+
+    async def list_approved_for_owner(
+        self, owner_user_id: UUID, purpose: str, *, exclude: UUID
+    ) -> list[UgcImage]:
+        """Одобренные изображения владельца (кроме ``exclude``), строки блокируются."""
+        ...
+
+    async def pending_keys(self, keys: Sequence[str]) -> set[str]:
+        """Какие из ключей принадлежат ``pending``-заявкам."""
+        ...
+
+    async def enqueue_purge(self, keys: Sequence[str], now: datetime) -> None:
+        """Записать ключи на гарантированное удаление (в транзакции решения)."""
+        ...
+
+    async def claim_purge(self, limit: int) -> list[str]:
+        """Ключи к удалению (с блокировкой строк: параллельные запуски не пересекаются)."""
+        ...
+
+    async def forget_purge(self, keys: Sequence[str]) -> None:
+        """Убрать ключи из очереди после успешного удаления из хранилища."""
+        ...
+
+    async def lock_owner(self, owner_user_id: UUID, purpose: str) -> None:
+        """Сериализовать заявки владельца на одно назначение до конца транзакции."""
+        ...
+
+    async def list_pending_for_owner(self, owner_user_id: UUID, purpose: str) -> list[UgcImage]:
+        """Ожидающие решения заявки владельца (с блокировкой строк)."""
+        ...
+
+    async def queue(
+        self,
+        status: UgcStatus,
+        purpose: str | None,
+        *,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> list[UgcImage]:
+        """Страница очереди: ``(submitted_at, id)`` по возрастанию, строго после ``after``."""
+        ...
+
+
 class MediaUnitOfWork(UnitOfWork, Protocol):
     """Транзакция use-case с репозиториями сервиса."""
 
+    ugc: UgcImageRepository
     asset_sets: AssetSetRepository
     sources: SourceMediaRepository
     items: MediaItemStateRepository

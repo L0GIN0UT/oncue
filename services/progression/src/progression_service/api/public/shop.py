@@ -191,7 +191,11 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
         return PlayersAppearance(
             players=[
                 PlayerAppearance(
-                    user_id=p.user_id, appearance=appearance(p.slots), custom_avatar_url=None
+                    user_id=p.user_id,
+                    appearance=appearance(p.slots),
+                    custom_avatar_url=(
+                        services.ugc_url(p.custom_avatar_key) if p.custom_avatar_key else None
+                    ),
                 )
                 for p in players
             ]

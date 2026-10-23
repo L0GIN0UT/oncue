@@ -71,6 +71,25 @@ class MediaSettings(BaseModel):
     # наборы со scope сборника (в 3b — только emoji).
     collection_emoji_max_graphemes: int = Field(default=12, ge=1, le=64)
     scoped_clue_types: frozenset[str] = frozenset({"emoji"})
+    # UGC-изображения (5b, ADR 0048): None - встроенный config/ugc_purposes.yaml.
+    ugc_purposes_path: Path | None = None
+    # Публичный префикс одобренных изображений на gateway (location /ugc/), с `/` на конце.
+    ugc_public_base_url: str = Field(
+        default="/ugc/", pattern=r"^(https?://[^/]+)?/([a-z0-9_-]+/)+$"
+    )
+    # Сколько картинок UGC декодируется одновременно (остальные ждут): защита от DoS потоком заявок.
+    ugc_encode_concurrency: int = Field(default=2, ge=1, le=32)
+    # Задача relay ``media.ugc.purge``: гарантированное удаление объектов снятых/отклонённых/
+    # замещённых изображений (ключи - в таблице ``ugc_object_purge``).
+    ugc_purge_interval_s: float = Field(default=60, gt=0)
+    ugc_purge_jitter_s: float = Field(default=10, ge=0)
+    ugc_purge_batch: int = Field(default=500, ge=1, le=1000)
+    # Задача relay ``media.ugc.orphans``: p/-объекты старше TTL без pending-строки в БД.
+    ugc_orphan_ttl_h: int = Field(default=24, ge=1, le=720)
+    ugc_orphan_interval_s: float = Field(default=3600, gt=0)
+    ugc_orphan_jitter_s: float = Field(default=300, ge=0)
+    # Срок ссылки модератора на pending-объект (`/media/p/...`).
+    ugc_preview_ttl_s: int = Field(default=120, ge=10, le=600)
 
     @property
     def source_host_list(self) -> frozenset[str]:

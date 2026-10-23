@@ -11,6 +11,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from gv_core.domain import DomainEvent
+from progression_service.application.ports.avatar import AvatarRepository
 from progression_service.application.ports.rewards import (
     BadgeRepository,
     BoostRepository,
@@ -283,6 +284,9 @@ class ProgressionUnitOfWork(Protocol):
 
     @property
     def packs(self) -> PackRepository: ...
+
+    @property
+    def avatars(self) -> AvatarRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

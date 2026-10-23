@@ -1,35 +1,38 @@
 """Схемы и ручки UGC-изображений (аватарки, обложки сборников): приём и модерация.
 
-Контракт этапа 5b (``docs/plans/stage-5.md`` §9.6, ADR 0048). Шаг 0a: ручки объявлены,
-реализация - поток S3; до тех пор отвечают 501 ``common.not_implemented``.
+Контракт этапа 5b (``docs/plans/stage-5.md`` §9.6, ADR 0048):
 
 * приём - internal (``POST /internal/v1/ugc-images``), сервисный токен с областью ``ugc.image``:
-  вызывает progression, пользовательского доступа к media-pipeline нет;
+  вызывает progression, пользовательского доступа к media-pipeline нет; клиент определяется
+  по ``sub = svc:<id>`` токена и должен быть в ``allowed_clients`` назначения;
 * модерация - admin (``/admin/v1/ugc-images``), право ``media.ugc.moderate`` (moderator, admin);
   решение с причиной из списка кодов конфига пишет аудит и публикует ``AssetModerated``;
-* ассет ``pending`` и ``rejected`` недоступен по публичному адресу.
+* ассет ``pending`` и ``rejected`` недоступен по публичному адресу;
+* успешные ответы - ``Cache-Control: no-store``.
 """
 
-# Аргументы ручек - зависимости FastAPI, часть нужна только ради проверки доступа.
-# ruff: noqa: ARG001
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Path, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Path, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from gv_auth import Principal, ServiceAuthenticator, ServicePrincipal, require_perm
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, Reason, problem_responses
+from gv_service.problems import problem
+from media_pipeline_service.application.commands.ugc import UgcUseCases
+from media_pipeline_service.application.ugc import UgcImageView
+from media_pipeline_service.domain.errors import UgcClientForbiddenError, UgcTooLargeError
+from media_pipeline_service.domain.ugc import UgcStatus
 
 UGC_IMAGE_SCOPE = "ugc.image"
 """Область сервисного токена для приёма UGC-изображений (``GV_SERVICE_CLIENTS`` identity)."""
 
 Key = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
-UgcStatus = Literal["pending", "approved", "rejected"]
+UgcStatusName = Literal["pending", "approved", "rejected"]
 Cursor = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,512}$")]
 AssetIdPath = Annotated[UUID, Path(description="Идентификатор UGC-ассета")]
 
@@ -38,6 +41,9 @@ Caller = Annotated[
     ServicePrincipal, Depends(ServiceAuthenticator().require_service(UGC_IMAGE_SCOPE))
 ]
 
+_READ_CHUNK = 64 * 1024
+_NO_STORE = "no-store"
+
 
 class UgcImage(BaseModel):
     """UGC-изображение."""
@@ -45,7 +51,7 @@ class UgcImage(BaseModel):
     asset_id: UUID
     owner_user_id: UUID
     purpose: Key = Field(description="Назначение из конфига: avatar, collection_cover")
-    status: UgcStatus
+    status: UgcStatusName
     reason_code: Key | None = Field(description="Код причины отклонения; иначе null")
     width: int = Field(ge=1)
     height: int = Field(ge=1)
@@ -54,6 +60,24 @@ class UgcImage(BaseModel):
     decided_at: datetime | None
     moderator_id: UUID | None
     version: int = Field(ge=1, description="Монотонная версия решения (как в `AssetModerated`)")
+
+    @classmethod
+    def of(cls, view: UgcImageView) -> UgcImage:
+        """Из результата use-case."""
+        return cls(
+            asset_id=view.asset_id,
+            owner_user_id=view.owner_user_id,
+            purpose=view.purpose,
+            status=view.status,
+            reason_code=view.reason_code,
+            width=view.width,
+            height=view.height,
+            bytes=view.size_bytes,
+            submitted_at=view.submitted_at,
+            decided_at=view.decided_at,
+            moderator_id=view.moderator_id,
+            version=view.version,
+        )
 
 
 class UgcImagePage(BaseModel):
@@ -111,12 +135,39 @@ class ApproveRequest(BaseModel):
     reason: Reason
 
 
-def _stub() -> NotImplementedYetError:
-    return NotImplementedYetError("ручка появится в потоке S3 этапа 5b")
+def _no_store(response: Response) -> None:
+    """Зависимость: ``Cache-Control: no-store`` на успешных ответах."""
+    response.headers["Cache-Control"] = _NO_STORE
 
 
-def register_ugc_internal_routes(router: APIRouter) -> None:
-    """Добавить в ``/internal/v1`` приём UGC-изображений (пока заглушка)."""
+async def _read_limited(file: UploadFile, max_bytes: int) -> bytes:
+    """Прочитать файл не больше лимита: тело отбрасывается до декодирования."""
+    if file.size is not None and file.size > max_bytes:
+        raise UgcTooLargeError("файл больше лимита", details={"max_bytes": max_bytes})
+    chunks: list[bytes] = []
+    size = 0
+    while chunk := await file.read(_READ_CHUNK):
+        size += len(chunk)
+        if size > max_bytes:
+            raise UgcTooLargeError("файл больше лимита", details={"max_bytes": max_bytes})
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _too_large(max_bytes: int) -> Response:
+    """413 Problem Details (в общем обработчике ошибок такого статуса нет)."""
+    reply = problem(
+        413,
+        "ugc.too_large",
+        "Файл больше допустимого размера",
+        extra={"details": {"max_bytes": max_bytes}},
+    )
+    reply.headers["Cache-Control"] = _NO_STORE
+    return reply
+
+
+def register_ugc_internal_routes(router: APIRouter, ugc: UgcUseCases) -> None:
+    """Добавить в ``/internal/v1`` приём UGC-изображений."""
 
     @router.post(
         "/ugc-images",
@@ -124,14 +175,18 @@ def register_ugc_internal_routes(router: APIRouter) -> None:
         status_code=202,
         summary="Принять UGC-изображение",
         description=(
-            "multipart: `file`, `owner_user_id`, `purpose`. Проверка по сигнатуре (не "
-            "`Content-Type`), размеру и сторонам, пересжатие и удаление EXIF, объект в S3 под "
+            "multipart: `file`, `owner_user_id`, `purpose`. Клиент определяется по сервисному "
+            "токену и должен быть в `allowed_clients` назначения (иначе 403). Проверка по "
+            "сигнатуре (не `Content-Type`), размеру и сторонам, только статичные "
+            "JPEG/PNG/WebP; пересжатие в квадратный WebP и удаление EXIF, объект в S3 под "
             "случайным ключом; ассет создаётся `pending`. Повтор с тем же `Idempotency-Key` "
-            "возвращает тот же ассет. Новая заявка владельца на то же назначение отменяет "
-            "прежнюю `pending`. Ошибки: 422 `ugc.invalid_image`, 413 `ugc.too_large`, "
-            "422 `ugc.purpose_unknown`."
+            "для владельца возвращает тот же ассет без повторной обработки. Новая заявка "
+            "владельца на то же назначение тихо отменяет прежнюю `pending` (событие не "
+            "публикуется). Ошибки: 422 `ugc.invalid_image`, 413 `ugc.too_large`, "
+            "422 `ugc.purpose_unknown`, 403 `ugc.client_forbidden`."
         ),
-        responses=problem_responses(401, 403, 413, 422, 501),
+        responses=problem_responses(401, 403, 409, 413, 422, 503),
+        dependencies=[Depends(_no_store)],
     )
     async def submit(
         caller: Caller,
@@ -139,47 +194,94 @@ def register_ugc_internal_routes(router: APIRouter) -> None:
         owner_user_id: Annotated[UUID, Form()],
         purpose: Annotated[Key, Form()],
         file: Annotated[UploadFile, File(description="Изображение")],
-    ) -> UgcImage:
-        raise _stub()
+    ) -> UgcImage | Response:
+        spec = ugc.catalog.purpose(purpose)
+        # Чужой клиент не заставляет сервис читать тело.
+        if caller.client_id not in spec.allowed_clients:
+            raise UgcClientForbiddenError("сервису это назначение недоступно")
+        try:
+            data = await _read_limited(file, spec.max_bytes)
+        except UgcTooLargeError:
+            return _too_large(spec.max_bytes)
+        try:
+            view = await ugc.submit.execute(
+                client_id=caller.client_id,
+                owner_user_id=owner_user_id,
+                purpose=purpose,
+                data=data,
+                idempotency_key=key,
+            )
+        except UgcTooLargeError:
+            return _too_large(spec.max_bytes)
+        return UgcImage.of(view)
 
 
-def register_ugc_admin_routes(router: APIRouter) -> None:
-    """Добавить в ``/admin/v1`` очередь «UGC-изображения» (пока заглушки)."""
+def register_ugc_admin_routes(router: APIRouter, ugc: UgcUseCases) -> None:
+    """Добавить в ``/admin/v1`` очередь «UGC-изображения»."""
 
     @router.get(
         "/ugc-images/settings",
         response_model=UgcSettings,
         summary="Назначения и причины отклонения",
-        responses=problem_responses(401, 403, 501),
+        responses=problem_responses(401, 403),
+        dependencies=[Depends(_no_store)],
     )
-    async def settings(principal: Moderator) -> UgcSettings:
-        raise _stub()
+    async def settings(principal: Moderator) -> UgcSettings:  # noqa: ARG001 - только проверка права
+        catalog = ugc.catalog
+        return UgcSettings(
+            purposes=[
+                UgcLimits(
+                    purpose=p.key,
+                    max_bytes=p.max_bytes,
+                    formats=list(p.input_formats),
+                    min_side_px=p.min_side_px,
+                    max_side_px=p.max_side_px,
+                )
+                for p in catalog.purposes.values()
+            ],
+            reasons=[UgcRejectionReason(code=r.code, title=r.title) for r in catalog.reasons],
+        )
 
     @router.get(
         "/ugc-images",
         response_model=UgcImagePage,
         summary="Очередь UGC-изображений",
-        description="Фильтры по статусу (по умолчанию `pending`) и назначению.",
-        responses=problem_responses(401, 403, 422, 501),
+        description=(
+            "Фильтры по статусу (по умолчанию `pending`) и назначению; старые заявки первыми. "
+            "Некорректный курсор - 422 `ugc.cursor_invalid`."
+        ),
+        responses=problem_responses(401, 403, 422),
+        dependencies=[Depends(_no_store)],
     )
     async def queue(
-        principal: Moderator,
-        status: Annotated[UgcStatus, Query()] = "pending",
+        principal: Moderator,  # noqa: ARG001 - только проверка права
+        status: Annotated[UgcStatusName, Query()] = "pending",
         purpose: Annotated[Key | None, Query()] = None,
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
     ) -> UgcImagePage:
-        raise _stub()
+        page = await ugc.queue.execute(
+            status=UgcStatus(status), purpose=purpose, cursor=cursor, limit=limit
+        )
+        return UgcImagePage(
+            items=[UgcImage.of(v) for v in page.items], next_cursor=page.next_cursor
+        )
 
     @router.get(
         "/ugc-images/{asset_id}/preview",
         response_model=UgcImagePreview,
         summary="Ссылка для просмотра",
-        description="Короткая подписанная ссылка; выдача пишется в аудит.",
-        responses=problem_responses(401, 403, 404, 501),
+        description=(
+            "Короткая подписанная ссылка на `pending`-объект (`/media/p/...`, секрет тот же, "
+            "что у ассетов), у одобренного - публичный адрес; выдача пишется в аудит. "
+            "У отклонённого объекта нет (404 `ugc.not_found`). Просроченная ссылка не работает."
+        ),
+        responses=problem_responses(401, 403, 404),
+        dependencies=[Depends(_no_store)],
     )
     async def preview(asset_id: AssetIdPath, principal: Moderator) -> UgcImagePreview:
-        raise _stub()
+        result = await ugc.preview.execute(asset_id, moderator_id=principal.user_id)
+        return UgcImagePreview(url=result.url, expires_at=result.expires_at)
 
     @router.post(
         "/ugc-images/{asset_id}/approve",
@@ -187,26 +289,41 @@ def register_ugc_admin_routes(router: APIRouter) -> None:
         summary="Одобрить",
         description=(
             "Только из `pending` (иначе 409 `ugc.not_pending`). В одной транзакции: статус, "
-            "аудит и outbox `AssetModerated`."
+            "аудит и outbox `AssetModerated`; объект копируется в публичный `u/<hex>.webp`, "
+            "`p/` удаляется после коммита."
         ),
-        responses=problem_responses(401, 403, 404, 409, 422, 501),
+        responses=problem_responses(401, 403, 404, 409, 422),
+        dependencies=[Depends(_no_store)],
     )
     async def approve(
         asset_id: AssetIdPath, body: ApproveRequest, principal: Moderator, key: IdempotencyKey
     ) -> UgcImage:
-        raise _stub()
+        view = await ugc.moderate.approve(
+            asset_id, moderator_id=principal.user_id, reason=body.reason, idempotency_key=key
+        )
+        return UgcImage.of(view)
 
     @router.post(
         "/ugc-images/{asset_id}/reject",
         response_model=UgcImage,
-        summary="Отклонить",
+        summary="Отклонить или снять",
         description=(
-            "Только из `pending` (409 `ugc.not_pending`). `reason_code` - из списка конфига "
-            "(422 `ugc.reason_unknown`); объект отклонённого ассета удаляется после коммита."
+            "Из `pending` (отклонение) и из `approved` (снятие UGC-изображения: версия растёт, "
+            "публичный объект удаляется, `AssetModerated(rejected)`). Из `rejected` - 409 "
+            "`ugc.not_pending`. `reason_code` - из списка конфига (422 `ugc.reason_unknown`); "
+            "объект удаляется после коммита."
         ),
-        responses=problem_responses(401, 403, 404, 409, 422, 501),
+        responses=problem_responses(401, 403, 404, 409, 422),
+        dependencies=[Depends(_no_store)],
     )
     async def reject(
         asset_id: AssetIdPath, body: RejectRequest, principal: Moderator, key: IdempotencyKey
     ) -> UgcImage:
-        raise _stub()
+        view = await ugc.moderate.reject(
+            asset_id,
+            moderator_id=principal.user_id,
+            reason_code=body.reason_code,
+            reason=body.reason,
+            idempotency_key=key,
+        )
+        return UgcImage.of(view)

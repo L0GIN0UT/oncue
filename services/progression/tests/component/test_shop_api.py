@@ -35,7 +35,6 @@ PUBLIC: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/v1/me/avatar", {}),
     ("POST", "/v1/me/avatar", {"files": {"file": ("a.png", PNG, "image/png")}}),
 ]
-AVATAR = {"/v1/me/avatar"}  # поток S3: до него заглушка 501
 
 
 def idem() -> dict[str, str]:
@@ -58,10 +57,7 @@ async def test_public_routes_need_an_account(
     assert_problem(await call(None), 401, "auth.unauthenticated")
     assert_problem(await call(progression.issuer.issue_guest()), 403, "auth.guest_forbidden")
     allowed = await call(progression.issuer.issue())
-    if path in AVATAR:
-        assert_problem(allowed, 501, "common.not_implemented")
-    else:
-        assert allowed.status_code != 501, allowed.text
+    assert allowed.status_code != 501, allowed.text
 
 
 @pytest.mark.parametrize(

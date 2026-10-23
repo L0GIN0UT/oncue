@@ -38,6 +38,21 @@ class ProgressionSettings(BaseModel):
     promo_hmac_key: SecretStr | None = Field(default=None, min_length=32)
     # Паки скрыты, пока биллинг выключен (ADR 0007); включает владелец, не код.
     billing_enabled: bool = False
+    # Своя аватарка (ADR 0048): media-pipeline (internal), публичный префикс gateway для
+    # одобренных изображений и таймауты вызова. Лимиты загрузки в ответе GET /v1/me/avatar
+    # ДУБЛИРУЮТ config/ugc_purposes.yaml media-pipeline (чтение без синхронного вызова);
+    # при смене там - менять здесь (значения по умолчанию совпадают).
+    media_url: str = Field(default="http://media-pipeline:8000", pattern=r"^https?://[^/]+$")
+    media_audience: str = Field(default="media_pipeline", pattern=r"^[a-z][a-z0-9_]*$")
+    media_timeout_s: float = Field(default=10.0, gt=0, le=60)
+    ugc_base_url: str = Field(default="/ugc/", pattern=r"^(https?://[^/]+)?/[^?#]*/$")
+    avatar_max_bytes: int = Field(default=1_500_000, ge=1, le=1_500_000)
+    avatar_formats: tuple[str, ...] = ("jpeg", "png", "webp")
+    avatar_min_side_px: int = Field(default=128, ge=1)
+    avatar_max_side_px: int = Field(default=4096, ge=1)
+    # Заявок на аватарку на игрока в окне (до вызова media-pipeline: декодирование дорогое).
+    avatar_submit_limit: int = Field(default=5, ge=1, le=1000)
+    avatar_submit_window_s: int = Field(default=3600, ge=1, le=86_400)
     # Подсказка клиенту, когда лимитер попыток (Redis) недоступен и ввод кода закрыт (503).
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
 

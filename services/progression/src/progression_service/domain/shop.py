@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -273,15 +273,21 @@ def check_key_unchanged(current: str, requested: str) -> None:
         raise ItemKeyImmutableError
 
 
-def validate_custom_avatar(shop_cfg: ShopConfig, slot_by_key: Mapping[str, str]) -> None:
-    """Товар «своя аватарка» (если задан) существует и лежит в слоте из ``shop.slots``.
+def validate_custom_avatar(
+    shop_cfg: ShopConfig,
+    slot_by_key: Mapping[str, str],
+    sellable: Collection[str] | None = None,
+) -> None:
+    """Товар «своя аватарка» (если задан) существует, продаётся и лежит в слоте ``shop.slots``.
 
     Args:
         shop_cfg: Секция ``shop`` конфига.
         slot_by_key: Слоты имеющихся предметов по ключу.
+        sellable: Ключи предметов с ценой (продаются за Версы); ``None`` - не проверять.
+            Без цены право нельзя получить, а заявки на аватарку невозможны.
 
     Raises:
-        CustomAvatarItemError: предмета нет или его слот неизвестен.
+        CustomAvatarItemError: предмета нет, у него нет цены или его слот неизвестен.
     """
     key = shop_cfg.custom_avatar_item_key
     if key is None:
@@ -291,6 +297,8 @@ def validate_custom_avatar(shop_cfg: ShopConfig, slot_by_key: Mapping[str, str])
         raise CustomAvatarItemError(f"shop.custom_avatar_item_key: нет предмета {key!r}")
     if shop_cfg.slot(slot) is None:
         raise CustomAvatarItemError(f"shop.custom_avatar_item_key: слот {slot!r} не в shop.slots")
+    if sellable is not None and key not in sellable:
+        raise CustomAvatarItemError(f"shop.custom_avatar_item_key: предмет {key!r} без цены")
 
 
 # ------------------------------------------------------------------ медиа предметов

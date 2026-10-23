@@ -29,6 +29,7 @@ class PlayerView:
 
     user_id: UUID
     slots: list[SlotView]
+    custom_avatar_key: str | None = None  # u/<hex>.webp действующей своей аватарки
 
 
 async def _views(
@@ -109,4 +110,12 @@ class AppearanceService:
             slots = [s.key for s in cfg.slots] if cfg else []
             known = [u for u in unique if await uow.progress.get(u) is not None]
             worn = await uow.equipped.many(known)
-            return [PlayerView(u, await _views(uow, slots, worn.get(u, {}))) for u in known]
+            avatars = await uow.avatars.currents(known)
+            return [
+                PlayerView(
+                    u,
+                    await _views(uow, slots, worn.get(u, {})),
+                    avatars[u].public_key if u in avatars else None,
+                )
+                for u in known
+            ]

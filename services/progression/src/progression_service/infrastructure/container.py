@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from functools import cached_property
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from gv_auth.service import ServiceTokenProvider
 from gv_core.errors import DependencyUnavailableError
 from gv_core.random import Random, SystemRandom
-from gv_service import Infrastructure
+from gv_service import Infrastructure, build_service_token_provider
 from progression_service.application.accrual.daily import AccrueDaily
 from progression_service.application.accrual.match import AccrueMatch
 from progression_service.application.accrual.rating_rewards import AccrueSeason, AccrueWeeklyTop
@@ -26,11 +28,13 @@ from progression_service.application.admin.shop import (
     PromoQueries,
 )
 from progression_service.application.appearance import AppearanceService
+from progression_service.application.avatar import AvatarService
 from progression_service.application.badges import BadgeQueries
 from progression_service.application.boosts import BoostRewardHook
 from progression_service.application.inventory import InventoryService
 from progression_service.application.ports import RewardHook, UnitOfWorkFactory
-from progression_service.application.ports.shop import AttemptLimiter
+from progression_service.application.ports.avatar import MediaUgcClient, UgcUpload
+from progression_service.application.ports.shop import AttemptLimiter, AttemptWindow
 from progression_service.application.promo import PromoService
 from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
@@ -47,8 +51,37 @@ from progression_service.infrastructure.adapters import (
 )
 from progression_service.infrastructure.db.admin_repositories import SqlAdminUnitOfWork
 from progression_service.infrastructure.db.repositories import SqlProgressionUnitOfWork
+from progression_service.infrastructure.media_client import HttpMediaUgcClient
 from progression_service.infrastructure.storage import S3MediaStore
 from progression_service.settings import Settings
+
+
+class _LateMedia:
+    """Клиент media-pipeline, выбираемый при каждом вызове: use-cases собираются вместе с
+    роутерами, а тесты подменяют ``container.media_ugc`` уже после сборки."""
+
+    def __init__(self, container: ProgressionContainer) -> None:
+        self._container = container
+
+    async def submit(
+        self, *, owner_user_id: UUID, purpose: str, data: bytes, idempotency_key: str
+    ) -> UgcUpload:
+        return await self._container.media_ugc.submit(
+            owner_user_id=owner_user_id,
+            purpose=purpose,
+            data=data,
+            idempotency_key=idempotency_key,
+        )
+
+
+class _LateLimiter:
+    """Лимитер, выбираемый при каждом вызове (как ``_LateMedia``)."""
+
+    def __init__(self, container: ProgressionContainer) -> None:
+        self._container = container
+
+    async def hit(self, key: str, window_s: int) -> AttemptWindow:
+        return await self._container.limiter.hit(key, window_s)
 
 
 class ProgressionContainer:
@@ -206,7 +239,50 @@ class ProgressionContainer:
             appearance=self.appearance,
             promo=self.promo,
             public_url=self.media_store.public_url,
+            avatars=self.avatar,
+            ugc_url=self.ugc_url,
         )
+
+    # ------------------------------------------------------------------ своя аватарка (поток S3)
+    def ugc_url(self, public_key: str) -> str:
+        """Публичный адрес одобренной аватарки: ``<ugc_base_url><u/hex.webp>``."""
+        return f"{self.settings.progression.ugc_base_url}{public_key}"
+
+    @cached_property
+    def service_tokens(self) -> ServiceTokenProvider:
+        """Сервисный токен для media-pipeline (создаётся при первом вызове; нет учётных данных -
+        ``ServiceAuthNotConfiguredError``, клиент превращает его в 503)."""
+        return build_service_token_provider(self.infra, self.settings.progression.media_audience)
+
+    @cached_property
+    def media_ugc(self) -> MediaUgcClient:
+        """Клиент media-pipeline (тесты подставляют фейк присваиванием)."""
+        p = self.settings.progression
+        client = HttpMediaUgcClient(
+            base_url=p.media_url,
+            timeout_s=p.media_timeout_s,
+            tokens=lambda: self.service_tokens,
+            max_bytes=p.avatar_max_bytes,
+        )
+        self.infra.add_closer(client.aclose)
+        return client
+
+    @property
+    def avatar(self) -> AvatarService:
+        """Своя аватарка (чтение, заявка)."""
+        p = self.settings.progression
+        return AvatarService(
+            self.uow_factory(),
+            self.infra.clock,
+            _LateMedia(self),
+            limiter=_LateLimiter(self),
+            submit_limit=p.avatar_submit_limit,
+            submit_window_s=p.avatar_submit_window_s,
+        )
+
+    def avatar_moderation(self, session: AsyncSession) -> AvatarService:
+        """Применение ``AssetModerated`` в транзакции consumer (media-клиент не нужен)."""
+        return AvatarService(self.uow_factory(session), self.infra.clock, _LateMedia(self))
 
     @property
     def shop(self) -> ShopService:

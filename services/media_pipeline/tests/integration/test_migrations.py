@@ -326,3 +326,55 @@ async def test_0007_scoped_assets_keep_catalog_invariant_and_downgrade(database_
         await asyncio.to_thread(run_migrations, path, database_url)
     finally:
         await engine.dispose()
+
+
+async def test_0008_ugc_images_is_additive_and_downgrades(database_url: str) -> None:
+    """0008 (ADR 0048): только новая таблица, прежние не затронуты; индексы очереди на месте;
+    откат убирает таблицу, повторный подъём работает."""
+    path = DEFINITION.migrations_path
+    assert path is not None
+    config = alembic_config(path, database_url)
+    await asyncio.to_thread(run_migrations, path, database_url, "0007")
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as conn:
+            assert (await conn.execute(text("SELECT to_regclass('ugc_images')"))).scalar() is None
+        await asyncio.to_thread(run_migrations, path, database_url)
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'ugc_images'")
+            )
+            indexes = set(result.scalars().all())
+        assert {"ix_ugc_images_queue", "ix_ugc_images_owner_purpose_status"} <= indexes
+        async with engine.begin() as conn:  # очередь гарантированного удаления объектов
+            assert (await conn.execute(text("SELECT to_regclass('ugc_object_purge')"))).scalar()
+        # откат прерывается, пока в таблицах есть данные (очередь удаления, заявки)
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("INSERT INTO ugc_object_purge (key, created_at) VALUES (:k, now())"),
+                {"k": f"u/{uuid7().hex[-32:]}.webp"},
+            )
+        with pytest.raises(RuntimeError, match=r"откат 0008 запрещён.*ugc_object_purge: 1"):
+            await asyncio.to_thread(command.downgrade, config, "0007")
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM ugc_object_purge"))
+            await conn.execute(
+                text(
+                    "INSERT INTO ugc_images (id, owner_user_id, purpose, status, pending_key, "
+                    "width, height, bytes, sha256, submitted_at) VALUES (:id, :o, 'avatar', "
+                    "'pending', :k, 512, 512, 100, :h, now())"
+                ),
+                {"id": uuid7(), "o": uuid7(), "k": f"p/{uuid7().hex[-32:]}.webp", "h": "0" * 64},
+            )
+        with pytest.raises(RuntimeError, match=r"ugc_images: 1"):
+            await asyncio.to_thread(command.downgrade, config, "0007")
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM ugc_images"))
+        await asyncio.to_thread(command.downgrade, config, "0007")
+        async with engine.begin() as conn:
+            assert (await conn.execute(text("SELECT to_regclass('ugc_images')"))).scalar() is None
+            purge = text("SELECT to_regclass('ugc_object_purge')")
+            assert (await conn.execute(purge)).scalar() is None
+        await asyncio.to_thread(run_migrations, path, database_url)
+    finally:
+        await engine.dispose()
