@@ -18,6 +18,7 @@ from match_service.application.ports import (
     PresenceStore,
     RateLimiter,
     RoomStore,
+    SpectatorRegistry,
     SubscriptionTokens,
 )
 from match_service.application.views import iso, mode_ref, room_state, room_view, settings_json
@@ -27,8 +28,11 @@ from match_service.domain.errors import (
     MatchInvalidError,
     MatchNotFoundError,
 )
-from match_service.domain.model import Presence
+from match_service.domain.model import Phase, Presence
 from match_service.domain.room import Room
+
+WATCHED_PHASES = frozenset({Phase.COUNTDOWN, Phase.LEVEL_OPEN, Phase.REVEAL, Phase.PAUSED})
+"""Фазы идущего матча, которые видит наблюдатель."""
 
 
 def encode_cursor(*parts: object) -> str:
@@ -61,6 +65,10 @@ class QueryLimits:
     join_by_code_per_user_per_min: int = 20
     tick_per_min: int = 150
     state_per_min: int = 60
+    spectate_per_min: int = 60
+    spectate_scan_pages: int = 10
+    window_s: int = 60
+    spectator_ttl_s: int = 3600
 
 
 class RoomQueries:
@@ -75,6 +83,7 @@ class RoomQueries:
         limiter: RateLimiter,
         clock: Clock,
         limits: QueryLimits,
+        spectators: SpectatorRegistry | None = None,
     ) -> None:
         self._store = store
         self._presence = presence
@@ -82,6 +91,7 @@ class RoomQueries:
         self._limiter = limiter
         self._clock = clock
         self._limits = limits
+        self._spectators = spectators
 
     def _now(self) -> datetime:
         return self._clock.now()
@@ -105,6 +115,40 @@ class RoomQueries:
             raise MatchForbiddenError("вы не участник комнаты", code=errors.NOT_PARTICIPANT)
         return room
 
+    @staticmethod
+    def _watchable(room: Room) -> bool:
+        """Идущий матч (отсчёт, уровни, ревил, пауза): лобби и итог наблюдателю не показываются."""
+        return (
+            not room.is_closed
+            and room.match is not None
+            and room.match.finish is None
+            and room.phase in WATCHED_PHASES
+        )
+
+    async def _viewer(
+        self, code: str, user_id: UUID, *, spectator: bool, closed: bool
+    ) -> tuple[Room, bool]:
+        """Участник комнаты, а при праве ``match.spectate`` — наблюдатель идущего матча.
+
+        Returns:
+            ``(комната, это_наблюдатель)``. Запросы наблюдателя делят лимит ``spectate``.
+        """
+        try:
+            return await self._participant(code, user_id, closed=closed), False
+        except MatchForbiddenError:
+            if not spectator:
+                raise
+        await self._limiter.hit(
+            "spectate",
+            str(user_id),
+            limit=self._limits.spectate_per_min,
+            window_s=self._limits.window_s,
+        )
+        room = await self._room(code)
+        if not self._watchable(room):
+            raise MatchNotFoundError("комнаты нет или она закрыта", code=errors.ROOM_NOT_FOUND)
+        return room, True
+
     async def get(self, actor: Actor, code: str) -> Json:
         """Комната по коду (экран входа): без данных матча; перебор кодов — fail-closed."""
         await code_lookup_limits(
@@ -115,12 +159,16 @@ class RoomQueries:
         )
         return room_view(await self._room(code), self._now_ms())
 
-    async def state(self, user_id: UUID, code: str) -> Json:
-        """Полный снимок для участника (лимит ``GV_MATCH__STATE_PER_PLAYER_PER_MIN``)."""
+    async def state(self, user_id: UUID, code: str, *, spectator: bool = False) -> Json:
+        """Полный снимок для участника (лимит ``GV_MATCH__STATE_PER_PLAYER_PER_MIN``).
+
+        Наблюдатель (``spectator``) получает тот же вид, что участник, но без ``me``: личные
+        попытки и варианты ``pick`` строятся только для игрока матча.
+        """
         await self._limiter.hit(
             "state", str(user_id), limit=self._limits.state_per_min, window_s=60
         )
-        room = await self._participant(code, user_id, closed=True)
+        room, _ = await self._viewer(code, user_id, spectator=spectator, closed=True)
         return room_state(room, user_id, self._now_ms())
 
     async def tick(self, user_id: UUID, code: str, known_version: int | None) -> Json:
@@ -137,12 +185,19 @@ class RoomQueries:
             "state": room_state(room, user_id, now) if fresh else None,
         }
 
-    async def realtime_token(self, user_id: UUID, code: str) -> Json:
-        """Subscription-токен канала ``room:{code}`` — только участнику (D9)."""
+    async def realtime_token(self, user_id: UUID, code: str, *, spectator: bool = False) -> Json:
+        """Subscription-токен канала ``room:{code}`` — участнику и наблюдателю (D9, D19).
+
+        Канал публикует одни и те же дельты всем подписчикам (личное в него не попадает),
+        публикации клиентов запрещены — наблюдатель только читает.
+        """
         await self._limiter.hit(
             "rt_token", str(user_id), limit=self._limits.tokens_per_min, window_s=60
         )
-        room = await self._participant(code, user_id)
+        room, watching = await self._viewer(code, user_id, spectator=spectator, closed=False)
+        if watching and self._spectators is not None:
+            # Запомнить наблюдателя: по концу матча владелец отзовёт его подписку.
+            await self._spectators.add(room.code, user_id, self._limits.spectator_ttl_s)
         channel = f"room:{room.code}"
         token, expires = self._tokens.issue(user_id, channel, self._now())
         return {"channel": channel, "token": token, "expires_at": expires.isoformat()}
@@ -172,6 +227,43 @@ class RoomQueries:
                 }
             )
         return {"items": items, "next_cursor": encode_cursor(*nxt) if nxt else None}
+
+    async def spectate_rooms(self, user_id: UUID, cursor: str | None, limit: int) -> Json:
+        """Идущие матчи для наблюдения (право ``match.spectate``), новые первыми.
+
+        Просматривает не больше ``GV_MATCH__SPECTATE_SCAN_PAGES`` страниц индекса за запрос
+        и возвращает первую непустую; ``next_cursor`` продолжает обход. Лобби и комнаты
+        с итогом не показываются (код лобби — приватный).
+        """
+        await self._limiter.hit(
+            "spectate",
+            str(user_id),
+            limit=self._limits.spectate_per_min,
+            window_s=self._limits.window_s,
+        )
+        position = cursor
+        if cursor is not None and not cursor.isdigit():
+            raise _bad_cursor()
+        for _ in range(self._limits.spectate_scan_pages):
+            rooms, position = await self._store.active_rooms(position, limit)
+            items = [
+                {
+                    "code": room.code,
+                    "mode": mode_ref(room),
+                    "phase": room.phase.value,
+                    "players": sum(1 for s in room.seats if s.presence is not Presence.LEFT),
+                    "started_at": iso(
+                        room.match.started_at_ms or room.match.created_at_ms
+                        if room.match is not None
+                        else room.created_at_ms
+                    ),
+                }
+                for room, _epoch in rooms
+                if self._watchable(room)
+            ]
+            if items or position is None:
+                return {"items": items, "next_cursor": position}
+        return {"items": [], "next_cursor": position}
 
     async def admin_rooms(self, phase: str | None, cursor: str | None, limit: int) -> Json:
         """Активные комнаты для админки (фильтр по фазе — на странице)."""

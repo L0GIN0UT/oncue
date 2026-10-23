@@ -531,6 +531,18 @@ class SqlModeHeads:
             return None
         return int(row.version)
 
+    async def heads(self, domain: str) -> list[tuple[str, int]]:
+        """``ModeKeys``: не архивные шаблоны домена ``(mode_key, version)`` по ключу."""
+        if self._sessions is None:
+            return []
+        async with self._sessions() as session:
+            rows = await session.execute(
+                select(mode_heads.c.mode_key, mode_heads.c.version)
+                .where(mode_heads.c.domain == domain, mode_heads.c.archived.is_(False))
+                .order_by(mode_heads.c.mode_key)
+            )
+            return [(str(r.mode_key), int(r.version)) for r in rows]
+
     @staticmethod
     async def published(
         session: AsyncSession, key: str, version: int, domain: str, now: datetime

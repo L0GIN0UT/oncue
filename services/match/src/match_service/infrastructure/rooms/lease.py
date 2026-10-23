@@ -8,6 +8,7 @@ TTL (пауза GC, сеть), получает отказ и бросает к�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from redis.asyncio import Redis
@@ -49,10 +50,23 @@ class Grant:
 class Lease:
     """Операции lease одного инстанса (``instance`` уникален на процесс)."""
 
-    def __init__(self, redis: Redis, instance: str, ttl_ms: int) -> None:
+    def __init__(
+        self,
+        redis: Redis,
+        instance: str,
+        ttl_ms: int,
+        *,
+        owner_key: Callable[[str], str] = keys.owner,
+        epoch_key: Callable[[str], str] = keys.epoch,
+        snapshot_key: Callable[[str], str] = keys.snapshot,
+    ) -> None:
+        """Lease комнат по умолчанию; очередь подбора подставляет свои ключи (ADR 0038)."""
         if "|" in instance:
             raise ValueError("instance не должен содержать '|'")
         self._redis = redis
+        self._owner_key = owner_key
+        self._epoch_key = epoch_key
+        self._snapshot_key = snapshot_key
         self._instance = instance
         self._ttl_ms = ttl_ms
         self._acquire = redis.register_script(_ACQUIRE)
@@ -69,7 +83,8 @@ class Lease:
         """Захватить свободную комнату; ``None`` — у неё есть владелец."""
         epoch = int(
             await self._acquire(
-                keys=[keys.owner(code), keys.epoch(code)], args=[self._instance, self._ttl_ms]
+                keys=[self._owner_key(code), self._epoch_key(code)],
+                args=[self._instance, self._ttl_ms],
             )
         )
         if epoch == 0:
@@ -79,24 +94,24 @@ class Lease:
     async def renew(self, grant: Grant) -> bool:
         """Продлить; ``False`` — lease потерян (комнату взял другой)."""
         return bool(
-            await self._renew(keys=[keys.owner(grant.code)], args=[grant.token, self._ttl_ms])
+            await self._renew(keys=[self._owner_key(grant.code)], args=[grant.token, self._ttl_ms])
         )
 
     async def release(self, grant: Grant) -> bool:
         """Отпустить, если lease всё ещё наш."""
-        return bool(await self._release(keys=[keys.owner(grant.code)], args=[grant.token]))
+        return bool(await self._release(keys=[self._owner_key(grant.code)], args=[grant.token]))
 
     async def write(self, grant: Grant, snapshot: str, ttl_ms: int) -> bool:
         """Записать снимок, только если lease наш (CAS по токену с эпохой)."""
         result = await self._cas(
-            keys=[keys.owner(grant.code), keys.snapshot(grant.code)],
+            keys=[self._owner_key(grant.code), self._snapshot_key(grant.code)],
             args=[grant.token, snapshot, ttl_ms],
         )
         return bool(result)
 
     async def holder(self, code: str) -> tuple[str, int] | None:
         """Текущий владелец ``(instance, epoch)`` или ``None``."""
-        raw = await self._redis.get(keys.owner(code))
+        raw = await self._redis.get(self._owner_key(code))
         if raw is None:
             return None
         value = raw.decode() if isinstance(raw, bytes) else str(raw)

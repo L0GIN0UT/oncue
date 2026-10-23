@@ -12,6 +12,7 @@ from uuid import UUID
 
 from gv_core.domain import DomainEvent
 from match_service.domain.model import MatchState, RoundRecord, Standing
+from match_service.domain.queue import queue_format_of
 from match_service.domain.room import Room
 
 
@@ -33,6 +34,7 @@ class MatchStarted(_MatchEvent):
     format: str
     ranked: bool
     ladder: str | None
+    queue_format: str | None
     players: list[dict[str, Any]]  # Any: {user_id, slot} по схеме события
     started_at: datetime
 
@@ -50,6 +52,7 @@ class MatchFinished(_MatchEvent):
     format: str
     ranked: bool
     ladder: str | None
+    queue_format: str | None
     players: list[dict[str, Any]]  # Any: строки итога по схеме события
     rounds: list[dict[str, Any]]  # Any: раунды по схеме события
     collection_ids: list[UUID]
@@ -107,6 +110,13 @@ def _round(r: RoundRecord, hidden: frozenset[UUID]) -> dict[str, Any]:  # Any: J
     }
 
 
+def _queue_format(room: Room) -> str | None:
+    """Формат очереди рейтинговой комнаты (``classic`` / ``lite``); у прочих — ``None``."""
+    if not room.mode.ranked:
+        return None
+    return queue_format_of(room.settings.answer_format)
+
+
 def match_started(room: Room, match: MatchState, started_at: datetime) -> MatchStarted:
     """Событие начала матча."""
     mode = room.mode
@@ -121,6 +131,7 @@ def match_started(room: Room, match: MatchState, started_at: datetime) -> MatchS
         format=mode.kind,
         ranked=mode.ranked,
         ladder=mode.ladder,
+        queue_format=_queue_format(room),
         players=[
             {"user_id": p.user_id, "slot": p.slot}
             for p in sorted(match.players.values(), key=lambda p: p.slot)
@@ -150,6 +161,7 @@ def match_finished(
         format=mode.kind,
         ranked=mode.ranked,
         ladder=mode.ladder,
+        queue_format=_queue_format(room),
         players=[_standing(s, hidden) for s in match.standings],
         rounds=[_round(r, hidden) for r in match.records if not r.void],
         collection_ids=[cid for cid, _ in match.collections],

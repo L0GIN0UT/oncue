@@ -21,10 +21,19 @@ from gv_core.random import Random, SystemRandom
 from gv_game_kernel import AssetPort, PluginRegistry, register_builtin, register_collection
 from gv_service import Infrastructure, ServiceAuthNotConfiguredError, build_service_token_provider
 from gv_text.ugc import UgcPolicy
+from match_service.application.commands.queue import QueueLimits, QueueService
 from match_service.application.commands.rooms import RoomLimits, RoomService
+from match_service.application.matchmaking import (
+    MatcherSettings,
+    Matchmaker,
+    QueueHooks,
+    RankedTemplates,
+)
 from match_service.application.owner import OwnerSettings, RoomOwner, is_transient
 from match_service.application.ports import (
     Json,
+    LadderProjection,
+    ModeKeys,
     ModeSource,
     RateLimiter,
     RealtimePublisher,
@@ -41,20 +50,28 @@ from match_service.infrastructure.clients import (
     TokenProvider,
     UnconfiguredTokens,
 )
+from match_service.infrastructure.db.ladders import SqlLadders
 from match_service.infrastructure.db.repositories import (
     SqlAdminAudit,
     SqlMatchRecords,
     SqlModeHeads,
     SqlUsers,
 )
+from match_service.infrastructure.ladder_cache import CachedLadders
 from match_service.infrastructure.limits import RedisRateLimiter
+from match_service.infrastructure.matchmaker import MatchmakerRunner
+from match_service.infrastructure.queue import RedisQueue
 from match_service.infrastructure.realtime import (
     CentrifugoPublisher,
     NullPublisher,
     SubscriptionTokenIssuer,
 )
 from match_service.infrastructure.rooms.runner import RoomsRunner, RunnerSettings
-from match_service.infrastructure.rooms.snapshot import RedisIdempotentCreates, RedisRoomStore
+from match_service.infrastructure.rooms.snapshot import (
+    RedisIdempotentCreates,
+    RedisRoomStore,
+    RedisSpectators,
+)
 from match_service.infrastructure.rooms.stream import (
     RedisCommandBus,
     RedisPlayerRooms,
@@ -111,6 +128,8 @@ class MatchAdapters:
     publisher: RealtimePublisher | None = None
     subscriptions: Subscriptions | None = None
     modes: ModeSource | None = None
+    mode_keys: ModeKeys | None = None
+    ladders: LadderProjection | None = None
     limiter: RateLimiter | None = None
     random: Random = field(default_factory=SystemRandom)
     instance: str | None = None
@@ -173,6 +192,11 @@ class MatchContainer:
         return int(self.settings.match.snapshot_ttl_h * 3600)
 
     @cached_property
+    def spectators(self) -> RedisSpectators:
+        """Наблюдатели комнат (отзыв подписок по окончании матча)."""
+        return RedisSpectators(self.redis)
+
+    @cached_property
     def limiter(self) -> RateLimiter:
         """Лимиты частоты."""
         return self.adapters.limiter or RedisRateLimiter(self.redis, self.infra.clock)
@@ -226,6 +250,31 @@ class MatchContainer:
     def modes(self) -> ModeSource:
         """Онлайн-шаблоны."""
         return self.adapters.modes or CatalogModes(SqlModeHeads(self.infra.sessions), self.game)
+
+    @cached_property
+    def ladders(self) -> CachedLadders:
+        """Проекция ladder-ов и рейтингов (из ``rating.rating.v1``), с кэшем процесса."""
+        inner = self.adapters.ladders or SqlLadders(
+            self.infra.sessions, self.settings.match.default_start_rating
+        )
+        return CachedLadders(inner, self.settings.match.ladder_cache_s)
+
+    @cached_property
+    def ranked_queue(self) -> RedisQueue:
+        """Очереди подбора (Redis)."""
+        m = self.settings.match
+        return RedisQueue(
+            self.redis,
+            ttl_ms=int(m.queue_ttl_s * MS),
+            matched_ttl_ms=int(m.queue_matched_ttl_s * MS),
+            reserved_ttl_ms=int(m.queue_reserved_ttl_s * MS),
+        )
+
+    @cached_property
+    def ranked_templates(self) -> RankedTemplates:
+        """Рейтинговые шаблоны очередей (дуэли ladder-а)."""
+        heads = self.adapters.mode_keys or SqlModeHeads(self.infra.sessions)
+        return RankedTemplates(heads, self.modes, self.factory)
 
     @cached_property
     def publisher(self) -> RealtimePublisher:
@@ -295,6 +344,54 @@ class MatchContainer:
                 pending_room_ms=m.pending_room_ms,
             ),
             transient=_transient,
+            ranked=QueueHooks(self.ranked_queue),
+            spectators=self.spectators,
+        )
+
+    @cached_property
+    def queue(self) -> QueueService:
+        """Очередь рейтинговой дуэли (api)."""
+        m = self.settings.match
+        return QueueService(
+            queue=self.ranked_queue,
+            ladders=self.ladders,
+            templates=self.ranked_templates,
+            player_rooms=self.player_rooms,
+            store=self.store,
+            bus=self.bus,
+            presence=self.presence,
+            limiter=self.limiter,
+            creates=RedisIdempotentCreates(
+                self.redis, ttl_s=int(self.settings.idempotency.retention_h * 3600)
+            ),
+            clock=self.infra.clock,
+            limits=QueueLimits(
+                tick_s=m.tick_s,
+                enter_per_min=m.queue_enter_per_user_per_min,
+                tick_per_min=m.queue_tick_per_user_per_min,
+                pending_room_ms=m.pending_room_ms,
+                window_s=m.rate_window_s,
+            ),
+        )
+
+    @cached_property
+    def matchmaker(self) -> Matchmaker:
+        """Батчевый матчер очередей (процесс rooms)."""
+        m = self.settings.match
+        return Matchmaker(
+            queue=self.ranked_queue,
+            templates=self.ranked_templates,
+            player_rooms=self.player_rooms,
+            store=self.store,
+            bus=self.bus,
+            users=self.users,
+            clock=self.infra.clock,
+            random=self.adapters.random,
+            settings=MatcherSettings(
+                batch_max=m.queue_batch_max,
+                pending_room_ms=m.pending_room_ms,
+                reserved_stale_ms=int(m.queue_reserved_stale_s * MS),
+            ),
         )
 
     @cached_property
@@ -346,7 +443,12 @@ class MatchContainer:
                 join_by_code_per_user_per_min=m.join_by_code_per_user_per_min,
                 tick_per_min=m.tick_per_player_per_min,
                 state_per_min=m.state_per_player_per_min,
+                spectate_per_min=m.spectate_per_user_per_min,
+                spectate_scan_pages=m.spectate_scan_pages,
+                window_s=m.rate_window_s,
+                spectator_ttl_s=int(m.snapshot_ttl_h * 3600),
             ),
+            spectators=self.spectators,
         )
 
     @cached_property
@@ -362,6 +464,19 @@ class MatchContainer:
             self.limiter,
             self.infra.clock,
             per_hour=self.settings.match.rate_per_user_per_hour,
+        )
+
+    def matchmaker_runner(self) -> MatchmakerRunner:
+        """Runner матчера очередей (рядом с runner-ом комнат)."""
+        m = self.settings.match
+        instance = self.adapters.instance or f"{socket.gethostname()}-{uuid7().hex[-8:]}"
+        return MatchmakerRunner(
+            self.redis,
+            matchmaker=self.matchmaker,
+            ladders=self.ladders,
+            instance=instance.replace("|", "-"),
+            lease_ttl_ms=int(m.matcher_lease_ttl_s * MS),
+            poll_ms=m.matcher_poll_ms,
         )
 
     def runner(self) -> RoomsRunner:

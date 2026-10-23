@@ -592,6 +592,11 @@ class QueueTicket(BaseModel):
     format: QueueFormat
     state: QueueState
     entered_at: datetime
+    tick_s: int | None = Field(
+        default=None,
+        ge=1,
+        description="Период heartbeat `POST /queue/tick`, с (`GV_MATCH__TICK_S`)",
+    )
     wait_s: int = Field(ge=0, description="Сколько секунд игрок ждёт")
     window: int = Field(ge=0, description="Текущее окно подбора ±, очков (из конфига ladder-а)")
     slow: bool = Field(

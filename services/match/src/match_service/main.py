@@ -35,8 +35,9 @@ def build_periodic_jobs(
 
 
 def build_runners(infra: Infrastructure, adapters: MatchAdapters | None = None) -> list[Runner]:
-    """Процесс rooms: владельцы комнат (D6, ADR 0034)."""
-    return [container_for(infra, adapters).runner()]
+    """Процесс rooms: владельцы комнат (D6, ADR 0034) и матчер очередей (ADR 0038)."""
+    container = container_for(infra, adapters)
+    return [container.runner(), container.matchmaker_runner()]
 
 
 DEFINITION = ServiceDefinition(

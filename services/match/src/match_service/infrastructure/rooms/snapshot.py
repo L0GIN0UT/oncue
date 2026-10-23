@@ -143,6 +143,17 @@ class RedisRoomStore:
         nxt = str(offset + limit) if len(codes) == limit else None
         return out, nxt
 
+    async def discard(self, code: str) -> None:
+        """Откат подбора: снимок и индексы удаляются (комнату так и не запустили)."""
+        try:
+            async with self._redis.pipeline(transaction=False) as pipe:
+                pipe.delete(keys.snapshot(code))
+                pipe.zrem(keys.ACTIVE, code)
+                pipe.zrem(keys.OPEN, code)
+                await pipe.execute()
+        except (RedisError, OSError) as exc:
+            raise MatchUnavailableError("комнаты временно недоступны") from exc
+
     async def index(self, room: Room) -> None:
         """Обновить индексы после снимка (владелец)."""
         async with self._redis.pipeline(transaction=False) as pipe:
@@ -172,6 +183,30 @@ class RedisRoomStore:
             for key in keys.room_keys(room.code):
                 pipe.expire(key, ttl_s)
             await pipe.execute()
+
+
+class RedisSpectators:
+    """``SpectatorRegistry``: SET ``{room:CODE}:spectators`` с TTL комнаты."""
+
+    def __init__(self, redis: Redis) -> None:
+        self._redis = redis
+
+    async def add(self, code: str, user_id: UUID, ttl_s: int) -> None:
+        """Запомнить наблюдателя."""
+        key = keys.spectators(code)
+        async with self._redis.pipeline(transaction=False) as pipe:
+            pipe.sadd(key, str(user_id))
+            pipe.expire(key, ttl_s)
+            await pipe.execute()
+
+    async def drain(self, code: str) -> list[UUID]:
+        """Забрать наблюдателей и очистить SET."""
+        key = keys.spectators(code)
+        async with self._redis.pipeline(transaction=True) as pipe:
+            pipe.smembers(key)
+            pipe.delete(key)
+            members, _ = await pipe.execute()
+        return [UUID(_text(m)) for m in members]
 
 
 class RedisIdempotentCreates:

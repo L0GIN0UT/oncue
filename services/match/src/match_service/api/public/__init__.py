@@ -24,7 +24,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from gv_auth import Principal, require_perm, require_user
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 from match_service.api.common import (
     NoStoreRoute,
@@ -83,7 +82,6 @@ _ACCEPTED: dict[int | str, dict[str, Any]] = {
         "description": "Команда принята в поток комнаты, владелец не ответил вовремя (D6)",
     }
 }
-_STUB_4B = "Заглушка контракта 0a этапа 4b: реализация — поток Q (match)"
 _READ = problem_responses(401, 403, 404, 422, 429, 501)
 _ROOM_CMD = {**_ACCEPTED, **problem_responses(401, 403, 404, 409, 422, 429, 501, 503)}
 _COMMON_ROOM_ERRORS = (
@@ -176,19 +174,23 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
         summary="Комнаты для наблюдения",
         description=(
             "Идущие матчи без задержки; только с правом `match.spectate` (модератор, админ) — "
-            "иначе 403 `auth.forbidden` (D19). Подписка на канал — `POST /rooms/{code}/"
-            "realtime-token` (роль наблюдателя), вид без личных данных игроков. Заглушка 0a "
-            "этапа 4b: реализация — поток Q."
+            "иначе 403 `auth.forbidden` (D19). Только чтение: подписка на канал — `POST "
+            "/rooms/{code}/realtime-token`, снимок — `GET /rooms/{code}/state` (оба — с тем же "
+            "правом), вид без личных данных игроков (`me` пуст, ответов до ревила нет). Лобби и "
+            "завершённые матчи не показываются. Ошибки: 422 `match.cursor_invalid`, 429 "
+            "`match.rate_limited` (`GV_MATCH__SPECTATE_PER_USER_PER_MIN`)."
         ),
-        responses=problem_responses(401, 403, 422, 501),
+        responses=problem_responses(401, 403, 422, 429),
     )
     async def spectate_rooms(
         user: User,  # noqa: ARG001 — гость получает auth.guest_forbidden раньше проверки права
-        spectator: Spectator,  # noqa: ARG001
-        cursor: Annotated[Cursor | None, Query()] = None,  # noqa: ARG001
-        limit: Limit = 20,  # noqa: ARG001
+        spectator: Spectator,
+        cursor: Annotated[Cursor | None, Query()] = None,
+        limit: Limit = 20,
     ) -> SpectateRoomsPage:
-        raise NotImplementedYetError(_STUB_4B)
+        return SpectateRoomsPage.model_validate(
+            await services().room_queries.spectate_rooms(spectator.user_id, cursor, limit)
+        )
 
     @router.get(
         "/rooms/{code}",
@@ -377,14 +379,17 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
         description=(
             "Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный "
             "секрет подписок, публикации клиентов запрещены). Connection-токен — "
-            "`POST /api/identity/v1/realtime/token`. Ошибки: 404 `match.room_not_found`, "
+            "`POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) "
+            "получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, "
             "403 `match.not_participant`, 429 `match.rate_limited`."
         ),
         responses=problem_responses(401, 403, 404, 422, 429, 501),
     )
     async def realtime_token(code: RoomCodePath, user: User) -> RealtimeSubscription:
         return RealtimeSubscription.model_validate(
-            await services().room_queries.realtime_token(user.user_id, code)
+            await services().room_queries.realtime_token(
+                user.user_id, code, spectator=user.has_perm("match.spectate")
+            )
         )
 
     @router.get(
@@ -393,13 +398,18 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
         summary="Снимок комнаты",
         description=(
             "Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — "
-            "только в `me`; до `reveal` нет единицы раунда и ключей ответа. Ошибки: 404 "
+            "только в `me`; до `reveal` нет единицы раунда и ключей ответа. Наблюдатель "
+            "(`match.spectate`) видит идущий матч без `me`. Ошибки: 404 "
             "`match.room_not_found`, 403 `match.not_participant`."
         ),
         responses=_READ,
     )
     async def room_state(code: RoomCodePath, user: User) -> RoomState:
-        return RoomState.model_validate(await services().room_queries.state(user.user_id, code))
+        return RoomState.model_validate(
+            await services().room_queries.state(
+                user.user_id, code, spectator=user.has_perm("match.spectate")
+            )
+        )
 
     @router.post(
         "/rooms/{code}/tick",
@@ -542,17 +552,15 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
             "Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 "
             "`match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 "
             "`match.queue_format_unavailable`, 409 `match.active_room_conflict` "
-            "(`details.code`), 429 `match.rate_limited`, 503 `match.game_unavailable`. "
-            "Заглушка 0a этапа 4b: реализация — поток Q."
+            "(`details.code` — комната, `details.queue` — другая очередь), 409 "
+            "`idempotency.key_reused`, 429 `match.rate_limited`, 503 `match.game_unavailable`."
         ),
-        responses=problem_responses(401, 403, 404, 409, 422, 429, 501, 503),
+        responses=problem_responses(401, 403, 404, 409, 422, 429, 503),
     )
-    async def queue_enter(
-        body: QueueEnterRequest,  # noqa: ARG001
-        user: User,  # noqa: ARG001
-        key: IdempotencyKey,  # noqa: ARG001
-    ) -> QueueTicket:
-        raise NotImplementedYetError(_STUB_4B)
+    async def queue_enter(body: QueueEnterRequest, user: User, key: IdempotencyKey) -> QueueTicket:
+        return QueueTicket.model_validate(
+            await services().queue.enter(actor_of(user), body.ladder, body.format, key)
+        )
 
     @router.post(
         "/queue/tick",
@@ -561,38 +569,38 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
         description=(
             "Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при "
             "`matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 "
-            "`match.not_in_queue`. Заглушка 0a этапа 4b: реализация — поток Q."
+            "`match.not_in_queue`; 429 `match.rate_limited`."
         ),
-        responses=problem_responses(401, 403, 404, 429, 501),
+        responses=problem_responses(401, 403, 404, 429),
     )
-    async def queue_tick(user: User) -> QueueTicket:  # noqa: ARG001
-        raise NotImplementedYetError(_STUB_4B)
+    async def queue_tick(user: User) -> QueueTicket:
+        return QueueTicket.model_validate(await services().queue.tick(actor_of(user)))
 
     @router.post(
         "/queue/leave",
         status_code=status.HTTP_204_NO_CONTENT,
         summary="Выйти из очереди",
         description=(
-            "Идемпотентно: вне очереди — тоже 204. Уход из очереди до матча — без штрафа. "
-            "Заглушка 0a этапа 4b: реализация — поток Q."
+            "Идемпотентно: вне очереди — тоже 204. Уход из очереди до матча — без штрафа; если "
+            "подбор уже состоялся, а отсчёт идёт, — выход из комнаты без штрафа (срыв отсчёта, "
+            "соперник возвращается в очередь); когда матч идёт — ничего не делает (сдача и "
+            "выход — команды комнаты). Пока пара резервируется и создаётся комната — 409 "
+            "`match.queue_matching` (повторить через секунду)."
         ),
-        responses=problem_responses(401, 403, 429, 501),
+        responses=problem_responses(401, 403, 409, 429),
     )
-    async def queue_leave(user: User, key: IdempotencyKey) -> None:  # noqa: ARG001
-        raise NotImplementedYetError(_STUB_4B)
+    async def queue_leave(user: User, key: IdempotencyKey) -> None:
+        await services().queue.leave(actor_of(user), key)
 
     @router.get(
         "/queue/pool",
         response_model=QueuePool,
         summary="Размер очередей",
-        description=(
-            "Сколько игроков ищут матч по каждому ladder-у и формату (для хаба онлайна). "
-            "Заглушка 0a этапа 4b: реализация — поток Q."
-        ),
-        responses=problem_responses(401, 403, 501),
+        description=("Сколько игроков ищут матч по каждому ладдеру и формату (для хаба онлайна)."),
+        responses=problem_responses(401, 403),
     )
     async def queue_pool(user: User) -> QueuePool:  # noqa: ARG001
-        raise NotImplementedYetError(_STUB_4B)
+        return QueuePool.model_validate(await services().queue.pool())
 
     # ------------------------------------------------------------------ итоги
     @router.post(

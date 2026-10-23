@@ -17,6 +17,7 @@ from uuid import UUID
 
 from match_service.domain.events import MatchStarted, PlayerRated
 from match_service.domain.model import MatchState, RoundPlan
+from match_service.domain.queue import MatchmakingConfig
 from match_service.domain.room import Room
 
 # Any: JSON-тела ответов и сообщений (схемы — contracts/openapi/match.json, contracts/realtime).
@@ -67,6 +68,10 @@ class RoomStore(Protocol):
         self, cursor: str | None, limit: int
     ) -> tuple[list[tuple[Room, int | None]], str | None]:
         """Активные комнаты с эпохой владельца (админка)."""
+        ...
+
+    async def discard(self, code: str) -> None:
+        """Убрать только что созданную комнату, которую так и не запустили (откат подбора)."""
         ...
 
 
@@ -359,4 +364,161 @@ class Users(Protocol):
 
     async def nicknames(self, user_ids: Sequence[UUID]) -> Mapping[UUID, str]:
         """Ники нескольких пользователей."""
+        ...
+
+
+# ----------------------------------------------------------------------------- подбор (4b)
+@dataclass(frozen=True, slots=True)
+class LadderInfo:
+    """Ladder из проекции ``rating.LadderPublished`` (ADR 0038).
+
+    Attributes:
+        ladder: Ключ ladder-а (= домен).
+        domain: ``music`` | ``film``.
+        version: Версия конфига ladder-а.
+        formats: Доступные форматы очереди.
+        matchmaking: Окно, подсказка и период матчера.
+        start_rating: Рейтинг новичка: ``target`` мягкого сброса последнего сезона, иначе
+            ``GV_MATCH__DEFAULT_START_RATING`` (событие не несёт ``elo.start``).
+    """
+
+    ladder: str
+    domain: str
+    version: int
+    formats: tuple[str, ...]
+    matchmaking: MatchmakingConfig
+    start_rating: int
+
+
+class LadderProjection(Protocol):
+    """Чтение проекции rating в match (без вызовов сервиса rating)."""
+
+    async def ladder(self, key: str) -> LadderInfo | None:
+        """Ladder по ключу."""
+        ...
+
+    async def all(self) -> list[LadderInfo]:
+        """Все известные ladder-ы."""
+        ...
+
+    async def rating(self, user_id: UUID, ladder: str) -> int | None:
+        """Рейтинг игрока в ladder-е; ``None`` — рейтинговых матчей ещё не было."""
+        ...
+
+
+class ModeKeys(Protocol):
+    """Ключи и версии опубликованных онлайн-шаблонов домена (проекция ``mode_heads``)."""
+
+    async def heads(self, domain: str) -> list[tuple[str, int]]:
+        """``(mode_key, version)`` не архивных шаблонов домена, по ключу."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class QueueRecord:
+    """Запись игрока в очереди (Redis).
+
+    Attributes:
+        rating: Рейтинг на момент входа (для подбора).
+        entered_at_ms: Вход в очередь; при возврате после срыва отсчёта сохраняется.
+        state: ``searching`` | ``matched``.
+        room_code: Комната дуэли при ``matched``.
+    """
+
+    user_id: UUID
+    ladder: str
+    format: str
+    rating: int
+    entered_at_ms: int
+    state: str
+    room_code: str | None = None
+
+
+class QueueStore(Protocol):
+    """Очереди подбора и записи игроков (Redis)."""
+
+    async def enter(
+        self, user_id: UUID, ladder: str, fmt: str, rating: int, now_ms: int
+    ) -> tuple[QueueRecord, bool]:
+        """Встать в очередь; запись уже есть — вернуть её (``False`` — не создана)."""
+        ...
+
+    async def get(self, user_id: UUID) -> QueueRecord | None:
+        """Запись игрока."""
+        ...
+
+    async def touch(self, user_id: UUID) -> bool:
+        """Heartbeat: продлить запись в поиске; ``False`` — записи нет."""
+        ...
+
+    async def remove(self, user_id: UUID) -> None:
+        """Убрать игрока из очереди (идемпотентно)."""
+        ...
+
+    async def count(self, ladder: str, fmt: str) -> int:
+        """Сколько игроков ищут матч."""
+        ...
+
+    async def waiting(self, ladder: str, fmt: str, limit: int) -> list[QueueRecord]:
+        """Ищущие игроки очереди (устаревшие записи вычищаются)."""
+        ...
+
+    async def reserve(
+        self, fence: QueueFence, first: UUID, second: UUID, code: str, now_ms: int
+    ) -> bool:
+        """Пара → ``reserved`` с кодом комнаты, только под актуальным lease очереди."""
+        ...
+
+    async def confirm(self, ladder: str, fmt: str, first: UUID, second: UUID, code: str) -> bool:
+        """Комната создана и стартует: ``reserved`` → ``matched`` у обоих."""
+        ...
+
+    async def stale_reserved(self, ladder: str, fmt: str, before_ms: int) -> list[QueueRecord]:
+        """Резервы старше ``before_ms``: матчер упал, не создав комнату."""
+        ...
+
+    async def set_room(self, users: Sequence[UUID], old: str, new: str) -> None:
+        """Сменить код комнаты в записях (коллизия кода)."""
+        ...
+
+    async def requeue(self, user_id: UUID, code: str) -> bool:
+        """Срыв отсчёта: вернуть в поиск с прежним ``entered_at`` (запись всё ещё за ``code``)."""
+        ...
+
+    async def release(self, user_id: UUID, code: str) -> None:
+        """Матч начался: убрать запись, если она за ``code``."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class QueueFence:
+    """Lease очереди ``(ladder, format)``: ключ и токен с эпохой (fencing)."""
+
+    ladder: str
+    format: str
+    key: str
+    token: str
+
+
+class SpectatorRegistry(Protocol):
+    """Наблюдатели комнаты: по окончании матча их подписки отзываются."""
+
+    async def add(self, code: str, user_id: UUID, ttl_s: int) -> None:
+        """Запомнить наблюдателя (токен выдан)."""
+        ...
+
+    async def drain(self, code: str) -> list[UUID]:
+        """Забрать и очистить список наблюдателей."""
+        ...
+
+
+class RankedHooks(Protocol):
+    """Обратная связь владельца рейтинговой комнаты с очередью."""
+
+    async def started(self, room: Room) -> None:
+        """Отсчёт закончился, матч идёт: записи очереди больше не нужны."""
+        ...
+
+    async def aborted(self, room: Room, survivors: Sequence[UUID]) -> None:
+        """Отсчёт сорван (выход, отключение, сбой старта): оставшиеся возвращаются в очередь."""
         ...

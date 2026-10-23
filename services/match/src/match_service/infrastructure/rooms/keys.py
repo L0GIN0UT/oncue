@@ -69,4 +69,60 @@ def create_idempotency(user_id: UUID, key: str) -> str:
 
 def room_keys(code: str) -> list[str]:
     """Все ключи комнаты (истечение после закрытия)."""
-    return [snapshot(code), owner(code), epoch(code), commands(code), seen(code)]
+    return [snapshot(code), owner(code), epoch(code), commands(code), seen(code), spectators(code)]
+
+
+# ----------------------------------------------------------------------------- очереди подбора
+# Все ключи очередей — в одном hash-слоте ``{mmq}``: Lua-скрипты трогают запись игрока,
+# ZSET очереди и lease атомарно (очередей четыре, нагрузка мала — ADR 0038).
+QUEUE_TAG = "{mmq}"
+
+
+def queue_name(ladder: str, fmt: str) -> str:
+    """Имя очереди ``(ladder, format)``."""
+    return f"{ladder}:{fmt}"
+
+
+def queue_zset_prefix() -> str:
+    """Префикс ZSET очередей (score — рейтинг, member — ``user_id``)."""
+    return f"{QUEUE_TAG}:q:"
+
+
+def queue_zset(name: str) -> str:
+    """ZSET очереди."""
+    return f"{queue_zset_prefix()}{name}"
+
+
+def queue_player(user_id: UUID) -> str:
+    """HASH записи игрока в очереди."""
+    return f"{QUEUE_TAG}:p:{user_id}"
+
+
+def queue_owner(name: str) -> str:
+    """Lease матчера очереди ``instance|epoch``."""
+    return f"{QUEUE_TAG}:lease:{name}"
+
+
+def queue_epoch(name: str) -> str:
+    """Счётчик fencing-эпох очереди."""
+    return f"{QUEUE_TAG}:epoch:{name}"
+
+
+def queue_unused(name: str) -> str:
+    """Заглушка ключа снимка (lease очереди снимков не пишет)."""
+    return f"{QUEUE_TAG}:nosnap:{name}"
+
+
+def queue_age(name: str) -> str:
+    """ZSET очереди по времени входа (score — ``entered_at``, мс): старейшие первыми в батче."""
+    return f"{QUEUE_TAG}:t:{name}"
+
+
+def queue_reserved(name: str) -> str:
+    """ZSET резервов пар (score — момент резерва, мс): зачистка после падения матчера."""
+    return f"{QUEUE_TAG}:r:{name}"
+
+
+def spectators(code: str) -> str:
+    """SET наблюдателей комнаты (отписка по окончании матча)."""
+    return f"{tag(code)}:spectators"

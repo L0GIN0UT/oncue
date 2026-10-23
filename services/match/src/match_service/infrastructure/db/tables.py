@@ -9,6 +9,9 @@ Postgres — история и проекции; горячее состояни
   создаёт периодическая задача ``match.partitions.ensure``, остальное — в ``_default``);
 * ``player_ratings_given`` — похвалы и жалобы (``PlayerRated``, один раз на пару и вид);
 * ``users_proj`` — ники из identity; ``mode_heads`` — текущие версии онлайн-шаблонов game;
+* ``ladders_proj`` / ``seasons_proj`` / ``ratings_proj`` — проекция ``rating.rating.v1``
+  для подбора (ADR 0038):
+  параметры очереди ladder-а и рейтинг игрока (без синхронных вызовов rating);
 * ``admin_actions`` — аудит админских действий (принудительное завершение);
 * ``idempotency_keys`` — ``Idempotency-Key`` оценок.
 """
@@ -160,6 +163,41 @@ mode_heads = Table(
     Column("archived", Boolean, nullable=False, server_default=text("false")),
     _ts("updated_at"),
     CheckConstraint("version >= 1", name="version_positive"),
+)
+
+ladders_proj = Table(
+    "ladders_proj",
+    _md,
+    Column("ladder", String(64), primary_key=True),
+    Column("version", Integer, nullable=False),
+    Column("domain", String(16), nullable=False),
+    Column("formats", JSONB, nullable=False),
+    Column("matchmaking", JSONB, nullable=False),
+    _ts("updated_at"),
+    CheckConstraint("version >= 1", name="version_positive"),
+)
+
+seasons_proj = Table(
+    "seasons_proj",
+    _md,
+    Column("ladder", String(64), primary_key=True),
+    Column("season_id", Uuid(as_uuid=True), nullable=False),
+    _ts("starts_at"),
+    Column("soft_reset", JSONB, nullable=True),
+    _ts("updated_at"),
+)
+
+ratings_proj = Table(
+    "ratings_proj",
+    _md,
+    Column("user_id", Uuid(as_uuid=True), nullable=False),
+    Column("ladder", String(64), nullable=False),
+    Column("rating", Integer, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("season_id", Uuid(as_uuid=True), nullable=True),
+    _ts("updated_at"),
+    PrimaryKeyConstraint("user_id", "ladder"),
+    CheckConstraint("version >= 0", name="version_not_negative"),
 )
 
 admin_actions = Table(

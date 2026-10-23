@@ -16,6 +16,7 @@ from uuid import UUID
 
 import httpx
 from match_service.application.ports import RoomCommand
+from match_service.infrastructure.container import container_for
 from match_service.infrastructure.db.tables import TABLES
 from match_service.infrastructure.rooms.stream import RedisCommandBus
 from match_service.settings import MatchSettings, Settings
@@ -51,6 +52,16 @@ class MemoryModes:
 
     async def body(self, key: str, version: int) -> dict[str, Any] | None:
         return self.bodies.get(key) if version == 1 else None
+
+
+class MemoryModeKeys:
+    """``ModeKeys``: ключи шаблонов домена (проекция ``mode_heads`` не нужна)."""
+
+    def __init__(self, bodies: dict[str, dict[str, Any]]) -> None:
+        self.bodies = bodies
+
+    async def heads(self, domain: str) -> list[tuple[str, int]]:
+        return sorted((k, 1) for k, b in self.bodies.items() if b["domain"] == domain)
 
 
 @dataclass
@@ -109,6 +120,88 @@ class MatchApp:
 
     async def deliver(self, envelope: EventEnvelope) -> Outcome:
         return await self.processor.process(envelope.to_bytes(), source="test")
+
+    # ------------------------------------------------------------------ проекция rating
+    async def rating_event(self, name: str, aggregate_id: str, **payload: Any) -> Outcome:
+        """Событие ``rating.<name>`` на основе примера контракта с переопределением полей."""
+        return await self.rating_event_of(f"rating.{name}", aggregate_id, **payload)
+
+    async def rating_event_of(self, event_type: str, aggregate_id: str, **payload: Any) -> Outcome:
+        """Событие по типу из примера контракта с переопределением полей payload."""
+        base = load_example(event_type)
+        envelope = base.model_copy(
+            update={
+                "aggregate_id": aggregate_id,
+                "payload": {**base.payload, **payload},
+                "event_id": uuid7(),
+            }
+        )
+        return await self.deliver(envelope)
+
+    async def ladder(self, key: str = "music", *, version: int = 1, **window: Any) -> None:
+        """``LadderPublished``: окно ±100, +50 каждые 10 с до 600, подсказка 60 с, период 1 с."""
+        matchmaking = {
+            "interval_s": 1,
+            "slow_hint_after_s": 60,
+            "window": {"base": 100, "step": 50, "step_every_s": 10, "max": 600} | window,
+        }
+        outcome = await self.rating_event(
+            "LadderPublished",
+            key,
+            ladder=key,
+            domain=key,
+            version=version,
+            formats=["classic", "lite"],
+            matchmaking=matchmaking,
+        )
+        assert outcome is Outcome.PROCESSED
+
+    async def rate(
+        self, player: Player, ladder: str, rating: int, version: int, **extra: Any
+    ) -> Outcome:
+        """``RatingChanged``: рейтинг игрока в проекции."""
+        return await self.rating_event(
+            "RatingChanged",
+            str(player.user_id),
+            user_id=str(player.user_id),
+            ladder=ladder,
+            new=rating,
+            version=version,
+            **({"at": self.clock.now().isoformat()} | extra),
+        )
+
+    async def projected(self, player: Player, ladder: str) -> int | None:
+        """Рейтинг игрока в проекции match."""
+        return await container_for(self.infra).ladders.rating(player.user_id, ladder)
+
+    # ------------------------------------------------------------------ очередь
+    async def enter(
+        self, player: Player, ladder: str = "music", fmt: str = "classic"
+    ) -> httpx.Response:
+        return await self.client.post(
+            "/v1/queue/enter",
+            json={"ladder": ladder, "format": fmt},
+            headers={**player.headers, "Idempotency-Key": player.op()},
+        )
+
+    async def queue_tick(self, player: Player) -> httpx.Response:
+        return await self.client.post("/v1/queue/tick", headers=player.headers)
+
+    async def queue_state(
+        self,
+        player: Player,
+        check: Callable[[dict[str, Any]], bool],
+        timeout: float = 6,  # noqa: ASYNC109 — общий предел ожидания сценария
+    ) -> dict[str, Any]:
+        """Опрос ``queue/tick`` до выполнения условия (матчер работает в фоне)."""
+        async with asyncio.timeout(timeout):
+            while True:
+                response = await self.queue_tick(player)
+                assert response.status_code == 200, response.text
+                ticket: dict[str, Any] = response.json()
+                if check(ticket):
+                    return ticket
+                await asyncio.sleep(0.05)
 
     # ------------------------------------------------------------------ запросы
     async def create(self, host: Player, mode_key: str, **body: Any) -> dict[str, Any]:
@@ -223,6 +316,7 @@ def settings(database_url: str, redis_url: str, **match: Any) -> Settings:
         "join_by_code_per_user_per_min": 10_000,
         "emote_per_player_per_min": 1000,
         "presence_timeout_s": 120,
+        "ladder_cache_s": 0,
     }
     return Settings(
         database_url=SecretStr(database_url),
