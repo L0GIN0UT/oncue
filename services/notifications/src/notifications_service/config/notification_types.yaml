@@ -91,9 +91,19 @@ types:
     filter: {purpose: avatar, status: rejected}
     user_mutable: false
     channels: {in_app: true, email: false, push: false}
-    params:
-      reason: payload.reason_code
+    params: {}
+    # Коды причин - общий словарь с media-pipeline (AssetModerated.reason_code).
+    lookups:
+      reason:
+        path: payload.reason_code
+        texts:
+          inappropriate: {ru: "отклонена: нарушает правила сообщества"}
+          copyright: {ru: "отклонена: нарушает чужие авторские права"}
+          low_quality: {ru: "отклонена: низкого качества"}
+          personal_data: {ru: "отклонена: содержит личные данные"}
+          other: {ru: "отклонена: не соответствует требованиям"}
+        fallback: {ru: не прошла модерацию}
     templates:
       ru:
         title: Аватарка отклонена
-        body: "Аватарка не прошла модерацию: {reason}."
+        body: "Ваша аватарка {reason}."

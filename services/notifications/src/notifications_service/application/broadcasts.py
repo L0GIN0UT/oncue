@@ -22,6 +22,7 @@ from gv_db.idempotency import request_fingerprint, run_idempotent
 from gv_messaging.ports import PermanentError, TaskQueue
 from notifications_service.application.cursor import decode_cursor, encode_cursor
 from notifications_service.application.ports import (
+    PERMANENT_DIRECTORY_CODES,
     AdminAction,
     Broadcast,
     EmailDirectory,
@@ -226,7 +227,7 @@ class SendBroadcast:
             try:
                 recipients = await self._directory.resolve(user_ids)
             except DependencyUnavailableError as exc:
-                if exc.code == "notifications.email_directory_unconfigured":
+                if exc.code in PERMANENT_DIRECTORY_CODES:
                     await self._fail(broadcast_id)
                     raise PermanentError(exc.message) from exc
                 raise

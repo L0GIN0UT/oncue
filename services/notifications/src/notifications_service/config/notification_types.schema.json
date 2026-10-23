@@ -1,5 +1,20 @@
 {
-  "$id": "urn:guessverse:contracts:notifications:notification_types:v1",
+  "$defs": {
+    "LocaleTexts": {
+      "additionalProperties": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "description": "Локаль -> текст фрагмента",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z]{2}$"
+      },
+      "type": "object"
+    }
+  },
+  "$id":"urn:guessverse:contracts:notifications:notification_types:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Конфиг типов уведомлений (ADR 0047): маппинг «событие → тип», каналы, шаблоны с локализацией. Значений и текстов в коде сервиса нет; новый тип - данные. Нет шаблона на default_locale - конфиг не проходит проверку при старте.",
@@ -53,6 +68,47 @@
             "maxLength": 64,
             "pattern": "^[a-z][a-z0-9_]*$",
             "type": "string"
+          },
+          "lookups": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "description": "Справочник текстов по коду из события; плейсхолдер `{имя}` в шаблоне заменяется текстом кода. Имя не должно совпадать с именем из params",
+              "properties": {
+                "fallback": {
+                  "$ref": "#/$defs/LocaleTexts",
+                  "description": "Текст для неизвестного или пустого кода; обязателен на default_locale"
+                },
+                "path": {
+                  "description": "Путь к коду в событии (payload.reason_code)",
+                  "maxLength": 120,
+                  "pattern": "^payload\\.[a-z_][a-z0-9_.]*$",
+                  "type": "string"
+                },
+                "texts": {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/LocaleTexts"
+                  },
+                  "description": "Код -> локаль -> текст; каждый код обязан иметь текст на default_locale",
+                  "maxProperties": 100,
+                  "propertyNames": {
+                    "maxLength": 64,
+                    "pattern": "^[a-z][a-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              },
+              "required": [
+                "path",
+                "texts",
+                "fallback"
+              ],
+              "type": "object"
+            },
+            "description": "Подстановки-справочники: имя -> правила выбора текста по коду события",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
           },
           "params": {
             "additionalProperties": {

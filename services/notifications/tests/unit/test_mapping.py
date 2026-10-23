@@ -124,7 +124,7 @@ def test_avatar_recipient_is_owner_and_reason_comes_from_event(catalog: TypeCata
     assert matches_filter(rejected.filter, payload)
     result = map_event(rejected, payload, locale="ru", default_locale="ru")
     assert result.user_id == UUID(USER)
-    assert "inappropriate" in result.body
+    assert result.body == "Ваша аватарка отклонена: нарушает правила сообщества."
     assert result.dedup_key == "avatar:0192a3b4-c5d6-7e8f-9a0b-0000000a0001:2"
 
 
@@ -159,3 +159,87 @@ def test_long_param_value_is_truncated_in_text(catalog: TypeCatalog) -> None:
     payload = {**payload_of("BadgeUnlocked"), "badge_key": "b" * 150}
     result = map_event(badge, payload, locale="ru", default_locale="ru")
     assert len(result.body) <= 500
+
+
+# Коды причин отклонения аватарки - общий словарь с media-pipeline (поток S3): менять только
+# вместе с ним и с ``services/notifications/CLAUDE.md``.
+AVATAR_REASON_CODES = {"inappropriate", "copyright", "low_quality", "personal_data", "other"}
+
+
+def _rejected_payload(reason_code: object) -> dict[str, Any]:
+    return {
+        "asset_id": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001",
+        "owner_user_id": USER,
+        "purpose": "avatar",
+        "status": "rejected",
+        "reason_code": reason_code,
+        "version": 2,
+        "decided_at": "2026-10-23T12:00:00Z",
+    }
+
+
+def test_avatar_rejected_lookup_covers_the_agreed_reason_codes(catalog: TypeCatalog) -> None:
+    rejected = catalog.by_key("avatar_rejected")
+    assert rejected is not None
+    assert set(rejected.lookups["reason"].texts) == AVATAR_REASON_CODES
+
+
+@pytest.mark.parametrize("code", sorted(AVATAR_REASON_CODES))
+def test_every_known_reason_code_has_own_text(catalog: TypeCatalog, code: str) -> None:
+    rejected = catalog.by_key("avatar_rejected")
+    assert rejected is not None
+    result = map_event(rejected, _rejected_payload(code), locale="ru", default_locale="ru")
+    assert result.body.startswith("Ваша аватарка отклонена: ")
+    assert "{" not in result.body
+
+
+@pytest.mark.parametrize("code", ["blurry", "", None, "x" * 500])
+def test_unknown_or_empty_reason_code_gives_fallback(catalog: TypeCatalog, code: object) -> None:
+    rejected = catalog.by_key("avatar_rejected")
+    assert rejected is not None
+    result = map_event(rejected, _rejected_payload(code), locale="ru", default_locale="ru")
+    assert result.body == "Ваша аватарка не прошла модерацию."
+
+
+def test_lookup_falls_back_to_default_locale_for_missing_locale(catalog: TypeCatalog) -> None:
+    rejected = catalog.by_key("avatar_rejected")
+    assert rejected is not None
+    known = map_event(rejected, _rejected_payload("copyright"), locale="de", default_locale="ru")
+    unknown = map_event(rejected, _rejected_payload("zzz"), locale="de", default_locale="ru")
+    assert known.body == "Ваша аватарка отклонена: нарушает чужие авторские права."
+    assert unknown.body == "Ваша аватарка не прошла модерацию."
+
+
+def test_lookup_uses_requested_locale_when_it_has_text() -> None:
+    catalog = TypeCatalog.parse(
+        {
+            "default_locale": "ru",
+            "types": [
+                {
+                    "key": "t",
+                    "source_event": "a.B",
+                    "recipient": "payload.u",
+                    "channels": {"in_app": True, "email": False, "push": False},
+                    "user_mutable": True,
+                    "dedup_key": "t:{payload.u}",
+                    "params": {},
+                    "lookups": {
+                        "why": {
+                            "path": "payload.code",
+                            "texts": {"a": {"ru": "эй", "en": "hey"}},
+                            "fallback": {"ru": "ничего", "en": "nothing"},
+                        }
+                    },
+                    "templates": {
+                        "ru": {"title": "T", "body": "Тут {why}."},
+                        "en": {"title": "T", "body": "Here {why}."},
+                    },
+                }
+            ],
+        }
+    )
+    t = catalog.types[0]
+    payload = {"u": USER, "code": "a"}
+    assert map_event(t, payload, locale="en", default_locale="ru").body == "Here hey."
+    other = {**payload, "code": "q"}
+    assert map_event(t, other, locale="en", default_locale="ru").body == "Here nothing."

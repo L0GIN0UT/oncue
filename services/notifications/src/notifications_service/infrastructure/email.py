@@ -9,13 +9,18 @@ from __future__ import annotations
 
 import asyncio
 from email.message import EmailMessage as MimeMessage
+from typing import Protocol
 from uuid import UUID
 
 import aiosmtplib
+import httpx
 import structlog
 
 from gv_core.errors import DependencyUnavailableError
 from notifications_service.application.ports import (
+    DIRECTORY_FORBIDDEN,
+    DIRECTORY_UNAVAILABLE,
+    DIRECTORY_UNCONFIGURED,
     EmailMessage,
     EmailSender,
     PermanentEmailError,
@@ -24,8 +29,6 @@ from notifications_service.application.ports import (
 from notifications_service.settings import SmtpSettings
 
 log = structlog.get_logger(__name__)
-
-DIRECTORY_UNCONFIGURED = "notifications.email_directory_unconfigured"
 
 
 class LogEmailSender:
@@ -104,7 +107,7 @@ class SmtpEmailSender:
 
 
 class UnconfiguredEmailDirectory:
-    """Адресов получателей нет: у identity пока нет internal-ручки выдачи адресов (хвост 5b).
+    """Адресов получателей нет: сервисная аутентификация не настроена (нет токенов identity).
 
     Рассылка в этом случае переходит в ``failed`` без повторов, остальной сервис работает.
     """
@@ -114,6 +117,109 @@ class UnconfiguredEmailDirectory:
         raise DependencyUnavailableError(
             "справочник адресов не настроен", code=DIRECTORY_UNCONFIGURED
         )
+
+
+class TokenProvider(Protocol):
+    """Сервисный токен (``gv_auth.ServiceTokenProvider``)."""
+
+    async def token(self) -> str:
+        """Действующий токен."""
+        ...
+
+    def invalidate(self) -> None:
+        """Забыть токен (ответ 401)."""
+        ...
+
+
+class HttpEmailDirectory:
+    """Адреса подтверждённых e-mail через internal API identity.
+
+    ``POST /internal/v1/users/emails`` (scope ``users.emails.read``): пачками до
+    ``batch_size`` идентификаторов; в ответе только игроки с подтверждённым адресом, остальные
+    пропускаются. Сетевой сбой, 5xx и 429 - повторяемая ошибка (воркер повторит задачу);
+    прочие 4xx - неповторяемая настройка (``DIRECTORY_FORBIDDEN``). После 401 токен
+    сбрасывается и вызов повторяется один раз. Адреса не попадают ни в логи, ни в исключения,
+    ни в метрики; тело ответа об ошибке не читается.
+    """
+
+    PATH = "/internal/v1/users/emails"
+
+    def __init__(
+        self,
+        base_url: str,
+        tokens: TokenProvider,
+        *,
+        timeout_s: float,
+        batch_size: int = 500,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._tokens = tokens
+        self._batch = batch_size
+        self._http = client or httpx.AsyncClient(base_url=base_url, timeout=timeout_s)
+
+    async def aclose(self) -> None:
+        """Закрыть HTTP-клиент."""
+        await self._http.aclose()
+
+    async def resolve(self, user_ids: list[UUID]) -> list[Recipient]:
+        """Адреса игроков; без подтверждённого адреса - пропускаются.
+
+        Raises:
+            DependencyUnavailableError: ``DIRECTORY_UNAVAILABLE`` (повторить) или
+                ``DIRECTORY_FORBIDDEN`` (настройка, повтор бесполезен).
+        """
+        result: list[Recipient] = []
+        for start in range(0, len(user_ids), self._batch):
+            chunk = user_ids[start : start + self._batch]
+            result.extend(await self._fetch(chunk))
+        return result
+
+    async def _post(self, chunk: list[UUID]) -> httpx.Response:
+        token = await self._tokens.token()
+        try:
+            return await self._http.post(
+                self.PATH,
+                json={"user_ids": [str(u) for u in chunk]},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        except httpx.HTTPError as exc:
+            log.warning("notifications.email_directory_network", error=type(exc).__name__)
+            raise DependencyUnavailableError(
+                "identity недоступен", code=DIRECTORY_UNAVAILABLE
+            ) from None
+
+    async def _fetch(self, chunk: list[UUID]) -> list[Recipient]:
+        response = await self._post(chunk)
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            self._tokens.invalidate()
+            response = await self._post(chunk)
+            if response.status_code == httpx.codes.UNAUTHORIZED:
+                self._tokens.invalidate()
+        status = response.status_code
+        if status != httpx.codes.OK:
+            log.warning("notifications.email_directory_rejected", status=status)
+            retryable = status >= httpx.codes.INTERNAL_SERVER_ERROR or (
+                status == httpx.codes.TOO_MANY_REQUESTS
+            )
+            if retryable:
+                raise DependencyUnavailableError(
+                    "identity временно недоступен", code=DIRECTORY_UNAVAILABLE
+                )
+            raise DependencyUnavailableError(
+                "identity отклонил запрос адресов: проверьте клиента и scope users.emails.read",
+                code=DIRECTORY_FORBIDDEN,
+            )
+        try:
+            return [
+                Recipient(user_id=UUID(str(item["user_id"])), email=str(item["email"]))
+                for item in response.json()["items"]
+            ]
+        except (KeyError, TypeError, ValueError):
+            # Ответ может содержать адреса: исключение и лог без деталей.
+            log.warning("notifications.email_directory_unparsable")
+            raise DependencyUnavailableError(
+                "ответ identity не разобран", code=DIRECTORY_UNAVAILABLE
+            ) from None
 
 
 class NullPushSender:

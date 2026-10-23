@@ -47,6 +47,8 @@ class NotificationsSettings(BaseModel):
         broadcast_batch_size: Получателей рассылки в одной порции.
         unsubscribe_footer: Подпись письма рассылки со ссылкой отписки (плейсхолдер ``{link}``).
         email_backend: ``log`` (только local/ci), ``smtp``.
+        identity_url: База identity для internal-ручки адресов (DNS compose/Kubernetes).
+        identity_timeout_s: Таймаут вызова identity.
         smtp: SMTP-сервер.
     """
 
@@ -65,6 +67,8 @@ class NotificationsSettings(BaseModel):
         max_length=500,
     )
     email_backend: Literal["log", "smtp"] = "log"
+    identity_url: str = Field(default="http://identity:8000", pattern=r"^https?://")
+    identity_timeout_s: float = Field(default=5.0, gt=0, le=60)
     smtp: SmtpSettings = SmtpSettings()
 
     @field_validator("types_path", "public_base_url", mode="before")

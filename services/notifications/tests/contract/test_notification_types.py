@@ -59,6 +59,8 @@ def test_every_source_event_exists_and_its_fields_are_in_the_schema() -> None:
         assert _payload_field(item["recipient"]) in fields, item["key"]
         for path in item["params"].values():
             assert _payload_field(path) in fields, (item["key"], path)
+        for lookup in item.get("lookups", {}).values():
+            assert _payload_field(lookup["path"]) in fields, (item["key"], lookup["path"])
         assert set(item.get("filter", {})) <= fields, item["key"]
         for ref in PLACEHOLDER.findall(item["dedup_key"]):
             assert _payload_field(ref) in fields, (item["key"], ref)
@@ -68,7 +70,8 @@ def test_template_placeholders_are_declared_params() -> None:
     for item in _example()["types"]:
         for locale, template in item["templates"].items():
             for text in (template["title"], template["body"]):
-                assert set(PLACEHOLDER.findall(text)) <= set(item["params"]), (
+                declared = set(item["params"]) | set(item.get("lookups", {}))
+                assert set(PLACEHOLDER.findall(text)) <= declared, (
                     item["key"],
                     locale,
                 )

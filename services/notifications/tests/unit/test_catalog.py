@@ -137,3 +137,48 @@ def test_yaml_is_not_a_mapping_is_config_error(tmp_path: Any) -> None:
     path.write_text("- just\n- a list\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_catalog(path)
+
+
+def _avatar_rejected(document: dict[str, Any]) -> dict[str, Any]:
+    return next(t for t in document["types"] if t["key"] == "avatar_rejected")
+
+
+def test_lookup_name_cannot_also_be_a_param(document: dict[str, Any]) -> None:
+    """Имя подстановки либо из params, либо из lookups: двусмысленность запрещена."""
+    _avatar_rejected(document)["params"] = {"reason": "payload.reason_code"}
+    with pytest.raises(ConfigError, match="reason"):
+        TypeCatalog.parse(document)
+
+
+def test_lookup_without_default_locale_fallback_is_config_error(
+    document: dict[str, Any],
+) -> None:
+    _avatar_rejected(document)["lookups"]["reason"]["fallback"] = {"en": "x"}
+    with pytest.raises(ConfigError, match="fallback"):
+        TypeCatalog.parse(document)
+
+
+def test_lookup_code_without_default_locale_text_is_config_error(
+    document: dict[str, Any],
+) -> None:
+    _avatar_rejected(document)["lookups"]["reason"]["texts"]["other"] = {"en": "x"}
+    with pytest.raises(ConfigError, match="other"):
+        TypeCatalog.parse(document)
+
+
+def test_lookup_path_outside_payload_is_rejected_by_schema(document: dict[str, Any]) -> None:
+    _avatar_rejected(document)["lookups"]["reason"]["path"] = "event_id"
+    with pytest.raises(ConfigError):
+        validate_document(document)
+
+
+def test_lookup_code_must_be_snake_case(document: dict[str, Any]) -> None:
+    _avatar_rejected(document)["lookups"]["reason"]["texts"]["Bad Code"] = {"ru": "x"}
+    with pytest.raises(ConfigError):
+        validate_document(document)
+
+
+def test_placeholder_not_in_params_or_lookups_is_still_error(document: dict[str, Any]) -> None:
+    _avatar_rejected(document)["templates"]["ru"]["body"] = "Аватарка {why}."
+    with pytest.raises(ConfigError, match="why"):
+        TypeCatalog.parse(document)

@@ -12,6 +12,11 @@ from notifications_service.application.broadcasts import (
     BROADCAST_TASK,
     BroadcastNotVisibleError,
 )
+from notifications_service.application.ports import (
+    DIRECTORY_FORBIDDEN,
+    DIRECTORY_UNAVAILABLE,
+    Recipient,
+)
 from notifications_service.infrastructure.db.tables import (
     admin_actions,
     broadcast_deliveries,
@@ -19,6 +24,7 @@ from notifications_service.infrastructure.db.tables import (
 )
 from notifications_service.infrastructure.email import UnconfiguredEmailDirectory
 
+from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
 from gv_messaging.ports import PermanentError
 from gv_testkit import assert_problem
@@ -269,6 +275,41 @@ async def test_unconfigured_directory_fails_broadcast_permanently(notifications:
         await sender.execute(UUID(broadcast["id"]))
     [row] = await svc.rows(broadcasts)
     assert row.status == "failed"
+    assert svc.email.sent == []
+
+
+class _FailingDirectory:
+    def __init__(self, code: str) -> None:
+        self._code = code
+
+    async def resolve(self, user_ids: list[UUID]) -> list[Recipient]:
+        raise DependencyUnavailableError("identity", code=self._code)
+
+
+async def test_forbidden_directory_fails_broadcast_permanently(notifications: Service) -> None:
+    svc = notifications
+    await subscriber(svc)
+    broadcast = (await create(svc)).json()
+    sender = svc.container.send_broadcast
+    sender._directory = _FailingDirectory(DIRECTORY_FORBIDDEN)
+    with pytest.raises(PermanentError):
+        await sender.execute(UUID(broadcast["id"]))
+    [row] = await svc.rows(broadcasts)
+    assert row.status == "failed"
+
+
+async def test_unavailable_directory_is_retried_and_broadcast_stays_sending(
+    notifications: Service,
+) -> None:
+    svc = notifications
+    await subscriber(svc)
+    broadcast = (await create(svc)).json()
+    sender = svc.container.send_broadcast
+    sender._directory = _FailingDirectory(DIRECTORY_UNAVAILABLE)
+    with pytest.raises(DependencyUnavailableError):
+        await sender.execute(UUID(broadcast["id"]))
+    [row] = await svc.rows(broadcasts)
+    assert row.status == "sending"
     assert svc.email.sent == []
 
 

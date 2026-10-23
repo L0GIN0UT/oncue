@@ -1,0 +1,69 @@
+{
+  "$id": "urn:guessverse:contracts:realtime:notification.created:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Публикует бэкенд notifications в личный канал `personal:#<user_id>` после коммита записи уведомления (ADR 0035, 0047). Запись в БД первична: клиент догоняет пропущенное списком GET /v1/notifications. Неизвестные поля уведомления клиент игнорирует; тексты показывает как есть (экранирует).",
+  "properties": {
+    "notification": {
+      "additionalProperties": false,
+      "description": "То же представление, что элемент списка GET /v1/notifications",
+      "properties": {
+        "body": {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "read_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Для нового уведомления всегда null"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "description": "Ключ типа из конфига notifications (level_up, avatar_rejected, ...)",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "title",
+        "body",
+        "created_at",
+        "read_at"
+      ],
+      "type": "object"
+    },
+    "type": {
+      "const": "notification.created",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "notification"
+  ],
+  "title": "Сообщение личного канала personal:#{user_id} v1",
+  "type": "object"
+}

@@ -13,12 +13,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
 from gv_messaging.ports import TaskQueue
-from gv_service import Environment, Infrastructure
+from gv_service import (
+    Environment,
+    Infrastructure,
+    ServiceAuthNotConfiguredError,
+    build_service_token_provider,
+)
 from notifications_service.application.broadcasts import (
     BroadcastQueries,
     CreateBroadcast,
@@ -43,6 +49,7 @@ from notifications_service.domain.tokens import UnsubscribeTokens
 from notifications_service.infrastructure.config import load_catalog
 from notifications_service.infrastructure.db.repositories import SqlUnitOfWork
 from notifications_service.infrastructure.email import (
+    HttpEmailDirectory,
     LogEmailSender,
     NullPushSender,
     SmtpEmailSender,
@@ -57,6 +64,9 @@ from notifications_service.infrastructure.realtime import (
 from notifications_service.infrastructure.tasks import LazyRabbitTaskQueue
 from notifications_service.settings import Settings
 
+log = structlog.get_logger(__name__)
+
+IDENTITY_AUDIENCE = "identity"
 _LOCAL_ENVIRONMENTS = {Environment.LOCAL, Environment.CI}
 _LOCAL_BASE_URL = "http://localhost:3000"
 
@@ -98,7 +108,7 @@ class NotificationsContainer:
         self.realtime: RealtimePublisher = adapters.realtime or self._build_realtime()
         self.dispatcher = PostCommitDispatcher(self.realtime)
         self.email: EmailSender = adapters.email or self._build_email()
-        self.directory: EmailDirectory = adapters.directory or UnconfiguredEmailDirectory()
+        self.directory: EmailDirectory = adapters.directory or self._build_directory()
         self.push: PushSender = adapters.push or NullPushSender()
         self.tasks: TaskQueue = adapters.tasks or self._build_tasks()
 
@@ -149,6 +159,19 @@ class NotificationsContainer:
                 "GV_NOTIFICATIONS__EMAIL_BACKEND=log допустим только в local/ci"
             )
         return LogEmailSender(include_body=self.is_local)
+
+    def _build_directory(self) -> EmailDirectory:
+        """Адреса из identity; без ``GV_SERVICE_AUTH__*`` - заглушка (рассылка ``failed``)."""
+        try:
+            tokens = build_service_token_provider(self.infra, IDENTITY_AUDIENCE)
+        except ServiceAuthNotConfiguredError:
+            log.warning("notifications.service_auth_not_configured", audience=IDENTITY_AUDIENCE)
+            return UnconfiguredEmailDirectory()
+        directory = HttpEmailDirectory(
+            self._cfg.identity_url, tokens, timeout_s=self._cfg.identity_timeout_s
+        )
+        self.infra.add_closer(directory.aclose)
+        return directory
 
     def _build_tasks(self) -> TaskQueue:
         rabbit = self.settings.rabbitmq_url
