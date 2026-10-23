@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 import structlog
@@ -38,11 +38,7 @@ from bff_web_service.application.dto import ANONYMOUS, CatalogQuery, SubjectKind
 from bff_web_service.application.ports import TRACE_HEADERS
 from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
-from gv_core.errors import (
-    DependencyUnavailableError,
-    NotImplementedYetError,
-    UnauthenticatedError,
-)
+from gv_core.errors import DependencyUnavailableError, UnauthenticatedError
 from gv_service import problem_responses
 
 log = structlog.get_logger(__name__)
@@ -115,13 +111,19 @@ REJECTED = Viewer(token_rejected=True)
 CurrentViewer = Annotated[Viewer, Depends(resolve_viewer)]
 
 
-def _cache_headers(response: Response, *, personal: bool, policy: HttpCacheSettings) -> None:
+def _cache_headers(
+    response: Response,
+    *,
+    personal: bool,
+    policy: HttpCacheSettings,
+    max_age_s: int | None = None,
+) -> None:
     response.headers["Vary"] = VARY
     if personal:
         response.headers["Cache-Control"] = PRIVATE
         return
     response.headers["Cache-Control"] = (
-        f"public, max-age={policy.public_max_age_s}, "
+        f"public, max-age={policy.public_max_age_s if max_age_s is None else max_age_s}, "
         f"stale-while-revalidate={policy.stale_while_revalidate_s}"
     )
 
@@ -296,7 +298,9 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         summary="Хаб онлайна",
         description=(
             "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания "
-            "комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). "
+            "комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие "
+            "сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, "
+            "страница 200). "
             "Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, "
             "`blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил "
             "401 — `status: session_expired` (обновить сессию и повторить). Всегда "
@@ -314,17 +318,27 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         response_model=LeaderboardsPage,
         summary="Лидерборды",
         description=(
-            "Публичная страница без токена: ladder-ы с сезоном и званиями, лидерборд "
-            "(`ladder`, `cursor`) и топ недели (rating). Блоки деградируют независимо. Кэш — "
-            "10 с (`public, max-age=10`). Заглушка 0a этапа 4b: реализация — поток C2."
+            "Публичная страница: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`; "
+            "без `ladder` — первый из списка) и топ недели (rating). Блоки деградируют "
+            "независимо. Без `around` ответ общий: `public, max-age=10`. `around=me` — окно "
+            "вокруг пользователя и строки `me`: нужен вход (иначе 401), ответ "
+            "`private, no-store`; в калибровке — обычная первая страница. Нет ladder-а — 404 "
+            "`rating.ladder_not_found`, чужой курсор — 422."
         ),
-        responses=problem_responses(404, 422, 501),
+        responses=problem_responses(401, 404, 422),
     )
     async def leaderboards_page(
-        ladder: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)] = None,  # noqa: ARG001
-        cursor: Annotated[str | None, Query(pattern=_CURSOR)] = None,  # noqa: ARG001
+        viewer: CurrentViewer,
+        response: Response,
+        ladder: Annotated[str | None, Query(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)] = None,
+        cursor: Annotated[str | None, Query(pattern=_CURSOR)] = None,
+        around: Annotated[Literal["me"] | None, Query()] = None,
     ) -> LeaderboardsPage:
-        raise NotImplementedYetError("Заглушка контракта 0a этапа 4b: реализация — поток C2")
+        page = await deps.get_leaderboards(viewer, ladder, cursor, around_me=around == "me")
+        _cache_headers(
+            response, personal=page.personal, policy=policy, max_age_s=policy.leaderboards_max_age_s
+        )
+        return LeaderboardsPage.model_validate(page, from_attributes=True)
 
     @router.get(
         "/pages/match/{match_id}",

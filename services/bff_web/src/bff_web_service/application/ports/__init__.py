@@ -24,15 +24,20 @@ from bff_web_service.application.dto import (
     Domain,
     Item,
     ItemShelves,
+    LadderCard,
+    LeaderboardCard,
     MatchResult,
     Me,
     Mode,
     MyMatches,
     OpenRooms,
     PersonalRecord,
+    QueuePoolCard,
+    RatingCard,
     SessionResult,
     Shelf,
     ShelfItems,
+    WeeklyTopCard,
 )
 
 TRACE_HEADERS: ContextVar[dict[str, str] | None] = ContextVar("bff_trace_headers", default=None)
@@ -172,6 +177,40 @@ class MatchClient(Protocol):
 
     async def match(self, token: str, match_id: UUID) -> MatchResult:
         """Итог завершённого матча. Нет или ещё идёт — ``UpstreamRejectedError(404)``."""
+        ...
+
+    async def queue_pool(self, token: str) -> list[QueuePoolCard]:
+        """Сколько игроков ищут матч по каждому ladder-у и формату (4b, ADR 0038)."""
+        ...
+
+
+class RatingClient(Protocol):
+    """Публичный API rating (4b).
+
+    ``ladders`` и анонимные ``leaderboard``/``weekly`` публичны и кэшируются на секунды;
+    с токеном (``me``, ``around=me``) и ``my_ratings`` — личные, не кэшируются.
+    """
+
+    async def ladders(self) -> list[LadderCard]:
+        """Опубликованные ladder-ы с действующим сезоном и званиями (кэшируется)."""
+        ...
+
+    async def my_ratings(self, token: str) -> list[RatingCard]:
+        """Рейтинги пользователя по ladder-ам. Гость — ``UpstreamRejectedError(403)``."""
+        ...
+
+    async def leaderboard(
+        self, ladder: str, *, token: str | None, cursor: str | None, around_me: bool
+    ) -> LeaderboardCard:
+        """Лидерборд ladder-а; без токена — общий и кэшируется.
+
+        Нет ladder-а — ``UpstreamRejectedError(404, rating.ladder_not_found)``,
+        ``around_me`` в калибровке — ``404 rating.not_ranked``.
+        """
+        ...
+
+    async def weekly(self, ladder: str, *, token: str | None) -> WeeklyTopCard:
+        """Топ недели ladder-а; без токена — общий и кэшируется."""
         ...
 
 

@@ -1,0 +1,94 @@
+{
+  "queue_pool": {
+    "items": [
+      {"ladder": "film", "format": "classic", "searching": 3},
+      {"ladder": "film", "format": "lite", "searching": 0},
+      {"ladder": "music", "format": "classic", "searching": 1}
+    ]
+  },
+  "ladders": {
+    "items": [
+      {
+        "key": "film",
+        "domain": "film",
+        "formats": ["classic", "lite"],
+        "version": 2,
+        "calibration_matches": 10,
+        "tiers": [
+          {"key": "iron_1", "family": "iron", "step": 1, "title_key": "rating.tier.iron", "below": 700},
+          {"key": "cinephile", "family": "cinephile", "step": null, "title_key": "rating.tier.cinephile", "below": null}
+        ],
+        "season": {
+          "season_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+          "number": 4,
+          "starts_at": "2026-10-19T00:00:00Z",
+          "ends_at": "2026-12-14T00:00:00Z"
+        }
+      },
+      {
+        "key": "music",
+        "domain": "music",
+        "formats": ["classic"],
+        "version": 1,
+        "calibration_matches": 10,
+        "tiers": [
+          {"key": "iron_1", "family": "iron", "step": 1, "title_key": "rating.tier.iron", "below": 700}
+        ],
+        "season": null
+      }
+    ]
+  },
+  "my_ratings": {
+    "items": [
+      {
+        "ladder": "film",
+        "season_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+        "rating": 1234,
+        "tier": {"key": "silver", "family": "silver", "step": null, "title_key": "rating.tier.silver", "below": 1500},
+        "next_tier_at": 1500,
+        "calibrating": false,
+        "calibration_left": 0,
+        "matches_played": 15,
+        "place": 42
+      },
+      {
+        "ladder": "music",
+        "season_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f02",
+        "rating": null,
+        "tier": null,
+        "next_tier_at": null,
+        "calibrating": true,
+        "calibration_left": 7,
+        "matches_played": 3,
+        "place": null
+      }
+    ]
+  },
+  "weekly": {
+    "ladder": "film",
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+    "week_start": "2026-10-19",
+    "items": [
+      {"place": 1, "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e01", "nickname": "neo", "delta": 55},
+      {"place": 2, "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e02", "nickname": "trinity", "delta": 31},
+      {"place": 3, "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e03", "nickname": "morpheus", "delta": 12}
+    ],
+    "me": null
+  },
+  "leaderboard": {
+    "ladder": "film",
+    "season_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+    "items": [
+      {
+        "place": 1,
+        "user_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e01",
+        "nickname": "neo",
+        "rating": 2450,
+        "tier": {"key": "cinephile", "family": "cinephile", "step": null, "title_key": "rating.tier.cinephile", "below": null},
+        "matches_played": 120
+      }
+    ],
+    "next_cursor": "c2",
+    "me": null
+  }
+}

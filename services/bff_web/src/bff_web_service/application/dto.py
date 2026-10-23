@@ -814,6 +814,128 @@ class ItemShelves:
     shelves: list[str]
 
 
+# ----------------------------------------------------------------------------- рейтинг (4b)
+QueueFormat = Literal["classic", "lite"]
+
+
+@dataclass(frozen=True, slots=True)
+class TierCard:
+    """Звание ladder-а (ключи i18n из конфига rating)."""
+
+    key: str
+    family: str
+    step: int | None
+    title_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class QueuePoolCard:
+    """Сколько игроков ищут матч в очереди ladder-а и формата (``match /v1/queue/pool``)."""
+
+    ladder: str
+    format: QueueFormat
+    searching: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RatingCard:
+    """Рейтинг пользователя в ladder-е; в калибровке ``rating`` и ``tier`` — ``None``."""
+
+    ladder: str
+    rating: int | None
+    tier: TierCard | None
+    next_tier_at: int | None = None
+    calibrating: bool
+    calibration_left: int
+    matches_played: int
+    place: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SeasonCard:
+    """Действующий сезон ladder-а."""
+
+    ladder: str
+    number: int
+    starts_at: datetime
+    ends_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class WeeklyEntryCard:
+    """Строка топа недели."""
+
+    place: int
+    user_id: UUID
+    nickname: str
+    delta: int
+
+
+@dataclass(frozen=True, slots=True)
+class WeeklyTopCard:
+    """Топ недели ladder-а (прирост с понедельника)."""
+
+    ladder: str
+    week_start: date
+    items: list[WeeklyEntryCard]
+    me: WeeklyEntryCard | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LadderCard:
+    """Ladder для переключателя и хаба: формат, звания, действующий сезон."""
+
+    key: str
+    domain: Domain
+    formats: list[QueueFormat]
+    season: SeasonCard | None = None
+    tiers: list[TierCard]
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardEntryCard:
+    """Строка лидерборда."""
+
+    place: int
+    user_id: UUID
+    nickname: str
+    rating: int
+    tier: TierCard
+    matches_played: int
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardCard:
+    """Страница лидерборда; ``next_cursor`` отдаёт rating."""
+
+    ladder: str
+    items: list[LeaderboardEntryCard]
+    next_cursor: str | None = None
+    me: LeaderboardEntryCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardsBlocks:
+    """Блоки страницы лидербордов; каждый гаснет независимо."""
+
+    ladders: Block[list[LadderCard]]
+    leaderboard: Block[LeaderboardCard]
+    weekly: Block[WeeklyTopCard]
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderboardsPage:
+    """``GET /v1/pages/leaderboards``.
+
+    Attributes:
+        blocks: Блоки страницы.
+        personal: В rating уходил токен пользователя (``me``): ответ не кэшируется.
+    """
+
+    blocks: LeaderboardsBlocks
+    personal: bool = False
+
+
 # ----------------------------------------------------------------------------- экраны 4a
 class OnlineStatus(StrEnum):
     """Состояние хаба онлайна; кроме ``ok`` блоков нет.
@@ -850,6 +972,10 @@ class OnlineBlocks:
     open_rooms: Block[OpenRooms]
     my_matches: Block[MyMatches]
     modes: Block[list[OnlineModeCard]]
+    queues: Block[list[QueuePoolCard]]
+    ratings: Block[list[RatingCard]]
+    seasons: Block[list[SeasonCard]]
+    weekly: Block[list[WeeklyTopCard]]
 
 
 @dataclass(frozen=True, slots=True)

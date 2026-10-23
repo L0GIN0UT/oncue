@@ -1751,7 +1751,7 @@
         "type": "object"
       },
       "LeaderboardsPage": {
-        "description": "``GET /v1/pages/leaderboards``: публичная страница, без токена; кэш 10 с.",
+        "description": "``GET /v1/pages/leaderboards``: публичная страница, кэш 10 с (с ``around=me`` — личная).",
         "properties": {
           "blocks": {
             "$ref": "#/components/schemas/LeaderboardsBlocks"
@@ -2351,54 +2351,30 @@
             "$ref": "#/components/schemas/Block_OpenRoomsList_"
           },
           "queues": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Block_list_QueuePoolCard__"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "$ref": "#/components/schemas/Block_list_QueuePoolCard__",
             "description": "4b: сколько игроков ищет матч (`match /v1/queue/pool`)"
           },
           "ratings": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Block_list_RatingCard__"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "4b: мои звания и калибровка (`rating /v1/me/ratings`)"
+            "$ref": "#/components/schemas/Block_list_RatingCard__",
+            "description": "4b: мои звания и калибровка (`rating /v1/me/ratings`); в калибровке `rating`/`tier` — null, «осталось N матчей» — `calibration_left`"
           },
           "seasons": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Block_list_SeasonCard__"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "4b: действующие сезоны («Сезон N · осталось X д.»)"
+            "$ref": "#/components/schemas/Block_list_SeasonCard__",
+            "description": "4b: действующие сезоны (ladder без сезона пропускается)"
           },
           "weekly": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Block_list_WeeklyTopCard__"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "4b: топ недели по ladder-ам (`rating /v1/ladders/{key}/weekly`)"
+            "$ref": "#/components/schemas/Block_list_WeeklyTopCard__",
+            "description": "4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`)"
           }
         },
         "required": [
           "open_rooms",
           "my_matches",
-          "modes"
+          "modes",
+          "queues",
+          "ratings",
+          "seasons",
+          "weekly"
         ],
         "title": "OnlineBlocks",
         "type": "object"
@@ -4126,7 +4102,7 @@
     },
     "/v1/pages/leaderboards": {
       "get": {
-        "description": "Публичная страница без токена: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`) и топ недели (rating). Блоки деградируют независимо. Кэш — 10 с (`public, max-age=10`). Заглушка 0a этапа 4b: реализация — поток C2.",
+        "description": "Публичная страница: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`; без `ladder` — первый из списка) и топ недели (rating). Блоки деградируют независимо. Без `around` ответ общий: `public, max-age=10`. `around=me` — окно вокруг пользователя и строки `me`: нужен вход (иначе 401), ответ `private, no-store`; в калибровке — обычная первая страница. Нет ladder-а — 404 `rating.ladder_not_found`, чужой курсор — 422.",
         "operationId": "leaderboards_page_v1_pages_leaderboards_get",
         "parameters": [
           {
@@ -4163,6 +4139,23 @@
               ],
               "title": "Cursor"
             }
+          },
+          {
+            "in": "query",
+            "name": "around",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "me",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Around"
+            }
           }
         ],
         "responses": {
@@ -4175,6 +4168,21 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
           },
           "404": {
             "content": {
@@ -4205,21 +4213,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Лидерборды",
@@ -4487,7 +4480,7 @@
     },
     "/v1/pages/online": {
       "get": {
-        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.",
+        "description": "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.",
         "operationId": "online_page_v1_pages_online_get",
         "responses": {
           "200": {

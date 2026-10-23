@@ -612,7 +612,7 @@ class LeaderboardsBlocks(BaseModel):
 
 
 class LeaderboardsPage(BaseModel):
-    """``GET /v1/pages/leaderboards``: публичная страница, без токена; кэш 10 с."""
+    """``GET /v1/pages/leaderboards``: публичная страница, кэш 10 с (с ``around=me`` — личная)."""
 
     blocks: LeaderboardsBlocks
 
@@ -668,17 +668,20 @@ class OnlineBlocks(BaseModel):
     modes: Block[list[OnlineModeCard]] = Field(
         description="Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
     )
-    queues: Block[list[QueuePoolCard]] | None = Field(
-        default=None, description="4b: сколько игроков ищет матч (`match /v1/queue/pool`)"
+    queues: Block[list[QueuePoolCard]] = Field(
+        description="4b: сколько игроков ищет матч (`match /v1/queue/pool`)"
     )
-    ratings: Block[list[RatingCard]] | None = Field(
-        default=None, description="4b: мои звания и калибровка (`rating /v1/me/ratings`)"
+    ratings: Block[list[RatingCard]] = Field(
+        description=(
+            "4b: мои звания и калибровка (`rating /v1/me/ratings`); в калибровке "
+            "`rating`/`tier` — null, «осталось N матчей» — `calibration_left`"
+        )
     )
-    seasons: Block[list[SeasonCard]] | None = Field(
-        default=None, description="4b: действующие сезоны («Сезон N · осталось X д.»)"
+    seasons: Block[list[SeasonCard]] = Field(
+        description="4b: действующие сезоны (ladder без сезона пропускается)"
     )
-    weekly: Block[list[WeeklyTopCard]] | None = Field(
-        default=None, description="4b: топ недели по ladder-ам (`rating /v1/ladders/{key}/weekly`)"
+    weekly: Block[list[WeeklyTopCard]] = Field(
+        description="4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`)"
     )
 
 

@@ -35,6 +35,9 @@ from bff_web_service.application.dto import (
     Domain,
     Item,
     ItemShelves,
+    LadderCard,
+    LeaderboardCard,
+    LeaderboardEntryCard,
     MatchMode,
     MatchPlayer,
     MatchResult,
@@ -52,18 +55,24 @@ from bff_web_service.application.dto import (
     PersonalRecord,
     Presentation,
     Preset,
+    QueuePoolCard,
+    RatingCard,
     ResultRecord,
     ResultRound,
     Reveal,
     RoomSettings,
     RoundPlayerResult,
     RoundsChoice,
+    SeasonCard,
     SessionResult,
     Share,
     Shelf,
     ShelfItem,
     ShelfItems,
     SubjectPick,
+    TierCard,
+    WeeklyEntryCard,
+    WeeklyTopCard,
 )
 from bff_web_service.application.ports import UpstreamUnavailableError
 from bff_web_service.infrastructure.http import UpstreamHttp
@@ -942,6 +951,22 @@ _MY_MATCHES = TypeAdapter(_MyMatchesIn)
 _MATCH_RESULT = TypeAdapter(_MatchResultIn)
 
 
+class _QueuePoolEntryIn(_In):
+    ladder: str
+    format: Literal["classic", "lite"]
+    searching: int = Field(ge=0)
+
+    def dto(self) -> QueuePoolCard:
+        return QueuePoolCard(self.ladder, self.format, self.searching)
+
+
+class _QueuePoolIn(_In):
+    items: list[_QueuePoolEntryIn]
+
+
+_QUEUE_POOL = TypeAdapter(_QueuePoolIn)
+
+
 class HttpMatchClient:
     """Публичный API match: всё только пользователю (D13), ничего не кэшируется."""
 
@@ -967,3 +992,212 @@ class HttpMatchClient:
         if result.match_id != match_id:
             raise UpstreamUnavailableError(self._http.service, "contract_violation")
         return result.dto()
+
+    async def queue_pool(self, token: str) -> list[QueuePoolCard]:
+        """``GET /v1/queue/pool``."""
+        body = await self._http.get("/v1/queue/pool", token=token)
+        return [e.dto() for e in _parse(self._http.service, _QUEUE_POOL, body).items]
+
+
+# ----------------------------------------------------------------------------- rating (4b)
+class _TierIn(_In):
+    key: str
+    family: str
+    step: int | None = None
+    title_key: str
+
+    def dto(self) -> TierCard:
+        return TierCard(self.key, self.family, self.step, self.title_key)
+
+
+class _SeasonIn(_In):
+    number: int = Field(ge=1)
+    starts_at: datetime
+    ends_at: datetime
+
+
+class _LadderIn(_In):
+    key: str
+    domain: Domain
+    formats: list[Literal["classic", "lite"]]
+    tiers: list[_TierIn]
+    season: _SeasonIn | None = None
+
+    def dto(self) -> LadderCard:
+        season = (
+            SeasonCard(self.key, self.season.number, self.season.starts_at, self.season.ends_at)
+            if self.season is not None
+            else None
+        )
+        return LadderCard(
+            key=self.key,
+            domain=self.domain,
+            formats=self.formats,
+            season=season,
+            tiers=[t.dto() for t in self.tiers],
+        )
+
+
+class _LadderListIn(_In):
+    items: list[_LadderIn]
+
+
+class _RatingIn(_In):
+    ladder: str
+    rating: int | None
+    tier: _TierIn | None
+    next_tier_at: int | None = None
+    calibrating: bool
+    calibration_left: int = Field(ge=0)
+    matches_played: int = Field(ge=0)
+    place: int | None = Field(default=None, ge=1)
+
+    def dto(self) -> RatingCard:
+        return RatingCard(
+            ladder=self.ladder,
+            rating=self.rating,
+            tier=self.tier.dto() if self.tier else None,
+            next_tier_at=self.next_tier_at,
+            calibrating=self.calibrating,
+            calibration_left=self.calibration_left,
+            matches_played=self.matches_played,
+            place=self.place,
+        )
+
+
+class _MyRatingsIn(_In):
+    items: list[_RatingIn]
+
+
+class _LeaderboardEntryIn(_In):
+    place: int = Field(ge=1)
+    user_id: UUID
+    nickname: str
+    rating: int
+    tier: _TierIn
+    matches_played: int = Field(ge=0)
+
+    def dto(self) -> LeaderboardEntryCard:
+        return LeaderboardEntryCard(
+            self.place,
+            self.user_id,
+            self.nickname,
+            self.rating,
+            self.tier.dto(),
+            self.matches_played,
+        )
+
+
+class _LeaderboardIn(_In):
+    ladder: str
+    items: list[_LeaderboardEntryIn]
+    next_cursor: str | None = None
+    me: _LeaderboardEntryIn | None = None
+
+    def dto(self) -> LeaderboardCard:
+        return LeaderboardCard(
+            self.ladder,
+            [e.dto() for e in self.items],
+            self.next_cursor,
+            self.me.dto() if self.me else None,
+        )
+
+
+class _WeeklyEntryIn(_In):
+    place: int = Field(ge=1)
+    user_id: UUID
+    nickname: str
+    delta: int
+
+    def dto(self) -> WeeklyEntryCard:
+        return WeeklyEntryCard(self.place, self.user_id, self.nickname, self.delta)
+
+
+class _WeeklyIn(_In):
+    ladder: str
+    week_start: date
+    items: list[_WeeklyEntryIn]
+    me: _WeeklyEntryIn | None = None
+
+    def dto(self) -> WeeklyTopCard:
+        return WeeklyTopCard(
+            self.ladder,
+            self.week_start,
+            [e.dto() for e in self.items],
+            self.me.dto() if self.me else None,
+        )
+
+
+_LADDER_LIST = TypeAdapter(_LadderListIn)
+_MY_RATINGS = TypeAdapter(_MyRatingsIn)
+_LEADERBOARD = TypeAdapter(_LeaderboardIn)
+_WEEKLY = TypeAdapter(_WeeklyIn)
+
+
+class HttpRatingClient:
+    """Публичный API rating.
+
+    Ladder-ы, а также лидерборд и топ недели без токена общие для всех: кэшируются на
+    ``ttl_s`` (10 с, ``GV_PAGE_CACHE__LEADERBOARD_TTL_S``). С токеном (``me``,
+    ``around=me``) и ``/me/ratings`` — личные, мимо кэша.
+    """
+
+    def __init__(self, http: UpstreamHttp, *, ttl_s: int, cache_prefix: str) -> None:
+        self._http, self._ttl, self._prefix = http, ttl_s, cache_prefix
+
+    async def ladders(self) -> list[LadderCard]:
+        """``GET /v1/ladders`` (общий, кэшируется)."""
+        key = f"{self._prefix}rating:ladders:v1"
+        body, cached = await self._http.get_public("/v1/ladders", cache_key=key)
+        page = _parse(self._http.service, _LADDER_LIST, body)
+        if not cached:
+            await self._http.remember(key, body, self._ttl)
+        return [x.dto() for x in page.items]
+
+    async def my_ratings(self, token: str) -> list[RatingCard]:
+        """``GET /v1/me/ratings``."""
+        body = await self._http.get("/v1/me/ratings", token=token)
+        return [x.dto() for x in _parse(self._http.service, _MY_RATINGS, body).items]
+
+    async def leaderboard(
+        self, ladder: str, *, token: str | None, cursor: str | None, around_me: bool
+    ) -> LeaderboardCard:
+        """``GET /v1/ladders/{ladder}/leaderboard``."""
+        path = f"/v1/ladders/{ladder}/leaderboard"
+        params: dict[str, str] = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if around_me:
+            params["around"] = "me"
+        if token is not None:
+            return self._leaderboard(ladder, await self._http.get(path, token=token, params=params))
+        key = f"{self._prefix}rating:leaderboard:v1:{ladder}:{cursor or ''}"
+        body, cached = await self._http.get_public(path, cache_key=key, params=params)
+        board = self._leaderboard(ladder, body)
+        if not cached:
+            await self._http.remember(key, body, self._ttl)
+        return board
+
+    def _leaderboard(self, ladder: str, body: bytes) -> LeaderboardCard:
+        board = _parse(self._http.service, _LEADERBOARD, body)
+        if board.ladder != ladder:
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return board.dto()
+
+    async def weekly(self, ladder: str, *, token: str | None) -> WeeklyTopCard:
+        """``GET /v1/ladders/{ladder}/weekly``."""
+        path = f"/v1/ladders/{ladder}/weekly"
+        if token is not None:
+            return self._weekly(ladder, await self._http.get(path, token=token))
+        key = f"{self._prefix}rating:weekly:v1:{ladder}"
+        body, cached = await self._http.get_public(path, cache_key=key)
+        top = self._weekly(ladder, body)
+        if not cached:
+            await self._http.remember(key, body, self._ttl)
+        return top
+
+    def _weekly(self, ladder: str, body: bytes) -> WeeklyTopCard:
+        top = _parse(self._http.service, _WEEKLY, body)
+        if top.ladder != ladder:
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return top.dto()

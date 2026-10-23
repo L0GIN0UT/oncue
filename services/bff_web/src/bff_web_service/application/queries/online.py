@@ -16,6 +16,7 @@ import structlog
 from bff_web_service.application.dto import (
     ItemCard,
     ItemShelves,
+    LadderCard,
     MatchBlocks,
     MatchPage,
     MatchResult,
@@ -24,14 +25,17 @@ from bff_web_service.application.dto import (
     OnlineModeCard,
     OnlinePage,
     OnlineStatus,
+    SeasonCard,
     SubjectKind,
     Viewer,
+    WeeklyTopCard,
 )
 from bff_web_service.application.ports import (
     CatalogClient,
     GameClient,
     LibraryClient,
     MatchClient,
+    RatingClient,
     UpstreamRejectedError,
     UpstreamUnavailableError,
 )
@@ -70,19 +74,23 @@ def _is_guest(value: object) -> bool:
 
 
 class GetOnlinePage:
-    """Хаб онлайна: открытые лобби, мои последние матчи, онлайн-режимы для создания комнаты."""
+    """Хаб онлайна: лобби, мои матчи, режимы, очереди, рейтинг, сезоны и топ недели (4b)."""
 
     def __init__(
         self,
         match: MatchClient,
         game: GameClient,
+        rating: RatingClient,
         *,
         concurrency: int,
         rooms_limit: int,
         matches_limit: int,
+        weekly_limit: int,
     ) -> None:
-        self._match, self._game, self._concurrency = match, game, concurrency
+        self._match, self._game, self._rating = match, game, rating
+        self._concurrency = concurrency
         self._rooms_limit, self._matches_limit = rooms_limit, matches_limit
+        self._weekly_limit = weekly_limit
 
     async def __call__(self, viewer: Viewer) -> OnlinePage:
         """Собрать хаб.
@@ -98,14 +106,20 @@ class GetOnlinePage:
             return AUTH_REQUIRED
         token = viewer.token
         limiter = Limiter(self._concurrency)
-        rooms, matches, modes = await asyncio.gather(
+        # Топ недели зависит от списка ladder-ов, но не ждёт остальных блоков: цепочка
+        # «ladder-ы → топы» идёт параллельно с первыми вызовами, а не после них.
+        rooms, matches, modes, pool, ratings, (ladders, weekly) = await asyncio.gather(
             limiter.attempt(self._match.open_rooms(token, limit=self._rooms_limit)),
             limiter.attempt(self._match.my_matches(token, limit=self._matches_limit)),
             limiter.attempt(self._game.online_modes()),
+            limiter.attempt(self._match.queue_pool(token)),
+            limiter.attempt(self._rating.my_ratings(token)),
+            self._ladders_and_weekly(limiter, token),
         )
-        if _is_unauthenticated(rooms) or _is_unauthenticated(matches):
+        personal = (rooms, matches, pool, ratings)
+        if any(_is_unauthenticated(v) for v in personal):
             return SESSION_EXPIRED
-        if _is_guest(rooms) or _is_guest(matches):
+        if any(_is_guest(v) for v in personal):
             return AUTH_REQUIRED
         modes_block = block_of(modes, "online.modes")
         return OnlinePage(
@@ -116,8 +130,47 @@ class GetOnlinePage:
                 modes=Block.ok(online_mode_cards(modes_block.data))
                 if modes_block.data is not None
                 else Block.unavailable(),
+                queues=block_of(pool, "online.queues"),
+                ratings=block_of(ratings, "online.ratings"),
+                seasons=_seasons(ladders),
+                weekly=weekly,
             ),
         )
+
+    async def _ladders_and_weekly(
+        self, limiter: Limiter, token: str
+    ) -> tuple[list[LadderCard] | UpstreamError, Block[list[WeeklyTopCard]]]:
+        """Ladder-ы и по ним топ недели (строка ``me`` требует токен, кэш bff не используется)."""
+        ladders = await limiter.attempt(self._rating.ladders())
+        return ladders, await self._weekly(limiter, token, ladders)
+
+    async def _weekly(
+        self, limiter: Limiter, token: str, ladders: list[LadderCard] | UpstreamError
+    ) -> Block[list[WeeklyTopCard]]:
+        """Топ недели по каждому ladder-у (с токеном: строка ``me``); сбой одного гасит блок."""
+        if isinstance(ladders, UpstreamUnavailableError | UpstreamRejectedError):
+            return Block.unavailable()
+        fetched = await asyncio.gather(
+            *(limiter.attempt(self._rating.weekly(x.key, token=token)) for x in ladders)
+        )
+        tops: list[WeeklyTopCard] = []
+        for value in fetched:
+            block = block_of(value, "online.weekly")
+            if block.data is None:
+                return Block.unavailable()
+            top = block.data
+            tops.append(
+                WeeklyTopCard(top.ladder, top.week_start, top.items[: self._weekly_limit], top.me)
+            )
+        return Block.ok(tops)
+
+
+def _seasons(ladders: list[LadderCard] | UpstreamError) -> Block[list[SeasonCard]]:
+    """Действующие сезоны ladder-ов; ladder без сезона (между сезонами) пропускается."""
+    block = block_of(ladders, "online.seasons")
+    if block.data is None:
+        return Block.unavailable()
+    return Block.ok([x.season for x in block.data if x.season is not None])
 
 
 def online_mode_cards(modes: Sequence[Mode]) -> list[OnlineModeCard]:
