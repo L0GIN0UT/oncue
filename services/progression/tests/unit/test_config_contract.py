@@ -113,6 +113,22 @@ def _promo_without_batch_cap(c: dict[str, Any]) -> None:
     del c["promo"]["max_batch_verses"]
 
 
+def _promo_without_actor_daily_cap(c: dict[str, Any]) -> None:
+    del c["promo"]["max_daily_verses_per_actor"]
+
+
+def _promo_without_total_daily_cap(c: dict[str, Any]) -> None:
+    del c["promo"]["max_daily_verses_total"]
+
+
+def _promo_zero_daily_cap(c: dict[str, Any]) -> None:
+    c["promo"]["max_daily_verses_per_actor"] = 0
+
+
+def _promo_daily_cap_above_bound(c: dict[str, Any]) -> None:
+    c["promo"]["max_daily_verses_total"] = 1_000_000_001
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
@@ -134,6 +150,10 @@ def _promo_without_batch_cap(c: dict[str, Any]) -> None:
         _short_promo_code,
         _spend_order_without_earned,
         _promo_without_batch_cap,
+        _promo_without_actor_daily_cap,
+        _promo_without_total_daily_cap,
+        _promo_zero_daily_cap,
+        _promo_daily_cap_above_bound,
     ],
 )
 def test_invalid_config_is_rejected(mutate: Callable[[dict[str, Any]], None]) -> None:

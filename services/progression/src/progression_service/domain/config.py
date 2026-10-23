@@ -79,6 +79,8 @@ BOUNDS: Mapping[str, int | float] = {
     "promo.window_s": 86_400,
     "promo.code_length": 32,
     "promo.max_batch_verses": 1_000_000_000,
+    "promo.max_daily_verses_per_actor": 1_000_000_000,
+    "promo.max_daily_verses_total": 1_000_000_000,
 }
 """Верхние границы значений: те же ``maximum``, что в схеме конфига (ключ — путь поля, ``[]`` —
 элемент массива). Сверка со схемой — тест ``test_config_bounds``; схема и домен держат границу
@@ -354,13 +356,19 @@ class ShopConfig:
 
 @dataclass(frozen=True, slots=True)
 class PromoConfig:
-    """Промокоды (ADR 0048): лимиты попыток ввода, длина кода, потолок эмиссии партии."""
+    """Промокоды (ADR 0048): лимиты попыток, длина кода, потолки эмиссии.
+
+    Потолки: ``max_batch_verses`` - одна партия; ``max_daily_verses_per_actor`` - сутки на
+    администратора; ``max_daily_verses_total`` - сутки на всех. Порядок: партия <= актор <= всего.
+    """
 
     attempts_per_user: int
     attempts_per_ip: int
     window_s: int
     code_length: int
     max_batch_verses: int
+    max_daily_verses_per_actor: int
+    max_daily_verses_total: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -828,13 +836,25 @@ def _sized(parent: Mapping[str, Any], key: str, path: str) -> int:
 
 
 def _promo(raw: Mapping[str, Any]) -> PromoConfig:
-    return PromoConfig(
+    cfg = PromoConfig(
         attempts_per_user=_sized(raw, "attempts_per_user", "promo.attempts_per_user"),
         attempts_per_ip=_sized(raw, "attempts_per_ip", "promo.attempts_per_ip"),
         window_s=_sized(raw, "window_s", "promo.window_s"),
         code_length=_sized(raw, "code_length", "promo.code_length"),
         max_batch_verses=_sized(raw, "max_batch_verses", "promo.max_batch_verses"),
+        max_daily_verses_per_actor=_sized(
+            raw, "max_daily_verses_per_actor", "promo.max_daily_verses_per_actor"
+        ),
+        max_daily_verses_total=_sized(
+            raw, "max_daily_verses_total", "promo.max_daily_verses_total"
+        ),
     )
+    # Схема порядок потолков выразить не может - его держит только домен.
+    if not cfg.max_batch_verses <= cfg.max_daily_verses_per_actor <= cfg.max_daily_verses_total:
+        raise ConfigInvalidError(
+            "promo: нужно max_batch_verses <= max_daily_verses_per_actor <= max_daily_verses_total"
+        )
+    return cfg
 
 
 def _spend(raw: Mapping[str, Any]) -> SpendConfig:

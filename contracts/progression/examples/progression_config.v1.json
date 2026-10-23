@@ -65,6 +65,8 @@
     "attempts_per_user": 10,
     "code_length": 12,
     "max_batch_verses": 1000000,
+    "max_daily_verses_per_actor": 5000000,
+    "max_daily_verses_total": 20000000,
     "window_s": 3600
   },
   "quests": {

@@ -213,6 +213,39 @@ async def batch(svc: Service, **patch: Any) -> list[str]:
     return codes
 
 
+async def test_parallel_batches_never_exceed_daily_emission_caps(progression: Service) -> None:
+    """20 параллельных партий по 100 Версов при потолке 500: проходит ровно 5 (ADR 0048)."""
+    await progression.publish_config(
+        promo__max_batch_verses=100,
+        promo__max_daily_verses_per_actor=500,
+        promo__max_daily_verses_total=500,
+    )
+    token = progression.issuer.issue(
+        user_id=UUID(int=79), perms=("admin.access", "progression.promo.manage")
+    )
+
+    async def create() -> httpx.Response:
+        return await progression.client.post(
+            "/admin/v1/promo-codes",
+            json={
+                "label": "Потолок",
+                "reward": {"kind": "verses", "verses_amount": 100},
+                "count": 1,
+                "max_uses": 1,
+                "reason": "проверка гонки потолка",
+            },
+            headers={"Authorization": f"Bearer {token}", "Idempotency-Key": f"idem-{uuid7().hex}"},
+        )
+
+    responses = await asyncio.gather(*(create() for _ in range(PARALLEL)))
+
+    assert sorted(r.status_code for r in responses).count(201) == 5
+    assert {r.json()["code"] for r in responses if r.status_code != 201} == {
+        "progression.promo_actor_daily_cap_exceeded"
+    }
+    assert len(await progression.rows("promo_batches")) == 5
+
+
 async def test_race_for_the_last_activations_never_exceeds_max_uses(progression: Service) -> None:
     await progression.publish_config(promo__attempts_per_ip=1000)
     (code,) = await batch(progression)

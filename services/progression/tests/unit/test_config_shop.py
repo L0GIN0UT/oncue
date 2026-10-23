@@ -93,6 +93,22 @@ def _zero_window(body: dict[str, Any]) -> None:
     body["promo"]["window_s"] = 0
 
 
+def _actor_cap_below_batch(body: dict[str, Any]) -> None:
+    body["promo"]["max_daily_verses_per_actor"] = body["promo"]["max_batch_verses"] - 1
+
+
+def _total_cap_below_actor(body: dict[str, Any]) -> None:
+    body["promo"]["max_daily_verses_total"] = body["promo"]["max_daily_verses_per_actor"] - 1
+
+
+def _missing_daily_cap(body: dict[str, Any]) -> None:
+    del body["promo"]["max_daily_verses_total"]
+
+
+def _daily_cap_above_bound(body: dict[str, Any]) -> None:
+    body["promo"]["max_daily_verses_total"] = 1_000_000_001
+
+
 def _bad_avatar_key(body: dict[str, Any]) -> None:
     body["shop"]["custom_avatar_item_key"] = "Bad Key"
 
@@ -118,6 +134,10 @@ def _missing_media(body: dict[str, Any]) -> None:
         _bool_amount,
         _short_code,
         _zero_window,
+        _actor_cap_below_batch,
+        _total_cap_below_actor,
+        _missing_daily_cap,
+        _daily_cap_above_bound,
         _bad_avatar_key,
         _one_frame,
         _missing_media,
@@ -130,6 +150,18 @@ def test_invalid_sections_are_rejected(
     mutate(body)
     with pytest.raises(ConfigInvalidError):
         ProgressionConfig.parse(body)
+
+
+def test_equal_promo_ceilings_are_valid(make_config: MakeConfig) -> None:
+    body = make_config()
+    body["promo"].update(
+        max_batch_verses=100, max_daily_verses_per_actor=100, max_daily_verses_total=100
+    )
+
+    cfg = ProgressionConfig.parse(body)
+
+    assert cfg.promo is not None
+    assert (cfg.promo.max_daily_verses_per_actor, cfg.promo.max_daily_verses_total) == (100, 100)
 
 
 def test_custom_avatar_key_may_be_null(make_config: MakeConfig) -> None:

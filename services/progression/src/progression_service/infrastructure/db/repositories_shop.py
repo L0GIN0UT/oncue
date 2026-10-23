@@ -400,6 +400,34 @@ class SqlPromos:
             ],
         )
 
+    async def lock_emission_day(self, day: str) -> None:
+        """Advisory-блокировка на ключ суток (снимается с коммитом/откатом транзакции)."""
+        await self._s.execute(
+            select(func.pg_advisory_xact_lock(func.hashtextextended(f"promo_emission:{day}", 0)))
+        )
+
+    async def emitted_verses(
+        self, start: datetime, end: datetime, *, created_by: UUID | None = None
+    ) -> int:
+        """Эмиссия Версов партиями за сутки, отозванные включены."""
+        stmt = select(
+            func.coalesce(
+                func.sum(
+                    promo_batches.c.codes_total
+                    * promo_batches.c.max_uses
+                    * promo_batches.c.verses_amount
+                ),
+                0,
+            )
+        ).where(
+            promo_batches.c.reward_kind == RewardKind.VERSES.value,
+            promo_batches.c.created_at >= start,
+            promo_batches.c.created_at < end,
+        )
+        if created_by is not None:
+            stmt = stmt.where(promo_batches.c.created_by == created_by)
+        return int(await self._s.scalar(stmt) or 0)
+
     async def page(
         self, *, before: tuple[datetime, UUID] | None, limit: int
     ) -> list[PromoBatchRow]:

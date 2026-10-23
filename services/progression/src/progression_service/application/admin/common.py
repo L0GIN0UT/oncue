@@ -6,13 +6,23 @@ import base64
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from gv_core.errors import ConflictError, InvalidInputError, NotFoundError
 from progression_service.application.admin.ports import AdminAction, AdminUnitOfWork
 from progression_service.domain.config import CONFIG_INVALID, ConfigInvalidError, ProgressionConfig
+
+
+def day_bounds(now: datetime, tz: ZoneInfo) -> tuple[datetime, datetime]:
+    """Границы календарных суток ``now`` в зоне конфига, в UTC: ``[начало, конец)``."""
+    day = now.astimezone(tz).date()
+    start = datetime.combine(day, time.min, tzinfo=tz)
+    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz)
+    return start.astimezone(UTC), end.astimezone(UTC)
+
 
 GRANT_REASON = "admin_grant"
 REVERSAL_REASON = "reversal"

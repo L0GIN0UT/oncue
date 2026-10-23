@@ -130,6 +130,22 @@ def test_emission_ceiling() -> None:
     promo.check_batch_emission(1000, 1000, None, ceiling=1)  # предметы не эмитируют Версы
 
 
+def test_daily_emission_ceilings() -> None:
+    kwargs = {"actor_limit": 100, "total_limit": 300}
+    promo.check_daily_emission(40, actor_used=60, total_used=260, **kwargs)  # ровно в потолок
+    promo.check_daily_emission(0, actor_used=100, total_used=300, **kwargs)  # предметы не считаются
+    with pytest.raises(promo.PromoActorDailyCapExceededError) as actor:
+        promo.check_daily_emission(41, actor_used=60, total_used=0, **kwargs)
+    assert actor.value.code == "progression.promo_actor_daily_cap_exceeded"
+    assert actor.value.details == {"limit": 100, "used": 60, "requested": 41}
+    with pytest.raises(promo.PromoTotalDailyCapExceededError) as total:
+        promo.check_daily_emission(41, actor_used=0, total_used=260, **kwargs)
+    assert total.value.code == "progression.promo_total_daily_cap_exceeded"
+    assert total.value.details == {"limit": 300, "used": 260, "requested": 41}
+    with pytest.raises(promo.PromoActorDailyCapExceededError):  # оба превышены - про актора
+        promo.check_daily_emission(41, actor_used=60, total_used=260, **kwargs)
+
+
 @given(
     count=st.integers(1, 1000),
     uses=st.integers(1, 1000),
