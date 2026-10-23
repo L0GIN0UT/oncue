@@ -27,6 +27,7 @@ PRODUCED = [
     ("rating.LadderPublished", None),
     ("rating.SeasonStarted", None),
     ("rating.SeasonFinished", None),
+    ("rating.SeasonStandingsFinalized", None),
     ("rating.WeeklyTopFinalized", None),
 ]
 
