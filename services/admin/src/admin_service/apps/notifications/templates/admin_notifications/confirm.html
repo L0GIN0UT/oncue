@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<h2>Вы отправляете рассылку всем игрокам с включёнными объявлениями</h2>
+<p>Число получателей сервис назовёт после постановки в очередь. Отменить отправку нельзя.</p>
+<table>
+  <tr><th>Тема</th><td>{{ form.cleaned_data.subject }}</td></tr>
+  <tr><th>Текст</th><td style="white-space:pre-wrap">{{ form.cleaned_data.body }}</td></tr>
+  <tr><th>Причина</th><td>{{ form.cleaned_data.reason }}</td></tr>
+</table>
+<form method="post" action="{% url 'broadcasts:send' %}">
+  {% csrf_token %}
+  {% for field in form %}{{ field.as_hidden }}{% endfor %}
+  <input type="submit" value="Подтвердить и отправить">
+  <a href="{% url 'broadcasts:new' %}">Отмена</a>
+</form>
+{% endblock %}

@@ -38,6 +38,7 @@ COLLECTIONS = "http://collections.test:8000"
 MATCH = "http://match.test:8000"
 RATING = "http://rating.test:8000"
 PROGRESSION = "http://progression.test:8000"
+NOTIFICATIONS = "http://notifications.test:8000"
 JWKS = f"{IDENTITY}/.well-known/jwks.json"
 ADMIN_PERMS = (
     "admin.access",
@@ -67,6 +68,10 @@ ADMIN_PERMS = (
     "progression.ledger.grant",
     "progression.ledger.reverse",
     "progression.ledger.read",
+    "progression.items.manage",
+    "progression.promo.manage",
+    "media.ugc.moderate",
+    "notifications.broadcast.send",
 )
 # Модератор этапа 2 (docs/plans/stage-2.md §2.7): конфиги — только просмотр, наборы дня — курация;
 # этап 3b (identity 0007): сборники — просмотр и скрытие; этап 4 (identity 0008): наблюдение
@@ -143,6 +148,7 @@ def gv_settings(settings: Any) -> Any:
         "match": MATCH,
         "rating": RATING,
         "progression": PROGRESSION,
+        "notifications": NOTIFICATIONS,
     }
     settings.GV_IP_ALLOWLIST = ["127.0.0.0/8"]
     # Счётчики лимита входа (кэш в памяти процесса) не должны переходить между тестами.
@@ -367,6 +373,12 @@ def rating() -> Iterator[ContractStub]:
 def progression() -> Iterator[ContractStub]:
     """Заглушка progression (по contracts/openapi/progression.json, admin-API - этап 5a)."""
     yield from _contract_stub(PROGRESSION, "progression")
+
+
+@pytest.fixture
+def notifications() -> Iterator[ContractStub]:
+    """Заглушка notifications (по contracts/openapi/notifications.json, admin-API - этап 5b)."""
+    yield from _contract_stub(NOTIFICATIONS, "notifications")
 
 
 def _session_body(

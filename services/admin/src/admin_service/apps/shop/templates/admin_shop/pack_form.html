@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_shop/_nav.html" %}
+{% if items_error %}<ul class="messagelist"><li class="error">{{ items_error }}</li></ul>{% endif %}
+<p>Продажа выключена, пока billing.enabled=false.</p>
+<form method="post">
+  {% csrf_token %}{{ form.as_p }}<input type="submit" value="Сохранить">
+</form>
+{% endblock %}

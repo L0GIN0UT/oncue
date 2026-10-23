@@ -1,0 +1,13 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<h2>Партия «{{ label }}»: {{ codes|length }} кодов</h2>
+<p><strong>Коды показаны один раз.</strong> Скопируйте или скачайте их сейчас: после обновления страницы они недоступны.
+Потеряли — отзовите партию и создайте новую.</p>
+<p><a href="{{ csv_href }}" download="promo-codes.csv">Скачать CSV</a></p>
+<table>
+  <thead><tr><th>Код</th></tr></thead>
+  {% for c in codes %}<tr><td><code>{{ c }}</code></td></tr>{% endfor %}
+</table>
+<p><a href="{% url 'shop:promos' %}">К партиям</a></p>
+{% endblock %}

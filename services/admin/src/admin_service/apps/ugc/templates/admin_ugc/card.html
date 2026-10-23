@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'ugc:queue' %}?status={{ status }}">← к очереди</a></p>
+<table>
+  <tr><th>Назначение</th><td>{{ row.purpose }}</td></tr>
+  <tr><th>Статус</th><td>{{ row.status }}{% if row.reason_code %} ({{ row.reason_code }}){% endif %}</td></tr>
+  <tr><th>Размер</th><td>{{ row.width }}×{{ row.height }}, {{ row.bytes }} байт</td></tr>
+  <tr><th>Владелец</th><td><code>{{ row.owner_user_id }}</code></td></tr>
+  <tr><th>Загружено</th><td>{{ row.submitted_at }}</td></tr>
+</table>
+{% if preview_url %}
+<p><img src="{{ preview_url }}" alt="Превью" style="max-width:512px"></p>
+<p>Ссылка действует до {{ preview_expires_at }}; обновите страницу, если превью не открывается.</p>
+{% endif %}
+{% if row.status == "pending" %}
+<h2>Одобрить</h2>
+<form method="post" action="{{ approve_url }}">
+  {% csrf_token %}{{ approve_form.as_p }}<input type="submit" value="Одобрить">
+</form>
+{% endif %}
+{% if row.status == "pending" or row.status == "approved" %}
+<h2>{{ reject_label }}</h2>
+<form method="post" action="{{ reject_url }}">
+  {% csrf_token %}{{ reject_form.as_p }}<input type="submit" value="{{ reject_label }}">
+</form>
+{% endif %}
+{% endblock %}

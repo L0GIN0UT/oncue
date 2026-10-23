@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_shop/_nav.html" %}
+<p><a href="{% url 'shop:pack_new' %}">Создать пак</a></p>
+<p>Продажа паков выключена, пока billing.enabled=false: витрины нет, пак только описывается.</p>
+<table>
+  <thead><tr><th>Ключ</th><th>Название</th><th>Стиль</th><th>Предметов</th><th>Версов</th><th>Цена, коп.</th><th>Активен</th></tr></thead>
+  {% for p in rows %}
+  <tr>
+    <td><a href="{% url 'shop:pack_edit' pack_id=p.id %}"><code>{{ p.key }}</code></a></td>
+    <td>{{ p.title }}</td><td>{{ p.style }}</td><td>{{ p.item_ids|length }}</td>
+    <td>{{ p.verses_amount }}</td><td>{{ p.price_kopecks }}</td><td>{{ p.active|yesno:"да,нет" }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="7">Паков нет</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}
