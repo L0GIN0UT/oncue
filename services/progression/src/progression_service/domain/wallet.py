@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from progression_service.domain.config import Band, VersesConfig, band_amount
-from progression_service.domain.experience import MatchFormat, OnlineResult, Outcome
+from progression_service.domain.experience import MatchFormat, OnlineResult, Outcome, apply_cap
 
 
 def solo_session_verses(cfg: VersesConfig, rounds_played: int) -> int:
@@ -38,6 +38,16 @@ def online_verses(cfg: VersesConfig, result: OnlineResult, min_rounds_ratio: flo
     if 1 <= result.place <= len(cfg.party_by_place):
         return cfg.party_by_place[result.place - 1]
     return 0
+
+
+def cap_online_verses(cfg: VersesConfig, amount: int, used: int) -> int:
+    """Версы онлайна после суточного потолка `verses.online_daily_cap` (нет поля - без потолка).
+
+    `used` - уже начисленные за сутки Версы за дуэли и party (не награды недели/сезона).
+    """
+    if cfg.online_daily_cap is None:
+        return max(0, amount)
+    return apply_cap(amount, used, cfg.online_daily_cap)
 
 
 def grid_amount(bands: tuple[Band, ...], place: int) -> int:

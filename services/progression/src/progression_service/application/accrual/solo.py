@@ -72,24 +72,37 @@ class AccrueSolo:
             counters = await uow.counters.lock(user_id, day)
             ref = str(session.session_id)
 
-            raw_xp = experience.solo_session_xp(cfg.xp, session.round_points)
-            xp = await poster.xp(
-                user_id,
-                op_id=f"game.session:{ref}:xp",
-                base_amount=experience.apply_cap(raw_xp, counters.solo_xp, cfg.xp.solo_daily_cap),
-                reason=SOLO_REASON,
-                source_ref=ref,
-            )
-            raw_verses = wallet.solo_session_verses(cfg.verses, len(session.round_points))
-            verses = await poster.verses(
-                user_id,
-                op_id=f"game.session:{ref}:verse",
-                amount=experience.apply_cap(
+            xp_op = f"game.session:{ref}:xp"
+            verse_op = f"game.session:{ref}:verse"
+            xp = verses = 0
+            if not await poster.accounted(xp_op):
+                raw_xp = experience.solo_session_xp(cfg.xp, session.round_points)
+                capped = experience.apply_cap(raw_xp, counters.solo_xp, cfg.xp.solo_daily_cap)
+                xp = await poster.xp(
+                    user_id,
+                    op_id=xp_op,
+                    base_amount=capped,
+                    reason=SOLO_REASON,
+                    source_ref=ref,
+                )
+                await poster.mark_if_capped(
+                    user_id, op_id=xp_op, raw=raw_xp, paid=xp, reason=SOLO_REASON
+                )
+            if not await poster.accounted(verse_op):
+                raw_verses = wallet.solo_session_verses(cfg.verses, len(session.round_points))
+                capped = experience.apply_cap(
                     raw_verses, counters.solo_verses, cfg.verses.solo_daily_cap
-                ),
-                reason=SOLO_REASON,
-                source_ref=ref,
-            )
+                )
+                verses = await poster.verses(
+                    user_id,
+                    op_id=verse_op,
+                    amount=capped,
+                    reason=SOLO_REASON,
+                    source_ref=ref,
+                )
+                await poster.mark_if_capped(
+                    user_id, op_id=verse_op, raw=raw_verses, paid=verses, reason=SOLO_REASON
+                )
             counters.solo_xp += xp
             counters.solo_verses += verses
             await uow.counters.save(user_id, day, counters)

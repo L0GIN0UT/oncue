@@ -163,6 +163,7 @@
       "loss": 3,
       "win": 10
     },
+    "online_daily_cap": 500,
     "party_by_place": [
       10,
       6,

@@ -30,7 +30,7 @@ from progression_service.infrastructure.db.tables import (
 from progression_service.main import DEFINITION
 from progression_service.settings import Settings
 from pydantic import SecretStr
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 
 from gv_core.ids import uuid7
 from gv_messaging import EventEnvelope, EventProcessor, Inbox, Outcome
@@ -68,7 +68,10 @@ def config_body(**patch: Any) -> dict[str, Any]:
         *head, last = dotted.split("__")
         for part in head:
             target = target[part]
-        target[last] = value
+        if value is ...:
+            target.pop(last, None)  # `...` - убрать необязательное поле
+        else:
+            target[last] = value
     return raw
 
 
@@ -165,6 +168,15 @@ class ProgressionService:
         if user_id is not None:
             stmt = stmt.where(currency_ledger.c.user_id == user_id)
         return int(await self.scalar(stmt))
+
+    async def mark_rows(self, user_id: UUID | None = None) -> int:
+        """Нулевые отметки предметов (``accrual_marks``)."""
+        stmt = "SELECT count(*) FROM accrual_marks"
+        params: dict[str, Any] = {}
+        if user_id is not None:
+            stmt += " WHERE user_id = :u"
+            params["u"] = user_id
+        return int(await self.scalar(text(stmt).bindparams(**params)))
 
     async def balance(self, user_id: UUID, bucket: str = "earned") -> int:
         value = await self.scalar(

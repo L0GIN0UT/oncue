@@ -45,6 +45,7 @@ BOUNDS: Mapping[str, int | float] = {
     "verses.duel.win": _AMOUNT_MAX,
     "verses.duel.loss": _AMOUNT_MAX,
     "verses.party_by_place[]": _AMOUNT_MAX,
+    "verses.online_daily_cap": _AMOUNT_MAX,
     "verses.solo_daily_cap": _AMOUNT_MAX,
     "verses.weekly_top[].from": _AMOUNT_MAX,
     "verses.weekly_top[].to": _AMOUNT_MAX,
@@ -157,13 +158,14 @@ class Band:
 
 @dataclass(frozen=True, slots=True)
 class VersesConfig:
-    """Источники Версов, потолок соло и сетки наград рейтинга."""
+    """Источники Версов, потолки (соло, онлайн) и сетки наград рейтинга."""
 
     solo_round: int
     daily: int
     duel: DuelVerses
     party_by_place: tuple[int, ...]
     solo_daily_cap: int
+    online_daily_cap: int | None
     weekly_top: tuple[Band, ...]
     season: tuple[Band, ...]
 
@@ -238,6 +240,13 @@ def _int(parent: Mapping[str, Any], key: str, path: str, *, minimum: int = 0) ->
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
         raise ConfigInvalidError(f"{path}: ожидается целое от {minimum} до {maximum}")
     return value
+
+
+def _optional_int(parent: Mapping[str, Any], key: str, path: str) -> int | None:
+    """Необязательное целое поле: нет ключа - `None` (нет ограничения)."""
+    if key not in parent:
+        return None
+    return _int(parent, key, path)
 
 
 def _timezone(value: object) -> str:
@@ -346,6 +355,7 @@ def _verses(raw: Mapping[str, Any]) -> VersesConfig:
         ),
         party_by_place=_int_list(raw, "party_by_place", "verses.party_by_place", min_items=1),
         solo_daily_cap=_int(raw, "solo_daily_cap", "verses.solo_daily_cap"),
+        online_daily_cap=_optional_int(raw, "online_daily_cap", "verses.online_daily_cap"),
         weekly_top=_bands(raw, "weekly_top"),
         season=_bands(raw, "season"),
     )

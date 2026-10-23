@@ -116,6 +116,7 @@ class AccrueMatch:
                 )
                 online = experience.online_xp(cfg.xp, result, cfg.min_rounds_ratio)
                 await poster.lock_user(user_id)
+                counters = await uow.counters.lock(user_id, day)
                 xp_op = f"match:{ref}:{user_id}:xp"
                 if not await uow.ledger.has_xp(xp_op):
                     multiplier = (
@@ -131,26 +132,32 @@ class AccrueMatch:
                         source_ref=ref,
                         multiplier=multiplier,
                     )
-                    if online.first_win_eligible and cfg.xp.first_win_bonus > 0:
-                        counters = await uow.counters.lock(user_id, day)
-                        if not counters.first_win_awarded:
-                            await poster.xp(
-                                user_id,
-                                op_id=f"first_win:{user_id}:{day.isoformat()}",
-                                base_amount=cfg.xp.first_win_bonus,
-                                reason=FIRST_WIN_REASON,
-                                source_ref=ref,
-                                multiplier=multiplier,
-                            )
-                            counters.first_win_awarded = True
-                            await uow.counters.save(user_id, day, counters)
-                await poster.verses(
-                    user_id,
-                    op_id=f"match:{ref}:{user_id}:verse",
-                    amount=wallet.online_verses(cfg.verses, result, cfg.min_rounds_ratio),
-                    reason=reason,
-                    source_ref=ref,
-                )
+                    first_win = online.first_win_eligible and cfg.xp.first_win_bonus > 0
+                    if first_win and not counters.first_win_awarded:
+                        await poster.xp(
+                            user_id,
+                            op_id=f"first_win:{user_id}:{day.isoformat()}",
+                            base_amount=cfg.xp.first_win_bonus,
+                            reason=FIRST_WIN_REASON,
+                            source_ref=ref,
+                            multiplier=multiplier,
+                        )
+                        counters.first_win_awarded = True
+                verse_op = f"match:{ref}:{user_id}:verse"
+                if not await poster.accounted(verse_op):
+                    raw = wallet.online_verses(cfg.verses, result, cfg.min_rounds_ratio)
+                    paid = await poster.verses(
+                        user_id,
+                        op_id=verse_op,
+                        amount=wallet.cap_online_verses(cfg.verses, raw, counters.online_verses),
+                        reason=reason,
+                        source_ref=ref,
+                    )
+                    await poster.mark_if_capped(
+                        user_id, op_id=verse_op, raw=raw, paid=paid, reason=reason
+                    )
+                    counters.online_verses += paid
+                await uow.counters.save(user_id, day, counters)
             await uow.commit()
         log.info("progression.match_accrued", match_id=ref, players=len(match.players))
         return AccrualResult.ACCRUED

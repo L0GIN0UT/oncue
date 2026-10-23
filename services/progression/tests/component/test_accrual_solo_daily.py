@@ -172,6 +172,45 @@ async def test_cap_is_per_local_day_and_parallel_sessions_around_midnight(
     assert await progression.xp_total(user) == 200
 
 
+# ------------------------------------------------------------------ нулевая отметка предмета
+async def test_exhausted_cap_marks_item_and_replay_after_raised_cap_pays_nothing(
+    progression: Service,
+) -> None:
+    await progression.publish_config(xp__solo_daily_cap=0, verses__solo_daily_cap=0)
+    user, session_id = uuid7(), uuid7()
+    first = progression.game_finished(user, [100, 100], session_id=session_id)
+    assert await progression.deliver(first) is Outcome.PROCESSED
+    assert await progression.xp_rows(user) == 0
+    assert await progression.verse_rows(user) == 0
+    assert await progression.mark_rows(user) == 2  # опыт и Версы предмета
+
+    later = progression.clock.now() + timedelta(hours=1)
+    await progression.publish_config(
+        version=2, at=later, xp__solo_daily_cap=5000, verses__solo_daily_cap=500
+    )
+    replay = progression.game_finished(user, [100, 100], session_id=session_id, finished_at=later)
+    assert replay.event_id != first.event_id
+    assert await progression.deliver(replay) is Outcome.PROCESSED
+
+    assert await progression.xp_rows(user) == 0
+    assert await progression.verse_rows(user) == 0
+    assert await progression.mark_rows(user) == 2
+    # Другая сессия под новым потолком платится как обычно.
+    await progression.deliver(progression.game_finished(user, [100, 100], finished_at=later))
+    assert await progression.xp_total(user) > 0
+
+
+async def test_regular_path_writes_no_marks(progression: Service) -> None:
+    await progression.publish_config(xp__solo_daily_cap=100, verses__solo_daily_cap=4)
+    user = uuid7()
+    await progression.deliver(progression.game_finished(user, [100, 100, 100]))
+    await progression.deliver(progression.game_finished(user, [100, 100, 100]))  # частично
+    assert await progression.mark_rows() == 0
+    # Следующая сессия упирается в потолок целиком: появляются отметки.
+    await progression.deliver(progression.game_finished(user, [100, 100, 100]))
+    assert await progression.mark_rows(user) == 2
+
+
 # ------------------------------------------------------------------ уровни и события
 async def test_level_up_publishes_events_and_level_never_drops(progression: Service) -> None:
     await progression.publish_config(levels__base=100, levels__step=0)  # 100 опыта на уровень

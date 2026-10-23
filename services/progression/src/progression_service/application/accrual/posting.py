@@ -69,6 +69,25 @@ class Poster:
             self._rows[user_id] = row
         return row
 
+    async def accounted(self, op_id: str) -> bool:
+        """Предмет уже учтён: есть проводка в любом журнале или нулевая отметка.
+
+        Проверяется до расчёта: повтор не начисляет задним числом, даже если потолок вырос.
+        """
+        ledger = self._uow.ledger
+        return (
+            await ledger.has_xp(op_id)
+            or await ledger.has_currency(op_id)
+            or await self._uow.marks.has(op_id)
+        )
+
+    async def mark_if_capped(
+        self, user_id: UUID, *, op_id: str, raw: int, paid: int, reason: str
+    ) -> None:
+        """Потолок съел всю сумму (``raw > 0``, ``paid == 0``): зафиксировать предмет отметкой."""
+        if raw > 0 and paid == 0:
+            await self._uow.marks.add(op_id, user_id, reason, self._now)
+
     async def xp(
         self,
         user_id: UUID,

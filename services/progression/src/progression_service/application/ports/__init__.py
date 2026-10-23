@@ -38,10 +38,11 @@ class ProgressRow:
 
 @dataclass(slots=True)
 class DailyCounters:
-    """Дневные счётчики игрока: опыт и Версы с соло, выдана ли первая победа дня."""
+    """Дневные счётчики игрока: опыт и Версы с соло, Версы онлайна, выдана ли первая победа дня."""
 
     solo_xp: int = 0
     solo_verses: int = 0
+    online_verses: int = 0
     first_win_awarded: bool = False
 
 
@@ -172,6 +173,18 @@ class CounterRepository(Protocol):
         ...
 
 
+class MarkRepository(Protocol):
+    """Нулевые отметки предметов (``accrual_marks``): сумма после потолка 0, проводки нет."""
+
+    async def has(self, op_id: str) -> bool:
+        """Есть ли отметка предмета."""
+        ...
+
+    async def add(self, op_id: str, user_id: UUID, reason: str, now: datetime) -> bool:
+        """Поставить отметку; `False` - уже есть."""
+        ...
+
+
 class StreakRepository(Protocol):
     """Серии дейлика."""
 
@@ -213,6 +226,9 @@ class ProgressionUnitOfWork(Protocol):
 
     @property
     def counters(self) -> CounterRepository: ...
+
+    @property
+    def marks(self) -> MarkRepository: ...
 
     @property
     def streaks(self) -> StreakRepository: ...

@@ -271,6 +271,12 @@
           ],
           "type": "object"
         },
+        "online_daily_cap": {
+          "description": "Потолок Версов за дуэли и party в сутки (необязательно: нет поля — нет потолка); опыт онлайна потолка не имеет",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        },
         "party_by_place": {
           "items": {
             "maximum": 100000000,

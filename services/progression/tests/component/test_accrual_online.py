@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -351,3 +351,72 @@ async def test_foreign_reward_hook_multiplier_is_clamped_by_config_maximum(
     )
     assert duel["boost_multiplier"] == expected_multiplier
     assert duel["amount"] == int(120 * expected_multiplier)
+
+
+# ------------------------------------------------------------------ онлайн-потолок Версов
+async def test_online_verses_are_capped_per_day_but_online_xp_is_not(progression: Service) -> None:
+    await progression.publish_config(verses__online_daily_cap=12)
+    winner, loser = uuid7(), uuid7()
+    await progression.deliver(progression.duel(winner, loser))  # победа: 10 Версов
+    await progression.deliver(progression.duel(winner, loser))  # влезает 2 из 10
+    await progression.deliver(progression.duel(winner, loser))  # потолок исчерпан: 0 + отметка
+    assert await progression.balance(winner) == 12
+    assert await progression.balance(loser) == 9  # 3 Верса за матч, потолок 12 не достигнут
+    assert await progression.xp_total(winner) == 120 + 200 + 120 + 120  # опыт без потолка
+    assert await progression.mark_rows(winner) == 1
+
+
+async def test_weekly_reward_is_outside_online_cap(progression: Service) -> None:
+    await progression.publish_config(verses__online_daily_cap=0)
+    winner, loser = uuid7(), uuid7()
+    await progression.deliver(progression.duel(winner, loser))
+    await progression.deliver(progression.weekly_top([(winner, 1)]))
+    assert await progression.balance(winner) == 500  # только неделя
+
+
+async def test_zero_online_cap_pays_no_verses_and_absent_cap_pays_all(
+    progression: Service,
+) -> None:
+    await progression.publish_config(verses__online_daily_cap=0)
+    a, b = uuid7(), uuid7()
+    await progression.deliver(progression.duel(a, b))
+    assert await progression.verse_rows() == 0
+    assert await progression.xp_total(a) == 320
+    assert await progression.mark_rows() == 2
+
+    await progression.publish_config(version=2, verses__online_daily_cap=...)
+    c, d = uuid7(), uuid7()
+    later = progression.clock.now() + timedelta(hours=1)
+    for _ in range(60):
+        await progression.deliver(progression.duel(c, d, finished_at=later))
+    assert await progression.balance(c) == 600  # выше 500 примера: потолка нет
+    assert await progression.mark_rows(c) == 0
+
+
+async def test_capped_match_replayed_after_raised_cap_pays_nothing_retroactively(
+    progression: Service,
+) -> None:
+    await progression.publish_config(verses__online_daily_cap=0)
+    a, b, match_id = uuid7(), uuid7(), uuid7()
+    await progression.deliver(progression.duel(a, b, match_id=match_id))
+    later = progression.clock.now() + timedelta(hours=1)
+    await progression.publish_config(version=2, at=later, verses__online_daily_cap=500)
+    replay = progression.duel(a, b, match_id=match_id, finished_at=later)
+    assert await progression.deliver(replay) is Outcome.PROCESSED
+    assert await progression.verse_rows() == 0
+    assert await progression.balance(a) == 0
+
+
+async def test_parallel_matches_around_midnight_cannot_bypass_online_cap(
+    progression: Service,
+) -> None:
+    await progression.publish_config(verses__online_daily_cap=15)
+    player = uuid7()
+    midnight = datetime(2026, 10, 24, tzinfo=UTC) - timedelta(hours=3)  # 00:00 по Москве
+    events = [
+        progression.duel(player, uuid7(), finished_at=midnight + timedelta(seconds=s))
+        for s in (-4, -3, -2, -1, 0, 1, 2, 3)
+    ]
+    await asyncio.gather(*(progression.deliver(e) for e in events))
+    assert await progression.balance(player) == 30  # по 15 за каждые сутки
+    assert await progression.xp_total(player) == 8 * 120 + 400  # первая победа в каждые сутки

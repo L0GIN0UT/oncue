@@ -115,6 +115,10 @@
 - social: друзья, комментарии, жалобы, модерация (+ разделы админки), санкции.
 - notifications: in-app, realtime, e-mail.
 
+### Хвосты этапа 5
+- этап 7: разделение ролей Postgres для журналов progression (владелец миграций / рабочая роль SELECT, INSERT) - риск принят владельцем.
+- этап 7: инкрементальная сверка журнала progression вместе с партиционированием.
+
 ## Этап 6. Интеграции и биллинг
 - integrations: Shikimori/AniList, Trakt, Spotify, Яндекс (после проверки API). Экспорт и синхронизация.
 - payments: подписки, entitlements, FakePaymentGateway. **Флаг `billing.enabled=false`.**

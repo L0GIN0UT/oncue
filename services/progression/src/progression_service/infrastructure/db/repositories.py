@@ -32,6 +32,7 @@ from progression_service.domain.daily_streak import Streak
 from progression_service.domain.ledger import Bucket, Direction, Entry
 from progression_service.infrastructure.db.tables import (
     TABLES,
+    accrual_marks,
     balances,
     config_versions,
     currency_ledger,
@@ -336,6 +337,7 @@ class SqlCounters:
         return DailyCounters(
             solo_xp=int(r.solo_xp),
             solo_verses=int(r.solo_verses),
+            online_verses=int(r.online_verses),
             first_win_awarded=bool(r.first_win_awarded),
         )
 
@@ -363,6 +365,7 @@ class SqlCounters:
             .values(
                 solo_xp=counters.solo_xp,
                 solo_verses=counters.solo_verses,
+                online_verses=counters.online_verses,
                 first_win_awarded=counters.first_win_awarded,
             )
         )
@@ -377,6 +380,32 @@ class SqlCounters:
             )
         ).first()
         return DailyCounters() if row is None else self._counters(row)
+
+
+class SqlMarks:
+    """Нулевые отметки предметов; кодом не удаляются."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def has(self, op_id: str) -> bool:
+        """Есть ли отметка предмета."""
+        found = await self._s.scalar(
+            select(accrual_marks.c.op_id).where(accrual_marks.c.op_id == op_id)
+        )
+        return found is not None
+
+    async def add(self, op_id: str, user_id: UUID, reason: str, now: datetime) -> bool:
+        """Поставить отметку; `False` - уже есть."""
+        row = (
+            await self._s.execute(
+                pg_insert(accrual_marks)
+                .values(op_id=op_id, user_id=user_id, reason=reason, at=now)
+                .on_conflict_do_nothing(index_elements=[accrual_marks.c.op_id])
+                .returning(accrual_marks.c.op_id)
+            )
+        ).first()
+        return row is not None
 
 
 class SqlStreaks:
@@ -446,6 +475,7 @@ class SqlProgressionUnitOfWork:
     ledger: SqlLedger
     balances: SqlBalances
     counters: SqlCounters
+    marks: SqlMarks
     streaks: SqlStreaks
     rewards: SqlRewardPeriods
 
@@ -485,6 +515,7 @@ class SqlProgressionUnitOfWork:
         self.ledger = SqlLedger(s)
         self.balances = SqlBalances(s)
         self.counters = SqlCounters(s)
+        self.marks = SqlMarks(s)
         self.streaks = SqlStreaks(s)
         self.rewards = SqlRewardPeriods(s)
         return self

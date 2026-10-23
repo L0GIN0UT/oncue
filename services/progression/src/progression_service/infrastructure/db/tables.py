@@ -144,9 +144,12 @@ daily_counters = Table(
     Column("day", Date, nullable=False),
     Column("solo_xp", BigInteger, nullable=False, server_default=text("0")),
     Column("solo_verses", BigInteger, nullable=False, server_default=text("0")),
+    Column("online_verses", BigInteger, nullable=False, server_default=text("0")),
     Column("first_win_awarded", Boolean, nullable=False, server_default=text("false")),
     PrimaryKeyConstraint("user_id", "day"),
-    CheckConstraint("solo_xp >= 0 AND solo_verses >= 0", name="counters_non_negative"),
+    CheckConstraint(
+        "solo_xp >= 0 AND solo_verses >= 0 AND online_verses >= 0", name="counters_non_negative"
+    ),
 )
 
 daily_streaks = Table(
@@ -161,6 +164,19 @@ daily_streaks = Table(
     CheckConstraint("domain IN ('music','film')", name="domain_known"),
     CheckConstraint("current >= 0 AND best >= current", name="streak_ordered"),
 )
+
+accrual_marks = Table(
+    "accrual_marks",
+    _md,
+    Column("op_id", OP_ID, primary_key=True),
+    Column("user_id", Uuid(as_uuid=True), nullable=False),
+    Column("reason", String(64), nullable=False),
+    _ts("at"),
+)
+"""Нулевая отметка предмета: сумма после потолка равна 0, проводки нет, но предмет учтён.
+
+Не append-only-журнал, но кодом не удаляется: повтор события не начисляет задним числом.
+"""
 
 reward_periods = Table(
     "reward_periods",

@@ -1,6 +1,7 @@
 """Ядро progression: версии конфига, прогресс, журналы опыта и Версов, балансы, счётчики.
 
-Только новые таблицы (expand): ``outbox``/``inbox`` не меняются. Таблицы пустые, индексы
+Только новые таблицы (expand): ``outbox``/``inbox`` не меняются.
+``accrual_marks`` - нулевые отметки предметов (кодом не удаляются). Таблицы пустые, индексы
 создаются обычным ``CREATE INDEX``. Журналы ``xp_ledger`` и ``currency_ledger`` append-only:
 триггеры ``BEFORE UPDATE OR DELETE`` (по строкам) и ``BEFORE TRUNCATE`` отвечают ошибкой — защита
 от порчи журнала даже у роли с правами на таблицу (ADR 0043). Откат удаляет только эти таблицы
@@ -160,11 +161,12 @@ def upgrade() -> None:
         sa.Column("day", sa.Date(), nullable=False),
         sa.Column("solo_xp", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
         sa.Column("solo_verses", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
+        sa.Column("online_verses", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
         sa.Column(
             "first_win_awarded", sa.Boolean(), server_default=sa.text("false"), nullable=False
         ),
         sa.CheckConstraint(
-            "solo_xp >= 0 AND solo_verses >= 0",
+            "solo_xp >= 0 AND solo_verses >= 0 AND online_verses >= 0",
             name=op.f("ck_daily_counters_counters_non_negative"),
         ),
         sa.PrimaryKeyConstraint("user_id", "day", name=op.f("pk_daily_counters")),
@@ -190,6 +192,15 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("awarded_at", _TS, nullable=False),
         sa.PrimaryKeyConstraint("period_key", "user_id", name=op.f("pk_reward_periods")),
+    )
+
+    op.create_table(
+        "accrual_marks",
+        sa.Column("op_id", sa.String(length=200), nullable=False),
+        sa.Column("user_id", sa.Uuid(), nullable=False),
+        sa.Column("reason", sa.String(length=64), nullable=False),
+        sa.Column("at", _TS, nullable=False),
+        sa.PrimaryKeyConstraint("op_id", name=op.f("pk_accrual_marks")),
     )
 
     op.execute(_FORBID_FUNCTION)
@@ -221,6 +232,7 @@ def downgrade() -> None:
     for table in _LEDGERS:
         op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_truncate ON {table}")
         op.execute(f"DROP TRIGGER IF EXISTS trg_{table}_append_only ON {table}")
+    op.drop_table("accrual_marks")
     op.drop_table("reward_periods")
     op.drop_table("daily_streaks")
     op.drop_table("daily_counters")
