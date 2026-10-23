@@ -294,7 +294,10 @@ export interface components {
             body: string;
             /** Reason */
             reason: string;
-            /** Subject */
+            /**
+             * Subject
+             * @description Тема письма: без управляющих символов (защита заголовков письма)
+             */
             subject: string;
         };
         /**
@@ -569,17 +572,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -655,16 +649,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     register_device_v1_devices_post: {
@@ -714,16 +698,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -792,16 +766,6 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     email_subscription_v1_email_subscription_get: {
@@ -834,16 +798,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -906,16 +860,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     meta_v1_meta_get: {
@@ -968,16 +912,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1053,16 +987,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     notifications_v1_notifications_get: {
@@ -1107,17 +1031,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1186,16 +1101,6 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     read_all_v1_notifications_read_all_post: {
@@ -1236,16 +1141,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     unread_count_v1_notifications_unread_count_get: {
@@ -1278,16 +1173,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1338,8 +1223,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

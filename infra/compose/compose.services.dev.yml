@@ -74,6 +74,8 @@ services:
     ports: ["127.0.0.1:8112:8000"]
     environment:
       GV_LOG_JSON: "false"
+      # Локально письма рассылки пишутся в лог (ссылка отписки видна в логе); smtp — через .env.
+      GV_NOTIFICATIONS__EMAIL_BACKEND: ${GV_NOTIFICATIONS__EMAIL_BACKEND:-log}
   bff-web:
     ports: ["127.0.0.1:8113:8000"]
     environment:

@@ -34,6 +34,10 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
     "admin": {"identity": ["admin_sessions"]},
     # Этап 4a (§2.7): план раундов матча у game (D5) и ссылки на ассеты уровней.
     "match": {"game": ["rounds.plan"], "media_pipeline": ["assets.link"]},
+    # Этап 5b: progression передаёт файл аватарки в media-pipeline (S3); notifications берёт
+    # подтверждённые адреса получателей рассылки у identity.
+    "progression": {"media_pipeline": ["ugc.image"]},
+    "notifications": {"identity": ["users.emails.read"]},
 }
 """Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
 

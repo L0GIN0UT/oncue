@@ -226,7 +226,7 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     out = fill_secrets(template)
     values = dict(line.split("=", 1) for line in out.splitlines())
     clients = {c["client_id"]: c for c in json.loads(values["GV_SERVICE_CLIENTS"])}
-    assert set(clients) == {"game", "admin", "match"}
+    assert set(clients) == {"game", "admin", "match", "progression", "notifications"}
     assert clients["game"]["audiences"] == {"media_pipeline": ["assets.link"]}
     assert clients["admin"]["audiences"] == {"identity": ["admin_sessions"]}
     # Этап 4a §2.7: план раундов у game (D5) и ссылки ассетов у media_pipeline.
@@ -234,6 +234,9 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
         "game": ["rounds.plan"],
         "media_pipeline": ["assets.link"],
     }
+    # Этап 5b: progression -> media_pipeline (аватарки), notifications -> identity (адреса).
+    assert clients["progression"]["audiences"] == {"media_pipeline": ["ugc.image"]}
+    assert clients["notifications"]["audiences"] == {"identity": ["users.emails.read"]}
     secrets_seen = set()
     for client_id, client in clients.items():
         secret = values[service_secret_env(client_id)]
@@ -241,7 +244,7 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
         assert client["secret_sha256"] == hashlib.sha256(secret.encode()).hexdigest()
         assert secret not in values["GV_SERVICE_CLIENTS"]
         secrets_seen.add(secret)
-    assert len(secrets_seen) == 3
+    assert len(secrets_seen) == len(SERVICE_CLIENTS)  # у каждого клиента свой секрет
 
 
 def test_generated_compose_passes_service_credentials() -> None:

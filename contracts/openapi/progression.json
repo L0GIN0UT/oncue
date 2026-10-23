@@ -3534,21 +3534,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Предметы",
@@ -3674,21 +3659,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать предмет",
@@ -3828,21 +3798,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Изменить предмет",
@@ -3982,21 +3937,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Загрузить картинку или анимацию предмета",
@@ -4203,21 +4143,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Паки",
@@ -4343,21 +4268,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать пак",
@@ -4496,21 +4406,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Заменить пак",
@@ -4604,21 +4499,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Партии промокодов",
@@ -4744,21 +4624,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Сгенерировать партию промокодов",
@@ -4891,21 +4756,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Отозвать партию",
@@ -5336,21 +5186,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Оформление игроков",
@@ -5403,21 +5238,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Моё оформление",
@@ -5525,21 +5345,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Надеть или снять предмет",
@@ -5851,21 +5656,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Мой инвентарь",
@@ -6201,7 +5991,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -6214,7 +6004,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Погасить промокод",
@@ -6299,21 +6089,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Витрина",
@@ -6438,21 +6213,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Купить предмет",
@@ -6520,21 +6280,6 @@
               }
             },
             "description": "Не найдено"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Паки косметики",

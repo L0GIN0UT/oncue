@@ -98,8 +98,10 @@
             "type": "string"
           },
           "subject": {
+            "description": "Тема письма: без управляющих символов (защита заголовков письма)",
             "maxLength": 150,
             "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
             "title": "Subject",
             "type": "string"
           }
@@ -661,16 +663,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
                   "$ref": "#/components/schemas/Problem"
                 }
               },
@@ -680,7 +672,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Некорректные данные"
           }
         },
         "summary": "Рассылки",
@@ -791,21 +783,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Поставить рассылку",
@@ -903,21 +880,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Зарегистрировать устройство для Push",
@@ -1002,21 +964,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Удалить устройство",
@@ -1068,21 +1015,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Согласие на рассылку",
@@ -1158,21 +1090,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Дать или отозвать согласие на рассылку",
@@ -1246,21 +1163,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Настройки уведомлений",
@@ -1368,21 +1270,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Изменить настройку типа",
@@ -1481,16 +1368,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
                   "$ref": "#/components/schemas/Problem"
                 }
               },
@@ -1500,7 +1377,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Некорректные данные"
           }
         },
         "summary": "Мои уведомления",
@@ -1553,21 +1430,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Прочитать все",
@@ -1619,21 +1481,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Число непрочитанных",
@@ -1718,21 +1565,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Отметить прочитанным",
@@ -1789,7 +1621,7 @@
             },
             "description": "Слишком много запросов"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1802,7 +1634,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Отписаться по ссылке из письма",

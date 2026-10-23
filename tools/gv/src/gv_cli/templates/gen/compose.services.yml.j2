@@ -49,6 +49,11 @@ services:
       GV_S3__ACCESS_KEY: ${S3_ACCESS_KEY:?задайте S3_ACCESS_KEY}
       GV_S3__SECRET_KEY: ${S3_SECRET_KEY:?задайте S3_SECRET_KEY}
 {% endif %}
+{% if s.name == "progression" %}
+      # Job migrate создаёт бакет косметики и проверяет ключ промокодов (prepare_resources).
+      GV_PROGRESSION__PROMO_HMAC_KEY: ${GV_PROGRESSION__PROMO_HMAC_KEY:?задайте GV_PROGRESSION__PROMO_HMAC_KEY}
+      GV_PROGRESSION__COSMETICS_BUCKET: ${GV_COSMETICS_BUCKET:-gv-cosmetics}
+{% endif %}
     depends_on:
       postgres: {condition: service_healthy}
 {% if s.s3 %}
@@ -159,6 +164,26 @@ services:
 {% endif %}
 {% if s.name == "game" %}
       GV_GAME_LIMITS__PLAYABILITY_PER_MIN: ${GV_GAME_LIMITS__PLAYABILITY_PER_MIN:-30}
+{% endif %}
+{% if s.name == "progression" %}
+      # Ключ HMAC промокодов (ADR 0048): один на все процессы; вне local/ci без него миграция и API не стартуют.
+      GV_PROGRESSION__PROMO_HMAC_KEY: ${GV_PROGRESSION__PROMO_HMAC_KEY:?задайте GV_PROGRESSION__PROMO_HMAC_KEY}
+      # Бакет косметики с анонимным чтением префикса c/ (gateway отдаёт его по /cosmetics/).
+      GV_PROGRESSION__COSMETICS_BUCKET: ${GV_COSMETICS_BUCKET:-gv-cosmetics}
+{% endif %}
+{% if s.name == "notifications" %}
+      # Ключ HMAC ссылок отписки (ADR 0047): один на api и worker, иначе ссылка из письма не пройдёт проверку.
+      GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY: ${GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY:?задайте GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY}
+      GV_NOTIFICATIONS__PUBLIC_BASE_URL: ${GV_PUBLIC_BASE_URL:-https://localhost}
+      GV_NOTIFICATIONS__EMAIL_BACKEND: ${GV_NOTIFICATIONS__EMAIL_BACKEND:-smtp}
+      GV_NOTIFICATIONS__SMTP__HOST: ${GV_SMTP__HOST:-localhost}
+      GV_NOTIFICATIONS__SMTP__PORT: ${GV_SMTP__PORT:-587}
+      GV_NOTIFICATIONS__SMTP__SENDER: ${GV_EMAIL__SENDER:-Guessverse <no-reply@guessverse.local>}
+      GV_NOTIFICATIONS__SMTP__USERNAME: ${GV_SMTP__USERNAME:-}
+      GV_NOTIFICATIONS__SMTP__PASSWORD: ${GV_SMTP__PASSWORD:-}
+      GV_NOTIFICATIONS__SMTP__START_TLS: ${GV_SMTP__START_TLS:-true}
+      GV_NOTIFICATIONS__SMTP__USE_TLS: ${GV_SMTP__USE_TLS:-false}
+      GV_NOTIFICATIONS__SMTP__TIMEOUT_S: ${GV_SMTP__TIMEOUT_S:-10}
 {% endif %}
 {% if s.name in service_clients %}
       GV_SERVICE_AUTH__TOKEN_URL: http://identity:8000/internal/v1/service-tokens
