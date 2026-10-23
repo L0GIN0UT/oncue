@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_progression/_nav.html" %}
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% else %}
+<table>
+  <tr><th>Действующая версия</th><td>{% if published %}v{{ published }}{% else %}—{% endif %}</td></tr>
+  <tr><th>Черновик</th><td>{% if draft %}v{{ draft }}{% else %}—{% endif %}</td></tr>
+</table>
+<p>Публикация действует для новых проводок и не пересчитывает прошлое.</p>
+<p><a href="{% url 'progression:edit' %}">Редактировать черновик</a></p>
+
+{% if diff_error %}<ul class="messagelist"><li class="error">{{ diff_error }}</li></ul>{% endif %}
+{% if diff %}
+<h3>Отличия v{{ diff_from }} → v{{ diff_to }}</h3>
+{% include "admin_game_config/_diff.html" %}
+{% elif diff_from and diff_to %}<p>v{{ diff_from }} и v{{ diff_to }} совпадают.</p>{% endif %}
+
+{% if can_publish and draft %}
+<h3>Публикация</h3>
+<form method="post" action="{% url 'progression:publish' %}">
+  {% csrf_token %}{{ publish_form.as_p }}<input type="submit" value="Опубликовать v{{ draft }}">
+</form>
+{% endif %}
+
+<h2>Версии</h2>
+<table>
+  <thead><tr><th>Версия</th><th>Статус</th><th>Создана</th><th>Автор</th><th>Опубликована</th><th>Сравнить</th></tr></thead>
+  {% for v in versions %}
+  <tr>
+    <td><a href="?version={{ v.version }}">v{{ v.version }}</a></td>
+    <td>{{ v.status }}</td><td>{{ v.created_at }}</td><td><code>{{ v.created_by }}</code></td><td>{{ v.published_at|default:"" }}</td>
+    <td>{% if published and v.version != published %}<a href="?from={{ published }}&amp;to={{ v.version }}">с действующей</a>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6">Версий нет</td></tr>
+  {% endfor %}
+</table>
+{% if shown_error %}<ul class="messagelist"><li class="error">{{ shown_error }}</li></ul>{% endif %}
+{% if shown_text %}<h3>Конфиг v{{ shown }}</h3><pre class="gv-lines">{{ shown_text }}</pre>{% endif %}
+
+{% if can_publish %}
+<h2>Откат</h2>
+<p>Копия выбранной версии станет черновиком (текущий черновик будет заменён); публикуете её отдельно.</p>
+<form method="post" action="{% url 'progression:rollback' %}">
+  {% csrf_token %}{{ rollback_form.as_p }}<input type="submit" value="Скопировать в черновик">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_progression/_nav.html" %}
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% else %}
+<p>Действующая версия конфига: v{{ config_version }}. Правка — через черновик.</p>
+<h2>Задания</h2>
+<table>
+  <thead><tr><th>Ключ</th><th>Период</th><th>Название</th><th>Награда</th><th>Включено</th><th>Выполнено</th></tr></thead>
+  {% for q in quests %}
+  <tr><td><code>{{ q.key }}</code></td><td>{{ q.period }}</td><td>{{ q.title }}</td><td>{{ q.reward.xp }} оп. / {{ q.reward.verses }} Версов</td><td>{{ q.enabled|yesno:"да,нет" }}</td><td>{% if q.completed_total is None %}нет данных{% else %}{{ q.completed_total }}{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="6">Заданий нет</td></tr>
+  {% endfor %}
+</table>
+<h2>Бейджи</h2>
+<table>
+  <thead><tr><th>Ключ</th><th>Название</th><th>Включено</th><th>Выдано</th></tr></thead>
+  {% for b in badges %}
+  <tr><td><code>{{ b.key }}</code></td><td>{{ b.title }}</td><td>{{ b.enabled|yesno:"да,нет" }}</td><td>{% if b.unlocked_total is None %}нет данных{% else %}{{ b.unlocked_total }}{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="4">Бейджей нет</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}
