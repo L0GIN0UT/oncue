@@ -353,6 +353,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
             "dailies": {"status": "unavailable", "data": None},
             "modes": {"status": "unavailable", "data": None},
             "weekly": {"status": "unavailable", "data": None},
+            "progress": None,
         }
     }
 
@@ -1645,3 +1646,26 @@ async def test_leaderboards_page_validates_query(bff: Bff) -> None:
     for params in ({"ladder": "Film!"}, {"around": "all"}, {"cursor": "bad cursor"}):
         response = await bff.client.get("/v1/pages/leaderboards", params=params)
         assert response.status_code == 422, params
+
+
+async def test_profile_page_is_contract_stub_for_users_only(bff: Bff) -> None:
+    """Шаг 0a этапа 5: экран объявлен; аноним — 401, гость — 403, пользователь — 501 до P4."""
+    guest = bff.bearer(bff.issuer.issue_guest())
+    user = bff.bearer(bff.issuer.issue())
+
+    assert_problem(await bff.client.get("/v1/pages/profile"), 401, "auth.unauthenticated")
+    assert_problem(
+        await bff.client.get("/v1/pages/profile", headers=guest), 403, "auth.guest_forbidden"
+    )
+    assert_problem(
+        await bff.client.get("/v1/pages/profile", headers=user), 501, "common.not_implemented"
+    )
+
+
+async def test_home_page_has_no_progress_block_until_p4(bff: Bff) -> None:
+    """Блок `progress` главной необязателен: до P4 он `null`, остальные блоки не меняются."""
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[])
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=[])
+    response = await bff.client.get("/v1/pages/home")
+    assert response.status_code == 200, response.text
+    assert response.json()["blocks"]["progress"] is None

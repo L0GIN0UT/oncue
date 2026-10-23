@@ -116,12 +116,115 @@ class RecordCard(BaseModel):
     achieved_at: datetime
 
 
+# ----------------------------------------------------------------------------- progression (5a)
+class StreakCard(BaseModel):
+    """Серия дейлика по домену."""
+
+    domain: Domain
+    current: int = Field(ge=0)
+    best: int = Field(ge=0)
+
+
+class BoostCard(BaseModel):
+    """Действующий буст опыта."""
+
+    multiplier: float = Field(gt=1)
+    matches_left: int = Field(ge=1)
+
+
+class ProgressCard(BaseModel):
+    """Уровень и опыт игрока (progression ``/v1/me/progress``)."""
+
+    level: int = Field(ge=1)
+    max_level: int = Field(ge=1)
+    total_xp: int = Field(ge=0)
+    xp_in_level: int = Field(ge=0)
+    xp_to_next: int | None = Field(ge=1, description="null — высший уровень")
+    streaks: list[StreakCard]
+    boost: BoostCard | None = None
+
+
+class WalletCard(BaseModel):
+    """Версы игрока (progression ``/v1/me/wallet``)."""
+
+    earned: int = Field(ge=0)
+    paid: int = Field(ge=0)
+    total: int = Field(ge=0)
+
+
+class QuestCard(BaseModel):
+    """Задание текущего периода."""
+
+    key: str
+    title: str
+    target: int = Field(ge=1)
+    progress: int = Field(ge=0)
+    completed: bool
+    reward_xp: int = Field(ge=0)
+    reward_verses: int = Field(ge=0)
+
+
+class QuestsCard(BaseModel):
+    """Задания игрока: дневные и недельные."""
+
+    daily: list[QuestCard]
+    weekly: list[QuestCard]
+
+
+class BadgeCard(BaseModel):
+    """Бейдж игрока."""
+
+    key: str
+    title: str
+    target: int = Field(ge=1)
+    progress: int = Field(ge=0)
+    unlocked_at: datetime | None = None
+
+
+class WheelCard(BaseModel):
+    """Состояние колеса на сегодня (progression ``/v1/wheel``)."""
+
+    enabled: bool
+    can_spin: bool
+    next_spin_at: datetime | None = Field(description="null — можно крутить")
+
+
+class HomeProgressCard(BaseModel):
+    """Свёртка прогресса для главной: уровень, серия, колесо."""
+
+    level: int = Field(ge=1)
+    xp_in_level: int = Field(ge=0)
+    xp_to_next: int | None = Field(ge=1)
+    best_streak: int = Field(ge=0, description="Наибольшая текущая серия дейлика по доменам")
+    can_spin: bool
+    quests_open: int = Field(ge=0, description="Невыполненных заданий на сегодня")
+
+
+class ProfileBlocks(BaseModel):
+    """Блоки профиля: каждый гаснет независимо."""
+
+    progress: Block[ProgressCard]
+    wallet: Block[WalletCard]
+    quests: Block[QuestsCard]
+    badges: Block[list[BadgeCard]]
+    wheel: Block[WheelCard]
+
+
+class ProfilePage(BaseModel):
+    """``GET /v1/pages/profile``: только пользователь с аккаунтом, ответ ``private, no-store``."""
+
+    blocks: ProfileBlocks
+
+
 class HomeBlocks(BaseModel):
     """Блоки главной."""
 
     dailies: Block[list[DailyCard]] = Field(description="Наборы дня (без недельной сетки)")
     modes: Block[list[ModeCard]]
     weekly: Block[list[DailyCard]] = Field(description="Наборы недели (сетка)")
+    progress: Block[HomeProgressCard] | None = Field(
+        default=None, description="Прогресс игрока; null — гость или аноним"
+    )
 
 
 class HomePage(BaseModel):

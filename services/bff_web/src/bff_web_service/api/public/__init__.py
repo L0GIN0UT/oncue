@@ -30,6 +30,7 @@ from bff_web_service.api.public.schemas import (
     LibraryShelfPage,
     MatchPage,
     OnlinePage,
+    ProfilePage,
     ResultsPage,
     SessionInfo,
     SoloPage,
@@ -38,7 +39,12 @@ from bff_web_service.application.dto import ANONYMOUS, CatalogQuery, SubjectKind
 from bff_web_service.application.ports import TRACE_HEADERS
 from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
-from gv_core.errors import DependencyUnavailableError, UnauthenticatedError
+from gv_core.errors import (
+    DependencyUnavailableError,
+    ForbiddenError,
+    NotImplementedYetError,
+    UnauthenticatedError,
+)
 from gv_service import problem_responses
 
 log = structlog.get_logger(__name__)
@@ -154,6 +160,26 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         page = await deps.get_home(viewer)
         _cache_headers(response, personal=page.personal, policy=policy)
         return HomePage.model_validate(page, from_attributes=True)
+
+    @router.get(
+        "/pages/profile",
+        response_model=ProfilePage,
+        summary="Профиль: прогресс, кошелёк, задания, бейджи, колесо",
+        description=(
+            "Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. "
+            "Блоки из progression гаснут независимо. Шаг 0a: контракт, до потока P4 — 501."
+        ),
+        responses=problem_responses(401, 403, 501),
+    )
+    async def profile_page(viewer: CurrentViewer, response: Response) -> ProfilePage:
+        if viewer.token is None:
+            raise UnauthenticatedError("требуется вход")
+        if viewer.kind is SubjectKind.GUEST:
+            raise ForbiddenError(
+                "профиль доступен только пользователям", code="auth.guest_forbidden"
+            )
+        _cache_headers(response, personal=True, policy=policy)
+        raise NotImplementedYetError("профиль появится в потоке P4 этапа 5a")
 
     @router.get(
         "/pages/solo",
