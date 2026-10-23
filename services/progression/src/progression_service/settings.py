@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from gv_service import ServiceSettings
@@ -25,6 +27,10 @@ class ProgressionSettings(BaseModel):
     reconcile_statement_timeout_ms: int = Field(default=30_000, ge=100, le=600_000)
     # Сколько последних проводок отдаёт ``GET /v1/me/wallet``.
     wallet_recent_limit: int = Field(default=20, ge=1, le=100)
+    # Каталог со стартовым конфигом (`config.yaml`): публикуется как версия 1 только в local/ci
+    # и только пока нет ни одной опубликованной версии.
+    bootstrap_config_dir: Path | None = None
+    bootstrap_interval_s: float = Field(default=60.0, gt=0)
 
 
 class Settings(ServiceSettings):

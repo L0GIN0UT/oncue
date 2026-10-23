@@ -130,6 +130,7 @@
 - **Публикует:** `ExperienceGained`, `ProgressionLevelChanged`, `CurrencyCredited`, `CurrencyDebited`, `QuestCompleted`, `BadgeUnlocked`, `WheelSpun` (топик `progression.progression.v1`, 5a), `ItemPurchased` (5b).
 - **Слушает:** `GameFinished`, `MatchFinished`, `DailyCompleted`, `CollectionPublished`, `FriendAdded`, `CommentPosted`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`, `EntitlementGranted`. В 5a — только `GameFinished`, `DailyCompleted`, `MatchFinished`, `CollectionPublished`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`.
 - **Инварианты:** баланс не уходит в минус; каждая проводка идемпотентна (`opId`).
+- **Задачи relay:** `progression.ledger.reconcile` (сверка журнала), `progression.config.bootstrap` (local/ci: публикует версию 1 конфига из `seeds/progression/config.yaml`, `GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, если опубликованной версии нет).
 
 ### 11. payments
 - **Отвечает за:** тарифы и подписки, платёжного провайдера, вебхуки, чеки, **entitlements** (что доступно пользователю по плану). На старте выключен флагом `billing.enabled=false`, все пользователи получают план `free_all` ([../06-payments.md](../06-payments.md)).

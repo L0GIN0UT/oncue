@@ -39,6 +39,12 @@
 - P3: `Cache-Control: no-store` в admin-ручках progression ставится до `raise` и в заглушках не действует — проверить на успешных ответах.
 - Нет теста «совпадение места в событии с реальным `ZREVRANGE` Redis» (тай-брейк проверен по коду и юнит-тестом).
 
+## 0b (сиды и e2e, не закоммичено)
+- `seeds/progression/config.yaml` (значения владельца, 12 секторов колеса, пулы: дневных 5, недельных 12, разовых 2); `verses.online_daily_cap` = **200** (решение владельца при 0b; выше в этом файле упомянуто 500 — устарело). Тест сида: `services/progression/tests/unit/test_seeds.py`.
+- Задача relay `progression.config.bootstrap` (`infrastructure/jobs.py`, `ConfigCommands.bootstrap`): только local/ci, `GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, если опубликованной версии нет — версия 1 через save_draft+publish, актор `UUID(int=0)`, причина «bootstrap сидов»; битый сид — ERROR в логе, без падения. Интервал `GV_PROGRESSION__BOOTSTRAP_INTERVAL_S` (60 с). Тесты: `tests/component/test_config_bootstrap.py`; «событие до конфига обрабатывается после» уже покрыто в `test_accrual_solo_daily.py` (повтор после `publish_config`).
+- Dev-оверлей compose монтирует `seeds/progression` (шаблон `compose.services.dev.yml.j2`, `gv gen`).
+- `e2e/progression.spec.ts` (не запускался, `tsc` чист): соло → опрос начисления → профиль → спин колеса. Нужны `gv dev up`, `gv dev seed`, `E2E_SEEDED=1`.
+
 ## Открыто
 - Ручные проверки владельцем: identity (realtime-токен), match (античит), rating; новая — ledger progression после реализации.
 - Допущения сидов 4b: K Эло 40/20, пороги званий, фильтры `similar`.
