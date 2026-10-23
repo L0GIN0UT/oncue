@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
@@ -40,6 +40,7 @@ from identity_service.domain import (
     UserStatus,
 )
 from identity_service.domain.guest import subject_kind
+from identity_service.domain.values import TOMBSTONE_EMAIL_SUFFIX
 from identity_service.infrastructure.db.tables import (
     TABLES,
     auth_identities,
@@ -148,6 +149,20 @@ class SqlUserRepository:
             .distinct()
         )
         return list((await self._s.scalars(stmt)).all())
+
+    async def verified_emails(self, user_ids: Collection[UUID]) -> list[tuple[UUID, str]]:
+        """Один запрос по набору id: активные пользователи с подтверждённым e-mail."""
+        if not user_ids:
+            return []
+        stmt = select(users.c.id, users.c.email).where(
+            users.c.id.in_(list(user_ids)),
+            users.c.status == UserStatus.ACTIVE.value,
+            users.c.email_verified_at.is_not(None),
+            # Второй рубеж: tombstone удалённого аккаунта не отдаём, даже если статус
+            # рассинхронизирован (адреса домена .invalid недоставляемы по RFC 2606).
+            ~users.c.email.endswith(TOMBSTONE_EMAIL_SUFFIX),
+        )
+        return [(row.id, str(row.email)) for row in await self._s.execute(stmt)]
 
     async def _one(self, condition: Any) -> User | None:
         row = (await self._s.execute(select(users).where(condition))).first()

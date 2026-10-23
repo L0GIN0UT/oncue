@@ -37,6 +37,7 @@ from identity_service.application.queries import (
     ListLinkedAccounts,
     ListUsers,
 )
+from identity_service.application.queries.user_emails import ListVerifiedEmails
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class IdentityUseCases:
     get_role_matrix: GetRoleMatrix
     get_jwks: GetJwks
     issue_service_token: IssueServiceToken
+    list_verified_emails: ListVerifiedEmails
     guest: GuestUseCases | None = None
     """Гостевые сессии (D5 плана этапа 2); ``None`` — выключены (тестовые сборки)."""
     issue_realtime_token: IssueRealtimeToken | None = None
