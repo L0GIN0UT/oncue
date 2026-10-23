@@ -160,6 +160,24 @@ class PromoRepository(Protocol):
         """Партия и её коды ``(code_id, code_hash)`` одной вставкой."""
         ...
 
+    async def lock_emission_day(self, day: str) -> None:
+        """Сериализовать выпуск партий за сутки ``day`` до конца транзакции.
+
+        Проверка потолка и вставка партии идут под этой блокировкой: параллельные создания
+        не могут вместе превысить суточный потолок.
+        """
+        ...
+
+    async def emitted_verses(
+        self, start: datetime, end: datetime, *, created_by: UUID | None = None
+    ) -> int:
+        """Эмиссия Версов партиями за ``[start, end)`` по ``created_at``.
+
+        Считается ``codes_total x max_uses x verses_amount`` по партиям Версов, включая
+        отозванные. ``created_by`` ограничивает одним администратором.
+        """
+        ...
+
     async def page(
         self, *, before: tuple[datetime, UUID] | None, limit: int
     ) -> list[PromoBatchRow]:

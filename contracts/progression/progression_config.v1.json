@@ -141,6 +141,18 @@
           "minimum": 1,
           "type": "integer"
         },
+        "max_daily_verses_per_actor": {
+          "description": "Суточная эмиссия Версов партиями промокодов на одного администратора (сутки в timezone, отозванные партии считаются); не меньше max_batch_verses и не больше max_daily_verses_total (порядок проверяет сервис: схема неравенства полей не выражает)",
+          "maximum": 1000000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_daily_verses_total": {
+          "description": "Суточная эмиссия Версов партиями промокодов по всем администраторам (сутки в timezone, отозванные партии считаются)",
+          "maximum": 1000000000,
+          "minimum": 1,
+          "type": "integer"
+        },
         "window_s": {
           "maximum": 86400,
           "minimum": 1,
@@ -152,7 +164,9 @@
         "attempts_per_ip",
         "window_s",
         "code_length",
-        "max_batch_verses"
+        "max_batch_verses",
+        "max_daily_verses_per_actor",
+        "max_daily_verses_total"
       ],
       "type": "object"
     },

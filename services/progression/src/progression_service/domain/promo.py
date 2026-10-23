@@ -62,6 +62,35 @@ class PromoBatchTooLargeError(InvalidInputError):
         )
 
 
+class PromoDailyCapExceededError(InvalidInputError):
+    """Суточная эмиссия партиями превысила потолок (422); подтип задаёт машинный код."""
+
+    def __init__(self, code: str, *, limit: int, used: int, requested: int) -> None:
+        super().__init__(
+            "суточный потолок эмиссии промокодов превышен",
+            code=code,
+            details={"limit": limit, "used": used, "requested": requested},
+        )
+
+
+class PromoActorDailyCapExceededError(PromoDailyCapExceededError):
+    """Потолок на одного администратора."""
+
+    default_code = "progression.promo_actor_daily_cap_exceeded"
+
+    def __init__(self, *, limit: int, used: int, requested: int) -> None:
+        super().__init__(self.default_code, limit=limit, used=used, requested=requested)
+
+
+class PromoTotalDailyCapExceededError(PromoDailyCapExceededError):
+    """Общий потолок по всем администраторам."""
+
+    default_code = "progression.promo_total_daily_cap_exceeded"
+
+    def __init__(self, *, limit: int, used: int, requested: int) -> None:
+        super().__init__(self.default_code, limit=limit, used=used, requested=requested)
+
+
 class PromoRewardInvalidError(InvalidInputError):
     """Награда не соответствует виду: Версы без суммы, предмет без id и т. п. (422)."""
 
@@ -156,6 +185,35 @@ def check_batch_emission(
     emission = batch_emission(count, max_uses, verses_amount)
     if emission > ceiling:
         raise PromoBatchTooLargeError(emission, ceiling)
+
+
+def check_daily_emission(
+    requested: int,
+    *,
+    actor_used: int,
+    total_used: int,
+    actor_limit: int,
+    total_limit: int,
+) -> None:
+    """Суточная эмиссия после партии не выше потолков (ADR 0048, шаг 0a).
+
+    ``*_used`` - эмиссия за календарные сутки, включая отозванные партии. Партия без Версов
+    (``requested == 0``) потолки не расходует. Если превышены оба потолка - ошибка про актора.
+
+    Raises:
+        PromoActorDailyCapExceededError: сумма актора выше ``max_daily_verses_per_actor``.
+        PromoTotalDailyCapExceededError: общая сумма выше ``max_daily_verses_total``.
+    """
+    if requested <= 0:
+        return
+    if actor_used + requested > actor_limit:
+        raise PromoActorDailyCapExceededError(
+            limit=actor_limit, used=actor_used, requested=requested
+        )
+    if total_used + requested > total_limit:
+        raise PromoTotalDailyCapExceededError(
+            limit=total_limit, used=total_used, requested=requested
+        )
 
 
 def check_reward(kind: RewardKind, *, verses_amount: int | None, item_id: UUID | None) -> None:

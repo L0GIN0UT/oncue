@@ -27,6 +27,7 @@ from progression_service.application.accrual.common import published_config
 from progression_service.application.admin.common import (
     AdminContext,
     audit,
+    day_bounds,
     decode_cursor,
     encode_cursor,
 )
@@ -567,6 +568,8 @@ class PromoCommands:
             PromoNotConfiguredError: нет секции ``promo`` в конфиге (422).
             PromoRewardInvalidError, PromoBatchTooLargeError, PromoItemNotFoundError,
                 PromoExpiredError: 422.
+            PromoActorDailyCapExceededError, PromoTotalDailyCapExceededError: суточный потолок
+                эмиссии (422).
             ConflictError: ``progression.codes_already_shown`` - повтор ключа (409).
         """
         fingerprint = request_fingerprint(
@@ -603,6 +606,21 @@ class PromoCommands:
                 item = await uow.items.get(fields.item_id)
                 if item is None or not item.active:
                     raise PromoItemNotFoundError
+            emission = promo.batch_emission(fields.count, fields.max_uses, fields.verses_amount)
+            if emission > 0:
+                # Сутки считаются в config.timezone; проверка и вставка - под блокировкой суток,
+                # иначе параллельные партии вместе превысят потолок (ADR 0048).
+                start, end = day_bounds(now, published.config.tz)
+                await uow.promos.lock_emission_day(
+                    now.astimezone(published.config.tz).date().isoformat()
+                )
+                promo.check_daily_emission(
+                    emission,
+                    actor_used=await uow.promos.emitted_verses(start, end, created_by=ctx.actor_id),
+                    total_used=await uow.promos.emitted_verses(start, end),
+                    actor_limit=cfg.max_daily_verses_per_actor,
+                    total_limit=cfg.max_daily_verses_total,
+                )
             codes = promo.generate_codes(self._rng, count=fields.count, length=cfg.code_length)
             batch = PromoBatchRow(
                 id=uuid7(),

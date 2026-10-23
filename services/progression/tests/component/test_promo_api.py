@@ -37,9 +37,15 @@ def idem() -> dict[str, str]:
 
 
 async def admin(
-    svc: Service, method: str, path: str, headers: dict[str, str] | None = None, **kwargs: Any
+    svc: Service,
+    method: str,
+    path: str,
+    headers: dict[str, str] | None = None,
+    *,
+    actor: UUID = ADMIN_ID,
+    **kwargs: Any,
 ) -> httpx.Response:
-    token = svc.issuer.issue(user_id=ADMIN_ID, perms=("admin.access", "progression.promo.manage"))
+    token = svc.issuer.issue(user_id=actor, perms=("admin.access", "progression.promo.manage"))
     sent = {"Authorization": f"Bearer {token}", **(headers if headers is not None else idem())}
     return await svc.client.request(method, path, headers=sent, **kwargs)
 
@@ -123,6 +129,98 @@ async def test_emission_ceiling_is_enforced(progression: Service) -> None:
 
     assert_problem(over, 422, "progression.promo_batch_too_large")
     assert exact.status_code == 201
+    assert len(await progression.rows("promo_batches")) == 1
+
+
+def verses_batch(emission: int) -> dict[str, Any]:
+    """Тело партии с эмиссией ровно ``emission`` Версов (1 код, 1 использование)."""
+    return {
+        **BATCH,
+        "count": 1,
+        "max_uses": 1,
+        "reward": {"kind": "verses", "verses_amount": emission},
+    }
+
+
+async def create(svc: Service, emission: int, *, actor: UUID = ADMIN_ID) -> httpx.Response:
+    return await admin(
+        svc, "POST", "/admin/v1/promo-codes", actor=actor, json=verses_batch(emission)
+    )
+
+
+async def test_actor_daily_cap_counts_revoked_batches_and_rolls_over_at_local_midnight(
+    progression: Service,
+) -> None:
+    await progression.publish_config(
+        promo__max_batch_verses=100,
+        promo__max_daily_verses_per_actor=150,
+        promo__max_daily_verses_total=1000,
+    )
+    first = await create(progression, 100)
+    revoke = await admin(
+        progression,
+        "POST",
+        f"/admin/v1/promo-codes/{first.json()['id']}/revoke",
+        json=REASON,
+    )
+    assert revoke.status_code == 204
+
+    over = await create(progression, 51)  # отозванная партия потолок не освободила
+    exact = await create(progression, 50)
+
+    body = assert_problem(over, 422, "progression.promo_actor_daily_cap_exceeded")
+    assert body["details"] == {"limit": 150, "used": 100, "requested": 51}
+    assert exact.status_code == 201
+    progression.clock.advance(hours=10)  # 12:00 UTC + 10 ч = 01:00 следующих суток в Москве
+    assert (await create(progression, 100)).status_code == 201
+
+
+async def test_total_daily_cap_spans_actors_and_actor_code_wins_when_both_exceeded(
+    progression: Service,
+) -> None:
+    other = UUID(int=79)
+    await progression.publish_config(
+        promo__max_batch_verses=100,
+        promo__max_daily_verses_per_actor=100,
+        promo__max_daily_verses_total=150,
+    )
+    assert (await create(progression, 100)).status_code == 201
+
+    total = await create(progression, 60, actor=other)
+    both = await create(progression, 100)
+    item_batch = await admin(
+        progression,
+        "POST",
+        "/admin/v1/promo-codes",
+        actor=other,
+        json={
+            **BATCH,
+            "reward": {"kind": "item", "item_id": str(await progression.add_item("it_cap"))},
+        },
+    )
+
+    body = assert_problem(total, 422, "progression.promo_total_daily_cap_exceeded")
+    assert body["details"] == {"limit": 150, "used": 100, "requested": 60}
+    assert_problem(both, 422, "progression.promo_actor_daily_cap_exceeded")
+    assert item_batch.status_code == 201  # предметы потолок Версов не расходуют
+
+
+async def test_repeating_a_batch_request_does_not_spend_the_cap_again(
+    progression: Service,
+) -> None:
+    await progression.publish_config(
+        promo__max_batch_verses=100,
+        promo__max_daily_verses_per_actor=100,
+        promo__max_daily_verses_total=100,
+    )
+    headers = idem()
+    body = verses_batch(100)
+
+    first = await admin(progression, "POST", "/admin/v1/promo-codes", headers, json=body)
+    again = await admin(progression, "POST", "/admin/v1/promo-codes", headers, json=body)
+
+    assert first.status_code == 201
+    assert_problem(again, 409, "progression.codes_already_shown")  # а не 422 про потолок
     assert len(await progression.rows("promo_batches")) == 1
 
 
