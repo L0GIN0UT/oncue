@@ -5,8 +5,8 @@
 - Пакет: `progression_service`; запуск: `progression api|relay|consumer|worker|all|migrate`
 - Карточка сервиса (данные, события, деградация): `docs/architecture/services.md`
 - Публичный API: `/api/progression/v1/...` на gateway
-- Зависимости: PostgreSQL, Redpanda
-- Статус: этап 5a, шаг 0a — контракты и заглушки 501 (`docs/plans/stage-5.md`); домен — потоки P1–P3. Решения: ADR 0042–0044.
+- Зависимости: PostgreSQL, Redpanda, Redis (лимит попыток промокода), S3 (картинки предметов)
+- Статус: этап 5b, поток S1 — магазин и промокоды (`docs/plans/stage-5.md`). Решения: ADR 0042–0048.
 
 ## Особенности
 - Контракты: события `contracts/events/progression/*` (топик `progression.progression.v1`, ключ — `user_id`), конфиг `contracts/progression/progression_config.v1.json` (опыт, уровни, Версы, задания, бейджи, колесо, лимиты выдачи; значений в коде нет). Часовой пояс суток — поле `timezone` конфига.
@@ -22,5 +22,8 @@
 - Буст опыта: `BoostRewardHook` тратит матч буста в транзакции матча (только при базовом опыте > 0, `boost_spends` PK `(user_id, match_id)`); Версы и соло бустом не множатся.
 - Колесо: `wheel_spins` PK `(user_id, day)`, сектор выбирает порт `Random` (`container.random`), приз выдаётся в той же транзакции; `GET /me/quests` пишет назначение.
 - Сид конфига — `seeds/progression/config.yaml`; задача relay `progression.config.bootstrap` (`GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, только local/ci) публикует версию 1, если опубликованной нет (актор `UUID(int=0)`); начисления до неё повторяются.
-- 5b (шаг 0a, контракты и заглушки 501; ADR 0045–0049): `api/public/shop.py` (витрина, покупка, инвентарь, оформление, `appearance?user_ids=`, промокод, `me/avatar`), `api/admin/shop.py` (предметы, паки, промокоды); события `ItemPurchased`, `ItemEquipped`, `PromoRedeemed`; необязательные секции конфига `shop`, `promo`, `spend` (в домене пока не разбираются — поток S1). Покупка — одна транзакция с ledger (`op_id = shop:{user}:{item}`, бакет `earned`), цену и условия клиент не передаёт. Модерация аватарок — не здесь: статус UGC-ассета и `AssetModerated` у media-pipeline, progression слушает событие (`purpose = avatar`). Права: `progression.items.manage`, `progression.promo.manage`. Код промокода в БД только как HMAC, в событиях и логах его нет.
+- 5b, S1 (ADR 0045–0049; миграции `0005`, `0006`): магазин, инвентарь, оформление, промокоды, паки — `application/{shop,inventory,appearance,promo}`, `application/admin/shop.py`, `domain/{shop,inventory,appearance,promo,packs}.py`, `api/public/shop.py`, `api/admin/shop.py`. `me/avatar` — заглушка 501 до потока S3 (`api/public/avatar.py`). Секции конфига `shop`/`promo`/`spend` необязательны: нет `shop` — магазин пуст.
+- Покупка: блокировка `progress` игрока → повтор по `op_id = shop:{user}:{item}` → бакет `earned` `FOR UPDATE` → `CurrencyDebited` + `inventory` + `ItemPurchased` в одной транзакции. Открытие по уровню — лениво (`INSERT … ON CONFLICT DO NOTHING` при чтении витрины/инвентаря и PUT оформления). Колесо: предмет → инвентарь `source=wheel`, дубль → Версы по редкости (`wheel:{user}:{day}:dup`); нет предмета в `items` — ERROR `progression.wheel_item_missing` и запись `grants_log`.
+- Промокод: в БД только HMAC-SHA256 (`GV_PROGRESSION__PROMO_HMAC_KEY`; вне local/ci без него падает job `migrate`, а первое хеширование — ошибкой; читается лениво), PK `(code_hash, user_id)`, счётчик под `FOR UPDATE` строки кода, `per_user_once` — один код партии на игрока, `promo_id` события = id кода; лимит попыток (Redis, fail-closed) по игроку и IP из секции `promo`. Коды партии показываются один раз, повтор ключа — 409 `codes_already_shown`.
+- Картинки предметов: Pillow (сигнатура, декод всех кадров, лимиты `shop.media`), объект в бакет `GV_PROGRESSION__COSMETICS_BUCKET` под `c/<32 hex>`, публичный префикс `GV_PROGRESSION__COSMETICS_BASE_URL`; бакет и политика создаются в job `migrate`. Паки: только CRUD; витрина — 404 пока `GV_PROGRESSION__BILLING_ENABLED=false`.
 - Нет синхронных вызовов game/match/rating; места сезона — из `rating.SeasonStandingsFinalized`, топ недели — топ-100 (решение владельца).

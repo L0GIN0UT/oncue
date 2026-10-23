@@ -15,6 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from gv_service import Infrastructure
+from progression_service.api.public.avatar import register_avatar_routes
 from progression_service.api.public.progress import register_progress_routes
 from progression_service.api.public.rewards import register_reward_routes
 from progression_service.api.public.schemas import ServiceMeta
@@ -23,6 +24,7 @@ from progression_service.api.public.wallet import register_wallet_routes
 from progression_service.application.badges import BadgeQueries
 from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
+from progression_service.application.shop import ShopServices
 from progression_service.application.wheel import WheelService
 
 
@@ -31,7 +33,9 @@ def build_public_router(
     queries: ProgressQueries,
     quests: QuestQueries,
     badges: BadgeQueries,
+    *,
     wheel: WheelService,
+    shop: ShopServices,
 ) -> APIRouter:
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["progression"])
@@ -43,5 +47,6 @@ def build_public_router(
     register_progress_routes(router, queries)
     register_wallet_routes(router, queries)
     register_reward_routes(router, quests, badges, wheel)
-    register_shop_routes(router)
+    register_shop_routes(router, shop)
+    register_avatar_routes(router)
     return router

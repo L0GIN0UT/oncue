@@ -26,7 +26,7 @@ from progression_service.application.ports import (
     XpEntry,
 )
 from progression_service.domain import levels
-from progression_service.domain.config import MAX_BOOST_MULTIPLIER
+from progression_service.domain.config import MAX_BOOST_MULTIPLIER, ProgressionConfig
 from progression_service.domain.events import (
     CurrencyCredited,
     CurrencyDebited,
@@ -58,6 +58,11 @@ class Poster:
     def version(self) -> int:
         """Версия конфига, по которой идёт начисление."""
         return self._published.version
+
+    @property
+    def config(self) -> ProgressionConfig:
+        """Действующая версия конфига транзакции."""
+        return self._published.config
 
     async def lock_user(self, user_id: UUID) -> ProgressRow:
         """Создать прогресс игрока при отсутствии и заблокировать его до конца транзакции."""

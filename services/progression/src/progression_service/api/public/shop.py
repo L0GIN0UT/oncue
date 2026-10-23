@@ -1,14 +1,12 @@
-"""Ручки магазина, инвентаря, оформления, промокода и своей аватарки (5b).
-
-Контракт этапа 5b (``docs/plans/stage-5.md`` §9, ADR 0045, 0048). Шаг 0a: ручки объявлены,
-реализация - поток S1 (магазин, инвентарь, оформление, промокоды, паки) и S3 (аватарка);
-до тех пор отвечают 501 ``common.not_implemented``.
+"""Ручки магазина, инвентаря, оформления и промокода (5b, поток S1; ADR 0045, 0048).
 
 * все ручки - только пользователь с аккаунтом (гость - 403 ``auth.guest_forbidden``);
-* ответы с данными игрока - ``private, no-store``;
-* мутации идемпотентны: покупка и промокод - по ``Idempotency-Key`` и предмету операции,
-  оформление - естественно (PUT слота), заявка на аватарку - по ``Idempotency-Key``;
+* успешные ответы с данными игрока - ``Cache-Control: private, no-store``;
+* мутации идемпотентны: покупка - по ``op_id = shop:{user}:{item}``, промокод - по паре
+  ``(код, игрок)``, оформление - естественно (PUT слота); ``Idempotency-Key`` обязателен;
 * паки скрыты (404 ``progression.billing_disabled``), пока ``billing.enabled=false``.
+
+Заявка на свою аватарку - ``avatar.py`` (поток S3).
 """
 
 # Аргументы ручек - зависимости FastAPI, часть нужна только ради проверки доступа.
@@ -18,41 +16,67 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Path, Query, UploadFile
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
 from gv_auth import Principal, require_user
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 from progression_service.api.public.shop_schemas import (
     Appearance,
-    AvatarRequestView,
+    AppearanceSlot,
     EquipRequest,
+    InventoryEntry,
+    ItemView,
     Key,
-    MyAvatar,
     MyInventory,
     PackCatalog,
+    PackView,
+    PlayerAppearance,
     PlayersAppearance,
     PromoRedeemRequest,
     PromoRedeemResult,
     PurchaseResult,
     ShopCatalog,
+    ShopItem,
 )
+from progression_service.application.appearance import SlotView
+from progression_service.application.shop import ShopServices
+from progression_service.domain.shop import Item
 
 User = Annotated[Principal, Depends(require_user)]
 ItemIdPath = Annotated[UUID, Path(description="Идентификатор предмета")]
 SlotPath = Annotated[
     str, Path(pattern=r"^[a-z][a-z0-9_]*$", max_length=64, description="Ключ слота")
 ]
-_READ = problem_responses(401, 403, 501)
-_WRITE = problem_responses(401, 403, 409, 422, 501)
+PRIVATE = "private, no-store"
+_READ = problem_responses(401, 403)
 
 
-def _stub() -> NotImplementedYetError:
-    return NotImplementedYetError("ручка появится в потоках S1/S3 этапа 5b")
+def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
+    """Добавить в ``/v1`` ручки магазина, инвентаря, оформления и промокода."""
+    url = services.public_url
 
+    def view(item: Item) -> ItemView:
+        return ItemView(
+            id=item.id,
+            key=item.key,
+            slot=item.slot,
+            rarity=item.rarity,
+            title=item.title,
+            media_kind=item.media_kind.value,
+            asset_url=url(item.asset_key) if item.asset_key else "",
+            poster_url=url(item.poster_key) if item.poster_key else None,
+            level_required=item.level_required,
+            price=item.price,
+            event_key=None,
+        )
 
-def register_shop_routes(router: APIRouter) -> None:
-    """Добавить в ``/v1`` ручки 5b (пока заглушки)."""
+    def appearance(slots: list[SlotView]) -> Appearance:
+        return Appearance(
+            slots=[
+                AppearanceSlot(slot=s.slot, item=None if s.item is None else view(s.item))
+                for s in slots
+            ]
+        )
 
     @router.get(
         "/shop/items",
@@ -66,9 +90,15 @@ def register_shop_routes(router: APIRouter) -> None:
     )
     async def shop_items(
         user: User,
+        response: Response,
         slot: Annotated[Key | None, Query(description="Ключ слота")] = None,
     ) -> ShopCatalog:
-        raise _stub()
+        catalog = await services.shop.catalog(user.user_id, slot)
+        response.headers["Cache-Control"] = PRIVATE
+        return ShopCatalog(
+            items=[ShopItem(item=view(e.item), state=e.state.value) for e in catalog.entries],
+            balance=catalog.balance,
+        )
 
     @router.post(
         "/shop/items/{item_id}/purchase",
@@ -81,20 +111,41 @@ def register_shop_routes(router: APIRouter) -> None:
             "`progression.insufficient_funds`, 409 `progression.already_owned`, 403 "
             "`progression.item_not_available`, 404 `progression.item_not_found`."
         ),
-        responses=problem_responses(401, 403, 404, 409, 501),
+        responses=problem_responses(401, 403, 404, 409),
     )
-    async def purchase(item_id: ItemIdPath, user: User, key: IdempotencyKey) -> PurchaseResult:
-        raise _stub()
+    async def purchase(
+        item_id: ItemIdPath, user: User, key: IdempotencyKey, response: Response
+    ) -> PurchaseResult:
+        outcome = await services.shop.purchase(user.user_id, item_id)
+        response.headers["Cache-Control"] = PRIVATE
+        return PurchaseResult(
+            item=view(outcome.item), balance_after=outcome.balance_after, repeated=outcome.repeated
+        )
 
     @router.get(
         "/shop/packs",
         response_model=PackCatalog,
         summary="Паки косметики",
         description="Скрыты, пока `billing.enabled=false`: 404 `progression.billing_disabled`.",
-        responses=problem_responses(401, 403, 404, 501),
+        responses=problem_responses(401, 403, 404),
     )
-    async def shop_packs(user: User) -> PackCatalog:
-        raise _stub()
+    async def shop_packs(user: User, response: Response) -> PackCatalog:
+        found = await services.shop.packs()
+        response.headers["Cache-Control"] = PRIVATE
+        return PackCatalog(
+            packs=[
+                PackView(
+                    id=p.id,
+                    key=p.key,
+                    title=p.title,
+                    style=p.style,
+                    items=[view(i) for i in items],
+                    verses_amount=p.verses_amount,
+                    price_kopecks=p.price_kopecks,
+                )
+                for p, items in found
+            ]
+        )
 
     @router.get(
         "/me/inventory",
@@ -103,8 +154,21 @@ def register_shop_routes(router: APIRouter) -> None:
         description="Предметы игрока; просроченные временные предметы скрыты.",
         responses=_READ,
     )
-    async def my_inventory(user: User) -> MyInventory:
-        raise _stub()
+    async def my_inventory(user: User, response: Response) -> MyInventory:
+        entries = await services.inventory.mine(user.user_id)
+        response.headers["Cache-Control"] = PRIVATE
+        return MyInventory(
+            items=[
+                InventoryEntry(
+                    item=view(e.item),
+                    source=e.entry.source.value,
+                    acquired_at=e.entry.acquired_at,
+                    expires_at=e.entry.expires_at,
+                    equipped=e.equipped,
+                )
+                for e in entries
+            ]
+        )
 
     @router.get(
         "/appearance",
@@ -115,13 +179,23 @@ def register_shop_routes(router: APIRouter) -> None:
             "и аватар в матче и в профиле. Только пользователь с аккаунтом; неизвестные id "
             "пропускаются, дубли схлопываются; больше 12 - 422."
         ),
-        responses=problem_responses(401, 403, 422, 501),
+        responses=problem_responses(401, 403, 422),
     )
     async def players_appearance(
         user: User,
+        response: Response,
         user_ids: Annotated[list[UUID], Query(min_length=1, max_length=12)],
     ) -> PlayersAppearance:
-        raise _stub()
+        players = await services.appearance.players(user_ids)
+        response.headers["Cache-Control"] = PRIVATE
+        return PlayersAppearance(
+            players=[
+                PlayerAppearance(
+                    user_id=p.user_id, appearance=appearance(p.slots), custom_avatar_url=None
+                )
+                for p in players
+            ]
+        )
 
     @router.get(
         "/me/appearance",
@@ -130,8 +204,10 @@ def register_shop_routes(router: APIRouter) -> None:
         description="По одному предмету на слот; пустой слот - `item = null`.",
         responses=_READ,
     )
-    async def my_appearance(user: User) -> Appearance:
-        raise _stub()
+    async def my_appearance(user: User, response: Response) -> Appearance:
+        slots = await services.appearance.mine(user.user_id)
+        response.headers["Cache-Control"] = PRIVATE
+        return appearance(slots)
 
     @router.put(
         "/me/appearance/{slot}",
@@ -142,10 +218,14 @@ def register_shop_routes(router: APIRouter) -> None:
             "Идемпотентно по природе операции. Ошибки: 404 `progression.slot_not_found`, "
             "404 `progression.item_not_owned`, 422 `progression.item_slot_mismatch`."
         ),
-        responses=problem_responses(401, 403, 404, 422, 501),
+        responses=problem_responses(401, 403, 404, 422),
     )
-    async def equip(slot: SlotPath, body: EquipRequest, user: User) -> Appearance:
-        raise _stub()
+    async def equip(
+        slot: SlotPath, body: EquipRequest, user: User, response: Response
+    ) -> Appearance:
+        slots = await services.appearance.equip(user.user_id, slot, body.item_id)
+        response.headers["Cache-Control"] = PRIVATE
+        return appearance(slots)
 
     @router.post(
         "/promo/redeem",
@@ -157,40 +237,21 @@ def register_shop_routes(router: APIRouter) -> None:
             "404 `progression.promo_invalid`; лимит попыток по игроку и IP - 429 "
             "`progression.promo_rate_limited` с `Retry-After`. Гостю - 403."
         ),
-        responses=problem_responses(401, 403, 404, 422, 429, 501),
+        responses=problem_responses(401, 403, 404, 422, 429, 503),
     )
     async def redeem(
-        body: PromoRedeemRequest, user: User, key: IdempotencyKey
-    ) -> PromoRedeemResult:
-        raise _stub()
-
-    @router.get(
-        "/me/avatar",
-        response_model=MyAvatar,
-        summary="Моя аватарка",
-        description="Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки.",
-        responses=_READ,
-    )
-    async def my_avatar(user: User) -> MyAvatar:
-        raise _stub()
-
-    @router.post(
-        "/me/avatar",
-        response_model=AvatarRequestView,
-        status_code=202,
-        summary="Загрузить свою аватарку",
-        description=(
-            "multipart, поле `file`. Нужен купленный товар "
-            "(403 `progression.avatar_not_entitled`). "
-            "Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения "
-            "модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. "
-            "Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`."
-        ),
-        responses=problem_responses(401, 403, 413, 422, 501),
-    )
-    async def submit_avatar(
+        body: PromoRedeemRequest,
         user: User,
         key: IdempotencyKey,
-        file: Annotated[UploadFile, File(description="Изображение")],
-    ) -> AvatarRequestView:
-        raise _stub()
+        request: Request,
+        response: Response,
+    ) -> PromoRedeemResult:
+        ip = request.client.host if request.client else None
+        outcome = await services.promo.redeem(user.user_id, body.code, client_ip=ip)
+        response.headers["Cache-Control"] = PRIVATE
+        return PromoRedeemResult(
+            reward_kind=outcome.reward_kind.value,
+            amount=outcome.amount,
+            item=None if outcome.item is None else view(outcome.item),
+            repeated=outcome.repeated,
+        )
