@@ -77,6 +77,7 @@ from identity_service.application.queries import (
     ListLinkedAccounts,
     ListUsers,
 )
+from identity_service.application.queries.user_emails import ListVerifiedEmails, UserEmailsLimit
 from identity_service.application.sessions import SessionIssuer
 from identity_service.domain import (
     EmailAddress,
@@ -103,6 +104,7 @@ from identity_service.infrastructure.redis_stores import (
     RedisOAuthStateStore,
     RedisRateLimiter,
     RedisRevocationStore,
+    RedisStrictRateLimiter,
 )
 from identity_service.infrastructure.security import (
     Argon2Hasher,
@@ -410,13 +412,14 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
     prefix = settings.redis_key_prefix
     if infra.redis is not None:
         limiter: Any = RedisRateLimiter(infra.redis, prefix=prefix)
+        strict_limiter: Any = RedisStrictRateLimiter(infra.redis, prefix=prefix)
         # Denylist должен пережить и access-токен, и допуск верификатора по exp.
         revocation: Any = RedisRevocationStore(
             infra.redis, ttl_s=settings.jwt.access_ttl_s + settings.jwt.leeway_s, prefix=prefix
         )
         states: Any = RedisOAuthStateStore(infra.redis, prefix=prefix)
     else:
-        limiter = revocation = states = _Unavailable()
+        limiter = strict_limiter = revocation = states = _Unavailable()
 
     hasher = Argon2Hasher(
         time_cost=settings.argon2.time_cost,
@@ -513,6 +516,15 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
                     settings.service_token_limit.failures_per_client_ip_per_min
                 ),
                 success_per_client_per_min=settings.service_token_limit.success_per_client_per_min,
+            ),
+        ),
+        list_verified_emails=ListVerifiedEmails(
+            uow,
+            strict_limiter,
+            UserEmailsLimit(
+                per_client=settings.users_emails_limit.per_client,
+                window_s=settings.users_emails_limit.window_s,
+                ids_per_hour=settings.users_emails_limit.ids_per_hour,
             ),
         ),
         guest=GuestUseCases(

@@ -14,6 +14,8 @@ from gv_core.errors import InvalidInputError
 _NICKNAME_RE = re.compile(r"^[0-9A-Za-zА-Яа-яЁё_.\-]{3,24}$")
 _DISPLAY_MAX = 40
 _EMAIL_MAX = 254
+TOMBSTONE_EMAIL_SUFFIX = "@deleted.invalid"
+"""Окончание обезличенного адреса удалённого аккаунта."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +81,7 @@ class EmailAddress:
     @classmethod
     def tombstone(cls, user_hex: str) -> EmailAddress:
         """Адрес удалённого аккаунта (домен ``.invalid`` зарезервирован RFC 2606)."""
-        return cls(f"{user_hex}@deleted.invalid")
+        return cls(f"{user_hex}{TOMBSTONE_EMAIL_SUFFIX}")
 
 
 @dataclass(frozen=True, slots=True)

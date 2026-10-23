@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from gv_auth.revocation import revoked_sid_key
+from gv_core.errors import DependencyUnavailableError
 from identity_service.application.ports import OAuthState, RateDecision
 from identity_service.domain import Provider
 
@@ -78,6 +79,33 @@ class RedisRateLimiter:
         REDIS_FAIL_OPEN.labels("rate_limit").inc()
         log.warning("auth.rate_limit_unavailable", error=type(exc).__name__)
         return RateDecision(allowed=True)
+
+
+class RedisStrictRateLimiter:
+    """Фиксированное окно с весом (``INCRBY``), **fail-closed**.
+
+    Отдельный от ``RedisRateLimiter`` класс: недоступный Redis не должен молча снимать
+    лимит выдачи чужих адресов, а вход паролем остаётся на fail-open лимитере.
+    """
+
+    def __init__(self, client: Redis, *, prefix: str = "") -> None:
+        self._r, self._prefix = client, prefix
+
+    async def hit(self, key: str, *, limit: int, window_s: int, amount: int = 1) -> RateDecision:
+        """Засчитать ``amount``; ошибка Redis — 503 ``DependencyUnavailableError``."""
+        full = self._prefix + key
+        try:
+            async with self._r.pipeline(transaction=True) as pipe:
+                pipe.incrby(full, amount)
+                pipe.expire(full, window_s, nx=True)
+                pipe.ttl(full)
+                count, _, ttl = await pipe.execute()
+        except RedisError as exc:
+            log.warning("auth.strict_rate_limit_unavailable", error=type(exc).__name__)
+            raise DependencyUnavailableError(
+                "лимитер недоступен", code="rate.limiter_unavailable", details={"retry_after": 5}
+            ) from exc
+        return RateDecision(int(count) <= limit, max(int(ttl), 1))
 
 
 class RedisRevocationStore:
