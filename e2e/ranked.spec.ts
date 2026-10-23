@@ -22,7 +22,6 @@ import {
   json,
   problem,
   registerPlayers,
-  roomCode,
   type Player,
 } from "./online";
 
@@ -85,7 +84,8 @@ test("рейтинговая дуэль: очередь → матч → сда�
     for (const p of players) {
       await expect(p.page.getByTestId("match-round")).toContainText("Раунд 1", { timeout: 60_000 });
     }
-    expect(await roomCode(a.page)).toBe(code);
+    // В идущем матче элемента `room-code` нет (он только в лобби) — код берём из адреса.
+    await expect(a.page).toHaveURL(`/room/${code}`);
   });
 
   await test.step("B сдаётся → итог: поражение у B", async () => {
