@@ -1365,7 +1365,12 @@ async def test_match_page_match_down_is_200_unavailable(bff: Bff, failure: str) 
 
     assert response.status_code == 200
     assert response.json() == {
-        "blocks": {"match": UNAVAILABLE, "items": UNAVAILABLE, "library": UNAVAILABLE}
+        "blocks": {
+            "match": UNAVAILABLE,
+            "items": UNAVAILABLE,
+            "library": UNAVAILABLE,
+            "appearance": None,
+        }
     }
 
 
@@ -1466,7 +1471,12 @@ async def test_match_page_match_429_or_undescribed_4xx_is_unavailable(
 
     assert response.status_code == 200
     assert response.json() == {
-        "blocks": {"match": UNAVAILABLE, "items": UNAVAILABLE, "library": UNAVAILABLE}
+        "blocks": {
+            "match": UNAVAILABLE,
+            "items": UNAVAILABLE,
+            "library": UNAVAILABLE,
+            "appearance": None,
+        }
     }
 
 
@@ -1818,7 +1828,16 @@ async def test_profile_page_all_blocks_ok(bff: Bff) -> None:
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == PRIVATE
     blocks = response.json()["blocks"]
-    assert set(blocks) == {"progress", "wallet", "quests", "badges", "wheel"}
+    assert set(blocks) == {
+        "progress",
+        "wallet",
+        "quests",
+        "badges",
+        "wheel",
+        "appearance",
+        "inventory",
+        "avatar",
+    }
     progress = blocks["progress"]["data"]
     assert (progress["level"], progress["xp_in_level"], progress["xp_to_next"]) == (7, 120, 380)
     assert progress["boost"] == {"multiplier": 1.5, "matches_left": 2}
@@ -1889,6 +1908,8 @@ async def test_profile_page_each_block_degrades_independently(
     for name, value in blocks.items():
         if name == block:
             assert value == UNAVAILABLE
+        elif value is None:
+            assert name in {"appearance", "inventory", "avatar"}  # блоки 5b - с потока S5
         else:
             assert value["status"] == "ok", name
 
@@ -1912,7 +1933,9 @@ async def test_profile_page_progression_down_is_200_all_unavailable(bff: Bff) ->
     response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
-    assert response.json() == {"blocks": dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)}
+    expected: dict[str, Any] = dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)
+    expected.update(appearance=None, inventory=None, avatar=None)  # блоки 5b - с потока S5
+    assert response.json() == {"blocks": expected}
 
 
 PROFILE_BLOCKS = ("progress", "wallet", "quests", "badges", "wheel")
@@ -2055,7 +2078,9 @@ async def test_player_page_ok(bff: Bff) -> None:
 
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == PRIVATE
-    assert response.json() == {"blocks": {"progress": {"status": "ok", "data": PLAYER}}}
+    assert response.json() == {
+        "blocks": {"progress": {"status": "ok", "data": PLAYER}, "appearance": None}
+    }
     assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
 
@@ -2090,7 +2115,7 @@ async def test_player_page_unknown_player_is_404_and_down_is_unavailable(bff: Bf
     route.respond(503)
     response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=headers)
     assert response.status_code == 200
-    assert response.json() == {"blocks": {"progress": UNAVAILABLE}}
+    assert response.json() == {"blocks": {"progress": UNAVAILABLE, "appearance": None}}
 
 
 async def test_player_page_requires_uuid(bff: Bff) -> None:

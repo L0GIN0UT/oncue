@@ -33,6 +33,9 @@ PRODUCED = [
     "progression.QuestCompleted",
     "progression.BadgeUnlocked",
     "progression.WheelSpun",
+    "progression.ItemPurchased",
+    "progression.ItemEquipped",
+    "progression.PromoRedeemed",
 ]
 
 

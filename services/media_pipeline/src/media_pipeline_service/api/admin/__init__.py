@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from gv_auth import Principal, require_perm
 from gv_service import IdempotencyKey, Reason, problem_responses
 from media_pipeline_service.api.common import AssetSetItem
+from media_pipeline_service.api.ugc import register_ugc_admin_routes
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.dto import SourceProvenance
@@ -299,4 +300,5 @@ def build_admin_router(
     async def admin_asset_sets(media_item_id: UUID, _: Viewer) -> list[AssetSetItem]:
         return [AssetSetItem.of(v) for v in await list_sets.execute(media_item_id)]
 
+    register_ugc_admin_routes(router)
     return router

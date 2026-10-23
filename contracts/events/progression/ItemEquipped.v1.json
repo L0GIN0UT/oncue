@@ -1,0 +1,47 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:ItemEquipped:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок надел или снял предмет в слоте. aggregate_id — user_id. Снятие — `item_id = null`. Потребители оформления (bff, match) читают состояние API, событие — для обновления кэшей.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "item_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "item_key": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "slot": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "item_id",
+    "item_key",
+    "slot",
+    "user_id"
+  ],
+  "title": "progression.ItemEquipped v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

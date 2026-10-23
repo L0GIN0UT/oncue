@@ -34,6 +34,8 @@ from bff_web_service.api.public.schemas import (
     ProfilePage,
     ResultsPage,
     SessionInfo,
+    ShellPage,
+    ShopPage,
     SoloPage,
 )
 from bff_web_service.application.dto import ANONYMOUS, CatalogQuery, SubjectKind, Viewer
@@ -42,6 +44,7 @@ from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
 from gv_core.errors import (
     DependencyUnavailableError,
+    NotImplementedYetError,
     UnauthenticatedError,
 )
 from gv_service import problem_responses
@@ -175,6 +178,37 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         page = await deps.get_profile(viewer)
         _cache_headers(response, personal=True, policy=policy)
         return ProfilePage.model_validate(page, from_attributes=True)
+
+    @router.get(
+        "/pages/shop",
+        response_model=ShopPage,
+        summary="Магазин: витрина косметики, паки",
+        description=(
+            "Этап 5b, контракт (реализация — поток S5; до тех пор 501). Только пользователь с "
+            "аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, "
+            "пока `billing.enabled=false`. Покупка — прямо в progression "
+            "(`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает."
+        ),
+        responses=problem_responses(401, 403, 501),
+    )
+    async def shop_page(viewer: CurrentViewer, response: Response) -> ShopPage:  # noqa: ARG001
+        raise NotImplementedYetError("страница магазина появится в потоке S5 этапа 5b")
+
+    @router.get(
+        "/pages/shell",
+        response_model=ShellPage,
+        summary="Оболочка приложения: тема и колокольчик",
+        description=(
+            "Этап 5b, контракт (реализация — поток S5; до тех пор 501). `theme.key` — ключ "
+            "активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного "
+            "события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число "
+            "непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова "
+            "notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш."
+        ),
+        responses=problem_responses(501),
+    )
+    async def shell_page(viewer: CurrentViewer, response: Response) -> ShellPage:  # noqa: ARG001
+        raise NotImplementedYetError("оболочка появится в потоке S5 этапа 5b")
 
     @router.get(
         "/pages/players/{user_id}",

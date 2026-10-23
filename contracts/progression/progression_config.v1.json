@@ -116,6 +116,46 @@
       "minimum": 0,
       "type": "number"
     },
+    "promo": {
+      "additionalProperties": false,
+      "description": "Промокоды (5b, ADR 0048): лимиты попыток ввода по пользователю и IP",
+      "properties": {
+        "attempts_per_ip": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "attempts_per_user": {
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "code_length": {
+          "maximum": 32,
+          "minimum": 8,
+          "type": "integer"
+        },
+        "max_batch_verses": {
+          "description": "Потолок суммарной эмиссии Версов одной партии: count x max_uses x verses_amount",
+          "maximum": 1000000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "window_s": {
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "attempts_per_user",
+        "attempts_per_ip",
+        "window_s",
+        "code_length",
+        "max_batch_verses"
+      ],
+      "type": "object"
+    },
     "quests": {
       "additionalProperties": false,
       "description": "Задания: пул и размер назначения; назначение — снимком на период",
@@ -233,6 +273,152 @@
         "daily_count",
         "weekly_count",
         "items"
+      ],
+      "type": "object"
+    },
+    "shop": {
+      "additionalProperties": false,
+      "description": "Магазин и инвентарь (5b, ADR 0045): слоты, редкости, лимиты медиа предметов, Версы за дубль с колеса. Секция необязательна: без неё магазин пуст.",
+      "properties": {
+        "custom_avatar_item_key": {
+          "description": "Ключ товара «своя аватарка» (покупается один раз); null — не продаётся",
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "media": {
+          "additionalProperties": false,
+          "description": "Лимиты картинок и анимаций предметов (ADR 0046): проверяются при загрузке в админке",
+          "properties": {
+            "animated_max_bytes": {
+              "maximum": 20000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "animated_max_duration_ms": {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "animated_max_frames": {
+              "maximum": 1000,
+              "minimum": 2,
+              "type": "integer"
+            },
+            "max_side_px": {
+              "maximum": 4096,
+              "minimum": 16,
+              "type": "integer"
+            },
+            "static_max_bytes": {
+              "maximum": 20000000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "static_max_bytes",
+            "animated_max_bytes",
+            "animated_max_frames",
+            "animated_max_duration_ms",
+            "max_side_px"
+          ],
+          "type": "object"
+        },
+        "rarities": {
+          "description": "Редкости по возрастанию ценности",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "duplicate_verses": {
+                "description": "Версы за дубль предмета этой редкости, выпавший с колеса (бакет earned)",
+                "maximum": 100000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "key": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "title",
+              "duplicate_verses"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "slots": {
+          "description": "Слоты оформления профиля (аватар, рамка, титул, фон): по одному предмету на слот",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "title"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "slots",
+        "rarities",
+        "media",
+        "custom_avatar_item_key"
+      ],
+      "type": "object"
+    },
+    "spend": {
+      "additionalProperties": false,
+      "description": "Траты Версов (ADR 0043, 0045): порядок списания бакетов. В 5b работает только earned; paid появляется с продажей паков (этап 6)",
+      "properties": {
+        "bucket_order": {
+          "contains": {
+            "const": "earned"
+          },
+          "items": {
+            "enum": [
+              "earned",
+              "paid"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "bucket_order"
       ],
       "type": "object"
     },

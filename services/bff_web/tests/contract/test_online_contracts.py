@@ -236,7 +236,9 @@ async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> N
 
     assert _errors("bff_web", _bff_schema("MatchPage"), body) == []
     assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/match/{match_id}"), body) == []
-    assert all(b["status"] == "ok" for b in body["blocks"].values())
+    # `appearance` (5b) - null до потока S5: блока ещё нет, а не «недоступен»
+    assert body["blocks"]["appearance"] is None
+    assert all(b["status"] == "ok" for k, b in body["blocks"].items() if k != "appearance")
 
 
 def _leaderboards_query() -> GetLeaderboardsPage:

@@ -51,10 +51,19 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 ### Прогресс
 | Шаг | Статус |
 |---|---|
-| Шаг 0: roadmap, handoff | сделано, не закоммичено |
-| Детализация плана 5b ([§9](../plans/stage-5.md), §12 «Модель 5d») и ADR 0045–0049 (черновики) | сделано, `mkdocs build --strict` зелёный, ждёт ревью владельца до кода |
-| 0a контракты (события, OpenAPI, права identity) | — |
+| Шаг 0: roadmap, handoff | сделано, закоммичено (`867f44d`) |
+| Детализация плана 5b ([§9](../plans/stage-5.md), §12 «Модель 5d») и ADR 0045–0049 (черновики) | сделано и утверждено владельцем (`867f44d`) |
+| 0a контракты (события, конфиг, OpenAPI, права identity) | сделано, ждёт ревью и коммита (ниже) |
 | S1 ∥ S2 → S3 ∥ S4 → S5 → 0b | — |
+
+### Шаг 0a (сделано, не закоммичено)
+- События: `progression.{ItemPurchased,ItemEquipped,PromoRedeemed}` и `media_pipeline.AssetModerated` (топик `media_pipeline.ugc_image.v1`) со схемами и примерами; `contracts/notifications/notification_types.v1.json` (схема типов уведомлений и пример; контрактный тест сверяет поля с схемами событий).
+- Конфиг progression: необязательные секции `shop`, `promo`, `spend` (схема и пример); домен их пока не разбирает — поток S1 (в `test_config_bounds.py` префиксы `shop.|promo.|spend.` временно в `OTHER_STREAMS`, S1 их убирает).
+- Заглушки 501: progression `api/public/shop*.py`, `api/admin/shop*.py`; media_pipeline `api/ugc.py` (internal приём + admin-очередь); notifications `api/{public,admin,schemas}`; bff `/pages/shop`, `/pages/shell`, null-блоки `appearance|inventory|avatar` (профиль, игрок, итог матча). Зависимость `python-multipart` добавлена в progression.
+- Миграция прав identity `0014_seed_economy_perms` (+ тесты); `notifications` в `COOKIE_MUTATION_SERVICES` (+ `compose.services.yml` через `gv gen`); `notifications` в `frontend/scripts/gen-api.mjs`.
+- Решения 0a (не из списка владельца): (1) `GET /v1/appearance?user_ids=` (≤12) в progression — оформление игроков для матча и профиля; (2) лимиты и форматы UGC-изображений и коды причин отклонения — конфиг media-pipeline, а не progression; (3) `POST /v1/unsubscribe` без входа (подписанный токен); (4) предметы имеют стабильный `key` (на него ссылается `wheel.sectors[].prize.item_key`); (5) bff остаётся GET-only: `/pages/shell` объединяет тему и колокольчик; (6) в ответах bff отсутствующие блоки 5b — явный `null` (как `progress` главной в 5a), существующие тесты обновлены.
+- Ревью 0a (code-reviewer): блокирующих нет. Учтено: `extra="forbid"` в публичных телах, `promo.max_batch_verses` и `contains earned` в `bucket_order`, 429 и описание защиты у `unsubscribe`, `moderator_id` убран из `AssetModerated`, тесты «без ключа / без reason / лишнее поле», уточнения в ADR 0048 и плане §9.4 (границы `shop|promo|spend` в `BOUNDS`, уникальность ключей, `no-store` на успешных ответах — задачи S1).
+- Проверки: `gv lint` (ruff, mypy, import-linter, `gv gen --check`, `gv contracts check`) зелёный; progression 408, notifications 26, identity 400, bff_web 255, tools/gv 157; frontend lint, typecheck, vitest 373. media_pipeline: 3 integration-теста ffmpeg (`test_media_adapters`, код 4294967283) и 2 errors `test_use_cases::test_upload_validation` падают и на `main` (проверено worktree-ом `origin/main`, 51af674) — окружение Windows, не чинится в 5b; admin: давний `test_runtime` (см. выше).
 
 ## Открыто
 - Ручные проверки владельцем: identity (realtime-токен), match (античит), rating; ledger progression (чек-лист выше). Для 5b — траты Версов (ledger, **требуется ручная проверка владельцем**).
@@ -63,6 +72,5 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 - Исключённый игрок может переподписаться на канал комнаты старым токеном (до 10 мин) — хвост 4a, при желании в 5c вместе с санкцией `ONLINE`.
 
 ## Дальше
-1. Владелец смотрит план (§9, §12) и ADR 0045–0049; после «да» — коммит документов (`docs(stage-5): ...`), затем 0a.
-2. Шаг 0a: контракты и заглушки 501 в основной сессии, `gv lint`, `gv contracts check`, `gv gen --check`, `pnpm gen:api`.
-3. S1 ∥ S2 → S3 ∥ S4 → S5 → 0b. Один `tdd-guide` и один ревьюер на поток; `security-reviewer` и `review-migration` для S1 и S3.
+1. Учесть замечания ревью 0a, коммит 0a (после «да» владельца), `/checkpoint stage-5`.
+2. S1 ∥ S2 → S3 ∥ S4 → S5 → 0b. Один `tdd-guide` и один ревьюер на поток; `security-reviewer` и `review-migration` для S1 и S3.

@@ -1,0 +1,59 @@
+{
+  "$id": "urn:guessverse:contracts:events:media_pipeline:AssetModerated:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Модератор принял решение по UGC-изображению (ADR 0048). aggregate_id — asset_id. `version` монотонна по asset_id: потребитель отбрасывает события с version не больше применённой. Причина — код из конфига media-pipeline, свободного текста в событии нет.",
+  "properties": {
+    "asset_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "decided_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "owner_user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "purpose": {
+      "description": "Назначение изображения из конфига media-pipeline: avatar, collection_cover",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "reason_code": {
+      "description": "Для rejected — код причины; для approved — null",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "approved",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "asset_id",
+    "decided_at",
+    "owner_user_id",
+    "purpose",
+    "reason_code",
+    "status",
+    "version"
+  ],
+  "title": "media_pipeline.AssetModerated v1",
+  "type": "object",
+  "x-aggregate-type": "ugc_image",
+  "x-topic": "media_pipeline.ugc_image.v1"
+}

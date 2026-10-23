@@ -238,6 +238,139 @@ class HomeProgressCard(BaseModel):
     quests_open: int = Field(ge=0, description="Невыполненных заданий на сегодня")
 
 
+class CosmeticCard(BaseModel):
+    """Предмет косметики (progression, 5b): картинка или анимация по ``media_kind``."""
+
+    id: UUID
+    key: str
+    slot: str
+    rarity: str
+    title: str
+    media_kind: Literal["static", "animated"]
+    asset_url: str
+    poster_url: str | None = Field(description="Статичный кадр для prefers-reduced-motion")
+    level_required: int | None = None
+    price: int | None = None
+
+
+class AppearanceSlotCard(BaseModel):
+    """Слот оформления: предмет или пусто."""
+
+    slot: str
+    item: CosmeticCard | None = None
+
+
+class AppearanceCard(BaseModel):
+    """Оформление профиля: по одному предмету на слот (ник и аватар берёт фронт из блока игрока)."""
+
+    slots: list[AppearanceSlotCard]
+    custom_avatar_url: str | None = Field(
+        default=None, description="Одобренная своя аватарка; null — аватар из слота"
+    )
+
+
+class PlayerAppearanceCard(BaseModel):
+    """Оформление игрока в матче: ник, аватар, рамка, титул (по ``user_id``)."""
+
+    user_id: UUID
+    appearance: AppearanceCard
+
+
+class InventoryEntryCard(BaseModel):
+    """Предмет инвентаря."""
+
+    item: CosmeticCard
+    source: str
+    equipped: bool
+    expires_at: datetime | None = None
+
+
+class InventoryCard(BaseModel):
+    """Инвентарь игрока."""
+
+    items: list[InventoryEntryCard]
+
+
+class AvatarRequestCard(BaseModel):
+    """Последняя заявка на свою аватарку."""
+
+    status: Literal["pending", "approved", "rejected"]
+    submitted_at: datetime
+    reason_code: str | None = None
+
+
+class AvatarCard(BaseModel):
+    """Своя аватарка: право, заявка, лимиты загрузки."""
+
+    entitled: bool
+    request: AvatarRequestCard | None = None
+    max_bytes: int = Field(ge=1)
+    formats: list[str]
+
+
+class ShopEntryCard(BaseModel):
+    """Предмет витрины с состоянием для игрока."""
+
+    item: CosmeticCard
+    state: Literal["locked", "available", "owned"]
+
+
+class ShopCatalogCard(BaseModel):
+    """Витрина: предметы и баланс (покупка — прямо в progression, bff только читает)."""
+
+    items: list[ShopEntryCard]
+    balance: int = Field(ge=0)
+    slots: list[str] = Field(description="Слоты в порядке конфига — для вкладок витрины")
+
+
+class PackCard(BaseModel):
+    """Пак косметики (виден только при ``billing.enabled=true``)."""
+
+    id: UUID
+    key: str
+    title: str
+    style: str
+    items: list[CosmeticCard]
+    verses_amount: int = Field(ge=0)
+    price_kopecks: int = Field(ge=1)
+
+
+class ShopBlocks(BaseModel):
+    """Блоки витрины."""
+
+    catalog: Block[ShopCatalogCard]
+    packs: Block[list[PackCard]] | None = Field(
+        default=None, description="null — продажа выключена (billing.enabled=false)"
+    )
+
+
+class ShopPage(BaseModel):
+    """``GET /v1/pages/shop``: только пользователь с аккаунтом, `private, no-store`."""
+
+    blocks: ShopBlocks
+
+
+class ThemeCard(BaseModel):
+    """Активная тема оформления (ADR 0049): только ключ, наборы токенов лежат во фронтенде."""
+
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+
+
+class BellCard(BaseModel):
+    """Колокольчик: число непрочитанных уведомлений."""
+
+    unread: int = Field(ge=0)
+
+
+class ShellPage(BaseModel):
+    """``GET /v1/pages/shell``: оболочка приложения — тема и колокольчик."""
+
+    theme: ThemeCard
+    bell: Block[BellCard] | None = Field(
+        default=None, description="null — аноним или гость, notifications не вызывается"
+    )
+
+
 class ProfileBlocks(BaseModel):
     """Блоки профиля: каждый гаснет независимо."""
 
@@ -246,6 +379,15 @@ class ProfileBlocks(BaseModel):
     quests: Block[QuestsCard]
     badges: Block[list[BadgeCard]]
     wheel: Block[WheelCard]
+    appearance: Block[AppearanceCard] | None = Field(
+        default=None, description="Оформление; null до потока S5 этапа 5b"
+    )
+    inventory: Block[InventoryCard] | None = Field(
+        default=None, description="Инвентарь; null до потока S5 этапа 5b"
+    )
+    avatar: Block[AvatarCard] | None = Field(
+        default=None, description="Своя аватарка; null до потока S5 этапа 5b"
+    )
 
 
 class ProfilePage(BaseModel):
@@ -275,6 +417,9 @@ class PlayerBlocks(BaseModel):
     """Блоки профиля игрока."""
 
     progress: Block[PublicProgressCard]
+    appearance: Block[AppearanceCard] | None = Field(
+        default=None, description="Оформление игрока; null до потока S5 этапа 5b"
+    )
 
 
 class PlayerPage(BaseModel):
@@ -926,6 +1071,9 @@ class MatchBlocks(BaseModel):
     match: Block[MatchSummary]
     items: Block[list[ItemCard]]
     library: Block[list[ItemShelvesCard]]
+    appearance: Block[list[PlayerAppearanceCard]] | None = Field(
+        default=None, description="Оформление игроков матча; null до потока S5 этапа 5b"
+    )
 
 
 class MatchPage(BaseModel):

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from gv_auth import ServiceAuthenticator, ServicePrincipal
 from gv_service import problem_responses
 from media_pipeline_service.api.common import AssetSetItem
+from media_pipeline_service.api.ugc import register_ugc_internal_routes
 from media_pipeline_service.application.commands.links import IssueAssetLink
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 
@@ -82,4 +83,5 @@ def build_internal_router(issue_link: IssueAssetLink, list_sets: ListAssetSets) 
         views = await list_sets.execute(media_item_id, clue_type)
         return [AssetSetItem.of(v) for v in views]
 
+    register_ugc_internal_routes(router)
     return router

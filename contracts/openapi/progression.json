@@ -63,6 +63,159 @@
         "title": "AdminBadgeList",
         "type": "object"
       },
+      "AdminItem": {
+        "description": "Предмет в админке.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "asset_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - картинка не загружена",
+            "title": "Asset Url"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "level_required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Required"
+          },
+          "media_kind": {
+            "enum": [
+              "static",
+              "animated"
+            ],
+            "title": "Media Kind",
+            "type": "string"
+          },
+          "owners": {
+            "description": "Сколько игроков владеют предметом",
+            "minimum": 0.0,
+            "title": "Owners",
+            "type": "integer"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "rarity": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Rarity",
+            "type": "string"
+          },
+          "slot": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Slot",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "slot",
+          "rarity",
+          "title",
+          "media_kind",
+          "level_required",
+          "price",
+          "active",
+          "asset_url",
+          "poster_url",
+          "owners",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdminItem",
+        "type": "object"
+      },
+      "AdminItemPage": {
+        "description": "Страница предметов (курсор).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AdminItemPage",
+        "type": "object"
+      },
       "AdminLedgerEntry": {
         "description": "Проводка в админке.",
         "properties": {
@@ -197,6 +350,93 @@
         "title": "AdminLedgerPage",
         "type": "object"
       },
+      "AdminPack": {
+        "description": "Пак в админке.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Item Ids",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "price_kopecks": {
+            "title": "Price Kopecks",
+            "type": "integer"
+          },
+          "style": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Style",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verses_amount": {
+            "title": "Verses Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "title",
+          "style",
+          "item_ids",
+          "verses_amount",
+          "price_kopecks",
+          "active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdminPack",
+        "type": "object"
+      },
+      "AdminPackList": {
+        "description": "Паки.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPack"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdminPackList",
+        "type": "object"
+      },
       "AdminQuestCard": {
         "description": "Задание действующего конфига со статистикой.",
         "properties": {
@@ -271,6 +511,134 @@
           "items"
         ],
         "title": "AdminQuestList",
+        "type": "object"
+      },
+      "Appearance": {
+        "description": "Оформление профиля: по одному предмету на слот.",
+        "properties": {
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/AppearanceSlot"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slots"
+        ],
+        "title": "Appearance",
+        "type": "object"
+      },
+      "AppearanceSlot": {
+        "description": "Слот оформления.",
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - слот пуст"
+          },
+          "slot": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Slot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "item"
+        ],
+        "title": "AppearanceSlot",
+        "type": "object"
+      },
+      "AvatarLimits": {
+        "description": "Лимиты загрузки (из конфига media-pipeline).",
+        "properties": {
+          "formats": {
+            "items": {
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "max_bytes": {
+            "minimum": 1.0,
+            "title": "Max Bytes",
+            "type": "integer"
+          },
+          "max_side_px": {
+            "minimum": 1.0,
+            "title": "Max Side Px",
+            "type": "integer"
+          },
+          "min_side_px": {
+            "minimum": 1.0,
+            "title": "Min Side Px",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_bytes",
+          "formats",
+          "min_side_px",
+          "max_side_px"
+        ],
+        "title": "AvatarLimits",
+        "type": "object"
+      },
+      "AvatarRequestView": {
+        "description": "Заявка на свою аватарку.",
+        "properties": {
+          "asset_id": {
+            "format": "uuid",
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Код причины отклонения; иначе null",
+            "title": "Reason Code"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "status",
+          "submitted_at",
+          "reason_code"
+        ],
+        "title": "AvatarRequestView",
         "type": "object"
       },
       "BadgeRef": {
@@ -350,6 +718,43 @@
           "unlocked_at"
         ],
         "title": "BadgeView",
+        "type": "object"
+      },
+      "Body_submit_avatar_v1_me_avatar_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Изображение",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_submit_avatar_v1_me_avatar_post",
+        "type": "object"
+      },
+      "Body_upload_item_media_admin_v1_items__item_id__media_put": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Картинка или анимация",
+            "title": "File",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "file"
+        ],
+        "title": "Body_upload_item_media_admin_v1_items__item_id__media_put",
         "type": "object"
       },
       "BoostView": {
@@ -468,6 +873,183 @@
         "title": "ConfigVersionList",
         "type": "object"
       },
+      "CreateItemRequest": {
+        "additionalProperties": false,
+        "description": "Создать предмет (без картинки - неактивным).",
+        "properties": {
+          "active": {
+            "default": false,
+            "description": "Активный предмет виден на витрине; нужна загруженная картинка",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "level_required": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Required"
+          },
+          "media_kind": {
+            "enum": [
+              "static",
+              "animated"
+            ],
+            "title": "Media Kind",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "rarity": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Rarity",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "slot": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Slot",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "slot",
+          "rarity",
+          "title",
+          "media_kind",
+          "reason"
+        ],
+        "title": "CreateItemRequest",
+        "type": "object"
+      },
+      "CreatePromoRequest": {
+        "additionalProperties": false,
+        "description": "Сгенерировать партию кодов с общими условиями.",
+        "properties": {
+          "count": {
+            "description": "Сколько кодов сгенерировать",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "label": {
+            "description": "Название партии (для админки; в уведомления не попадает)",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "description": "Лимит активаций на каждый код",
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "per_user_once": {
+            "default": true,
+            "description": "Один код - один раз на игрока",
+            "title": "Per User Once",
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/PromoReward"
+          }
+        },
+        "required": [
+          "label",
+          "reward",
+          "count",
+          "max_uses",
+          "reason"
+        ],
+        "title": "CreatePromoRequest",
+        "type": "object"
+      },
+      "CreatedPromo": {
+        "description": "Партия кодов. `codes` показывается ОДИН раз - потом в БД только хеш.",
+        "properties": {
+          "codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Codes",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "codes"
+        ],
+        "title": "CreatedPromo",
+        "type": "object"
+      },
       "DailyStreakView": {
         "description": "Серия дейлика по домену.",
         "properties": {
@@ -513,6 +1095,30 @@
         "title": "DailyStreakView",
         "type": "object"
       },
+      "EquipRequest": {
+        "additionalProperties": false,
+        "description": "Надеть предмет в слот или снять (`item_id = null`).",
+        "properties": {
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - снять; предмет должен быть в инвентаре и подходить слоту",
+            "title": "Item Id"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "title": "EquipRequest",
+        "type": "object"
+      },
       "GrantRequest": {
         "additionalProperties": false,
         "description": "Ручная выдача Версов.",
@@ -542,6 +1148,184 @@
           "reason"
         ],
         "title": "GrantRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InventoryEntry": {
+        "description": "Предмет в инвентаре.",
+        "properties": {
+          "acquired_at": {
+            "format": "date-time",
+            "title": "Acquired At",
+            "type": "string"
+          },
+          "equipped": {
+            "title": "Equipped",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Временный предмет (5d); в 5b всегда null",
+            "title": "Expires At"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemView"
+          },
+          "source": {
+            "enum": [
+              "purchase",
+              "level",
+              "wheel",
+              "promo",
+              "pack",
+              "admin",
+              "event"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "source",
+          "acquired_at",
+          "expires_at",
+          "equipped"
+        ],
+        "title": "InventoryEntry",
+        "type": "object"
+      },
+      "ItemView": {
+        "description": "Предмет косметики.",
+        "properties": {
+          "asset_url": {
+            "description": "Публичный адрес картинки или анимации (animated WebP)",
+            "title": "Asset Url",
+            "type": "string"
+          },
+          "event_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Сезонное событие (5d); в 5b всегда null",
+            "title": "Event Key"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "level_required": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Открывается с уровня; null - по уровню нет",
+            "title": "Level Required"
+          },
+          "media_kind": {
+            "enum": [
+              "static",
+              "animated"
+            ],
+            "title": "Media Kind",
+            "type": "string"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Статичный кадр анимации (для prefers-reduced-motion); у static - null",
+            "title": "Poster Url"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Цена в Версах; null - не продаётся",
+            "title": "Price"
+          },
+          "rarity": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Rarity",
+            "type": "string"
+          },
+          "slot": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Slot",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "slot",
+          "rarity",
+          "title",
+          "media_kind",
+          "asset_url",
+          "poster_url",
+          "level_required",
+          "price",
+          "event_key"
+        ],
+        "title": "ItemView",
         "type": "object"
       },
       "JsonValue": {},
@@ -622,6 +1406,50 @@
         "title": "LedgerOperation",
         "type": "object"
       },
+      "MyAvatar": {
+        "description": "Своя аватарка: право, действующий аватар, последняя заявка.",
+        "properties": {
+          "current_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Одобренная аватарка; null - используется предмет слота",
+            "title": "Current Url"
+          },
+          "entitled": {
+            "description": "Куплен товар «своя аватарка»",
+            "title": "Entitled",
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AvatarLimits"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarRequestView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последняя заявка; null - не подавалась"
+          }
+        },
+        "required": [
+          "entitled",
+          "current_url",
+          "request",
+          "limits"
+        ],
+        "title": "MyAvatar",
+        "type": "object"
+      },
       "MyBadges": {
         "description": "Свои бейджи, полученные и нет.",
         "properties": {
@@ -637,6 +1465,23 @@
           "items"
         ],
         "title": "MyBadges",
+        "type": "object"
+      },
+      "MyInventory": {
+        "description": "Инвентарь игрока (просроченные предметы скрыты).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MyInventory",
         "type": "object"
       },
       "MyProgress": {
@@ -800,6 +1645,128 @@
         "title": "MyWallet",
         "type": "object"
       },
+      "PackCatalog": {
+        "description": "Витрина паков.",
+        "properties": {
+          "packs": {
+            "items": {
+              "$ref": "#/components/schemas/PackView"
+            },
+            "title": "Packs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "packs"
+        ],
+        "title": "PackCatalog",
+        "type": "object"
+      },
+      "PackView": {
+        "description": "Пак косметики (скрыт при `billing.enabled=false`).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "price_kopecks": {
+            "description": "Цена в копейках",
+            "minimum": 1.0,
+            "title": "Price Kopecks",
+            "type": "integer"
+          },
+          "style": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Style",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "title": "Title",
+            "type": "string"
+          },
+          "verses_amount": {
+            "minimum": 0.0,
+            "title": "Verses Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "title",
+          "style",
+          "items",
+          "verses_amount",
+          "price_kopecks"
+        ],
+        "title": "PackView",
+        "type": "object"
+      },
+      "PlayerAppearance": {
+        "description": "Оформление игрока (публичное): рамка, титул, фон, аватар.",
+        "properties": {
+          "appearance": {
+            "$ref": "#/components/schemas/Appearance"
+          },
+          "custom_avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Одобренная своя аватарка; null - аватар из слота",
+            "title": "Custom Avatar Url"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "appearance",
+          "custom_avatar_url"
+        ],
+        "title": "PlayerAppearance",
+        "type": "object"
+      },
+      "PlayersAppearance": {
+        "description": "Оформление нескольких игроков (матч, профиль); неизвестные id пропускаются.",
+        "properties": {
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/PlayerAppearance"
+            },
+            "title": "Players",
+            "type": "array"
+          }
+        },
+        "required": [
+          "players"
+        ],
+        "title": "PlayersAppearance",
+        "type": "object"
+      },
       "PrizeView": {
         "description": "Приз сектора колеса.",
         "properties": {
@@ -950,6 +1917,221 @@
         "title": "Problem",
         "type": "object"
       },
+      "PromoBatch": {
+        "description": "Партия кодов в списке (без самих кодов).",
+        "properties": {
+          "activations": {
+            "minimum": 0.0,
+            "title": "Activations",
+            "type": "integer"
+          },
+          "codes_total": {
+            "minimum": 1.0,
+            "title": "Codes Total",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "per_user_once": {
+            "title": "Per User Once",
+            "type": "boolean"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/PromoReward"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "reward",
+          "codes_total",
+          "activations",
+          "max_uses",
+          "per_user_once",
+          "expires_at",
+          "status",
+          "created_at"
+        ],
+        "title": "PromoBatch",
+        "type": "object"
+      },
+      "PromoBatchPage": {
+        "description": "Страница партий (курсор).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromoBatch"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "PromoBatchPage",
+        "type": "object"
+      },
+      "PromoRedeemRequest": {
+        "additionalProperties": false,
+        "description": "Погасить промокод.",
+        "properties": {
+          "code": {
+            "description": "Код как ввёл игрок (регистр и пробелы нормализуются)",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "PromoRedeemRequest",
+        "type": "object"
+      },
+      "PromoRedeemResult": {
+        "description": "Награда промокода. Повтор погашения того же кода возвращает ту же награду.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Версы; для предмета null",
+            "title": "Amount"
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repeated": {
+            "title": "Repeated",
+            "type": "boolean"
+          },
+          "reward_kind": {
+            "enum": [
+              "verses",
+              "item"
+            ],
+            "title": "Reward Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reward_kind",
+          "amount",
+          "item",
+          "repeated"
+        ],
+        "title": "PromoRedeemResult",
+        "type": "object"
+      },
+      "PromoReward": {
+        "additionalProperties": false,
+        "description": "Награда: ровно одно из `verses_amount` и `item_id` (в соответствии с `kind`).",
+        "properties": {
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "kind": {
+            "enum": [
+              "verses",
+              "item"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "verses_amount": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verses Amount"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "PromoReward",
+        "type": "object"
+      },
       "PublicProgress": {
         "description": "Публичный прогресс другого игрока (профиль). Скрытие — поле модели, ручка в 5c.",
         "properties": {
@@ -1014,6 +2196,31 @@
           "reason"
         ],
         "title": "PublishRequest",
+        "type": "object"
+      },
+      "PurchaseResult": {
+        "description": "Результат покупки. Повтор с тем же `Idempotency-Key` возвращает ту же выдачу.",
+        "properties": {
+          "balance_after": {
+            "minimum": 0.0,
+            "title": "Balance After",
+            "type": "integer"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemView"
+          },
+          "repeated": {
+            "description": "true - повтор уже выполненной покупки",
+            "title": "Repeated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item",
+          "balance_after",
+          "repeated"
+        ],
+        "title": "PurchaseResult",
         "type": "object"
       },
       "QuestPeriodView": {
@@ -1127,6 +2334,23 @@
         "title": "ReverseRequest",
         "type": "object"
       },
+      "RevokeRequest": {
+        "additionalProperties": false,
+        "description": "Отозвать партию: новые активации невозможны, выданные награды не отзываются.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RevokeRequest",
+        "type": "object"
+      },
       "Reward": {
         "description": "Награда: опыт и Версы.",
         "properties": {
@@ -1190,6 +2414,75 @@
         "title": "SaveDraftRequest",
         "type": "object"
       },
+      "SavePackRequest": {
+        "additionalProperties": false,
+        "description": "Создать или заменить пак.",
+        "properties": {
+          "active": {
+            "default": false,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "item_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Item Ids",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "price_kopecks": {
+            "description": "Цена в копейках",
+            "maximum": 100000000.0,
+            "minimum": 1.0,
+            "title": "Price Kopecks",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "style": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Style",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "verses_amount": {
+            "default": 0,
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "title": "Verses Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "style",
+          "item_ids",
+          "price_kopecks",
+          "reason"
+        ],
+        "title": "SavePackRequest",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -1207,6 +2500,54 @@
           "status"
         ],
         "title": "ServiceMeta",
+        "type": "object"
+      },
+      "ShopCatalog": {
+        "description": "Витрина: активные предметы, можно отфильтровать по слоту.",
+        "properties": {
+          "balance": {
+            "description": "Версы игрока (бакет earned)",
+            "minimum": 0.0,
+            "title": "Balance",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShopItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "balance"
+        ],
+        "title": "ShopCatalog",
+        "type": "object"
+      },
+      "ShopItem": {
+        "description": "Предмет витрины с состоянием для игрока.",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ItemView"
+          },
+          "state": {
+            "description": "locked - не хватает уровня и цены; available - можно получить; owned - есть",
+            "enum": [
+              "locked",
+              "available",
+              "owned"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "state"
+        ],
+        "title": "ShopItem",
         "type": "object"
       },
       "SpinResult": {
@@ -1245,6 +2586,132 @@
           "repeated"
         ],
         "title": "SpinResult",
+        "type": "object"
+      },
+      "UpdateItemRequest": {
+        "additionalProperties": false,
+        "description": "Заменить поля предмета (`key` менять нельзя - 422 `progression.item_key_immutable`).",
+        "properties": {
+          "active": {
+            "default": false,
+            "description": "Активный предмет виден на витрине; нужна загруженная картинка",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "level_required": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Required"
+          },
+          "media_kind": {
+            "enum": [
+              "static",
+              "animated"
+            ],
+            "title": "Media Kind",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "rarity": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Rarity",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "slot": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Slot",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "slot",
+          "rarity",
+          "title",
+          "media_kind",
+          "reason"
+        ],
+        "title": "UpdateItemRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       },
       "WheelSectorView": {
@@ -1949,6 +3416,595 @@
         ]
       }
     },
+    "/admin/v1/items": {
+      "get": {
+        "operationId": "items_admin_v1_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "slot",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Slot"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItemPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Предметы",
+        "tags": [
+          "progression-admin"
+        ]
+      },
+      "post": {
+        "description": "Без картинки предмет неактивен. Слот и редкость - из секции `shop` действующего конфига (иначе 422 `progression.item_slot_unknown` или `progression.item_rarity_unknown`); нужно `level_required` или `price` (422 `progression.item_unlock_required`); повтор `key` - 409 `progression.item_key_taken`.",
+        "operationId": "create_item_admin_v1_items_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Создать предмет",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/items/{item_id}": {
+      "put": {
+        "description": "Цена и условия действуют для новых покупок; владельцы не затрагиваются. Активировать без картинки нельзя - 422 `progression.item_media_missing`.",
+        "operationId": "update_item_admin_v1_items__item_id__put",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Изменить предмет",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/items/{item_id}/media": {
+      "put": {
+        "description": "multipart: `file`, `reason`. Статика - WebP/PNG, анимация - animated WebP (ADR 0046); проверка сигнатуры, декодирование, лимиты размера, кадров, длительности и стороны из секции `shop.media` конфига, постер - первый кадр. Ошибки: 422 `progression.item_media_invalid`, 413 `progression.item_media_too_large`.",
+        "operationId": "upload_item_media_admin_v1_items__item_id__media_put",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_item_media_admin_v1_items__item_id__media_put"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Problem Details"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Загрузить картинку или анимацию предмета",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
     "/admin/v1/ledger/{op_id}/reverse": {
       "post": {
         "description": "Встречная проводка со ссылкой `reversal_of`; журнал не правится; только журнал Версов, только кредиты. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.not_reversible` (дебет, сторно, проводка опыта), 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).",
@@ -2099,6 +4155,760 @@
           }
         },
         "summary": "Сторнировать проводку",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/packs": {
+      "get": {
+        "operationId": "packs_admin_v1_packs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPackList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Паки",
+        "tags": [
+          "progression-admin"
+        ]
+      },
+      "post": {
+        "description": "Только модель: витрина и покупка скрыты, пока `billing.enabled=false`.",
+        "operationId": "create_pack_admin_v1_packs_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPack"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Создать пак",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/packs/{pack_id}": {
+      "put": {
+        "operationId": "update_pack_admin_v1_packs__pack_id__put",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "pack_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Pack Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPack"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Заменить пак",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/promo-codes": {
+      "get": {
+        "description": "Без самих кодов: в БД только хеш.",
+        "operationId": "promo_batches_admin_v1_promo_codes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoBatchPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Партии промокодов",
+        "tags": [
+          "progression-admin"
+        ]
+      },
+      "post": {
+        "description": "Коды генерируются сервером (длина - `promo.code_length` конфига) и возвращаются ОДИН раз. Награда - предмет или Версы; для предмета он должен быть активен (422 `progression.item_not_found`). Повтор с тем же `Idempotency-Key` не создаёт вторую партию и не раскрывает коды повторно (409 `progression.codes_already_shown`).",
+        "operationId": "create_promo_admin_v1_promo_codes_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedPromo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Сгенерировать партию промокодов",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/promo-codes/{promo_id}/revoke": {
+      "post": {
+        "description": "Новые активации невозможны; выданные награды не отзываются.",
+        "operationId": "revoke_promo_admin_v1_promo_codes__promo_id__revoke_post",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "promo_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Promo Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Отозвать партию",
         "tags": [
           "progression-admin"
         ]
@@ -2450,6 +5260,486 @@
         ]
       }
     },
+    "/v1/appearance": {
+      "get": {
+        "description": "Публичное оформление (рамка, титул, фон, аватар) до 12 игроков за вызов: ник и аватар в матче и в профиле. Только пользователь с аккаунтом; неизвестные id пропускаются, дубли схлопываются; больше 12 - 422.",
+        "operationId": "players_appearance_v1_appearance_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 12,
+              "minItems": 1,
+              "title": "User Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayersAppearance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Оформление игроков",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/appearance": {
+      "get": {
+        "description": "По одному предмету на слот; пустой слот - `item = null`.",
+        "operationId": "my_appearance_v1_me_appearance_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Appearance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Моё оформление",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/appearance/{slot}": {
+      "put": {
+        "description": "`item_id = null` снимает. Предмет должен быть в инвентаре и подходить слоту. Идемпотентно по природе операции. Ошибки: 404 `progression.slot_not_found`, 404 `progression.item_not_owned`, 422 `progression.item_slot_mismatch`.",
+        "operationId": "equip_v1_me_appearance__slot__put",
+        "parameters": [
+          {
+            "description": "Ключ слота",
+            "in": "path",
+            "name": "slot",
+            "required": true,
+            "schema": {
+              "description": "Ключ слота",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Slot",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Appearance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Надеть или снять предмет",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/avatar": {
+      "get": {
+        "description": "Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки.",
+        "operationId": "my_avatar_v1_me_avatar_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyAvatar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Моя аватарка",
+        "tags": [
+          "progression"
+        ]
+      },
+      "post": {
+        "description": "multipart, поле `file`. Нужен купленный товар (403 `progression.avatar_not_entitled`). Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`.",
+        "operationId": "submit_avatar_v1_me_avatar_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_avatar_v1_me_avatar_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvatarRequestView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Problem Details"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Загрузить свою аватарку",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
     "/v1/me/badges": {
       "get": {
         "description": "Все бейджи конфига: полученные и с прогрессом.",
@@ -2512,6 +5802,73 @@
           }
         },
         "summary": "Мои бейджи",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/inventory": {
+      "get": {
+        "description": "Предметы игрока; просроченные временные предметы скрыты.",
+        "operationId": "my_inventory_v1_me_inventory_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyInventory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Мой инвентарь",
         "tags": [
           "progression"
         ]
@@ -2719,6 +6076,468 @@
           }
         },
         "summary": "Сведения о сервисе",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/promo/redeem": {
+      "post": {
+        "description": "Награда - предмет или Версы. Повтор того же кода тем же игроком - та же награда (`repeated = true`). Неверный, просроченный и исчерпанный код дают одинаковый 404 `progression.promo_invalid`; лимит попыток по игроку и IP - 429 `progression.promo_rate_limited` с `Retry-After`. Гостю - 403.",
+        "operationId": "redeem_v1_promo_redeem_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoRedeemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoRedeemResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Погасить промокод",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/shop/items": {
+      "get": {
+        "description": "Активные предметы с состоянием для игрока (`locked | available | owned`); фильтр по слоту. Условия открытия - по уровню и/или за Версы.",
+        "operationId": "shop_items_v1_shop_items_get",
+        "parameters": [
+          {
+            "description": "Ключ слота",
+            "in": "query",
+            "name": "slot",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "pattern": "^[a-z][a-z0-9_]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ключ слота",
+              "title": "Slot"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Витрина",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/shop/items/{item_id}/purchase": {
+      "post": {
+        "description": "Одна транзакция: проводка `CurrencyDebited` (`op_id = shop:{user}:{item}`), строка инвентаря, outbox `ItemPurchased`. Пустое тело; цена и условия - только на сервере. Повтор - та же выдача (`repeated = true`). Ошибки: 409 `progression.insufficient_funds`, 409 `progression.already_owned`, 403 `progression.item_not_available`, 404 `progression.item_not_found`.",
+        "operationId": "purchase_v1_shop_items__item_id__purchase_post",
+        "parameters": [
+          {
+            "description": "Идентификатор предмета",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор предмета",
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Купить предмет",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/shop/packs": {
+      "get": {
+        "description": "Скрыты, пока `billing.enabled=false`: 404 `progression.billing_disabled`.",
+        "operationId": "shop_packs_v1_shop_packs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Паки косметики",
         "tags": [
           "progression"
         ]

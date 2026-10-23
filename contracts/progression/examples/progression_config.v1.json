@@ -60,6 +60,13 @@
     "step": 20
   },
   "min_rounds_ratio": 0.5,
+  "promo": {
+    "attempts_per_ip": 30,
+    "attempts_per_user": 10,
+    "code_length": 12,
+    "max_batch_verses": 1000000,
+    "window_s": 3600
+  },
   "quests": {
     "daily_count": 3,
     "items": [
@@ -155,6 +162,57 @@
       }
     ],
     "weekly_count": 10
+  },
+  "shop": {
+    "custom_avatar_item_key": "custom_avatar",
+    "media": {
+      "animated_max_bytes": 1500000,
+      "animated_max_duration_ms": 6000,
+      "animated_max_frames": 120,
+      "max_side_px": 512,
+      "static_max_bytes": 300000
+    },
+    "rarities": [
+      {
+        "duplicate_verses": 5,
+        "key": "common",
+        "title": "Обычный"
+      },
+      {
+        "duplicate_verses": 15,
+        "key": "rare",
+        "title": "Редкий"
+      },
+      {
+        "duplicate_verses": 40,
+        "key": "epic",
+        "title": "Эпический"
+      }
+    ],
+    "slots": [
+      {
+        "key": "avatar",
+        "title": "Аватар"
+      },
+      {
+        "key": "frame",
+        "title": "Рамка"
+      },
+      {
+        "key": "title",
+        "title": "Титул"
+      },
+      {
+        "key": "background",
+        "title": "Фон профиля"
+      }
+    ]
+  },
+  "spend": {
+    "bucket_order": [
+      "earned",
+      "paid"
+    ]
   },
   "timezone": "Europe/Moscow",
   "verses": {

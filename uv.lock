@@ -1865,6 +1865,7 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "python-multipart" },
 ]
 
 [package.metadata]
@@ -1874,6 +1875,7 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "python-multipart", specifier = ">=0.0.12" },
 ]
 
 [[package]]

@@ -658,6 +658,7 @@ services:
       GV_DATABASE_POOL_SIZE: "5"
       GV_KAFKA_BOOTSTRAP: redpanda:9092
       GV_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guessverse}:${RABBITMQ_PASSWORD:?задайте RABBITMQ_PASSWORD}@rabbitmq:5672/
+      GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
     depends_on:
       notifications-migrate: {condition: service_completed_successfully}
       redpanda: {condition: service_healthy}

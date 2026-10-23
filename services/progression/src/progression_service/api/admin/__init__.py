@@ -33,6 +33,7 @@ from progression_service.api.admin.schemas import (
     RollbackRequest,
     SaveDraftRequest,
 )
+from progression_service.api.admin.shop import register_shop_admin_routes
 from progression_service.application.admin import AdminServices
 from progression_service.application.admin.common import AdminContext
 
@@ -245,4 +246,5 @@ def build_admin_router(services: AdminServices) -> APIRouter:
         response.headers["Cache-Control"] = NO_STORE
         return result
 
+    register_shop_admin_routes(router)
     return router

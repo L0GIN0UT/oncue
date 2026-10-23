@@ -142,6 +142,7 @@
 | `Cache-Control: no-store` в admin-ручках progression ставится до `raise`: проверить на успешных ответах | progression | 5b |
 | Нет теста тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | 5b |
 | Нестабильные тесты `GameScreen.modes` (под нагрузкой) и `party.spec` | frontend, e2e | 5b |
+| Windows-окружение (на `main` тоже): 3 integration-теста ffmpeg `test_media_adapters` (код 4294967283) и 2 errors в `unit/test_use_cases::test_upload_validation` (идентификаторы параметров), `admin test_runtime` (`/health/live`) | media_pipeline, admin | Не чинить в 5b; зелёные в CI/Linux |
 | Win-trading: детектор ([ADR 0038](adr/0038-matchmaking-queues.md)) | rating, match | 5c |
 | Ручная проверка владельцем: ledger progression, identity, match, rating | — | Открыта |
 

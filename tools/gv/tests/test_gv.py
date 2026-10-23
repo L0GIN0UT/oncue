@@ -329,7 +329,15 @@ def test_public_origins_for_cookie_mutation_services() -> None:
     services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
     # match (этап 4a): команды комнат из браузера — мутации по cookie; без списка Origin
     # CSRF-проверка отклоняла бы их все (создание комнаты не работало на стеке).
-    for name in ("identity", "game", "collections", "library", "match", "progression"):
+    for name in (
+        "identity",
+        "game",
+        "collections",
+        "library",
+        "match",
+        "progression",
+        "notifications",
+    ):
         value = services[name]["environment"]["GV_PUBLIC_ORIGINS"]
         assert value.startswith("${GV_PUBLIC_ORIGINS:?"), name
     assert "GV_PUBLIC_ORIGINS" not in services["bff-web"]["environment"]  # только GET
