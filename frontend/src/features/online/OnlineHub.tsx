@@ -13,13 +13,17 @@ import type { Domain } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { createRoom } from "@/features/match/api";
 import { matchErrorKey } from "@/features/match/errors";
-import { blockData, useOnlinePage, type OnlineModeCard } from "./bff";
+import { RatingPanel } from "@/features/rating/RatingPanel";
+import { WeeklyTopTable } from "@/features/rating/WeeklyTopTable";
+import { blockData, hasBlock, useOnlinePage, type OnlineModeCard } from "./bff";
 import { JoinByCode } from "./JoinByCode";
 import { MyMatchList, OpenRoomList } from "./lists";
 import { OnlineAuthRequired } from "./OnlineGate";
+import { QueuePanel } from "./QueuePanel";
 
 const HUB_ROOMS = 5;
 const HUB_MATCHES = 5;
+const HUB_WEEKLY = 3;
 const DOMAINS: Domain[] = ["music", "film"];
 
 export function OnlineHub() {
@@ -47,6 +51,8 @@ export function OnlineHub() {
   const modes = blockData(blocks?.modes);
   const rooms = blockData(blocks?.open_rooms);
   const matches = blockData(blocks?.my_matches);
+  // Блоки 4b: пока bff их не отдаёт (null), секции не рисуем; unavailable — «не загрузилось».
+  const weekly = blockData(blocks?.weekly);
 
   return (
     <div className="flex flex-col gap-12 pt-6 sm:pt-10">
@@ -56,6 +62,25 @@ export function OnlineHub() {
         </h1>
         <p className="max-w-[60ch] text-ink-muted">{t("online.lead")}</p>
       </header>
+
+      {hasBlock(blocks?.queues) && <QueuePanel queues={blockData(blocks?.queues)} />}
+
+      {hasBlock(blocks?.ratings) && (
+        <section aria-labelledby="online-ratings" className="flex flex-col gap-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="online-ratings" className="font-display text-xl font-semibold">
+              {t("rating.mine.title")}
+            </h2>
+            <Link
+              href="/leaderboards"
+              className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+            >
+              {t("rating.board.fullTable")}
+            </Link>
+          </div>
+          <RatingPanel ratings={blockData(blocks?.ratings)} seasons={blockData(blocks?.seasons)} />
+        </section>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,26rem)]">
         <section aria-labelledby="online-create" className="flex flex-col gap-4">
@@ -89,6 +114,23 @@ export function OnlineHub() {
           <OpenRoomList rooms={rooms.items.slice(0, HUB_ROOMS)} />
         )}
       </section>
+
+      {hasBlock(blocks?.weekly) && (
+        <section aria-labelledby="online-weekly" className="flex flex-col gap-4">
+          <h2 id="online-weekly" className="sr-only">
+            {t("rating.board.weekly")}
+          </h2>
+          {weekly === null ? (
+            <p className="text-ink-muted">{t("rating.board.weeklyUnavailable")}</p>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2">
+              {weekly.map((top) => (
+                <WeeklyTopTable key={top.ladder} top={top} limit={HUB_WEEKLY} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="online-matches" className="flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-4">

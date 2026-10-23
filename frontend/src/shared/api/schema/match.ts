@@ -150,7 +150,7 @@ export interface paths {
         put?: never;
         /**
          * Встать в очередь
-         * @description Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока (повтор с тем же ключом или тем же ladder/format — то же состояние). Рейтинг для подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 `match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 `match.queue_format_unavailable`, 409 `match.active_room_conflict` (`details.code`), 429 `match.rate_limited`, 503 `match.game_unavailable`. Заглушка 0a этапа 4b: реализация — поток Q.
+         * @description Рейтинговая дуэль 1×1 по ladder-у и формату; в очереди ровно одна запись на игрока (повтор с тем же ключом или тем же ladder/format — то же состояние). Рейтинг для подбора — из проекции `rating.RatingChanged` (синхронного вызова rating нет). Допускается любой аккаунт; штрафов по времени нет. Ошибки: 403 `match.ranked_forbidden` (санкция `RANKED`), 404 `match.ladder_not_found`, 422 `match.queue_format_unavailable`, 409 `match.active_room_conflict` (`details.code` — комната, `details.queue` — другая очередь), 409 `idempotency.key_reused`, 429 `match.rate_limited`, 503 `match.game_unavailable`.
          */
         post: operations["queue_enter_v1_queue_enter_post"];
         delete?: never;
@@ -170,7 +170,7 @@ export interface paths {
         put?: never;
         /**
          * Выйти из очереди
-         * @description Идемпотентно: вне очереди — тоже 204. Уход из очереди до матча — без штрафа. Заглушка 0a этапа 4b: реализация — поток Q.
+         * @description Идемпотентно: вне очереди — тоже 204. Уход из очереди до матча — без штрафа; если подбор уже состоялся, а отсчёт идёт, — выход из комнаты без штрафа (срыв отсчёта, соперник возвращается в очередь); когда матч идёт — ничего не делает (сдача и выход — команды комнаты). Пока пара резервируется и создаётся комната — 409 `match.queue_matching` (повторить через секунду).
          */
         post: operations["queue_leave_v1_queue_leave_post"];
         delete?: never;
@@ -188,7 +188,7 @@ export interface paths {
         };
         /**
          * Размер очередей
-         * @description Сколько игроков ищут матч по каждому ladder-у и формату (для хаба онлайна). Заглушка 0a этапа 4b: реализация — поток Q.
+         * @description Сколько игроков ищут матч по каждому ладдеру и формату (для хаба онлайна).
          */
         get: operations["queue_pool_v1_queue_pool_get"];
         put?: never;
@@ -210,7 +210,7 @@ export interface paths {
         put?: never;
         /**
          * Состояние очереди (heartbeat)
-         * @description Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при `matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 `match.not_in_queue`. Заглушка 0a этапа 4b: реализация — поток Q.
+         * @description Раз в `GV_MATCH__TICK_S`: продлевает запись в очереди и отдаёт состояние; при `matched` — код комнаты. Нет записи (истёк heartbeat или игрок вышел) — 404 `match.not_in_queue`; 429 `match.rate_limited`.
          */
         post: operations["queue_tick_v1_queue_tick_post"];
         delete?: never;
@@ -470,7 +470,7 @@ export interface paths {
         put?: never;
         /**
          * Токен подписки на канал комнаты
-         * @description Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.
+         * @description Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.
          */
         post: operations["realtime_token_v1_rooms__code__realtime_token_post"];
         delete?: never;
@@ -568,7 +568,7 @@ export interface paths {
         };
         /**
          * Снимок комнаты
-         * @description Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — только в `me`; до `reveal` нет единицы раунда и ключей ответа. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`.
+         * @description Ресинк после пропуска версии в канале. Снимок фильтруется по зрителю: личное — только в `me`; до `reveal` нет единицы раунда и ключей ответа. Наблюдатель (`match.spectate`) видит идущий матч без `me`. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`.
          */
         get: operations["room_state_v1_rooms__code__state_get"];
         put?: never;
@@ -648,7 +648,7 @@ export interface paths {
         };
         /**
          * Комнаты для наблюдения
-         * @description Идущие матчи без задержки; только с правом `match.spectate` (модератор, админ) — иначе 403 `auth.forbidden` (D19). Подписка на канал — `POST /rooms/{code}/realtime-token` (роль наблюдателя), вид без личных данных игроков. Заглушка 0a этапа 4b: реализация — поток Q.
+         * @description Идущие матчи без задержки; только с правом `match.spectate` (модератор, админ) — иначе 403 `auth.forbidden` (D19). Только чтение: подписка на канал — `POST /rooms/{code}/realtime-token`, снимок — `GET /rooms/{code}/state` (оба — с тем же правом), вид без личных данных игроков (`me` пуст, ответов до ревила нет). Лобби и завершённые матчи не показываются. Ошибки: 422 `match.cursor_invalid`, 429 `match.rate_limited` (`GV_MATCH__SPECTATE_PER_USER_PER_MIN`).
          */
         get: operations["spectate_rooms_v1_rooms_spectate_get"];
         put?: never;
@@ -1343,6 +1343,11 @@ export interface components {
              * @enum {string}
              */
             state: "searching" | "matched";
+            /**
+             * Tick S
+             * @description Период heartbeat `POST /queue/tick`, с (`GV_MATCH__TICK_S`)
+             */
+            tick_s?: number | null;
             /**
              * Wait S
              * @description Сколько секунд игрок ждёт
@@ -2401,16 +2406,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Зависимость временно недоступна */
             503: {
                 headers: {
@@ -2462,6 +2457,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2473,16 +2478,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2523,16 +2518,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2593,16 +2578,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4910,8 +4885,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Слишком много запросов */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

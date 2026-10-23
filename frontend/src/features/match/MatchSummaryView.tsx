@@ -17,6 +17,7 @@ import { cn } from "@/shared/lib/cn";
 import { SaveButton } from "@/features/library/SaveButton";
 import { blockData, useMatchPage, type MatchSummary } from "@/features/online/bff";
 import { useModeTitle } from "@/features/online/lists";
+import { RatingChangeBlock } from "@/features/rating/RatingChangeBlock";
 import { rateOpponent } from "./api";
 import { matchErrorKey } from "./errors";
 
@@ -63,6 +64,13 @@ export function MatchSummaryView({ matchId, myId, fallback, actions }: Props) {
       <Headline summary={summary} placements={placements} myId={myId} />
       <Standings placements={placements} myId={myId} />
       {actions}
+      {/* Дельта рейтинга — отдельный блок со своим опросом: итог не ждёт rating. */}
+      {summary?.mode.ranked &&
+        summary.finish !== "aborted" &&
+        myId &&
+        placements.some((p) => p.user_id === myId) && (
+          <RatingChangeBlock matchId={matchId} myId={myId} />
+        )}
       {summary && <Rounds summary={summary} items={items} domain={domain} />}
       {summary && myId && placements.some((p) => p.user_id === myId) && (
         <RateOpponents matchId={matchId} myId={myId} players={placements} />

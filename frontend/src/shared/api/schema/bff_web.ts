@@ -85,7 +85,7 @@ export interface paths {
         };
         /**
          * Лидерборды
-         * @description Публичная страница без токена: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`) и топ недели (rating). Блоки деградируют независимо. Кэш — 10 с (`public, max-age=10`). Заглушка 0a этапа 4b: реализация — поток C2.
+         * @description Публичная страница: ladder-ы с сезоном и званиями, лидерборд (`ladder`, `cursor`; без `ladder` — первый из списка) и топ недели (rating). Блоки деградируют независимо. Без `around` ответ общий: `public, max-age=10`. `around=me` — окно вокруг пользователя и строки `me`: нужен вход (иначе 401), ответ `private, no-store`; в калибровке — обычная первая страница. Нет ladder-а — 404 `rating.ladder_not_found`, чужой курсор — 422.
          */
         get: operations["leaderboards_page_v1_pages_leaderboards_get"];
         put?: never;
@@ -165,7 +165,7 @@ export interface paths {
         };
         /**
          * Хаб онлайна
-         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
+         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
          */
         get: operations["online_page_v1_pages_online_get"];
         put?: never;
@@ -917,7 +917,7 @@ export interface components {
         };
         /**
          * LeaderboardsPage
-         * @description ``GET /v1/pages/leaderboards``: публичная страница, без токена; кэш 10 с.
+         * @description ``GET /v1/pages/leaderboards``: публичная страница, кэш 10 с (с ``around=me`` — личная).
          */
         LeaderboardsPage: {
             blocks: components["schemas"]["LeaderboardsBlocks"];
@@ -1203,13 +1203,13 @@ export interface components {
             my_matches: components["schemas"]["Block_MyMatchesList_"];
             open_rooms: components["schemas"]["Block_OpenRoomsList_"];
             /** @description 4b: сколько игроков ищет матч (`match /v1/queue/pool`) */
-            queues?: components["schemas"]["Block_list_QueuePoolCard__"] | null;
-            /** @description 4b: мои звания и калибровка (`rating /v1/me/ratings`) */
-            ratings?: components["schemas"]["Block_list_RatingCard__"] | null;
-            /** @description 4b: действующие сезоны («Сезон N · осталось X д.») */
-            seasons?: components["schemas"]["Block_list_SeasonCard__"] | null;
-            /** @description 4b: топ недели по ladder-ам (`rating /v1/ladders/{key}/weekly`) */
-            weekly?: components["schemas"]["Block_list_WeeklyTopCard__"] | null;
+            queues: components["schemas"]["Block_list_QueuePoolCard__"];
+            /** @description 4b: мои звания и калибровка (`rating /v1/me/ratings`); в калибровке `rating`/`tier` — null, «осталось N матчей» — `calibration_left` */
+            ratings: components["schemas"]["Block_list_RatingCard__"];
+            /** @description 4b: действующие сезоны (ladder без сезона пропускается) */
+            seasons: components["schemas"]["Block_list_SeasonCard__"];
+            /** @description 4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`) */
+            weekly: components["schemas"]["Block_list_WeeklyTopCard__"];
         };
         /**
          * OnlineChatCard
@@ -1975,6 +1975,7 @@ export interface operations {
     leaderboards_page_v1_pages_leaderboards_get: {
         parameters: {
             query?: {
+                around?: "me" | null;
                 cursor?: string | null;
                 ladder?: string | null;
             };
@@ -1993,6 +1994,16 @@ export interface operations {
                     "application/json": components["schemas"]["LeaderboardsPage"];
                 };
             };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Не найдено */
             404: {
                 headers: {
@@ -2005,16 +2016,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,0 +1,152 @@
+/**
+ * Рейтинг и подбор этапа 4b на моках: звания и сезон в хабе и профиле, очередь рейтинговой дуэли
+ * (ожидание, «ищем дольше обычного», отмена, соперник найден → комната), дельта рейтинга в итоге
+ * и страница лидербордов (пагинация по курсору, «моё место», топ недели).
+ */
+import { expect, login, test } from "./fixtures";
+import { QUEUE_TICK_S } from "./mocks/match";
+
+/** Первому игроку о матче сообщает ближайший heartbeat: ждём несколько периодов мока. */
+const TICK_WAIT = { timeout: (QUEUE_TICK_S * 3 + 4) * 1000 };
+
+test("хаб: звание со ступенью, калибровка вместо звания, сезон и топ недели; то же в профиле", async ({
+  page,
+  expectAccessible,
+}) => {
+  await login(page);
+  await page.goto("/online");
+  const music = page.getByTestId("rating-music");
+  await expect(music.getByTestId("tier")).toHaveText("Бронза 2");
+  await expect(music).toContainText("1120 очк.");
+  await expect(music.getByTestId("next-tier")).toContainText("До следующего звания: 80 очков");
+  await expect(music.getByTestId("season-music")).toHaveText("Сезон 3 · осталось 12 дней");
+  // В калибровке звание скрыто.
+  const film = page.getByTestId("rating-film");
+  await expect(film.getByTestId("calibration")).toHaveText("Калибровка: осталось 7 матчей");
+  await expect(film.getByTestId("tier")).toHaveCount(0);
+  await expect(page.getByTestId("weekly-film")).toContainText("игрок1");
+  await expectAccessible(page);
+
+  await page.goto("/me");
+  await expect(page.getByTestId("rating-music").getByTestId("tier")).toHaveText("Бронза 2");
+});
+
+test("очередь: ожидание, подсказка, отмена; второй игрок находит матч, оба в комнате; дельта рейтинга в итоге", async ({
+  page,
+  player,
+  scenario,
+  expectAccessible,
+}) => {
+  await login(page);
+  await page.goto("/online");
+  await expect(page.getByTestId("queue-enter-music-classic")).toHaveText(/Музыка · Классика/);
+  await expect(page.getByTestId("queue-enter-film-lite")).toHaveText(/Кино · Лайт/);
+
+  // Ожидание с подсказкой и отменой.
+  await scenario({ match: { queueSlow: true } });
+  await page.getByTestId("queue-enter-music-classic").click();
+  await expect(page.getByTestId("queue-searching")).toContainText(
+    "Ищем соперника: Музыка · Классика",
+  );
+  await expect(page.getByTestId("queue-slow")).toContainText("дольше обычного");
+  await expectAccessible(page);
+  await page.getByTestId("queue-cancel").click();
+  await expect(page.getByTestId("queue-searching")).toHaveCount(0);
+  await expect(page.getByTestId("queue-enter-music-classic")).toBeEnabled();
+
+  // Снова в очередь; соперник встаёт в ту же — его перебрасывает в комнату сразу.
+  await page.getByTestId("queue-enter-music-classic").click();
+  await expect(page.getByTestId("queue-searching")).toBeVisible();
+  const rival = await player("rival");
+  await rival.goto("/online");
+  await rival.getByTestId("queue-enter-music-classic").click();
+  await expect(rival.getByTestId("queue-found")).toBeVisible();
+  await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+  const code = (await rival.getByTestId("room-code").textContent())!.trim();
+
+  // Первому о матче сообщает ближайший heartbeat; вкладка видима — переход в комнату.
+  await expect(page.getByTestId("queue-found")).toBeVisible(TICK_WAIT);
+  await expect(page).toHaveURL(`/room/${code}`);
+  await expect(page.getByTestId("room-code")).toHaveText(code);
+  await expect(page.getByTestId("player-rival")).toBeVisible();
+
+  // Матч: соперник сдаётся → у победителя дельта рейтинга, у сдавшегося — калибровка и штраф.
+  await page.getByTestId("ready-toggle").click();
+  await rival.getByTestId("ready-toggle").click();
+  await page.getByTestId("start-match").click();
+  await expect(rival.getByTestId("clue-audio")).toBeAttached();
+  await rival.getByTestId("forfeit").click();
+  await rival.getByTestId("forfeit-confirm").click();
+  await expect(page.getByTestId("summary-headline")).toHaveText("Соперник сдался");
+
+  const change = page.getByTestId("rating-change");
+  await expect(change.getByTestId("rating-delta")).toHaveText("+16", { timeout: 10_000 });
+  await expect(change).toContainText("1195 → 1211");
+  await expect(change.getByTestId("rating-tier")).toHaveText("Новое звание: Серебро 1");
+  await expect(page.getByTestId("standings")).toBeVisible();
+
+  const loserChange = rival.getByTestId("rating-change");
+  await expect(loserChange.getByTestId("calibration")).toHaveText("Калибровка: осталось 9 матчей", {
+    timeout: 10_000,
+  });
+  await expect(loserChange.getByTestId("rating-penalty")).toContainText("−10");
+  await expectAccessible(page);
+});
+
+test("rating недоступен: итог рейтингового матча цел, блок — «появится позже»", async ({
+  page,
+  player,
+  scenario,
+}) => {
+  await scenario({ match: { ratingDown: true } });
+  await login(page);
+  await page.goto("/online");
+  await page.getByTestId("queue-enter-film-classic").click();
+  const rival = await player("rival");
+  await rival.goto("/online");
+  await rival.getByTestId("queue-enter-film-classic").click();
+  await expect(page.getByTestId("queue-found")).toBeVisible(TICK_WAIT);
+  await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+  await page.getByTestId("ready-toggle").click();
+  await rival.getByTestId("ready-toggle").click();
+  await page.getByTestId("start-match").click();
+  await expect(rival.getByTestId("forfeit")).toBeVisible();
+  await rival.getByTestId("forfeit").click();
+  await rival.getByTestId("forfeit-confirm").click();
+  await expect(page.getByTestId("summary-headline")).toHaveText("Соперник сдался");
+  await expect(page.getByTestId("rating-change-later")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("standings")).toBeVisible();
+});
+
+test("лидерборды: ladder-ы, пагинация по курсору, топ недели; «Моё место» только вошедшему", async ({
+  page,
+  expectAccessible,
+}) => {
+  // Страница публична: гость видит таблицу, но не «Моё место».
+  await page.goto("/leaderboards");
+  const rows = page.locator("[data-testid^=board-row-]");
+  await expect(rows).toHaveCount(10);
+  await expect(page.getByTestId("board-row-1")).toContainText("Платина 3");
+  await expect(page.getByTestId("around-me")).toHaveCount(0);
+  await expect(page.getByTestId("weekly-film")).toContainText("игрок1");
+  await expectAccessible(page);
+
+  await page.getByTestId("board-more").click();
+  await expect(rows).toHaveCount(20);
+  await page.getByTestId("board-more").click();
+  await expect(rows).toHaveCount(25);
+  await expect(page.getByTestId("board-more")).toHaveCount(0);
+
+  await page.getByTestId("ladder-music").click();
+  await expect(page.getByTestId("ladder-music")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("weekly-music")).toBeVisible();
+  await expect(rows).toHaveCount(10);
+
+  await login(page);
+  await page.goto("/leaderboards");
+  await page.getByTestId("around-me").click();
+  await expect(page.getByTestId("board-row-18")).toHaveAttribute("aria-current", "true");
+  await expect(page.getByTestId("board-row-18")).toContainText("(вы)");
+  await page.getByTestId("around-me").click();
+  await expect(page.getByTestId("board-row-1")).toBeVisible();
+});

@@ -29,6 +29,13 @@ export function SiteHeader() {
           {t("nav.online")}
         </Link>
         <Link
+          href="/leaderboards"
+          className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+          data-testid="nav-leaderboards"
+        >
+          {t("nav.leaderboards")}
+        </Link>
+        <Link
           href="/collections"
           className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
           data-testid="nav-collections"

@@ -131,3 +131,18 @@ export type MatchResultPlayer = M["ResultPlayer"];
 export type MatchResultRound = M["ResultRound"];
 export type RateKind = M["RateRequest"]["kind"];
 export type RealtimeToken = Identity["schemas"]["RealtimeTokenResponse"];
+
+// Этап 4b: очередь рейтинговой дуэли (match) и рейтинг (bff, rating).
+export type QueueTicket = M["QueueTicket"];
+export type QueueFormat = QueueTicket["format"];
+export type OnlineQueue = B["QueuePoolCard"];
+export type TierCard = B["TierCard"];
+export type RatingCard = B["RatingCard"];
+export type SeasonCard = B["SeasonCard"];
+export type WeeklyTop = B["WeeklyTopCard"];
+export type WeeklyEntry = B["WeeklyEntryCard"];
+export type LeaderboardsPage = B["LeaderboardsPage"];
+export type LeaderboardCard = B["LeaderboardCard"];
+export type LeaderboardEntry = B["LeaderboardEntryCard"];
+export type LadderCard = B["LadderCard"];
+export type { MatchChange, MatchChanges } from "./rating-types";

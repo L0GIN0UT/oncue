@@ -18,8 +18,9 @@ export type MatchPage = B["MatchPage"];
 export type MatchSummary = B["MatchSummary"];
 export type ItemShelvesCard = B["ItemShelvesCard"];
 export type OnlineModeCard = B["OnlineModeCard"];
+export type { OnlineQueue } from "@/shared/api/types";
 
-type Block<T> = { status: "ok" | "unavailable"; data?: T | null };
+export { blockData, hasBlock } from "@/shared/api/blocks";
 
 async function getOnline(): Promise<OnlinePage> {
   return unwrap(await api().web.GET("/v1/pages/online"));
@@ -58,9 +59,4 @@ export function useMatchPage(matchId: string | null) {
     retry: (count, error) => count < 4 && (error as { status?: number }).status === 404,
     retryDelay: 700,
   });
-}
-
-/** Данные блока или `null` (блок погас — экран показывает заглушку). */
-export function blockData<T>(block: Block<T> | null | undefined): T | null {
-  return block?.status === "ok" ? (block.data ?? null) : null;
 }
