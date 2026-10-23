@@ -414,13 +414,13 @@ export interface paths {
         };
         /**
          * Моя аватарка
-         * @description Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки.
+         * @description Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки (лимиты - из настроек progression, дублируют конфиг media-pipeline).
          */
         get: operations["my_avatar_v1_me_avatar_get"];
         put?: never;
         /**
          * Загрузить свою аватарку
-         * @description multipart, поле `file`. Нужен купленный товар (403 `progression.avatar_not_entitled`). Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`.
+         * @description multipart, поле `file`. Нужен купленный товар (403 `progression.avatar_not_entitled`). Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. Повтор с тем же `Idempotency-Key` возвращает ту же заявку. Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`; media-pipeline недоступен - 503 `progression.avatar_unavailable`.
          */
         post: operations["submit_avatar_v1_me_avatar_post"];
         delete?: never;
@@ -3565,16 +3565,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     submit_avatar_v1_me_avatar_post: {
@@ -3622,6 +3612,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Problem Details */
             413: {
                 headers: {
@@ -3642,8 +3642,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

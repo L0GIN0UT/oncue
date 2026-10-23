@@ -5355,7 +5355,7 @@
     },
     "/v1/me/avatar": {
       "get": {
-        "description": "Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки.",
+        "description": "Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки (лимиты - из настроек progression, дублируют конфиг media-pipeline).",
         "operationId": "my_avatar_v1_me_avatar_get",
         "responses": {
           "200": {
@@ -5397,21 +5397,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Моя аватарка",
@@ -5420,7 +5405,7 @@
         ]
       },
       "post": {
-        "description": "multipart, поле `file`. Нужен купленный товар (403 `progression.avatar_not_entitled`). Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`.",
+        "description": "multipart, поле `file`. Нужен купленный товар (403 `progression.avatar_not_entitled`). Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. Повтор с тем же `Idempotency-Key` возвращает ту же заявку. Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`; media-pipeline недоступен - 503 `progression.avatar_unavailable`.",
         "operationId": "submit_avatar_v1_me_avatar_post",
         "parameters": [
           {
@@ -5493,6 +5478,21 @@
             },
             "description": "Недостаточно прав"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
           "413": {
             "content": {
               "application/json": {
@@ -5523,7 +5523,7 @@
             },
             "description": "Некорректные данные"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -5536,7 +5536,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Загрузить свою аватарку",

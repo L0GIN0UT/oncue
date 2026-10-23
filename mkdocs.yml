@@ -51,6 +51,7 @@ nav:
   - Платежи: 06-payments.md
   - Инфраструктура: 07-infrastructure.md
   - Roadmap: 09-roadmap.md
+  - Бэклог: backlog.md
   - Планы:
       - Этап 1: plans/stage-1.md
       - Этап 2: plans/stage-2.md

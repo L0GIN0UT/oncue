@@ -21,6 +21,7 @@
 | [07-infrastructure.md](07-infrastructure.md) | VPS → Kubernetes, окружения, CI/CD, observability | DevOps |
 | [08-development-workflow.md](08-development-workflow.md) | Монорепо, локальная разработка, git, релизы | Всем разработчикам |
 | [09-roadmap.md](09-roadmap.md) | Этапы разработки | Всем |
+| [backlog.md](backlog.md) | Небольшие доработки вне этапа | Всем |
 | plans/: [этап 1](plans/stage-1.md), [этап 2](plans/stage-2.md) | Детальные планы этапов (потоки, контракты, критерии готовности) | Всем разработчикам |
 | [10-ai-assistant.md](10-ai-assistant.md) | Скиллы и агенты: что и когда использовать, обязательные проверки безопасности, правила комментариев | Claude, все разработчики |
 | [handoff/](handoff/) | Передача задачи между сессиями Claude Code: состояние, решения владельца, открытые вопросы, план | Claude |

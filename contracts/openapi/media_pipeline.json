@@ -1757,7 +1757,7 @@
     },
     "/admin/v1/ugc-images": {
       "get": {
-        "description": "Фильтры по статусу (по умолчанию `pending`) и назначению.",
+        "description": "Фильтры по статусу (по умолчанию `pending`) и назначению; старые заявки первыми. Некорректный курсор - 422 `ugc.cursor_invalid`.",
         "operationId": "queue_admin_v1_ugc_images_get",
         "parameters": [
           {
@@ -1878,21 +1878,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Очередь UGC-изображений",
@@ -1944,21 +1929,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Назначения и причины отклонения",
@@ -1969,7 +1939,7 @@
     },
     "/admin/v1/ugc-images/{asset_id}/approve": {
       "post": {
-        "description": "Только из `pending` (иначе 409 `ugc.not_pending`). В одной транзакции: статус, аудит и outbox `AssetModerated`.",
+        "description": "Только из `pending` (иначе 409 `ugc.not_pending`). В одной транзакции: статус, аудит и outbox `AssetModerated`; объект копируется в публичный `u/<hex>.webp`, `p/` удаляется после коммита.",
         "operationId": "approve_admin_v1_ugc_images__asset_id__approve_post",
         "parameters": [
           {
@@ -2098,21 +2068,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Одобрить",
@@ -2123,7 +2078,7 @@
     },
     "/admin/v1/ugc-images/{asset_id}/preview": {
       "get": {
-        "description": "Короткая подписанная ссылка; выдача пишется в аудит.",
+        "description": "Короткая подписанная ссылка на `pending`-объект (`/media/p/...`, секрет тот же, что у ассетов), у одобренного - публичный адрес; выдача пишется в аудит. У отклонённого объекта нет (404 `ugc.not_found`). Просроченная ссылка не работает.",
         "operationId": "preview_admin_v1_ugc_images__asset_id__preview_get",
         "parameters": [
           {
@@ -2204,21 +2159,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Ссылка для просмотра",
@@ -2229,7 +2169,7 @@
     },
     "/admin/v1/ugc-images/{asset_id}/reject": {
       "post": {
-        "description": "Только из `pending` (409 `ugc.not_pending`). `reason_code` - из списка конфига (422 `ugc.reason_unknown`); объект отклонённого ассета удаляется после коммита.",
+        "description": "Из `pending` (отклонение) и из `approved` (снятие UGC-изображения: версия растёт, публичный объект удаляется, `AssetModerated(rejected)`). Из `rejected` - 409 `ugc.not_pending`. `reason_code` - из списка конфига (422 `ugc.reason_unknown`); объект удаляется после коммита.",
         "operationId": "reject_admin_v1_ugc_images__asset_id__reject_post",
         "parameters": [
           {
@@ -2358,24 +2298,9 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
-        "summary": "Отклонить",
+        "summary": "Отклонить или снять",
         "tags": [
           "admin"
         ]
@@ -2634,7 +2559,7 @@
     },
     "/internal/v1/ugc-images": {
       "post": {
-        "description": "multipart: `file`, `owner_user_id`, `purpose`. Проверка по сигнатуре (не `Content-Type`), размеру и сторонам, пересжатие и удаление EXIF, объект в S3 под случайным ключом; ассет создаётся `pending`. Повтор с тем же `Idempotency-Key` возвращает тот же ассет. Новая заявка владельца на то же назначение отменяет прежнюю `pending`. Ошибки: 422 `ugc.invalid_image`, 413 `ugc.too_large`, 422 `ugc.purpose_unknown`.",
+        "description": "multipart: `file`, `owner_user_id`, `purpose`. Клиент определяется по сервисному токену и должен быть в `allowed_clients` назначения (иначе 403). Проверка по сигнатуре (не `Content-Type`), размеру и сторонам, только статичные JPEG/PNG/WebP; пересжатие в квадратный WebP и удаление EXIF, объект в S3 под случайным ключом; ассет создаётся `pending`. Повтор с тем же `Idempotency-Key` для владельца возвращает тот же ассет без повторной обработки. Новая заявка владельца на то же назначение тихо отменяет прежнюю `pending` (событие не публикуется). Ошибки: 422 `ugc.invalid_image`, 413 `ugc.too_large`, 422 `ugc.purpose_unknown`, 403 `ugc.client_forbidden`.",
         "operationId": "submit_internal_v1_ugc_images_post",
         "parameters": [
           {
@@ -2707,6 +2632,21 @@
             },
             "description": "Недостаточно прав"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
           "413": {
             "content": {
               "application/json": {
@@ -2737,7 +2677,7 @@
             },
             "description": "Некорректные данные"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2750,7 +2690,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Принять UGC-изображение",
