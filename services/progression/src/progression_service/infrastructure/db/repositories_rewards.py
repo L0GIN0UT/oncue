@@ -250,6 +250,17 @@ class SqlSpins:
             spun_at=r.spun_at,
         )
 
+    async def days(self, user_id: UUID, since: date, until: date) -> set[date]:
+        """Сутки со спином игрока в ``[since, until]``."""
+        rows = await self._s.execute(
+            select(wheel_spins.c.day).where(
+                wheel_spins.c.user_id == user_id,
+                wheel_spins.c.day >= since,
+                wheel_spins.c.day <= until,
+            )
+        )
+        return {r.day for r in rows}
+
     async def add(self, record: SpinRecord) -> bool:
         """``INSERT … ON CONFLICT DO NOTHING``; ``False`` - за сутки уже есть запись."""
         prize = record.prize

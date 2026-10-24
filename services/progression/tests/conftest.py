@@ -11,9 +11,9 @@ import copy
 import json
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from uuid import UUID
 
 import httpx
@@ -62,6 +62,65 @@ EXAMPLE_CONFIG = (
 # Пятница 12:00 UTC = 15:00 в Europe/Moscow (зона примера конфига).
 START = datetime(2026, 10, 23, 12, 0, tzinfo=UTC)
 ADMIN = UUID(int=1)
+EVENTS_MANAGE = "progression.events.manage"
+EVENTS_PUBLISH = "progression.events.publish"
+
+
+class EventKit:
+    """Построители определений сезонных событий (5d): ``progression.ev.*``."""
+
+    MANAGE = EVENTS_MANAGE
+    PUBLISH = EVENTS_PUBLISH
+
+    @staticmethod
+    def find(
+        key: str,
+        number: int,
+        trigger: dict[str, Any] | None = None,
+        *,
+        final: bool = False,
+        xp: int = 10,
+        verses: int = 5,
+    ) -> dict[str, Any]:
+        """Находка определения (по умолчанию - спрятанный элемент на главной)."""
+        return {
+            "key": key,
+            "number": number,
+            "title": f"Находка {key}",
+            "diary_before": f"до {key}",
+            "diary_after": f"после {key}",
+            "x_pct": 10.5,
+            "y_pct": 20,
+            "reward": {"xp": xp, "verses": verses},
+            "final": final,
+            "trigger": trigger or {"type": "ui_spot", "page_key": "home"},
+        }
+
+    @staticmethod
+    def trigger(
+        metric: str, target: int = 1, period: str = "event", **params: Any
+    ) -> dict[str, Any]:
+        """Серверный триггер находки."""
+        trigger: dict[str, Any] = {
+            "type": "server",
+            "metric": metric,
+            "target": target,
+            "period": period,
+        }
+        if params:
+            trigger["params"] = params
+        return trigger
+
+    @staticmethod
+    def body(*finds: dict[str, Any], item_key: str | None = None) -> dict[str, Any]:
+        """Тело определения события."""
+        return {
+            "title": "Осень",
+            "description": "Листопад",
+            "theme_key": "autumn",
+            "finds": list(finds),
+            "reward": {"item_key": item_key},
+        }
 
 
 def config_body(**patch: Any) -> dict[str, Any]:
@@ -123,6 +182,7 @@ class ProgressionService:
     issuer: TestTokenIssuer
     clock: FakeClock
     versions: list[int] = field(default_factory=list)
+    ev: ClassVar[type[EventKit]] = EventKit
 
     # ------------------------------------------------------------------ конфиг
     async def publish_config(
@@ -410,8 +470,14 @@ class ProgressionService:
         level_required: int | None = None,
         active: bool = True,
         media_kind: str = "static",
+        event_key: str | None = None,
     ) -> UUID:
-        """Предмет в таблице ``items`` (картинка-заглушка у активного)."""
+        """Предмет в таблице ``items`` (картинка-заглушка у активного).
+
+        ``event_key`` - предмет награды события: без цены и уровня.
+        """
+        if event_key is not None:
+            price, level_required = None, None
         assert self.infra.sessions is not None
         item_id = uuid7()
         async with self.infra.sessions() as session, session.begin():
@@ -428,6 +494,7 @@ class ProgressionService:
                     level_required=level_required,
                     price=price,
                     active=active,
+                    event_key=event_key,
                     created_at=self.clock.now(),
                     updated_at=self.clock.now(),
                 )
@@ -459,6 +526,55 @@ class ProgressionService:
         """``POST /v1/shop/items/{id}/purchase``."""
         headers = {**self.user(user_id), "Idempotency-Key": key or f"idem-{uuid7().hex}"}
         return await self.client.post(f"/v1/shop/items/{item_id}/purchase", headers=headers)
+
+    # ------------------------------------------------------------------ сезонные события (5d)
+    def admin(self, *perms: str) -> dict[str, str]:
+        """Заголовки админа с правами и новым ``Idempotency-Key``."""
+        token = self.issuer.issue(user_id=ADMIN, perms=["admin.access", *perms])
+        return {"Authorization": f"Bearer {token}", "Idempotency-Key": f"idem-{uuid7().hex}"}
+
+    async def create_event(self, key: str, body: dict[str, Any]) -> httpx.Response:
+        """``POST /admin/v1/events``."""
+        return await self.client.post(
+            "/admin/v1/events",
+            headers=self.admin(EVENTS_MANAGE),
+            json={"key": key, "body": body, "reason": "тест события"},
+        )
+
+    async def publish_event(
+        self,
+        key: str,
+        body: dict[str, Any],
+        *,
+        starts_at: datetime | None = None,
+        ends_at: datetime | None = None,
+        create: bool = True,
+    ) -> UUID:
+        """Создать событие (при ``create``), запуск и опубликовать его; вернуть ``run_id``."""
+        if create:
+            created = await self.create_event(key, body)
+            assert created.status_code == 201, created.text
+        starts = starts_at or self.clock.now() - timedelta(days=1)
+        ends = ends_at or self.clock.now() + timedelta(days=7)
+        run = await self.client.post(
+            f"/admin/v1/events/{key}/runs",
+            headers=self.admin(EVENTS_MANAGE),
+            json={"starts_at": starts.isoformat(), "ends_at": ends.isoformat(), "reason": "тест"},
+        )
+        assert run.status_code == 201, run.text
+        event = await self.client.get(f"/admin/v1/events/{key}", headers=self.admin(EVENTS_MANAGE))
+        published = await self.client.post(
+            f"/admin/v1/events/{key}/runs/{run.json()['id']}/publish",
+            headers=self.admin(EVENTS_PUBLISH),
+            json={"body_sha256": event.json()["body_sha256"], "reason": "тест публикации"},
+        )
+        assert published.status_code == 200, published.text
+        return UUID(run.json()["id"])
+
+    async def claim(self, user: UUID, key: str, find: str) -> httpx.Response:
+        """``POST /v1/events/{key}/finds/{find}/claim``."""
+        headers = {**self.user(user), "Idempotency-Key": f"idem-{uuid7().hex}"}
+        return await self.client.post(f"/v1/events/{key}/finds/{find}/claim", headers=headers)
 
     def season_standings(
         self,

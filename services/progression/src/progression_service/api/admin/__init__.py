@@ -248,5 +248,5 @@ def build_admin_router(services: AdminServices) -> APIRouter:
         return result
 
     register_shop_admin_routes(router, services)
-    register_event_admin_routes(router)
+    register_event_admin_routes(router, services)
     return router

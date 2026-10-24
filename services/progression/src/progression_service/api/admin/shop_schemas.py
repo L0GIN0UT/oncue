@@ -37,6 +37,15 @@ class ItemFields(_Request):
     active: bool = Field(
         default=False, description="Активный предмет виден на витрине; нужна загруженная картинка"
     )
+    event_key: str | None = Field(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_]*$",
+        max_length=64,
+        description=(
+            "Предмет только для награды сезонного события с этим ключом: без цены и уровня, "
+            "не на витрине, не с колеса и не по промокоду (422 `progression.item_event_exclusive`)"
+        ),
+    )
 
 
 class CreateItemRequest(ItemFields):
@@ -63,6 +72,7 @@ class AdminItem(BaseModel):
     level_required: int | None
     price: int | None
     active: bool
+    event_key: str | None = Field(description="Предмет награды события; null - обычный")
     asset_url: str | None = Field(description="null - картинка не загружена")
     poster_url: str | None
     owners: int = Field(ge=0, description="Сколько игроков владеют предметом")

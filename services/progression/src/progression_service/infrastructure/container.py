@@ -17,6 +17,7 @@ from progression_service.application.accrual.rating_rewards import AccrueSeason,
 from progression_service.application.accrual.solo import AccrueSolo
 from progression_service.application.admin import AdminServices
 from progression_service.application.admin.configs import ConfigCommands, ConfigQueries
+from progression_service.application.admin.events import EventAdminCommands, EventAdminQueries
 from progression_service.application.admin.ledger import LedgerCommands, LedgerQueries
 from progression_service.application.admin.ports import AdminUowFactory
 from progression_service.application.admin.shop import (
@@ -31,6 +32,8 @@ from progression_service.application.appearance import AppearanceService
 from progression_service.application.avatar import AvatarService
 from progression_service.application.badges import BadgeQueries
 from progression_service.application.boosts import BoostRewardHook
+from progression_service.application.events.player import EventPlayerService
+from progression_service.application.events.tick import EventTicker
 from progression_service.application.inventory import InventoryService
 from progression_service.application.ports import RewardHook, UnitOfWorkFactory
 from progression_service.application.ports.avatar import MediaUgcClient, UgcUpload
@@ -195,7 +198,16 @@ class ProgressionContainer:
             inspector=PillowMediaInspector(),
             tokens=SecretsTokenSource(),
         )
+        events = EventAdminCommands(
+            factory,
+            clock,
+            store=self.media_store,
+            inspector=PillowMediaInspector(),
+            tokens=SecretsTokenSource(),
+        )
         return AdminServices(
+            events=events,
+            event_queries=EventAdminQueries(factory, clock, events),
             configs=ConfigCommands(factory, clock),
             config_queries=ConfigQueries(factory),
             ledger=LedgerCommands(factory, clock),
@@ -229,6 +241,25 @@ class ProgressionContainer:
         if self.infra.redis is None:
             return UnconfiguredLimiter(retry)
         return RedisAttemptLimiter(self.infra.redis, retry_after_s=retry)
+
+    # ------------------------------------------------------------------ сезонные события (5d)
+    @property
+    def event_player(self) -> EventPlayerService:
+        """События для игрока: страница, архив, claim (лимит на игрока - Redis, fail-closed)."""
+        count, window = self.settings.progression.event_claim_rate
+        return EventPlayerService(
+            self.uow_factory(),
+            self.infra.clock,
+            self.media_store.public_url,
+            limiter=_LateLimiter(self),
+            claim_limit=count,
+            claim_window_s=window,
+        )
+
+    @property
+    def event_ticker(self) -> EventTicker:
+        """Задача ``progression.events.tick``."""
+        return EventTicker(self.uow_factory(), self.infra.clock)
 
     @property
     def shop_services(self) -> ShopServices:

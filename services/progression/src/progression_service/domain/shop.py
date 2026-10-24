@@ -93,6 +93,15 @@ class ItemRarityUnknownError(InvalidInputError):
         super().__init__("редкость не описана в конфиге")
 
 
+class ItemEventExclusiveError(InvalidInputError):
+    """Предмет события нельзя продавать и открывать уровнем (422)."""
+
+    default_code = "progression.item_event_exclusive"
+
+    def __init__(self) -> None:
+        super().__init__("предмет события выдаётся только событием: без цены и уровня")
+
+
 class ItemUnlockRequiredError(InvalidInputError):
     """Нужен ``level_required`` или ``price`` (422)."""
 
@@ -165,6 +174,8 @@ class Item:
         poster_key: Статичный первый кадр анимации; у ``static`` - ``None``.
         level_required: С какого уровня предмет выдаётся сам; ``None`` - не по уровню.
         price: Цена в Версах; ``None`` - не продаётся.
+        event_key: Ключ сезонного события (ADR 0056): предмет только для награды события -
+            не продаётся, не открывается уровнем, не выпадает с колеса, не гасится промокодом.
     """
 
     id: UUID
@@ -180,6 +191,7 @@ class Item:
     active: bool
     created_at: datetime
     updated_at: datetime
+    event_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,18 +257,26 @@ def validate_item_fields(
     level_required: int | None,
     price: int | None,
     shop_cfg: ShopConfig | None,
+    event_key: str | None = None,
 ) -> None:
     """Слот и редкость описаны в действующем конфиге, условие открытия задано.
+
+    Предмет события (``event_key``) условия открытия не имеет: ни цены, ни уровня.
 
     Raises:
         ItemSlotUnknownError: слота нет в конфиге (или секции ``shop`` нет).
         ItemRarityUnknownError: редкости нет в конфиге.
-        ItemUnlockRequiredError: нет ни ``level_required``, ни ``price``.
+        ItemUnlockRequiredError: нет ни ``level_required``, ни ``price`` (и не предмет события).
+        ItemEventExclusiveError: у предмета события есть цена или уровень.
     """
     if shop_cfg is None or shop_cfg.slot(slot) is None:
         raise ItemSlotUnknownError
     if shop_cfg.rarity(rarity) is None:
         raise ItemRarityUnknownError
+    if event_key is not None:
+        if level_required is not None or price is not None:
+            raise ItemEventExclusiveError
+        return
     if level_required is None and price is None:
         raise ItemUnlockRequiredError
 
