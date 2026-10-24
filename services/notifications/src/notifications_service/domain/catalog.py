@@ -84,6 +84,8 @@ class NotificationType:
     templates: Mapping[str, Template]
     filter: Mapping[str, FilterValue] = field(default_factory=dict)
     lookups: Mapping[str, Lookup] = field(default_factory=dict)
+    data: Mapping[str, str] = field(default_factory=dict)
+    """Машинные поля для клиента: имя -> путь в событии (значения приводятся к строке)."""
 
 
 def _require_payload_path(type_key: str, field_name: str, path: str) -> None:
@@ -116,6 +118,9 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
     params: dict[str, str] = dict(raw["params"])
     for name, path in params.items():
         _require_payload_path(key, f"params.{name}", path)
+    data: dict[str, str] = dict(raw.get("data", {}))
+    for name, path in data.items():
+        _require_payload_path(key, f"data.{name}", path)
     lookups = _parse_lookups(key, raw.get("lookups", {}), params, default_locale)
     refs = DEDUP_PLACEHOLDER.findall(raw["dedup_key"])
     if not refs:
@@ -147,6 +152,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
         templates=templates,
         filter=dict(raw.get("filter", {})),
         lookups=lookups,
+        data=data,
     )
 
 

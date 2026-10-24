@@ -76,17 +76,17 @@ class CentrifugoPublisher:
 
 def realtime_message(notification: Notification) -> dict[str, Any]:  # Any: JSON
     """Сообщение личного канала: то же представление, что в ``GET /v1/notifications``."""
-    return {
-        "type": "notification.created",
-        "notification": {
-            "id": str(notification.id),
-            "type": notification.type_key,
-            "title": notification.title,
-            "body": notification.body,
-            "created_at": notification.created_at.isoformat(),
-            "read_at": None,
-        },
+    item: dict[str, Any] = {  # Any: JSON
+        "id": str(notification.id),
+        "type": notification.type_key,
+        "title": notification.title,
+        "body": notification.body,
+        "created_at": notification.created_at.isoformat(),
+        "read_at": None,
     }
+    if notification.data:  # необязательное поле контракта: пусто - не отправляем
+        item["data"] = dict(notification.data)
+    return {"type": "notification.created", "notification": item}
 
 
 class PostCommitDispatcher:

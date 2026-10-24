@@ -72,6 +72,7 @@ class IngestEvent:
                     dedup_key=candidate.dedup_key,
                     title=candidate.title,
                     body=candidate.body,
+                    data=candidate.data,
                     created_at=self._clock.now(),
                 )
                 if await uow.notifications.add(notification):

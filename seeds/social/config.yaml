@@ -1,0 +1,43 @@
+# Стартовый конфиг social (версия 1 в local/ci; задача relay social.config.bootstrap, ADR 0053).
+# Содержимое = contracts/social/examples/social_config.v1.json (равенство проверяет тест).
+version: 1
+comments:
+  edit_window_s: 300
+  max_length: 500
+  per_minute: 5
+friends:
+  code_attempts_per_hour: 30
+  invites_per_minute: 10
+  max_friends: 200
+  requests_per_day: 20
+presence:
+  heartbeat_s: 30
+  ttl_s: 75
+reports:
+  per_day: 10
+  reasons:
+    - code: abusive_behaviour
+      target_kinds: [player]
+      title:
+        ru: Оскорбления и токсичное поведение
+    - code: cheating
+      target_kinds: [player]
+      title:
+        ru: Читерство или договорная игра
+    - code: inappropriate_content
+      target_kinds: [collection, comment, avatar]
+      title:
+        ru: Неприемлемое содержимое
+    - code: spam
+      target_kinds: [collection, comment]
+      title:
+        ru: Спам или реклама
+    - code: other
+      target_kinds: [player, collection, comment, avatar]
+      title:
+        ru: Другое
+  text_max_length: 300
+  threshold_per_day: 3
+sanctions:
+  max_duration_s: 31536000
+  min_duration_s: 3600

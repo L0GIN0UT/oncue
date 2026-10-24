@@ -51,6 +51,7 @@ def _notification(row: Row[Any]) -> Notification:
         body=r.body,
         created_at=r.created_at,
         read_at=r.read_at,
+        data=dict(r.data or {}),
     )
 
 
@@ -72,6 +73,7 @@ class SqlNotifications:
                 body=notification.body,
                 created_at=notification.created_at,
                 read_at=notification.read_at,
+                data=dict(notification.data),
             )
             .on_conflict_do_nothing(constraint="uq_notifications_user_dedup")
             .returning(t.notifications.c.id)
