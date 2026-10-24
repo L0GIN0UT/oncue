@@ -56,3 +56,4 @@
 | [0050](0050-friends-and-blocks.md) | Друзья, блокировки, presence и приглашения (черновик) |
 | [0051](0051-reports-and-moderation-queue.md) | Жалобы, комментарии и очередь модерации (черновик) |
 | [0052](0052-sanctions-and-enforcement.md) | Санкции и их применение (черновик) |
+| [0053](0053-social-config-versioned-in-db.md) | Конфиг social: версии в БД (черновик) |

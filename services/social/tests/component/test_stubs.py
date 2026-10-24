@@ -174,3 +174,48 @@ async def test_openapi_has_social_paths_and_no_text_in_events(client: httpx.Asyn
         assert path in spec["paths"]
     privacy = spec["components"]["schemas"]["PrivacySettings"]["properties"]
     assert set(privacy) == {"profile_public", "stats_public", "friend_requests"}
+
+
+CONFIG_BODY = {"config": {"version": 1}, "reason": REASON}
+CONFIG: list[tuple[str, str, dict[str, Any], str]] = [
+    ("GET", "/admin/v1/config/versions", {}, "social.config.manage"),
+    ("GET", "/admin/v1/config/versions/1", {}, "social.config.manage"),
+    (
+        "PUT",
+        "/admin/v1/config/draft",
+        {"json": CONFIG_BODY, "headers": KEY},
+        "social.config.manage",
+    ),
+    (
+        "POST",
+        "/admin/v1/config/draft/publish",
+        {"json": {"version": 2, "body_sha256": "a" * 64, "reason": REASON}, "headers": KEY},
+        "social.config.publish",
+    ),
+    (
+        "POST",
+        "/admin/v1/config/versions/1/rollback",
+        {"json": {"reason": REASON}, "headers": KEY},
+        "social.config.publish",
+    ),
+]
+
+
+@pytest.mark.parametrize("call", CONFIG, ids=lambda c: f"{c[0]} {c[1]}")
+async def test_config_routes_need_their_own_permission_then_501(
+    client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any], str]
+) -> None:
+    *request, perm = call
+    request_call = (request[0], request[1], request[2])
+    assert_problem(await _send(client, request_call), 401, "auth.unauthenticated")
+    # Право очереди модерации или санкций не открывает конфиг.
+    wrong = _auth(perms=["admin.access", "social.moderate", "social.sanctions.manage"])
+    assert_problem(await _send(client, request_call, headers=wrong), 403, "auth.forbidden")
+    right = _auth(perms=["admin.access", perm])
+    assert_problem(await _send(client, request_call, headers=right), 501, "common.not_implemented")
+
+
+async def test_manage_permission_cannot_publish(client: httpx.AsyncClient) -> None:
+    publish = next(c for c in CONFIG if c[1].endswith("/publish"))
+    headers = _auth(perms=["admin.access", "social.config.manage"])
+    assert_problem(await _send(client, publish[:3], headers=headers), 403, "auth.forbidden")

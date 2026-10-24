@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints, model_validator
 
 from gv_service import Reason
 
@@ -317,6 +317,57 @@ class CaseResolve(_Request):
         if (self.decision == "sanctioned") != (self.sanction is not None):
             raise ValueError("sanction обязательна при sanctioned и запрещена иначе")
         return self
+
+
+class ConfigVersionCard(BaseModel):
+    """Версия конфига social (ADR 0053)."""
+
+    version: int = Field(ge=1)
+    status: Literal["draft", "published", "archived"]
+    created_at: datetime
+    published_at: datetime | None = None
+    created_by: UUID
+    body_sha256: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="sha256 канонического JSON тела; публикация привязана к нему",
+    )
+
+
+class ConfigVersionList(BaseModel):
+    """Версии конфига, новые первыми."""
+
+    items: list[ConfigVersionCard]
+
+
+class ConfigVersionBody(BaseModel):
+    """Версия конфига с телом."""
+
+    card: ConfigVersionCard
+    config: dict[str, JsonValue] = Field(description="По `contracts/social/social_config.v1.json`")
+
+
+class SaveConfigDraft(_Request):
+    """Сохранить черновик конфига (заменяет текущий черновик)."""
+
+    config: dict[str, JsonValue]
+    reason: Reason
+
+
+class PublishConfig(_Request):
+    """Опубликовать черновик."""
+
+    version: int = Field(ge=1, description="Версия черновика")
+    body_sha256: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="`body_sha256` черновика, который видел автор (иначе 409 `draft_changed`)",
+    )
+    reason: Reason
+
+
+class RollbackConfig(_Request):
+    """Откат: копия старой версии становится новым черновиком."""
+
+    reason: Reason
 
 
 class SanctionRevoke(_Request):

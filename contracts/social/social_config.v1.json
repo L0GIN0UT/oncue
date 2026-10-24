@@ -9,7 +9,7 @@
   "$id": "urn:guessverse:contracts:social:social_config:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Конфиг social 5c (ADR 0050-0052): лимиты, окна, справочник причин жалоб, пределы санкций. Значений в коде сервиса нет; файловый конфиг пакета, как у notifications. Нарушение схемы — сервис не стартует.",
+  "description": "Тело версии конфига social 5c (ADR 0050-0053): лимиты, окна, справочник причин жалоб, пределы санкций. Хранится в БД версиями (черновик → публикация → откат через admin-API), значений в коде сервиса нет; границы схемы — предел опасных значений. Нарушение схемы — 422 social.config_invalid.",
   "properties": {
     "comments": {
       "additionalProperties": false,

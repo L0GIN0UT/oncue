@@ -142,7 +142,7 @@
 - **Отвечает за:** друзей, заявки, коды добавления, блокировки, комментарии (к сборникам; к профилям нет), жалобы, очередь модерации, шкалы поведения и санкции, приватность, похвалы.
 - **Данные:** Postgres (friendships, requests, blocks, comments, reports, moderation_cases, behaviour_scores, sanctions, privacy_settings).
 - **Публикует** (`social.social.v1`, 5c): `FriendRequested`, `FriendAdded`, `FriendRemoved`, `UserBlocked`, `RoomInviteSent`, `CommentPosted`, `CommentDeleted`, `ReportFiled`, `ReportResolved`, `ContentModerated`, `UserSanctionsChanged`.
-- **Слушает:** `MatchStarted`, `MatchFinished` (счётчики порядочности из `players[].finish`; `PlayerForfeited` не вводится), `PlayerRated`, `collections.*` (проекция сборников), `identity.UserDeleted`, `UserProfileBasicsChanged`. Конфиг: `contracts/social/social_config.v1.json`; presence — Redis; санкции применяют identity и match ([ADR 0052](../adr/0052-sanctions-and-enforcement.md)).
+- **Слушает:** `MatchStarted`, `MatchFinished` (счётчики порядочности из `players[].finish`; `PlayerForfeited` не вводится), `PlayerRated`, `collections.*` (проекция сборников), `identity.UserDeleted`, `UserProfileBasicsChanged`. Конфиг — версии в БД ([ADR 0053](../adr/0053-social-config-versioned-in-db.md)); presence — Redis; санкции применяют identity и match ([ADR 0052](../adr/0052-sanctions-and-enforcement.md)).
 
 ### 13. notifications
 - **Отвечает за:** in-app уведомления (группировка, прочитано), доставку в realtime (публикация в Centrifugo), e-mail, web-push, Telegram-бота (позже), отключение по типам. Шаблоны и локализация.

@@ -114,6 +114,7 @@ nav:
       - adr/0050-friends-and-blocks.md
       - adr/0051-reports-and-moderation-queue.md
       - adr/0052-sanctions-and-enforcement.md
+      - adr/0053-social-config-versioned-in-db.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

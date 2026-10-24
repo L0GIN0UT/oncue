@@ -363,3 +363,33 @@ async def test_0015_seeds_social_perms_moderator_has_no_account_ban_and_is_rever
     assert after["admin"] >= ECONOMY_PERMS  # права 0014 откат не трогает
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["admin"] >= SOCIAL_PERMS
+
+
+SOCIAL_CONFIG_PERMS = {"social.config.manage", "social.config.publish"}
+
+
+async def test_0016_seeds_social_config_perms_for_admin_and_moderator_and_is_reversible(
+    database_url: str,
+) -> None:
+    """ADR 0053: конфиг social крутят admin и moderator; обычный игрок - нет."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= SOCIAL_CONFIG_PERMS
+    assert grants["admin"] >= SOCIAL_CONFIG_PERMS
+    assert grants["moderator"] >= SOCIAL_CONFIG_PERMS
+    assert not grants.get("user", set()) & SOCIAL_CONFIG_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0015")
+    after = await _grants(database_url)
+    assert not after["*"] & SOCIAL_CONFIG_PERMS
+    assert after["admin"] >= SOCIAL_PERMS  # права 0015 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["moderator"] >= SOCIAL_CONFIG_PERMS
