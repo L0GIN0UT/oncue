@@ -307,6 +307,9 @@ def dev_seed(
     collections_url: Annotated[
         str, typer.Option(envvar="GV_SEED__COLLECTIONS_URL", help="Базовый адрес collections")
     ] = "http://127.0.0.1:8106",
+    progression_url: Annotated[
+        str, typer.Option(envvar="GV_SEED__PROGRESSION_URL", help="Базовый адрес progression")
+    ] = "http://127.0.0.1:8109",
     service_client_id: Annotated[
         str, typer.Option(envvar="GV_SEED__SERVICE_CLIENT_ID", help="Сервисный клиент")
     ] = "admin",
@@ -348,6 +351,7 @@ def dev_seed(
         media_url=media_url,
         game_url=game_url,
         collections_url=collections_url,
+        progression_url=progression_url,
         admin_login=login or "",
         admin_password=password or "",
         service_client_id=service_client_id,

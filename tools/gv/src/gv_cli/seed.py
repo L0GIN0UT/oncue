@@ -146,6 +146,9 @@ class SeedConfig:
         media_url: Базовый адрес media-pipeline (admin-ручки).
         game_url: Базовый адрес game (admin-ручки и публичные режимы сборника).
         collections_url: Базовый адрес collections (admin-ручки кураторских сборников).
+        progression_url: Базовый адрес progression (admin-ручки предметов, паков и конфига).
+        progression_dir: Сиды progression (по умолчанию ``seeds/progression``); нет
+            ``items/items.yaml`` - шаг пропускается.
         admin_login: Логин администратора (e-mail или никнейм).
         admin_password: Пароль администратора.
         service_client_id: Идентификатор сервисного клиента (по умолчанию ``admin``).
@@ -179,6 +182,8 @@ class SeedConfig:
     media_out_dir: Path | None = None
     modes_dir: Path | None = None
     collections_dir: Path | None = None
+    progression_url: str = "http://127.0.0.1:8109"
+    progression_dir: Path | None = None
     http_timeout_s: float = 30.0
     poll_interval_s: float = 1.0
     import_timeout_s: float = 60.0
@@ -199,6 +204,10 @@ class SeedConfig:
     def collections_path(self) -> Path:
         """Каталог кураторских сборников."""
         return self.collections_dir or self.repo_root / "seeds" / "collections"
+
+    def progression_path(self) -> Path:
+        """Каталог сидов progression (конфиг, предметы, паки, картинки)."""
+        return self.progression_dir or self.repo_root / "seeds" / "progression"
 
 
 @dataclass(slots=True)
@@ -488,6 +497,7 @@ class Seeder:
         # а ``/v1/collections/{id}/modes`` открыт и анониму.
         self._game_public = factory(config.game_url)
         self._collections = factory(config.collections_url)
+        self._progression = factory(config.progression_url)
         self._admin_token: str | None = None
 
     def _clients(self) -> tuple[httpx.Client, ...]:
@@ -498,6 +508,7 @@ class Seeder:
             self._game,
             self._game_public,
             self._collections,
+            self._progression,
         )
 
     def close(self) -> None:
@@ -530,6 +541,7 @@ class Seeder:
         self.regenerate_period_sets(plans)
         self.seed_collections(collections, items)
         self.wait_online_collections(lobby_collections, items)
+        self.seed_progression()
         self._echo("seed: готово")
 
     # ------------------------------------------------------------------ шаг 1: вход
@@ -546,7 +558,13 @@ class Seeder:
         token = str(resp.json()["access_token"])
         self._admin_token = token
         # admin-токен — Bearer для всех admin-ручек каталога, медиа, игры и сборников.
-        for client in (self._catalog, self._media, self._game, self._collections):
+        for client in (
+            self._catalog,
+            self._media,
+            self._game,
+            self._collections,
+            self._progression,
+        ):
             client.headers["Authorization"] = f"Bearer {token}"
         return token
 
@@ -1221,6 +1239,247 @@ class Seeder:
             on_timeout=lambda: str(state.get("mode", "нет ответа")),
         )
 
+    # ------------------------------------------------------------------ шаг 8: progression
+    def seed_progression(self) -> None:
+        """Предметы, паки и конфиг с товаром «своя аватарка» (5b, ADR 0045-0048).
+
+        Порядок важен. Конфиг v1 (с секцией ``shop``, но ``custom_avatar_item_key = null``)
+        публикует задача ``progression.config.bootstrap``: публикация с ключом требует, чтобы
+        предмет уже существовал (422 ``progression.config_invalid``). Поэтому: ждём
+        опубликованный конфиг (слоты и редкости предметов проверяются по нему) -> предметы
+        (создание, картинка, активация) -> паки -> следующая версия конфига с ключом товара.
+        Всё идемпотентно по ключу предмета/пака и по версии конфига. Нет ``items/items.yaml`` -
+        шаг пропускается.
+        """
+        root = self._cfg.progression_path()
+        items_file = root / "items" / "items.yaml"
+        if not items_file.is_file():
+            self._echo("seed: сидов progression нет, шаг пропущен")
+            return
+        spec = _mapping(yaml.safe_load(items_file.read_text(encoding="utf-8")))
+        item_specs = [_mapping(i) for i in spec.get("items") or []]
+        packs_file = root / "items" / "packs.yaml"
+        pack_specs: list[dict[str, Any]] = []
+        if packs_file.is_file():
+            packs_raw = _mapping(yaml.safe_load(packs_file.read_text(encoding="utf-8")))
+            pack_specs = [_mapping(p) for p in packs_raw.get("packs") or []]
+        avatar_key = spec.get("custom_avatar_item_key")
+        self._echo("seed: progression - ожидание опубликованного конфига")
+        _, body = self._wait_published_config()
+        if not isinstance(body.get("shop"), dict):
+            raise SeedError(
+                "в опубликованной версии нет секции shop: перезапустите progression "
+                "с актуальным seeds/progression/config.yaml"
+            )
+        by_key = {str(i["key"]): i for i in self._progression_items()}
+        for item_spec in item_specs:
+            by_key[str(item_spec["key"])] = self._ensure_item(item_spec, by_key, root)
+        self._ensure_packs(pack_specs, by_key)
+        if isinstance(avatar_key, str):
+            self._ensure_avatar_config(body, avatar_key, by_key)
+
+    def _wait_published_config(self) -> tuple[int, dict[str, Any]]:
+        """Дождаться опубликованной версии конфига (bootstrap) и вернуть ``(версия, тело)``."""
+        holder: dict[str, Any] = {}
+
+        def published() -> bool:
+            resp = self._progression.get("/admin/v1/configs")
+            self._check(resp, {200}, "версии конфига progression")
+            cards = [c for c in resp.json().get("items", []) if c.get("status") == "published"]
+            if not cards:
+                return False
+            version = int(cards[0]["version"])
+            detail = self._progression.get(f"/admin/v1/configs/{version}")
+            self._check(detail, {200}, f"конфиг progression v{version}")
+            holder["version"] = version
+            holder["config"] = _mapping(detail.json()["config"])
+            return True
+
+        self._poll(
+            published,
+            timeout_s=self._cfg.assets_timeout_s,
+            what="опубликованный конфиг progression (progression.config.bootstrap)",
+        )
+        return int(holder["version"]), holder["config"]
+
+    def _progression_items(self) -> list[dict[str, Any]]:
+        """Все предметы админки (страницы по курсору)."""
+        found: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            params: dict[str, Any] = {"limit": 100}
+            if cursor:
+                params["cursor"] = cursor
+            resp = self._progression.get("/admin/v1/items", params=params)
+            self._check(resp, {200}, "список предметов progression")
+            page = resp.json()
+            found.extend(_mapping(i) for i in page.get("items", []))
+            cursor = page.get("next_cursor")
+            if not cursor:
+                return found
+
+    def _ensure_item(
+        self, item_spec: Mapping[str, Any], by_key: Mapping[str, dict[str, Any]], root: Path
+    ) -> dict[str, Any]:
+        """Предмет существует и с картинкой; новый предмет активируется.
+
+        Сид только добавляет: существующий предмет с изменёнными в yaml полями НЕ обновляется
+        (правка - через админку). Активация - только предмету, которому сид сам только что
+        загрузил картинку: предмет, деактивированный админом, повторно не включается, а
+        создание/активация прерванного прогона повторяются теми же ключами идемпотентности.
+        """
+        key = str(item_spec["key"])
+        fields = {
+            name: item_spec.get(name)
+            for name in ("key", "slot", "rarity", "title", "media_kind", "level_required", "price")
+        }
+        digest = hashlib.sha256(
+            json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()[:12]
+        item = by_key.get(key)
+        if item is None:
+            resp = self._progression.post(
+                "/admin/v1/items",
+                headers={"Idempotency-Key": f"seed-item-create-{key}-{digest}"},
+                json={**fields, "active": False, "reason": REASON},
+            )
+            if resp.status_code == httpx.codes.CONFLICT:
+                # Параллельный запуск или прежний сид без записи в by_key: берём созданное.
+                item = next((i for i in self._progression_items() if i["key"] == key), None)
+                if item is None:
+                    self._check(resp, {201}, f"создание предмета {key}")
+            else:
+                self._check(resp, {201}, f"создание предмета {key}")
+                item = _mapping(resp.json())
+            self._echo(f"seed: предмет {key} создан")
+        assert item is not None  # noqa: S101 - _check выше бросает при неудаче
+        uploaded = not item.get("asset_url")
+        if uploaded:
+            item = self._upload_item_media(key, item, root)
+        if uploaded and item_spec.get("active") and not item.get("active"):
+            resp = self._progression.put(
+                f"/admin/v1/items/{item['id']}",
+                headers={"Idempotency-Key": f"seed-item-activate-{key}-{digest}"},
+                json={**fields, "active": True, "reason": REASON},
+            )
+            self._check(resp, {200}, f"активация предмета {key}")
+            item = _mapping(resp.json())
+        return item
+
+    def _upload_item_media(self, key: str, item: Mapping[str, Any], root: Path) -> dict[str, Any]:
+        path = root / "items" / "images" / f"{key}.webp"
+        if not path.is_file():
+            raise SeedError(
+                f"нет картинки {path}: uv run python seeds/progression/generate_items.py"
+            )
+        data = path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()[:12]
+        resp = self._progression.put(
+            f"/admin/v1/items/{item['id']}/media",
+            headers={"Idempotency-Key": f"seed-item-media-{key}-{digest}"},
+            files={"file": (path.name, data, "image/webp")},
+            data={"reason": REASON},
+        )
+        self._check(resp, {200}, f"картинка предмета {key}")
+        return _mapping(resp.json())
+
+    def _ensure_packs(
+        self, pack_specs: Iterable[Mapping[str, Any]], by_key: Mapping[str, dict[str, Any]]
+    ) -> None:
+        """Паки по ключу: существующий не трогаем (правка пака - через админку)."""
+        specs = list(pack_specs)
+        if not specs:
+            return
+        resp = self._progression.get("/admin/v1/packs")
+        self._check(resp, {200}, "список паков progression")
+        existing = {str(p["key"]) for p in resp.json().get("items", [])}
+        for pack in specs:
+            key = str(pack["key"])
+            if key in existing:
+                continue
+            missing = [k for k in pack["item_keys"] if k not in by_key]
+            if missing:
+                raise SeedError(f"пак {key}: нет предметов {missing}")
+            body = {
+                "key": key,
+                "title": pack["title"],
+                "style": pack["style"],
+                "item_ids": [by_key[k]["id"] for k in pack["item_keys"]],
+                "verses_amount": pack.get("verses_amount", 0),
+                "price_kopecks": pack["price_kopecks"],
+                "active": bool(pack.get("active", False)),
+                "reason": REASON,
+            }
+            created = self._progression.post(
+                "/admin/v1/packs", headers={"Idempotency-Key": f"seed-pack-{key}"}, json=body
+            )
+            self._check(created, {200, 201}, f"создание пака {key}")
+            self._echo(f"seed: пак {key} создан")
+
+    def _ensure_avatar_config(
+        self, body: Mapping[str, Any], avatar_key: str, by_key: Mapping[str, Any]
+    ) -> None:
+        """Опубликовать версию конфига с ``shop.custom_avatar_item_key``.
+
+        Ключ ставится только в ``null``: уже заданный (в том числе админом) не трогаем. Чужой
+        черновик администратора (не равный ни опубликованному телу, ни нашему) не
+        перезаписывается - пропуск с логом. Ключи идемпотентности содержат хеш тела, поэтому
+        прерванный прогон (черновик сохранён, публикация упала) повторяется теми же ключами.
+        При 409 ``draft_changed`` черновик перечитывается и публикация повторяется один раз.
+        """
+        shop = body["shop"]
+        current = shop.get("custom_avatar_item_key")
+        if current == avatar_key:
+            return
+        if current is not None:
+            self._echo(f"seed: пропуск: ключ задан админом ({current!r}), конфиг не меняю")
+            return
+        if avatar_key not in by_key:
+            raise SeedError(f"товар своей аватарки {avatar_key!r} не заведён")
+        config = {**body, "shop": {**shop, "custom_avatar_item_key": avatar_key}}
+        draft = self._progression_draft()
+        if draft is not None and draft[1] not in (config, body):
+            self._echo("seed: пропуск: в progression есть черновик админа, конфиг не меняю")
+            return
+        sha = hashlib.sha256(
+            json.dumps(config, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()[:12]
+        saved = self._progression.put(
+            "/admin/v1/configs/draft",
+            headers={"Idempotency-Key": f"seed-config-draft-{sha}"},
+            json={"config": config, "reason": REASON},
+        )
+        self._check(saved, {200, 201}, "черновик конфига progression")
+        card = saved.json()["card"]
+        published = self._publish_draft(card, sha, "")
+        if published.status_code == httpx.codes.CONFLICT and _code(published) == DRAFT_CHANGED:
+            reread = self._progression_draft()
+            if reread is None or reread[1] != config:
+                self._echo("seed: пропуск: черновик изменён админом, публикацию не повторяю")
+                return
+            published = self._publish_draft(reread[0], sha, "-retry")
+        self._check(published, {200, 201}, "публикация конфига progression")
+        self._echo(f"seed: конфиг progression v{card['version']} с товаром {avatar_key}")
+
+    def _publish_draft(self, card: Mapping[str, Any], sha: str, suffix: str) -> httpx.Response:
+        return self._progression.post(
+            "/admin/v1/configs/draft/publish",
+            headers={"Idempotency-Key": f"seed-config-publish-{sha}{suffix}"},
+            json={"version": card["version"], "body_sha256": card["body_sha256"], "reason": REASON},
+        )
+
+    def _progression_draft(self) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        """Текущий черновик конфига: ``(карточка, тело)`` или ``None``."""
+        resp = self._progression.get("/admin/v1/configs")
+        self._check(resp, {200}, "версии конфига progression")
+        drafts = [c for c in resp.json().get("items", []) if c.get("status") == "draft"]
+        if not drafts:
+            return None
+        detail = self._progression.get(f"/admin/v1/configs/{drafts[0]['version']}")
+        self._check(detail, {200}, "черновик конфига progression")
+        data = detail.json()
+        return _mapping(data["card"]), _mapping(data["config"])
+
     # ------------------------------------------------------------------ вспомогательное
     def _expected_keys(self) -> set[str]:
         """Ключи единиц из файлов импорта (``key`` каждой строки JSONL)."""
@@ -1264,6 +1523,19 @@ class Seeder:
                 extra = f": {on_timeout()}" if on_timeout else ""
                 raise SeedError(f"таймаут ожидания ({what}){extra}")
             time.sleep(self._cfg.poll_interval_s)
+
+
+# Код 409 публикации: тело черновика изменилось после сохранения (progression).
+DRAFT_CHANGED = "progression.draft_changed"
+
+
+def _code(resp: httpx.Response) -> str | None:
+    """Машинный ``code`` ответа-проблемы; не JSON - ``None``."""
+    try:
+        code = resp.json().get("code")
+    except (ValueError, AttributeError):
+        return None
+    return str(code) if code else None
 
 
 def _publish_errors(resp: httpx.Response) -> list[dict[str, Any]]:
