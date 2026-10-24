@@ -15,7 +15,8 @@
   значений: 500 символов комментария, 300 текста жалобы, пределы санкций).
 - Admin-API `/admin/v1/config/versions[/{version}]`, `PUT /config/draft`, `POST /config/draft/publish`,
   `POST /config/versions/{version}/rollback`. Права `social.config.manage` (черновик) и
-  `social.config.publish` (публикация, откат); обе у admin и moderator. Публикация привязана к
+  `social.config.publish` (публикация, откат); `manage` у admin и moderator (читает версии и правит
+  черновик), `publish` — только у admin (identity `0018`, решение владельца 2026-10-24). Публикация привязана к
   `body_sha256` черновика, `Idempotency-Key` и `reason` обязательны, действие пишется в аудит.
 - Первую версию в local/ci создаёт задача relay `social.config.bootstrap` из `seeds/social/config.yaml`
   (как `progression.config.bootstrap`); в проде первая версия — через admin-API.
@@ -32,5 +33,5 @@
 - Переменные окружения — рестарт и нет аудита.
 
 ## Последствия
-Миграция `0002` social создаёт `config_versions`; права — identity `0016`. Модератор, имея право публикации,
-может поднять лимиты в пределах границ схемы: риск принят владельцем, смягчён аудитом и границами.
+Миграция `0002` social создаёт `config_versions`; права — identity `0016`, у moderator `publish` снят в `0018`.
+Модератор готовит черновик, публикует и откатывает только admin: лимиты нельзя поднять без второго человека.

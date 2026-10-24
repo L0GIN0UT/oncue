@@ -108,8 +108,7 @@ async def test_seeded_matrix(sessions: async_sessionmaker[Any], fake_clock: Fake
         "social.moderate",  # 0015
         "social.comments.delete_any",
         "social.sanctions.manage",
-        "social.config.manage",  # 0016
-        "social.config.publish",
+        "social.config.manage",  # 0016; publish у moderator снят в 0018
     }
 
 

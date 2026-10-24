@@ -460,6 +460,18 @@ def test_publish_sends_version_and_hash(client: Any, login: Any, social: Any) ->
     assert entry.before == {"draft_version": 2, "body_sha256": SHA}
 
 
+def test_config_page_without_publish_perm_has_no_publish_or_rollback(
+    client: Any, login: Any, social: Any
+) -> None:
+    login(perms=(*MODERATOR, "social.config.manage"), roles=("moderator",))
+    _versions(social)
+    page = client.get("/social/config/").content.decode()
+    assert "v2" in page and SHA in page  # версии читать можно
+    assert 'name="body_sha256"' not in page
+    assert "/social/config/publish/" not in page and "/social/config/rollback/" not in page
+    assert "/social/config/edit/" in page  # черновик править можно
+
+
 def test_publish_without_publish_permission_is_forbidden(client: Any, login: Any) -> None:
     login(perms=("admin.access", "social.config.manage"), roles=("moderator",))
     data = {"version": 2, "body_sha256": SHA, "reason": "новый лимит", "idempotency_key": _key()}

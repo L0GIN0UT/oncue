@@ -113,6 +113,31 @@ async def test_manage_cannot_publish_and_replay_is_idempotent(social: Social) ->
     assert_problem(forbidden, 403, "auth.forbidden")
 
 
+async def test_moderator_perms_cannot_publish_or_rollback(social: Social) -> None:
+    """Права moderator (identity 0018): очередь, чтение и черновик - без публикации и отката."""
+    await social.publish_config(1)
+    moderator = ("admin.access", "social.moderate", "social.config.manage")
+    saved = await social.client.put(
+        "/admin/v1/config/draft",
+        json={"config": config_body(friends__max_friends=9), "reason": REASON},
+        headers=_auth(social, moderator),
+    )
+    assert saved.status_code == 200, saved.text
+    publish = await social.client.post(
+        "/admin/v1/config/draft/publish",
+        json={"version": 2, "body_sha256": saved.json()["card"]["body_sha256"], "reason": REASON},
+        headers=_auth(social, moderator),
+    )
+    assert_problem(publish, 403, "auth.forbidden")
+    rollback = await social.client.post(
+        "/admin/v1/config/versions/1/rollback",
+        json={"reason": "откат"},
+        headers=_auth(social, moderator),
+    )
+    assert_problem(rollback, 403, "auth.forbidden")
+    assert (await social.container.config.current()).friends.max_friends == 200
+
+
 async def test_rollback_copies_published_version_into_draft(social: Social) -> None:
     await social.publish_config(1)
     await social.publish_config(2, friends__max_friends=5)
