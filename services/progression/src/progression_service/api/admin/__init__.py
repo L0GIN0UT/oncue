@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Path, Query, Response, status
 
 from gv_auth import Principal, require_perm
 from gv_service import IdempotencyKey, problem_responses
+from progression_service.api.admin.events import register_event_admin_routes
 from progression_service.api.admin.schemas import (
     AdminBadgeList,
     AdminLedgerPage,
@@ -247,4 +248,5 @@ def build_admin_router(services: AdminServices) -> APIRouter:
         return result
 
     register_shop_admin_routes(router, services)
+    register_event_admin_routes(router)
     return router

@@ -20,7 +20,10 @@
       "type": "array",
       "minItems": 2,
       "maxItems": 20,
-      "items": {"$ref": "#/$defs/find"}
+      "items": {"$ref": "#/$defs/find"},
+      "contains": {"type": "object", "properties": {"final": {"const": true}}, "required": ["final"]},
+      "minContains": 1,
+      "maxContains": 1
     },
     "reward": {
       "description": "Основная награда за закрытие всех находок",

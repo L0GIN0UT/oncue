@@ -24,6 +24,7 @@ from bff_web_service.api.public.schemas import (
     CollectionsPage,
     Difficulty,
     Domain,
+    EventPageView,
     HomePage,
     LeaderboardsPage,
     LibraryPage,
@@ -44,6 +45,7 @@ from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
 from gv_core.errors import (
     DependencyUnavailableError,
+    NotImplementedYetError,
     UnauthenticatedError,
 )
 from gv_service import problem_responses
@@ -116,6 +118,31 @@ REJECTED = Viewer(token_rejected=True)
 """Токен не прошёл проверку: для экранов — аноним (токен дальше не уходит)."""
 
 CurrentViewer = Annotated[Viewer, Depends(resolve_viewer)]
+
+
+def _register_event_page_stub(router: APIRouter) -> None:
+    """Заглушка страницы события (5d, шаг 0a): реализация - поток E3."""
+
+    @router.get(
+        "/pages/events/{event_key}",
+        response_model=EventPageView,
+        summary="Сезонное событие: карта, находки, дневник",
+        description=(
+            "Этап 5d, контракт (реализация — поток E3; до тех пор 501). Только пользователь с "
+            "аккаунтом (аноним — 401, гость — 403), `private, no-store`. Данные — progression "
+            "`GET /v1/events/{key}` + `theme.key` запуска; нет события — 404 "
+            "`progression.event_not_found`. Засчитать находку-элемент интерфейса браузер "
+            "просит прямо в progression (`POST /v1/events/{key}/finds/{find}/claim`)."
+        ),
+        responses=problem_responses(401, 403, 404, 501),
+    )
+    async def event_page(
+        event_key: Annotated[  # noqa: ARG001
+            str, Path(pattern=r"^[a-z][a-z0-9_]*$", max_length=64, description="Ключ события")
+        ],
+        viewer: CurrentViewer,  # noqa: ARG001
+    ) -> EventPageView:
+        raise NotImplementedYetError("страница события появится в потоке E3 этапа 5d")
 
 
 def _cache_headers(
@@ -211,6 +238,8 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         page = await deps.get_shell(viewer)
         _cache_headers(response, personal=page.personal, policy=policy)
         return ShellPage.model_validate(page, from_attributes=True)
+
+    _register_event_page_stub(router)
 
     @router.get(
         "/pages/players/{user_id}",

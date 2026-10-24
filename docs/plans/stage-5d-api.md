@@ -6,7 +6,7 @@
 | Метод | Путь | Ответ |
 |---|---|---|
 | GET | `/v1/events/active` | анонимно; `{event: EventBanner \| null}`; `EventBanner = {run_id, key, title, theme_key, starts_at, ends_at}` |
-| GET | `/v1/events/{key}` | вход; `EventPage`; запуск: активный, иначе последний `finished/stopped`; 404 `progression.event_not_found` (черновики и неопубликованные не видны) |
+| GET | `/v1/events/{event_key}` | вход; `EventPage`; запуск: активный, иначе последний `finished/stopped`; 404 `progression.event_not_found` (черновики и неопубликованные не видны) |
 | GET | `/v1/me/events` | вход; архив: `{items: [EventArchiveItem]}` (запуски, где у игрока есть прогресс; новые первыми, ≤ 50) |
 | POST | `/v1/events/{key}/finds/{find}/claim` | вход, CSRF, пустое тело; `ClaimResult`; идемпотентно; 404 `event_not_found`/`event_find_not_found`; 409 `event_not_active`/`event_find_not_ui_spot`/`event_find_locked`; 429 лимит (Redis, fail-closed 503) |
 
@@ -20,13 +20,13 @@
 |---|---|---|
 | GET | `/admin/v1/events` | список `{items: [AdminEventSummary{key, title, status, latest_run}]}` |
 | POST | `/admin/v1/events` | `{key, body}` → 201 `AdminEvent`; 409 `event_key_taken`; 422 `event_definition_invalid` |
-| GET | `/admin/v1/events/{key}` | `AdminEvent{key, body, body_sha256, map_url, runs: [AdminRun], updated_at}` |
-| PUT | `/admin/v1/events/{key}` | `{body}`; 409 `event_definition_locked`, если есть запуск `published/active` |
-| PUT | `/admin/v1/events/{key}/map` | multipart-картинка карты (статика PNG/WebP, лимиты — как `shop.media`); 422 `event_map_invalid` |
-| POST | `/admin/v1/events/{key}/runs` | `{starts_at, ends_at}` → 201 `AdminRun` (draft) — это и перезапуск; 422 период |
-| POST | `/admin/v1/events/{key}/runs/{run_id}/publish` | право `publish`; `{body_sha256}` (хеш определения, 409 `event_body_changed`); 409 `event_period_overlap`, `event_run_state_invalid`; кладёт снимок |
-| POST | `/admin/v1/events/{key}/runs/{run_id}/stop` | право `publish`; активный/опубликованный → `stopped`; 409 `event_run_state_invalid` |
-| GET | `/admin/v1/events/{key}/runs/{run_id}/stats` | `{run_id, players, completed, finds: [{find_key, number, unlocked}]}` |
+| GET | `/admin/v1/events/{event_key}` | `AdminEvent{key, body, body_sha256, map_url, runs: [AdminRun], updated_at}` |
+| PUT | `/admin/v1/events/{event_key}` | `{body}`; 409 `event_definition_locked`, если есть запуск `published/active` |
+| PUT | `/admin/v1/events/{event_key}/map` | multipart-картинка карты (статика PNG/WebP, лимиты — как `shop.media`); 422 `event_map_invalid` |
+| POST | `/admin/v1/events/{event_key}/runs` | `{starts_at, ends_at}` → 201 `AdminRun` (draft) — это и перезапуск; 422 период |
+| POST | `/admin/v1/events/{event_key}/runs/{run_id}/publish` | право `publish`; `{body_sha256}` (хеш определения, 409 `event_body_changed`); 409 `event_period_overlap`, `event_run_state_invalid`; кладёт снимок |
+| POST | `/admin/v1/events/{event_key}/runs/{run_id}/stop` | право `publish`; активный/опубликованный → `stopped`; 409 `event_run_state_invalid` |
+| GET | `/admin/v1/events/{event_key}/runs/{run_id}/stats` | `{run_id, players, completed, finds: [{find_key, number, unlocked}]}` |
 
 `AdminRun = {id, seq, status, starts_at, ends_at, published_at, stopped_at}`; статус `active/finished` считается по времени.
 

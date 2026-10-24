@@ -392,6 +392,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
             "modes": {"status": "unavailable", "data": None},
             "weekly": {"status": "unavailable", "data": None},
             "progress": None,
+            "event": None,
         }
     }
 
@@ -1931,6 +1932,7 @@ async def test_profile_page_all_blocks_ok(bff: Bff) -> None:
         "appearance",
         "inventory",
         "avatar",
+        "events",
     }
     progress = blocks["progress"]["data"]
     assert (progress["level"], progress["xp_in_level"], progress["xp_to_next"]) == (7, 120, 380)
@@ -2034,6 +2036,7 @@ async def test_profile_page_each_block_degrades_independently(
     blocks = response.json()["blocks"]
     # Оформление собирается из слотов и адреса своей аватарки: падение аватара гасит оба блока.
     dead = {block, "appearance"} if block == "avatar" else {block}
+    assert blocks.pop("events") == []
     for name, value in blocks.items():
         assert value == UNAVAILABLE if name in dead else value["status"] == "ok", name
 
@@ -2065,7 +2068,9 @@ async def test_profile_page_progression_down_is_200_all_unavailable(bff: Bff) ->
     response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
-    assert response.json() == {"blocks": dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)}
+    assert response.json() == {
+        "blocks": {**dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE), "events": []}
+    }
 
 
 PROFILE_BLOCKS = (
@@ -2485,6 +2490,7 @@ async def test_shell_for_user_has_theme_key_and_bell(bff: Bff) -> None:
         "theme": {"key": "default"},  # только ключ: значений токенов в API нет
         "bell": {"status": "ok", "data": {"unread": 3}},
         "sanctions": EMPTY_SANCTIONS,
+        "event": None,
     }
     assert unread.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
@@ -2495,7 +2501,12 @@ async def test_shell_for_anonymous_is_public_without_bell_call(bff: Bff) -> None
     response = await bff.client.get("/v1/pages/shell")
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
+    assert response.json() == {
+        "theme": {"key": "default"},
+        "bell": None,
+        "sanctions": None,
+        "event": None,
+    }
     assert response.headers["cache-control"] == PUBLIC
     assert response.headers["vary"] == "Authorization, Cookie"
     assert unread.call_count == 0
@@ -2507,7 +2518,12 @@ async def test_shell_for_guest_has_no_bell_and_does_not_call_notifications(bff: 
     response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
+    assert response.json() == {
+        "theme": {"key": "default"},
+        "bell": None,
+        "sanctions": None,
+        "event": None,
+    }
     assert response.headers["cache-control"] == PRIVATE  # с токеном - личный ответ
     assert unread.call_count == 0
 
@@ -2531,6 +2547,7 @@ async def test_shell_notifications_failure_hides_bell_only(bff: Bff, failure: st
         "theme": {"key": "default"},
         "bell": UNAVAILABLE,
         "sanctions": EMPTY_SANCTIONS,
+        "event": None,
     }
 
 
@@ -2543,7 +2560,12 @@ def theme_env(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_shell_theme_key_comes_from_env(theme_env: None, bff: Bff) -> None:
     response = await bff.client.get("/v1/pages/shell")
 
-    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None, "sanctions": None}
+    assert response.json() == {
+        "theme": {"key": "autumn_event"},
+        "bell": None,
+        "sanctions": None,
+        "event": None,
+    }
 
 
 async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> None:
@@ -2559,7 +2581,12 @@ async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> 
         )
         shell = await bff.client.get("/v1/pages/shell", headers=headers)
         assert shell.status_code == 200
-        assert shell.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
+        assert shell.json() == {
+            "theme": {"key": "default"},
+            "bell": None,
+            "sanctions": None,
+            "event": None,
+        }
     assert all(route.call_count == 0 for route in routes.values())
     assert unread.call_count == 0
 

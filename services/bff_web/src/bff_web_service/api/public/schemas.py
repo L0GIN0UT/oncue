@@ -362,6 +362,91 @@ class BellCard(BaseModel):
     unread: int = Field(ge=0)
 
 
+class EventBannerCard(BaseModel):
+    """Активное сезонное событие для шапки и главной (5d, ADR 0054)."""
+
+    key: str
+    title: str
+    ends_at: datetime
+    found: int | None = Field(default=None, ge=0, description="Найдено игроком; null - аноним")
+    total: int | None = Field(default=None, ge=0, description="Всего находок; null - аноним")
+
+
+class EventArchiveCard(BaseModel):
+    """Запуск события в архиве игрока (5d)."""
+
+    key: str
+    title: str
+    status: Literal["active", "finished", "stopped"]
+    starts_at: datetime
+    ends_at: datetime
+    found: int = Field(ge=0)
+    total: int = Field(ge=0)
+    completed: bool
+
+
+class EventRewardCard(BaseModel):
+    """Основная награда события."""
+
+    item_key: str
+    title: str
+    image_url: str
+
+
+class EventFindRewardCard(BaseModel):
+    """Награда находки."""
+
+    xp: int = Field(ge=0)
+    verses: int = Field(ge=0)
+
+
+class EventFindTriggerCard(BaseModel):
+    """Условие открытия находки; у закрытой финальной `progress = null`."""
+
+    type: Literal["server", "ui_spot"]
+    page_key: str | None = None
+    metric: str | None = None
+    progress: int | None = None
+    target: int | None = None
+    period: Literal["day", "event"] | None = None
+
+
+class EventFindCard(BaseModel):
+    """Находка события с состоянием для игрока."""
+
+    key: str
+    number: int = Field(ge=1, le=20)
+    title: str
+    x_pct: float = Field(ge=0, le=100)
+    y_pct: float = Field(ge=0, le=100)
+    final: bool
+    state: Literal["locked", "open", "found"]
+    diary: str
+    reward: EventFindRewardCard
+    play_page: str | None = None
+    trigger: EventFindTriggerCard
+    found_at: datetime | None = None
+
+
+class EventPageView(BaseModel):
+    """``GET /v1/pages/events/{key}``: страница события + тема (5d). Только пользователь."""
+
+    key: str
+    title: str
+    description: str
+    theme_key: str
+    theme: ThemeCard
+    status: Literal["active", "finished", "stopped"]
+    starts_at: datetime
+    ends_at: datetime
+    map_url: str | None = None
+    found: int = Field(ge=0)
+    total: int = Field(ge=0)
+    completed: bool
+    reward_item: EventRewardCard | None = None
+    finds: list[EventFindCard]
+
+
 class ShellPage(BaseModel):
     """``GET /v1/pages/shell``: оболочка приложения — тема и колокольчик."""
 
@@ -371,6 +456,10 @@ class ShellPage(BaseModel):
     )
     sanctions: Block[SanctionsCard] | None = Field(
         default=None, description="5c: действующие санкции; null — аноним или гость"
+    )
+    event: EventBannerCard | None = Field(
+        default=None,
+        description="5d: активное событие; null - нет события или progression недоступен",
     )
 
 
@@ -390,6 +479,9 @@ class ProfileBlocks(BaseModel):
     )
     avatar: Block[AvatarCard] | None = Field(
         default=None, description="Своя аватарка; null до потока S5 этапа 5b"
+    )
+    events: list[EventArchiveCard] = Field(
+        default_factory=list, description="5d: архив событий игрока (новые первыми); пусто - нет"
     )
 
 
@@ -507,6 +599,10 @@ class HomeBlocks(BaseModel):
     weekly: Block[list[DailyCard]] = Field(description="Наборы недели (сетка)")
     progress: Block[HomeProgressCard] | None = Field(
         default=None, description="Прогресс игрока; null — гость или аноним"
+    )
+    event: EventBannerCard | None = Field(
+        default=None,
+        description="5d: активное событие; null - нет события или progression недоступен",
     )
 
 

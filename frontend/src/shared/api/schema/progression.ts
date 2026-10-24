@@ -122,6 +122,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** События */
+        get: operations["events_admin_v1_events_get"];
+        put?: never;
+        /**
+         * Создать событие
+         * @description Ошибки: 409 `progression.event_key_taken`, 422 `progression.event_definition_invalid` (`details.errors` - пути и причины: одна финальная находка, уникальные ключи и номера, предмет награды есть в каталоге и т. п.).
+         */
+        post: operations["create_event_admin_v1_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/events/{event_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Событие
+         * @description Определение, хеш, карта и запуски. Ошибки: 404 `progression.event_not_found`.
+         */
+        get: operations["get_event_admin_v1_events__event_key__get"];
+        /**
+         * Изменить определение
+         * @description Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` (есть запуск `published/active`), 422 `progression.event_definition_invalid`.
+         */
+        put: operations["update_event_admin_v1_events__event_key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/events/{event_key}/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Загрузить карту события
+         * @description multipart: `file`, `reason`. Статика PNG/WebP; сигнатура, декодирование и лимиты - как у `shop.media`. Ошибки: 404 `progression.event_not_found`, 413 `progression.event_map_too_large`, 422 `progression.event_map_invalid`.
+         */
+        put: operations["upload_map_admin_v1_events__event_key__map_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/events/{event_key}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Создать запуск
+         * @description Черновик запуска с периодом; так же делается перезапуск. Ошибки: 404 `progression.event_not_found`, 422 `progression.event_period_invalid`.
+         */
+        post: operations["create_run_admin_v1_events__event_key__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/events/{event_key}/runs/{run_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Опубликовать запуск
+         * @description Кладёт неизменяемый снимок определения. Ошибки: 404 `progression.event_not_found` / `progression.event_run_not_found`, 409 `progression.event_body_changed` (хеш определения иной), 409 `progression.event_period_overlap`, 409 `progression.event_run_state_invalid`.
+         */
+        post: operations["publish_run_admin_v1_events__event_key__runs__run_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/events/{event_key}/runs/{run_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Статистика запуска
+         * @description Игроки, закончившие событие, и число открывших каждую находку.
+         */
+        get: operations["run_stats_admin_v1_events__event_key__runs__run_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/events/{event_key}/runs/{run_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Остановить запуск
+         * @description Активный или опубликованный запуск становится `stopped`. Ошибки: 404 `progression.event_run_not_found`, 409 `progression.event_run_state_invalid`.
+         */
+        post: operations["stop_run_admin_v1_events__event_key__runs__run_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/items": {
         parameters: {
             query?: never;
@@ -365,6 +510,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/{event_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Страница события
+         * @description Запуск: активный, иначе последний завершённый или остановленный. Закрытая финальная находка без прогресса триггера. Черновики и неопубликованные не видны: 404 `progression.event_not_found`.
+         */
+        get: operations["event_page_v1_events__event_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/{event_key}/finds/{find}/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Засчитать находку-элемент интерфейса
+         * @description Пустое тело, идемпотентно: повтор возвращает тот же итог с `newly_unlocked = false`. Ошибки: 404 `progression.event_not_found`, 404 `progression.event_find_not_found`, 409 `progression.event_not_active`, 409 `progression.event_find_not_ui_spot`, 409 `progression.event_find_locked` (финальная, пока не открыты остальные), 429 `progression.event_claim_rate_limited` (лимит на игрока, `Retry-After`), 503 (лимитер Redis недоступен, fail-closed).
+         */
+        post: operations["claim_v1_events__event_key__finds__find__claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Активное событие
+         * @description Анонимно. Запуск, идущий сейчас, или `event = null`. Нужен шапке (тема) и главной; bff кэширует ответ до 30 с.
+         */
+        get: operations["active_event_v1_events_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/appearance": {
         parameters: {
             query?: never;
@@ -441,6 +646,26 @@ export interface paths {
          * @description Все бейджи конфига: полученные и с прогрессом.
          */
         get: operations["my_badges_v1_me_badges_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Архив событий игрока
+         * @description Запуски, где у игрока есть прогресс; новые первыми, не более 50.
+         */
+        get: operations["my_events_v1_me_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -691,6 +916,13 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ActiveEvent
+         * @description Ответ ``GET /v1/events/active``.
+         */
+        ActiveEvent: {
+            event: components["schemas"]["EventBanner"] | null;
+        };
+        /**
          * AdminBadgeCard
          * @description Бейдж действующего конфига со статистикой.
          */
@@ -716,6 +948,50 @@ export interface components {
             config_version: number;
             /** Items */
             items: components["schemas"]["AdminBadgeCard"][];
+        };
+        /**
+         * AdminEvent
+         * @description Событие в админке.
+         */
+        AdminEvent: {
+            body: components["schemas"]["EventDefinition"];
+            /** Body Sha256 */
+            body_sha256: string;
+            /** Key */
+            key: string;
+            /** Map Url */
+            map_url: string | null;
+            /** Runs */
+            runs: components["schemas"]["AdminRun"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AdminEventList
+         * @description Список событий.
+         */
+        AdminEventList: {
+            /** Items */
+            items: components["schemas"]["AdminEventSummary"][];
+        };
+        /**
+         * AdminEventSummary
+         * @description Строка списка событий.
+         */
+        AdminEventSummary: {
+            /** Key */
+            key: string;
+            latest_run: components["schemas"]["AdminRun"] | null;
+            /**
+             * Status
+             * @description Статус последнего запуска; null - запусков нет
+             */
+            status: ("draft" | "published" | "active" | "finished" | "stopped") | ("active" | "finished" | "stopped") | null;
+            /** Title */
+            title: string;
         };
         /**
          * AdminItem
@@ -913,6 +1189,38 @@ export interface components {
             items: components["schemas"]["AdminQuestCard"][];
         };
         /**
+         * AdminRun
+         * @description Запуск события; `active/finished` считается по времени.
+         */
+        AdminRun: {
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Published At */
+            published_at: string | null;
+            /** Seq */
+            seq: number;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "published" | "active" | "finished" | "stopped";
+            /** Stopped At */
+            stopped_at: string | null;
+        };
+        /**
          * Appearance
          * @description Оформление профиля: по одному предмету на слот.
          */
@@ -1024,6 +1332,16 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** Body_upload_map_admin_v1_events__event_key__map_put */
+        Body_upload_map_admin_v1_events__event_key__map_put: {
+            /**
+             * File
+             * @description Картинка карты (PNG или WebP)
+             */
+            file: string;
+            /** Reason */
+            reason: string;
+        };
         /**
          * BoostView
          * @description Буст опыта (с колеса): множитель на N онлайн-матчей.
@@ -1033,6 +1351,24 @@ export interface components {
             matches_left: number;
             /** Multiplier */
             multiplier: number;
+        };
+        /**
+         * ClaimResult
+         * @description Итог засчёта находки-элемента интерфейса.
+         */
+        ClaimResult: {
+            /** Completed */
+            completed: boolean;
+            find: components["schemas"]["EventFind"];
+            /** Found */
+            found: number;
+            /**
+             * Newly Unlocked
+             * @description false при повторе: награда не выдаётся второй раз
+             */
+            newly_unlocked: boolean;
+            /** Total */
+            total: number;
         };
         /**
          * ConfigVersionBody
@@ -1102,6 +1438,17 @@ export interface components {
             label: string;
         };
         /**
+         * CreateEventRequest
+         * @description Создать событие. Повтор `key` - 409 `progression.event_key_taken`.
+         */
+        CreateEventRequest: {
+            body: components["schemas"]["EventDefinition"];
+            /** Key */
+            key: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * CreateItemRequest
          * @description Создать предмет (без картинки - неактивным).
          */
@@ -1165,6 +1512,24 @@ export interface components {
             reward: components["schemas"]["PromoReward"];
         };
         /**
+         * CreateRunRequest
+         * @description Новый запуск (и перезапуск) события: черновик с периодом.
+         */
+        CreateRunRequest: {
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
+        /**
          * DailyStreakView
          * @description Серия дейлика по домену.
          */
@@ -1197,6 +1562,266 @@ export interface components {
              * @description null - снять; предмет должен быть в инвентаре и подходить слоту
              */
             item_id: string | null;
+        };
+        /**
+         * EventArchiveItem
+         * @description Запуск в архиве игрока.
+         */
+        EventArchiveItem: {
+            /** Completed */
+            completed: boolean;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Found */
+            found: number;
+            /** Key */
+            key: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "finished" | "stopped";
+            /** Title */
+            title: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EventBanner
+         * @description Активное событие для шапки и главной.
+         */
+        EventBanner: {
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Key */
+            key: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Theme Key
+             * @description Пустая строка - тема не меняется
+             */
+            theme_key: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * EventDefinition
+         * @description Тело определения события (``event_definition.v1``).
+         */
+        EventDefinition: {
+            /** Description */
+            description: string;
+            /** Finds */
+            finds: components["schemas"]["FindDefinition"][];
+            reward: components["schemas"]["MainReward"];
+            /** Theme Key */
+            theme_key: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * EventFind
+         * @description Находка события с состоянием для игрока.
+         */
+        EventFind: {
+            /**
+             * Diary
+             * @description `diary_before` до открытия, `diary_after` после
+             */
+            diary: string;
+            /** Final */
+            final: boolean;
+            /** Found At */
+            found_at: string | null;
+            /** Key */
+            key: string;
+            /** Number */
+            number: number;
+            /**
+             * Play Page
+             * @description Раздел для кнопки «играть»
+             */
+            play_page: string | null;
+            reward: components["schemas"]["FindReward"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "locked" | "open" | "found";
+            /** Title */
+            title: string;
+            trigger: components["schemas"]["FindTrigger"];
+            /** X Pct */
+            x_pct: number;
+            /** Y Pct */
+            y_pct: number;
+        };
+        /**
+         * EventPage
+         * @description Страница события: карта, находки, прогресс игрока.
+         */
+        EventPage: {
+            /** Completed */
+            completed: boolean;
+            /** Description */
+            description: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Finds */
+            finds: components["schemas"]["EventFind"][];
+            /** Found */
+            found: number;
+            /** Key */
+            key: string;
+            /** Map Url */
+            map_url: string | null;
+            reward_item: components["schemas"]["EventRewardItem"] | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "finished" | "stopped";
+            /** Theme Key */
+            theme_key: string;
+            /** Title */
+            title: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EventRewardItem
+         * @description Основная награда за закрытие всех находок.
+         */
+        EventRewardItem: {
+            /** Image Url */
+            image_url: string;
+            /** Item Key */
+            item_key: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * FindDefinition
+         * @description Находка в определении.
+         */
+        FindDefinition: {
+            /** Diary After */
+            diary_after: string;
+            /** Diary Before */
+            diary_before: string;
+            /** Final */
+            final: boolean;
+            /** Key */
+            key: string;
+            /** Number */
+            number: number;
+            /** Play Page */
+            play_page?: ("home" | "daily" | "solo" | "online" | "collections" | "leaderboards" | "wheel" | "shop" | "profile") | null;
+            reward: components["schemas"]["FindRewardBody"];
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: components["schemas"]["ServerTrigger"] | components["schemas"]["UiSpotTrigger"];
+            /** X Pct */
+            x_pct: number;
+            /** Y Pct */
+            y_pct: number;
+        };
+        /**
+         * FindReward
+         * @description Награда находки.
+         */
+        FindReward: {
+            /** Verses */
+            verses: number;
+            /** Xp */
+            xp: number;
+        };
+        /**
+         * FindRewardBody
+         * @description Награда находки.
+         */
+        FindRewardBody: {
+            /** Verses */
+            verses: number;
+            /** Xp */
+            xp: number;
+        };
+        /**
+         * FindStat
+         * @description Сколько игроков открыли находку.
+         */
+        FindStat: {
+            /** Find Key */
+            find_key: string;
+            /** Number */
+            number: number;
+            /** Unlocked */
+            unlocked: number;
+        };
+        /**
+         * FindTrigger
+         * @description Условие открытия находки.
+         */
+        FindTrigger: {
+            /**
+             * Metric
+             * @description Метрика реестра (`server`)
+             */
+            metric: string | null;
+            /**
+             * Page Key
+             * @description Страница спрятанного элемента (`ui_spot`)
+             */
+            page_key: string | null;
+            /**
+             * Period
+             * @description `day` - сброс каждые сутки, `event` - за запуск
+             */
+            period: ("day" | "event") | null;
+            /**
+             * Progress
+             * @description Текущее значение метрики; у закрытой финальной находки - null
+             */
+            progress: number | null;
+            /**
+             * Target
+             * @description Цель метрики (`server`)
+             */
+            target: number | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "server" | "ui_spot";
         };
         /**
          * GrantRequest
@@ -1340,6 +1965,14 @@ export interface components {
             user_id: string;
         };
         /**
+         * MainReward
+         * @description Основная награда за закрытие всех находок.
+         */
+        MainReward: {
+            /** Item Key */
+            item_key: string | null;
+        };
+        /**
          * MyAvatar
          * @description Своя аватарка: право, действующий аватар, последняя заявка.
          */
@@ -1365,6 +1998,14 @@ export interface components {
         MyBadges: {
             /** Items */
             items: components["schemas"]["BadgeView"][];
+        };
+        /**
+         * MyEvents
+         * @description Архив событий игрока (новые первыми, не более 50).
+         */
+        MyEvents: {
+            /** Items */
+            items: components["schemas"]["EventArchiveItem"][];
         };
         /**
          * MyInventory
@@ -1712,6 +2353,16 @@ export interface components {
             version: number;
         };
         /**
+         * PublishRunRequest
+         * @description Публикация запуска с проверкой, что определение не менялось.
+         */
+        PublishRunRequest: {
+            /** Body Sha256 */
+            body_sha256: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * PurchaseResult
          * @description Результат покупки. Повтор с тем же `Idempotency-Key` возвращает ту же выдачу.
          */
@@ -1802,6 +2453,23 @@ export interface components {
             reason: string;
         };
         /**
+         * RunStats
+         * @description Статистика запуска.
+         */
+        RunStats: {
+            /** Completed */
+            completed: number;
+            /** Finds */
+            finds: components["schemas"]["FindStat"][];
+            /** Players */
+            players: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
+        /**
          * SaveDraftRequest
          * @description Сохранить черновик конфига (заменяет текущий черновик).
          */
@@ -1843,6 +2511,30 @@ export interface components {
              * @default 0
              */
             verses_amount: number;
+        };
+        /**
+         * ServerTrigger
+         * @description Находка открывается серверной метрикой.
+         */
+        ServerTrigger: {
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "rounds_played" | "correct_answers" | "wins" | "online_matches" | "daily_completed" | "collection_published" | "daily_streak" | "duel_win" | "weekly_top_place" | "wheel_spin_streak" | "item_equipped" | "collection_played";
+            params?: components["schemas"]["TriggerParams"] | null;
+            /**
+             * Period
+             * @enum {string}
+             */
+            period: "day" | "event";
+            /** Target */
+            target: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "server";
         };
         /**
          * ServiceMeta
@@ -1903,6 +2595,53 @@ export interface components {
              * Format: date-time
              */
             spun_at: string;
+        };
+        /**
+         * StopRunRequest
+         * @description Остановка запуска.
+         */
+        StopRunRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * TriggerParams
+         * @description Параметры метрики.
+         */
+        TriggerParams: {
+            /** Domain */
+            domain?: ("music" | "film") | null;
+            /** Item Key */
+            item_key?: string | null;
+            /** Place Max */
+            place_max?: number | null;
+            /** Slot */
+            slot?: string | null;
+        };
+        /**
+         * UiSpotTrigger
+         * @description Находка спрятана в элементе интерфейса страницы.
+         */
+        UiSpotTrigger: {
+            /**
+             * Page Key
+             * @enum {string}
+             */
+            page_key: "home" | "leaderboards" | "profile" | "collections" | "match_summary" | "shop" | "wheel";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "ui_spot";
+        };
+        /**
+         * UpdateEventRequest
+         * @description Заменить определение (есть запуск `published/active` - 409).
+         */
+        UpdateEventRequest: {
+            body: components["schemas"]["EventDefinition"];
+            /** Reason */
+            reason: string;
         };
         /**
          * UpdateItemRequest
@@ -2367,6 +3106,723 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    events_admin_v1_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEventList"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_event_admin_v1_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_event_admin_v1_events__event_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_event_admin_v1_events__event_key__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    upload_map_admin_v1_events__event_key__map_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_map_admin_v1_events__event_key__map_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminEvent"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Problem Details */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_run_admin_v1_events__event_key__runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRun"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    publish_run_admin_v1_events__event_key__runs__run_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+                /** @description Идентификатор запуска */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRun"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    run_stats_admin_v1_events__event_key__runs__run_id__stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+                /** @description Идентификатор запуска */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunStats"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    stop_run_admin_v1_events__event_key__runs__run_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+                /** @description Идентификатор запуска */
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StopRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRun"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3420,6 +4876,215 @@ export interface operations {
             };
         };
     };
+    event_page_v1_events__event_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    claim_v1_events__event_key__finds__find__claim_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+                /** @description Ключ находки */
+                find: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimResult"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    active_event_v1_events_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveEvent"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     my_appearance_v1_me_appearance_get: {
         parameters: {
             query?: never;
@@ -3694,6 +5359,56 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    my_events_v1_me_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyEvents"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

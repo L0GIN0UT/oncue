@@ -1,6 +1,26 @@
 {
   "components": {
     "schemas": {
+      "ActiveEvent": {
+        "description": "Ответ ``GET /v1/events/active``.",
+        "properties": {
+          "event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventBanner"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "title": "ActiveEvent",
+        "type": "object"
+      },
       "AdminBadgeCard": {
         "description": "Бейдж действующего конфига со статистикой.",
         "properties": {
@@ -61,6 +81,134 @@
           "items"
         ],
         "title": "AdminBadgeList",
+        "type": "object"
+      },
+      "AdminEvent": {
+        "description": "Событие в админке.",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/EventDefinition"
+          },
+          "body_sha256": {
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "map_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Map Url"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/AdminRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "body",
+          "body_sha256",
+          "map_url",
+          "runs",
+          "updated_at"
+        ],
+        "title": "AdminEvent",
+        "type": "object"
+      },
+      "AdminEventList": {
+        "description": "Список событий.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminEventSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdminEventList",
+        "type": "object"
+      },
+      "AdminEventSummary": {
+        "description": "Строка списка событий.",
+        "properties": {
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "latest_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "published",
+                  "active",
+                  "finished",
+                  "stopped"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "active",
+                  "finished",
+                  "stopped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Статус последнего запуска; null - запусков нет",
+            "title": "Status"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "status",
+          "latest_run"
+        ],
+        "title": "AdminEventSummary",
         "type": "object"
       },
       "AdminItem": {
@@ -513,6 +661,77 @@
         "title": "AdminQuestList",
         "type": "object"
       },
+      "AdminRun": {
+        "description": "Запуск события; `active/finished` считается по времени.",
+        "properties": {
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "active",
+              "finished",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "status",
+          "starts_at",
+          "ends_at",
+          "published_at",
+          "stopped_at"
+        ],
+        "title": "AdminRun",
+        "type": "object"
+      },
       "Appearance": {
         "description": "Оформление профиля: по одному предмету на слот.",
         "properties": {
@@ -757,6 +976,28 @@
         "title": "Body_upload_item_media_admin_v1_items__item_id__media_put",
         "type": "object"
       },
+      "Body_upload_map_admin_v1_events__event_key__map_put": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Картинка карты (PNG или WebP)",
+            "title": "File",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "file"
+        ],
+        "title": "Body_upload_map_admin_v1_events__event_key__map_put",
+        "type": "object"
+      },
       "BoostView": {
         "description": "Буст опыта (с колеса): множитель на N онлайн-матчей.",
         "properties": {
@@ -776,6 +1017,42 @@
           "matches_left"
         ],
         "title": "BoostView",
+        "type": "object"
+      },
+      "ClaimResult": {
+        "description": "Итог засчёта находки-элемента интерфейса.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "find": {
+            "$ref": "#/components/schemas/EventFind"
+          },
+          "found": {
+            "minimum": 0.0,
+            "title": "Found",
+            "type": "integer"
+          },
+          "newly_unlocked": {
+            "description": "false при повторе: награда не выдаётся второй раз",
+            "title": "Newly Unlocked",
+            "type": "boolean"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "find",
+          "found",
+          "total",
+          "completed",
+          "newly_unlocked"
+        ],
+        "title": "ClaimResult",
         "type": "object"
       },
       "ConfigVersionBody": {
@@ -871,6 +1148,34 @@
           "items"
         ],
         "title": "ConfigVersionList",
+        "type": "object"
+      },
+      "CreateEventRequest": {
+        "additionalProperties": false,
+        "description": "Создать событие. Повтор `key` - 409 `progression.event_key_taken`.",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/EventDefinition"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "body",
+          "reason"
+        ],
+        "title": "CreateEventRequest",
         "type": "object"
       },
       "CreateItemRequest": {
@@ -1022,6 +1327,35 @@
         "title": "CreatePromoRequest",
         "type": "object"
       },
+      "CreateRunRequest": {
+        "additionalProperties": false,
+        "description": "Новый запуск (и перезапуск) события: черновик с периодом.",
+        "properties": {
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "starts_at",
+          "ends_at",
+          "reason"
+        ],
+        "title": "CreateRunRequest",
+        "type": "object"
+      },
       "CreatedPromo": {
         "description": "Партия кодов. `codes` показывается ОДИН раз - потом в БД только хеш.",
         "properties": {
@@ -1117,6 +1451,649 @@
           "item_id"
         ],
         "title": "EquipRequest",
+        "type": "object"
+      },
+      "EventArchiveItem": {
+        "description": "Запуск в архиве игрока.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "found": {
+            "minimum": 0.0,
+            "title": "Found",
+            "type": "integer"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "finished",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "status",
+          "starts_at",
+          "ends_at",
+          "found",
+          "total",
+          "completed"
+        ],
+        "title": "EventArchiveItem",
+        "type": "object"
+      },
+      "EventBanner": {
+        "description": "Активное событие для шапки и главной.",
+        "properties": {
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "theme_key": {
+            "description": "Пустая строка - тема не меняется",
+            "maxLength": 32,
+            "pattern": "^([a-z][a-z0-9_-]*)?$",
+            "title": "Theme Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "key",
+          "title",
+          "theme_key",
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "EventBanner",
+        "type": "object"
+      },
+      "EventDefinition": {
+        "additionalProperties": false,
+        "description": "Тело определения события (``event_definition.v1``).",
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "finds": {
+            "items": {
+              "$ref": "#/components/schemas/FindDefinition"
+            },
+            "maxItems": 20,
+            "minItems": 2,
+            "title": "Finds",
+            "type": "array"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/MainReward"
+          },
+          "theme_key": {
+            "maxLength": 32,
+            "pattern": "^([a-z][a-z0-9_-]*)?$",
+            "title": "Theme Key",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "theme_key",
+          "finds",
+          "reward"
+        ],
+        "title": "EventDefinition",
+        "type": "object"
+      },
+      "EventFind": {
+        "description": "Находка события с состоянием для игрока.",
+        "properties": {
+          "diary": {
+            "description": "`diary_before` до открытия, `diary_after` после",
+            "title": "Diary",
+            "type": "string"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "found_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found At"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "number": {
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Number",
+            "type": "integer"
+          },
+          "play_page": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Раздел для кнопки «играть»",
+            "title": "Play Page"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/FindReward"
+          },
+          "state": {
+            "enum": [
+              "locked",
+              "open",
+              "found"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/FindTrigger"
+          },
+          "x_pct": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "X Pct",
+            "type": "number"
+          },
+          "y_pct": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Y Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "number",
+          "title",
+          "x_pct",
+          "y_pct",
+          "final",
+          "state",
+          "diary",
+          "reward",
+          "play_page",
+          "trigger",
+          "found_at"
+        ],
+        "title": "EventFind",
+        "type": "object"
+      },
+      "EventPage": {
+        "description": "Страница события: карта, находки, прогресс игрока.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "finds": {
+            "items": {
+              "$ref": "#/components/schemas/EventFind"
+            },
+            "title": "Finds",
+            "type": "array"
+          },
+          "found": {
+            "minimum": 0.0,
+            "title": "Found",
+            "type": "integer"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "map_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Map Url"
+          },
+          "reward_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventRewardItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "finished",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "theme_key": {
+            "maxLength": 32,
+            "pattern": "^([a-z][a-z0-9_-]*)?$",
+            "title": "Theme Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "theme_key",
+          "status",
+          "starts_at",
+          "ends_at",
+          "map_url",
+          "found",
+          "total",
+          "completed",
+          "reward_item",
+          "finds"
+        ],
+        "title": "EventPage",
+        "type": "object"
+      },
+      "EventRewardItem": {
+        "description": "Основная награда за закрытие всех находок.",
+        "properties": {
+          "image_url": {
+            "title": "Image Url",
+            "type": "string"
+          },
+          "item_key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Item Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_key",
+          "title",
+          "image_url"
+        ],
+        "title": "EventRewardItem",
+        "type": "object"
+      },
+      "FindDefinition": {
+        "additionalProperties": false,
+        "description": "Находка в определении.",
+        "properties": {
+          "diary_after": {
+            "maxLength": 1000,
+            "title": "Diary After",
+            "type": "string"
+          },
+          "diary_before": {
+            "maxLength": 1000,
+            "title": "Diary Before",
+            "type": "string"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "number": {
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Number",
+            "type": "integer"
+          },
+          "play_page": {
+            "anyOf": [
+              {
+                "enum": [
+                  "home",
+                  "daily",
+                  "solo",
+                  "online",
+                  "collections",
+                  "leaderboards",
+                  "wheel",
+                  "shop",
+                  "profile"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Play Page"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/FindRewardBody"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "discriminator": {
+              "mapping": {
+                "server": "#/components/schemas/ServerTrigger",
+                "ui_spot": "#/components/schemas/UiSpotTrigger"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ServerTrigger"
+              },
+              {
+                "$ref": "#/components/schemas/UiSpotTrigger"
+              }
+            ],
+            "title": "Trigger"
+          },
+          "x_pct": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "X Pct",
+            "type": "number"
+          },
+          "y_pct": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Y Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "number",
+          "title",
+          "diary_before",
+          "diary_after",
+          "x_pct",
+          "y_pct",
+          "reward",
+          "final",
+          "trigger"
+        ],
+        "title": "FindDefinition",
+        "type": "object"
+      },
+      "FindReward": {
+        "description": "Награда находки.",
+        "properties": {
+          "verses": {
+            "minimum": 0.0,
+            "title": "Verses",
+            "type": "integer"
+          },
+          "xp": {
+            "minimum": 0.0,
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "xp",
+          "verses"
+        ],
+        "title": "FindReward",
+        "type": "object"
+      },
+      "FindRewardBody": {
+        "additionalProperties": false,
+        "description": "Награда находки.",
+        "properties": {
+          "verses": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Verses",
+            "type": "integer"
+          },
+          "xp": {
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "xp",
+          "verses"
+        ],
+        "title": "FindRewardBody",
+        "type": "object"
+      },
+      "FindStat": {
+        "description": "Сколько игроков открыли находку.",
+        "properties": {
+          "find_key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Find Key",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "unlocked": {
+            "minimum": 0.0,
+            "title": "Unlocked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "find_key",
+          "number",
+          "unlocked"
+        ],
+        "title": "FindStat",
+        "type": "object"
+      },
+      "FindTrigger": {
+        "description": "Условие открытия находки.",
+        "properties": {
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Метрика реестра (`server`)",
+            "title": "Metric"
+          },
+          "page_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Страница спрятанного элемента (`ui_spot`)",
+            "title": "Page Key"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "enum": [
+                  "day",
+                  "event"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`day` - сброс каждые сутки, `event` - за запуск",
+            "title": "Period"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Текущее значение метрики; у закрытой финальной находки - null",
+            "title": "Progress"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Цель метрики (`server`)",
+            "title": "Target"
+          },
+          "type": {
+            "enum": [
+              "server",
+              "ui_spot"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "page_key",
+          "metric",
+          "progress",
+          "target",
+          "period"
+        ],
+        "title": "FindTrigger",
         "type": "object"
       },
       "GrantRequest": {
@@ -1406,6 +2383,29 @@
         "title": "LedgerOperation",
         "type": "object"
       },
+      "MainReward": {
+        "additionalProperties": false,
+        "description": "Основная награда за закрытие всех находок.",
+        "properties": {
+          "item_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Key"
+          }
+        },
+        "required": [
+          "item_key"
+        ],
+        "title": "MainReward",
+        "type": "object"
+      },
       "MyAvatar": {
         "description": "Своя аватарка: право, действующий аватар, последняя заявка.",
         "properties": {
@@ -1465,6 +2465,24 @@
           "items"
         ],
         "title": "MyBadges",
+        "type": "object"
+      },
+      "MyEvents": {
+        "description": "Архив событий игрока (новые первыми, не более 50).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EventArchiveItem"
+            },
+            "maxItems": 50,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "MyEvents",
         "type": "object"
       },
       "MyInventory": {
@@ -2198,6 +3216,29 @@
         "title": "PublishRequest",
         "type": "object"
       },
+      "PublishRunRequest": {
+        "additionalProperties": false,
+        "description": "Публикация запуска с проверкой, что определение не менялось.",
+        "properties": {
+          "body_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body_sha256",
+          "reason"
+        ],
+        "title": "PublishRunRequest",
+        "type": "object"
+      },
       "PurchaseResult": {
         "description": "Результат покупки. Повтор с тем же `Idempotency-Key` возвращает ту же выдачу.",
         "properties": {
@@ -2389,6 +3430,41 @@
         "title": "RollbackRequest",
         "type": "object"
       },
+      "RunStats": {
+        "description": "Статистика запуска.",
+        "properties": {
+          "completed": {
+            "minimum": 0.0,
+            "title": "Completed",
+            "type": "integer"
+          },
+          "finds": {
+            "items": {
+              "$ref": "#/components/schemas/FindStat"
+            },
+            "title": "Finds",
+            "type": "array"
+          },
+          "players": {
+            "minimum": 0.0,
+            "title": "Players",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "players",
+          "completed",
+          "finds"
+        ],
+        "title": "RunStats",
+        "type": "object"
+      },
       "SaveDraftRequest": {
         "additionalProperties": false,
         "description": "Сохранить черновик конфига (заменяет текущий черновик).",
@@ -2481,6 +3557,67 @@
           "reason"
         ],
         "title": "SavePackRequest",
+        "type": "object"
+      },
+      "ServerTrigger": {
+        "additionalProperties": false,
+        "description": "Находка открывается серверной метрикой.",
+        "properties": {
+          "metric": {
+            "enum": [
+              "rounds_played",
+              "correct_answers",
+              "wins",
+              "online_matches",
+              "daily_completed",
+              "collection_published",
+              "daily_streak",
+              "duel_win",
+              "weekly_top_place",
+              "wheel_spin_streak",
+              "item_equipped",
+              "collection_played"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerParams"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "enum": [
+              "day",
+              "event"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "target": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Target",
+            "type": "integer"
+          },
+          "type": {
+            "const": "server",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "metric",
+          "target",
+          "period"
+        ],
+        "title": "ServerTrigger",
         "type": "object"
       },
       "ServiceMeta": {
@@ -2586,6 +3723,135 @@
           "repeated"
         ],
         "title": "SpinResult",
+        "type": "object"
+      },
+      "StopRunRequest": {
+        "additionalProperties": false,
+        "description": "Остановка запуска.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "StopRunRequest",
+        "type": "object"
+      },
+      "TriggerParams": {
+        "additionalProperties": false,
+        "description": "Параметры метрики.",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "enum": [
+                  "music",
+                  "film"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "item_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Key"
+          },
+          "place_max": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Max"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          }
+        },
+        "title": "TriggerParams",
+        "type": "object"
+      },
+      "UiSpotTrigger": {
+        "additionalProperties": false,
+        "description": "Находка спрятана в элементе интерфейса страницы.",
+        "properties": {
+          "page_key": {
+            "enum": [
+              "home",
+              "leaderboards",
+              "profile",
+              "collections",
+              "match_summary",
+              "shop",
+              "wheel"
+            ],
+            "title": "Page Key",
+            "type": "string"
+          },
+          "type": {
+            "const": "ui_spot",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "page_key"
+        ],
+        "title": "UiSpotTrigger",
+        "type": "object"
+      },
+      "UpdateEventRequest": {
+        "additionalProperties": false,
+        "description": "Заменить определение (есть запуск `published/active` - 409).",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/EventDefinition"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "reason"
+        ],
+        "title": "UpdateEventRequest",
         "type": "object"
       },
       "UpdateItemRequest": {
@@ -3411,6 +4677,1205 @@
           }
         },
         "summary": "Откатить к версии",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events": {
+      "get": {
+        "operationId": "events_admin_v1_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEventList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "События",
+        "tags": [
+          "progression-admin"
+        ]
+      },
+      "post": {
+        "description": "Ошибки: 409 `progression.event_key_taken`, 422 `progression.event_definition_invalid` (`details.errors` - пути и причины: одна финальная находка, уникальные ключи и номера, предмет награды есть в каталоге и т. п.).",
+        "operationId": "create_event_admin_v1_events_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Создать событие",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events/{event_key}": {
+      "get": {
+        "description": "Определение, хеш, карта и запуски. Ошибки: 404 `progression.event_not_found`.",
+        "operationId": "get_event_admin_v1_events__event_key__get",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Событие",
+        "tags": [
+          "progression-admin"
+        ]
+      },
+      "put": {
+        "description": "Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` (есть запуск `published/active`), 422 `progression.event_definition_invalid`.",
+        "operationId": "update_event_admin_v1_events__event_key__put",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Изменить определение",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events/{event_key}/map": {
+      "put": {
+        "description": "multipart: `file`, `reason`. Статика PNG/WebP; сигнатура, декодирование и лимиты - как у `shop.media`. Ошибки: 404 `progression.event_not_found`, 413 `progression.event_map_too_large`, 422 `progression.event_map_invalid`.",
+        "operationId": "upload_map_admin_v1_events__event_key__map_put",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_map_admin_v1_events__event_key__map_put"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Problem Details"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Загрузить карту события",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events/{event_key}/runs": {
+      "post": {
+        "description": "Черновик запуска с периодом; так же делается перезапуск. Ошибки: 404 `progression.event_not_found`, 422 `progression.event_period_invalid`.",
+        "operationId": "create_run_admin_v1_events__event_key__runs_post",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Создать запуск",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events/{event_key}/runs/{run_id}/publish": {
+      "post": {
+        "description": "Кладёт неизменяемый снимок определения. Ошибки: 404 `progression.event_not_found` / `progression.event_run_not_found`, 409 `progression.event_body_changed` (хеш определения иной), 409 `progression.event_period_overlap`, 409 `progression.event_run_state_invalid`.",
+        "operationId": "publish_run_admin_v1_events__event_key__runs__run_id__publish_post",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Идентификатор запуска",
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор запуска",
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Опубликовать запуск",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events/{event_key}/runs/{run_id}/stats": {
+      "get": {
+        "description": "Игроки, закончившие событие, и число открывших каждую находку.",
+        "operationId": "run_stats_admin_v1_events__event_key__runs__run_id__stats_get",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Идентификатор запуска",
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор запуска",
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Статистика запуска",
+        "tags": [
+          "progression-admin"
+        ]
+      }
+    },
+    "/admin/v1/events/{event_key}/runs/{run_id}/stop": {
+      "post": {
+        "description": "Активный или опубликованный запуск становится `stopped`. Ошибки: 404 `progression.event_run_not_found`, 409 `progression.event_run_state_invalid`.",
+        "operationId": "stop_run_admin_v1_events__event_key__runs__run_id__stop_post",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Идентификатор запуска",
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор запуска",
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Остановить запуск",
         "tags": [
           "progression-admin"
         ]
@@ -5194,6 +7659,333 @@
         ]
       }
     },
+    "/v1/events/active": {
+      "get": {
+        "description": "Анонимно. Запуск, идущий сейчас, или `event = null`. Нужен шапке (тема) и главной; bff кэширует ответ до 30 с.",
+        "operationId": "active_event_v1_events_active_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Активное событие",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/events/{event_key}": {
+      "get": {
+        "description": "Запуск: активный, иначе последний завершённый или остановленный. Закрытая финальная находка без прогресса триггера. Черновики и неопубликованные не видны: 404 `progression.event_not_found`.",
+        "operationId": "event_page_v1_events__event_key__get",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Страница события",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/events/{event_key}/finds/{find}/claim": {
+      "post": {
+        "description": "Пустое тело, идемпотентно: повтор возвращает тот же итог с `newly_unlocked = false`. Ошибки: 404 `progression.event_not_found`, 404 `progression.event_find_not_found`, 409 `progression.event_not_active`, 409 `progression.event_find_not_ui_spot`, 409 `progression.event_find_locked` (финальная, пока не открыты остальные), 429 `progression.event_claim_rate_limited` (лимит на игрока, `Retry-After`), 503 (лимитер Redis недоступен, fail-closed).",
+        "operationId": "claim_v1_events__event_key__finds__find__claim_post",
+        "parameters": [
+          {
+            "description": "Ключ события",
+            "in": "path",
+            "name": "event_key",
+            "required": true,
+            "schema": {
+              "description": "Ключ события",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Event Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ключ находки",
+            "in": "path",
+            "name": "find",
+            "required": true,
+            "schema": {
+              "description": "Ключ находки",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Find",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Засчитать находку-элемент интерфейса",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
     "/v1/me/appearance": {
       "get": {
         "description": "По одному предмету на слот; пустой слот - `item = null`.",
@@ -5607,6 +8399,73 @@
           }
         },
         "summary": "Мои бейджи",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/events": {
+      "get": {
+        "description": "Запуски, где у игрока есть прогресс; новые первыми, не более 50.",
+        "operationId": "my_events_v1_me_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyEvents"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Архив событий игрока",
         "tags": [
           "progression"
         ]

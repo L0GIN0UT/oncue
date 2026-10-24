@@ -16,6 +16,7 @@ from fastapi import APIRouter
 
 from gv_service import Infrastructure
 from progression_service.api.public.avatar import register_avatar_routes
+from progression_service.api.public.events import register_event_routes
 from progression_service.api.public.progress import register_progress_routes
 from progression_service.api.public.rewards import register_reward_routes
 from progression_service.api.public.schemas import ServiceMeta
@@ -56,4 +57,5 @@ def build_public_router(
     register_reward_routes(router, quests, badges, wheel)
     register_shop_routes(router, shop)
     register_avatar_routes(router, shop, _progression_settings(infra))
+    register_event_routes(router)
     return router
