@@ -6,6 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import messages from "../../../messages/ru.json";
+import { SOCIAL_ERROR_CODES, SOCIAL_EXTRA_KEYS } from "@/features/friends/errors";
 import { CHAT_REJECT_REASONS, MATCH_ERROR_CODES } from "@/features/match/errors";
 
 const root = path.resolve(import.meta.dirname, "../../..");
@@ -158,6 +159,16 @@ describe("messages/ru.json", () => {
       // Базовые эмоции и фразы онлайн-шаблонов (session.chat в сидах режимов).
       ...["wow", "gg", "fire", "laugh", "think"].map((k) => `match.emotes.${k}`),
       ...["good_luck", "well_played", "nice_one", "so_close"].map((k) => `match.phrases.${k}`),
+      // Этап 5c: social — коды ошибок, статусы, виды санкций, объекты жалоб, приватность.
+      ...[...SOCIAL_ERROR_CODES, ...SOCIAL_EXTRA_KEYS].map((k) => `social.error.${k}`),
+      "auth.error.account_banned",
+      ...["online", "in_match", "offline"].map((k) => `social.status.${k}`),
+      ...["ranked", "chat", "online", "account"].flatMap((k) => [
+        `social.sanctions.kind.${k}`,
+        `social.sanctions.kindHint.${k}`,
+      ]),
+      ...["player", "collection", "comment", "avatar"].map((k) => `social.report.title.${k}`),
+      ...["all", "none"].map((k) => `social.privacy.requestsValue.${k}`),
     ];
     expect(dynamic.filter((k) => typeof lookup(k) !== "string")).toEqual([]);
   });

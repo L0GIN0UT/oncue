@@ -29,6 +29,24 @@ describe("parseNotificationMessage", () => {
     expect(parseNotificationMessage(msg)).not.toBeNull();
   });
 
+  it("машинные поля data сохраняются, нестроковые значения отбрасываются", () => {
+    const msg = {
+      ...valid,
+      notification: {
+        ...valid.notification,
+        type: "room_invite",
+        data: { room_code: "ABCD2345", n: 5, nested: { a: 1 } },
+      },
+    };
+    expect(parseNotificationMessage(msg)?.data).toEqual({ room_code: "ABCD2345" });
+  });
+
+  it("без data поле отсутствует, битое data игнорируется", () => {
+    expect(parseNotificationMessage(valid)).not.toHaveProperty("data");
+    const bad = { ...valid, notification: { ...valid.notification, data: "x" } };
+    expect(parseNotificationMessage(bad)).not.toHaveProperty("data");
+  });
+
   it.each([
     null,
     "строка",

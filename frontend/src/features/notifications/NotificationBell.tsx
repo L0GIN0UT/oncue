@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useIcons } from "@/shared/ui/theme-provider";
+import { RoomInviteCard } from "./RoomInviteCard";
 import { useUnreadCount } from "./use-unread";
 
 const MAX_SHOWN = 99;
@@ -34,6 +35,7 @@ export function NotificationBell() {
       <span className="sr-only" role="status" aria-live="polite" data-testid="notification-live">
         {count > 0 ? t("notifications.unread", { count }) : ""}
       </span>
+      <RoomInviteCard />
     </>
   );
 }

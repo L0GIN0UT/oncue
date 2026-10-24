@@ -14,6 +14,8 @@ import { blockData } from "@/shared/api/blocks";
 import { defaultPersonalFactory } from "@/shared/realtime/personal";
 import { useMyUserId } from "@/features/auth/use-my-user-id";
 import { useViewer } from "@/features/auth/session";
+import { roomInviteHref } from "./invite";
+import { latestInviteKey } from "./RoomInviteCard";
 import { withPrepended, type ListData } from "./cache";
 import {
   fetchShell,
@@ -70,6 +72,8 @@ export function useUnreadCount(): number {
           data ? withPrepended(data, item) : data,
         );
         void client.invalidateQueries({ queryKey: unreadQueryKey });
+        // Приглашение в комнату — карточка с кнопкой «Войти» у колокольчика (5c).
+        if (roomInviteHref(item)) client.setQueryData(latestInviteKey, item);
       },
     });
     return () => {

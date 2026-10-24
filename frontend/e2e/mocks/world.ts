@@ -21,6 +21,7 @@ import { dayIn, nextMidnight } from "@/features/daily/countdown-time";
 import { ProgressionWorld } from "./progression";
 import { EconomyWorld } from "./economy";
 import { NotificationsWorld } from "./notifications";
+import { SocialWorld, type SocialScenario } from "./social";
 import { COLLECTION_MODES, UgcWorld } from "./ugc";
 
 export type Domain = "music" | "film";
@@ -448,6 +449,8 @@ export type Scenario = {
   avatarRequest?: "pending" | "approved" | "rejected";
   /** Этап 5b: notifications отвечает 503. */
   notificationsDown?: boolean;
+  /** Этап 5c: сценарии social (см. social.ts). */
+  social?: SocialScenario;
 };
 
 type Asset =
@@ -509,6 +512,8 @@ export class MockWorld {
   economy = new EconomyWorld();
   /** Уведомления (этап 5b). */
   notifications = new NotificationsWorld();
+  /** Друзья, комментарии, жалобы, санкции (этап 5c). */
+  social = new SocialWorld();
   scenario: Scenario = {};
   /** Субъекты, чья refresh-сессия отозвана (refresh отвечает 401). */
   revokedRefresh = new Set<string>();
@@ -537,6 +542,7 @@ export class MockWorld {
     this.progression.reset();
     this.economy.reset();
     this.notifications.reset();
+    this.social.reset();
     this.seq = 0;
   }
 
