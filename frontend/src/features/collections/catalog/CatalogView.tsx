@@ -67,6 +67,16 @@ export function CatalogView() {
   const update = (patch: Partial<Filters>) =>
     router.replace(`${pathname}${toSearch({ ...filters, ...patch })}`, { scroll: false });
 
+  // Поиск пишет адрес через history API: router.replace по паузе ввода отменял бы
+  // незавершённый router.push карточки (клик сразу после ввода). Next подхватывает
+  // replaceState в useSearchParams, навигации при этом не отменяются.
+  const search = (q: string | undefined) =>
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname}${toSearch({ ...filters, q: q || undefined })}`,
+    );
+
   return (
     <div className="flex flex-col gap-8 pt-6 sm:pt-10">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -84,7 +94,7 @@ export function CatalogView() {
         )}
       </header>
 
-      <SearchBox value={filters.q ?? ""} onSearch={(q) => update({ q: q || undefined })} />
+      <SearchBox value={filters.q ?? ""} onSearch={search} />
       <FilterBar filters={filters} onChange={update} />
 
       {listMode ? (

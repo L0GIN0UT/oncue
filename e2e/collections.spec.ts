@@ -367,6 +367,8 @@ test("B: поиск сборника, страница без состава, 5 
   // Каталог: фильтры и сортировка — из адреса, поиск — поле `collection-search`.
   await page.goto("/collections?domain=film&sort=new");
   await page.getByTestId("collection-search").fill("кадры");
+  // Адрес с q обновляется по паузе ввода; клик раньше гонялся бы с этим обновлением.
+  await expect(page).toHaveURL(/q=/);
   const card = page.getByTestId(`collection-card-${collectionId}`);
   await expect(card).toBeVisible();
   await card.click();
