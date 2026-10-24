@@ -115,6 +115,9 @@ nav:
       - adr/0051-reports-and-moderation-queue.md
       - adr/0052-sanctions-and-enforcement.md
       - adr/0053-social-config-versioned-in-db.md
+      - adr/0054-seasonal-events-model.md
+      - adr/0055-event-find-triggers.md
+      - adr/0056-event-rewards-via-ledger.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md
