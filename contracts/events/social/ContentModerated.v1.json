@@ -53,6 +53,6 @@
   ],
   "title": "social.ContentModerated v1",
   "type": "object",
-  "x-aggregate-type": "moderation_case",
+  "x-aggregate-type": "social",
   "x-topic": "social.social.v1"
 }

@@ -67,6 +67,6 @@
   ],
   "title": "social.ReportFiled v1",
   "type": "object",
-  "x-aggregate-type": "report",
+  "x-aggregate-type": "social",
   "x-topic": "social.social.v1"
 }

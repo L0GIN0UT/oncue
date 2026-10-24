@@ -172,8 +172,7 @@ types:
     channels: {in_app: true, email: false, push: false}
     params:
       nickname: payload.author_nickname
-      collection: payload.collection_title
     templates:
       ru:
         title: Новый комментарий
-        body: "{nickname} прокомментировал(а) сборник «{collection}»."
+        body: "{nickname} оставил(а) комментарий к вашему сборнику."

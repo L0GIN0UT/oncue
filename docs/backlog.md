@@ -54,6 +54,7 @@
 | GET карточки UGC-изображения по id в admin-API | media_pipeline, admin | 5b | По желанию |
 | Число получателей в подтверждении рассылки (`GET /admin/v1/broadcasts/audience`) | notifications, admin | 5b | По желанию |
 | Своя аватарка в `me/appearance`: убрать дубль `PlayerAppearance.custom_avatar_url` одним изменением контракта | progression, bff | 5b | По желанию |
+| Название сборника в `collections.CollectionPublished/Updated` (необязательное `title` ≤120): нужно social для `CommentPosted.collection_title` (сейчас пустая строка, текст уведомления без названия) | collections, social | 5c |
 | Ник в `/pages/players/{id}`: `PlayerBadge` показывает «Игрок» | bff, progression, frontend | 5b | 5c (F5), если ник даёт social/identity |
 | Общий `adminContext` в e2e (`e2e/collections.spec.ts` дублирует `e2e/admin.ts`) | e2e | 5b | По желанию |
 | Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |

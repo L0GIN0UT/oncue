@@ -24,6 +24,6 @@
   ],
   "title": "social.UserBlocked v1",
   "type": "object",
-  "x-aggregate-type": "block",
+  "x-aggregate-type": "social",
   "x-topic": "social.social.v1"
 }

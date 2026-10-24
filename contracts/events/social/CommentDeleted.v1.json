@@ -42,6 +42,6 @@
   ],
   "title": "social.CommentDeleted v1",
   "type": "object",
-  "x-aggregate-type": "comment",
+  "x-aggregate-type": "social",
   "x-topic": "social.social.v1"
 }

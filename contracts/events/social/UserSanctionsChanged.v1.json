@@ -89,6 +89,6 @@
   ],
   "title": "social.UserSanctionsChanged v1",
   "type": "object",
-  "x-aggregate-type": "sanctions",
+  "x-aggregate-type": "social",
   "x-topic": "social.social.v1"
 }
