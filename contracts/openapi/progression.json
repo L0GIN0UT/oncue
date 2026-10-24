@@ -235,6 +235,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "event_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Предмет награды события; null - обычный",
+            "title": "Event Key"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -325,6 +337,7 @@
           "level_required",
           "price",
           "active",
+          "event_key",
           "asset_url",
           "poster_url",
           "owners",
@@ -1187,6 +1200,20 @@
             "description": "Активный предмет виден на витрине; нужна загруженная картинка",
             "title": "Active",
             "type": "boolean"
+          },
+          "event_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Предмет только для награды сезонного события с этим ключом: без цены и уровня, не на витрине, не с колеса и не по промокоду (422 `progression.item_event_exclusive`)",
+            "title": "Event Key"
           },
           "key": {
             "maxLength": 64,
@@ -3864,6 +3891,20 @@
             "title": "Active",
             "type": "boolean"
           },
+          "event_key": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Предмет только для награды сезонного события с этим ключом: без цены и уровня, не на витрине, не с колеса и не по промокоду (422 `progression.item_event_exclusive`)",
+            "title": "Event Key"
+          },
           "key": {
             "maxLength": 64,
             "pattern": "^[a-z][a-z0-9_]*$",
@@ -4725,21 +4766,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "События",
@@ -4748,7 +4774,7 @@
         ]
       },
       "post": {
-        "description": "Ошибки: 409 `progression.event_key_taken`, 422 `progression.event_definition_invalid` (`details.errors` - пути и причины: одна финальная находка, уникальные ключи и номера, предмет награды есть в каталоге и т. п.).",
+        "description": "Ошибки: 409 `progression.event_key_taken`, 422 `progression.event_definition_invalid` (`details.errors` - пути и причины: одна финальная находка, уникальные ключи и номера, предмет награды - активный предмет этого события и т. п.).",
         "operationId": "create_event_admin_v1_events_post",
         "parameters": [
           {
@@ -4850,21 +4876,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать событие",
@@ -4957,21 +4968,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Событие",
@@ -5110,21 +5106,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Изменить определение",
@@ -5265,21 +5246,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Загрузить карту события",
@@ -5405,21 +5371,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Создать запуск",
@@ -5430,7 +5381,7 @@
     },
     "/admin/v1/events/{event_key}/runs/{run_id}/publish": {
       "post": {
-        "description": "Кладёт неизменяемый снимок определения. Ошибки: 404 `progression.event_not_found` / `progression.event_run_not_found`, 409 `progression.event_body_changed` (хеш определения иной), 409 `progression.event_period_overlap`, 409 `progression.event_run_state_invalid`.",
+        "description": "Кладёт неизменяемый снимок определения. Ошибки: 404 `progression.event_not_found` / `progression.event_run_not_found`, 409 `progression.event_body_changed` (хеш определения иной), 409 `progression.event_period_overlap`, 409 `progression.event_run_state_invalid`, 422 `progression.event_definition_invalid`.",
         "operationId": "publish_run_admin_v1_events__event_key__runs__run_id__publish_post",
         "parameters": [
           {
@@ -5572,21 +5523,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Опубликовать запуск",
@@ -5691,21 +5627,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Статистика запуска",
@@ -5858,21 +5779,6 @@
               }
             },
             "description": "Некорректные данные"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Остановить запуск",
@@ -7673,21 +7579,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Активное событие",
@@ -7780,21 +7671,6 @@
               }
             },
             "description": "Validation Error"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Страница события",
@@ -7948,21 +7824,6 @@
               }
             },
             "description": "Слишком много запросов"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           },
           "503": {
             "content": {
@@ -8448,21 +8309,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Архив событий игрока",

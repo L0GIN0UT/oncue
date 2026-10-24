@@ -43,11 +43,13 @@ def _item(r: Any) -> Item:
         active=r.active,
         created_at=r.created_at,
         updated_at=r.updated_at,
+        event_key=r.event_key,
     )
 
 
 def _item_values(item: Item) -> dict[str, Any]:
     return {
+        "event_key": item.event_key,
         "slot": item.slot,
         "rarity": item.rarity,
         "title": item.title,
@@ -89,7 +91,8 @@ class SqlItems:
 
     async def list_active(self, slot: str | None) -> list[Item]:
         """Активные предметы, старые первыми."""
-        stmt = select(items).where(items.c.active.is_(True))
+        # Предметы событий на витрину не попадают (выдаются только событием).
+        stmt = select(items).where(items.c.active.is_(True), items.c.event_key.is_(None))
         if slot is not None:
             stmt = stmt.where(items.c.slot == slot)
         rows = await self._s.execute(stmt.order_by(items.c.created_at, items.c.id))
@@ -212,6 +215,7 @@ class SqlInventory:
                     literal(now, inventory.c.acquired_at.type),
                 ).where(
                     items.c.active.is_(True),
+                    items.c.event_key.is_(None),
                     items.c.level_required.is_not(None),
                     items.c.level_required <= level,
                 ),

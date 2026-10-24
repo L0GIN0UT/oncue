@@ -55,10 +55,17 @@ items = Table(
     Column("active", Boolean, nullable=False, server_default=text("false")),
     _ts("created_at"),
     _ts("updated_at"),
+    # Предмет только для награды сезонного события (5d, ADR 0056): не продаётся и не по уровню.
+    Column("event_key", String(64), nullable=True),
     UniqueConstraint("key", name="uq_items_key"),
     CheckConstraint("media_kind IN ('static','animated')", name="media_kind_known"),
     CheckConstraint(
-        "level_required IS NOT NULL OR price IS NOT NULL", name="unlock_condition_required"
+        "level_required IS NOT NULL OR price IS NOT NULL OR event_key IS NOT NULL",
+        name="unlock_condition_required",
+    ),
+    CheckConstraint(
+        "event_key IS NULL OR (level_required IS NULL AND price IS NULL)",
+        name="event_item_not_sold",
     ),
     CheckConstraint(
         "level_required IS NULL OR level_required >= 1", name="level_required_positive"

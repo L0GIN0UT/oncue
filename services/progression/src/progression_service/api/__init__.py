@@ -9,6 +9,7 @@ from progression_service.api.admin import build_admin_router
 from progression_service.api.public import build_public_router
 from progression_service.application.admin import AdminServices
 from progression_service.application.badges import BadgeQueries
+from progression_service.application.events.player import EventPlayerService
 from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
 from progression_service.application.shop import ShopServices
@@ -24,9 +25,10 @@ def build_api_routers(
     wheel: WheelService,
     admin: AdminServices,
     shop: ShopServices,
+    events: EventPlayerService,
 ) -> list[APIRouter]:
     """Все роутеры сервиса: use-cases приходят из composition root (``main.py``)."""
     return [
-        build_public_router(infra, queries, quests, badges, wheel=wheel, shop=shop),
+        build_public_router(infra, queries, quests, badges, wheel=wheel, shop=shop, events=events),
         build_admin_router(admin),
     ]

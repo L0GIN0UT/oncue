@@ -9,8 +9,9 @@
 from progression_service.infrastructure.db import (
     tables_admin,
     tables_avatar,
+    tables_events,
     tables_rewards,
     tables_shop,
 )
 
-__all__ = ["tables_admin", "tables_avatar", "tables_rewards", "tables_shop"]
+__all__ = ["tables_admin", "tables_avatar", "tables_events", "tables_rewards", "tables_shop"]

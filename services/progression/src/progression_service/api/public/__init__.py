@@ -23,6 +23,7 @@ from progression_service.api.public.schemas import ServiceMeta
 from progression_service.api.public.shop import register_shop_routes
 from progression_service.api.public.wallet import register_wallet_routes
 from progression_service.application.badges import BadgeQueries
+from progression_service.application.events.player import EventPlayerService
 from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
 from progression_service.application.shop import ShopServices
@@ -44,6 +45,7 @@ def build_public_router(
     *,
     wheel: WheelService,
     shop: ShopServices,
+    events: EventPlayerService,
 ) -> APIRouter:
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["progression"])
@@ -57,5 +59,5 @@ def build_public_router(
     register_reward_routes(router, quests, badges, wheel)
     register_shop_routes(router, shop)
     register_avatar_routes(router, shop, _progression_settings(infra))
-    register_event_routes(router)
+    register_event_routes(router, events)
     return router

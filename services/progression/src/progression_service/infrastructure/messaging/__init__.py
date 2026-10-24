@@ -99,6 +99,7 @@ class _GameFinished(_Payload):
     domain: Domain
     day: date | None
     finished_at: AwareDatetime
+    collection_id: UUID | None = None  # сессия по сборнику (метрика collection_played)
     rounds: list[_Round] = Field(min_length=1, max_length=200)
 
 
@@ -269,6 +270,7 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:  # noqa
                 finished_at=p.finished_at,
                 rounds_played=len(played),
                 correct_answers=sum(1 for r in played if r.outcome == _CORRECT),
+                collection_id=p.collection_id,
             ),
             session,
         )
@@ -307,14 +309,15 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:  # noqa
 
     async def on_weekly_top(envelope: EventEnvelope, session: AsyncSession) -> object:
         p = _parse(_WeeklyTop, envelope.payload)
-        return await container.accrue_weekly_top(session).execute(
-            WeeklyTop(
-                ladder=p.ladder,
-                week_start=p.week_start,
-                top=tuple(PlacedUser(e.user_id, e.place) for e in p.top),
-                closed_at=envelope.occurred_at,
-            )
+        top = WeeklyTop(
+            ladder=p.ladder,
+            week_start=p.week_start,
+            top=tuple(PlacedUser(e.user_id, e.place) for e in p.top),
+            closed_at=envelope.occurred_at,
         )
+        result = await container.accrue_weekly_top(session).execute(top)
+        await rewards.weekly_top(top, session)
+        return result
 
     async def on_season_standings(envelope: EventEnvelope, session: AsyncSession) -> object:
         p = _parse(_SeasonStandings, envelope.payload)

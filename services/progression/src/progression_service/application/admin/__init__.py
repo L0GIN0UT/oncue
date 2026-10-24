@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from progression_service.application.admin.configs import ConfigCommands, ConfigQueries
+from progression_service.application.admin.events import EventAdminCommands, EventAdminQueries
 from progression_service.application.admin.ledger import LedgerCommands, LedgerQueries
 from progression_service.application.admin.shop import (
     ItemCommands,
@@ -31,3 +32,5 @@ class AdminServices:
     pack_queries: PackQueries
     promos: PromoCommands
     promo_queries: PromoQueries
+    events: EventAdminCommands
+    event_queries: EventAdminQueries

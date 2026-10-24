@@ -78,6 +78,7 @@ def _item_fields(body: ItemBody) -> ItemFields:
         level_required=body.level_required,
         price=body.price,
         active=body.active,
+        event_key=body.event_key,
     )
 
 
