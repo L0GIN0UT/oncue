@@ -245,7 +245,7 @@ export interface paths {
         };
         /**
          * Оболочка приложения: тема и колокольчик
-         * @description Этап 5b, контракт (реализация — поток S5; до тех пор 501). `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
+         * @description Этап 5b. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
          */
         get: operations["shell_page_v1_pages_shell_get"];
         put?: never;
@@ -265,7 +265,7 @@ export interface paths {
         };
         /**
          * Магазин: витрина косметики, паки
-         * @description Этап 5b, контракт (реализация — поток S5; до тех пор 501). Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, пока `billing.enabled=false`. Покупка — прямо в progression (`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает.
+         * @description Этап 5b. Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, пока `billing.enabled=false`. Покупка — прямо в progression (`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает.
          */
         get: operations["shop_page_v1_pages_shop_get"];
         put?: never;
@@ -3116,16 +3116,6 @@ export interface operations {
                     "application/json": components["schemas"]["ShellPage"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     shop_page_v1_pages_shop_get: {
@@ -3158,16 +3148,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

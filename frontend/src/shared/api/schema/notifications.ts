@@ -229,9 +229,29 @@ export interface paths {
         put?: never;
         /**
          * Отписаться по ссылке из письма
-         * @description Единственная ручка без входа. Токен - HMAC серверным ключом над `user_id` и рассылкой, сравнение за постоянное время; чужой, просроченный и неверный токен дают один и тот же ответ (существование пользователя не раскрывается). Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор - 204. Неверный токен - 422 `notifications.unsubscribe_invalid`.
+         * @description Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`.
          */
         post: operations["unsubscribe_v1_unsubscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/unsubscribe/one-click": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отписка одним запросом (RFC 8058)
+         * @description Для заголовка `List-Unsubscribe`: почтовик шлёт POST на ссылку из письма, токен в query, тело `application/x-www-form-urlencoded` с `List-Unsubscribe=One-Click` (до 1 КБ). Без входа; тот же лимит и тот же единый ответ, что у обычной отписки; неверное тело неотличимо от неверного токена (422 `notifications.unsubscribe_invalid`). GET не поддерживается (405).
+         */
+        post: operations["unsubscribe_one_click_v1_unsubscribe_one_click_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -503,10 +523,13 @@ export interface components {
         };
         /**
          * UnsubscribeRequest
-         * @description Отписка по подписанной ссылке из письма (one-click).
+         * @description Отписка по токену из письма (страница отписки).
          */
         UnsubscribeRequest: {
-            /** Token */
+            /**
+             * Token
+             * @description Непрозрачный токен из ссылки в письме
+             */
             token: string;
         };
         /** ValidationError */
@@ -1195,6 +1218,56 @@ export interface operations {
                 "application/json": components["schemas"]["UnsubscribeRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unsubscribe_one_click_v1_unsubscribe_one_click_post: {
+        parameters: {
+            query?: {
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {

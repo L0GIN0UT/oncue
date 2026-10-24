@@ -6333,7 +6333,7 @@
     },
     "/v1/pages/shell": {
       "get": {
-        "description": "Этап 5b, контракт (реализация — поток S5; до тех пор 501). `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.",
+        "description": "Этап 5b. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.",
         "operationId": "shell_page_v1_pages_shell_get",
         "responses": {
           "200": {
@@ -6345,21 +6345,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Оболочка приложения: тема и колокольчик",
@@ -6370,7 +6355,7 @@
     },
     "/v1/pages/shop": {
       "get": {
-        "description": "Этап 5b, контракт (реализация — поток S5; до тех пор 501). Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, пока `billing.enabled=false`. Покупка — прямо в progression (`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает.",
+        "description": "Этап 5b. Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, пока `billing.enabled=false`. Покупка — прямо в progression (`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает.",
         "operationId": "shop_page_v1_pages_shop_get",
         "responses": {
           "200": {
@@ -6412,21 +6397,6 @@
               }
             },
             "description": "Недостаточно прав"
-          },
-          "501": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не реализовано"
           }
         },
         "summary": "Магазин: витрина косметики, паки",
