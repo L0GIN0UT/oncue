@@ -94,7 +94,8 @@ def register_discussion_routes(router: APIRouter, services: DiscussionServices) 
         description=(
             "Событие `CommentPosted`. Ошибки: 422 `social.comment_rejected` (denylist), 429 "
             "`social.comments_rate_limit`, 403 `social.chat_muted` (санкция `CHAT`), 404 "
-            "`social.collection_not_found`. Повтор по `Idempotency-Key` - тот же комментарий."
+            "`social.collection_not_found`, 403 `social.blocked` (блокировка между вами и автором "
+            "сборника в любую сторону). Повтор по `Idempotency-Key` - тот же комментарий."
         ),
         responses=problem_responses(401, 403, 404, 409, 422, 429, 503),
     )

@@ -274,7 +274,7 @@ export interface paths {
         put?: never;
         /**
          * Написать комментарий
-         * @description Событие `CommentPosted`. Ошибки: 422 `social.comment_rejected` (denylist), 429 `social.comments_rate_limit`, 403 `social.chat_muted` (санкция `CHAT`), 404 `social.collection_not_found`. Повтор по `Idempotency-Key` - тот же комментарий.
+         * @description Событие `CommentPosted`. Ошибки: 422 `social.comment_rejected` (denylist), 429 `social.comments_rate_limit`, 403 `social.chat_muted` (санкция `CHAT`), 404 `social.collection_not_found`, 403 `social.blocked` (блокировка между вами и автором сборника в любую сторону). Повтор по `Idempotency-Key` - тот же комментарий.
          */
         post: operations["post_comment_v1_collections__collection_id__comments_post"];
         delete?: never;
