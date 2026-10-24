@@ -120,7 +120,8 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 | Шаг 0: roadmap, backlog (три раздела), handoff, детализация §10.1, ADR 0050–0052 | сделано, закоммичено (`9e4532c`) |
 | 0a контракты | сделано, ждёт коммита (см. «Шаг 0a» ниже) |
 | F1 (друзья, приватность, presence, конфиг в БД) ∥ F2 (комментарии, жалобы, кейсы-ядро, consumers) | сделано, слито, ревью пройдено, запушено (`66ff0df`); social 269, notifications 235 |
-| F3 ∥ F4 → F5 → 0b | не начаты |
+| F3 (санкции, identity+match) ∥ F4 (очередь модерации, конфиг, Django-админка, аватарки) | сделано, ревью (security-reviewer, review-migration, code-reviewer) пройдены, слито, запушено (`4c90b4f`); social 382, identity 471, match 251, collections 235 |
+| F5 → 0b | не начаты |
 
 ### Шаг 0a (контракты, сделано)
 - События `contracts/events/social/*` (11, с примерами `event_id` ...`7a0001`–`7a000b`); конфиг `contracts/social/social_config.v1.json` (+ пример).
