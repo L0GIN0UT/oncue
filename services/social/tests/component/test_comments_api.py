@@ -32,20 +32,58 @@ async def _post(
     return data
 
 
-async def test_post_by_user_blocked_by_owner_does_not_notify_owner(social: SocialService) -> None:
+async def _block(social: SocialService, blocker: UUID, blocked: UUID) -> None:
     from sqlalchemy import text
 
-    owner, author = uuid7(), uuid7()
-    collection = await social.publish_collection(owner)
     assert social.infra.sessions is not None
     async with social.infra.sessions() as session, session.begin():
         await session.execute(
             text("INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (:a, :b, now())"),
-            {"a": owner, "b": author},
+            {"a": blocker, "b": blocked},
         )
+
+
+async def _unblock(social: SocialService, blocker: UUID, blocked: UUID) -> None:
+    from sqlalchemy import text
+
+    assert social.infra.sessions is not None
+    async with social.infra.sessions() as session, session.begin():
+        await session.execute(
+            text("DELETE FROM blocks WHERE blocker_id = :a AND blocked_id = :b"),
+            {"a": blocker, "b": blocked},
+        )
+
+
+@pytest.mark.parametrize("owner_blocks", [True, False], ids=["owner_blocked_me", "i_blocked"])
+async def test_block_closes_posting_both_ways_then_unblock_reopens(
+    social: SocialService, owner_blocks: bool
+) -> None:
+    owner, author = uuid7(), uuid7()
+    collection = await social.publish_collection(owner)
+    pair = (owner, author) if owner_blocks else (author, owner)
+    await _block(social, *pair)
+    url = f"/v1/collections/{collection}/comments"
+    denied = await social.client.post(
+        url, json={"body": "Привет"}, headers={**social.auth(author), **social.key()}
+    )
+    assert_problem(denied, 403, "social.blocked")
+    assert not await social.outbox_events("social.CommentPosted")
+    # Чтение публично и при блокировке.
+    assert (await social.client.get(url, headers=social.auth(author))).status_code == 200
+    await _unblock(social, *pair)
     await _post(social, collection, author)
-    (event,) = await social.outbox_events("social.CommentPosted")
-    assert event.payload["notify_owner"] is False
+    assert len(await social.outbox_events("social.CommentPosted")) == 1
+
+
+async def test_sanction_mask_from_reader_mutes_even_with_clean_claim(social: SocialService) -> None:
+    author = uuid7()
+    collection = await social.publish_collection(uuid7())
+    social.sanctions.masks[author] = int(Sanction.CHAT_MUTE | Sanction.COMMENTS)
+    url = f"/v1/collections/{collection}/comments"
+    response = await social.client.post(
+        url, json={"body": "Привет"}, headers={**social.auth(author), **social.key()}
+    )
+    assert_problem(response, 403, "social.chat_muted")
 
 
 async def test_post_requires_account(social: SocialService) -> None:

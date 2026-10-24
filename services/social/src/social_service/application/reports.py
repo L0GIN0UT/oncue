@@ -15,12 +15,7 @@ from uuid import UUID
 import structlog
 
 from gv_core.clock import Clock
-from gv_core.errors import (
-    InvalidInputError,
-    NotFoundError,
-    NotImplementedYetError,
-    RateLimitedError,
-)
+from gv_core.errors import InvalidInputError, NotFoundError, RateLimitedError
 from social_service.application.config_access import current_config
 from social_service.application.ports.config import ConfigProvider
 from social_service.application.ports.discussion import (
@@ -91,9 +86,6 @@ class ReportService:
             raise InvalidInputError("причина не подходит", code=rules.REPORT_REASON_UNKNOWN)
         if text is not None and len(text) > cfg.reports.text_max_length:
             raise InvalidInputError("текст жалобы слишком длинный", code=rules.REPORT_TEXT_TOO_LONG)
-        if target_kind == "avatar":
-            # Владелец ассета станет известен после проекции AssetModerated (следующий шаг).
-            raise NotImplementedYetError("жалобы на аватарки пока не принимаются")
         async with self._uow() as uow:
             target_user_id = await self._resolve_owner(
                 uow, author_id, target_kind, target_id, context_match_id
@@ -181,6 +173,12 @@ class ReportService:
             if ref is None or ref.author_id is None:
                 raise NotFoundError("сборник не найден", code=rules.COLLECTION_NOT_FOUND)
             owner = ref.author_id
+        elif kind == "avatar":
+            # Владелец ассета известен из проекции media_pipeline.AssetModerated (одобренные).
+            avatar = await uow.avatars.get(target_id)
+            if avatar is None or avatar.status != "approved":
+                raise NotFoundError("аватарка не найдена", code=rules.REPORT_TARGET_NOT_FOUND)
+            owner = avatar.owner_user_id
         else:
             comment = await uow.comments.get(target_id)
             if comment is None or comment.is_deleted:

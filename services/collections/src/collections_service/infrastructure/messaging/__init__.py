@@ -1,4 +1,4 @@
-"""Обработчики событий catalog, game и identity (K7).
+"""Обработчики событий catalog, game, identity и social (K7, 5c).
 
 Обработчик работает в транзакции ``EventProcessor`` (отметка inbox + изменения атомарно);
 use-cases получают UoW, привязанный к этой сессии (SAVEPOINT), и свои события пишут в
@@ -25,6 +25,7 @@ CONSUMED_TOPICS: tuple[str, ...] = (
     "catalog.media_item.v1",
     "game.session.v1",
     "identity.user.v1",
+    "social.social.v1",
 )
 
 ITEM_CREATED = "catalog.MediaItemCreated"
@@ -35,6 +36,7 @@ GAME_FINISHED = "game.GameFinished"
 USER_REGISTERED = "identity.UserRegistered"
 USER_PROFILE_CHANGED = "identity.UserProfileBasicsChanged"
 USER_DELETED = "identity.UserDeleted"
+CONTENT_MODERATED = "social.ContentModerated"
 
 
 class _Payload(BaseModel):
@@ -71,6 +73,14 @@ class _UserPayload(_Payload):
     user_id: UUID
     nickname: str = Field(min_length=1, max_length=64)
     version: int = Field(ge=1)
+
+
+class _ModeratedPayload(_Payload):
+    case_id: UUID
+    decision: str
+    moderator_id: UUID
+    target_id: UUID
+    target_kind: str
 
 
 class _UserDeletedPayload(_Payload):
@@ -144,6 +154,17 @@ def build_event_handlers(container: CollectionsContainer) -> EventHandlerRegistr
             await container.users.deleted(uow, p.user_id, p.version)
             await uow.commit()
 
+    async def on_content_moderated(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_ModeratedPayload, envelope.payload)
+        if p.decision != "content_removed" or p.target_kind != "collection":
+            return  # остальные решения (комментарии, аватарки, санкции) сборников не касаются
+        async with container.uow_factory(session)() as uow:
+            await container.moderation.content_removed(
+                uow, p.target_id, case_id=p.case_id, moderator_id=p.moderator_id
+            )
+            await uow.commit()
+
+    registry.register(CONTENT_MODERATED, on_content_moderated)
     registry.register(ITEM_CREATED, on_item)
     registry.register(ITEM_UPDATED, on_item)
     registry.register(ITEM_BLOCKED, on_status("blocked"))

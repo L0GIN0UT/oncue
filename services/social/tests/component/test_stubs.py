@@ -53,7 +53,8 @@ PUBLIC_USER: list[tuple[str, str, dict[str, Any]]] = [
     # Комментарии и жалобы (F2) реализованы: см. test_comments_api.py, test_reports_api.py.
     ("GET", "/v1/me/sanctions", {}),
 ]
-ADMIN: list[tuple[str, str, dict[str, Any]]] = [
+CASES: list[tuple[str, str, dict[str, Any]]] = [
+    # Реализованы в F4: поведение - test_cases_api.py, здесь только доступ.
     ("GET", "/admin/v1/cases", {}),
     ("GET", f"/admin/v1/cases/{OBJ}", {}),
     ("POST", f"/admin/v1/cases/{OBJ}/claim", {"json": {"version": 1}, "headers": KEY}),
@@ -67,6 +68,8 @@ ADMIN: list[tuple[str, str, dict[str, Any]]] = [
         f"/admin/v1/cases/{OBJ}/resolve",
         {"json": {"version": 1, "decision": "dismissed", "reason": REASON}, "headers": KEY},
     ),
+]
+ADMIN: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/admin/v1/users/{UID}/moderation", {}),
     (
         "POST",
@@ -103,7 +106,9 @@ def _send(client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]], **ex
     return client.request(method, path, headers=headers, **kwargs)
 
 
-@pytest.mark.parametrize("call", FRIENDS + PUBLIC_USER + ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")
+@pytest.mark.parametrize(
+    "call", FRIENDS + PUBLIC_USER + CASES + ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}"
+)
 async def test_requires_authentication(
     client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]]
 ) -> None:
@@ -116,6 +121,15 @@ async def test_public_stub_answers_501_for_user(
 ) -> None:
     response = await _send(client, call, headers=_auth())
     assert_problem(response, 501, "common.not_implemented")
+
+
+@pytest.mark.parametrize("call", CASES, ids=lambda c: f"{c[0]} {c[1][:40]}")
+async def test_cases_need_moderate_permission(
+    client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]]
+) -> None:
+    assert_problem(await _send(client, call, headers=_auth()), 403, "auth.forbidden")
+    only_sanctions = _auth(perms=["admin.access", "social.sanctions.manage"])
+    assert_problem(await _send(client, call, headers=only_sanctions), 403, "auth.forbidden")
 
 
 @pytest.mark.parametrize("call", ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")
@@ -184,17 +198,15 @@ CONFIG: list[tuple[str, str, dict[str, Any], str]] = [
 
 
 @pytest.mark.parametrize("call", CONFIG, ids=lambda c: f"{c[0]} {c[1]}")
-async def test_config_routes_need_their_own_permission_then_501(
+async def test_config_routes_need_their_own_permission(
     client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any], str]
 ) -> None:
-    *request, perm = call
+    *request, _perm = call
     request_call = (request[0], request[1], request[2])
     assert_problem(await _send(client, request_call), 401, "auth.unauthenticated")
     # Право очереди модерации или санкций не открывает конфиг.
     wrong = _auth(perms=["admin.access", "social.moderate", "social.sanctions.manage"])
     assert_problem(await _send(client, request_call, headers=wrong), 403, "auth.forbidden")
-    right = _auth(perms=["admin.access", perm])
-    assert_problem(await _send(client, request_call, headers=right), 501, "common.not_implemented")
 
 
 async def test_manage_permission_cannot_publish(client: httpx.AsyncClient) -> None:

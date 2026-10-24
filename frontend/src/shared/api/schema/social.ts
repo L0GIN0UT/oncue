@@ -11,7 +11,7 @@ export interface paths {
         };
         /**
          * Очередь модерации
-         * @description Старые первыми; фильтры по статусу, объекту и «мои» (`assignee=me`).
+         * @description Старые первыми; фильтры по статусу, объекту и «мои» (`mine`).
          */
         get: operations["cases_admin_v1_cases_get"];
         put?: never;
@@ -29,7 +29,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Карточка кейса */
+        /**
+         * Карточка кейса
+         * @description Жалобы с текстом (только модератору) и фрагмент содержимого объекта.
+         */
         get: operations["case_admin_v1_cases__case_id__get"];
         put?: never;
         post?: never;
@@ -50,7 +53,7 @@ export interface paths {
         put?: never;
         /**
          * Взять в работу
-         * @description `open` -> `in_work`. Уже взятый другим: 409 `social.case_already_claimed`.
+         * @description `open` -> `in_work`. Уже взятый другим: 409 `social.case_already_claimed`; устаревшая `version`: 409 `social.case_version_conflict`.
          */
         post: operations["claim_admin_v1_cases__case_id__claim_post"];
         delete?: never;
@@ -130,7 +133,7 @@ export interface paths {
         put?: never;
         /**
          * Опубликовать черновик
-         * @description Новая версия действует без деплоя (кэш сервиса короткий), прежняя уходит в архив. Права `social.config.publish`. Ошибки: 404 `social.config_version_not_found`, 409 `social.config_not_draft`, 409 `social.draft_changed` (тело изменилось).
+         * @description Новая версия действует без деплоя (кэш сервиса короткий), прежняя уходит в архив. Права `social.config.publish`. Ошибки: 404 `social.config_version_not_found`, 409 `social.config_not_draft`, 409 `social.config_draft_changed` (тело изменилось).
          */
         post: operations["publish_config_admin_v1_config_draft_publish_post"];
         delete?: never;
@@ -1500,16 +1503,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     case_admin_v1_cases__case_id__get: {
@@ -1570,16 +1563,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1661,16 +1644,6 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     escalate_admin_v1_cases__case_id__escalate_post: {
@@ -1748,16 +1721,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -1917,16 +1880,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     publish_config_admin_v1_config_draft_publish_post: {
@@ -2004,16 +1957,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     config_versions_admin_v1_config_versions_get: {
@@ -2046,16 +1989,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2119,16 +2052,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2209,16 +2132,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3910,16 +3823,6 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

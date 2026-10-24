@@ -376,3 +376,38 @@ async def test_queue_is_oldest_first_with_cursor(media: Any) -> None:
         status=UgcStatus.PENDING, purpose="avatar", cursor=page.next_cursor, limit=2
     )
     assert [v.asset_id for v in rest.items] == ids[2:] and rest.next_cursor is None
+
+
+# ---------------------------------------------------------------- решение модерации social
+async def _approved(media: Any) -> Any:
+    view = await _submit(media)
+    await media.ugc.moderate.approve(
+        view.asset_id, moderator_id=MODERATOR, reason=REASON, idempotency_key="mod-approve"
+    )
+    return view
+
+
+def _removal(media: Any) -> Any:
+    from media_pipeline_service.application.commands.ugc import RemoveModeratedUgcImage
+
+    return RemoveModeratedUgcImage(media.ugc.moderate, reason_code="inappropriate")
+
+
+async def test_social_removal_takes_approved_avatar_down_idempotently(media: Any) -> None:
+    view = await _approved(media)
+    case = uuid7()
+    removal = _removal(media)
+    assert await removal.execute(view.asset_id, moderator_id=MODERATOR, case_id=case) is True
+    image = media.db.ugc[view.asset_id]
+    assert (image.status, image.reason_code) == (UgcStatus.REJECTED, "inappropriate")
+    moderated = [e for e in media.db.events if isinstance(e, AssetModerated)]
+    assert [e.status for e in moderated] == ["approved", "rejected"]
+    # Повтор того же решения и другой кейс по уже снятому - без нового события.
+    await removal.execute(view.asset_id, moderator_id=MODERATOR, case_id=case)  # повтор по ключу
+    assert await removal.execute(view.asset_id, moderator_id=MODERATOR, case_id=uuid7()) is False
+    assert len([e for e in media.db.events if isinstance(e, AssetModerated)]) == 2
+
+
+async def test_social_removal_of_unknown_asset_is_noop(media: Any) -> None:
+    assert await _removal(media).execute(uuid7(), moderator_id=MODERATOR, case_id=uuid7()) is False
+    assert media.db.events == []

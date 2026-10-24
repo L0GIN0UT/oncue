@@ -23,7 +23,9 @@ from gv_core.domain import DomainEvent
 from gv_db.idempotency import SqlIdempotencyStore
 from gv_messaging import EventEnvelope
 from gv_messaging.outbox import OutboxWriter
+from social_service.application.ports.cases import AuditEntry, AvatarRef, CaseReportRow
 from social_service.application.ports.discussion import NewReport
+from social_service.domain.cases import ModerationCase
 from social_service.domain.discussion import CollectionRef, Comment
 from social_service.infrastructure.db import tables_friends
 from social_service.infrastructure.db import tables_moderation as t
@@ -353,6 +355,166 @@ class SqlMatches:
         await self._s.execute(stmt)
 
 
+def _case(row: Row[Any], reports_count: int) -> ModerationCase:
+    return ModerationCase(
+        id=row.id,
+        target_kind=row.target_kind,
+        target_id=row.target_id,
+        target_user_id=row.target_user_id,
+        status=row.status,
+        assignee_id=row.assignee_id,
+        opened_at=row.opened_at,
+        version=row.version,
+        reports_count=max(reports_count, 1),
+        decision=row.decision,
+        resolved_by=row.resolved_by,
+        resolved_at=row.resolved_at,
+    )
+
+
+PREVIEW_MAX = 200
+
+
+class SqlCases:
+    """Кейсы модерации."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    def _count(self) -> Any:  # Any: коррелированный подзапрос Core
+        cr = t.case_reports
+        return (
+            select(func.count())
+            .select_from(cr)
+            .where(cr.c.case_id == t.moderation_cases.c.id)
+            .scalar_subquery()
+        )
+
+    async def get(self, case_id: UUID, *, for_update: bool = False) -> ModerationCase | None:
+        c = t.moderation_cases
+        stmt = select(c, self._count().label("reports_count")).where(c.c.id == case_id)
+        if for_update:
+            stmt = stmt.with_for_update(of=c)
+        row = (await self._s.execute(stmt)).first()
+        return _case(row, row.reports_count) if row else None
+
+    async def page(
+        self,
+        *,
+        status: str | None,
+        target_kind: str | None,
+        assignee_id: UUID | None,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> list[ModerationCase]:
+        c = t.moderation_cases
+        stmt = select(c, self._count().label("reports_count"))
+        if status is not None:
+            stmt = stmt.where(c.c.status == status)
+        if target_kind is not None:
+            stmt = stmt.where(c.c.target_kind == target_kind)
+        if assignee_id is not None:
+            stmt = stmt.where(c.c.assignee_id == assignee_id)
+        if after is not None:
+            at, row_id = after
+            stmt = stmt.where(or_(c.c.opened_at > at, and_(c.c.opened_at == at, c.c.id > row_id)))
+        stmt = stmt.order_by(c.c.opened_at, c.c.id).limit(limit)
+        return [_case(r, r.reports_count) for r in (await self._s.execute(stmt)).all()]
+
+    async def save(self, case: ModerationCase, *, expected_version: int) -> bool:
+        c = t.moderation_cases
+        result = await self._s.execute(
+            update(c)
+            .where(c.c.id == case.id, c.c.version == expected_version)
+            .values(
+                status=case.status,
+                assignee_id=case.assignee_id,
+                decision=case.decision,
+                resolved_by=case.resolved_by,
+                resolved_at=case.resolved_at,
+                version=case.version,
+            )
+            .returning(c.c.id)
+        )
+        return result.first() is not None
+
+    async def reports(self, case_id: UUID) -> list[CaseReportRow]:
+        r, cr = t.reports, t.case_reports
+        stmt = (
+            select(r)
+            .join(cr, cr.c.report_id == r.c.id)
+            .where(cr.c.case_id == case_id)
+            .order_by(r.c.created_at, r.c.id)
+        )
+        return [
+            CaseReportRow(
+                id=x.id,
+                author_id=x.author_id,
+                reason_code=x.reason_code,
+                text=x.text,
+                context_match_id=x.context_match_id,
+                created_at=x.created_at,
+            )
+            for x in (await self._s.execute(stmt)).all()
+        ]
+
+    async def preview(self, kind: str, target_id: UUID) -> str | None:
+        if kind == "comment":
+            body = await self._s.scalar(
+                select(t.comments.c.body).where(t.comments.c.id == target_id)
+            )
+            return (body or None) and body[:PREVIEW_MAX]
+        if kind == "collection":
+            title = await self._s.scalar(
+                select(t.collections_proj.c.title).where(t.collections_proj.c.id == target_id)
+            )
+            return (title or None) and title[:PREVIEW_MAX]
+        return None
+
+
+class SqlAvatars:
+    """Проекция владельцев аватарок."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, asset_id: UUID) -> AvatarRef | None:
+        a = t.avatar_proj
+        row = (await self._s.execute(select(a).where(a.c.asset_id == asset_id))).first()
+        if row is None:
+            return None
+        return AvatarRef(row.asset_id, row.owner_user_id, row.status, row.version)
+
+    async def apply(self, ref: AvatarRef) -> None:
+        a = t.avatar_proj
+        values = {"owner_user_id": ref.owner_user_id, "status": ref.status, "version": ref.version}
+        stmt = pg_insert(a).values(asset_id=ref.asset_id, **values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[a.c.asset_id], set_=values, where=a.c.version < ref.version
+        )
+        await self._s.execute(stmt)
+
+
+class SqlAudit:
+    """Аудит ручных действий."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def add(self, entry: AuditEntry) -> None:
+        await self._s.execute(
+            insert(t.moderation_audit).values(
+                id=entry.id,
+                actor_id=entry.actor_id,
+                action=entry.action,
+                target=entry.target,
+                reason=entry.reason,
+                details=entry.details,
+                at=entry.at,
+            )
+        )
+
+
 class SqlDiscussionUnitOfWork:
     """Транзакция use-case комментариев и жалоб с записью событий в outbox."""
 
@@ -362,6 +524,9 @@ class SqlDiscussionUnitOfWork:
     reports: SqlReports
     matches: SqlMatches
     blocks: SqlBlocks
+    cases: SqlCases
+    avatars: SqlAvatars
+    audit: SqlAudit
     idempotency: SqlIdempotencyStore
 
     def __init__(
@@ -401,6 +566,9 @@ class SqlDiscussionUnitOfWork:
         self.reports = SqlReports(s)
         self.matches = SqlMatches(s)
         self.blocks = SqlBlocks(s)
+        self.cases = SqlCases(s)
+        self.avatars = SqlAvatars(s)
+        self.audit = SqlAudit(s)
         self.idempotency = SqlIdempotencyStore(s, t.COMMENT_IDEMPOTENCY, self._clock)
         return self
 

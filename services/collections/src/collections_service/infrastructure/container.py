@@ -16,6 +16,7 @@ from collections_service.application.commands.author import AuthorCommands, Auth
 from collections_service.application.commands.projection import (
     CatalogEvents,
     Completions,
+    ModerationEvents,
     PopularRecompute,
     SweepBlockedItems,
     UserEvents,
@@ -176,6 +177,11 @@ class CollectionsContainer:
     def users(self) -> UserEvents:
         """События identity."""
         return UserEvents(self.infra.clock)
+
+    @cached_property
+    def moderation(self) -> ModerationEvents:
+        """Решения модерации social."""
+        return ModerationEvents(self.infra.clock)
 
     @cached_property
     def popular(self) -> PopularRecompute:

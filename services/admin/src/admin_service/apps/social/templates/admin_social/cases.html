@@ -1,0 +1,19 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_social/_nav.html" %}
+<form method="get">{{ filter_form.as_p }}<input type="submit" value="Показать"></form>
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Открыт</th><th>Объект</th><th>Статус</th><th>Жалоб</th><th>Исполнитель</th><th></th></tr></thead>
+  {% for c in rows %}
+  <tr>
+    <td>{{ c.opened_at }}</td><td>{{ c.target_kind }}</td><td>{{ c.status }}</td><td>{{ c.reports_count }}</td>
+    <td>{% if c.assignee_id %}<code>{{ c.assignee_id }}</code>{% else %}—{% endif %}</td>
+    <td>{% if c.admin_url %}<a href="{{ c.admin_url }}">Открыть</a>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6">Кейсов нет</td></tr>
+  {% endfor %}
+</table>
+{% if next_cursor %}<p><a href="?{% if query %}{{ query }}&amp;{% endif %}cursor={{ next_cursor|urlencode:"" }}">Дальше →</a></p>{% endif %}
+{% endblock %}

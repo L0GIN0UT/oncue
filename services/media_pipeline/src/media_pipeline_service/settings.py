@@ -79,6 +79,8 @@ class MediaSettings(BaseModel):
     )
     # Сколько картинок UGC декодируется одновременно (остальные ждут): защита от DoS потоком заявок.
     ugc_encode_concurrency: int = Field(default=2, ge=1, le=32)
+    # Код причины из ugc_purposes.yaml для снятия аватарки решением модерации social (5c).
+    ugc_social_removal_reason: str = Field(default="inappropriate", min_length=1, max_length=64)
     # Задача relay ``media.ugc.purge``: гарантированное удаление объектов снятых/отклонённых/
     # замещённых изображений (ключи - в таблице ``ugc_object_purge``).
     ugc_purge_interval_s: float = Field(default=60, gt=0)

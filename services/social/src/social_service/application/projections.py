@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from gv_core.clock import Clock
+from social_service.application.ports.cases import AvatarRef
 from social_service.application.ports.discussion import DiscussionUowFactory
 from social_service.application.reports import ReportService
 from social_service.domain import discussion as rules
@@ -58,6 +59,23 @@ class ProjectionService:
                     version=int(payload["version"]),
                 )
             )
+            await uow.commit()
+
+    async def asset_moderated(self, payload: Mapping[str, Any]) -> None:
+        """``media_pipeline.AssetModerated``: владелец и статус аватарки (для жалоб на неё).
+
+        Другие назначения изображений (обложки) жалоб не порождают и не хранятся.
+        """
+        if payload["purpose"] != "avatar":
+            return
+        ref = AvatarRef(
+            asset_id=UUID(payload["asset_id"]),
+            owner_user_id=UUID(payload["owner_user_id"]),
+            status=str(payload["status"]),
+            version=int(payload["version"]),
+        )
+        async with self._uow() as uow:
+            await uow.avatars.apply(ref)
             await uow.commit()
 
     async def match_finished(self, payload: Mapping[str, Any]) -> None:

@@ -1166,3 +1166,57 @@ async def test_collection_with_invalid_emoji_goes_to_dlq(service: Service) -> No
     assert await service.deliver(published) is Outcome.DEAD
     assert await _sets(service, item_id) == []
     assert service.queue.tasks == []
+
+
+# ---------------------------------------------------------------- решения модерации social (5c)
+async def _approved_avatar(service: Service) -> UUID:
+    asset = uuid7()
+    assert service.infra.sessions is not None
+    async with service.infra.sessions() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT INTO ugc_images (id, owner_user_id, purpose, status, public_key, width, "
+                "height, bytes, sha256, submitted_at, version) VALUES (:id, :o, 'avatar', "
+                "'approved', :k, 512, 512, 100, :h, now(), 1)"
+            ),
+            {"id": asset, "o": uuid7(), "k": f"u/{uuid7().hex}.webp", "h": "0" * 64},
+        )
+    return asset
+
+
+def _moderated(asset: UUID, **changes: str) -> EventEnvelope:
+    base = load_example("social.ContentModerated")
+    payload = {
+        **base.payload,
+        "decision": "content_removed",
+        "target_kind": "avatar",
+        "target_id": str(asset),
+        **changes,
+    }
+    return base.model_copy(update={"payload": payload, "event_id": uuid7()})
+
+
+async def test_social_content_removed_takes_avatar_down_once(service: Service) -> None:
+    asset = await _approved_avatar(service)
+    assert await service.deliver(_moderated(asset)) is Outcome.PROCESSED
+    (event,) = [
+        e for e in await service.outbox() if e.event_type == "media_pipeline.AssetModerated"
+    ]
+    assert_event_matches_schema(event)
+    assert (event.payload["status"], event.payload["version"]) == ("rejected", 2)
+    assert event.payload["public_key"] is None and event.payload["reason_code"] == "inappropriate"
+    async with service.infra.sessions() as session:  # type: ignore[misc]
+        row = (
+            await session.execute(
+                sa.text("SELECT status, public_key FROM ugc_images WHERE id = :i"), {"i": asset}
+            )
+        ).one()
+        queued = await session.scalar(sa.text("SELECT count(*) FROM ugc_object_purge"))
+    assert tuple(row) == ("rejected", None) and queued == 1  # u/ уйдёт задачей media.ugc.purge
+    # Новое событие по тому же ассету (другой кейс) и чужие решения - без новых событий.
+    again = _moderated(asset, case_id=str(uuid7()))
+    assert await service.deliver(again) is Outcome.PROCESSED
+    dismissed = _moderated(asset, case_id=str(uuid7()), decision="dismissed")
+    assert await service.deliver(dismissed) is Outcome.PROCESSED
+    assert await service.deliver(_moderated(uuid7(), case_id=str(uuid7()))) is Outcome.PROCESSED
+    assert len([e for e in await service.outbox() if "AssetModerated" in e.event_type]) == 1

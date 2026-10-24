@@ -8,12 +8,15 @@ from functools import cached_property
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_core.errors import DependencyUnavailableError
+from gv_core.ids import uuid7
 from gv_core.random import Random, SystemRandom
 from gv_service import Infrastructure
-from social_service.application.config_admin import ConfigCommands, ConfigQueries
+from social_service.application.config_admin import ConfigChange, ConfigCommands, ConfigQueries
 from social_service.application.friends import FriendsService
 from social_service.application.friends_projections import FriendsProjectionService
+from social_service.application.ports.cases import AuditEntry
 from social_service.application.ports.config import ConfigProvider, ConfigUnavailableError
+from social_service.application.ports.config_store import ConfigUnitOfWork
 from social_service.application.ports.friends import AttemptLimiter, PresenceStore
 from social_service.domain.config import SocialConfig
 from social_service.infrastructure.adapters import (
@@ -105,7 +108,31 @@ class SocialContainer:
     @property
     def config_commands(self) -> ConfigCommands:
         """Мутации версий конфига (для admin-API, поток F4)."""
-        return ConfigCommands(self.uow_factory(), self.infra.clock, validate_config_body)
+        return ConfigCommands(
+            self.uow_factory(), self.infra.clock, validate_config_body, self._audit_config_change
+        )
+
+    async def _audit_config_change(self, uow: ConfigUnitOfWork, change: ConfigChange) -> None:
+        """Аудит версии конфига в той же транзакции, что и сама правка."""
+        if not isinstance(uow, SqlFriendsUnitOfWork):
+            raise TypeError("аудит конфига ждёт SQL Unit of Work social")
+        await uow.audit.add(
+            AuditEntry(
+                id=uuid7(),
+                actor_id=change.actor_id,
+                action=change.action,
+                target=f"config:{change.version}",
+                reason=change.reason,
+                at=self.infra.clock.now(),
+                details=change.details,
+            )
+        )
+
+    def invalidate_config(self) -> None:
+        """Сбросить кэш конфига в этом процессе (остальные реплики - по TTL кэша)."""
+        invalidate = getattr(self.config, "invalidate", None)
+        if invalidate is not None:
+            invalidate()
 
     @property
     def config_queries(self) -> ConfigQueries:
