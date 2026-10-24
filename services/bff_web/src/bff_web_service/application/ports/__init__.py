@@ -297,6 +297,10 @@ class ProgressionClient(Protocol):
         """Страница события (``/v1/events/{key}``); нет события — 404."""
         ...
 
+    async def event_progress(self, token: str, user_id: UUID, event_key: str) -> EventPageData:
+        """Та же страница для баннера оболочки: короткий кэш на игрока."""
+        ...
+
     async def my_events(self, token: str) -> list[EventArchiveCard]:
         """Архив событий игрока (``/v1/me/events``)."""
         ...

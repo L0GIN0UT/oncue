@@ -1414,7 +1414,8 @@ _WHEEL = TypeAdapter(_WheelIn)
 class HttpProgressionClient:
     """Публичный API progression: всё личное и не кэшируется, кроме активного события.
 
-    Активное событие общее для всех: кэшируется на ``active_event_ttl_s`` (<= 30 с, 5d).
+    Активное событие общее для всех: кэшируется на ``active_event_ttl_s`` (<= 30 с, 5d);
+    прогресс игрока для баннера - на ``event_progress_ttl_s`` (<= 30 с, ключ с ``user_id``).
     """
 
     def __init__(
@@ -1422,10 +1423,12 @@ class HttpProgressionClient:
         http: UpstreamHttp,
         *,
         active_event_ttl_s: int = 30,
+        event_progress_ttl_s: int = 15,
         cache_prefix: str = "bff_web:",
     ) -> None:
         self._http = http
         self._event_ttl, self._prefix = active_event_ttl_s, cache_prefix
+        self._progress_ttl = event_progress_ttl_s
 
     async def active_event(self) -> ActiveEvent | None:
         """``GET /v1/events/active`` (анонимно, общий кэш)."""
@@ -1443,6 +1446,17 @@ class HttpProgressionClient:
         """``GET /v1/events/{key}``."""
         body = await self._http.get(f"/v1/events/{event_key}", token=token)
         return _parse(self._http.service, _EVENT_PAGE, body).dto()
+
+    async def event_progress(self, token: str, user_id: UUID, event_key: str) -> EventPageData:
+        """Страница события для баннера оболочки: кэш на игрока (``event_progress_ttl_s``)."""
+        key = f"{self._prefix}progression:events:page:{user_id}:{event_key}:v1"
+        body, cached = await self._http.get_personal_cached(
+            f"/v1/events/{event_key}", token=token, cache_key=key
+        )
+        page = _parse(self._http.service, _EVENT_PAGE, body).dto()
+        if not cached:
+            await self._http.remember(key, body, self._progress_ttl)
+        return page
 
     async def my_events(self, token: str) -> list[EventArchiveCard]:
         """``GET /v1/me/events``."""

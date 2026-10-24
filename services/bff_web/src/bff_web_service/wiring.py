@@ -94,6 +94,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
     progression = HttpProgressionClient(
         upstream("progression", up.progression_url),
         active_event_ttl_s=pc.active_event_ttl_s,
+        event_progress_ttl_s=pc.event_progress_ttl_s,
         cache_prefix=pc.key_prefix,
     )
     notifications = HttpNotificationsClient(upstream("notifications", up.notifications_url))

@@ -171,6 +171,21 @@ class UpstreamHttp:
             PAGE_CACHE.labels("miss").inc()
         return await self.get(path, token=None, params=params), False
 
+    async def get_personal_cached(
+        self, path: str, *, token: str, cache_key: str
+    ) -> tuple[bytes, bool]:
+        """Личный ответ с коротким кэшем под ключом игрока: тело и признак «из кэша».
+
+        Ключ обязан содержать субъекта; кладёт в кэш вызывающий (``remember``).
+        """
+        if self._cache is not None:
+            cached = await self._cache.get(cache_key)
+            if cached is not None:
+                PAGE_CACHE.labels("hit").inc()
+                return cached, True
+            PAGE_CACHE.labels("miss").inc()
+        return await self.get(path, token=token), False
+
     async def remember(self, cache_key: str, body: bytes, ttl_s: int) -> None:
         """Положить в кэш тело, которое прошло разбор по контракту."""
         if self._cache is not None:

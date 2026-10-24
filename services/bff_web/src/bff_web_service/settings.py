@@ -63,6 +63,7 @@ class PageCacheSettings(BaseModel):
     collection_modes_ttl_s: int = Field(default=30, ge=1, le=3600)
     leaderboard_ttl_s: int = Field(default=10, ge=1, le=600)
     active_event_ttl_s: int = Field(default=30, ge=1, le=30)
+    event_progress_ttl_s: int = Field(default=15, ge=1, le=30)
     key_prefix: str = "bff_web:"
     op_timeout_s: float = Field(default=0.2, gt=0, le=5)
 

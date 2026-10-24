@@ -77,7 +77,7 @@ export function EventSpot({ pageKey }: { pageKey: SpotPageKey }) {
       aria-label={t("events.spot.label")}
       data-testid="event-spot"
       data-find={find.key}
-      className="grid size-9 place-items-center self-end rounded-full text-ink-faint opacity-60 transition-opacity hover:text-[var(--color-film)] hover:opacity-100 focus-visible:opacity-100"
+      className="grid size-11 place-items-center self-end rounded-full text-ink-faint opacity-60 transition-opacity hover:text-[var(--color-film)] hover:opacity-100 focus-visible:opacity-100"
     >
       <Icon aria-hidden className="size-5" />
     </button>

@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -2577,6 +2577,33 @@ async def test_shell_active_event_is_cached_between_requests(bff: Bff) -> None:
     await bff.client.get("/v1/pages/shell")
 
     assert bff.stubs.progression.route("GET", "/v1/events/active").call_count == 1
+
+
+async def test_shell_event_progress_is_cached_per_player(bff: Bff) -> None:
+    _event_routes(bff)
+    _unread_route(bff)
+    first, second = uuid4(), uuid4()
+
+    for user in (first, first, second):
+        response = await bff.client.get(
+            "/v1/pages/shell", headers=bff.bearer(bff.issuer.issue(user_id=user))
+        )
+        assert response.json()["event"]["found"] == 1
+
+    page_route = bff.stubs.progression.route("GET", "/v1/events/winter")
+    assert page_route.call_count == 2  # один вызов на игрока, а не на запрос
+
+
+async def test_event_page_screen_is_not_served_from_the_shell_cache(bff: Bff) -> None:
+    _event_routes(bff)
+    _unread_route(bff)
+    headers = bff.bearer(bff.issuer.issue(user_id=uuid4()))
+
+    await bff.client.get("/v1/pages/shell", headers=headers)
+    await bff.client.get("/v1/pages/events/winter", headers=headers)
+
+    page_route = bff.stubs.progression.route("GET", "/v1/events/winter")
+    assert page_route.call_count == 2
 
 
 @pytest.mark.parametrize("theme_key", ["", "Bad Key!"])

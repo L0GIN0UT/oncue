@@ -57,6 +57,7 @@ describe("EventSpot", () => {
 
     const spot = await screen.findByTestId("event-spot");
     expect(spot).toHaveAttribute("aria-label", "Что-то блестит — присмотреться");
+    expect(spot).toHaveClass("size-11"); // цель касания не меньше 44 px
     fireEvent.click(spot);
 
     expect(await screen.findByText("Находка открыта!")).toBeInTheDocument();

@@ -76,9 +76,12 @@ class EventsContext:
         found = total = None
         token = user_token(viewer)
         if token is not None:
-            page = await Limiter(self._concurrency).attempt(
+            call = (
                 self._progression.event_page(token, event.key)
+                if viewer.user_id is None
+                else self._progression.event_progress(token, viewer.user_id, event.key)
             )
+            page = await Limiter(self._concurrency).attempt(call)
             if isinstance(page, EventPageData):
                 found, total = page.found, page.total
         return EventSnapshot(
