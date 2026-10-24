@@ -53,3 +53,6 @@
 | [0047](0047-notifications-channels-mapping.md) | Notifications: каналы, маппинг событий, порт Push (черновик) |
 | [0048](0048-promo-codes-custom-avatar.md) | Промокоды и своя аватарка (черновик) |
 | [0049](0049-theme-as-data.md) | Тема оформления как данные (черновик) |
+| [0050](0050-friends-and-blocks.md) | Друзья, блокировки, presence и приглашения (черновик) |
+| [0051](0051-reports-and-moderation-queue.md) | Жалобы, комментарии и очередь модерации (черновик) |
+| [0052](0052-sanctions-and-enforcement.md) | Санкции и их применение (черновик) |

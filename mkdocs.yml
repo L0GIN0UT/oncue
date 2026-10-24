@@ -111,6 +111,9 @@ nav:
       - adr/0047-notifications-channels-mapping.md
       - adr/0048-promo-codes-custom-avatar.md
       - adr/0049-theme-as-data.md
+      - adr/0050-friends-and-blocks.md
+      - adr/0051-reports-and-moderation-queue.md
+      - adr/0052-sanctions-and-enforcement.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

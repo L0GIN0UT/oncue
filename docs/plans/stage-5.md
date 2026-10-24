@@ -226,6 +226,28 @@ bff: блоки `/pages/profile` (уровень, опыт, Версы, зада
 - **Санкции:** `RANKED` (есть), `CHAT`, `ONLINE`, `ACCOUNT` — со сроком, только вручную модератором; событие `UserSanctionsChanged`.
 - **Приватность:** профиль и статистика публичны по умолчанию (можно скрыть), история матчей только владельцу.
 
+### 10.1. Детализация 5c (решения владельца 2026-10-24; при расхождении с §10 приоритет здесь)
+
+Решения: [ADR 0050](../adr/0050-friends-and-blocks.md), [0051](../adr/0051-reports-and-moderation-queue.md), [0052](../adr/0052-sanctions-and-enforcement.md) (черновики). Ветка `stage5c/integration`, потоки — ветки от неё, один `tdd-guide` на поток, не более 2 параллельно.
+
+**Находки в коде.** `PlayerForfeited` нет — счётчики из `MatchFinished.players[].finish`; жалоба из матча уже есть как `PlayerRated(kind=report)`; в claim есть `RANKED=1, CUSTOM_CONTENT=2, CHAT_SLOW=4, CHAT_MUTE=8, COMMENTS=16`, `ONLINE=32` добавляется; Nginx JWT не разбирает — санкции применяют identity, match, social, не gateway; общего presence нет — живёт в social (Redis).
+
+**Данные social** (миграции `0002_social_friends`, `0003_social_moderation`, расширяющие): `friend_requests`, `friendships`, `friend_codes`, `blocks`, `privacy_settings`, `comments`, `collections_proj`, `reports`, `moderation_cases`, `case_reports`, `match_participants_proj`, `in_match_proj`, `sanctions`, `behaviour_counters`, `users_proj`, idempotency, outbox, inbox.
+
+**События `social.social.v1`:** `FriendRequested`, `FriendAdded`, `FriendRemoved`, `UserBlocked`, `RoomInviteSent`, `CommentPosted`, `CommentDeleted`, `ReportFiled`, `ReportResolved`, `ContentModerated`, `UserSanctionsChanged`. Потребители: notifications (5 типов), identity и match (`UserSanctionsChanged`), collections и media-pipeline (`ContentModerated`), progression (`FriendAdded`, `CommentPosted` — опционально). social слушает `MatchStarted`, `MatchFinished`, `PlayerRated`, `collections.*`, `identity.UserDeleted`.
+
+| Поток | Состав | Ключевые тесты |
+|---|---|---|
+| 0a | контракты, OpenAPI `/v1` и `/admin/v1`, блоки bff, права identity, `ONLINE=32`, типы notifications, realtime `room_invite`, заглушки 501, `COOKIE_MUTATION_SERVICES` | contract на примеры, `gv lint`, `gv contracts check`, `gv gen --check` |
+| F1 | друзья, блокировки, приватность, коды, presence, приглашения | блок рвёт дружбу, встречные заявки, гонка accept, лимиты, 403 приглашений |
+| F2 | комментарии, жалобы, порог, consumers | правка >5 мин 409, права удаления, повтор жалобы no-op, соло/без матча 422, порог один раз |
+| F3 | санкции: social, identity, match, `libs/auth` (`security-reviewer`, `review-migration`) | истёкшая не в маске, ACCOUNT → 403 и отзыв сессий, ONLINE → 403 и выбивание, порядок по `version`, не себе |
+| F4 | admin: очередь, санкции, карточка игрока | 403 без права, идемпотентность, повторный захват 409 |
+| F5 | bff и frontend | vitest, Playwright на моках |
+| 0b | сиды, `friends.spec.ts`, `moderation.spec.ts` | живой стек у владельца |
+
+Порядок: F1 ∥ F2 → F3 ∥ F4 → F5 → 0b. Не входит: автосанкции, e-mail/push по социальным типам, комментарии к профилям, «частые соперники», 5d.
+
 ## 11. Обязательные проверки безопасности
 
 Применимо к P1 и admin-ручкам P3 (progression = ledger, [docs/10-ai-assistant.md](../10-ai-assistant.md) §3).
