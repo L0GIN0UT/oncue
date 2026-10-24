@@ -1443,6 +1443,8 @@ class Seeder:
             name: item_spec.get(name)
             for name in ("key", "slot", "rarity", "title", "media_kind", "level_required", "price")
         }
+        if item_spec.get("event_key"):
+            fields["event_key"] = item_spec["event_key"]
         digest = hashlib.sha256(
             json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()[:12]

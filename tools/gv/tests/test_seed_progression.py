@@ -152,7 +152,7 @@ class FakeProgression:
             return _problem(422, "progression.item_slot_unknown")
         if body["rarity"] not in {r["key"] for r in shop.get("rarities", [])}:
             return _problem(422, "progression.item_rarity_unknown")
-        if not body.get("level_required") and not body.get("price"):
+        if not body.get("level_required") and not body.get("price") and not body.get("event_key"):
             return _problem(422, "progression.item_unlock_required")
         item = {
             **{k: v for k, v in body.items() if k != "reason"},
