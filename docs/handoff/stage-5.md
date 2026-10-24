@@ -1,6 +1,6 @@
 # Передача: этап 5 «Прогрессия и социальное»
 
-> Обновлено: 2026-10-23. Новая сессия начинается с чтения этого файла. 5a влит в `main`; идёт 5b (ветка `stage5b/integration`); 5c — в плане как модель.
+> Обновлено: 2026-10-23. Новая сессия начинается с чтения этого файла. 5a влит в `main`; 5b готов к PR (ветка `stage5b/integration`); 5c — в плане как модель.
 
 ## Состояние (2026-10-23)
 - 5a (progression) влит в `main`: PR #27 (`stage5a/integration`) и PR #28 (`GV_PUBLIC_ORIGINS` для progression, CSRF на спине колеса). Состав: 0a (контракты, rating-событие, права identity), P1 (домен, ledger, миграция `0002`, начисления), P2 (задания, бейджи, колесо, бусты, `0003`), P3 (admin-API, раздел админки, `0004`), P4 (bff `/pages/profile`, `/pages/players/{id}`, прогресс на главной; фронтенд `/profile`, `/players/[id]`, колесо), 0b (сид `seeds/progression/config.yaml`, задача `progression.config.bootstrap`, `e2e/progression.spec.ts`).
@@ -38,7 +38,7 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 - `seeds/progression/config.yaml` (12 секторов колеса; пулы: дневных 5, недельных 12, разовых 2). Задача relay `progression.config.bootstrap` — только local/ci, `GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, интервал `GV_PROGRESSION__BOOTSTRAP_INTERVAL_S`; актор `UUID(int=0)`. Dev-оверлей compose монтирует `seeds/progression`.
 - `e2e/progression.spec.ts` (нужны `gv dev up`, `gv dev seed`, `E2E_SEEDED=1`).
 
-## 5b — экономика и уведомления (в работе)
+## 5b — экономика и уведомления (готово к PR)
 Ветка `stage5b/integration` от `main` (после PR #28); один PR на подэтап, потоки — ветки от неё. Решения владельца — в [плане](../plans/stage-5.md) §9; ADR 0045–0049 (черновики).
 
 ### Решения 5b (ассистента, подтверждены или заменены владельцем 2026-10-23)
@@ -53,8 +53,10 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 |---|---|
 | Шаг 0: roadmap, handoff | сделано, закоммичено (`867f44d`) |
 | Детализация плана 5b ([§9](../plans/stage-5.md), §12 «Модель 5d») и ADR 0045–0049 (черновики) | сделано и утверждено владельцем (`867f44d`) |
-| 0a контракты (события, конфиг, OpenAPI, права identity) | сделано, ждёт ревью и коммита (ниже) |
-| S1 ∥ S2 → S3 ∥ S4 → S5 → 0b | — |
+| 0a контракты (события, конфиг, OpenAPI, права identity), 0a.1 инфраструктура, 0a.2 ручка адресов, 0a.3 `public_key` | сделано, влито |
+| S1 (магазин, промокоды), S2 (notifications), S3 (аватарка), S4 (админка), S5-bff, S5-front, 0b (сиды) | сделано, ревью пройдены, влито |
+| Волна 2: `e2e/shop.spec.ts`, `e2e/notifications.spec.ts` | написано, `tsc -p e2e` проходит, **на живом стеке не запускалось** |
+| PR `stage5b/integration` → `main` | открывает владелец (метка `e2e`) |
 
 ### Решения владельца после 0a (2026-10-23)
 - Типы уведомлений — файловый конфиг в пакете notifications (как профили media-pipeline), не версии в БД; admin-API позже только для включения и выключения типа (хвост в roadmap).
@@ -96,12 +98,25 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 - Ревью 0a (code-reviewer): блокирующих нет. Учтено: `extra="forbid"` в публичных телах, `promo.max_batch_verses` и `contains earned` в `bucket_order`, 429 и описание защиты у `unsubscribe`, `moderator_id` убран из `AssetModerated`, тесты «без ключа / без reason / лишнее поле», уточнения в ADR 0048 и плане §9.4 (границы `shop|promo|spend` в `BOUNDS`, уникальность ключей, `no-store` на успешных ответах — задачи S1).
 - Проверки: `gv lint` (ruff, mypy, import-linter, `gv gen --check`, `gv contracts check`) зелёный; progression 408, notifications 26, identity 400, bff_web 255, tools/gv 157; frontend lint, typecheck, vitest 373. media_pipeline: 3 integration-теста ffmpeg (`test_media_adapters`, код 4294967283) и 2 errors `test_use_cases::test_upload_validation` падают и на `main` (проверено worktree-ом `origin/main`, 51af674) — окружение Windows, не чинится в 5b; admin: давний `test_runtime` (см. выше).
 
+## Чек-лист ручной проверки 5b владельцем (перед слиянием `stage5b/integration` → `main`)
+**Требуется ручная проверка владельцем** (зоны повышенной безопасности и то, что без живого стека не прогонялось):
+1. **Живой стек.** `gv dev up`, `gv dev seed` (теперь грузит предметы и пак и публикует конфиг v2 с `custom_avatar`), `E2E_SEEDED=1`: `e2e/shop.spec.ts`, `e2e/notifications.spec.ts`, `e2e/progression.spec.ts`. Допущения спеков — в отчёте потока (селекторы, поля ответов, время доставки уведомления ≤ 90 с).
+2. **Ledger (траты Версов).** Покупка: одна проводка на `shop:{user}:{item}`, параллельные повторы, баланс не ниже нуля; повтор покупки отдаёт 200 `repeated=true`; колесо с предметом и Версы за дубль; `reconcile` сходится; миграции `progression 0005`–`0007` на чистой БД (вверх/вниз).
+3. **Промокоды.** Только HMAC-хеш в БД; одинаковый 404 на неверный/просроченный/исчерпанный/имеющийся предмет; лимит попыток по игроку и IP (Redis fail-closed); потолки эмиссии (партия, актор в сутки, общий в сутки; отозванные считаются); коды не попадают в логи, аудит и сессию админки.
+4. **Загрузка файлов.** Аватарка: `POST /v1/me/avatar` → media-pipeline, лимит 1,5 МБ (gateway 2m), только статика, перекодирование в WebP, `p/` → `u/` при одобрении, `/ugc/` и `/media/p/` на gateway (`nginx -t` только в CI), политика бакета, чистка осиротевших объектов (`media.ugc.purge`, `media.ugc.orphans`); картинки предметов: animated WebP, лимиты `shop.media`, публичный `/cosmetics/`.
+5. **identity.** `POST /internal/v1/users/emails` (scope `users.emails.read`, клиент notifications; лимиты fail-closed, ≤ 20000 адресов в час на клиента); ключи `GV_SERVICE_CLIENTS`/`gv dev secrets` для клиентов `notifications` и `progression`.
+6. **Отписка без входа.** Токен непрозрачный (хеш в БД, срок 90 дней), кнопка на странице `/unsubscribe`, one-click `POST /api/notifications/v1/unsubscribe/one-click` (RFC 8058), `Referrer-Policy: no-referrer`, query не пишется ни в access-лог, ни в трейсы (`fix(observability)`); письма рассылки в логе (`log`-бэкенд) содержат ссылку; допущение: токен действует до истечения срока, а не до первого использования (ADR 0048).
+7. **Рассылка.** `EmailDirectory` через identity: проверить на стеке с SMTP-логом, что письма уходят только подписавшимся.
+8. **Тема.** `GV_PAGES__DEFAULT_THEME_KEY`, `data-theme` в первом HTML, нет литералов цвета (eslint) и контраст AA (тест); смена темы в рантайме не проверялась.
+9. **Прежние пункты** — 5a (чек-лист выше) и хвосты 4a/4b: identity (realtime-токен), match (античит), rating; допущения сидов 4b.
+
 ## Открыто
-- Ручные проверки владельцем: identity (realtime-токен), match (античит), rating; ledger progression (чек-лист выше). Для 5b — траты Версов (ledger, **требуется ручная проверка владельцем**).
+- Ручные проверки владельцем: чек-листы выше (5a и 5b).
+- Хвосты 5b — [docs/backlog.md](../backlog.md) и [roadmap](../09-roadmap.md#хвосты-этапа-5).
 - Допущения сидов 4b: K Эло 40/20, пороги званий, фильтры `similar`.
 - Win-trading — детектор (хвост ADR 0038), 5c.
 - Исключённый игрок может переподписаться на канал комнаты старым токеном (до 10 мин) — хвост 4a, при желании в 5c вместе с санкцией `ONLINE`.
 
 ## Дальше
-1. Учесть замечания ревью 0a, коммит 0a (после «да» владельца), `/checkpoint stage-5`.
-2. S1 ∥ S2 → S3 ∥ S4 → S5 → 0b. Один `tdd-guide` и один ревьюер на поток; `security-reviewer` и `review-migration` для S1 и S3.
+1. Владелец: ручная проверка (чек-лист 5b), живой прогон e2e, PR `stage5b/integration` → `main` с меткой `e2e`.
+2. После слияния — 5c (social, [план](../plans/stage-5.md) §10): друзья, комментарии, жалобы, санкции, приватность; затем 5d (сезонные события, §12). Очередь модерации UGC-изображений при 5c можно подтянуть в общую очередь `social` отдельным ADR.
