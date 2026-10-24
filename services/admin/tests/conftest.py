@@ -71,6 +71,8 @@ ADMIN_PERMS = (
     "progression.ledger.read",
     "progression.items.manage",
     "progression.promo.manage",
+    "progression.events.manage",
+    "progression.events.publish",
     "media.ugc.moderate",
     "notifications.broadcast.send",
     "social.moderate",

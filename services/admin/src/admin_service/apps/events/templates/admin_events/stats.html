@@ -1,0 +1,13 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'events:card' event_key=event_key %}">← к событию</a></p>
+<p>Игроков с прогрессом: <b>{{ players }}</b>, прошли событие: <b>{{ completed }}</b>.</p>
+<table>
+  <thead><tr><th>№</th><th>Находка</th><th>Открыли</th><th>Доля игроков</th></tr></thead>
+  {% for f in finds %}
+  <tr><td>{{ f.number }}</td><td><code>{{ f.find_key }}</code></td><td>{{ f.unlocked }}</td><td>{{ f.share }}%</td></tr>
+  {% empty %}<tr><td colspan="4">Данных нет</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

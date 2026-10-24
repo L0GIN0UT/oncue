@@ -89,6 +89,7 @@ def map_event(
     *,
     locale: str,
     default_locale: str,
+    user_id: UUID | None = None,
 ) -> Candidate:
     """Собрать уведомление из события по типу.
 
@@ -97,15 +98,19 @@ def map_event(
         payload: ``payload`` события.
         locale: Желаемая локаль; нет шаблона - ``default_locale``.
         default_locale: Локаль по умолчанию (шаблон есть всегда, проверено при старте).
+        user_id: Получатель типа с ``audience`` (у типа с ``recipient`` берётся из события).
 
     Raises:
         MappingError: события не хватает полей, получатель не UUID, ключ слишком длинный.
     """
-    raw_recipient = resolve_path(payload, notification_type.recipient)
-    try:
-        user_id = UUID(str(raw_recipient))
-    except ValueError as exc:
-        raise MappingError("получатель не является UUID") from exc
+    if notification_type.recipient is not None:
+        raw_recipient = resolve_path(payload, notification_type.recipient)
+        try:
+            user_id = UUID(str(raw_recipient))
+        except ValueError as exc:
+            raise MappingError("получатель не является UUID") from exc
+    elif user_id is None:
+        raise MappingError("для типа с audience нужен user_id получателя")
     values = {
         name: _text(resolve_path(payload, path)) for name, path in notification_type.params.items()
     }

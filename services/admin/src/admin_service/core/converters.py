@@ -55,9 +55,22 @@ class LadderKeyConverter:
         return value
 
 
+class EventKeyConverter:
+    """Ключ события ``[a-z][a-z0-9_]{0,63}`` (``key`` в contracts/openapi/progression.json)."""
+
+    regex = r"[a-z][a-z0-9_]{0,63}"
+
+    def to_python(self, value: str) -> str:
+        return value
+
+    def to_url(self, value: str) -> str:
+        return value
+
+
 def register() -> None:
     """Зарегистрировать конвертеры; вызывается один раз — из корневого ``urls.py``."""
     register_converter(ModeKeyConverter, "modekey")
     register_converter(IsoDateConverter, "isodate")
     register_converter(RoomCodeConverter, "roomcode")
     register_converter(LadderKeyConverter, "ladderkey")
+    register_converter(EventKeyConverter, "eventkey")

@@ -182,6 +182,39 @@
         }
       },
       "user_mutable": false
+    },
+    {
+      "recipient": "payload.user_id",
+      "channels": {"email": false, "in_app": true, "push": false},
+      "data": {"event_key": "payload.event_key"},
+      "dedup_key": "find_unlocked:{payload.run_id}:{payload.user_id}:{payload.find_key}",
+      "key": "find_unlocked",
+      "params": {"find": "payload.find_title", "found": "payload.found", "total": "payload.total"},
+      "source_event": "progression.FindUnlocked",
+      "templates": {"ru": {"body": "Находка «{find}»: найдено {found} из {total}.", "title": "Находка открыта"}},
+      "user_mutable": true
+    },
+    {
+      "recipient": "payload.user_id",
+      "channels": {"email": false, "in_app": true, "push": false},
+      "data": {"event_key": "payload.event_key"},
+      "dedup_key": "event_completed:{payload.run_id}:{payload.user_id}",
+      "key": "event_completed",
+      "params": {"title": "payload.event_title"},
+      "source_event": "progression.EventCompleted",
+      "templates": {"ru": {"body": "Вы нашли всё в событии «{title}», награда начислена.", "title": "Событие пройдено"}},
+      "user_mutable": true
+    },
+    {
+      "audience": "known_users",
+      "channels": {"email": false, "in_app": true, "push": false},
+      "data": {"event_key": "payload.event_key"},
+      "dedup_key": "event_started:{payload.run_id}",
+      "key": "event_started",
+      "params": {"title": "payload.title"},
+      "source_event": "progression.EventRunStarted",
+      "templates": {"ru": {"body": "Стартовало событие «{title}» - загляните на его страницу.", "title": "Началось событие"}},
+      "user_mutable": true
     }
   ]
 }
