@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from typing import Annotated, cast
+from urllib.parse import parse_qs
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
@@ -46,6 +47,7 @@ TypePath = Annotated[str, Path(pattern=r"^[a-z][a-z0-9_]*$", max_length=64, desc
 _READ = problem_responses(401, 403, 422)
 PRIVATE = "private, no-store"
 UNKNOWN_CLIENT = "unknown"
+ONE_CLICK_BODY_LIMIT = 1024
 
 
 class ServiceMeta(BaseModel):
@@ -53,6 +55,27 @@ class ServiceMeta(BaseModel):
 
     service: str
     status: str
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else UNKNOWN_CLIENT
+
+
+async def _is_one_click_body(request: Request) -> bool:
+    """Тело - форма с ``List-Unsubscribe=One-Click`` (RFC 8058); читается не больше 1 КБ."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > ONE_CLICK_BODY_LIMIT:
+        return False
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw += chunk
+        if len(raw) > ONE_CLICK_BODY_LIMIT:
+            return False
+    try:
+        form = parse_qs(raw.decode("ascii"), keep_blank_values=True)
+    except UnicodeDecodeError:
+        return False
+    return form.get("List-Unsubscribe") == ["One-Click"]
 
 
 def _item(n: Notification) -> NotificationItem:
@@ -204,17 +227,36 @@ def build_public_router(infra: Infrastructure, services: ApiServices) -> APIRout
         status_code=204,
         summary="Отписаться по ссылке из письма",
         description=(
-            "Единственная ручка без входа. Токен - HMAC серверным ключом над `user_id` и "
-            "рассылкой, сравнение за постоянное время; чужой, просроченный и неверный токен "
-            "дают один и тот же ответ (существование пользователя не раскрывается). Лимит "
-            "попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор - 204. "
-            "Неверный токен - 422 `notifications.unsubscribe_invalid`."
+            "Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным "
+            "сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. "
+            "Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного "
+            "токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`."
         ),
         responses=problem_responses(422, 429, 503),
     )
     async def unsubscribe(body: UnsubscribeRequest, request: Request, response: Response) -> None:
-        client_ip = request.client.host if request.client else UNKNOWN_CLIENT
-        await services.unsubscribe.execute(body.token, client_ip=client_ip)
+        await services.unsubscribe.execute(body.token, client_ip=_client_ip(request))
+        response.headers["Cache-Control"] = PRIVATE
+
+    @router.post(
+        "/unsubscribe/one-click",
+        status_code=204,
+        summary="Отписка одним запросом (RFC 8058)",
+        description=(
+            "Для заголовка `List-Unsubscribe`: почтовик шлёт POST на ссылку из письма, токен в "
+            "query, тело `application/x-www-form-urlencoded` с `List-Unsubscribe=One-Click` "
+            "(до 1 КБ). Без входа; тот же лимит и тот же единый ответ, что у обычной отписки; "
+            "неверное тело неотличимо от неверного токена (422 "
+            "`notifications.unsubscribe_invalid`). GET не поддерживается (405)."
+        ),
+        responses=problem_responses(422, 429, 503),
+    )
+    async def unsubscribe_one_click(
+        request: Request, response: Response, token: Annotated[str, Query()] = ""
+    ) -> None:
+        # Тело без нужной пары - то же, что пустой токен: ответ тот же, эффекта нет.
+        effective = token if await _is_one_click_body(request) else ""
+        await services.unsubscribe.execute(effective, client_ip=_client_ip(request))
         response.headers["Cache-Control"] = PRIVATE
 
     @router.post(

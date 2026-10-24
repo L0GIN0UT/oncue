@@ -35,11 +35,7 @@ class NotificationsSettings(BaseModel):
 
     Attributes:
         types_path: Свой файл типов уведомлений вместо встроенного (``None`` - встроенный).
-        unsubscribe_hmac_key: Ключ HMAC токенов отписки (не короче 32 символов). Без него
-            сервис стартует только в local/ci (временный ключ процесса).
-        unsubscribe_key_version: Версия активного ключа (входит в токен).
-        unsubscribe_previous_keys: Прежние ключи по версиям - для ротации: выпущенные ссылки
-            остаются рабочими, пока ключ не убран из списка.
+        unsubscribe_ttl_days: Срок жизни токена отписки с момента отправки письма (дни).
         public_base_url: База публичных ссылок (страница отписки ``{base}/unsubscribe?token=``).
         unsubscribe_attempts: Попыток отписки с одного IP за окно.
         unsubscribe_window_s: Окно лимита попыток.
@@ -53,9 +49,7 @@ class NotificationsSettings(BaseModel):
     """
 
     types_path: Path | None = None
-    unsubscribe_hmac_key: SecretStr | None = None
-    unsubscribe_key_version: int = Field(default=1, ge=1, le=999_999)
-    unsubscribe_previous_keys: dict[int, SecretStr] = Field(default_factory=dict)
+    unsubscribe_ttl_days: int = Field(default=90, ge=1, le=3650)
     public_base_url: str | None = Field(default=None, pattern=r"^https?://")
     unsubscribe_attempts: int = Field(default=10, ge=1, le=1000)
     unsubscribe_window_s: int = Field(default=600, ge=1, le=86_400)
@@ -83,13 +77,6 @@ class NotificationsSettings(BaseModel):
         # Письмо рассылки без ссылки отписки отправляться не должно никогда.
         if "{link}" not in value:
             raise ValueError("unsubscribe_footer должен содержать {link}")
-        return value
-
-    @field_validator("unsubscribe_hmac_key")
-    @classmethod
-    def _strong_key(cls, value: SecretStr | None) -> SecretStr | None:
-        if value is not None and len(value.get_secret_value()) < 32:  # noqa: PLR2004 — энтропия
-            raise ValueError("ключ отписки короче 32 символов")
         return value
 
 

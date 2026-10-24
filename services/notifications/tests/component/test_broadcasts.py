@@ -240,7 +240,7 @@ async def test_email_has_unsubscribe_link_with_working_token(notifications: Serv
     match = re.search(r"/unsubscribe\?token=(\S+)", message.body)
     assert match is not None
     token = match.group(1)
-    assert svc.container.tokens.verify(token) == (user, UUID(broadcast["id"]))
+    assert str(user) not in token and broadcast["id"] not in token  # токен непрозрачный
 
     response = await svc.client.post("/v1/unsubscribe", json={"token": token})
     assert response.status_code == 204
@@ -334,11 +334,13 @@ async def test_every_email_has_one_click_list_unsubscribe_headers(notifications:
     [message] = svc.email.sent
     match = re.search(r"/unsubscribe\?token=(\S+)", message.body)
     assert match is not None
+    # Заголовок ведёт на POST-ручку API, а не на страницу (RFC 8058); токен тот же, что в тексте.
     assert message.headers["List-Unsubscribe"] == (
-        f"<{svc.container.public_base_url}/unsubscribe?token={match.group(1)}>"
+        f"<{svc.container.public_base_url}/api/notifications/v1/unsubscribe/one-click"
+        f"?token={match.group(1)}>"
     )
     assert message.headers["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
-    assert svc.container.tokens.verify(match.group(1)) == (user, UUID(broadcast["id"]))
+    assert str(user) not in message.headers["List-Unsubscribe"]
     assert "\n" not in "".join(message.headers.values())
 
 

@@ -48,6 +48,16 @@ async def test_migrations_apply_and_match_metadata(database_url: str) -> None:
     assert await tables_of(database_url) >= (CORE | BROADCASTS)
 
 
+async def columns_of(url: str, table: str) -> set[str]:
+    engine = create_async_engine(url)
+    try:
+        async with engine.connect() as conn:
+            found = await conn.run_sync(lambda sync: inspect(sync).get_columns(table))
+            return {column["name"] for column in found}
+    finally:
+        await engine.dispose()
+
+
 def alembic_config(path: Path, url: str) -> Config:
     config = Config()
     config.set_main_option("script_location", str(path))
@@ -61,6 +71,14 @@ async def test_migrations_downgrade_and_upgrade_again(database_url: str) -> None
     await apply_migrations(database_url, DEFINITION.migrations_path)
 
     config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0003")
+    columns = await columns_of(database_url, "broadcast_deliveries")
+    assert {"broadcast_id", "user_id"} <= columns
+    assert not ({"token_hash", "token_expires_at"} & columns)
+    await asyncio.to_thread(command.upgrade, config, "0004")
+    assert {"token_hash", "token_expires_at"} <= await columns_of(
+        database_url, "broadcast_deliveries"
+    )
     await asyncio.to_thread(command.downgrade, config, "0002")
     after_0003 = await tables_of(database_url)
     assert not (BROADCASTS & after_0003)

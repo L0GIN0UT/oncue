@@ -118,9 +118,19 @@ broadcast_deliveries = Table(
     Column("sent_at", DateTime(timezone=True), nullable=False),
     # sent - письмо отправлено (или занято к отправке); failed - адрес отвергнут окончательно.
     Column("status", String(8), nullable=False, server_default=text("'sent'")),
+    # Токен отписки получателя: только sha256 (hex); NULL - доставки до миграции 0004.
+    Column("token_hash", String(64), nullable=True),
+    Column("token_expires_at", DateTime(timezone=True), nullable=True),
     CheckConstraint("status IN ('sent', 'failed')", name="status_known"),
     # UNIQUE(broadcast_id, user_id): повтор воркера не шлёт письмо дважды.
     PrimaryKeyConstraint("broadcast_id", "user_id", name="pk_broadcast_deliveries"),
+    Index(
+        "uq_broadcast_deliveries_token_hash",
+        "token_hash",
+        unique=True,
+        postgresql_where=text("token_hash IS NOT NULL"),
+    ),
+    Index("ix_broadcast_deliveries_token_expires_at", "token_expires_at"),
 )
 
 admin_actions = Table(

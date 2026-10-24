@@ -11,7 +11,20 @@ from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
-from sqlalchemy import DateTime, Row, Uuid, and_, delete, func, insert, literal, or_, select, update
+from sqlalchemy import (
+    DateTime,
+    Row,
+    String,
+    Uuid,
+    and_,
+    delete,
+    func,
+    insert,
+    literal,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
 
@@ -300,21 +313,38 @@ class SqlBroadcasts:
             .values(status="failed")
         )
 
-    async def claim(self, broadcast_id: UUID, user_id: UUID, now: datetime) -> bool:
+    async def claim(
+        self,
+        broadcast_id: UUID,
+        user_id: UUID,
+        now: datetime,
+        *,
+        token_hash: str,
+        token_expires_at: datetime,
+    ) -> bool:
         # Занятие только для подписанного прямо сейчас: отписка до отправки письмо отменяет.
         e = t.email_subscriptions
         source = select(
             literal(broadcast_id, Uuid(as_uuid=True)),
             e.c.user_id,
             literal(now, DateTime(timezone=True)),
+            literal(token_hash, String(64)),
+            literal(token_expires_at, DateTime(timezone=True)),
         ).where(e.c.user_id == user_id, e.c.subscribed.is_(True))
         stmt = (
             pg_insert(t.broadcast_deliveries)
-            .from_select(["broadcast_id", "user_id", "sent_at"], source)
+            .from_select(
+                ["broadcast_id", "user_id", "sent_at", "token_hash", "token_expires_at"], source
+            )
             .on_conflict_do_nothing()
             .returning(t.broadcast_deliveries.c.user_id)
         )
         return (await self._s.execute(stmt)).first() is not None
+
+    async def token_owner(self, token_hash: str, now: datetime) -> UUID | None:
+        d = t.broadcast_deliveries
+        stmt = select(d.c.user_id).where(d.c.token_hash == token_hash, d.c.token_expires_at > now)
+        return (await self._s.execute(stmt)).scalar_one_or_none()
 
     async def release(self, broadcast_id: UUID, user_id: UUID) -> None:
         d = t.broadcast_deliveries
