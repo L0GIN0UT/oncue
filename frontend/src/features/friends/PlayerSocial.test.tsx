@@ -12,13 +12,12 @@ setupMockBackend();
 const PLAYER = PLAYERS[0]!;
 
 describe("профиль игрока: social", () => {
-  it("не друг: «Добавить в друзья» ведёт на вкладку добавления; блокировка с подтверждением", async () => {
+  it("не друг: «Добавить в друзья» шлёт заявку по user_id; блокировка с подтверждением", async () => {
     signInAsUser();
     renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
-    expect(await screen.findByTestId("player-add-friend")).toHaveAttribute(
-      "href",
-      "/friends?tab=add",
-    );
+    await userEvent.click(await screen.findByTestId("player-add-friend"));
+    expect(await screen.findByTestId("player-add-friend-sent")).toBeInTheDocument();
+    expect(world.social.outgoing.map((r) => r.user_id)).toEqual([PLAYER.user_id]);
     await userEvent.click(screen.getByTestId("player-block"));
     expect(world.social.blocks).toHaveLength(0);
     await userEvent.click(screen.getByTestId("player-block-confirm"));

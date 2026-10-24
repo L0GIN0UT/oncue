@@ -52,15 +52,17 @@ class FriendList(BaseModel):
 
 
 class FriendRequestCreate(_Request):
-    """Заявка по нику или по коду добавления (ровно одно поле)."""
+    """Заявка по нику, коду добавления или id игрока (ровно одно поле)."""
 
     nickname: Nickname | None = None
     code: FriendCode | None = None
+    user_id: UUID | None = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> Self:
-        if (self.nickname is None) == (self.code is None):
-            raise ValueError("укажите nickname или code")
+        given = [v for v in (self.nickname, self.code, self.user_id) if v is not None]
+        if len(given) != 1:
+            raise ValueError("укажите ровно одно из nickname, code, user_id")
         return self
 
 

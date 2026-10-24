@@ -161,6 +161,41 @@ async def test_unknown_hidden_and_blocking_players_are_indistinguishable(
     assert await social.rows(friend_requests) == []
 
 
+async def test_request_by_user_id_is_idempotent_and_matches_nickname(
+    social: Social, duo: tuple[UUID, UUID]
+) -> None:
+    alice, bobby = duo
+    headers = {**social.headers(alice), **social.key()}
+    first = await social.client.post(REQUESTS, json={"user_id": str(bobby)}, headers=headers)
+    second = await social.client.post(REQUESTS, json={"user_id": str(bobby)}, headers=headers)
+    assert (first.status_code, second.status_code) == (201, 201)
+    assert first.json() == second.json()
+    assert first.json()["user_id"] == str(bobby)
+    assert len(await social.rows(friend_requests)) == 1
+    assert_problem(await send(social, alice, user_id=str(bobby)), 409, "social.request_pending")
+
+
+async def test_request_by_user_id_unknown_hidden_blocking_look_the_same(
+    social: Social, duo: tuple[UUID, UUID]
+) -> None:
+    alice, _ = duo
+    hidden = await social.register("Hidden")
+    blocker = await social.register("Blocker")
+    await social.client.put(
+        "/v1/me/privacy",
+        json={"profile_public": True, "stats_public": True, "friend_requests": "none"},
+        headers=social.headers(hidden),
+    )
+    await social.client.put(f"/v1/me/blocks/{alice}", headers=social.headers(blocker))
+    answers = []
+    for target in (uuid7(), hidden, blocker, alice):
+        response = await send(social, alice, user_id=str(target))
+        assert_problem(response, 404, "social.player_not_found")
+        answers.append((response.status_code, response.json()["code"], response.json()["title"]))
+    assert len(set(answers)) == 1
+    assert await social.rows(friend_requests) == []
+
+
 async def test_cannot_request_self_and_duplicates_conflict(
     social: Social, duo: tuple[UUID, UUID]
 ) -> None:

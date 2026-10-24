@@ -133,7 +133,13 @@ async def test_sanction_routes_need_sanctions_permission(
 async def test_friend_request_needs_exactly_one_of_nickname_and_code(
     client: httpx.AsyncClient,
 ) -> None:
-    for body in ({}, {"nickname": "Bob", "code": "ABCD2345"}):
+    uid = "018f0000-0000-7000-8000-000000000001"
+    for body in (
+        {},
+        {"nickname": "Bob", "code": "ABCD2345"},
+        {"nickname": "Bob", "user_id": uid},
+        {"code": "ABCD2345", "user_id": uid},
+    ):
         response = await client.post(
             "/v1/me/friend-requests", json=body, headers={**KEY, **_auth()}
         )

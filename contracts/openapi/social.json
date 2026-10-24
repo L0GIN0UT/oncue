@@ -694,7 +694,7 @@
       },
       "FriendRequestCreate": {
         "additionalProperties": false,
-        "description": "Заявка по нику или по коду добавления (ровно одно поле).",
+        "description": "Заявка по нику, коду добавления или id игрока (ровно одно поле).",
         "properties": {
           "code": {
             "anyOf": [
@@ -720,6 +720,18 @@
               }
             ],
             "title": "Nickname"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           }
         },
         "title": "FriendRequestCreate",
@@ -4055,7 +4067,7 @@
         ]
       },
       "post": {
-        "description": "Ровно одно из `nickname`, `code`. Встречная заявка сразу создаёт дружбу. Ответ для неизвестного ника/кода, скрывшего заявки (`friend_requests = none`) и заблокировавшего игрока одинаков: 404 `social.player_not_found`. Лимиты из конфига: 429 `social.friend_requests_daily_limit`, 409 `social.friends_limit`; 409 `social.already_friends`, 409 `social.request_pending`, 403 `social.blocked_by_you` (себя заблокировал). Повтор по `Idempotency-Key` - та же заявка.",
+        "description": "Ровно одно из `nickname`, `code`, `user_id` (иначе 422). Встречная заявка сразу создаёт дружбу. Ответ для неизвестного ника/кода/id, скрывшего заявки (`friend_requests = none`) и заблокировавшего игрока одинаков: 404 `social.player_not_found`. Лимиты из конфига: 429 `social.friend_requests_daily_limit`, 409 `social.friends_limit`; 409 `social.already_friends`, 409 `social.request_pending`, 403 `social.blocked_by_you` (себя заблокировал). Повтор по `Idempotency-Key` - та же заявка.",
         "operationId": "send_request_v1_me_friend_requests_post",
         "parameters": [
           {
@@ -4199,7 +4211,7 @@
             "description": "Зависимость временно недоступна"
           }
         },
-        "summary": "Отправить заявку по нику или коду",
+        "summary": "Отправить заявку по нику, коду или id игрока",
         "tags": [
           "social"
         ]

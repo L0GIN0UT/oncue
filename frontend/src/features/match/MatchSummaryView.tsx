@@ -20,6 +20,7 @@ import { SaveButton } from "@/features/library/SaveButton";
 import { blockData, useMatchPage, type MatchSummary } from "@/features/online/bff";
 import { useModeTitle } from "@/features/online/lists";
 import { RatingChangeBlock } from "@/features/rating/RatingChangeBlock";
+import { AddFriendButton } from "@/features/friends/AddFriendButton";
 import { ReportButton } from "@/features/reports/ReportDialog";
 import { rateOpponent } from "./api";
 import { matchErrorKey } from "./errors";
@@ -287,6 +288,7 @@ function RateOpponents({
                   <ThumbsUp aria-hidden />
                   {t("match.rate.praise")}
                 </Button>
+                {p.can_report && <AddFriendButton userId={p.user_id} testId="rate-add-friend" />}
                 {p.can_report && (
                   <ReportButton
                     kind="player"

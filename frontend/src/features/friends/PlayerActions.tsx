@@ -1,17 +1,16 @@
 "use client";
 /**
  * Действия над игроком в его профиле (`blocks.social` bff): добавить в друзья, удалить из
- * друзей, заблокировать и снять блокировку. Заявка в social создаётся по нику или коду, а ника
- * в профиле нет, поэтому «добавить» ведёт на вкладку добавления на `/friends`. Жалоба на игрока
+ * друзей, заблокировать и снять блокировку. «Добавить» шлёт заявку по `user_id`. Жалоба на игрока
  * подаётся только из матча (`context_match_id`), в профиле её нет.
  */
 import { useState } from "react";
-import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { PlayerSocialCard } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { playerQueryKey } from "@/features/progression/api";
+import { AddFriendButton } from "./AddFriendButton";
 import { ErrorLine } from "./ErrorLine";
 import { useSocialAction } from "./use-action";
 import { blockPlayer, friendsKeys, removeFriend, unblockPlayer } from "./api";
@@ -70,11 +69,7 @@ export function PlayerActions({ userId, social }: { userId: string; social: Play
               </>
             )}
             {!social.is_friend && social.can_send_request && (
-              <Button asChild size="sm">
-                <Link href="/friends?tab=add" data-testid="player-add-friend">
-                  {t("social.player.addFriend")}
-                </Link>
-              </Button>
+              <AddFriendButton userId={userId} testId="player-add-friend" />
             )}
             {confirmBlock ? (
               <span className="flex items-center gap-2">

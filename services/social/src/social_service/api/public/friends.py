@@ -113,11 +113,12 @@ def register_friend_routes(router: APIRouter, factory: ServiceFactory) -> None:
         "/me/friend-requests",
         response_model=FriendRequestView,
         status_code=201,
-        summary="Отправить заявку по нику или коду",
+        summary="Отправить заявку по нику, коду или id игрока",
         description=(
-            "Ровно одно из `nickname`, `code`. Встречная заявка сразу создаёт дружбу. Ответ "
-            "для неизвестного ника/кода, скрывшего заявки (`friend_requests = none`) и "
-            "заблокировавшего игрока одинаков: 404 `social.player_not_found`. Лимиты из "
+            "Ровно одно из `nickname`, `code`, `user_id` (иначе 422). Встречная заявка сразу "
+            "создаёт дружбу. Ответ для неизвестного ника/кода/id, "
+            "скрывшего заявки (`friend_requests = none`) и заблокировавшего игрока "
+            "одинаков: 404 `social.player_not_found`. Лимиты из "
             "конфига: 429 `social.friend_requests_daily_limit`, 409 `social.friends_limit`; "
             "409 `social.already_friends`, 409 `social.request_pending`, 403 "
             "`social.blocked_by_you` (себя заблокировал). Повтор по `Idempotency-Key` - та же "
@@ -137,7 +138,12 @@ def register_friend_routes(router: APIRouter, factory: ServiceFactory) -> None:
         _private(response)
         ip = request.client.host if request.client else None
         return await svc.send_request(
-            user.user_id, key=key, nickname=body.nickname, code=body.code, client_ip=ip
+            user.user_id,
+            key=key,
+            nickname=body.nickname,
+            code=body.code,
+            user_id=body.user_id,
+            client_ip=ip,
         )
 
     @router.post(

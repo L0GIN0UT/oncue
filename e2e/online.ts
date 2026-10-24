@@ -66,7 +66,7 @@ async function withApiErrors<T>(
     throw error;
   }
 }
-const PASSWORD = "e2e-online-password-1";
+export const PASSWORD = "e2e-online-password-1";
 
 /** Самое длинное окно уровня онлайн-шаблонов засева + запас на доставку дельты (мс). */
 export const LEVEL_WINDOW_MS = 30_000 + 10_000;
@@ -120,6 +120,7 @@ export function api(
     | "rating"
     | "progression"
     | "notifications"
+    | "social"
     | "identity",
 ) {
   const base = `/api/${service}/v1`;
@@ -138,6 +139,10 @@ export function api(
     get: (p: string) => page.request.get(`${base}${p}`),
     post: async (p: string, data?: unknown) =>
       page.request.post(`${base}${p}`, { data, headers: await headers() }),
+    put: async (p: string, data?: unknown) =>
+      page.request.put(`${base}${p}`, { data, headers: await headers() }),
+    delete: async (p: string) =>
+      page.request.delete(`${base}${p}`, { headers: await headers() }),
   };
 }
 

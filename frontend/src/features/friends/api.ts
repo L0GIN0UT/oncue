@@ -54,9 +54,9 @@ export async function fetchRequests(): Promise<FriendRequests> {
   return unwrap(await api().social.GET("/v1/me/friend-requests"));
 }
 
-/** Заявка по нику или коду: ровно одно поле. */
+/** Заявка по нику, коду или id игрока: ровно одно поле. */
 export async function sendRequest(
-  target: { nickname: string } | { code: string },
+  target: { nickname: string } | { code: string } | { user_id: string },
   key: string,
 ): Promise<FriendRequestView> {
   return unwrap(

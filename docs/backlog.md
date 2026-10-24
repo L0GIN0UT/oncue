@@ -56,6 +56,10 @@
 | Своя аватарка в `me/appearance`: убрать дубль `PlayerAppearance.custom_avatar_url` одним изменением контракта | progression, bff | 5b | По желанию |
 | Название сборника в `collections.CollectionPublished/Updated` (необязательное `title` ≤120): нужно social для `CommentPosted.collection_title` (сейчас пустая строка, текст уведомления без названия) | collections, social | 5c |
 | Ник в `/pages/players/{id}`: `PlayerBadge` показывает «Игрок» | bff, progression, frontend | 5b | 5c (F5), если ник даёт social/identity |
+| Жалоба на аватарку чужого игрока: в `PlayerAppearance` (progression) нужен необязательный `asset_id` одобренного ассета, bff пробросит в `AvatarCard`, фронтенд подключит `ReportButton kind="avatar"` | progression, bff, frontend | 5c |
+| Кнопка жалобы в истории матчей: у карточки матча нет списка игроков (жалоба доступна в итоге матча) | bff, frontend | 5c |
+| Страница для уже открытой сессии забаненного `account` (сейчас только отказ на входе) | frontend, identity | 5c |
+| Точный флаг «можно добавить в друзья» в итоге матча (сейчас кнопка при `can_report`) | bff | 5c |
 | Общий `adminContext` в e2e (`e2e/collections.spec.ts` дублирует `e2e/admin.ts`) | e2e | 5b | По желанию |
 | Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |
 | Анонимное чтение `p/*` в S3 (принятый риск): перейти на presigned-ссылки gateway | media_pipeline | 5b | Этап 7 |

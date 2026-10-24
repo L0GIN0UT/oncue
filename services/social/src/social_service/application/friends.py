@@ -150,8 +150,9 @@ class FriendsService:
         nickname: str | None,
         code: str | None,
         client_ip: str | None,
+        user_id: UUID | None = None,
     ) -> Json:
-        """Заявка по нику или коду; встречная заявка сразу создаёт дружбу.
+        """Заявка по нику, коду или id игрока; встречная заявка сразу создаёт дружбу.
 
         Raises:
             LookupRateLimitedError: перебор ника/кода (по игроку или IP).
@@ -163,14 +164,18 @@ class FriendsService:
         """
         cfg = await current_config(self._config)
         fingerprint = request_fingerprint(
-            "friend_request.create", None, {"nickname": nickname, "code": code}
+            "friend_request.create",
+            None,
+            {"nickname": nickname, "code": code, "user_id": user_id and str(user_id)},
         )
         async with self._uow() as uow:
 
             async def perform() -> Json:
                 # Лимит - только на выполняемом пути: повтор с тем же ключом бюджет не тратит.
                 await self._check_lookup(cfg, sender, client_ip)
-                return await self._send(uow, cfg, sender, nickname, code)
+                return await self._send(
+                    uow, cfg, sender, nickname=nickname, code=code, user_id=user_id
+                )
 
             response, _ = await run_idempotent(
                 uow.idempotency, sender, key, fingerprint, perform, status_code=201
@@ -183,19 +188,23 @@ class FriendsService:
         uow: FriendsUnitOfWork,
         cfg: SocialConfig,
         sender: UUID,
+        *,
         nickname: str | None,
         code: str | None,
+        user_id: UUID | None = None,
     ) -> Json:
         repo = uow.repo
         # Ник отправителя - до поиска цели, иначе 503/404 раскрывали бы существование игрока.
         sender_nick = await repo.nickname(sender)
         if sender_nick is None:
             raise ProfileNotReadyError("профиль ещё не готов, повторите позже")
-        target = (
-            await repo.user_by_nickname(nickname)
-            if nickname is not None
-            else await repo.user_by_code(code or "")
-        )
+        if user_id is not None:
+            # Существование - по users_proj (ниже через nickname); неизвестный id = тот же 404.
+            target: UUID | None = user_id
+        elif nickname is not None:
+            target = await repo.user_by_nickname(nickname)
+        else:
+            target = await repo.user_by_code(code or "")
         target_nick = None if target is None else await repo.nickname(target)
         if target is None or target_nick is None:
             raise PlayerNotFoundError

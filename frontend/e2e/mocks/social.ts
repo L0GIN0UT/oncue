@@ -318,13 +318,23 @@ export function createSocialHandlers(world: MockWorld): HttpHandler[] {
       if (err) return err;
       const key = request.headers.get("idempotency-key");
       if (key && s.idempotency.has(key)) return json(s.idempotency.get(key));
-      const body = (await request.json()) as { nickname?: string; code?: string };
-      if (!!body.nickname === !!body.code) return problem(422, "validation.failed");
-      const target = body.code
-        ? body.code === "ZZZZ9999"
-          ? SOCIAL_USERS.dmitry
-          : null
-        : (Object.values(SOCIAL_USERS).find((u) => u.nickname === body.nickname) ?? null);
+      const body = (await request.json()) as {
+        nickname?: string;
+        code?: string;
+        user_id?: string;
+      };
+      if ([body.nickname, body.code, body.user_id].filter(Boolean).length !== 1)
+        return problem(422, "validation.failed");
+      const target = body.user_id
+        ? (Object.values(SOCIAL_USERS).find((u) => u.id === body.user_id) ?? {
+            id: body.user_id,
+            nickname: "Игрок",
+          })
+        : body.code
+          ? body.code === "ZZZZ9999"
+            ? SOCIAL_USERS.dmitry
+            : null
+          : (Object.values(SOCIAL_USERS).find((u) => u.nickname === body.nickname) ?? null);
       if (!target) return problem(404, "social.player_not_found");
       if (s.isFriend(target.id)) return problem(409, "social.already_friends");
       if (s.outgoing.some((r) => r.user_id === target.id))

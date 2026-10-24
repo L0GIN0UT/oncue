@@ -402,8 +402,8 @@ export interface paths {
         get: operations["my_requests_v1_me_friend_requests_get"];
         put?: never;
         /**
-         * Отправить заявку по нику или коду
-         * @description Ровно одно из `nickname`, `code`. Встречная заявка сразу создаёт дружбу. Ответ для неизвестного ника/кода, скрывшего заявки (`friend_requests = none`) и заблокировавшего игрока одинаков: 404 `social.player_not_found`. Лимиты из конфига: 429 `social.friend_requests_daily_limit`, 409 `social.friends_limit`; 409 `social.already_friends`, 409 `social.request_pending`, 403 `social.blocked_by_you` (себя заблокировал). Повтор по `Idempotency-Key` - та же заявка.
+         * Отправить заявку по нику, коду или id игрока
+         * @description Ровно одно из `nickname`, `code`, `user_id` (иначе 422). Встречная заявка сразу создаёт дружбу. Ответ для неизвестного ника/кода/id, скрывшего заявки (`friend_requests = none`) и заблокировавшего игрока одинаков: 404 `social.player_not_found`. Лимиты из конфига: 429 `social.friend_requests_daily_limit`, 409 `social.friends_limit`; 409 `social.already_friends`, 409 `social.request_pending`, 403 `social.blocked_by_you` (себя заблокировал). Повтор по `Idempotency-Key` - та же заявка.
          */
         post: operations["send_request_v1_me_friend_requests_post"];
         delete?: never;
@@ -1002,13 +1002,15 @@ export interface components {
         };
         /**
          * FriendRequestCreate
-         * @description Заявка по нику или по коду добавления (ровно одно поле).
+         * @description Заявка по нику, коду добавления или id игрока (ровно одно поле).
          */
         FriendRequestCreate: {
             /** Code */
             code?: string | null;
             /** Nickname */
             nickname?: string | null;
+            /** User Id */
+            user_id?: string | null;
         };
         /**
          * FriendRequests
