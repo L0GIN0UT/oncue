@@ -1,6 +1,133 @@
 {
   "components": {
     "schemas": {
+      "AppearanceCard": {
+        "description": "Оформление профиля: по одному предмету на слот (ник и аватар берёт фронт из блока игрока).",
+        "properties": {
+          "custom_avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Одобренная своя аватарка; null — аватар из слота",
+            "title": "Custom Avatar Url"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/AppearanceSlotCard"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slots"
+        ],
+        "title": "AppearanceCard",
+        "type": "object"
+      },
+      "AppearanceSlotCard": {
+        "description": "Слот оформления: предмет или пусто.",
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CosmeticCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot"
+        ],
+        "title": "AppearanceSlotCard",
+        "type": "object"
+      },
+      "AvatarCard": {
+        "description": "Своя аватарка: право, заявка, лимиты загрузки.",
+        "properties": {
+          "entitled": {
+            "title": "Entitled",
+            "type": "boolean"
+          },
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "max_bytes": {
+            "minimum": 1.0,
+            "title": "Max Bytes",
+            "type": "integer"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarRequestCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "entitled",
+          "max_bytes",
+          "formats"
+        ],
+        "title": "AvatarCard",
+        "type": "object"
+      },
+      "AvatarRequestCard": {
+        "description": "Последняя заявка на свою аватарку.",
+        "properties": {
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "submitted_at"
+        ],
+        "title": "AvatarRequestCard",
+        "type": "object"
+      },
       "BadgeCard": {
         "description": "Бейдж игрока.",
         "properties": {
@@ -72,6 +199,102 @@
           "unlocked_at"
         ],
         "title": "BadgeRefCard",
+        "type": "object"
+      },
+      "BellCard": {
+        "description": "Колокольчик: число непрочитанных уведомлений.",
+        "properties": {
+          "unread": {
+            "minimum": 0.0,
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread"
+        ],
+        "title": "BellCard",
+        "type": "object"
+      },
+      "Block_AppearanceCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppearanceCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[AppearanceCard]",
+        "type": "object"
+      },
+      "Block_AvatarCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[AvatarCard]",
+        "type": "object"
+      },
+      "Block_BellCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BellCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[BellCard]",
         "type": "object"
       },
       "Block_CollectionDetail_": {
@@ -153,6 +376,33 @@
           "status"
         ],
         "title": "Block[HomeProgressCard]",
+        "type": "object"
+      },
+      "Block_InventoryCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InventoryCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[InventoryCard]",
         "type": "object"
       },
       "Block_LeaderboardCard_": {
@@ -396,6 +646,33 @@
           "status"
         ],
         "title": "Block[ShelfItems]",
+        "type": "object"
+      },
+      "Block_ShopCatalogCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShopCatalogCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[ShopCatalogCard]",
         "type": "object"
       },
       "Block_WalletCard_": {
@@ -756,6 +1033,68 @@
           "status"
         ],
         "title": "Block[list[OnlineModeCard]]",
+        "type": "object"
+      },
+      "Block_list_PackCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PackCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[PackCard]]",
+        "type": "object"
+      },
+      "Block_list_PlayerAppearanceCard__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PlayerAppearanceCard"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[list[PlayerAppearanceCard]]",
         "type": "object"
       },
       "Block_list_QueuePoolCard__": {
@@ -1615,6 +1954,90 @@
         "title": "CollectionsPage",
         "type": "object"
       },
+      "CosmeticCard": {
+        "description": "Предмет косметики (progression, 5b): картинка или анимация по ``media_kind``.",
+        "properties": {
+          "asset_url": {
+            "title": "Asset Url",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "level_required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Required"
+          },
+          "media_kind": {
+            "enum": [
+              "static",
+              "animated"
+            ],
+            "title": "Media Kind",
+            "type": "string"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Статичный кадр для prefers-reduced-motion",
+            "title": "Poster Url"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "rarity": {
+            "title": "Rarity",
+            "type": "string"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "slot",
+          "rarity",
+          "title",
+          "media_kind",
+          "asset_url",
+          "poster_url"
+        ],
+        "title": "CosmeticCard",
+        "type": "object"
+      },
       "CustomClueCard": {
         "description": "Своя загадка единицы (эмодзи); приходит только автору и админу.",
         "properties": {
@@ -1838,6 +2261,58 @@
           "quests_open"
         ],
         "title": "HomeProgressCard",
+        "type": "object"
+      },
+      "InventoryCard": {
+        "description": "Инвентарь игрока.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryEntryCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "InventoryCard",
+        "type": "object"
+      },
+      "InventoryEntryCard": {
+        "description": "Предмет инвентаря.",
+        "properties": {
+          "equipped": {
+            "title": "Equipped",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "item": {
+            "$ref": "#/components/schemas/CosmeticCard"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "source",
+          "equipped"
+        ],
+        "title": "InventoryEntryCard",
         "type": "object"
       },
       "ItemCard": {
@@ -2169,6 +2644,17 @@
       "MatchBlocks": {
         "description": "Блоки экрана итога матча.",
         "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_list_PlayerAppearanceCard__"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Оформление игроков матча; null до потока S5 этапа 5b"
+          },
           "items": {
             "$ref": "#/components/schemas/Block_list_ItemCard__"
           },
@@ -3032,6 +3518,56 @@
         "title": "OpenRoomsList",
         "type": "object"
       },
+      "PackCard": {
+        "description": "Пак косметики (виден только при ``billing.enabled=true``).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CosmeticCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "price_kopecks": {
+            "minimum": 1.0,
+            "title": "Price Kopecks",
+            "type": "integer"
+          },
+          "style": {
+            "title": "Style",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "verses_amount": {
+            "minimum": 0.0,
+            "title": "Verses Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "title",
+          "style",
+          "items",
+          "verses_amount",
+          "price_kopecks"
+        ],
+        "title": "PackCard",
+        "type": "object"
+      },
       "PersonCard": {
         "description": "Персона в карточке единицы.",
         "properties": {
@@ -3051,9 +3587,39 @@
         "title": "PersonCard",
         "type": "object"
       },
+      "PlayerAppearanceCard": {
+        "description": "Оформление игрока в матче: ник, аватар, рамка, титул (по ``user_id``).",
+        "properties": {
+          "appearance": {
+            "$ref": "#/components/schemas/AppearanceCard"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "appearance"
+        ],
+        "title": "PlayerAppearanceCard",
+        "type": "object"
+      },
       "PlayerBlocks": {
         "description": "Блоки профиля игрока.",
         "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_AppearanceCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Оформление игрока; null до потока S5 этапа 5b"
+          },
           "progress": {
             "$ref": "#/components/schemas/Block_PublicProgressCard_"
           }
@@ -3238,8 +3804,41 @@
       "ProfileBlocks": {
         "description": "Блоки профиля: каждый гаснет независимо.",
         "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_AppearanceCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Оформление; null до потока S5 этапа 5b"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_AvatarCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Своя аватарка; null до потока S5 этапа 5b"
+          },
           "badges": {
             "$ref": "#/components/schemas/Block_list_BadgeCard__"
+          },
+          "inventory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_InventoryCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Инвентарь; null до потока S5 этапа 5b"
           },
           "progress": {
             "$ref": "#/components/schemas/Block_ProgressCard_"
@@ -4248,6 +4847,122 @@
         "title": "ShelfItems",
         "type": "object"
       },
+      "ShellPage": {
+        "description": "``GET /v1/pages/shell``: оболочка приложения — тема и колокольчик.",
+        "properties": {
+          "bell": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_BellCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — аноним или гость, notifications не вызывается"
+          },
+          "theme": {
+            "$ref": "#/components/schemas/ThemeCard"
+          }
+        },
+        "required": [
+          "theme"
+        ],
+        "title": "ShellPage",
+        "type": "object"
+      },
+      "ShopBlocks": {
+        "description": "Блоки витрины.",
+        "properties": {
+          "catalog": {
+            "$ref": "#/components/schemas/Block_ShopCatalogCard_"
+          },
+          "packs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_list_PackCard__"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null — продажа выключена (billing.enabled=false)"
+          }
+        },
+        "required": [
+          "catalog"
+        ],
+        "title": "ShopBlocks",
+        "type": "object"
+      },
+      "ShopCatalogCard": {
+        "description": "Витрина: предметы и баланс (покупка — прямо в progression, bff только читает).",
+        "properties": {
+          "balance": {
+            "minimum": 0.0,
+            "title": "Balance",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShopEntryCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "slots": {
+            "description": "Слоты в порядке конфига — для вкладок витрины",
+            "items": {
+              "type": "string"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "balance",
+          "slots"
+        ],
+        "title": "ShopCatalogCard",
+        "type": "object"
+      },
+      "ShopEntryCard": {
+        "description": "Предмет витрины с состоянием для игрока.",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/CosmeticCard"
+          },
+          "state": {
+            "enum": [
+              "locked",
+              "available",
+              "owned"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "state"
+        ],
+        "title": "ShopEntryCard",
+        "type": "object"
+      },
+      "ShopPage": {
+        "description": "``GET /v1/pages/shop``: только пользователь с аккаунтом, `private, no-store`.",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/ShopBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "ShopPage",
+        "type": "object"
+      },
       "SoloBlocks": {
         "description": "Блоки хаба соло-режимов.",
         "properties": {
@@ -4416,6 +5131,22 @@
           "max"
         ],
         "title": "SubjectPickCard",
+        "type": "object"
+      },
+      "ThemeCard": {
+        "description": "Активная тема оформления (ADR 0049): только ключ, наборы токенов лежат во фронтенде.",
+        "properties": {
+          "key": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "ThemeCard",
         "type": "object"
       },
       "TierCard": {
@@ -5595,6 +6326,80 @@
           }
         },
         "summary": "Экран результатов сессии",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/shell": {
+      "get": {
+        "description": "Этап 5b. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.",
+        "operationId": "shell_page_v1_pages_shell_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShellPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Оболочка приложения: тема и колокольчик",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/shop": {
+      "get": {
+        "description": "Этап 5b. Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, пока `billing.enabled=false`. Покупка — прямо в progression (`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает.",
+        "operationId": "shop_page_v1_pages_shop_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Магазин: витрина косметики, паки",
         "tags": [
           "bff_web"
         ]

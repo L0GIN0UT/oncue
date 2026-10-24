@@ -41,6 +41,8 @@ from progression_service.application.accrual.rating_rewards import (
 )
 from progression_service.application.accrual.solo import SoloSession
 from progression_service.application.quests.tracker import DailyDone, SoloFinished
+from progression_service.domain.avatar import PURPOSE as AVATAR_PURPOSE
+from progression_service.domain.avatar import Moderation, RequestStatus
 from progression_service.domain.config import ConfigInvalidError
 from progression_service.domain.experience import Finish, MatchFormat, Outcome
 from progression_service.infrastructure.container import container_for
@@ -52,11 +54,14 @@ from progression_service.infrastructure.messaging.rewards import (
 
 log = structlog.get_logger(__name__)
 
+UGC_IMAGE_TOPIC = "media_pipeline.ugc_image.v1"
+
 CONSUMED_TOPICS: tuple[str, ...] = (
     "game.session.v1",
     "match.match.v1",
     "rating.rating.v1",
     COLLECTIONS_TOPIC,
+    UGC_IMAGE_TOPIC,
 )
 
 GAME_FINISHED = "game.GameFinished"
@@ -64,6 +69,7 @@ DAILY_COMPLETED = "game.DailyCompleted"
 MATCH_FINISHED = "match.MatchFinished"
 WEEKLY_TOP_FINALIZED = "rating.WeeklyTopFinalized"
 SEASON_STANDINGS_FINALIZED = "rating.SeasonStandingsFinalized"
+ASSET_MODERATED = "media_pipeline.AssetModerated"
 
 CONSUMER_LAG = Gauge(
     "gv_progression_consumer_lag",
@@ -148,6 +154,32 @@ class _SeasonStandings(_Payload):
     entries: list[_Placed] = Field(min_length=1, max_length=500)
 
 
+class _AssetModerated(_Payload):
+    asset_id: UUID
+    owner_user_id: UUID
+    purpose: str = Field(min_length=1, max_length=64)
+    status: Literal["approved", "rejected"]
+    reason_code: str | None = Field(max_length=64)
+    public_key: str | None
+    decided_at: AwareDatetime
+    version: int = Field(ge=1)
+
+
+def _moderation(p: _AssetModerated) -> Moderation:
+    try:
+        return Moderation(
+            asset_id=p.asset_id,
+            owner_user_id=p.owner_user_id,
+            status=RequestStatus(p.status),
+            reason_code=p.reason_code,
+            public_key=p.public_key,
+            decided_at=p.decided_at,
+            version=p.version,
+        )
+    except ValueError as exc:  # противоречие полей контракта
+        raise PermanentError(f"AssetModerated нарушает контракт: {exc}") from exc
+
+
 def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
     try:
         return model.model_validate(payload)
@@ -182,7 +214,7 @@ def _match(p: _MatchFinished) -> FinishedMatch:
 Handler = Callable[[EventEnvelope, AsyncSession], Awaitable[None]]
 
 
-def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
+def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:  # noqa: PLR0915 - реестр
     """Реестр обработчиков событий."""
     registry = EventHandlerRegistry()
     container = container_for(infra)
@@ -301,7 +333,14 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
         await rewards.collection_published(envelope, session)
         return None
 
+    async def on_asset_moderated(envelope: EventEnvelope, session: AsyncSession) -> object:
+        p = _parse(_AssetModerated, envelope.payload)
+        if p.purpose != AVATAR_PURPOSE:
+            return None  # обложки сборников и прочее - не наша зона
+        return await container.avatar_moderation(session).apply(_moderation(p))
+
     registry.register(GAME_FINISHED, handler(on_game_finished))
+    registry.register(ASSET_MODERATED, handler(on_asset_moderated))
     registry.register(DAILY_COMPLETED, handler(on_daily_completed))
     registry.register(MATCH_FINISHED, handler(on_match_finished))
     registry.register(WEEKLY_TOP_FINALIZED, handler(on_weekly_top))

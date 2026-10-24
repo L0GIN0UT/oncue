@@ -1,0 +1,64 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:ItemPurchased:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок получил предмет косметики за Версы (ADR 0045). aggregate_id — user_id. Проводка `CurrencyDebited` публикуется отдельно с тем же `op_id`. Выдача по уровню, с колеса, промокодом и паком этим событием не объявляется.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "balance_after": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "item_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "item_key": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "op_id": {
+      "description": "`shop:{user}:{item}`",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "price": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "rarity": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "slot": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "balance_after",
+    "item_id",
+    "item_key",
+    "op_id",
+    "price",
+    "rarity",
+    "slot",
+    "user_id"
+  ],
+  "title": "progression.ItemPurchased v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

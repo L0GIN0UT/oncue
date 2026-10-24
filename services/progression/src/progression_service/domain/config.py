@@ -68,6 +68,19 @@ BOUNDS: Mapping[str, int | float] = {
     "quests.items[].reward.xp": _AMOUNT_MAX,
     "quests.items[].reward.verses": _AMOUNT_MAX,
     "badges[].target": 1_000_000,
+    "shop.media.static_max_bytes": 20_000_000,
+    "shop.media.animated_max_bytes": 20_000_000,
+    "shop.media.animated_max_frames": 1000,
+    "shop.media.animated_max_duration_ms": 60_000,
+    "shop.media.max_side_px": 4096,
+    "shop.rarities[].duplicate_verses": _AMOUNT_MAX,
+    "promo.attempts_per_user": 10_000,
+    "promo.attempts_per_ip": 10_000,
+    "promo.window_s": 86_400,
+    "promo.code_length": 32,
+    "promo.max_batch_verses": 1_000_000_000,
+    "promo.max_daily_verses_per_actor": 1_000_000_000,
+    "promo.max_daily_verses_total": 1_000_000_000,
 }
 """Верхние границы значений: те же ``maximum``, что в схеме конфига (ключ — путь поля, ``[]`` —
 элемент массива). Сверка со схемой — тест ``test_config_bounds``; схема и домен держат границу
@@ -81,8 +94,22 @@ ITEM_LIMITS: Mapping[str, int] = {
     "wheel.sectors": 64,
     "quests.items": 500,
     "badges": 500,
+    "shop.slots": 16,
+    "shop.rarities": 16,
+    "spend.bucket_order": 2,
 }
 """Верхние границы длины массивов (``maxItems`` схемы)."""
+
+MINIMUMS: Mapping[str, int] = {
+    "shop.media.animated_max_frames": 2,
+    "shop.media.max_side_px": 16,
+    "promo.code_length": 8,
+}
+"""Нижние границы (``minimum`` схемы), отличные от значения по умолчанию (0 для сумм, 1 для
+размеров и сроков - см. ``_sized``)."""
+
+SPEND_BUCKETS = ("earned", "paid")
+"""Бакеты, которые знает ``spend.bucket_order`` (``items.enum`` схемы)."""
 
 MAX_BOOST_MULTIPLIER = Decimal(str(BOUNDS["wheel.sectors[].prize.multiplier"]))
 """Наибольший множитель буста опыта, который вообще допускает конфиг."""
@@ -282,6 +309,76 @@ class WheelConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class SlotDef:
+    """Слот оформления профиля (аватар, рамка, титул, фон)."""
+
+    key: str
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
+class RarityDef:
+    """Редкость предмета; ``duplicate_verses`` - Версы за дубль, выпавший с колеса."""
+
+    key: str
+    title: str
+    duplicate_verses: int
+
+
+@dataclass(frozen=True, slots=True)
+class MediaLimits:
+    """Лимиты картинок и анимаций предметов (ADR 0046)."""
+
+    static_max_bytes: int
+    animated_max_bytes: int
+    animated_max_frames: int
+    animated_max_duration_ms: int
+    max_side_px: int
+
+
+@dataclass(frozen=True, slots=True)
+class ShopConfig:
+    """Магазин и инвентарь (ADR 0045): слоты, редкости, лимиты медиа."""
+
+    slots: tuple[SlotDef, ...]
+    rarities: tuple[RarityDef, ...]
+    media: MediaLimits
+    custom_avatar_item_key: str | None
+
+    def slot(self, key: str) -> SlotDef | None:
+        """Слот по ключу."""
+        return next((s for s in self.slots if s.key == key), None)
+
+    def rarity(self, key: str) -> RarityDef | None:
+        """Редкость по ключу."""
+        return next((r for r in self.rarities if r.key == key), None)
+
+
+@dataclass(frozen=True, slots=True)
+class PromoConfig:
+    """Промокоды (ADR 0048): лимиты попыток, длина кода, потолки эмиссии.
+
+    Потолки: ``max_batch_verses`` - одна партия; ``max_daily_verses_per_actor`` - сутки на
+    администратора; ``max_daily_verses_total`` - сутки на всех. Порядок: партия <= актор <= всего.
+    """
+
+    attempts_per_user: int
+    attempts_per_ip: int
+    window_s: int
+    code_length: int
+    max_batch_verses: int
+    max_daily_verses_per_actor: int
+    max_daily_verses_total: int
+
+
+@dataclass(frozen=True, slots=True)
+class SpendConfig:
+    """Траты Версов (ADR 0043): порядок списания бакетов."""
+
+    bucket_order: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ProgressionConfig:
     """Разобранная и проверенная версия конфига.
 
@@ -295,6 +392,9 @@ class ProgressionConfig:
         badges: Бейджи.
         wheel: Колесо.
         body: Исходное тело версии (для блоков, которые разбирают другие потоки).
+        shop: Магазин 5b; ``None`` - секции нет, магазин пуст.
+        promo: Промокоды 5b; ``None`` - секции нет.
+        spend: Порядок трат 5b; ``None`` - секции нет (тратится только ``earned``).
     """
 
     timezone: str
@@ -306,6 +406,9 @@ class ProgressionConfig:
     badges: tuple[BadgeDef, ...]
     wheel: WheelConfig
     body: Mapping[str, Any]
+    shop: ShopConfig | None = None
+    promo: PromoConfig | None = None
+    spend: SpendConfig | None = None
 
     @property
     def tz(self) -> ZoneInfo:
@@ -334,6 +437,9 @@ class ProgressionConfig:
         quests = _quests(_obj(body, "quests"))
         badges = _badges(body.get("badges"))
         wheel = _wheel(_obj(body, "wheel"))
+        shop = _shop(_obj(body, "shop")) if "shop" in body else None
+        promo = _promo(_obj(body, "promo")) if "promo" in body else None
+        spend = _spend(_obj(body, "spend")) if "spend" in body else None
         return cls(
             timezone=timezone,
             levels=levels,
@@ -344,6 +450,9 @@ class ProgressionConfig:
             badges=badges,
             wheel=wheel,
             body=dict(body),
+            shop=shop,
+            promo=promo,
+            spend=spend,
         )
 
 
@@ -663,6 +772,104 @@ def _wheel(raw: Mapping[str, Any]) -> WheelConfig:
         sectors=tuple(sectors),
         max_boost_queue=_int(raw, "max_boost_queue", "wheel.max_boost_queue", minimum=1),
     )
+
+
+def _titled_keys(raw: Mapping[str, Any], name: str, path: str) -> list[Mapping[str, Any]]:
+    """Непустой массив объектов с уникальными ключами (слоты, редкости)."""
+    items: list[Mapping[str, Any]] = []
+    seen: set[str] = set()
+    for item in _array(raw, name, path):
+        if not isinstance(item, Mapping):
+            raise ConfigInvalidError(f"{path}: элемент должен быть объектом")
+        key = _key(item, f"{path}[]")
+        if key in seen:
+            raise ConfigInvalidError(f"{path}: ключ {key!r} повторяется")
+        seen.add(key)
+        items.append(item)
+    if not items:
+        raise ConfigInvalidError(f"{path}: нужен хотя бы один элемент")
+    return items
+
+
+def _shop(raw: Mapping[str, Any]) -> ShopConfig:
+    """Магазин: слоты и редкости с уникальными ключами, лимиты медиа, ключ товара-аватарки."""
+    slots = tuple(
+        SlotDef(
+            key=_key(s, "shop.slots[]"),
+            title=_text(s, "title", "shop.slots[]", limit=80, required=True),
+        )
+        for s in _titled_keys(raw, "slots", "shop.slots")
+    )
+    rarities = tuple(
+        RarityDef(
+            key=_key(r, "shop.rarities[]"),
+            title=_text(r, "title", "shop.rarities[]", limit=80, required=True),
+            duplicate_verses=_int(
+                r, "duplicate_verses", "shop.rarities[].duplicate_verses", minimum=0
+            ),
+        )
+        for r in _titled_keys(raw, "rarities", "shop.rarities")
+    )
+    media = _obj(raw, "media")
+    limits = MediaLimits(
+        static_max_bytes=_sized(media, "static_max_bytes", "shop.media.static_max_bytes"),
+        animated_max_bytes=_sized(media, "animated_max_bytes", "shop.media.animated_max_bytes"),
+        animated_max_frames=_sized(media, "animated_max_frames", "shop.media.animated_max_frames"),
+        animated_max_duration_ms=_sized(
+            media, "animated_max_duration_ms", "shop.media.animated_max_duration_ms"
+        ),
+        max_side_px=_sized(media, "max_side_px", "shop.media.max_side_px"),
+    )
+    if "custom_avatar_item_key" not in raw:
+        raise ConfigInvalidError("shop.custom_avatar_item_key: поле обязательно (может быть null)")
+    avatar = raw["custom_avatar_item_key"]
+    if avatar is not None and (
+        not isinstance(avatar, str) or len(avatar) > _KEY_MAX or not _KEY.match(avatar)
+    ):
+        raise ConfigInvalidError("shop.custom_avatar_item_key: ключ предмета или null")
+    return ShopConfig(slots=slots, rarities=rarities, media=limits, custom_avatar_item_key=avatar)
+
+
+def _sized(parent: Mapping[str, Any], key: str, path: str) -> int:
+    """Размер или срок: целое от ``MINIMUMS[path]`` (по умолчанию 1) до ``BOUNDS[path]``."""
+    return _int(parent, key, path, minimum=MINIMUMS.get(path, 1))
+
+
+def _promo(raw: Mapping[str, Any]) -> PromoConfig:
+    cfg = PromoConfig(
+        attempts_per_user=_sized(raw, "attempts_per_user", "promo.attempts_per_user"),
+        attempts_per_ip=_sized(raw, "attempts_per_ip", "promo.attempts_per_ip"),
+        window_s=_sized(raw, "window_s", "promo.window_s"),
+        code_length=_sized(raw, "code_length", "promo.code_length"),
+        max_batch_verses=_sized(raw, "max_batch_verses", "promo.max_batch_verses"),
+        max_daily_verses_per_actor=_sized(
+            raw, "max_daily_verses_per_actor", "promo.max_daily_verses_per_actor"
+        ),
+        max_daily_verses_total=_sized(
+            raw, "max_daily_verses_total", "promo.max_daily_verses_total"
+        ),
+    )
+    # Схема порядок потолков выразить не может - его держит только домен.
+    if not cfg.max_batch_verses <= cfg.max_daily_verses_per_actor <= cfg.max_daily_verses_total:
+        raise ConfigInvalidError(
+            "promo: нужно max_batch_verses <= max_daily_verses_per_actor <= max_daily_verses_total"
+        )
+    return cfg
+
+
+def _spend(raw: Mapping[str, Any]) -> SpendConfig:
+    """Порядок трат: уникальные известные бакеты, ``earned`` обязан быть (ADR 0043)."""
+    order = _array(raw, "bucket_order", "spend.bucket_order")
+    if not order:
+        raise ConfigInvalidError("spend.bucket_order: нужен хотя бы один бакет")
+    for bucket in order:
+        if bucket not in SPEND_BUCKETS:
+            raise ConfigInvalidError(f"spend.bucket_order: неизвестный бакет {bucket!r}")
+    if len(set(order)) != len(order):
+        raise ConfigInvalidError("spend.bucket_order: бакеты не должны повторяться")
+    if "earned" not in order:
+        raise ConfigInvalidError("spend.bucket_order: нужен бакет earned")
+    return SpendConfig(bucket_order=tuple(order))
 
 
 def _check_multiplier(value: object) -> None:

@@ -11,6 +11,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from gv_core.domain import DomainEvent
+from progression_service.application.ports.avatar import AvatarRepository
 from progression_service.application.ports.rewards import (
     BadgeRepository,
     BoostRepository,
@@ -18,6 +19,13 @@ from progression_service.application.ports.rewards import (
     MetricRepository,
     QuestRepository,
     SpinRepository,
+)
+from progression_service.application.ports.shop import (
+    EquippedRepository,
+    InventoryRepository,
+    ItemRepository,
+    PackRepository,
+    PromoRepository,
 )
 from progression_service.domain.config import ProgressionConfig
 from progression_service.domain.daily_streak import Streak
@@ -261,6 +269,24 @@ class ProgressionUnitOfWork(Protocol):
 
     @property
     def grants(self) -> GrantRepository: ...
+
+    @property
+    def items(self) -> ItemRepository: ...
+
+    @property
+    def inventory(self) -> InventoryRepository: ...
+
+    @property
+    def equipped(self) -> EquippedRepository: ...
+
+    @property
+    def promos(self) -> PromoRepository: ...
+
+    @property
+    def packs(self) -> PackRepository: ...
+
+    @property
+    def avatars(self) -> AvatarRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

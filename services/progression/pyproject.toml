@@ -3,7 +3,7 @@ name = "guessverse-progression"
 version = "0.1.0"
 description = "Опыт и уровни, валюта (журнал проводок), задания, бейджи, магазин, инвентарь, оформление профиля"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "python-multipart>=0.0.12", "Pillow>=13", "aioboto3>=13"]
 
 [project.scripts]
 progression = "progression_service.main:run"

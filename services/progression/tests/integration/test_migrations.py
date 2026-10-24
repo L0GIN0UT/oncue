@@ -154,7 +154,7 @@ async def test_downgrade_0003_drops_reward_tables_only_and_reapplies(database_ur
 
 
 def test_alembic_has_single_head_and_linear_chain() -> None:
-    """Ревизии идут цепочкой 0001 → 0002 → 0003 → 0004: после слияния потоков голова одна."""
+    """Ревизии идут цепочкой 0001 → … → 0007: после слияния потоков голова одна."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -162,6 +162,50 @@ def test_alembic_has_single_head_and_linear_chain() -> None:
     config = Config()
     config.set_main_option("script_location", str(DEFINITION.migrations_path))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0004"]
+    assert script.get_heads() == ["0007"]
     chain = [rev.revision for rev in script.walk_revisions()]
-    assert chain == ["0004", "0003", "0002", "0001"]
+    assert chain == ["0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+
+
+async def test_downgrade_0007_is_blocked_by_data_and_empty_one_reapplies(
+    database_url: str,
+) -> None:
+    """0007 (ADR 0048): откат прерывается, пока есть заявки или аватарки; пустой откат и
+    повторный подъём проходят."""
+    import asyncio
+
+    from alembic import command
+    from sqlalchemy import text
+
+    from gv_core.ids import uuid7
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    engine = create_async_engine(database_url)
+    index = text("SELECT to_regclass('ux_avatar_requests_one_pending')")
+    try:
+        async with engine.connect() as conn:  # одна pending на игрока - в схеме
+            assert (await conn.execute(index)).scalar() is not None
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO avatar_requests (id, user_id, asset_id, status, submitted_at) "
+                    "VALUES (:id, :u, :a, 'pending', now())"
+                ),
+                {"id": uuid7(), "u": uuid7(), "a": uuid7()},
+            )
+        with pytest.raises(RuntimeError, match="откат 0007 запрещён"):
+            await asyncio.to_thread(command.downgrade, config, "0006")
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM avatar_requests"))
+        await asyncio.to_thread(command.downgrade, config, "0006")
+        async with engine.connect() as conn:
+            gone = (await conn.execute(text("SELECT to_regclass('user_avatars')"))).scalar()
+        assert gone is None
+        async with engine.connect() as conn:
+            assert (await conn.execute(index)).scalar() is None
+        await apply_migrations(database_url, DEFINITION.migrations_path)
+    finally:
+        await engine.dispose()

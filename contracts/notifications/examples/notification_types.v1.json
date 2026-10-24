@@ -1,0 +1,187 @@
+{
+  "default_locale": "ru",
+  "types": [
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "level_up:{payload.user_id}:{payload.new_level}",
+      "key": "level_up",
+      "params": {
+        "level": "payload.new_level"
+      },
+      "recipient": "payload.user_id",
+      "source_event": "progression.ProgressionLevelChanged",
+      "templates": {
+        "ru": {
+          "body": "Вы достигли уровня {level}.",
+          "title": "Новый уровень"
+        }
+      },
+      "user_mutable": true
+    },
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "badge:{payload.user_id}:{payload.badge_key}",
+      "key": "badge_unlocked",
+      "params": {
+        "badge": "payload.badge_key"
+      },
+      "recipient": "payload.user_id",
+      "source_event": "progression.BadgeUnlocked",
+      "templates": {
+        "ru": {
+          "body": "Вы получили бейдж «{badge}».",
+          "title": "Новый бейдж"
+        }
+      },
+      "user_mutable": true
+    },
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "quest:{payload.user_id}:{payload.quest_key}:{payload.period_start}",
+      "key": "quest_completed",
+      "params": {
+        "quest": "payload.quest_key"
+      },
+      "recipient": "payload.user_id",
+      "source_event": "progression.QuestCompleted",
+      "templates": {
+        "ru": {
+          "body": "Задание «{quest}» выполнено, награда начислена.",
+          "title": "Задание выполнено"
+        }
+      },
+      "user_mutable": true
+    },
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "weekly:{payload.op_id}",
+      "filter": {
+        "reason": "weekly_top"
+      },
+      "key": "weekly_top_reward",
+      "params": {
+        "amount": "payload.amount"
+      },
+      "recipient": "payload.user_id",
+      "source_event": "progression.CurrencyCredited",
+      "templates": {
+        "ru": {
+          "body": "За место в топе недели начислено {amount} Версов.",
+          "title": "Награда недели"
+        }
+      },
+      "user_mutable": true
+    },
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "season:{payload.op_id}",
+      "filter": {
+        "reason": "season"
+      },
+      "key": "season_reward",
+      "params": {
+        "amount": "payload.amount"
+      },
+      "recipient": "payload.user_id",
+      "source_event": "progression.CurrencyCredited",
+      "templates": {
+        "ru": {
+          "body": "За итог сезона начислено {amount} Версов.",
+          "title": "Награда сезона"
+        }
+      },
+      "user_mutable": true
+    },
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "avatar:{payload.asset_id}:{payload.version}",
+      "filter": {
+        "purpose": "avatar",
+        "status": "approved"
+      },
+      "key": "avatar_approved",
+      "params": {},
+      "recipient": "payload.owner_user_id",
+      "source_event": "media_pipeline.AssetModerated",
+      "templates": {
+        "ru": {
+          "body": "Ваша аватарка прошла модерацию.",
+          "title": "Аватарка одобрена"
+        }
+      },
+      "user_mutable": false
+    },
+    {
+      "channels": {
+        "email": false,
+        "in_app": true,
+        "push": false
+      },
+      "dedup_key": "avatar:{payload.asset_id}:{payload.version}",
+      "filter": {
+        "purpose": "avatar",
+        "status": "rejected"
+      },
+      "key": "avatar_rejected",
+      "lookups": {
+        "reason": {
+          "fallback": {
+            "ru": "не прошла модерацию"
+          },
+          "path": "payload.reason_code",
+          "texts": {
+            "copyright": {
+              "ru": "отклонена: нарушает чужие авторские права"
+            },
+            "inappropriate": {
+              "ru": "отклонена: нарушает правила сообщества"
+            },
+            "low_quality": {
+              "ru": "отклонена: низкого качества"
+            },
+            "other": {
+              "ru": "отклонена: не соответствует требованиям"
+            },
+            "personal_data": {
+              "ru": "отклонена: содержит личные данные"
+            }
+          }
+        }
+      },
+      "params": {},
+      "recipient": "payload.owner_user_id",
+      "source_event": "media_pipeline.AssetModerated",
+      "templates": {
+        "ru": {
+          "body": "Ваша аватарка {reason}.",
+          "title": "Аватарка отклонена"
+        }
+      },
+      "user_mutable": false
+    }
+  ]
+}

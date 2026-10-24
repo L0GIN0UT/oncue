@@ -10,6 +10,10 @@ services:
       # Локально письма с кодом пишутся в лог (ADR 0041); smtp — через GV_EMAIL__BACKEND в .env.
       GV_EMAIL__BACKEND: ${GV_EMAIL__BACKEND:-log}
 {% endif %}
+{% if s.name == "notifications" %}
+      # Локально письма рассылки пишутся в лог (ссылка отписки видна в логе); smtp — через .env.
+      GV_NOTIFICATIONS__EMAIL_BACKEND: ${GV_NOTIFICATIONS__EMAIL_BACKEND:-log}
+{% endif %}
 {% if s.name == "game" %}
       # Сиды режимов публикуются при старте (game.modes.bootstrap).
       GV_GAME__BOOTSTRAP_MODES_DIR: /seeds/game/modes

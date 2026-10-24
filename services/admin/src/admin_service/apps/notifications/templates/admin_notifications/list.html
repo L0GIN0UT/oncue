@@ -1,0 +1,13 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<p><a href="{% url 'broadcasts:new' %}">Новая рассылка</a></p>
+<table>
+  <thead><tr><th>Создана</th><th>Тема</th><th>Статус</th><th>Получателей</th><th>Автор</th></tr></thead>
+  {% for b in rows %}
+  <tr><td>{{ b.created_at }}</td><td>{{ b.subject }}</td><td>{{ b.status }}</td><td>{{ b.recipients }}</td><td><code>{{ b.created_by }}</code></td></tr>
+  {% empty %}<tr><td colspan="5">Рассылок нет</td></tr>
+  {% endfor %}
+</table>
+{% if next_cursor %}<p><a href="?cursor={{ next_cursor|urlencode:"" }}">Дальше →</a></p>{% endif %}
+{% endblock %}

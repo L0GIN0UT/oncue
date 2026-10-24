@@ -25,6 +25,7 @@ from bff_web_service.application.dto import (
     OnlineModeCard,
     OnlinePage,
     OnlineStatus,
+    PlayerAppearanceCard,
     SeasonCard,
     SubjectKind,
     Viewer,
@@ -35,6 +36,7 @@ from bff_web_service.application.ports import (
     GameClient,
     LibraryClient,
     MatchClient,
+    ProgressionClient,
     RatingClient,
     UpstreamRejectedError,
     UpstreamUnavailableError,
@@ -200,12 +202,16 @@ class GetMatchPage:
         match: MatchClient,
         catalog: CatalogClient,
         library: LibraryClient,
+        progression: ProgressionClient,
         *,
         concurrency: int,
         items_deadline_s: float,
+        appearance_batch_size: int = 12,
     ) -> None:
         self._match, self._catalog, self._library = match, catalog, library
+        self._progression = progression
         self._concurrency, self._deadline_s = concurrency, items_deadline_s
+        self._batch = appearance_batch_size
 
     async def __call__(self, viewer: Viewer, match_id: UUID) -> MatchPage:
         """Собрать экран.
@@ -228,26 +234,44 @@ class GetMatchPage:
             result = await limiter.run(self._match.match(token, match_id))
         except UpstreamUnavailableError as exc:
             log.warning("bff.block_unavailable", block="match", reason=exc.reason)
-            return MatchPage(
-                MatchBlocks(Block.unavailable(), Block.unavailable(), Block.unavailable())
-            )
+            return _match_unavailable()
         except UpstreamRejectedError as exc:
             error = screen_error(exc, not_found="матч не найден")
             if error is not None:
                 raise error from exc
             log.warning("bff.block_unavailable", block="match", reason=exc.code)
-            return MatchPage(
-                MatchBlocks(Block.unavailable(), Block.unavailable(), Block.unavailable())
-            )
+            return _match_unavailable()
         ids = _round_item_ids(result)
         # Общий предел обоих блоков: до 50 единиц идут волнами по concurrency, и без него
         # страница ждала бы «волны × timeout_s». Блок, не успевший к сроку, гаснет сам.
         deadline = asyncio.get_running_loop().time() + self._deadline_s
-        items, shelves = await asyncio.gather(
+        items, shelves, appearance = await asyncio.gather(
             _until(deadline, self._items(limiter, ids), "match.items"),
             _until(deadline, self._shelves(limiter, token, ids), "match.library"),
+            _until(deadline, self._appearance(limiter, token, result), "match.appearance"),
         )
-        return MatchPage(MatchBlocks(match=Block.ok(result), items=items, library=shelves))
+        return MatchPage(
+            MatchBlocks(match=Block.ok(result), items=items, library=shelves, appearance=appearance)
+        )
+
+    async def _appearance(
+        self, limiter: Limiter, token: str, result: MatchResult
+    ) -> Block[list[PlayerAppearanceCard]]:
+        """Оформление игроков матча пачками (предел источника), дубли схлопнуты."""
+        users = list(dict.fromkeys(p.user_id for p in result.players))
+        batches = [users[i : i + self._batch] for i in range(0, len(users), self._batch)]
+        fetched = await asyncio.gather(
+            *(limiter.attempt(self._progression.players_appearance(token, b)) for b in batches)
+        )
+        cards: list[PlayerAppearanceCard] = []
+        for value in fetched:
+            if not isinstance(value, list):
+                return block_of(value, "match.appearance")
+            cards.extend(value)
+        # Порядок - по игрокам матча, а не по ответам progression (пачки и их порядок произвольны).
+        position = {u: i for i, u in enumerate(users)}
+        cards.sort(key=lambda c: position.get(c.user_id, len(users)))
+        return Block.ok(cards)
 
     async def _items(self, limiter: Limiter, ids: list[UUID]) -> Block[list[ItemCard]]:
         fetched = await asyncio.gather(*(limiter.attempt(self._catalog.get_item(i)) for i in ids))
@@ -280,6 +304,18 @@ class GetMatchPage:
                 return Block.unavailable()
             flags.append(block.data)
         return Block.ok(flags)
+
+
+def _match_unavailable() -> MatchPage:
+    """Итога нет - гаснут все блоки (ids игроков для оформления взять неоткуда)."""
+    return MatchPage(
+        MatchBlocks(
+            Block.unavailable(),
+            Block.unavailable(),
+            Block.unavailable(),
+            Block.unavailable(),
+        )
+    )
 
 
 async def _until[T](deadline: float, call: Awaitable[Block[T]], block: str) -> Block[T]:

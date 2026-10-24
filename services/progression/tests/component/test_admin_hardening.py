@@ -96,6 +96,7 @@ async def test_publish_is_bound_to_the_draft_body_that_was_seen(
     progression: Service, make_config: Callable[..., dict[str, Any]]
 ) -> None:
     await progression.publish_config()
+    await progression.add_item("custom_avatar", slot="avatar", price=10)
     path = "/admin/v1/configs/draft"
     a = await call(
         progression, "PUT", path, {"config": make_config(levels__base=600), **REASON}, perm=MANAGE

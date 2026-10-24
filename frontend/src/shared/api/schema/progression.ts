@@ -122,6 +122,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Предметы */
+        get: operations["items_admin_v1_items_get"];
+        put?: never;
+        /**
+         * Создать предмет
+         * @description Без картинки предмет неактивен. Слот и редкость - из секции `shop` действующего конфига (иначе 422 `progression.item_slot_unknown` или `progression.item_rarity_unknown`); нужно `level_required` или `price` (422 `progression.item_unlock_required`); повтор `key` - 409 `progression.item_key_taken`.
+         */
+        post: operations["create_item_admin_v1_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Изменить предмет
+         * @description Цена и условия действуют для новых покупок; владельцы не затрагиваются. Активировать без картинки нельзя - 422 `progression.item_media_missing`.
+         */
+        put: operations["update_item_admin_v1_items__item_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/items/{item_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Загрузить картинку или анимацию предмета
+         * @description multipart: `file`, `reason`. Статика - WebP/PNG, анимация - animated WebP (ADR 0046); проверка сигнатуры, декодирование, лимиты размера, кадров, длительности и стороны из секции `shop.media` конфига, постер - первый кадр. Ошибки: 422 `progression.item_media_invalid`, 413 `progression.item_media_too_large`.
+         */
+        put: operations["upload_item_media_admin_v1_items__item_id__media_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/ledger/{op_id}/reverse": {
         parameters: {
             query?: never;
@@ -136,6 +197,88 @@ export interface paths {
          * @description Встречная проводка со ссылкой `reversal_of`; журнал не правится; только журнал Версов, только кредиты. Ошибки: 404 `progression.ledger_entry_not_found`, 409 `progression.already_reversed`, 409 `progression.not_reversible` (дебет, сторно, проводка опыта), 409 `progression.insufficient_balance` (баланс ушёл бы ниже нуля).
          */
         post: operations["reverse_admin_v1_ledger__op_id__reverse_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Паки */
+        get: operations["packs_admin_v1_packs_get"];
+        put?: never;
+        /**
+         * Создать пак
+         * @description Только модель: витрина и покупка скрыты, пока `billing.enabled=false`.
+         */
+        post: operations["create_pack_admin_v1_packs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/packs/{pack_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Заменить пак */
+        put: operations["update_pack_admin_v1_packs__pack_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/promo-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Партии промокодов
+         * @description Без самих кодов: в БД только хеш.
+         */
+        get: operations["promo_batches_admin_v1_promo_codes_get"];
+        put?: never;
+        /**
+         * Сгенерировать партию промокодов
+         * @description Коды генерируются сервером (длина - `promo.code_length` конфига) и возвращаются ОДИН раз. Награда - предмет или Версы; для предмета он должен быть активен (422 `progression.item_not_found`). Повтор с тем же `Idempotency-Key` не создаёт вторую партию и не раскрывает коды повторно (409 `progression.codes_already_shown`).
+         */
+        post: operations["create_promo_admin_v1_promo_codes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/promo-codes/{promo_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отозвать партию
+         * @description Новые активации невозможны; выданные награды не отзываются.
+         */
+        post: operations["revoke_promo_admin_v1_promo_codes__promo_id__revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -202,6 +345,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Оформление игроков
+         * @description Публичное оформление (рамка, титул, фон, аватар) до 12 игроков за вызов: ник и аватар в матче и в профиле. Только пользователь с аккаунтом; неизвестные id пропускаются, дубли схлопываются; больше 12 - 422.
+         */
+        get: operations["players_appearance_v1_appearance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Моё оформление
+         * @description По одному предмету на слот; пустой слот - `item = null`.
+         */
+        get: operations["my_appearance_v1_me_appearance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/appearance/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Надеть или снять предмет
+         * @description `item_id = null` снимает. Предмет должен быть в инвентаре и подходить слоту. Идемпотентно по природе операции. Ошибки: 404 `progression.slot_not_found`, 404 `progression.item_not_owned`, 422 `progression.item_slot_mismatch`.
+         */
+        put: operations["equip_v1_me_appearance__slot__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Моя аватарка
+         * @description Куплено ли право, действующий аватар, последняя заявка и лимиты загрузки (лимиты - из настроек progression, дублируют конфиг media-pipeline).
+         */
+        get: operations["my_avatar_v1_me_avatar_get"];
+        put?: never;
+        /**
+         * Загрузить свою аватарку
+         * @description multipart, поле `file`. Нужен купленный товар (403 `progression.avatar_not_entitled`). Файл уходит в media-pipeline (проверка, пересжатие, UGC-ассет `pending`); до решения модератора виден прежний аватар. Новая заявка отменяет предыдущую `pending`. Повтор с тем же `Idempotency-Key` возвращает ту же заявку. Ошибки файла: 422 `ugc.invalid_image`, 413 `ugc.too_large`; media-pipeline недоступен - 503 `progression.avatar_unavailable`.
+         */
+        post: operations["submit_avatar_v1_me_avatar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/badges": {
         parameters: {
             query?: never;
@@ -214,6 +441,26 @@ export interface paths {
          * @description Все бейджи конфига: полученные и с прогрессом.
          */
         get: operations["my_badges_v1_me_badges_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Мой инвентарь
+         * @description Предметы игрока; просроченные временные предметы скрыты.
+         */
+        get: operations["my_inventory_v1_me_inventory_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -291,6 +538,86 @@ export interface paths {
         };
         /** Сведения о сервисе */
         get: operations["meta_v1_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promo/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Погасить промокод
+         * @description Награда - предмет или Версы. Повтор того же кода тем же игроком - та же награда (`repeated = true`). Неверный, просроченный и исчерпанный код дают одинаковый 404 `progression.promo_invalid`; лимит попыток по игроку и IP - 429 `progression.promo_rate_limited` с `Retry-After`. Гостю - 403.
+         */
+        post: operations["redeem_v1_promo_redeem_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/shop/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Витрина
+         * @description Активные предметы с состоянием для игрока (`locked | available | owned`); фильтр по слоту. Условия открытия - по уровню и/или за Версы.
+         */
+        get: operations["shop_items_v1_shop_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/shop/items/{item_id}/purchase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Купить предмет
+         * @description Одна транзакция: проводка `CurrencyDebited` (`op_id = shop:{user}:{item}`), строка инвентаря, outbox `ItemPurchased`. Пустое тело; цена и условия - только на сервере. Повтор - та же выдача (`repeated = true`). Ошибки: 409 `progression.insufficient_funds`, 409 `progression.already_owned`, 403 `progression.item_not_available`, 404 `progression.item_not_found`.
+         */
+        post: operations["purchase_v1_shop_items__item_id__purchase_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/shop/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Паки косметики
+         * @description Скрыты, пока `billing.enabled=false`: 404 `progression.billing_disabled`.
+         */
+        get: operations["shop_packs_v1_shop_packs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -391,6 +718,68 @@ export interface components {
             items: components["schemas"]["AdminBadgeCard"][];
         };
         /**
+         * AdminItem
+         * @description Предмет в админке.
+         */
+        AdminItem: {
+            /** Active */
+            active: boolean;
+            /**
+             * Asset Url
+             * @description null - картинка не загружена
+             */
+            asset_url: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Level Required */
+            level_required: number | null;
+            /**
+             * Media Kind
+             * @enum {string}
+             */
+            media_kind: "static" | "animated";
+            /**
+             * Owners
+             * @description Сколько игроков владеют предметом
+             */
+            owners: number;
+            /** Poster Url */
+            poster_url: string | null;
+            /** Price */
+            price: number | null;
+            /** Rarity */
+            rarity: string;
+            /** Slot */
+            slot: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AdminItemPage
+         * @description Страница предметов (курсор).
+         */
+        AdminItemPage: {
+            /** Items */
+            items: components["schemas"]["AdminItem"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
          * AdminLedgerEntry
          * @description Проводка в админке.
          */
@@ -448,6 +837,49 @@ export interface components {
             user_id: string;
         };
         /**
+         * AdminPack
+         * @description Пак в админке.
+         */
+        AdminPack: {
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Ids */
+            item_ids: string[];
+            /** Key */
+            key: string;
+            /** Price Kopecks */
+            price_kopecks: number;
+            /** Style */
+            style: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Verses Amount */
+            verses_amount: number;
+        };
+        /**
+         * AdminPackList
+         * @description Паки.
+         */
+        AdminPackList: {
+            /** Items */
+            items: components["schemas"]["AdminPack"][];
+        };
+        /**
          * AdminQuestCard
          * @description Задание действующего конфига со статистикой.
          */
@@ -479,6 +911,64 @@ export interface components {
             config_version: number;
             /** Items */
             items: components["schemas"]["AdminQuestCard"][];
+        };
+        /**
+         * Appearance
+         * @description Оформление профиля: по одному предмету на слот.
+         */
+        Appearance: {
+            /** Slots */
+            slots: components["schemas"]["AppearanceSlot"][];
+        };
+        /**
+         * AppearanceSlot
+         * @description Слот оформления.
+         */
+        AppearanceSlot: {
+            /** @description null - слот пуст */
+            item: components["schemas"]["ItemView"] | null;
+            /** Slot */
+            slot: string;
+        };
+        /**
+         * AvatarLimits
+         * @description Лимиты загрузки (из конфига media-pipeline).
+         */
+        AvatarLimits: {
+            /** Formats */
+            formats: string[];
+            /** Max Bytes */
+            max_bytes: number;
+            /** Max Side Px */
+            max_side_px: number;
+            /** Min Side Px */
+            min_side_px: number;
+        };
+        /**
+         * AvatarRequestView
+         * @description Заявка на свою аватарку.
+         */
+        AvatarRequestView: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Reason Code
+             * @description Код причины отклонения; иначе null
+             */
+            reason_code: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
         };
         /**
          * BadgeRef
@@ -515,6 +1005,24 @@ export interface components {
              * @description null — не получен
              */
             unlocked_at: string | null;
+        };
+        /** Body_submit_avatar_v1_me_avatar_post */
+        Body_submit_avatar_v1_me_avatar_post: {
+            /**
+             * File
+             * @description Изображение
+             */
+            file: string;
+        };
+        /** Body_upload_item_media_admin_v1_items__item_id__media_put */
+        Body_upload_item_media_admin_v1_items__item_id__media_put: {
+            /**
+             * File
+             * @description Картинка или анимация
+             */
+            file: string;
+            /** Reason */
+            reason: string;
         };
         /**
          * BoostView
@@ -579,6 +1087,84 @@ export interface components {
             items: components["schemas"]["ConfigVersionCard"][];
         };
         /**
+         * CreatedPromo
+         * @description Партия кодов. `codes` показывается ОДИН раз - потом в БД только хеш.
+         */
+        CreatedPromo: {
+            /** Codes */
+            codes: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * CreateItemRequest
+         * @description Создать предмет (без картинки - неактивным).
+         */
+        CreateItemRequest: {
+            /**
+             * Active
+             * @description Активный предмет виден на витрине; нужна загруженная картинка
+             * @default false
+             */
+            active: boolean;
+            /** Key */
+            key: string;
+            /** Level Required */
+            level_required?: number | null;
+            /**
+             * Media Kind
+             * @enum {string}
+             */
+            media_kind: "static" | "animated";
+            /** Price */
+            price?: number | null;
+            /** Rarity */
+            rarity: string;
+            /** Reason */
+            reason: string;
+            /** Slot */
+            slot: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * CreatePromoRequest
+         * @description Сгенерировать партию кодов с общими условиями.
+         */
+        CreatePromoRequest: {
+            /**
+             * Count
+             * @description Сколько кодов сгенерировать
+             */
+            count: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Label
+             * @description Название партии (для админки; в уведомления не попадает)
+             */
+            label: string;
+            /**
+             * Max Uses
+             * @description Лимит активаций на каждый код
+             */
+            max_uses: number;
+            /**
+             * Per User Once
+             * @description Один код - один раз на игрока
+             * @default true
+             */
+            per_user_once: boolean;
+            /** Reason */
+            reason: string;
+            reward: components["schemas"]["PromoReward"];
+        };
+        /**
          * DailyStreakView
          * @description Серия дейлика по домену.
          */
@@ -602,6 +1188,17 @@ export interface components {
             last_day: string | null;
         };
         /**
+         * EquipRequest
+         * @description Надеть предмет в слот или снять (`item_id = null`).
+         */
+        EquipRequest: {
+            /**
+             * Item Id
+             * @description null - снять; предмет должен быть в инвентаре и подходить слоту
+             */
+            item_id: string | null;
+        };
+        /**
          * GrantRequest
          * @description Ручная выдача Версов.
          */
@@ -620,6 +1217,84 @@ export interface components {
             bucket: "earned";
             /** Reason */
             reason: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * InventoryEntry
+         * @description Предмет в инвентаре.
+         */
+        InventoryEntry: {
+            /**
+             * Acquired At
+             * Format: date-time
+             */
+            acquired_at: string;
+            /** Equipped */
+            equipped: boolean;
+            /**
+             * Expires At
+             * @description Временный предмет (5d); в 5b всегда null
+             */
+            expires_at: string | null;
+            item: components["schemas"]["ItemView"];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "purchase" | "level" | "wheel" | "promo" | "pack" | "admin" | "event";
+        };
+        /**
+         * ItemView
+         * @description Предмет косметики.
+         */
+        ItemView: {
+            /**
+             * Asset Url
+             * @description Публичный адрес картинки или анимации (animated WebP)
+             */
+            asset_url: string;
+            /**
+             * Event Key
+             * @description Сезонное событие (5d); в 5b всегда null
+             */
+            event_key: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /**
+             * Level Required
+             * @description Открывается с уровня; null - по уровню нет
+             */
+            level_required: number | null;
+            /**
+             * Media Kind
+             * @enum {string}
+             */
+            media_kind: "static" | "animated";
+            /**
+             * Poster Url
+             * @description Статичный кадр анимации (для prefers-reduced-motion); у static - null
+             */
+            poster_url: string | null;
+            /**
+             * Price
+             * @description Цена в Версах; null - не продаётся
+             */
+            price: number | null;
+            /** Rarity */
+            rarity: string;
+            /** Slot */
+            slot: string;
+            /** Title */
+            title: string;
         };
         JsonValue: unknown;
         /**
@@ -665,12 +1340,39 @@ export interface components {
             user_id: string;
         };
         /**
+         * MyAvatar
+         * @description Своя аватарка: право, действующий аватар, последняя заявка.
+         */
+        MyAvatar: {
+            /**
+             * Current Url
+             * @description Одобренная аватарка; null - используется предмет слота
+             */
+            current_url: string | null;
+            /**
+             * Entitled
+             * @description Куплен товар «своя аватарка»
+             */
+            entitled: boolean;
+            limits: components["schemas"]["AvatarLimits"];
+            /** @description Последняя заявка; null - не подавалась */
+            request: components["schemas"]["AvatarRequestView"] | null;
+        };
+        /**
          * MyBadges
          * @description Свои бейджи, полученные и нет.
          */
         MyBadges: {
             /** Items */
             items: components["schemas"]["BadgeView"][];
+        };
+        /**
+         * MyInventory
+         * @description Инвентарь игрока (просроченные предметы скрыты).
+         */
+        MyInventory: {
+            /** Items */
+            items: components["schemas"]["InventoryEntry"][];
         };
         /**
          * MyProgress
@@ -757,6 +1459,65 @@ export interface components {
             total: number;
         };
         /**
+         * PackCatalog
+         * @description Витрина паков.
+         */
+        PackCatalog: {
+            /** Packs */
+            packs: components["schemas"]["PackView"][];
+        };
+        /**
+         * PackView
+         * @description Пак косметики (скрыт при `billing.enabled=false`).
+         */
+        PackView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["ItemView"][];
+            /** Key */
+            key: string;
+            /**
+             * Price Kopecks
+             * @description Цена в копейках
+             */
+            price_kopecks: number;
+            /** Style */
+            style: string;
+            /** Title */
+            title: string;
+            /** Verses Amount */
+            verses_amount: number;
+        };
+        /**
+         * PlayerAppearance
+         * @description Оформление игрока (публичное): рамка, титул, фон, аватар.
+         */
+        PlayerAppearance: {
+            appearance: components["schemas"]["Appearance"];
+            /**
+             * Custom Avatar Url
+             * @description Одобренная своя аватарка; null - аватар из слота
+             */
+            custom_avatar_url: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * PlayersAppearance
+         * @description Оформление нескольких игроков (матч, профиль); неизвестные id пропускаются.
+         */
+        PlayersAppearance: {
+            /** Players */
+            players: components["schemas"]["PlayerAppearance"][];
+        };
+        /**
          * PrizeView
          * @description Приз сектора колеса.
          */
@@ -827,6 +1588,95 @@ export interface components {
             type: string;
         };
         /**
+         * PromoBatch
+         * @description Партия кодов в списке (без самих кодов).
+         */
+        PromoBatch: {
+            /** Activations */
+            activations: number;
+            /** Codes Total */
+            codes_total: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Max Uses */
+            max_uses: number;
+            /** Per User Once */
+            per_user_once: boolean;
+            reward: components["schemas"]["PromoReward"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "expired" | "revoked";
+        };
+        /**
+         * PromoBatchPage
+         * @description Страница партий (курсор).
+         */
+        PromoBatchPage: {
+            /** Items */
+            items: components["schemas"]["PromoBatch"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * PromoRedeemRequest
+         * @description Погасить промокод.
+         */
+        PromoRedeemRequest: {
+            /**
+             * Code
+             * @description Код как ввёл игрок (регистр и пробелы нормализуются)
+             */
+            code: string;
+        };
+        /**
+         * PromoRedeemResult
+         * @description Награда промокода. Повтор погашения того же кода возвращает ту же награду.
+         */
+        PromoRedeemResult: {
+            /**
+             * Amount
+             * @description Версы; для предмета null
+             */
+            amount: number | null;
+            item: components["schemas"]["ItemView"] | null;
+            /** Repeated */
+            repeated: boolean;
+            /**
+             * Reward Kind
+             * @enum {string}
+             */
+            reward_kind: "verses" | "item";
+        };
+        /**
+         * PromoReward
+         * @description Награда: ровно одно из `verses_amount` и `item_id` (в соответствии с `kind`).
+         */
+        PromoReward: {
+            /** Item Id */
+            item_id?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "verses" | "item";
+            /** Verses Amount */
+            verses_amount?: number | null;
+        };
+        /**
          * PublicProgress
          * @description Публичный прогресс другого игрока (профиль). Скрытие — поле модели, ручка в 5c.
          */
@@ -860,6 +1710,20 @@ export interface components {
              * @description Версия черновика
              */
             version: number;
+        };
+        /**
+         * PurchaseResult
+         * @description Результат покупки. Повтор с тем же `Idempotency-Key` возвращает ту же выдачу.
+         */
+        PurchaseResult: {
+            /** Balance After */
+            balance_after: number;
+            item: components["schemas"]["ItemView"];
+            /**
+             * Repeated
+             * @description true - повтор уже выполненной покупки
+             */
+            repeated: boolean;
         };
         /**
          * QuestPeriodView
@@ -912,6 +1776,14 @@ export interface components {
             reason: string;
         };
         /**
+         * RevokeRequest
+         * @description Отозвать партию: новые активации невозможны, выданные награды не отзываются.
+         */
+        RevokeRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
          * Reward
          * @description Награда: опыт и Версы.
          */
@@ -942,6 +1814,37 @@ export interface components {
             reason: string;
         };
         /**
+         * SavePackRequest
+         * @description Создать или заменить пак.
+         */
+        SavePackRequest: {
+            /**
+             * Active
+             * @default false
+             */
+            active: boolean;
+            /** Item Ids */
+            item_ids: string[];
+            /** Key */
+            key: string;
+            /**
+             * Price Kopecks
+             * @description Цена в копейках
+             */
+            price_kopecks: number;
+            /** Reason */
+            reason: string;
+            /** Style */
+            style: string;
+            /** Title */
+            title: string;
+            /**
+             * Verses Amount
+             * @default 0
+             */
+            verses_amount: number;
+        };
+        /**
          * ServiceMeta
          * @description Сведения о сервисе.
          */
@@ -950,6 +1853,32 @@ export interface components {
             service: string;
             /** Status */
             status: string;
+        };
+        /**
+         * ShopCatalog
+         * @description Витрина: активные предметы, можно отфильтровать по слоту.
+         */
+        ShopCatalog: {
+            /**
+             * Balance
+             * @description Версы игрока (бакет earned)
+             */
+            balance: number;
+            /** Items */
+            items: components["schemas"]["ShopItem"][];
+        };
+        /**
+         * ShopItem
+         * @description Предмет витрины с состоянием для игрока.
+         */
+        ShopItem: {
+            item: components["schemas"]["ItemView"];
+            /**
+             * State
+             * @description locked - не хватает уровня и цены; available - можно получить; owned - есть
+             * @enum {string}
+             */
+            state: "locked" | "available" | "owned";
         };
         /**
          * SpinResult
@@ -974,6 +1903,50 @@ export interface components {
              * Format: date-time
              */
             spun_at: string;
+        };
+        /**
+         * UpdateItemRequest
+         * @description Заменить поля предмета (`key` менять нельзя - 422 `progression.item_key_immutable`).
+         */
+        UpdateItemRequest: {
+            /**
+             * Active
+             * @description Активный предмет виден на витрине; нужна загруженная картинка
+             * @default false
+             */
+            active: boolean;
+            /** Key */
+            key: string;
+            /** Level Required */
+            level_required?: number | null;
+            /**
+             * Media Kind
+             * @enum {string}
+             */
+            media_kind: "static" | "animated";
+            /** Price */
+            price?: number | null;
+            /** Rarity */
+            rarity: string;
+            /** Reason */
+            reason: string;
+            /** Slot */
+            slot: string;
+            /** Title */
+            title: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
         };
         /**
          * WheelSectorView
@@ -1404,6 +2377,297 @@ export interface operations {
             };
         };
     };
+    items_admin_v1_items_get: {
+        parameters: {
+            query?: {
+                active?: boolean | null;
+                cursor?: string | null;
+                limit?: number;
+                slot?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminItemPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_item_admin_v1_items_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminItem"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_item_admin_v1_items__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Идентификатор */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminItem"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    upload_item_media_admin_v1_items__item_id__media_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Идентификатор */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_item_media_admin_v1_items__item_id__media_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminItem"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Problem Details */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     reverse_admin_v1_ledger__op_id__reverse_post: {
         parameters: {
             query?: never;
@@ -1484,6 +2748,410 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    packs_admin_v1_packs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPackList"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_pack_admin_v1_packs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPack"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_pack_admin_v1_packs__pack_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Идентификатор */
+                pack_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPack"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    promo_batches_admin_v1_promo_codes_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoBatchPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_promo_admin_v1_promo_codes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePromoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedPromo"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_promo_admin_v1_promo_codes__promo_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Идентификатор */
+                promo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1700,6 +3368,292 @@ export interface operations {
             };
         };
     };
+    players_appearance_v1_appearance_get: {
+        parameters: {
+            query: {
+                user_ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayersAppearance"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    my_appearance_v1_me_appearance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Appearance"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    equip_v1_me_appearance__slot__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ключ слота */
+                slot: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Appearance"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    my_avatar_v1_me_avatar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyAvatar"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    submit_avatar_v1_me_avatar_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_submit_avatar_v1_me_avatar_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvatarRequestView"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Problem Details */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     my_badges_v1_me_badges_get: {
         parameters: {
             query?: never;
@@ -1740,6 +3694,46 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    my_inventory_v1_me_inventory_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyInventory"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1906,6 +3900,270 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServiceMeta"];
+                };
+            };
+        };
+    };
+    redeem_v1_promo_redeem_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoRedeemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoRedeemResult"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    shop_items_v1_shop_items_get: {
+        parameters: {
+            query?: {
+                /** @description Ключ слота */
+                slot?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopCatalog"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purchase_v1_shop_items__item_id__purchase_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Идентификатор предмета */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseResult"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shop_packs_v1_shop_packs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackCatalog"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

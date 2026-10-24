@@ -163,3 +163,27 @@ export type SpinCard = B["SpinCard"];
 export type PrizeCard = B["PrizeCard"];
 export type HomeProgressCard = B["HomeProgressCard"];
 export type { SpinResult } from "./progression-types";
+
+// Этап 5b: магазин, оформление, своя аватарка (bff читает, мутации — прямо в progression),
+// shell (тема, колокольчик) и уведомления.
+export type ShellPage = B["ShellPage"];
+export type ShopPage = B["ShopPage"];
+export type ShopCatalogCard = B["ShopCatalogCard"];
+export type ShopEntryCard = B["ShopEntryCard"];
+export type ShopItemState = ShopEntryCard["state"];
+export type CosmeticCard = B["CosmeticCard"];
+export type AppearanceCard = B["AppearanceCard"];
+export type AppearanceSlotCard = B["AppearanceSlotCard"];
+export type InventoryCard = B["InventoryCard"];
+export type InventoryEntryCard = B["InventoryEntryCard"];
+export type AvatarCard = B["AvatarCard"];
+export type AvatarRequestCard = B["AvatarRequestCard"];
+export type PlayerAppearanceCard = B["PlayerAppearanceCard"];
+export type { PurchaseResult, PromoRedeemResult, PlayersAppearance } from "./progression-types";
+export type {
+  NotificationItem,
+  NotificationPage,
+  NotificationSettings,
+  TypeSetting,
+  EmailSubscription,
+} from "./notifications-types";

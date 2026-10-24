@@ -110,8 +110,44 @@ wheel:
     - {key: boost_x15_3, title: Опыт ×1.5 на 3 матча, weight: 12, prize: {kind: boost, amount: 0, multiplier: 1.5, matches: 3, item_key: null}}
     - {key: boost_x2_4, title: Опыт ×2 на 4 матча, weight: 6, prize: {kind: boost, amount: 0, multiplier: 2, matches: 4, item_key: null}}
     - {key: boost_x3_5, title: Опыт ×3 на 5 матчей, weight: 3, prize: {kind: boost, amount: 0, multiplier: 3, matches: 5, item_key: null}}
-    - {key: item_cosmetic, title: Косметика, weight: 1, prize: {kind: item, amount: 0, multiplier: null, matches: null, item_key: wheel_cosmetic}}
+    - {key: item_frame_gold, title: Золотая рамка, weight: 1, prize: {kind: item, amount: 0, multiplier: null, matches: null, item_key: frm_gold}}
+    - {key: item_avatar_owl, title: Аватарка «Сова», weight: 2, prize: {kind: item, amount: 0, multiplier: null, matches: null, item_key: ava_owl}}
     - {key: nothing, title: Повезёт завтра, weight: 12, prize: {kind: none, amount: 0, multiplier: null, matches: null, item_key: null}}
+
+# Магазин косметики (5b, ADR 0045-0046). Предметы - seeds/progression/items/items.yaml.
+# custom_avatar_item_key здесь null: конфиг v1 публикует bootstrap до появления предметов, а публикация
+# с ключом требует существующего товара (ADR 0048). Ключ ставит `gv dev seed` следующей версией конфига.
+shop:
+  slots:
+    - {key: avatar, title: Аватарка}
+    - {key: frame, title: Рамка}
+    - {key: title, title: Титул}
+    - {key: background, title: Фон}
+  rarities:
+    - {key: common, title: Обычный, duplicate_verses: 5}
+    - {key: rare, title: Редкий, duplicate_verses: 15}
+    - {key: epic, title: Эпический, duplicate_verses: 40}
+  media:
+    static_max_bytes: 50000
+    animated_max_bytes: 50000
+    animated_max_frames: 12
+    animated_max_duration_ms: 3000
+    max_side_px: 256
+  custom_avatar_item_key: null
+
+# Промокоды (ADR 0048): лимит попыток ввода и потолки суточной эмиссии (batch <= actor <= total).
+promo:
+  attempts_per_user: 10
+  attempts_per_ip: 30
+  window_s: 3600
+  code_length: 12
+  max_batch_verses: 10000
+  max_daily_verses_per_actor: 50000
+  max_daily_verses_total: 200000
+
+# Порядок списания Версов при покупке (ADR 0043, 0045): в 5b только заработанные.
+spend:
+  bucket_order: [earned]
 
 admin:
   grant_max_amount: 10000

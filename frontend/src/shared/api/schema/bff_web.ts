@@ -236,6 +236,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/shell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Оболочка приложения: тема и колокольчик
+         * @description Этап 5b. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
+         */
+        get: operations["shell_page_v1_pages_shell_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pages/shop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Магазин: витрина косметики, паки
+         * @description Этап 5b. Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Блок `packs` — `null`, пока `billing.enabled=false`. Покупка — прямо в progression (`POST /api/progression/v1/shop/items/{id}/purchase`), bff только читает.
+         */
+        get: operations["shop_page_v1_pages_shop_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/solo": {
         parameters: {
             query?: never;
@@ -281,6 +321,59 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AppearanceCard
+         * @description Оформление профиля: по одному предмету на слот (ник и аватар берёт фронт из блока игрока).
+         */
+        AppearanceCard: {
+            /**
+             * Custom Avatar Url
+             * @description Одобренная своя аватарка; null — аватар из слота
+             */
+            custom_avatar_url?: string | null;
+            /** Slots */
+            slots: components["schemas"]["AppearanceSlotCard"][];
+        };
+        /**
+         * AppearanceSlotCard
+         * @description Слот оформления: предмет или пусто.
+         */
+        AppearanceSlotCard: {
+            item?: components["schemas"]["CosmeticCard"] | null;
+            /** Slot */
+            slot: string;
+        };
+        /**
+         * AvatarCard
+         * @description Своя аватарка: право, заявка, лимиты загрузки.
+         */
+        AvatarCard: {
+            /** Entitled */
+            entitled: boolean;
+            /** Formats */
+            formats: string[];
+            /** Max Bytes */
+            max_bytes: number;
+            request?: components["schemas"]["AvatarRequestCard"] | null;
+        };
+        /**
+         * AvatarRequestCard
+         * @description Последняя заявка на свою аватарку.
+         */
+        AvatarRequestCard: {
+            /** Reason Code */
+            reason_code?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+        };
+        /**
          * BadgeCard
          * @description Бейдж игрока.
          */
@@ -313,6 +406,41 @@ export interface components {
              */
             unlocked_at: string;
         };
+        /**
+         * BellCard
+         * @description Колокольчик: число непрочитанных уведомлений.
+         */
+        BellCard: {
+            /** Unread */
+            unread: number;
+        };
+        /** Block[AppearanceCard] */
+        Block_AppearanceCard_: {
+            data?: components["schemas"]["AppearanceCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[AvatarCard] */
+        Block_AvatarCard_: {
+            data?: components["schemas"]["AvatarCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[BellCard] */
+        Block_BellCard_: {
+            data?: components["schemas"]["BellCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[CollectionDetail] */
         Block_CollectionDetail_: {
             data?: components["schemas"]["CollectionDetail"] | null;
@@ -334,6 +462,15 @@ export interface components {
         /** Block[HomeProgressCard] */
         Block_HomeProgressCard_: {
             data?: components["schemas"]["HomeProgressCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[InventoryCard] */
+        Block_InventoryCard_: {
+            data?: components["schemas"]["InventoryCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -433,6 +570,26 @@ export interface components {
         Block_list_OnlineModeCard__: {
             /** Data */
             data?: components["schemas"]["OnlineModeCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[PackCard]] */
+        Block_list_PackCard__: {
+            /** Data */
+            data?: components["schemas"]["PackCard"][] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[list[PlayerAppearanceCard]] */
+        Block_list_PlayerAppearanceCard__: {
+            /** Data */
+            data?: components["schemas"]["PlayerAppearanceCard"][] | null;
             /**
              * Status
              * @enum {string}
@@ -565,6 +722,15 @@ export interface components {
         /** Block[ShelfItems] */
         Block_ShelfItems_: {
             data?: components["schemas"]["ShelfItems"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[ShopCatalogCard] */
+        Block_ShopCatalogCard_: {
+            data?: components["schemas"]["ShopCatalogCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -878,6 +1044,41 @@ export interface components {
             blocks: components["schemas"]["CollectionsBlocks"];
         };
         /**
+         * CosmeticCard
+         * @description Предмет косметики (progression, 5b): картинка или анимация по ``media_kind``.
+         */
+        CosmeticCard: {
+            /** Asset Url */
+            asset_url: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Level Required */
+            level_required?: number | null;
+            /**
+             * Media Kind
+             * @enum {string}
+             */
+            media_kind: "static" | "animated";
+            /**
+             * Poster Url
+             * @description Статичный кадр для prefers-reduced-motion
+             */
+            poster_url: string | null;
+            /** Price */
+            price?: number | null;
+            /** Rarity */
+            rarity: string;
+            /** Slot */
+            slot: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * CustomClueCard
          * @description Своя загадка единицы (эмодзи); приходит только автору и админу.
          */
@@ -983,6 +1184,27 @@ export interface components {
             xp_in_level: number;
             /** Xp To Next */
             xp_to_next: number | null;
+        };
+        /**
+         * InventoryCard
+         * @description Инвентарь игрока.
+         */
+        InventoryCard: {
+            /** Items */
+            items: components["schemas"]["InventoryEntryCard"][];
+        };
+        /**
+         * InventoryEntryCard
+         * @description Предмет инвентаря.
+         */
+        InventoryEntryCard: {
+            /** Equipped */
+            equipped: boolean;
+            /** Expires At */
+            expires_at?: string | null;
+            item: components["schemas"]["CosmeticCard"];
+            /** Source */
+            source: string;
         };
         /**
          * ItemCard
@@ -1128,6 +1350,8 @@ export interface components {
          * @description Блоки экрана итога матча.
          */
         MatchBlocks: {
+            /** @description Оформление игроков матча; null до потока S5 этапа 5b */
+            appearance?: components["schemas"]["Block_list_PlayerAppearanceCard__"] | null;
             items: components["schemas"]["Block_list_ItemCard__"];
             library: components["schemas"]["Block_list_ItemShelvesCard__"];
             match: components["schemas"]["Block_MatchSummary_"];
@@ -1520,6 +1744,29 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * PackCard
+         * @description Пак косметики (виден только при ``billing.enabled=true``).
+         */
+        PackCard: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["CosmeticCard"][];
+            /** Key */
+            key: string;
+            /** Price Kopecks */
+            price_kopecks: number;
+            /** Style */
+            style: string;
+            /** Title */
+            title: string;
+            /** Verses Amount */
+            verses_amount: number;
+        };
+        /**
          * PersonCard
          * @description Персона в карточке единицы.
          */
@@ -1530,10 +1777,24 @@ export interface components {
             role: string;
         };
         /**
+         * PlayerAppearanceCard
+         * @description Оформление игрока в матче: ник, аватар, рамка, титул (по ``user_id``).
+         */
+        PlayerAppearanceCard: {
+            appearance: components["schemas"]["AppearanceCard"];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * PlayerBlocks
          * @description Блоки профиля игрока.
          */
         PlayerBlocks: {
+            /** @description Оформление игрока; null до потока S5 этапа 5b */
+            appearance?: components["schemas"]["Block_AppearanceCard_"] | null;
             progress: components["schemas"]["Block_PublicProgressCard_"];
         };
         /**
@@ -1616,7 +1877,13 @@ export interface components {
          * @description Блоки профиля: каждый гаснет независимо.
          */
         ProfileBlocks: {
+            /** @description Оформление; null до потока S5 этапа 5b */
+            appearance?: components["schemas"]["Block_AppearanceCard_"] | null;
+            /** @description Своя аватарка; null до потока S5 этапа 5b */
+            avatar?: components["schemas"]["Block_AvatarCard_"] | null;
             badges: components["schemas"]["Block_list_BadgeCard__"];
+            /** @description Инвентарь; null до потока S5 этапа 5b */
+            inventory?: components["schemas"]["Block_InventoryCard_"] | null;
             progress: components["schemas"]["Block_ProgressCard_"];
             quests: components["schemas"]["Block_QuestsCard_"];
             wallet: components["schemas"]["Block_WalletCard_"];
@@ -2033,6 +2300,58 @@ export interface components {
             shelf: components["schemas"]["ShelfCard"];
         };
         /**
+         * ShellPage
+         * @description ``GET /v1/pages/shell``: оболочка приложения — тема и колокольчик.
+         */
+        ShellPage: {
+            /** @description null — аноним или гость, notifications не вызывается */
+            bell?: components["schemas"]["Block_BellCard_"] | null;
+            theme: components["schemas"]["ThemeCard"];
+        };
+        /**
+         * ShopBlocks
+         * @description Блоки витрины.
+         */
+        ShopBlocks: {
+            catalog: components["schemas"]["Block_ShopCatalogCard_"];
+            /** @description null — продажа выключена (billing.enabled=false) */
+            packs?: components["schemas"]["Block_list_PackCard__"] | null;
+        };
+        /**
+         * ShopCatalogCard
+         * @description Витрина: предметы и баланс (покупка — прямо в progression, bff только читает).
+         */
+        ShopCatalogCard: {
+            /** Balance */
+            balance: number;
+            /** Items */
+            items: components["schemas"]["ShopEntryCard"][];
+            /**
+             * Slots
+             * @description Слоты в порядке конфига — для вкладок витрины
+             */
+            slots: string[];
+        };
+        /**
+         * ShopEntryCard
+         * @description Предмет витрины с состоянием для игрока.
+         */
+        ShopEntryCard: {
+            item: components["schemas"]["CosmeticCard"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "locked" | "available" | "owned";
+        };
+        /**
+         * ShopPage
+         * @description ``GET /v1/pages/shop``: только пользователь с аккаунтом, `private, no-store`.
+         */
+        ShopPage: {
+            blocks: components["schemas"]["ShopBlocks"];
+        };
+        /**
          * SoloBlocks
          * @description Блоки хаба соло-режимов.
          */
@@ -2113,6 +2432,14 @@ export interface components {
             max: number;
             /** Roles */
             roles: string[];
+        };
+        /**
+         * ThemeCard
+         * @description Активная тема оформления (ADR 0049): только ключ, наборы токенов лежат во фронтенде.
+         */
+        ThemeCard: {
+            /** Key */
+            key: string;
         };
         /**
          * TierCard
@@ -2761,6 +3088,66 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    shell_page_v1_pages_shell_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShellPage"];
+                };
+            };
+        };
+    };
+    shop_page_v1_pages_shop_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

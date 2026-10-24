@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+<form method="get">
+  <label>Статус
+    <select name="status">{% for s in statuses %}<option value="{{ s }}"{% if s == status %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+  </label>
+  <label>Назначение
+    <select name="purpose">
+      <option value="">все</option>
+      {% for p in purposes %}<option value="{{ p }}"{% if p == purpose %} selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+  </label>
+  <input type="submit" value="Показать">
+</form>
+<table>
+  <thead><tr><th>Назначение</th><th>Размер</th><th>Байт</th><th>Загружено</th><th>Статус</th><th>Причина</th><th></th></tr></thead>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.purpose }}</td><td>{{ r.width }}×{{ r.height }}</td><td>{{ r.bytes }}</td>
+    <td>{{ r.submitted_at }}</td><td>{{ r.status }}</td><td>{{ r.reason_code|default:"—" }}</td>
+    <td>{% if r.card_url %}<a href="{{ r.card_url }}">Открыть</a>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="7">Очередь пуста</td></tr>
+  {% endfor %}
+</table>
+{% if next_cursor %}<p><a href="?status={{ status|urlencode:"" }}&purpose={{ purpose|urlencode:"" }}&cursor={{ next_cursor|urlencode:"" }}">Дальше →</a></p>{% endif %}
+{% endblock %}

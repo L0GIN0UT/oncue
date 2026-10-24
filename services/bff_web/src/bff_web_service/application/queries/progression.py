@@ -13,21 +13,34 @@ from uuid import UUID
 import structlog
 
 from bff_web_service.application.dto import (
+    AppearanceCard,
+    BellCard,
     HomeProgressCard,
+    MyAvatar,
     PlayerBlocks,
     PlayerPage,
     ProfileBlocks,
     ProfilePage,
     ProgressCard,
     QuestsCard,
+    ShellPage,
+    ShopBlocks,
+    ShopPage,
     SubjectKind,
+    ThemeCard,
     Viewer,
     WheelCard,
 )
-from bff_web_service.application.ports import ProgressionClient, UpstreamRejectedError
+from bff_web_service.application.ports import (
+    NotificationsClient,
+    ProgressionClient,
+    UpstreamRejectedError,
+    UpstreamUnavailableError,
+)
 from bff_web_service.application.queries.common import (
     GUEST_FORBIDDEN,
     HTTP_FORBIDDEN,
+    HTTP_NOT_FOUND,
     HTTP_UNAUTHORIZED,
     Limiter,
     block_of,
@@ -38,6 +51,9 @@ from bff_web_service.domain import Block
 from gv_core.errors import ForbiddenError, UnauthenticatedError
 
 log = structlog.get_logger(__name__)
+
+BILLING_DISABLED = "progression.billing_disabled"
+"""Код 404 паков: продажа выключена (``billing.enabled=false``) - блок ``packs`` равен ``null``."""
 
 
 class GetProfilePage:
@@ -59,21 +75,31 @@ class GetProfilePage:
             raise ForbiddenError("профиль доступен только пользователям", code=GUEST_FORBIDDEN)
         token, p = viewer.token, self._progression
         limiter = Limiter(self._concurrency)
-        progress, wallet, quests, badges, wheel = await asyncio.gather(
-            limiter.attempt(p.progress(token)),
-            limiter.attempt(p.wallet(token)),
-            limiter.attempt(p.quests(token)),
-            limiter.attempt(p.badges(token)),
-            limiter.attempt(p.wheel(token)),
+        # Две группы под одним gather: так вызовы идут параллельно, а типы результатов сохранены.
+        core, cosmetics = await asyncio.gather(
+            asyncio.gather(
+                limiter.attempt(p.progress(token)),
+                limiter.attempt(p.wallet(token)),
+                limiter.attempt(p.quests(token)),
+                limiter.attempt(p.badges(token)),
+                limiter.attempt(p.wheel(token)),
+            ),
+            asyncio.gather(
+                limiter.attempt(p.my_appearance(token)),
+                limiter.attempt(p.inventory(token)),
+                limiter.attempt(p.my_avatar(token)),
+            ),
         )
-        for result in (progress, wallet, quests, badges, wheel):
-            if isinstance(result, UpstreamRejectedError) and result.status in (
-                HTTP_UNAUTHORIZED,
-                HTTP_FORBIDDEN,
-            ):
-                error = screen_error(result, not_found="")
-                if error is not None:
-                    raise error
+        progress, wallet, quests, badges, wheel = core
+        slots, inventory, avatar = cosmetics
+        _raise_auth_failure(progress, wallet, quests, badges, wheel, slots, inventory, avatar)
+        # Оформление = слоты + адрес своей аватарки; без одной из частей показать его
+        # нельзя (иначе фронт нарисует не тот аватар) - блок гаснет целиком.
+        if isinstance(slots, list) and isinstance(avatar, MyAvatar):
+            appearance = Block.ok(AppearanceCard(slots, avatar.current_url))
+        else:
+            block_of(avatar if isinstance(slots, list) else slots, "profile.appearance")  # в лог
+            appearance = Block.unavailable()
         return ProfilePage(
             blocks=ProfileBlocks(
                 progress=block_of(progress, "profile.progress"),
@@ -81,6 +107,11 @@ class GetProfilePage:
                 quests=block_of(quests, "profile.quests"),
                 badges=block_of(badges, "profile.badges"),
                 wheel=block_of(wheel, "profile.wheel"),
+                appearance=appearance,
+                inventory=block_of(inventory, "profile.inventory"),
+                avatar=Block.ok(avatar.card)
+                if isinstance(avatar, MyAvatar)
+                else block_of(avatar, "profile.avatar"),
             )
         )
 
@@ -105,14 +136,99 @@ class GetPlayerPage:
             raise ForbiddenError(
                 "профиль игрока доступен только пользователям", code=GUEST_FORBIDDEN
             )
-        result = await Limiter(self._concurrency).attempt(
-            self._progression.player(viewer.token, user_id)
+        limiter = Limiter(self._concurrency)
+        result, looks = await asyncio.gather(
+            limiter.attempt(self._progression.player(viewer.token, user_id)),
+            limiter.attempt(self._progression.players_appearance(viewer.token, [user_id])),
         )
         if isinstance(result, UpstreamRejectedError) and (
             error := screen_error(result, not_found="игрок не найден")
         ):
             raise error
-        return PlayerPage(blocks=PlayerBlocks(progress=block_of(result, "player.progress")))
+        _raise_auth_failure(looks)  # 404 оформления - не 404 экрана: игрок есть
+        appearance: Block[AppearanceCard]
+        if isinstance(looks, list):
+            # Источник пропускает неизвестных: игрока без оформления показываем «по умолчанию».
+            mine = next((p.appearance for p in looks if p.user_id == user_id), None)
+            appearance = Block.ok(mine or AppearanceCard(slots=[]))
+        else:
+            appearance = block_of(looks, "player.appearance")
+        return PlayerPage(
+            blocks=PlayerBlocks(progress=block_of(result, "player.progress"), appearance=appearance)
+        )
+
+
+class GetShopPage:
+    """Магазин: витрина косметики с балансом и паки (продажа паков может быть выключена)."""
+
+    def __init__(self, progression: ProgressionClient, *, concurrency: int) -> None:
+        self._progression, self._concurrency = progression, concurrency
+
+    async def __call__(self, viewer: Viewer) -> ShopPage:
+        """Собрать страницу.
+
+        Raises:
+            UnauthenticatedError: аноним или progression не принял токен.
+            ForbiddenError: ``auth.guest_forbidden`` — гость (источники не вызываются).
+        """
+        if viewer.token is None or viewer.token_rejected:
+            raise UnauthenticatedError("требуется вход")
+        if viewer.kind is SubjectKind.GUEST:
+            raise ForbiddenError("магазин доступен только пользователям", code=GUEST_FORBIDDEN)
+        token, limiter = viewer.token, Limiter(self._concurrency)
+        catalog, packs = await asyncio.gather(
+            limiter.attempt(self._progression.shop_items(token)),
+            limiter.attempt(self._progression.shop_packs(token)),
+        )
+        billing_off = (
+            isinstance(packs, UpstreamRejectedError)
+            and packs.status == HTTP_NOT_FOUND
+            and packs.code == BILLING_DISABLED
+        )
+        _raise_auth_failure(catalog, packs)
+        return ShopPage(
+            blocks=ShopBlocks(
+                catalog=block_of(catalog, "shop.catalog"),
+                packs=None if billing_off else block_of(packs, "shop.packs"),
+            )
+        )
+
+
+class GetShellPage:
+    """Оболочка: ключ темы (настройка) и колокольчик (только пользователю)."""
+
+    def __init__(
+        self, notifications: NotificationsClient, *, theme_key: str, concurrency: int
+    ) -> None:
+        self._notifications, self._theme_key = notifications, theme_key
+        self._concurrency = concurrency
+
+    async def __call__(self, viewer: Viewer) -> ShellPage:
+        """Собрать оболочку; сбой notifications гасит только колокольчик."""
+        theme = ThemeCard(key=self._theme_key)
+        token = user_token(viewer)
+        bell: Block[BellCard] | None = None
+        if token is not None:
+            count = await Limiter(self._concurrency).attempt(
+                self._notifications.unread_count(token)
+            )
+            if isinstance(count, UpstreamUnavailableError | UpstreamRejectedError):
+                bell = block_of(count, "shell.bell")
+            else:
+                bell = Block.ok(BellCard(unread=count))
+        return ShellPage(theme=theme, bell=bell, personal=viewer.token is not None)
+
+
+def _raise_auth_failure(*results: object) -> None:
+    """Отказ токена (401/403) любым источником - ответ экрана (первый по порядку)."""
+    for result in results:
+        if isinstance(result, UpstreamRejectedError) and result.status in (
+            HTTP_UNAUTHORIZED,
+            HTTP_FORBIDDEN,
+        ):
+            error = screen_error(result, not_found="")
+            if error is not None:
+                raise error
 
 
 class HomeProgress:
@@ -161,4 +277,4 @@ class HomeProgress:
         )
 
 
-__all__ = ["GetPlayerPage", "GetProfilePage", "HomeProgress"]
+__all__ = ["GetPlayerPage", "GetProfilePage", "GetShellPage", "GetShopPage", "HomeProgress"]

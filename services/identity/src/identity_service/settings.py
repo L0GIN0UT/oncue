@@ -192,6 +192,18 @@ class ServiceTokenLimitSettings(BaseModel):
     success_per_client_per_min: int = Field(default=600, ge=1)
 
 
+class UsersEmailsLimitSettings(BaseModel):
+    """Лимит ``POST /internal/v1/users/emails``: ``GV_USERS_EMAILS_LIMIT__*``.
+
+    Ручка массово отдаёт чужие адреса, поэтому вызовы считаются на ``client_id``.
+    """
+
+    per_client: int = Field(default=60, ge=1)
+    window_s: int = Field(default=60, ge=1, le=3600)
+    ids_per_hour: int = Field(default=20000, ge=1)
+    """Запрошенных идентификаторов на ``client_id`` в час (по адресам)."""
+
+
 class RealtimeTokenLimitSettings(BaseModel):
     """Лимит выдачи connection-токенов Centrifugo: ``GV_REALTIME_TOKEN_LIMIT__*``.
 
@@ -261,6 +273,7 @@ class Settings(ServiceSettings):
     service_token_limit: ServiceTokenLimitSettings = ServiceTokenLimitSettings()
     guest: GuestSettings = GuestSettings()
     realtime_token_limit: RealtimeTokenLimitSettings = RealtimeTokenLimitSettings()
+    users_emails_limit: UsersEmailsLimitSettings = UsersEmailsLimitSettings()
     """Лимит ``POST /v1/realtime/token``; секрет и TTL — в ``GV_REALTIME__*`` (gv_service)."""
     bootstrap_admin: BootstrapAdminSettings = BootstrapAdminSettings()
     """``GV_BOOTSTRAP_ADMIN__*`` — bootstrap-админ автосидинга (только local/ci); пусто — выкл."""

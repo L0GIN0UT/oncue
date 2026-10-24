@@ -30,6 +30,7 @@ from progression_service.domain import boosts, wheel
 from progression_service.domain.boosts import Boost
 from progression_service.domain.config import PrizeDef, PrizeKind, SectorDef
 from progression_service.domain.events import PrizePayload, WheelSpun
+from progression_service.domain.inventory import InventoryItem, Source
 
 log = structlog.get_logger(__name__)
 
@@ -216,13 +217,35 @@ async def _grant_boost(
 
 async def _grant_item(
     uow: ProgressionUnitOfWork,
-    poster: Poster,  # noqa: ARG001
+    poster: Poster,
     record: SpinRecord,
 ) -> None:
-    assert record.prize.item_key is not None  # noqa: S101
-    await uow.grants.add(
-        record.user_id, WHEEL_REASON, _ref(record)[1], record.prize.item_key, record.spun_at
-    )
+    """Предмет - в инвентарь (``source = wheel``); дубль - Версы по редкости (ADR 0045).
+
+    Предмета с таким ключом нет в таблице ``items`` (конфиг опередил админку) - спин не
+    падает: ошибка в лог, выдача как в 5a - запись журнала ``grants_log``.
+    """
+    key = record.prize.item_key
+    assert key is not None  # noqa: S101
+    day, op = _ref(record)
+    item = await uow.items.get_by_key(key)
+    if item is None or not item.active:  # снятый с продажи предмет - как отсутствующий
+        log.error("progression.wheel_item_missing", item_key=key)
+        await uow.grants.add(record.user_id, WHEEL_REASON, op, key, record.spun_at)
+        return
+    entry = InventoryItem(record.user_id, item.id, Source.WHEEL, record.spun_at, None, None)
+    if await uow.inventory.add(entry):
+        return
+    shop = poster.config.shop
+    rarity = None if shop is None else shop.rarity(item.rarity)
+    if rarity is not None:
+        await poster.verses(
+            record.user_id,
+            op_id=f"{op}:dup",
+            amount=rarity.duplicate_verses,
+            reason=WHEEL_REASON,
+            source_ref=day,
+        )
 
 
 _Grant = Callable[[ProgressionUnitOfWork, Poster, SpinRecord], Awaitable[None]]

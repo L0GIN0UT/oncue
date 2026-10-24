@@ -19,6 +19,8 @@ import type {
 } from "@/shared/api/types";
 import { dayIn, nextMidnight } from "@/features/daily/countdown-time";
 import { ProgressionWorld } from "./progression";
+import { EconomyWorld } from "./economy";
+import { NotificationsWorld } from "./notifications";
 import { COLLECTION_MODES, UgcWorld } from "./ugc";
 
 export type Domain = "music" | "film";
@@ -428,6 +430,24 @@ export type Scenario = {
   spinNetworkOnce?: boolean;
   /** Этап 5a: игрок уже крутил в другой вкладке — первый спин вернёт `repeated: true`. */
   spunElsewhere?: boolean;
+  /** Этап 5b: ключ темы в ответе shell (по умолчанию `default`). */
+  themeKey?: string;
+  /** Этап 5b: shell отвечает 503 (тема откатывается на default). */
+  shellDown?: boolean;
+  /** Этап 5b: витрина магазина недоступна. */
+  shopDown?: boolean;
+  /** Этап 5b: блоки appearance/inventory/avatar профиля недоступны. */
+  appearanceDown?: boolean;
+  /** Этап 5b: стартовые Версы (применяются до первой покупки). */
+  balance?: number;
+  /** Этап 5b: погашение промокода — 429 с Retry-After 3. */
+  promoRateLimited?: boolean;
+  /** Этап 5b: ошибка загрузки аватарки. */
+  avatarFail?: "too_large" | "invalid" | "rate";
+  /** Этап 5b: предустановленная заявка на аватарку (право считается купленным). */
+  avatarRequest?: "pending" | "approved" | "rejected";
+  /** Этап 5b: notifications отвечает 503. */
+  notificationsDown?: boolean;
 };
 
 type Asset =
@@ -485,6 +505,10 @@ export class MockWorld {
   ugc = new UgcWorld();
   /** Прогрессия (этап 5a): сегодняшние спины колеса. */
   progression = new ProgressionWorld();
+  /** Магазин, оформление, аватарка (этап 5b). */
+  economy = new EconomyWorld();
+  /** Уведомления (этап 5b). */
+  notifications = new NotificationsWorld();
   scenario: Scenario = {};
   /** Субъекты, чья refresh-сессия отозвана (refresh отвечает 401). */
   revokedRefresh = new Set<string>();
@@ -511,6 +535,8 @@ export class MockWorld {
     this.users = BASE_USERS.map((u) => ({ ...u }));
     this.ugc.reset();
     this.progression.reset();
+    this.economy.reset();
+    this.notifications.reset();
     this.seq = 0;
   }
 

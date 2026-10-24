@@ -9,6 +9,7 @@ import type { paths as LibraryPaths } from "./schema/library";
 import type { paths as MatchPaths } from "./schema/match";
 import type { paths as RatingPaths } from "./schema/rating";
 import type { paths as ProgressionPaths } from "./schema/progression";
+import type { paths as NotificationsPaths } from "./schema/notifications";
 import { ApiError, parseRetryAfter } from "./errors";
 import { apiFetch } from "./http";
 
@@ -22,6 +23,7 @@ export const API_PREFIX = {
   match: "/api/match",
   rating: "/api/rating",
   progression: "/api/progression",
+  notifications: "/api/notifications",
 } as const;
 
 type Clients = {
@@ -34,6 +36,7 @@ type Clients = {
   match: Client<MatchPaths>;
   rating: Client<RatingPaths>;
   progression: Client<ProgressionPaths>;
+  notifications: Client<NotificationsPaths>;
 };
 
 let clients: Clients | null = null;
@@ -54,6 +57,7 @@ export function api(): Clients {
       match: make<MatchPaths>(API_PREFIX.match),
       rating: make<RatingPaths>(API_PREFIX.rating),
       progression: make<ProgressionPaths>(API_PREFIX.progression),
+      notifications: make<NotificationsPaths>(API_PREFIX.notifications),
     };
   }
   return clients;

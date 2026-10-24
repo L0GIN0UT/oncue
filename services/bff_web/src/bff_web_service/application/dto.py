@@ -994,6 +994,7 @@ class MatchBlocks:
     match: Block[MatchResult]
     items: Block[list[ItemCard]]
     library: Block[list[ItemShelves]]
+    appearance: Block[list[PlayerAppearanceCard]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1149,6 +1150,7 @@ class PlayerBlocks:
     """Блоки профиля чужого игрока."""
 
     progress: Block[PublicProgress]
+    appearance: Block[AppearanceCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1179,6 +1181,9 @@ class ProfileBlocks:
     quests: Block[QuestsCard]
     badges: Block[list[BadgeCard]]
     wheel: Block[WheelCard]
+    appearance: Block[AppearanceCard] | None = None
+    inventory: Block[InventoryCard] | None = None
+    avatar: Block[AvatarCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1186,3 +1191,156 @@ class ProfilePage:
     """``GET /v1/pages/profile``."""
 
     blocks: ProfileBlocks
+
+
+# ----------------------------------------------------------------------------- 5b: косметика, тема
+@dataclass(frozen=True, slots=True)
+class CosmeticCard:
+    """Предмет косметики (progression ``ItemView``)."""
+
+    id: UUID
+    key: str
+    slot: str
+    rarity: str
+    title: str
+    media_kind: Literal["static", "animated"]
+    asset_url: str
+    poster_url: str | None
+    level_required: int | None
+    price: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class AppearanceSlotCard:
+    """Слот оформления: предмет или пусто."""
+
+    slot: str
+    item: CosmeticCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AppearanceCard:
+    """Оформление: по предмету на слот и своя аватарка (если одобрена)."""
+
+    slots: list[AppearanceSlotCard]
+    custom_avatar_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerAppearanceCard:
+    """Оформление игрока по ``user_id`` (матч, профиль)."""
+
+    user_id: UUID
+    appearance: AppearanceCard
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryEntryCard:
+    """Предмет инвентаря."""
+
+    item: CosmeticCard
+    source: str
+    equipped: bool
+    expires_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InventoryCard:
+    """Инвентарь игрока."""
+
+    items: list[InventoryEntryCard]
+
+
+@dataclass(frozen=True, slots=True)
+class AvatarRequestCard:
+    """Последняя заявка на свою аватарку."""
+
+    status: Literal["pending", "approved", "rejected"]
+    submitted_at: datetime
+    reason_code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AvatarCard:
+    """Своя аватарка: право, заявка, лимиты загрузки."""
+
+    entitled: bool
+    request: AvatarRequestCard | None
+    max_bytes: int
+    formats: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class MyAvatar:
+    """Ответ progression ``/v1/me/avatar``: карточка экрана и действующий адрес аватарки."""
+
+    card: AvatarCard
+    current_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ShopEntryCard:
+    """Предмет витрины с состоянием для игрока."""
+
+    item: CosmeticCard
+    state: Literal["locked", "available", "owned"]
+
+
+@dataclass(frozen=True, slots=True)
+class ShopCatalogCard:
+    """Витрина: предметы, баланс и слоты (в порядке появления в ответе)."""
+
+    items: list[ShopEntryCard]
+    balance: int
+    slots: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class PackCard:
+    """Пак косметики."""
+
+    id: UUID
+    key: str
+    title: str
+    style: str
+    items: list[CosmeticCard]
+    verses_amount: int
+    price_kopecks: int
+
+
+@dataclass(frozen=True, slots=True)
+class ShopBlocks:
+    """Блоки витрины; ``packs = None`` — продажа выключена."""
+
+    catalog: Block[ShopCatalogCard]
+    packs: Block[list[PackCard]] | None
+
+
+@dataclass(frozen=True, slots=True)
+class ShopPage:
+    """``GET /v1/pages/shop``."""
+
+    blocks: ShopBlocks
+
+
+@dataclass(frozen=True, slots=True)
+class ThemeCard:
+    """Активная тема: только ключ (ADR 0049)."""
+
+    key: str
+
+
+@dataclass(frozen=True, slots=True)
+class BellCard:
+    """Колокольчик: число непрочитанных."""
+
+    unread: int
+
+
+@dataclass(frozen=True, slots=True)
+class ShellPage:
+    """``GET /v1/pages/shell``; ``personal`` — запрос пришёл с токеном (кэш ``private``)."""
+
+    theme: ThemeCard
+    bell: Block[BellCard] | None
+    personal: bool

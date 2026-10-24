@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from uuid import UUID
 
 import pytest
 from bff_web_service.application.dto import (
     ANONYMOUS,
+    AppearanceCard,
     CollectionMode,
     DailyStatus,
     Domain,
@@ -20,6 +21,7 @@ from bff_web_service.application.dto import (
     LeaderboardCard,
     LeaderboardEntryCard,
     MatchMode,
+    MatchPlayer,
     MatchResult,
     MatchRound,
     Mode,
@@ -29,6 +31,7 @@ from bff_web_service.application.dto import (
     OnlineStatus,
     OpenRooms,
     PersonalRecord,
+    PlayerAppearanceCard,
     QueuePoolCard,
     RatingCard,
     SeasonCard,
@@ -227,6 +230,22 @@ def online(
     )
 
 
+@dataclass
+class FakeAppearance:
+    """progression для итога матча: только оформление игроков, пачками."""
+
+    fail: Exception | None = None
+    reverse: bool = False
+    calls: list[list[UUID]] = field(default_factory=list)
+
+    async def players_appearance(self, token: str, user_ids: list[UUID]) -> list[object]:
+        self.calls.append(list(user_ids))
+        if self.fail is not None:
+            raise self.fail
+        cards = [PlayerAppearanceCard(u, AppearanceCard(slots=[])) for u in user_ids]
+        return cards[::-1] if self.reverse else cards
+
+
 def match_page(
     match: FakeMatch,
     catalog: FakeCatalog | None = None,
@@ -234,14 +253,68 @@ def match_page(
     *,
     concurrency: int = 10,
     deadline_s: float = 5.0,
+    progression: FakeAppearance | None = None,
+    batch: int = 12,
 ) -> GetMatchPage:
     return GetMatchPage(
         match,
         catalog or FakeCatalog(),
         library or FakeLibrary(),
+        progression or FakeAppearance(),  # type: ignore[arg-type]  # фейк
         concurrency=concurrency,
         items_deadline_s=deadline_s,
+        appearance_batch_size=batch,
     )
+
+
+def player(n: int) -> MatchPlayer:
+    return MatchPlayer(
+        user_id=UUID(int=n),
+        nickname=f"p{n}",
+        slot=n,
+        place=1,
+        score=0,
+        outcome=None,
+        finish="completed",
+    )
+
+
+async def test_match_page_appearance_is_batched_by_12_and_deduplicated() -> None:
+    players = [player(n) for n in range(1, 15)] + [player(3)]  # 14 разных + дубль
+    outcome = replace(result(ITEM_A), players=players)
+    progression = FakeAppearance()
+
+    page = await match_page(FakeMatch(outcome=outcome), progression=progression)(USER, MATCH_ID)
+
+    assert [len(c) for c in progression.calls] == [12, 2]
+    assert page.blocks.appearance is not None
+    assert [c.user_id for c in page.blocks.appearance.data or []] == [
+        UUID(int=n) for n in range(1, 15)
+    ]
+
+
+async def test_match_page_appearance_follows_match_player_order_not_answer_order() -> None:
+    """Источник отвечает в обратном порядке: порядок карточек - по игрокам матча."""
+    outcome = replace(result(ITEM_A), players=[player(n) for n in (5, 2, 9, 1, 7)])
+    progression = FakeAppearance(reverse=True)
+
+    page = await match_page(FakeMatch(outcome=outcome), progression=progression, batch=2)(
+        USER, MATCH_ID
+    )
+
+    assert page.blocks.appearance is not None
+    got = [c.user_id for c in page.blocks.appearance.data or []]
+    assert got == [UUID(int=n) for n in (5, 2, 9, 1, 7)]
+
+
+async def test_match_page_appearance_failure_hides_only_its_block() -> None:
+    outcome = replace(result(ITEM_A), players=[player(1)])
+    progression = FakeAppearance(fail=DOWN)
+
+    page = await match_page(FakeMatch(outcome=outcome), progression=progression)(USER, MATCH_ID)
+
+    assert page.blocks.appearance is not None and not page.blocks.appearance.is_ok
+    assert page.blocks.match.is_ok and page.blocks.items.is_ok and page.blocks.library.is_ok
 
 
 # ----------------------------------------------------------------------------- хаб

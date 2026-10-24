@@ -29,6 +29,7 @@ from bff_web_service.infrastructure.clients import (
     HttpGameClient,
     HttpLibraryClient,
     HttpMatchClient,
+    HttpProgressionClient,
     HttpRatingClient,
 )
 from bff_web_service.infrastructure.http import CircuitBreaker, UpstreamHttp
@@ -172,6 +173,21 @@ def upstreams() -> Iterator[respx.MockRouter]:
             router.get(
                 f"http://rating.test/v1/ladders/{ladder}/leaderboard", name=f"board_{ladder}"
             ).respond(200, json={**RATING_SAMPLES["leaderboard"], "ladder": ladder})
+        router.get("http://progression.test/v1/appearance", name="appearance").mock(
+            side_effect=lambda request: httpx.Response(
+                200,
+                json={
+                    "players": [
+                        {
+                            "user_id": i,
+                            "appearance": {"slots": []},
+                            "custom_avatar_url": None,
+                        }
+                        for i in request.url.params.get_list("user_ids")
+                    ]
+                },
+            )
+        )
         for rnd in SAMPLES["match_result"]["rounds"]:
             item_id = rnd["media_item_id"]
             router.get(f"http://catalog.test/v1/items/{item_id}").respond(
@@ -227,6 +243,7 @@ async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> N
         HttpMatchClient(_http("match", "http://match.test")),
         HttpCatalogClient(_http("catalog", "http://catalog.test"), item_ttl_s=1, cache_prefix="t:"),
         HttpLibraryClient(_http("library", "http://library.test")),
+        HttpProgressionClient(_http("progression", "http://progression.test")),
         concurrency=10,
         items_deadline_s=5,
     )
@@ -237,6 +254,11 @@ async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> N
     assert _errors("bff_web", _bff_schema("MatchPage"), body) == []
     assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/match/{match_id}"), body) == []
     assert all(b["status"] == "ok" for b in body["blocks"].values())
+    # Вызов оформления - с параметром, который описал progression (не больше 12 за раз).
+    ids = upstreams["appearance"].calls.last.request.url.params.get_list("user_ids")
+    assert ids == [p["user_id"] for p in SAMPLES["match_result"]["players"]]
+    described = _spec("progression")["paths"]["/v1/appearance"]["get"]["parameters"][0]
+    assert described["name"] == "user_ids" and len(ids) <= described["schema"]["maxItems"]
 
 
 def _leaderboards_query() -> GetLeaderboardsPage:

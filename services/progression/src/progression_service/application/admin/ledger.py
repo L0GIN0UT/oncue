@@ -11,9 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 import structlog
 
@@ -34,6 +32,7 @@ from progression_service.application.admin.common import (
     NotReversibleLedgerError,
     UserNotFoundError,
     audit,
+    day_bounds,
     decode_cursor,
     encode_cursor,
 )
@@ -109,7 +108,7 @@ class LedgerCommands:
             now = self._clock.now()
             poster = Poster(uow, published, now)
             await poster.lock_user(user_id)  # дальше выдачи этому игроку идут по очереди
-            start, end = _day_bounds(now, published.config.tz)
+            start, end = day_bounds(now, published.config.tz)
             granted = await uow.admin_ledger.granted_between(user_id, start, end)
             if granted + amount > limits.grant_max_per_user_day:
                 _limit_exceeded(ctx, user_id, scope="day")
@@ -260,14 +259,6 @@ async def _post(poster: Poster, entry: Entry) -> None:
         raise ConflictError(
             "Idempotency-Key уже использован другой операцией", code="idempotency.key_reused"
         )
-
-
-def _day_bounds(now: datetime, tz: ZoneInfo) -> tuple[datetime, datetime]:
-    """Границы суток ``now`` в зоне конфига, в UTC."""
-    day = now.astimezone(tz).date()
-    start = datetime.combine(day, time.min, tzinfo=tz)
-    end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz)
-    return start.astimezone(UTC), end.astimezone(UTC)
 
 
 class LedgerQueries:

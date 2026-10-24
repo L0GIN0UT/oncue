@@ -12,3 +12,9 @@ map "" $media_signing_secret {
 map "" $media_assets_bucket {
     default "${GV_MEDIA_ASSETS_BUCKET}";
 }
+
+# Бакет косметики (картинки и анимации предметов, ADR 0046; GV_PROGRESSION__BUCKET_COSMETICS).
+# Публичный префикс /cosmetics/: объекты не секрет, ключ случайный.
+map "" $cosmetics_bucket {
+    default "${GV_COSMETICS_BUCKET}";
+}

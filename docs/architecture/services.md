@@ -64,8 +64,8 @@
 
 ### 3. media-pipeline
 - **Отвечает за:** генерацию ассетов загадок по уровням (аудиосегменты fMP4, отрывки задом наперёд, размытие и пикселизация кадров, маскировка постеров), хранение в S3, выдачу **подписанных ссылок с коротким TTL** на конкретный уровень ([ADR 0012](../adr/0012-signed-asset-links-nginx.md)), загрузку UGC-изображений и их проверку (этап 5).
-- **Данные:** Postgres (media_items_state, source_media, asset_sets, asset_levels, link_issuance, idempotency_keys), S3 (байты, случайные ключи `a/<hex>`).
-- **Публикует:** `AssetsReady`, `AssetsFailed` (`version` монотонна по `media_item_id`; с этапа 3b — необязательный `scope` набора сборника, [ADR 0029](../adr/0029-collection-assets-scoped-sets.md)).
+- **Данные:** Postgres (media_items_state, source_media, asset_sets, asset_levels, link_issuance, idempotency_keys, с 5b — ugc_images со статусом модерации), S3 (байты, случайные ключи `a/<hex>`).
+- **Публикует:** `AssetModerated` (5b, топик `media_pipeline.ugc_image.v1`, [ADR 0048](../adr/0048-promo-codes-custom-avatar.md)), `AssetsReady`, `AssetsFailed` (`version` монотонна по `media_item_id`; с этапа 3b — необязательный `scope` набора сборника, [ADR 0029](../adr/0029-collection-assets-scoped-sets.md)).
 - **Слушает:** `MediaItemCreated`/`Updated`/`Blocked`/`Unblocked` → ставит задачи `media.generate_asset_set` в RabbitMQ; `ClueAssetsRequested` — этап 3; `collections.collection.v1` — свои эмодзи сборников (этап 3b). Блокировка единицы сразу удаляет объекты ассетов из S3, разблокировка — новое поколение генерации ([ADR 0015](../adr/0015-admin-idempotency-and-asset-event-order.md)).
 - **API (этап 1):** internal `/internal/v1/asset-links`, `/internal/v1/asset-sets` (с этапа 2 — только сервисный токен со scope `assets.link`, [ADR 0016](../adr/0016-service-tokens-client-credentials.md)); admin `/admin/v1/sources` (загрузка исходника), `/admin/v1/asset-sets[/{id}/regenerate]`. Публичного API нет.
 - **Масштаб:** API stateless. Воркеры (ffmpeg, Pillow/libvips) масштабируются по длине очереди.
@@ -127,8 +127,8 @@
 ### 10. progression
 - **Отвечает за:** опыт и уровни, разблокировки по уровням, внутреннюю валюту (**append-only журнал проводок**, раздельно `earned`/`paid`), задания (метрики и периоды из конфига), бейджи и достижения (в том числе мастерство по персоне), магазин, инвентарь и косметику, оформление профиля, промокоды.
 - **Данные:** Postgres (ledger, balances как проекция, quests, quest_progress, badges, inventory, shop_items, appearance).
-- **Публикует:** `ExperienceGained`, `ProgressionLevelChanged`, `CurrencyCredited`, `CurrencyDebited`, `QuestCompleted`, `BadgeUnlocked`, `WheelSpun` (топик `progression.progression.v1`, 5a), `ItemPurchased` (5b).
-- **Слушает:** `GameFinished`, `MatchFinished`, `DailyCompleted`, `CollectionPublished`, `FriendAdded`, `CommentPosted`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`, `EntitlementGranted`. В 5a — только `GameFinished`, `DailyCompleted`, `MatchFinished`, `CollectionPublished`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`.
+- **Публикует:** `ExperienceGained`, `ProgressionLevelChanged`, `CurrencyCredited`, `CurrencyDebited`, `QuestCompleted`, `BadgeUnlocked`, `WheelSpun` (топик `progression.progression.v1`, 5a), `ItemPurchased`, `ItemEquipped`, `PromoRedeemed` (5b, ADR 0045, 0048).
+- **Слушает:** `GameFinished`, `MatchFinished`, `DailyCompleted`, `CollectionPublished`, `FriendAdded`, `CommentPosted`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`, `EntitlementGranted`. Слушает также `media_pipeline.AssetModerated` (5b: применяет одобренную аватарку). В 5a — только `GameFinished`, `DailyCompleted`, `MatchFinished`, `CollectionPublished`, `SeasonStandingsFinalized`, `WeeklyTopFinalized`.
 - **Инварианты:** баланс не уходит в минус; каждая проводка идемпотентна (`opId`).
 - **Задачи relay:** `progression.ledger.reconcile` (сверка журнала), `progression.config.bootstrap` (local/ci: публикует версию 1 конфига из `seeds/progression/config.yaml`, `GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, если опубликованной версии нет).
 
@@ -148,7 +148,7 @@
 - **Отвечает за:** in-app уведомления (группировка, прочитано), доставку в realtime (публикация в Centrifugo), e-mail, web-push, Telegram-бота (позже), отключение по типам. Шаблоны и локализация.
 - **Данные:** Postgres (notifications, mutes, templates).
 - **Публикует:** — (терминальный потребитель).
-- **Слушает:** почти все события, которые имеют смысл для пользователя. Маппинг «событие → тип уведомления» задаётся конфигом.
+- **Слушает:** почти все события, которые имеют смысл для пользователя (5b: `ProgressionLevelChanged`, `BadgeUnlocked`, `QuestCompleted`, `CurrencyCredited` недели и сезона, `media_pipeline.AssetModerated`; [ADR 0047](../adr/0047-notifications-channels-mapping.md)). Маппинг «событие → тип уведомления» задаётся конфигом.
 - **Деградация:** некритичен. Уведомления догоняют после восстановления.
 
 ---

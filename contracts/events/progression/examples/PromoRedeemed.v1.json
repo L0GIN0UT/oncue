@@ -1,0 +1,21 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+  "aggregate_type": "progression",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-00000000600a",
+  "event_type": "progression.PromoRedeemed",
+  "event_version": 1,
+  "occurred_at": "2026-10-23T12:00:00Z",
+  "payload": {
+    "amount": 50,
+    "at": "2026-10-23T12:00:00Z",
+    "item_id": null,
+    "item_key": null,
+    "op_id": "promo:0192a3b4-c5d6-7e8f-9a0b-0000000c0101:0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "promo_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0101",
+    "reward_kind": "verses",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+  },
+  "producer": "progression"
+}

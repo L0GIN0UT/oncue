@@ -352,7 +352,29 @@ class TestS3WithoutDocker:
             urllib.request.urlopen(endpoint.url, timeout=1)  # noqa: S310 — локальный адрес
 
 
-_REALTIME_EXAMPLES = sorted((_REPO_ROOT / "contracts" / "realtime" / "examples").glob("*.json"))
+_REALTIME_DIR = _REPO_ROOT / "contracts" / "realtime"
+_REALTIME_EXAMPLES = sorted((_REALTIME_DIR / "examples").glob("*.json"))
+
+
+def _channel_of_example(path: Path) -> tuple[str, int]:
+    """Канал и версия схемы по имени файла примера.
+
+    ``room.message.phase.v1`` → (``room.message``, 1); ``notification.created.v1`` →
+    (``notification.created``, 1). Канал — самое длинное имя схемы ``<канал>.v<N>.json``,
+    с которого начинается имя примера (остаток — вариант сообщения).
+    """
+    import re
+
+    found = re.fullmatch(r"(?P<name>.+)\.v(?P<version>\d+)", path.stem)
+    assert found, f"имя примера должно оканчиваться версией (.vN): {path.name}"
+    name, version = found["name"], int(found["version"])
+    channels = [
+        schema.name.removesuffix(f".v{version}.json")
+        for schema in _REALTIME_DIR.glob(f"*.v{version}.json")
+    ]
+    matching = [c for c in channels if name == c or name.startswith(f"{c}.")]
+    assert matching, f"нет схемы канала для примера {path.name}"
+    return max(matching, key=len), version
 
 
 class TestRealtimeContracts:
@@ -368,7 +390,21 @@ class TestRealtimeContracts:
 
         from gv_testkit import assert_realtime_message_matches_schema
 
-        assert_realtime_message_matches_schema(json.loads(path.read_text(encoding="utf-8")))
+        channel, version = _channel_of_example(path)
+        assert_realtime_message_matches_schema(
+            json.loads(path.read_text(encoding="utf-8")), channel, version
+        )
+
+    @pytest.mark.parametrize(
+        ("stem", "channel"),
+        [
+            ("room.message.phase.v1", "room.message"),
+            ("room.message.level_opened.v1", "room.message"),
+            ("notification.created.v1", "notification.created"),
+        ],
+    )
+    def test_schema_is_chosen_by_example_name(self, stem: str, channel: str) -> None:
+        assert _channel_of_example(_REALTIME_DIR / "examples" / f"{stem}.json") == (channel, 1)
 
     def test_answer_in_level_delta_is_rejected(self) -> None:
         import json

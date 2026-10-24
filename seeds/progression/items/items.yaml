@@ -1,0 +1,29 @@
+# Сид косметики (5b, ADR 0045-0048). Слоты и редкости - из seeds/progression/config.yaml (секция shop).
+# Картинки лежат рядом: images/<key>.webp, генерируются seeds/progression/generate_items.py
+# (детерминированно, каждая <= 50 КБ). Грузит `gv dev seed` через admin-API progression.
+#
+# Порядок засева (см. services/progression/CLAUDE.md): конфиг v1 публикует progression.config.bootstrap
+# с shop.custom_avatar_item_key = null; затем `gv dev seed` заводит предметы и публикует следующую версию
+# конфига с ключом из `custom_avatar_item_key` ниже (публикация требует, чтобы предмет уже существовал).
+custom_avatar_item_key: custom_avatar
+
+items:
+  # --- аватарки
+  - {key: ava_fox, slot: avatar, rarity: common, title: Лисёнок, media_kind: static, level_required: 2, price: null, active: true}
+  - {key: ava_owl, slot: avatar, rarity: rare, title: Сова, media_kind: static, level_required: null, price: 150, active: true}
+  - {key: ava_dragon, slot: avatar, rarity: epic, title: Дракон, media_kind: animated, level_required: null, price: 600, active: true}
+  # Товар «своя аватарка» (ADR 0048): покупка даёт право загружать собственную картинку.
+  - {key: custom_avatar, slot: avatar, rarity: rare, title: Своя аватарка, media_kind: static, level_required: null, price: 500, active: true}
+  # --- рамки
+  - {key: frm_simple, slot: frame, rarity: common, title: Простая рамка, media_kind: static, level_required: 3, price: null, active: true}
+  - {key: frm_neon, slot: frame, rarity: rare, title: Неоновая рамка, media_kind: animated, level_required: null, price: 200, active: true}
+  - {key: frm_gold, slot: frame, rarity: epic, title: Золотая рамка, media_kind: animated, level_required: null, price: 700, active: true}
+  # --- титулы
+  - {key: ttl_rookie, slot: title, rarity: common, title: Новичок, media_kind: static, level_required: 1, price: null, active: true}
+  - {key: ttl_melomaniac, slot: title, rarity: rare, title: Меломан, media_kind: static, level_required: null, price: 150, active: true}
+  - {key: ttl_cinephile, slot: title, rarity: rare, title: Киноман, media_kind: static, level_required: null, price: 150, active: true}
+  - {key: ttl_legend, slot: title, rarity: epic, title: Легенда, media_kind: static, level_required: 50, price: null, active: true}
+  # --- фоны
+  - {key: bg_dusk, slot: background, rarity: common, title: Сумерки, media_kind: static, level_required: 4, price: null, active: true}
+  - {key: bg_aurora, slot: background, rarity: rare, title: Северное сияние, media_kind: animated, level_required: null, price: 250, active: true}
+  - {key: bg_galaxy, slot: background, rarity: epic, title: Галактика, media_kind: animated, level_required: null, price: 800, active: true}

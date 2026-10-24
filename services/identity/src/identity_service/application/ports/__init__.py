@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -146,6 +146,10 @@ class UserRepository(Protocol):
 
     async def ids_with_roles(self, roles: Iterable[str]) -> list[UUID]:
         """Активные пользователи, у которых есть хотя бы одна из ролей."""
+        ...
+
+    async def verified_emails(self, user_ids: Collection[UUID]) -> list[tuple[UUID, str]]:
+        """Одним запросом: (id, e-mail) активных пользователей с подтверждённым адресом."""
         ...
 
 
@@ -476,6 +480,19 @@ class CodeService(Protocol):
 
     def matches(self, stored: str, *, challenge_id: UUID, code: str) -> bool:
         """Сравнение за постоянное время (``hmac.compare_digest``)."""
+        ...
+
+
+class StrictRateLimiter(Protocol):
+    """Лимитер fail-closed со взвешенным счётчиком (массовая выдача чужих адресов)."""
+
+    async def hit(self, key: str, *, limit: int, window_s: int, amount: int = 1) -> RateDecision:
+        """Засчитать ``amount`` единиц и решить, разрешено ли.
+
+        Raises:
+            DependencyUnavailableError: хранилище счётчиков недоступно (503 с Retry-After):
+                без лимитера запрос не выполняется.
+        """
         ...
 
 

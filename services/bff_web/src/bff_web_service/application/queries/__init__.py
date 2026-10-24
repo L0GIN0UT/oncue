@@ -69,6 +69,8 @@ from bff_web_service.application.queries.online import GetMatchPage, GetOnlinePa
 from bff_web_service.application.queries.progression import (
     GetPlayerPage,
     GetProfilePage,
+    GetShellPage,
+    GetShopPage,
     HomeProgress,
 )
 from bff_web_service.application.queries.rating import GetLeaderboardsPage
@@ -91,6 +93,8 @@ __all__ = [
     "GetProfilePage",
     "GetResultsPage",
     "GetSession",
+    "GetShellPage",
+    "GetShopPage",
     "GetSoloPage",
     "HomeProgress",
     "Limiter",

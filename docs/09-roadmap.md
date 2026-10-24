@@ -126,19 +126,51 @@
 | Presence и join/leave в Centrifugo namespace `room` выключены; если включат — скрыть наблюдателей | `infra/centrifugo` | При включении |
 | Ручная проверка владельцем: identity, match, rating | — | Открыта, не закрыта |
 
-## Этап 5. Прогрессия и социальное
-- progression: опыт, уровни, валюта (ledger), задания, бейджи, магазин косметики, оформление профиля.
-- social: друзья, комментарии, жалобы, модерация (+ разделы админки), санкции.
-- notifications: in-app, realtime, e-mail.
+## Этап 5. Прогрессия и социальное — 5a влит в `main` (PR #27, #28, 2026-10-23); 5b готов к PR (ветка `stage5b/integration`)
+План: [plans/stage-5.md](plans/stage-5.md); передача между сессиями — [handoff/stage-5.md](handoff/stage-5.md). Деление: **5a** progression, **5b** экономика и уведомления, **5c** social, **5d** сезонные события (после 5c).
+
+### Подэтап 5a — выполнен и влит (PR #27, #28)
+- **Контракты (0a):** события `progression.progression.v1`, `rating.SeasonStandingsFinalized`, схема конфига, OpenAPI progression/bff-web, права identity.
+- **progression:** опыт и уровни, ledger Версов (append-only, баланс в транзакции), задания, бейджи, колесо, бусты, admin-API (конфиг с версиями, выдача, сторно), сид конфига и задача `progression.config.bootstrap`.
+- **bff-web, frontend, admin:** `/profile`, `/players/[id]`, колесо, прогресс на главной, раздел «Прогрессия».
+- **e2e:** `e2e/progression.spec.ts` (живой стек у владельца).
+- **Осталось:** ручная проверка владельцем (ledger — зона повышенной безопасности; чек-лист в handoff), живая проверка на compose.
+
+### Хвосты 5a
+| Пункт | Где | Когда |
+|---|---|---|
+| `Cache-Control: no-store` в admin-ручках progression ставится до `raise`: проверить на успешных ответах | progression | 5b |
+| Нет теста тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | 5b |
+| Нестабильные под нагрузкой тесты: `GameScreen.modes`, `CollectionEditor` (автосохранение), `party.spec` | frontend, e2e | 5b |
+| Windows-окружение (на `main` тоже): 3 integration-теста ffmpeg `test_media_adapters` (код 4294967283) и 2 errors в `unit/test_use_cases::test_upload_validation` (идентификаторы параметров), `admin test_runtime` (`/health/live`) | media_pipeline, admin | Не чинить в 5b; зелёные в CI/Linux |
+| Win-trading: детектор ([ADR 0038](adr/0038-matchmaking-queues.md)) | rating, match | 5c |
+| Ручная проверка владельцем: ledger progression, identity, match, rating | — | Открыта |
+
+### Подэтап 5b — экономика и уведомления (готов к PR)
+- progression: магазин и инвентарь косметики (слоты аватар/рамка/титул/фон, статика и анимация), оформление профиля, промокоды, паки (только модель и admin-CRUD, скрыты при `billing.enabled=false`), товар «своя аватарка» с модерацией.
+- notifications (новый сервис): in-app, realtime (Centrifugo), организационный e-mail, порт Push.
+- Тема оформления как данные (дизайн-токены) на фронтенде.
+- **Сделано:** магазин, инвентарь, оформление, промокоды с суточными потолками эмиссии, паки (модель, CRUD); колесо выдаёт предметы, дубль даёт Версы; своя аватарка (media-pipeline: приём, модерация, публикация `u/`, снятие); notifications (7 типов, realtime, настройки, рассылка с согласием, отписка по непрозрачному токену и one-click); identity — internal-ручка подтверждённых адресов; bff `/pages/shop`, `/pages/shell`; фронтенд: тема как данные (eslint-запрет литералов цвета, контраст AA), магазин, `PlayerBadge`, промокод, аватарка, колокольчик, уведомления; админка: «Магазин», «Промокоды», «UGC-изображения», «Рассылки»; сиды и `gv dev seed` предметов; e2e `shop.spec.ts`, `notifications.spec.ts`. ADR [0045–0049](adr/README.md) (черновики) — на принятие владельцем.
+- **Осталось:** ручная проверка владельцем и живой прогон e2e ([чек-лист](handoff/stage-5.md#чек-лист-ручной-проверки-5b-владельцем-перед-слиянием-stage5bintegration-main)).
+
+### Подэтап 5c — social
+- social: друзья, комментарии, жалобы, модерация (+ разделы админки), санкции, приватность.
+
+### Подэтап 5d — сезонные события (после 5c)
+- Событие с периодом и темой, цепочка находок по действиям игрока, временные предметы ([plans/stage-5.md](plans/stage-5.md) §12).
 
 ### Хвосты этапа 5
 - этап 7: разделение ролей Postgres для журналов progression (владелец миграций / рабочая роль SELECT, INSERT) - риск принят владельцем.
 - этап 7: инкрементальная сверка журнала progression вместе с партиционированием.
 - этап 7: ретенция metric_marks / quest_progress (очистка или партиционирование).
+- после 5b: admin-API для включения и выключения типов уведомлений (сами типы, шаблоны и маппинг остаются файловым конфигом в пакете notifications: новый тип требует кода consumer-а и рендера на фронте) — решение владельца 2026-10-23.
+- после 5b: вынести `SmtpEmailSender`/`LogEmailSender`/`BackgroundEmailSender` из identity и notifications в `libs/` (в 5b — копия в notifications «по образцу identity»).
+- 5b (S3): `client_max_body_size 2m` на gateway ограничивает загрузку своей аватарки; лимит размера в конфиге media-pipeline не выше него.
 
 ## Этап 6. Интеграции и биллинг
 - integrations: Shikimori/AniList, Trakt, Spotify, Яндекс (после проверки API). Экспорт и синхронизация.
-- payments: подписки, entitlements, FakePaymentGateway. **Флаг `billing.enabled=false`.**
+- payments: подписки, entitlements, продажа паков за деньги. **Флаг `billing.enabled=false`.**
+  - Свой биллинг не пишем: берём готового провайдера (ЮKassa или Robokassa — выбор по комиссии и юрлицу владельца), в тестах — `FakePaymentGateway`.
 
 ## Этап 7. Релиз
 - Нагрузочное тестирование, resilience-сценарии, тест восстановления.

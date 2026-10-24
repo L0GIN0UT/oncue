@@ -1,0 +1,11 @@
+{
+  "notification": {
+    "body": "Вы достигли уровня 9.",
+    "created_at": "2026-10-23T12:00:00Z",
+    "id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0001",
+    "read_at": null,
+    "title": "Новый уровень",
+    "type": "level_up"
+  },
+  "type": "notification.created"
+}

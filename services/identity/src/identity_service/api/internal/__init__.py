@@ -8,6 +8,7 @@ admin хранит их в своей серверной сессии. Ручк�
 """
 
 from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
@@ -74,6 +75,33 @@ class ServiceTokenResponse(BaseModel):
     expires_in: int
 
 
+USERS_EMAILS_READ_SCOPE = "users.emails.read"
+"""Область сервисного токена для ``POST /users/emails`` (клиент notifications)."""
+
+MAX_EMAIL_LOOKUP_IDS = 500
+
+
+class UserEmailsRequest(BaseModel):
+    """Набор пользователей; дубли id схлопываются."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_ids: list[UUID] = Field(min_length=1, max_length=MAX_EMAIL_LOOKUP_IDS)
+
+
+class UserEmailItem(BaseModel):
+    """Подтверждённый адрес пользователя."""
+
+    user_id: UUID
+    email: str
+
+
+class UserEmailsResponse(BaseModel):
+    """Только подходящие пользователи; причины пропуска не различаются, порядок любой."""
+
+    items: list[UserEmailItem]
+
+
 def _response(issued: IssuedSession) -> AdminSessionResponse:
     return AdminSessionResponse(
         access_token=issued.access_token,
@@ -128,6 +156,31 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
     )
     async def admin_revoke(body: AdminRefreshRequest, _: admin_client) -> None:
         await uc.logout(refresh_token=body.refresh_token, kind=SessionKind.ADMIN)
+
+    @router.post(
+        "/users/emails",
+        response_model=UserEmailsResponse,
+        summary="Подтверждённые адреса пользователей (рассылки)",
+        description=(
+            "Сервисный токен со scope `users.emails.read`. Неизвестные, удалённые и "
+            "пользователи без подтверждённого e-mail молча пропускаются. 429 — лимит "
+            "вызовов на `client_id`."
+        ),
+        responses=problem_responses(401, 403, 422, 429, 503),
+    )
+    async def user_emails(
+        body: UserEmailsRequest,
+        response: Response,
+        principal: Annotated[
+            ServicePrincipal,
+            Depends(deps.service_auth.require_service(USERS_EMAILS_READ_SCOPE)),
+        ],
+    ) -> UserEmailsResponse:
+        found = await uc.list_verified_emails.execute(
+            principal.client_id, principal.token_id, body.user_ids
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return UserEmailsResponse(items=[UserEmailItem(user_id=i, email=e) for i, e in found])
 
     @router.post(
         "/service-tokens",

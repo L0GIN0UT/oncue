@@ -34,6 +34,10 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
     "admin": {"identity": ["admin_sessions"]},
     # Этап 4a (§2.7): план раундов матча у game (D5) и ссылки на ассеты уровней.
     "match": {"game": ["rounds.plan"], "media_pipeline": ["assets.link"]},
+    # Этап 5b: progression передаёт файл аватарки в media-pipeline (S3); notifications берёт
+    # подтверждённые адреса получателей рассылки у identity.
+    "progression": {"media_pipeline": ["ugc.image"]},
+    "notifications": {"identity": ["users.emails.read"]},
 }
 """Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
 
@@ -43,12 +47,13 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
 
 
 COOKIE_MUTATION_SERVICES: frozenset[str] = frozenset(
-    {"identity", "game", "collections", "library", "match", "progression"}
+    {"identity", "game", "collections", "library", "match", "progression", "notifications"}
 )
 """Сервисы с мутациями по cookie (CSRF-проверка Origin по ``GV_PUBLIC_ORIGINS``).
 
-progression (этап 5a) — спин колеса. bff_web только читает (GET), admin — Django со своей
-CSRF-защитой.
+progression (этап 5a) — спин колеса, 5b — покупка, оформление, промокод, аватарка;
+notifications (5b) — «прочитано», настройки, устройства. bff_web только читает (GET), admin —
+Django со своей CSRF-защитой.
 """
 
 
@@ -64,11 +69,12 @@ identity подписывает connection-токены, match — subscription-
 """
 
 
-REALTIME_PUBLISHERS: frozenset[str] = frozenset({"match"})
+REALTIME_PUBLISHERS: frozenset[str] = frozenset({"match", "notifications"})
 """Сервисы, которые публикуют в Centrifugo через server API (получают ``GV_REALTIME__API_*``).
 
 identity только подписывает connection-токены: ключ server API ему не нужен (минимум прав —
-утечка env identity не даёт публиковать в каналы комнат). rating добавится на этапе 4b.
+утечка env identity не даёт публиковать в каналы комнат). notifications (5b) публикует в личные
+каналы ``personal:#<user>``, токенов не выдаёт и не подписывает.
 Сервис из этого множества обязан иметь ``realtime = true`` в реестре (проверяет ``gv gen``).
 """
 

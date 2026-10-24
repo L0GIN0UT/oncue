@@ -77,6 +77,58 @@ def _bad_key(c: dict[str, Any]) -> None:
     c["badges"][0]["key"] = "First Win"
 
 
+def _negative_duplicate_verses(c: dict[str, Any]) -> None:
+    c["shop"]["rarities"][0]["duplicate_verses"] = -1
+
+
+def _animated_frames_below_two(c: dict[str, Any]) -> None:
+    c["shop"]["media"]["animated_max_frames"] = 1
+
+
+def _no_slots(c: dict[str, Any]) -> None:
+    c["shop"]["slots"] = []
+
+
+def _unknown_bucket_in_spend_order(c: dict[str, Any]) -> None:
+    c["spend"]["bucket_order"] = ["earned", "gold"]
+
+
+def _duplicate_bucket_in_spend_order(c: dict[str, Any]) -> None:
+    c["spend"]["bucket_order"] = ["earned", "earned"]
+
+
+def _zero_promo_attempts(c: dict[str, Any]) -> None:
+    c["promo"]["attempts_per_ip"] = 0
+
+
+def _short_promo_code(c: dict[str, Any]) -> None:
+    c["promo"]["code_length"] = 4
+
+
+def _spend_order_without_earned(c: dict[str, Any]) -> None:
+    c["spend"]["bucket_order"] = ["paid"]  # в 5b списывается earned (ADR 0043)
+
+
+def _promo_without_batch_cap(c: dict[str, Any]) -> None:
+    del c["promo"]["max_batch_verses"]
+
+
+def _promo_without_actor_daily_cap(c: dict[str, Any]) -> None:
+    del c["promo"]["max_daily_verses_per_actor"]
+
+
+def _promo_without_total_daily_cap(c: dict[str, Any]) -> None:
+    del c["promo"]["max_daily_verses_total"]
+
+
+def _promo_zero_daily_cap(c: dict[str, Any]) -> None:
+    c["promo"]["max_daily_verses_per_actor"] = 0
+
+
+def _promo_daily_cap_above_bound(c: dict[str, Any]) -> None:
+    c["promo"]["max_daily_verses_total"] = 1_000_000_001
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
@@ -89,9 +141,38 @@ def _bad_key(c: dict[str, Any]) -> None:
         _boost_multiplier_not_above_one,
         _one_sector,
         _bad_key,
+        _negative_duplicate_verses,
+        _animated_frames_below_two,
+        _no_slots,
+        _unknown_bucket_in_spend_order,
+        _duplicate_bucket_in_spend_order,
+        _zero_promo_attempts,
+        _short_promo_code,
+        _spend_order_without_earned,
+        _promo_without_batch_cap,
+        _promo_without_actor_daily_cap,
+        _promo_without_total_daily_cap,
+        _promo_zero_daily_cap,
+        _promo_daily_cap_above_bound,
     ],
 )
 def test_invalid_config_is_rejected(mutate: Callable[[dict[str, Any]], None]) -> None:
     config = copy.deepcopy(_load("examples/progression_config.v1.json"))
     mutate(config)
     assert list(_validator().iter_errors(config)) != []
+
+
+def test_example_shop_keys_are_unique() -> None:
+    """Схема не умеет уникальность по полю: ключи слотов и редкостей проверяет домен (S1)."""
+    shop = _load("examples/progression_config.v1.json")["shop"]
+    for section in ("slots", "rarities"):
+        keys = [entry["key"] for entry in shop[section]]
+        assert len(keys) == len(set(keys)), section
+
+
+def test_config_without_5b_sections_stays_valid() -> None:
+    """Секции 5b необязательны: версии конфига 5a (сид, архив) остаются допустимыми."""
+    config = copy.deepcopy(_load("examples/progression_config.v1.json"))
+    for section in ("shop", "promo", "spend"):
+        del config[section]
+    assert list(_validator().iter_errors(config)) == []

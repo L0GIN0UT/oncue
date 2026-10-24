@@ -114,9 +114,10 @@ memory_mb = 256
 description = "Опыт и уровни, валюта (журнал проводок), задания, бейджи, магазин, инвентарь, оформление профиля"
 public = "progression"
 database = true
-redis = false
+redis = true
 kafka = true
 rabbitmq = false
+s3 = true
 memory_mb = 256
 
 [services.payments]
@@ -141,9 +142,10 @@ memory_mb = 256
 description = "In-app уведомления, realtime-доставка, e-mail, web-push, отключение по типам"
 public = "notifications"
 database = true
-redis = false
+redis = true
 kafka = true
 rabbitmq = true
+realtime = true
 memory_mb = 256
 
 [services.bff_web]

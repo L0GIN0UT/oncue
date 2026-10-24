@@ -34,6 +34,14 @@ from media_pipeline_service.application.commands.profiles import (
     BackfillDynamicProfiles,
 )
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
+from media_pipeline_service.application.commands.ugc import (
+    ModerateUgcImage,
+    PreviewUgcImage,
+    SubmitUgcImage,
+    SweepOrphanUgcObjects,
+    UgcObjectPurger,
+    UgcUseCases,
+)
 from media_pipeline_service.application.generators import (
     AudioBlackoutGenerator,
     AudioIntroGenerator,
@@ -53,6 +61,7 @@ from media_pipeline_service.application.ports import (
     SourceFetcher,
     TokenSource,
     Transcoder,
+    UgcImageEncoder,
     UnitOfWorkFactory,
     UrlSigner,
 )
@@ -60,11 +69,13 @@ from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.application.queries.sources import ListSources
+from media_pipeline_service.application.queries.ugc import ListUgcQueue
 from media_pipeline_service.application.sources import SourceIngestor
 from media_pipeline_service.domain.links import LinkPolicy
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
 from media_pipeline_service.domain.sources import SourceKind
-from media_pipeline_service.infrastructure.config import load_profiles
+from media_pipeline_service.domain.ugc import UgcCatalog
+from media_pipeline_service.infrastructure.config import load_profiles, load_ugc_catalog
 from media_pipeline_service.infrastructure.db.repositories import SqlMediaUnitOfWork
 from media_pipeline_service.infrastructure.fetcher import HttpSourceFetcher
 from media_pipeline_service.infrastructure.ffmpeg import FfmpegTranscoder
@@ -78,6 +89,7 @@ from media_pipeline_service.infrastructure.links import (
 )
 from media_pipeline_service.infrastructure.storage import S3Storage
 from media_pipeline_service.infrastructure.tasks import LazyRabbitTaskQueue
+from media_pipeline_service.infrastructure.ugc_images import PillowUgcEncoder
 from media_pipeline_service.settings import Settings
 
 _MB = 1024 * 1024
@@ -101,6 +113,7 @@ class MediaAdapters:
     fetcher: SourceFetcher
     transcoder: Transcoder
     images: ImageProcessor
+    ugc_encoder: UgcImageEncoder
     signer: UrlSigner
     limiter: LinkRateLimiter
     queue: TaskQueue
@@ -131,6 +144,9 @@ class MediaAdapters:
                 timeout_s=settings.ffmpeg.timeout_s,
             ),
             images=PillowImageProcessor(max_pixels=m.max_image_pixels, webp_quality=m.webp_quality),
+            ugc_encoder=PillowUgcEncoder(
+                webp_quality=m.webp_quality, concurrency=m.ugc_encode_concurrency
+            ),
             signer=signer,
             limiter=(
                 RedisLinkRateLimiter(infra.redis, retry_after_s=m.link_limiter_retry_after_s)
@@ -358,6 +374,48 @@ class MediaContainer:
     def list_sources(self) -> ListSources:
         """Исходники единицы (admin)."""
         return ListSources(self.uow_factory())
+
+    @cached_property
+    def ugc_catalog(self) -> UgcCatalog:
+        """Назначения и причины UGC (проверяются при первом обращении)."""
+        return load_ugc_catalog(self.settings.media.ugc_purposes_path)
+
+    @cached_property
+    def ugc(self) -> UgcUseCases:
+        """Use-cases UGC-изображений (приём, решения, очередь)."""
+        a = self.adapters
+        m = self.settings.media
+        purger = UgcObjectPurger(self.uow_factory(), a.storage, batch=m.ugc_purge_batch)
+        return UgcUseCases(
+            catalog=self.ugc_catalog,
+            submit=SubmitUgcImage(
+                self.uow_factory(),
+                self.clock,
+                a.ugc_encoder,
+                a.storage,
+                a.tokens,
+                self.ugc_catalog,
+                purger,
+            ),
+            moderate=ModerateUgcImage(
+                self.uow_factory(), self.clock, a.storage, a.tokens, self.ugc_catalog, purger
+            ),
+            preview=PreviewUgcImage(
+                self.uow_factory(),
+                self.clock,
+                a.signer,
+                ttl_s=m.ugc_preview_ttl_s,
+                public_base_url=m.ugc_public_base_url,
+            ),
+            queue=ListUgcQueue(self.uow_factory()),
+            purger=purger,
+            orphans=SweepOrphanUgcObjects(
+                self.uow_factory(),
+                a.storage,
+                self.clock,
+                ttl=timedelta(hours=m.ugc_orphan_ttl_h),
+            ),
+        )
 
     async def close(self) -> None:
         """Закрыть клиенты, открытые лениво (соединение RabbitMQ очереди задач)."""

@@ -34,6 +34,7 @@ YA_INFO = "https://ya.test/info"
 # Клиенты сервисных токенов (D13); в настройках identity — только sha256 секретов.
 ADMIN_SECRET = "admin-client-secret-0123456789abcdef"
 GAME_SECRET = "game-client-secret-0123456789abcdef"
+NOTIFICATIONS_SECRET = "notifications-client-secret-0123456789abcdef"
 # Секрет connection-токенов Centrifugo (D9 этапа 4).
 REALTIME_SECRET = "realtime-connection-secret-0123456789abcdef"
 
@@ -52,6 +53,11 @@ SERVICE_CLIENTS = (
         "client_id": "game",
         "secret_sha256": sha256_hex(GAME_SECRET),
         "audiences": {"media_pipeline": ["assets.link"]},
+    },
+    {
+        "client_id": "notifications",
+        "secret_sha256": sha256_hex(NOTIFICATIONS_SECRET),
+        "audiences": {"identity": ["users.emails.read"]},
     },
 )
 

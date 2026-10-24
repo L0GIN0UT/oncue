@@ -1,6 +1,7 @@
 """Публичный API (/v1). На gateway: /api/progression/v1/....
 
-Контракт этапа 5a (``docs/plans/stage-5.md`` §2.4, ADR 0042–0044): прогресс и кошелёк (P1:
+Контракт этапа 5a (``docs/plans/stage-5.md`` §2.4, ADR 0042–0044) и 5b (§9, ADR 0045, 0048;
+``shop.py``): прогресс и кошелёк (P1:
 ``progress.py``, ``wallet.py``), задания, бейджи и колесо (P2: ``rewards.py``).
 
 * все ручки — только пользователь с аккаунтом (гость — 403 ``auth.guest_forbidden``);
@@ -14,14 +15,24 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from gv_service import Infrastructure
+from progression_service.api.public.avatar import register_avatar_routes
 from progression_service.api.public.progress import register_progress_routes
 from progression_service.api.public.rewards import register_reward_routes
 from progression_service.api.public.schemas import ServiceMeta
+from progression_service.api.public.shop import register_shop_routes
 from progression_service.api.public.wallet import register_wallet_routes
 from progression_service.application.badges import BadgeQueries
 from progression_service.application.queries import ProgressQueries
 from progression_service.application.quests import QuestQueries
+from progression_service.application.shop import ShopServices
 from progression_service.application.wheel import WheelService
+from progression_service.settings import ProgressionSettings, Settings
+
+
+def _progression_settings(infra: Infrastructure) -> ProgressionSettings:
+    if not isinstance(infra.settings, Settings):
+        raise TypeError("ожидаются настройки progression")
+    return infra.settings.progression
 
 
 def build_public_router(
@@ -29,7 +40,9 @@ def build_public_router(
     queries: ProgressQueries,
     quests: QuestQueries,
     badges: BadgeQueries,
+    *,
     wheel: WheelService,
+    shop: ShopServices,
 ) -> APIRouter:
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["progression"])
@@ -41,4 +54,6 @@ def build_public_router(
     register_progress_routes(router, queries)
     register_wallet_routes(router, queries)
     register_reward_routes(router, quests, badges, wheel)
+    register_shop_routes(router, shop)
+    register_avatar_routes(router, shop, _progression_settings(infra))
     return router

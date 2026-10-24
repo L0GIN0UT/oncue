@@ -1818,20 +1818,28 @@ name = "guessverse-notifications"
 version = "0.1.0"
 source = { editable = "services/notifications" }
 dependencies = [
+    { name = "aiosmtplib" },
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aiosmtplib", specifier = ">=3.0" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
@@ -1860,20 +1868,26 @@ name = "guessverse-progression"
 version = "0.1.0"
 source = { editable = "services/progression" }
 dependencies = [
+    { name = "aioboto3" },
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "pillow" },
+    { name = "python-multipart" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aioboto3", specifier = ">=13" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "pillow", specifier = ">=13" },
+    { name = "python-multipart", specifier = ">=0.0.12" },
 ]
 
 [[package]]
@@ -4397,11 +4411,11 @@ wheels = [
 
 [[package]]
 name = "setuptools"
-version = "84.0.0"
+version = "84.2.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6d/44/f5da03a8ef95d369145c5bb53050e7877c9f3d312e128605fd9504829143/setuptools-84.0.0.tar.gz", hash = "sha256:f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73", size = 1168449, upload-time = "2026-08-08T18:27:58.365Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/b3/c19426f783614d625699a4b247faf628ea9ab1db228674491767b417f9e1/setuptools-84.2.1.tar.gz", hash = "sha256:3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc", size = 1230289, upload-time = "2026-10-20T19:01:37.742Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl", hash = "sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670", size = 818216, upload-time = "2026-08-08T18:27:56.719Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/55/6dc6d6bb953bdfc52519a0059592c52b6e3b8ad51cf8256dffceb55b0610/setuptools-84.2.1-py3-none-any.whl", hash = "sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2", size = 876263, upload-time = "2026-10-20T19:01:35.678Z" },
 ]
 
 [[package]]

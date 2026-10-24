@@ -168,6 +168,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/users/emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Подтверждённые адреса пользователей (рассылки)
+         * @description Сервисный токен со scope `users.emails.read`. Неизвестные, удалённые и пользователи без подтверждённого e-mail молча пропускаются. 429 — лимит вызовов на `client_id`.
+         */
+        post: operations["user_emails_internal_v1_users_emails_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/codes/resend": {
         parameters: {
             query?: never;
@@ -1028,6 +1048,35 @@ export interface components {
             password?: string | null;
         };
         /**
+         * UserEmailItem
+         * @description Подтверждённый адрес пользователя.
+         */
+        UserEmailItem: {
+            /** Email */
+            email: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * UserEmailsRequest
+         * @description Набор пользователей; дубли id схлопываются.
+         */
+        UserEmailsRequest: {
+            /** User Ids */
+            user_ids: string[];
+        };
+        /**
+         * UserEmailsResponse
+         * @description Только подходящие пользователи; причины пропуска не различаются, порядок любой.
+         */
+        UserEmailsResponse: {
+            /** Items */
+            items: components["schemas"]["UserEmailItem"][];
+        };
+        /**
          * UsersPage
          * @description Страница пользователей.
          */
@@ -1542,6 +1591,80 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    user_emails_internal_v1_users_emails_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserEmailsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEmailsResponse"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

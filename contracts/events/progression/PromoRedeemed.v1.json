@@ -1,0 +1,70 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:PromoRedeemed:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок погасил промокод (ADR 0048). aggregate_id — user_id. Самого кода в событии нет, только идентификатор записи. Версы приходят проводкой `CurrencyCredited` с тем же `op_id`.",
+  "properties": {
+    "amount": {
+      "description": "Версы; для награды-предмета null",
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "item_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "item_key": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "op_id": {
+      "description": "`promo:{promo_id}:{user}`",
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "promo_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "reward_kind": {
+      "enum": [
+        "verses",
+        "item"
+      ],
+      "type": "string"
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "amount",
+    "at",
+    "item_id",
+    "item_key",
+    "op_id",
+    "promo_id",
+    "reward_kind",
+    "user_id"
+  ],
+  "title": "progression.PromoRedeemed v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

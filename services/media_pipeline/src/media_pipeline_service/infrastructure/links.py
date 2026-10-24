@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import secrets
 from datetime import datetime
 from urllib.parse import quote
@@ -12,6 +13,8 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from gv_core.errors import DependencyUnavailableError
+
+_SIGNABLE_KEY = re.compile(r"^[ap]/[A-Za-z0-9]+\.[a-z0-9]+$")
 
 
 def md5_b64url(text: str) -> str:
@@ -50,7 +53,16 @@ class NginxSecureLinkSigner:
         return md5_b64url(f"{expires}{uri} {self._secret}")
 
     def sign(self, object_key: str, expires_at: datetime) -> str:
-        """Подписанный URL объекта ассета."""
+        """Подписанный URL объекта ассета (``a/…``) или UGC на модерации (``p/…``).
+
+        Публичный ``u/…`` подписи не требует и сюда не допускается; регэксп location
+        ``/media/`` на gateway пропускает только ``(a|p)/<hex>.<ext>``.
+
+        Raises:
+            ValueError: ключ вне подписываемых префиксов или с посторонними символами.
+        """
+        if not _SIGNABLE_KEY.match(object_key):
+            raise ValueError("ключ объекта не подлежит подписи")
         uri = f"{self._prefix}{quote(object_key, safe='/.')}"
         expires = int(expires_at.timestamp())
         return f"{self._base}{uri}?md5={self.token(uri, expires)}&expires={expires}"

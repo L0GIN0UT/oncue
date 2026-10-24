@@ -11,7 +11,7 @@ import asyncio
 import copy
 import dataclasses
 import hashlib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Self
@@ -68,6 +68,7 @@ from identity_service.application.queries import (
     ListLinkedAccounts,
     ListUsers,
 )
+from identity_service.application.queries.user_emails import ListVerifiedEmails, UserEmailsLimit
 from identity_service.application.security import hash_secret
 from identity_service.application.sessions import IssuedSession, SessionIssuer
 from identity_service.domain import (
@@ -87,7 +88,7 @@ from identity_service.domain import (
 )
 from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
 
-from gv_core import ConflictError, DomainEvent
+from gv_core import ConflictError, DependencyUnavailableError, DomainEvent
 from gv_core.ids import uuid7
 from gv_testkit import FakeClock, FakeUnitOfWork, InMemoryIdempotencyStore
 
@@ -173,6 +174,13 @@ class Users:
     async def ids_with_roles(self, roles: Iterable[str]) -> list[UUID]:
         wanted = set(roles)
         return [u.id for u in self.d.users.values() if u.is_active and u.roles & wanted]
+
+    async def verified_emails(self, user_ids: Collection[UUID]) -> list[tuple[UUID, str]]:
+        return [
+            (u.id, u.email.value)
+            for uid in user_ids
+            if (u := self.d.users.get(uid)) is not None and u.is_active and u.email_verified
+        ]
 
 
 class Creds:
@@ -422,6 +430,7 @@ class World:
         self.clock = FakeClock()
         self.hasher = FakeHasher()
         self.limiter = FakeLimiter()
+        self.strict_limiter = FakeStrictLimiter()
         self.revoked: set[UUID] = set()
         self.states = FakeStateStore()
         self.emails: list[EmailMessage] = []
@@ -516,6 +525,7 @@ class World:
             issue_service_token=IssueServiceToken(
                 SERVICE_CLIENTS, self.tokens, self.limiter, SERVICE_TOKEN_CONFIG
             ),
+            list_verified_emails=ListVerifiedEmails(uow, self.strict_limiter, UserEmailsLimit()),
         )
 
     async def make_user(
@@ -687,6 +697,20 @@ class FakeLimiter:
 
     async def reset(self, key: str) -> None:
         self.counts.pop(key, None)
+
+
+class FakeStrictLimiter:
+    """Лимитер fail-closed: ``broken`` имитирует недоступный Redis."""
+
+    def __init__(self) -> None:
+        self.counts: dict[str, int] = {}
+        self.broken = False
+
+    async def hit(self, key: str, *, limit: int, window_s: int, amount: int = 1) -> RateDecision:
+        if self.broken:
+            raise DependencyUnavailableError("лимитер недоступен", details={"retry_after": 5})
+        self.counts[key] = self.counts.get(key, 0) + amount
+        return RateDecision(self.counts[key] <= limit, window_s)
 
 
 class FakeRevocation:

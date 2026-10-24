@@ -51,6 +51,7 @@ nav:
   - Платежи: 06-payments.md
   - Инфраструктура: 07-infrastructure.md
   - Roadmap: 09-roadmap.md
+  - Бэклог: backlog.md
   - Планы:
       - Этап 1: plans/stage-1.md
       - Этап 2: plans/stage-2.md
@@ -105,6 +106,11 @@ nav:
       - adr/0042-progression-xp-levels-config.md
       - adr/0043-currency-ledger-verses.md
       - adr/0044-daily-wheel-and-boosts.md
+      - adr/0045-shop-inventory-purchase.md
+      - adr/0046-animated-cosmetics-format.md
+      - adr/0047-notifications-channels-mapping.md
+      - adr/0048-promo-codes-custom-avatar.md
+      - adr/0049-theme-as-data.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

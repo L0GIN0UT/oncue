@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_shop/_nav.html" %}
+{% if config_error %}<p>Конфиг магазина недоступен ({{ config_error }}): слот и редкость вводятся текстом, проверит сервис.</p>{% endif %}
+<p>Предмет создаётся выключенным; картинку загрузите на странице предмета.</p>
+<form method="post">
+  {% csrf_token %}{{ form.as_p }}<input type="submit" value="Создать">
+</form>
+{% endblock %}

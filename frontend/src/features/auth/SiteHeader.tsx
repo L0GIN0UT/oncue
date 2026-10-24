@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Wordmark } from "@/shared/ui/wordmark";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { useSessionInfo } from "./session";
 
 export function SiteHeader() {
@@ -53,6 +54,15 @@ export function SiteHeader() {
         )}
         {subject?.kind === "user" && (
           <Link
+            href="/shop"
+            className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+            data-testid="nav-shop"
+          >
+            {t("nav.shop")}
+          </Link>
+        )}
+        {subject?.kind === "user" && (
+          <Link
             href="/profile"
             className="rounded-md px-3 py-2 text-ink-muted hover:text-ink"
             data-testid="nav-profile"
@@ -69,6 +79,7 @@ export function SiteHeader() {
             {t("nav.security")}
           </Link>
         )}
+        {subject?.kind === "user" && <NotificationBell />}
         {subject?.kind === "user" ? (
           <Link
             href="/me/collections"

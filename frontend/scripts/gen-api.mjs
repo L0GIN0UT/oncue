@@ -20,6 +20,7 @@ const SERVICES = [
     "match",
     "rating",
     "progression",
+    "notifications",
 ];
 const check = process.argv.includes("--check");
 

@@ -17,6 +17,8 @@ from bff_web_service.application.queries import (
     GetProfilePage,
     GetResultsPage,
     GetSession,
+    GetShellPage,
+    GetShopPage,
     GetSoloPage,
 )
 from bff_web_service.settings import HttpCacheSettings
@@ -39,4 +41,6 @@ class BffDeps:
     get_leaderboards: GetLeaderboardsPage
     get_profile: GetProfilePage
     get_player: GetPlayerPage
+    get_shop: GetShopPage
+    get_shell: GetShellPage
     http_cache: HttpCacheSettings

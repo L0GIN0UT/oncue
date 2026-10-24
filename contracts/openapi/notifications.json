@@ -1,6 +1,431 @@
 {
   "components": {
     "schemas": {
+      "Broadcast": {
+        "description": "Рассылка.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "recipients": {
+            "description": "Подписчиков на момент постановки",
+            "minimum": 0.0,
+            "title": "Recipients",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "sending",
+              "sent",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "status",
+          "recipients",
+          "created_at",
+          "created_by"
+        ],
+        "title": "Broadcast",
+        "type": "object"
+      },
+      "BroadcastPage": {
+        "description": "Страница рассылок (курсор).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Broadcast"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "BroadcastPage",
+        "type": "object"
+      },
+      "BroadcastRequest": {
+        "additionalProperties": false,
+        "description": "Информационная рассылка подписчикам.",
+        "properties": {
+          "body": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "subject": {
+            "description": "Тема письма: без управляющих символов (защита заголовков письма)",
+            "maxLength": 150,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "body",
+          "reason"
+        ],
+        "title": "BroadcastRequest",
+        "type": "object"
+      },
+      "Device": {
+        "description": "Зарегистрированное устройство.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "platform": {
+            "enum": [
+              "web",
+              "ios",
+              "android"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "registered_at": {
+            "format": "date-time",
+            "title": "Registered At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "platform",
+          "registered_at"
+        ],
+        "title": "Device",
+        "type": "object"
+      },
+      "DeviceRequest": {
+        "additionalProperties": false,
+        "description": "Регистрация устройства для Push (реализация Push - после релиза).",
+        "properties": {
+          "platform": {
+            "enum": [
+              "web",
+              "ios",
+              "android"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 4096,
+            "minLength": 8,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "platform",
+          "token"
+        ],
+        "title": "DeviceRequest",
+        "type": "object"
+      },
+      "EmailSubscription": {
+        "description": "Согласие на информационную рассылку от администрации.",
+        "properties": {
+          "changed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed At"
+          },
+          "subscribed": {
+            "title": "Subscribed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "subscribed",
+          "changed_at"
+        ],
+        "title": "EmailSubscription",
+        "type": "object"
+      },
+      "EmailSubscriptionRequest": {
+        "additionalProperties": false,
+        "description": "Дать или отозвать согласие на рассылку.",
+        "properties": {
+          "subscribed": {
+            "title": "Subscribed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "subscribed"
+        ],
+        "title": "EmailSubscriptionRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MarkedRead": {
+        "description": "Сколько уведомлений отмечено прочитанными.",
+        "properties": {
+          "marked": {
+            "minimum": 0.0,
+            "title": "Marked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "marked"
+        ],
+        "title": "MarkedRead",
+        "type": "object"
+      },
+      "NotificationItem": {
+        "description": "Уведомление игрока: текст уже собран по шаблону и локали.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - не прочитано",
+            "title": "Read At"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "body",
+          "created_at",
+          "read_at"
+        ],
+        "title": "NotificationItem",
+        "type": "object"
+      },
+      "NotificationPage": {
+        "description": "Страница уведомлений (курсор), новые первыми.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "unread": {
+            "minimum": 0.0,
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "unread"
+        ],
+        "title": "NotificationPage",
+        "type": "object"
+      },
+      "NotificationSettings": {
+        "description": "Настройки по типам.",
+        "properties": {
+          "types": {
+            "items": {
+              "$ref": "#/components/schemas/TypeSetting"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "types"
+        ],
+        "title": "NotificationSettings",
+        "type": "object"
+      },
+      "Problem": {
+        "description": "RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).\n\nAttributes:\n    type: URN проблемы ``urn:guessverse:problem:<code>``.\n    title: Человекочитаемый заголовок.\n    status: HTTP-статус.\n    code: Машинный код ошибки — на него опираются клиенты.\n    detail: Пояснение.\n    correlation_id: Идентификатор цепочки запроса (для поиска в логах).\n    details: Безопасные для клиента подробности (``AppError.details``).\n    errors: Ошибки валидации полей запроса.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ошибки валидации: loc, msg, type",
+            "title": "Errors"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -19,6 +444,135 @@
         ],
         "title": "ServiceMeta",
         "type": "object"
+      },
+      "TypeSetting": {
+        "description": "Настройка типа уведомления.",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "boolean"
+          },
+          "in_app": {
+            "title": "In App",
+            "type": "boolean"
+          },
+          "title": {
+            "description": "Название типа для экрана настроек (конфиг, локаль игрока)",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Type",
+            "type": "string"
+          },
+          "user_mutable": {
+            "description": "false - тип нельзя отключить",
+            "title": "User Mutable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "in_app",
+          "email",
+          "user_mutable"
+        ],
+        "title": "TypeSetting",
+        "type": "object"
+      },
+      "TypeSettingRequest": {
+        "additionalProperties": false,
+        "description": "Включить или отключить каналы типа.",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "boolean"
+          },
+          "in_app": {
+            "title": "In App",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "in_app",
+          "email"
+        ],
+        "title": "TypeSettingRequest",
+        "type": "object"
+      },
+      "UnreadCount": {
+        "description": "Число непрочитанных (бейдж колокольчика).",
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "UnreadCount",
+        "type": "object"
+      },
+      "UnsubscribeRequest": {
+        "additionalProperties": false,
+        "description": "Отписка по токену из письма (страница отписки).",
+        "properties": {
+          "token": {
+            "description": "Непрозрачный токен из ссылки в письме",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "UnsubscribeRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     }
   },
@@ -29,6 +583,520 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/v1/broadcasts": {
+      "get": {
+        "operationId": "broadcasts_admin_v1_broadcasts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Рассылки",
+        "tags": [
+          "notifications-admin"
+        ]
+      },
+      "post": {
+        "description": "Информационное письмо подписчикам (согласие и отписка). Отправку делает задача RabbitMQ. Повтор с тем же `Idempotency-Key` возвращает ту же рассылку.",
+        "operationId": "create_broadcast_admin_v1_broadcasts_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BroadcastRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Broadcast"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Поставить рассылку",
+        "tags": [
+          "notifications-admin"
+        ]
+      }
+    },
+    "/v1/devices": {
+      "post": {
+        "description": "Push пока не отправляется (порт без реализации); повтор токена - то же устройство.",
+        "operationId": "register_device_v1_devices_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Device"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Зарегистрировать устройство для Push",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/devices/{device_id}": {
+      "delete": {
+        "description": "Идемпотентно; чужое устройство - 404.",
+        "operationId": "delete_device_v1_devices__device_id__delete",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Удалить устройство",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/email-subscription": {
+      "get": {
+        "operationId": "email_subscription_v1_email_subscription_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailSubscription"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Согласие на рассылку",
+        "tags": [
+          "notifications"
+        ]
+      },
+      "put": {
+        "description": "По умолчанию согласия нет; рассылка без согласия не уходит.",
+        "operationId": "set_email_subscription_v1_email_subscription_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailSubscription"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Дать или отозвать согласие на рассылку",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
     "/v1/meta": {
       "get": {
         "operationId": "meta_v1_meta_get",
@@ -45,6 +1113,602 @@
           }
         },
         "summary": "Сведения о сервисе",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notification-settings": {
+      "get": {
+        "description": "Типы из конфига с текущими каналами игрока.",
+        "operationId": "settings_v1_notification_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Настройки уведомлений",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notification-settings/{type_key}": {
+      "put": {
+        "description": "Идемпотентно по природе операции. Неизвестный тип - 404 `notifications.type_not_found`; тип с `user_mutable = false` - 422 `notifications.type_not_mutable`.",
+        "operationId": "set_setting_v1_notification_settings__type_key__put",
+        "parameters": [
+          {
+            "description": "Тип",
+            "in": "path",
+            "name": "type_key",
+            "required": true,
+            "schema": {
+              "description": "Тип",
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "title": "Type Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypeSettingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypeSetting"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Изменить настройку типа",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notifications": {
+      "get": {
+        "description": "Новые первыми, курсорная пагинация; `unread_only` - только непрочитанные.",
+        "operationId": "notifications_v1_notifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "unread_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unread Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Мои уведомления",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notifications/read-all": {
+      "post": {
+        "description": "Идемпотентно: повтор отмечает 0.",
+        "operationId": "read_all_v1_notifications_read_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkedRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Прочитать все",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notifications/unread-count": {
+      "get": {
+        "operationId": "unread_count_v1_notifications_unread_count_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          }
+        },
+        "summary": "Число непрочитанных",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/notifications/{notification_id}/read": {
+      "post": {
+        "description": "Идемпотентно. Чужое или несуществующее - 404 `notifications.not_found`.",
+        "operationId": "read_one_v1_notifications__notification_id__read_post",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Notification Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Отметить прочитанным",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/unsubscribe": {
+      "post": {
+        "description": "Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`.",
+        "operationId": "unsubscribe_v1_unsubscribe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnsubscribeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Отписаться по ссылке из письма",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/v1/unsubscribe/one-click": {
+      "post": {
+        "description": "Для заголовка `List-Unsubscribe`: почтовик шлёт POST на ссылку из письма, токен в query, тело `application/x-www-form-urlencoded` с `List-Unsubscribe=One-Click` (до 1 КБ). Без входа; тот же лимит и тот же единый ответ, что у обычной отписки; неверное тело неотличимо от неверного токена (422 `notifications.unsubscribe_invalid`). GET не поддерживается (405).",
+        "operationId": "unsubscribe_one_click_v1_unsubscribe_one_click_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Отписка одним запросом (RFC 8058)",
         "tags": [
           "notifications"
         ]

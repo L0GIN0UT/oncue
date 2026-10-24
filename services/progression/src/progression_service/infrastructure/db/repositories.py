@@ -30,6 +30,7 @@ from progression_service.application.ports import (
 from progression_service.domain.config import ProgressionConfig
 from progression_service.domain.daily_streak import Streak
 from progression_service.domain.ledger import Bucket, Direction, Entry
+from progression_service.infrastructure.db.repositories_avatar import SqlAvatars
 from progression_service.infrastructure.db.repositories_rewards import (
     SqlBadges,
     SqlBoosts,
@@ -37,6 +38,13 @@ from progression_service.infrastructure.db.repositories_rewards import (
     SqlMetrics,
     SqlQuests,
     SqlSpins,
+)
+from progression_service.infrastructure.db.repositories_shop import (
+    SqlEquipped,
+    SqlInventory,
+    SqlItems,
+    SqlPacks,
+    SqlPromos,
 )
 from progression_service.infrastructure.db.tables import (
     TABLES,
@@ -492,6 +500,12 @@ class SqlProgressionUnitOfWork:
     spins: SqlSpins
     boosts: SqlBoosts
     grants: SqlGrants
+    items: SqlItems
+    inventory: SqlInventory
+    equipped: SqlEquipped
+    promos: SqlPromos
+    packs: SqlPacks
+    avatars: SqlAvatars
 
     def __init__(
         self,
@@ -538,6 +552,12 @@ class SqlProgressionUnitOfWork:
         self.spins = SqlSpins(s)
         self.boosts = SqlBoosts(s)
         self.grants = SqlGrants(s)
+        self.items = SqlItems(s)
+        self.inventory = SqlInventory(s)
+        self.equipped = SqlEquipped(s)
+        self.promos = SqlPromos(s)
+        self.packs = SqlPacks(s)
+        self.avatars = SqlAvatars(s)
         return self
 
     async def __aexit__(

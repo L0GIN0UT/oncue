@@ -164,6 +164,7 @@ async def test_draft_publish_archives_previous_and_applies_to_new_events(
     progression: Service, make_config: Callable[..., dict[str, Any]]
 ) -> None:
     await progression.publish_config()
+    await progression.add_item("custom_avatar", slot="avatar", price=10)  # товар из конфига
     # без заданий (P2) в сумме Версов только начисление за раунды
     config = make_config(verses__solo_round=2, quests__daily_count=0, quests__weekly_count=0)
     saved = await call(progression, "PUT", "/admin/v1/configs/draft", {"config": config, **REASON})
@@ -254,6 +255,7 @@ async def test_rollback_makes_copy_a_draft(
     progression: Service, make_config: Callable[..., dict[str, Any]]
 ) -> None:
     await progression.publish_config()
+    await progression.add_item("custom_avatar", slot="avatar", price=10)
     saved = await call(
         progression,
         "PUT",
@@ -288,6 +290,7 @@ async def test_config_mutation_is_idempotent_and_audited(
     progression: Service, make_config: Callable[..., dict[str, Any]]
 ) -> None:
     await progression.publish_config()
+    await progression.add_item("custom_avatar", slot="avatar", price=10)
     saved = await call(
         progression, "PUT", "/admin/v1/configs/draft", {"config": make_config(), **REASON}
     )

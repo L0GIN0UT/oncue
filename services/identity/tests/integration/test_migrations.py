@@ -293,3 +293,38 @@ async def test_0013_seeds_progression_perms_for_admin_only_and_is_reversible(
     assert after["admin"] >= ONLINE_PERMS  # права 0008 откат не трогает
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["admin"] >= PROGRESSION_PERMS
+
+
+ECONOMY_PERMS = {
+    "progression.items.manage",
+    "progression.promo.manage",
+    "media.ugc.moderate",
+    "notifications.broadcast.send",
+}
+
+
+async def test_0014_seeds_economy_perms_moderator_gets_only_ugc_and_is_reversible(
+    database_url: str,
+) -> None:
+    """План этапа 5, §9.2: предметы, промокоды, рассылка - admin; UGC-модерация - и moderator."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= ECONOMY_PERMS
+    assert grants["admin"] >= ECONOMY_PERMS
+    assert grants["moderator"] & ECONOMY_PERMS == {"media.ugc.moderate"}
+    assert not grants.get("user", set()) & ECONOMY_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0013")
+    after = await _grants(database_url)
+    assert not after["*"] & ECONOMY_PERMS
+    assert after["admin"] >= PROGRESSION_PERMS  # права 0013 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= ECONOMY_PERMS

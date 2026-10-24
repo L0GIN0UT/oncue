@@ -249,6 +249,58 @@ collections_state = Table(
     CheckConstraint("version >= 1", name="version_positive"),
 )
 
+# UGC-изображения (5b, ADR 0048): аватарки. ``version`` - число решений модератора.
+# ``pending_key`` есть только у pending, ``public_key`` - только у approved.
+ugc_images = Table(
+    "ugc_images",
+    _md,
+    Column("id", Uuid, primary_key=True),
+    Column("owner_user_id", Uuid, nullable=False),
+    Column("purpose", String(64), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("reason_code", String(64), nullable=True),
+    Column("pending_key", String(64), nullable=True),
+    Column("public_key", String(64), nullable=True),
+    Column("width", Integer, nullable=False),
+    Column("height", Integer, nullable=False),
+    Column("bytes", Integer, nullable=False),
+    Column("sha256", String(64), nullable=False),
+    Column("submitted_at", DateTime(timezone=True), nullable=False),
+    Column("decided_at", DateTime(timezone=True), nullable=True),
+    Column("moderator_id", Uuid, nullable=True),
+    Column("version", Integer, nullable=False, server_default=text("0")),
+    CheckConstraint("status IN ('pending', 'approved', 'rejected')", name="status_valid"),
+    CheckConstraint("version >= 0", name="version_non_negative"),
+    CheckConstraint("width >= 1 AND height >= 1 AND bytes >= 1", name="dimensions_positive"),
+    CheckConstraint(
+        "(status = 'pending') = (pending_key IS NOT NULL)", name="pending_key_iff_pending"
+    ),
+    CheckConstraint(
+        "(status = 'approved') = (public_key IS NOT NULL)", name="public_key_iff_approved"
+    ),
+    CheckConstraint(
+        "pending_key IS NULL OR pending_key ~ '^p/[a-f0-9]{32}[.]webp$'", name="pending_key_shape"
+    ),
+    CheckConstraint(
+        "public_key IS NULL OR public_key ~ '^u/[a-f0-9]{32}[.]webp$'", name="public_key_shape"
+    ),
+    UniqueConstraint("pending_key"),
+    UniqueConstraint("public_key"),
+    Index("ix_ugc_images_queue", "status", "submitted_at", "id"),
+    Index("ix_ugc_images_owner_purpose_status", "owner_user_id", "purpose", "status"),
+)
+
+# Очередь гарантированного удаления объектов UGC: ключ пишется в транзакции решения, задача
+# relay ``media.ugc.purge`` удаляет объект из S3 до успеха и стирает строку.
+ugc_object_purge = Table(
+    "ugc_object_purge",
+    _md,
+    Column("key", String(64), primary_key=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("key ~ '^[pu]/[a-f0-9]{32}[.]webp$'", name="key_shape"),
+    Index("ix_ugc_object_purge_created_at", "created_at"),
+)
+
 # Ключи идемпотентности admin-мутаций (gv_db.idempotency): ключ и ответ пишутся в той же
 # транзакции, что и мутация.
 idempotency_keys = idempotency_table(_md)

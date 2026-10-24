@@ -226,7 +226,7 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     out = fill_secrets(template)
     values = dict(line.split("=", 1) for line in out.splitlines())
     clients = {c["client_id"]: c for c in json.loads(values["GV_SERVICE_CLIENTS"])}
-    assert set(clients) == {"game", "admin", "match"}
+    assert set(clients) == {"game", "admin", "match", "progression", "notifications"}
     assert clients["game"]["audiences"] == {"media_pipeline": ["assets.link"]}
     assert clients["admin"]["audiences"] == {"identity": ["admin_sessions"]}
     # Этап 4a §2.7: план раундов у game (D5) и ссылки ассетов у media_pipeline.
@@ -234,6 +234,9 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
         "game": ["rounds.plan"],
         "media_pipeline": ["assets.link"],
     }
+    # Этап 5b: progression -> media_pipeline (аватарки), notifications -> identity (адреса).
+    assert clients["progression"]["audiences"] == {"media_pipeline": ["ugc.image"]}
+    assert clients["notifications"]["audiences"] == {"identity": ["users.emails.read"]}
     secrets_seen = set()
     for client_id, client in clients.items():
         secret = values[service_secret_env(client_id)]
@@ -241,7 +244,7 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
         assert client["secret_sha256"] == hashlib.sha256(secret.encode()).hexdigest()
         assert secret not in values["GV_SERVICE_CLIENTS"]
         secrets_seen.add(secret)
-    assert len(secrets_seen) == 3
+    assert len(secrets_seen) == len(SERVICE_CLIENTS)  # у каждого клиента свой секрет
 
 
 def test_generated_compose_passes_service_credentials() -> None:
@@ -329,7 +332,15 @@ def test_public_origins_for_cookie_mutation_services() -> None:
     services = yaml.safe_load(rendered["infra/compose/compose.services.yml"])["services"]
     # match (этап 4a): команды комнат из браузера — мутации по cookie; без списка Origin
     # CSRF-проверка отклоняла бы их все (создание комнаты не работало на стеке).
-    for name in ("identity", "game", "collections", "library", "match", "progression"):
+    for name in (
+        "identity",
+        "game",
+        "collections",
+        "library",
+        "match",
+        "progression",
+        "notifications",
+    ):
         value = services[name]["environment"]["GV_PUBLIC_ORIGINS"]
         assert value.startswith("${GV_PUBLIC_ORIGINS:?"), name
     assert "GV_PUBLIC_ORIGINS" not in services["bff-web"]["environment"]  # только GET
@@ -350,7 +361,8 @@ class TestRealtime:
 
     def test_registry_flags(self) -> None:
         realtime = {s.name for s in load_services(ROOT) if s.realtime}
-        assert realtime == {"identity", "match"}  # rating — в 4b
+        # notifications (5b) публикует в личный канал `personal:#<user>`, токенов не выдаёт
+        assert realtime == {"identity", "match", "notifications"}
 
     def test_flag_defaults_to_false(self, tmp_path: Path) -> None:
         (service,) = load_services(_registry(tmp_path, '[services.a]\ndescription="x"\n'))
@@ -375,9 +387,14 @@ class TestRealtime:
             "${CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET:?"
         )
         assert "GV_REALTIME__CONNECTION_TOKEN_SECRET" not in match
+        # notifications публикует (ключ server API), но токенов не подписывает.
+        notifications = services["notifications"]["environment"]
+        assert notifications["GV_REALTIME__API_KEY"].startswith("${CENTRIFUGO_API_KEY:?")
+        assert "GV_REALTIME__CONNECTION_TOKEN_SECRET" not in notifications
+        assert "GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET" not in notifications
         # API-ключ — только у сервисов с realtime = true.
         for name, svc in services.items():
-            if name not in {"identity", "match"}:
+            if name not in {"identity", "match", "notifications"}:
                 env = svc.get("environment", {})
                 assert not any(k.startswith("GV_REALTIME__") for k in env), name
 
