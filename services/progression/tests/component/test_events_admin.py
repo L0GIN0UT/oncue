@@ -373,3 +373,45 @@ async def test_event_item_is_not_on_storefront_wheel_promo_or_pack(progression: 
         },
     )
     assert pack.status_code == 422
+
+
+async def test_run_period_must_be_timezone_aware(progression: Service) -> None:
+    await progression.publish_config()
+    await progression.create_event("autumn", body_of(progression))
+    now = progression.clock.now()
+    response = await progression.client.post(
+        "/admin/v1/events/autumn/runs",
+        headers=progression.admin(progression.ev.MANAGE),
+        json={
+            "starts_at": (now + timedelta(days=1)).replace(tzinfo=None).isoformat(),
+            "ends_at": (now + timedelta(days=2)).isoformat(),
+            **REASON,
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_run_cannot_start_in_the_past(progression: Service) -> None:
+    await progression.publish_config()
+    await progression.create_event("autumn", body_of(progression))
+    now = progression.clock.now()
+    late = await progression.client.post(
+        "/admin/v1/events/autumn/runs",
+        headers=progression.admin(progression.ev.MANAGE),
+        json={
+            "starts_at": (now - timedelta(minutes=5)).isoformat(),
+            "ends_at": (now + timedelta(days=2)).isoformat(),
+            **REASON,
+        },
+    )
+    assert_problem(late, 422, "progression.event_period_invalid")
+    fine = await progression.client.post(
+        "/admin/v1/events/autumn/runs",
+        headers=progression.admin(progression.ev.MANAGE),
+        json={
+            "starts_at": (now - timedelta(seconds=30)).isoformat(),
+            "ends_at": (now + timedelta(days=2)).isoformat(),
+            **REASON,
+        },
+    )
+    assert fine.status_code == 201

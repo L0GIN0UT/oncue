@@ -149,11 +149,15 @@ class SqlEvents:
         )
         return _with_seq(run, seq)
 
-    async def get_run(self, run_id: UUID, *, for_update: bool = False) -> RunRow | None:
-        """Запуск по id."""
+    async def get_run(
+        self, run_id: UUID, *, for_update: bool = False, for_share: bool = False
+    ) -> RunRow | None:
+        """Запуск по id (``for_share`` - держит строку от остановки до конца транзакции)."""
         stmt = _runs_query().where(event_runs.c.id == run_id)
         if for_update:
             stmt = stmt.with_for_update(of=event_runs)
+        elif for_share:
+            stmt = stmt.with_for_update(read=True, of=event_runs)
         row = (await self._s.execute(stmt)).first()
         return None if row is None else _run(row)
 

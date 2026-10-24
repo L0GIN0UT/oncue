@@ -157,8 +157,11 @@ async def _complete(uow: ProgressionUnitOfWork, state: PlayerRun, now: datetime)
     key = state.definition.item_key
     if key is not None:
         item = await uow.items.get_by_key(key)
-        if item is None:
+        # Предмет могли снять или переназначить после публикации: тогда не выдаём, но закрываем.
+        if item is None or not item.active or item.event_key != run.event_key:
             log.error("progression.event_item_missing", event_key=run.event_key, item_key=key)
+            await uow.grants.add(user, REWARD_REASON, complete_op_id(run.id, user), key, now)
+            key = None
         else:
             # Дубль предмета (уже есть) - не повторная выдача: ON CONFLICT DO NOTHING.
             await uow.inventory.add(InventoryItem(user, item.id, Source.EVENT, now, None, None))

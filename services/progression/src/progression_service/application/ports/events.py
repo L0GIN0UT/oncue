@@ -97,8 +97,10 @@ class EventRepository(Protocol):
         """Добавить запуск; ``seq`` назначается репозиторием (следующий в событии)."""
         ...
 
-    async def get_run(self, run_id: UUID, *, for_update: bool = False) -> RunRow | None:
-        """Запуск по id."""
+    async def get_run(
+        self, run_id: UUID, *, for_update: bool = False, for_share: bool = False
+    ) -> RunRow | None:
+        """Запуск по id (``for_share`` - держит строку от остановки до конца транзакции)."""
         ...
 
     async def save_run(self, run: RunRow) -> None:

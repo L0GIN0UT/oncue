@@ -7,6 +7,9 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from progression_service.application.accrual.posting import Poster
+from sqlalchemy import text
+from structlog.testing import capture_logs
 
 from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
@@ -412,3 +415,86 @@ async def test_stopped_run_is_not_finished_again_by_tick(progression: Service) -
     progression.clock.advance(days=30)
     await progression.run_job("progression.events.tick")
     assert len(await progression.outbox("progression.EventRunFinished")) == 1
+
+
+async def test_item_deactivated_after_publish_is_not_granted_but_event_completes(
+    progression: Service,
+) -> None:
+    ev = progression.ev
+    await start_event(
+        progression, ev.find("a", 1), ev.find("fin", 2, final=True), item="autumn_frame"
+    )
+    assert progression.infra.sessions is not None
+    async with progression.infra.sessions() as session, session.begin():
+        await session.execute(text("UPDATE items SET active = false WHERE key = 'autumn_frame'"))
+    user = uuid7()
+    await progression.claim(user, KEY, "a")
+    with capture_logs() as logs:
+        final = (await progression.claim(user, KEY, "fin")).json()
+
+    assert final["completed"] is True
+    assert await progression.rows("inventory", user) == []
+    (grant,) = await progression.rows("grants_log", user)
+    assert grant.item_key == "autumn_frame"
+    assert any(
+        e["event"] == "progression.event_item_missing" and e["log_level"] == "error" for e in logs
+    )
+    (completed,) = await progression.outbox("progression.EventCompleted")
+    assert completed.payload["item_key"] is None
+    assert len(await progression.rows("event_completions", user)) == 1
+
+
+async def test_item_moved_to_another_event_is_not_granted(progression: Service) -> None:
+    ev = progression.ev
+    await start_event(
+        progression, ev.find("a", 1), ev.find("fin", 2, final=True), item="autumn_frame"
+    )
+    assert progression.infra.sessions is not None
+    async with progression.infra.sessions() as session, session.begin():
+        await session.execute(
+            text("UPDATE items SET event_key = 'winter' WHERE key = 'autumn_frame'")
+        )
+    user = uuid7()
+    await progression.claim(user, KEY, "a")
+    assert (await progression.claim(user, KEY, "fin")).json()["completed"] is True
+    assert await progression.rows("inventory", user) == []
+
+
+async def test_claim_after_stop_in_flight_gives_no_reward(
+    progression: Service, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ev = progression.ev
+    run = await start_event(progression, ev.find("leaf", 1), ev.find("fin", 2, final=True))
+    original = Poster.lock_user
+
+    async def stop_then_lock(self: Poster, user_id: UUID) -> Any:
+        # остановка успевает закоммититься между чтением запуска и блокировкой игрока
+        stopped = await progression.client.post(
+            f"/admin/v1/events/{KEY}/runs/{run}/stop",
+            headers=progression.admin(ev.PUBLISH),
+            json={"reason": "тест остановки"},
+        )
+        assert stopped.status_code == 200, stopped.text
+        return await original(self, user_id)
+
+    monkeypatch.setattr(Poster, "lock_user", stop_then_lock)
+    user = uuid7()
+    response = await progression.claim(user, KEY, "leaf")
+    assert_problem(response, 409, "progression.event_not_active")
+    assert await progression.xp_rows(user) == 0
+    assert await progression.rows("event_find_progress", user) == []
+
+
+async def test_claim_of_not_yet_started_event_is_404(progression: Service) -> None:
+    ev = progression.ev
+    await progression.publish_config(at=progression.clock.now() - timedelta(days=60))
+    await progression.publish_event(
+        KEY,
+        ev.body(ev.find("leaf", 1), ev.find("fin", 2, final=True)),
+        starts_at=progression.clock.now() + timedelta(days=1),
+        ends_at=progression.clock.now() + timedelta(days=5),
+    )
+    user = uuid7()
+    assert_problem(await progression.claim(user, KEY, "leaf"), 404, "progression.event_not_found")
+    page_response = await progression.get(f"/v1/events/{KEY}", user)
+    assert_problem(page_response, 404, "progression.event_not_found")

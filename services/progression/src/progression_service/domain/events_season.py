@@ -393,11 +393,11 @@ class FindState(StrEnum):
     FOUND = "found"
 
 
-def find_state(find: FindDef, unlocked: Collection[str], total: int) -> FindState:
+def find_state(find: FindDef, unlocked: Collection[str], definition: Definition) -> FindState:
     """Найдена; закрыта (финальная, пока не открыты остальные); иначе открыта."""
     if find.key in unlocked:
         return FindState.FOUND
-    if find.final and len(set(unlocked)) < total - 1:
+    if find.final and not others_done(definition, unlocked):
         return FindState.LOCKED
     return FindState.OPEN
 

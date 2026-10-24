@@ -213,13 +213,13 @@ def test_advance_counter_adds_and_level_takes_max_both_capped() -> None:
 def test_final_find_is_locked_until_others_unlocked() -> None:
     definition = parse_definition(sample())
     a, b, z = definition.finds
-    assert find_state(a, set(), 3) is FindState.OPEN
-    assert find_state(z, {"a"}, 3) is FindState.LOCKED
+    assert find_state(a, set(), definition) is FindState.OPEN
+    assert find_state(z, {"a"}, definition) is FindState.LOCKED
     assert not others_done(definition, {"a"})
     assert others_done(definition, {"a", "b"})
-    assert find_state(z, {"a", "b"}, 3) is FindState.OPEN
-    assert find_state(z, {"a", "b", "z"}, 3) is FindState.FOUND
-    assert find_state(b, {"b"}, 3) is FindState.FOUND
+    assert find_state(z, {"a", "b"}, definition) is FindState.OPEN
+    assert find_state(z, {"a", "b", "z"}, definition) is FindState.FOUND
+    assert find_state(b, {"b"}, definition) is FindState.FOUND
 
 
 @given(

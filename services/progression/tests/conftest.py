@@ -556,12 +556,25 @@ class ProgressionService:
             assert created.status_code == 201, created.text
         starts = starts_at or self.clock.now() - timedelta(days=1)
         ends = ends_at or self.clock.now() + timedelta(days=7)
+        now = self.clock.now()
+        backdated = starts < now - timedelta(seconds=30)  # API не создаёт запуск «задним числом»
         run = await self.client.post(
             f"/admin/v1/events/{key}/runs",
             headers=self.admin(EVENTS_MANAGE),
-            json={"starts_at": starts.isoformat(), "ends_at": ends.isoformat(), "reason": "тест"},
+            json={
+                "starts_at": (now if backdated else starts).isoformat(),
+                "ends_at": ends.isoformat(),
+                "reason": "тест",
+            },
         )
         assert run.status_code == 201, run.text
+        if backdated:
+            assert self.infra.sessions is not None
+            async with self.infra.sessions() as session, session.begin():
+                await session.execute(
+                    text("UPDATE event_runs SET starts_at = :s WHERE id = :i"),
+                    {"s": starts, "i": UUID(run.json()["id"])},
+                )
         event = await self.client.get(f"/admin/v1/events/{key}", headers=self.admin(EVENTS_MANAGE))
         published = await self.client.post(
             f"/admin/v1/events/{key}/runs/{run.json()['id']}/publish",

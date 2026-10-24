@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from gv_service import Reason
 from progression_service.api.public.events_schemas import EventKey, RunStatus, ThemeKey
@@ -135,8 +135,8 @@ class UpdateEventRequest(_Strict):
 class CreateRunRequest(_Strict):
     """Новый запуск (и перезапуск) события: черновик с периодом."""
 
-    starts_at: datetime
-    ends_at: datetime
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
     reason: Reason
 
 

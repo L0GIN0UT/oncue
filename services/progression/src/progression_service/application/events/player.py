@@ -69,21 +69,21 @@ def _find_json(
     state: FindState,
     player: PlayerRun,
     day: date,
-    *,
-    hide_progress: bool = False,
 ) -> Json:
     trigger = find.trigger
     progress: int | None = None
-    if trigger.type == SERVER and not hide_progress and state is not FindState.LOCKED:
+    if trigger.type == SERVER and state is not FindState.LOCKED:
         progress = (
             trigger.target
             if state is FindState.FOUND
             else player.progress_of(find.key, trigger.period_key(day))
         )
-    found_at = None
-    for (key, _), row in player.rows.items():
-        if key == find.key and row.unlocked_at is not None:
-            found_at = _iso(row.unlocked_at)
+    unlocked_at = [
+        row.unlocked_at
+        for (key, _), row in player.rows.items()
+        if key == find.key and row.unlocked_at is not None
+    ]
+    found_at = _iso(max(unlocked_at)) if unlocked_at else None
     return {
         "key": find.key,
         "number": find.number,
@@ -161,7 +161,7 @@ class EventPlayerService:
             day = now.astimezone(await _tz(uow)).date()
             reward_item = await self._reward_item(uow, definition)
         finds = [
-            _find_json(f, find_state(f, player.unlocked, definition.total), player, day)
+            _find_json(f, find_state(f, player.unlocked, definition), player, day)
             for f in definition.finds
         ]
         status = run_status(run.status, run.starts_at, run.ends_at, now)
@@ -223,7 +223,13 @@ class EventPlayerService:
             now = self._clock.now()
             run = await uow.events.active_at(now)
             if run is None or run.event_key != key or run.snapshot is None:
-                if await uow.events.runs_for_key(key):
+                # Как страница: событие без начавшегося запуска для игрока не существует.
+                started = (
+                    run_status(r.status, r.starts_at, r.ends_at, now)
+                    for r in await uow.events.runs_for_key(key)
+                    if r.snapshot is not None
+                )
+                if any(s is not RunStatus.PUBLISHED for s in started):
                     raise EventNotActiveError
                 raise EventNotFoundError
             definition = _definition(run)
@@ -235,6 +241,7 @@ class EventPlayerService:
             published = await published_config(uow)
             poster = Poster(uow, published, now)
             await poster.lock_user(user_id)  # сериализует клики одного игрока
+            run = await self._still_active(uow, run, now)
             player = await PlayerRun.load(uow, run, definition, user_id)
             newly = False
             if find.key not in player.unlocked:
@@ -243,8 +250,8 @@ class EventPlayerService:
                 newly = await unlock_find(uow, poster, player, find, "event", 1, now)
             completed = await uow.events.is_completed(run.id, user_id)
             await uow.commit()
-            day = now.astimezone(published.config.tz).date()
-        state = find_state(find, player.unlocked, definition.total)
+            day = now.astimezone(await _tz(uow)).date()
+        state = find_state(find, player.unlocked, definition)
         return {
             "find": _find_json(find, state, player, day),
             "found": len(player.unlocked),
@@ -252,6 +259,16 @@ class EventPlayerService:
             "completed": completed,
             "newly_unlocked": newly,
         }
+
+    @staticmethod
+    async def _still_active(uow: ProgressionUnitOfWork, run: RunRow, now: datetime) -> RunRow:
+        """Перечитать запуск под ``FOR SHARE``: остановка после блокировки игрока не пройдёт."""
+        fresh = await uow.events.get_run(run.id, for_share=True)
+        if fresh is None or run_status(fresh.status, fresh.starts_at, fresh.ends_at, now) is not (
+            RunStatus.ACTIVE
+        ):
+            raise EventNotActiveError
+        return fresh
 
     @staticmethod
     async def _visible_run(uow: ProgressionUnitOfWork, key: str, now: datetime) -> RunRow:

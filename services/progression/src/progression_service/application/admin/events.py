@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -47,6 +47,9 @@ from progression_service.domain.events_season import (
 from progression_service.domain.shop import MediaKind
 
 log = structlog.get_logger(__name__)
+
+# Допуск на расхождение часов браузера админа и сервера при создании запуска.
+START_GRACE = timedelta(minutes=1)
 
 
 class EventMapInvalidError(InvalidInputError):
@@ -276,6 +279,8 @@ class EventAdminCommands:
                 raise EventPeriodInvalidError("конец периода должен быть позже начала")
             if ends_at <= now:
                 raise EventPeriodInvalidError("период уже закончился")
+            if starts_at < now - START_GRACE:
+                raise EventPeriodInvalidError("начало периода в прошлом")
             draft = RunRow(
                 uuid7(), event.id, key, 0, RunStatus.DRAFT, starts_at, ends_at, None, None, None,
                 None, ctx.actor_id, now,
