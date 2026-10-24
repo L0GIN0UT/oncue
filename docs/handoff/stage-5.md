@@ -76,7 +76,7 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 - **Y** (`stage5b/y-notif-reasons`): `lookups` в конфиге типов (код причины → текст, fallback «не прошла модерацию»), `HttpEmailDirectory` поверх ручки X, контракт `contracts/realtime/notification.created.v1.json`. Коды причин: `inappropriate`, `copyright`, `low_quality`, `personal_data`, `other` — их обязан использовать media-pipeline (S3).
 - **Z** (`stage5b/z-promo-caps`): `promo.max_daily_verses_per_actor` и `promo.max_daily_verses_total` (обязательны в секции `promo`; порядок `max_batch ≤ actor ≤ total` проверяет домен), 422 `progression.promo_actor_daily_cap_exceeded|promo_total_daily_cap_exceeded`, отозванные партии входят в сумму. **Требуется ручная проверка владельцем** (валюта).
 - **0a.3:** в `AssetModerated` добавлено обязательное `public_key` (`u/<hex>.webp` у одобренного, `null` у отклонённого). Проверка `custom_avatar_item_key` при публикации конфига — в S3.
-- compose: ключи HMAC (`GV_PROGRESSION__PROMO_HMAC_KEY`, `GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY`, генерируются `gv dev secrets`), `GV_PUBLIC_BASE_URL`, сервисные клиенты `progression → media_pipeline[ugc.image]` и `notifications → identity[users.emails.read]`.
+- compose: ключ HMAC промокодов (`GV_PROGRESSION__PROMO_HMAC_KEY`, генерируется `gv dev secrets`; ключа HMAC отписки больше нет — токены непрозрачные), `GV_PUBLIC_BASE_URL`, сервисные клиенты `progression → media_pipeline[ugc.image]` и `notifications → identity[users.emails.read]`.
 - Тесты на слитом дереве: identity 432, notifications 225, bff_web 255, progression 659, tools/gv 157; media_pipeline — те же падения Windows, что и на `main`.
 - Хвост: ADR 0047 допишется описанием `lookups` при принятии (сейчас черновик).
 

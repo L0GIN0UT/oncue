@@ -688,8 +688,8 @@ services:
       GV_REALTIME__API_KEY: ${CENTRIFUGO_API_KEY:?задайте CENTRIFUGO_API_KEY}
       # Секрет токенов Centrifugo — свой у каждого сервиса (D9).
       GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
-      # Ключ HMAC ссылок отписки (ADR 0047): один на api и worker, иначе ссылка из письма не пройдёт проверку.
-      GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY: ${GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY:?задайте GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY}
+      # Токены отписки непрозрачные (в БД только sha256), ключа HMAC больше нет (ADR 0047, 0048).
+      GV_NOTIFICATIONS__UNSUBSCRIBE_TTL_DAYS: ${GV_NOTIFICATIONS__UNSUBSCRIBE_TTL_DAYS:-90}
       GV_NOTIFICATIONS__PUBLIC_BASE_URL: ${GV_PUBLIC_BASE_URL:-https://localhost}
       GV_NOTIFICATIONS__EMAIL_BACKEND: ${GV_NOTIFICATIONS__EMAIL_BACKEND:-smtp}
       GV_NOTIFICATIONS__SMTP__HOST: ${GV_SMTP__HOST:-localhost}

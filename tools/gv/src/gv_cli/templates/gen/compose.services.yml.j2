@@ -176,8 +176,8 @@ services:
       GV_PROGRESSION__UGC_BASE_URL: ${GV_PROGRESSION__UGC_BASE_URL:-/ugc/}
 {% endif %}
 {% if s.name == "notifications" %}
-      # Ключ HMAC ссылок отписки (ADR 0047): один на api и worker, иначе ссылка из письма не пройдёт проверку.
-      GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY: ${GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY:?задайте GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY}
+      # Токены отписки непрозрачные (в БД только sha256), ключа HMAC больше нет (ADR 0047, 0048).
+      GV_NOTIFICATIONS__UNSUBSCRIBE_TTL_DAYS: ${GV_NOTIFICATIONS__UNSUBSCRIBE_TTL_DAYS:-90}
       GV_NOTIFICATIONS__PUBLIC_BASE_URL: ${GV_PUBLIC_BASE_URL:-https://localhost}
       GV_NOTIFICATIONS__EMAIL_BACKEND: ${GV_NOTIFICATIONS__EMAIL_BACKEND:-smtp}
       GV_NOTIFICATIONS__SMTP__HOST: ${GV_SMTP__HOST:-localhost}

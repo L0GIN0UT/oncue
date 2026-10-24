@@ -12,5 +12,8 @@
 | Своя аватарка в `me/appearance` | progression, bff | Поля `custom_avatar_url` нет в `Appearance`; bff в 5b собирает аватар из `/v1/appearance?user_ids=` и `/v1/me/avatar`. Добавление в общую модель дублирует `PlayerAppearance.custom_avatar_url`, поэтому убрать дубль одним изменением контракта |
 | Включение и выключение типов уведомлений через admin-API | notifications | Сами типы, шаблоны и маппинг остаются файловым конфигом (решение владельца 2026-10-23) |
 | Вынос отправки почты в `libs/` | identity, notifications | `SmtpEmailSender`, `LogEmailSender`, `BackgroundEmailSender` сейчас продублированы |
+| Ник в странице профиля игрока | bff, progression, frontend | В `/pages/players/{id}` нет `nickname`: `PlayerBadge` показывает «Игрок». Нужен ник в контракте bff (источник — identity или публичный профиль) |
+| Рефакторинг фронтенда перед релизом | frontend | Токены темы, eslint-запрет на литералы цвета и тест контраста (поток S5-front 5b) — задел под рефакторинг: свести компоненты к токенам полностью, проверить светлую тему (этап 7), убрать остатки вне `src/styles` |
+| Content-Type у one-click отписки | notifications | `POST /v1/unsubscribe/one-click`: RFC 8058 требует `application/x-www-form-urlencoded`; сейчас тело разбирается при любом типе (безопасности не вредит) |
 | Анонимное чтение `p/*` в S3 | media_pipeline | Принятый риск (ключ 128 бит, S3 во внутренней сети); при случае перейти на presigned-ссылки gateway |
 | Цвет аватарки: 16-битные и CMYK | media_pipeline | `convert("RGB")` обрезает `I;16` и даёт сдвиг цвета у CMYK без ICC: нормализовать или отказывать |
