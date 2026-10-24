@@ -1,0 +1,100 @@
+# Сид сезонного события «Новый год» (5d, ADR 0054-0056). Грузит `gv dev seed` через
+# admin-API progression (POST/PUT /admin/v1/events). Только определение: периода и статуса
+# нет - запуск (event_runs) владелец создаёт и публикует в админке в декабре, до того
+# событие остаётся без запусков. Тело `body` - по contracts/progression/event_definition.v1.json.
+# map_image - необязательный путь к картинке карты (PNG/WebP) относительно этой папки;
+# нет файла - карта не загружается.
+key: new_year_2026
+map_image: new_year_2026.webp
+body:
+  title: Новогодняя экспедиция
+  description: >-
+    Зима пришла в Guessverse: по сайту разбросаны семь новогодних находок.
+    Играйте, выигрывайте дуэли и заглядывайте в укромные уголки -
+    за все семь вас ждёт зимняя рамка.
+  theme_key: winter
+  finds:
+    - key: first_snow
+      number: 1
+      title: Первый снег
+      diary_before: Говорят, снег выпадает тем, кто не пропускает ежедневную загадку.
+      diary_after: Снежинки легли на подоконник - ежедневная загадка разгадана, первый след найден.
+      x_pct: 12
+      y_pct: 70
+      reward: {xp: 30, verses: 5}
+      final: false
+      play_page: daily
+      trigger: {type: server, metric: daily_completed, target: 1, period: day}
+    - key: duel_icicle
+      number: 2
+      title: Ледяная сосулька
+      diary_before: Сосулька блестит там, где решаются дуэли. Победите соперника один на один.
+      diary_after: Сосулька упала к ногам победителя - дуэль выиграна.
+      x_pct: 31
+      y_pct: 22
+      reward: {xp: 50, verses: 10}
+      final: false
+      play_page: online
+      trigger: {type: server, metric: duel_win, target: 1, period: event}
+    - key: gift_collection
+      number: 3
+      title: Подарок из сборника
+      diary_before: Под ёлкой лежит сборник. Сыграйте в любой сборник, чтобы развернуть подарок.
+      diary_after: Подарок развёрнут - в сборнике нашлась блестящая игрушка.
+      x_pct: 52
+      y_pct: 58
+      reward: {xp: 50, verses: 10}
+      final: false
+      play_page: collections
+      trigger: {type: server, metric: collection_played, target: 1, period: event}
+    - key: frosty_frame
+      number: 4
+      title: Морозная рамка
+      diary_before: Узор мороза рисуется на рамке. Наденьте любую рамку профиля.
+      diary_after: Мороз лёг на вашу рамку - узор получился на славу.
+      x_pct: 74
+      y_pct: 35
+      reward: {xp: 60, verses: 10}
+      final: false
+      play_page: shop
+      trigger:
+        type: server
+        metric: item_equipped
+        target: 1
+        period: event
+        params: {slot: frame}
+    - key: lucky_wheel
+      number: 5
+      title: Колесо удачи
+      diary_before: Новогоднее колесо крутится три дня подряд - не пропустите ни одного.
+      diary_after: Три дня подряд колесо вращалось для вас - праздничная удача на вашей стороне.
+      x_pct: 88
+      y_pct: 72
+      reward: {xp: 100, verses: 20}
+      final: false
+      play_page: wheel
+      trigger: {type: server, metric: wheel_spin_streak, target: 3, period: event}
+    - key: top_garland
+      number: 6
+      title: Гирлянда на вершине
+      diary_before: Гирлянда зажигается на самом верху таблицы лидеров. Загляните туда.
+      diary_after: Гирлянда замигала над рейтингом - след найден среди лидеров.
+      x_pct: 18
+      y_pct: 42
+      reward: {xp: 40, verses: 5}
+      final: false
+      play_page: leaderboards
+      trigger: {type: ui_spot, page_key: leaderboards}
+    - key: star_on_top
+      number: 7
+      title: Звезда на макушке
+      diary_before: Звезда ещё не зажглась - сначала найдите все остальные новогодние следы.
+      diary_after: Звезда засияла на макушке ёлки - экспедиция завершена, с Новым годом!
+      x_pct: 60
+      y_pct: 8
+      reward: {xp: 100, verses: 20}
+      final: true
+      play_page: home
+      trigger: {type: ui_spot, page_key: home}
+  reward:
+    item_key: frame_snowfall

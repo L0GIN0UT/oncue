@@ -97,6 +97,7 @@ INSTALLED_APPS = [
     "admin_service.apps.rating",
     "admin_service.apps.progression",
     "admin_service.apps.shop",
+    "admin_service.apps.events",
     "admin_service.apps.ugc",
     "admin_service.apps.notifications",
     "admin_service.apps.social",

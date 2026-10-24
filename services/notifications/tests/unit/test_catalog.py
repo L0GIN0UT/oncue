@@ -37,6 +37,9 @@ def test_builtin_config_loads_all_types_of_stage_5c() -> None:
         "room_invite",
         "report_resolved",
         "comment_on_my_collection",
+        "find_unlocked",
+        "event_completed",
+        "event_started",
     }
     assert catalog.default_locale == "ru"
 
@@ -65,6 +68,9 @@ def test_topics_follow_source_events() -> None:
             "social.RoomInviteSent",
             "social.ReportResolved",
             "social.CommentPosted",
+            "progression.FindUnlocked",
+            "progression.EventCompleted",
+            "progression.EventRunStarted",
         }
     )
 
@@ -191,4 +197,14 @@ def test_lookup_code_must_be_snake_case(document: dict[str, Any]) -> None:
 def test_placeholder_not_in_params_or_lookups_is_still_error(document: dict[str, Any]) -> None:
     _avatar_rejected(document)["templates"]["ru"]["body"] = "Аватарка {why}."
     with pytest.raises(ConfigError, match="why"):
+        TypeCatalog.parse(document)
+
+
+def test_type_needs_exactly_one_of_recipient_and_audience(document: dict[str, Any]) -> None:
+    started = next(t for t in document["types"] if t["key"] == "event_started")
+    started["recipient"] = "payload.user_id"
+    with pytest.raises(ConfigError, match="ровно один"):
+        TypeCatalog.parse(document)
+    del started["recipient"], started["audience"]
+    with pytest.raises(ConfigError, match="ровно один"):
         TypeCatalog.parse(document)

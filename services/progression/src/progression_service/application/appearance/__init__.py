@@ -8,10 +8,13 @@ from datetime import datetime
 from uuid import UUID
 
 from gv_core.clock import Clock
+from progression_service.application.accrual.posting import Poster
+from progression_service.application.events.progress import apply_metric_updates
 from progression_service.application.inventory import shop_config, unlock_by_level
 from progression_service.application.ports import ProgressionUnitOfWork, UnitOfWorkFactory
-from progression_service.domain import appearance
+from progression_service.domain import appearance, metrics
 from progression_service.domain.events import ItemEquipped
+from progression_service.domain.metrics import MetricUpdate
 from progression_service.domain.shop import Item
 
 
@@ -83,9 +86,22 @@ class AppearanceService:
                 await uow.equipped.put(user_id, slot, item.id, now)
                 worn[slot] = item.id
                 self._publish(uow, user_id, slot, item, now)
+                await self._event_progress(uow, user_id, slot, item, now)
             views = await _views(uow, slots, worn)
             await uow.commit()
         return views
+
+    @staticmethod
+    async def _event_progress(
+        uow: ProgressionUnitOfWork, user_id: UUID, slot: str, item: Item, now: datetime
+    ) -> None:
+        """Надетый предмет двигает находки событий ``item_equipped`` (ADR 0055)."""
+        published = await uow.configs.published()
+        if published is None:
+            return
+        update = MetricUpdate(metrics.ITEM_EQUIPPED, 1, slot=slot, item_key=item.key)
+        poster = Poster(uow, published, now)
+        await apply_metric_updates(uow, published, poster, user_id, now, [update], now)
 
     @staticmethod
     def _publish(

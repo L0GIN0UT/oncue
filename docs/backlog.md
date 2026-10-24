@@ -69,6 +69,11 @@
 | Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
 | Иерархия модераторов: сейчас модератор с `social.sanctions.manage` может санкционировать admin; запрет санкций выше своей роли | social, identity | ADR 0052 (решение владельца) | По решению владельца |
 | Фронт шумит: presence с каждой вкладки, `unread-count` и shell отдельными запросами (e2e упёрлись в лимиты gateway по IP, PR #30); свести в `/pages/shell` и один presence на браузер (лидер через `BroadcastChannel`) | frontend, bff | CI e2e, PR #30 | До релиза |
+| `e2e/ranked.spec.ts` «очередь: второй игрок находит матч» нестабилен на CI (`queue-found` не появляется за 10 с, проходит на retry): сделать heartbeat в моке детерминированным или поднять `TICK_WAIT` | e2e | CI, PR #30 | Низкий |
+| Теги сборника в `game.GameFinished`: `collection_played` в событиях 5d считает любую сессию по сборнику, фильтра по тегу нет | game, progression | 5d | По решению владельца |
+| Полная аудитория `event_started`: identity отдаёт список пользователей (сейчас — игроки, известные notifications); остановка рассылки при досрочном `stop` запуска; настройки пачки одним запросом; `UserDeleted` в notifications | identity, notifications | 5d | До релиза |
+| `EXCLUDE USING gist` по `tstzrange` запусков событий (сейчас только advisory-lock и проверка в транзакции) | progression | 5d | По желанию |
+| Редактор находок формой в админке (сейчас YAML/JSON с превью точек); файл карты «Нового года» в сидах | admin, seeds | 5d | По желанию |
 | Лаг идентичности: решение о доступе по claim токена (≤ 15 мин) и проекциям разных сервисов расходится на время доставки событий | identity, match, social | ADR 0052 | Принятый риск |
 
 ## 2. Продуктовые идеи владельца

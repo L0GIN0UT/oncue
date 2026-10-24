@@ -5,7 +5,7 @@
  */
 
 /** Ключи тем, наборы которых есть во фронтенде. */
-export const THEME_KEYS = ["default"] as const;
+export const THEME_KEYS = ["default", "winter"] as const;
 
 export type ThemeKey = (typeof THEME_KEYS)[number];
 
@@ -17,6 +17,7 @@ export const DEFAULT_THEME_KEY: ThemeKey = "default";
  */
 export const THEME_META: Record<ThemeKey, { themeColor: string }> = {
   default: { themeColor: "#16112a" },
+  winter: { themeColor: "#0e1a2b" },
 };
 
 const KNOWN = new Set<string>(THEME_KEYS);

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from gv_messaging import EventEnvelope
 from gv_messaging.ports import PermanentError
 from progression_service.application.accrual.match import FinishedMatch
-from progression_service.application.accrual.rating_rewards import SeasonStandings
+from progression_service.application.accrual.rating_rewards import SeasonStandings, WeeklyTop
 from progression_service.application.quests.tracker import (
     CollectionDone,
     DailyDone,
@@ -73,6 +73,10 @@ class RewardHandlers:
     ) -> None:
         """Онлайн-матч и победы игроков."""
         await self._tracker(session).on_match_finished(match, domain)
+
+    async def weekly_top(self, top: WeeklyTop, session: AsyncSession) -> None:
+        """Место игроков в топе недели (триггеры находок событий)."""
+        await self._tracker(session).on_weekly_top(top)
 
     async def season_standings(self, standings: SeasonStandings, session: AsyncSession) -> None:
         """Звание сезона игрокам пачки."""

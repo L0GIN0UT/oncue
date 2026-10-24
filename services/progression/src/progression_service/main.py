@@ -28,6 +28,7 @@ def build_routers(infra: Infrastructure) -> list[APIRouter]:
         wheel=c.wheel,
         admin=c.admin,
         shop=c.shop_services,
+        events=c.event_player,
     )
 
 

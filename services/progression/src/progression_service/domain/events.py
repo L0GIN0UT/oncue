@@ -195,3 +195,60 @@ class PromoRedeemed(DomainEvent):
     item_key: str | None
     op_id: str
     at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class EventRunStarted(DomainEvent):
+    """Запуск сезонного события стал активным (``aggregate_id`` - ``run_id``)."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    run_id: UUID
+    event_key: str
+    title: str
+    theme_key: str
+    starts_at: datetime
+    ends_at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class EventRunFinished(DomainEvent):
+    """Запуск закончился по времени (``ended``) или остановлен админом (``stopped``)."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    run_id: UUID
+    event_key: str
+    reason: str
+    at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class FindUnlocked(DomainEvent):
+    """Игрок открыл находку события; награда находки выдана."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    run_id: UUID
+    event_key: str
+    user_id: UUID
+    find_key: str
+    find_title: str
+    found: int
+    total: int
+    reward: RewardPayload
+    at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class EventCompleted(DomainEvent):
+    """Игрок закрыл все находки; основная награда выдана."""
+
+    aggregate_type: ClassVar[str] = PROGRESSION_AGGREGATE
+
+    run_id: UUID
+    event_key: str
+    event_title: str
+    user_id: UUID
+    item_key: str | None
+    at: datetime

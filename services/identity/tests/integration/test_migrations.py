@@ -416,3 +416,29 @@ async def test_0018_leaves_publish_to_admin_only_and_is_reversible(database_url:
     assert "social.config.publish" in (await _grants(database_url))["moderator"]
     await asyncio.to_thread(command.upgrade, config, "head")
     assert "social.config.publish" not in (await _grants(database_url))["moderator"]
+
+
+EVENTS_PERMS = {"progression.events.manage", "progression.events.publish"}
+
+
+async def test_0019_seeds_events_perms_for_admin_only_and_is_reversible(database_url: str) -> None:
+    """Права событий 5d: только admin (moderator и игрок - нет); откат убирает строки."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= EVENTS_PERMS
+    assert grants["admin"] >= EVENTS_PERMS
+    assert not grants.get("moderator", set()) & EVENTS_PERMS
+    assert not grants.get("user", set()) & EVENTS_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0018")
+    assert not (await _grants(database_url))["*"] & EVENTS_PERMS
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= EVENTS_PERMS

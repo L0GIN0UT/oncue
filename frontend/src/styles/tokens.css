@@ -8,6 +8,7 @@
  * Подключая новую тему, добавьте файл, `@import` ниже и ключ в `THEME_KEYS` (проверяет тест).
  */
 @import "./themes/default.css";
+@import "./themes/winter.css";
 
 @theme {
     --font-sans: "Onest Variable", ui-sans-serif, system-ui, sans-serif;

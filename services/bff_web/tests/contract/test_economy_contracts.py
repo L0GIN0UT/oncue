@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from functools import cache
 from typing import Any
 from uuid import UUID
@@ -14,9 +15,17 @@ from uuid import UUID
 import httpx
 import pytest
 import respx
-from bff_web_service.api.public.schemas import PlayerPage, ProfilePage, ShellPage, ShopPage
+from bff_web_service.api.public.schemas import (
+    EventPageView,
+    PlayerPage,
+    ProfilePage,
+    ShellPage,
+    ShopPage,
+)
 from bff_web_service.application.dto import SubjectKind, Viewer
 from bff_web_service.application.queries import (
+    EventsContext,
+    GetEventPage,
     GetPlayerPage,
     GetProfilePage,
     GetShellPage,
@@ -101,6 +110,88 @@ SAMPLES: dict[tuple[str, str], Any] = {
         ]
     },
     ("notifications", "/v1/notifications/unread-count"): {"count": 4},
+    ("progression", "/v1/events/active"): {
+        "event": {
+            "run_id": str(UUID(int=5)),
+            "key": "winter",
+            "title": "Зимняя охота",
+            "theme_key": "winter",
+            "starts_at": "2026-12-01T00:00:00Z",
+            "ends_at": "2026-12-31T00:00:00Z",
+        }
+    },
+    ("progression", "/v1/me/events"): {
+        "items": [
+            {
+                "key": "autumn",
+                "title": "Осень",
+                "status": "finished",
+                "starts_at": "2026-10-01T00:00:00Z",
+                "ends_at": "2026-10-31T00:00:00Z",
+                "found": 3,
+                "total": 5,
+                "completed": False,
+            }
+        ]
+    },
+}
+EVENT_PAGE_SAMPLE = {
+    "key": "winter",
+    "title": "Зимняя охота",
+    "description": "Найди все",
+    "theme_key": "winter",
+    "status": "active",
+    "starts_at": "2026-12-01T00:00:00Z",
+    "ends_at": "2026-12-31T00:00:00Z",
+    "map_url": "/media/events/winter.webp",
+    "found": 1,
+    "total": 2,
+    "completed": False,
+    "reward_item": {"item_key": "frame", "title": "Рамка", "image_url": "/media/frame.webp"},
+    "finds": [
+        {
+            "key": "snowman",
+            "number": 1,
+            "title": "Снеговик",
+            "x_pct": 10.0,
+            "y_pct": 20.5,
+            "final": False,
+            "state": "found",
+            "diary": "Нашёл",
+            "reward": {"xp": 10, "verses": 1},
+            "play_page": "solo",
+            "trigger": {
+                "type": "ui_spot",
+                "page_key": "shop",
+                "metric": None,
+                "progress": None,
+                "target": None,
+                "period": None,
+            },
+            "found_at": "2026-12-02T10:00:00Z",
+        },
+        {
+            "key": "star",
+            "number": 2,
+            "title": "Звезда",
+            "x_pct": 80.0,
+            "y_pct": 5.0,
+            "final": True,
+            "state": "locked",
+            "diary": "Тайна",
+            "reward": {"xp": 100, "verses": 10},
+            "play_page": None,
+            "trigger": {
+                "type": "server",
+                "page_key": None,
+                "metric": "duel_win",
+                "progress": None,
+                "target": 3,
+                "period": "event",
+            },
+            "found_at": None,
+        },
+    ],
 }
 
 
@@ -147,6 +238,7 @@ def upstreams() -> Any:
         }
         for (service, path), body in SAMPLES.items():
             router.get(f"{bases[service]}{path}").respond(200, json=body)
+        router.get("http://progression.test/v1/events/winter").respond(200, json=EVENT_PAGE_SAMPLE)
         router.get(f"http://progression.test/v1/users/{PLAYER}/progress").respond(
             200, json={"user_id": str(PLAYER), "level": 1, "total_xp": 0, "badges": []}
         )
@@ -187,15 +279,36 @@ async def test_shop_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> No
     assert page.blocks.catalog.is_ok and page.blocks.packs is not None and page.blocks.packs.is_ok
 
 
+def test_event_page_sample_matches_producer_snapshot() -> None:
+    schema = _response_schema("progression", "/v1/events/{event_key}")
+    assert _errors("progression", schema, EVENT_PAGE_SAMPLE) == []
+
+
 async def test_shell_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> None:
     notifications = HttpNotificationsClient(_http("notifications", "http://notifications.test"))
-    shell = GetShellPage(notifications, theme_key="default", concurrency=5)
+    progression = HttpProgressionClient(_http("progression", "http://progression.test"))
+    events = EventsContext(progression, default_theme_key="default", concurrency=5)
+    shell = GetShellPage(notifications, theme_key="default", concurrency=5, events=events)
 
     for viewer in (USER, Viewer()):
         page = await shell(viewer)
         assert _bff_errors(ShellPage, page, "/v1/pages/shell") == []
+        assert page.theme.key == "winter"
+        assert page.event is not None
     assert page.bell is None
     assert (await shell(USER)).bell is not None
+
+
+async def test_event_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> None:
+    progression = HttpProgressionClient(_http("progression", "http://progression.test"))
+    events = EventsContext(progression, default_theme_key="default", concurrency=5)
+
+    result = await GetEventPage(progression, events)(USER, "winter")
+    view = EventPageView.model_validate({**asdict(result.page), "theme": asdict(result.theme)})
+
+    schema = _response_schema("bff_web", "/v1/pages/events/{event_key}")
+    assert _errors("bff_web", schema, view.model_dump(mode="json")) == []
+    assert result.theme.key == "winter"
 
 
 async def test_profile_and_player_pages_match_bff_snapshot(upstreams: respx.MockRouter) -> None:
@@ -206,7 +319,9 @@ async def test_profile_and_player_pages_match_bff_snapshot(upstreams: respx.Mock
 
     assert _bff_errors(ProfilePage, profile, "/v1/pages/profile") == []
     assert _bff_errors(PlayerPage, player, "/v1/pages/players/{user_id}") == []
-    assert all(b is not None and b.is_ok for b in vars_of(profile.blocks))
+    assert all(
+        b is not None and b.is_ok for b in vars_of(profile.blocks) if not isinstance(b, list)
+    )
     assert player.blocks.appearance is not None and player.blocks.appearance.is_ok
 
 

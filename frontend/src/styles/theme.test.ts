@@ -11,6 +11,11 @@ describe("resolveThemeKey", () => {
     expect(resolveThemeKey("default")).toBe("default");
   });
 
+  it("сезонная тема winter известна (5d)", () => {
+    expect(resolveThemeKey("winter")).toBe("winter");
+    expect(themeKeyOfShell({ theme: { key: "winter" } })).toBe("winter");
+  });
+
   it.each([undefined, null, "", "halloween", "DEFAULT", "__proto__", "constructor", 42])(
     "неизвестное или пустое значение (%s) — default",
     (value) => {

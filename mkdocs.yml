@@ -59,6 +59,7 @@ nav:
       - Этап 3b: plans/stage-3b.md
       - Этап 4: plans/stage-4.md
       - Этап 5: plans/stage-5.md
+      - Этап 5d, API событий: plans/stage-5d-api.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md
@@ -115,6 +116,9 @@ nav:
       - adr/0051-reports-and-moderation-queue.md
       - adr/0052-sanctions-and-enforcement.md
       - adr/0053-social-config-versioned-in-db.md
+      - adr/0054-seasonal-events-model.md
+      - adr/0055-event-find-triggers.md
+      - adr/0056-event-rewards-via-ledger.md
   - Справочник libs:
       - api/index.md
       - libs/core: api/core.md

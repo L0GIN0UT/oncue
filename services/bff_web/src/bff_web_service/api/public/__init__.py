@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from bff_web_service.api.public.schemas import (
     CollectionsPage,
     Difficulty,
     Domain,
+    EventPageView,
     HomePage,
     LeaderboardsPage,
     LibraryPage,
@@ -118,6 +120,34 @@ REJECTED = Viewer(token_rejected=True)
 CurrentViewer = Annotated[Viewer, Depends(resolve_viewer)]
 
 
+def _register_event_page(router: APIRouter, deps: BffDeps) -> None:
+    """Страница сезонного события (5d)."""
+
+    @router.get(
+        "/pages/events/{event_key}",
+        response_model=EventPageView,
+        summary="Сезонное событие: карта, находки, дневник",
+        description=(
+            "Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. "
+            "Данные — progression `GET /v1/events/{key}` + `theme.key` запуска; нет события — "
+            "404 `progression.event_not_found`; progression недоступен — 503. Засчитать "
+            "находку-элемент интерфейса браузер просит прямо в progression "
+            "(`POST /v1/events/{key}/finds/{find}/claim`)."
+        ),
+        responses=problem_responses(401, 403, 404, 503),
+    )
+    async def event_page(
+        event_key: Annotated[
+            str, Path(pattern=r"^[a-z][a-z0-9_]*$", max_length=64, description="Ключ события")
+        ],
+        viewer: CurrentViewer,
+        response: Response,
+    ) -> EventPageView:
+        result = await deps.get_event_page(viewer, event_key)
+        _cache_headers(response, personal=True, policy=deps.http_cache)
+        return EventPageView.model_validate({**asdict(result.page), "theme": asdict(result.theme)})
+
+
 def _cache_headers(
     response: Response,
     *,
@@ -201,8 +231,9 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         summary="Оболочка приложения: тема и колокольчик",
         description=(
             "Этап 5b. `sanctions` (5c) — действующие санкции пользователя. `theme.key` — ключ "
-            "активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного "
-            "события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число "
+            "активной темы (тема активного сезонного события, иначе настройка bff "
+            "`default_theme_key`; наборы токенов лежат во фронтенде, ADR 0054). `event` — баннер "
+            "активного события; `found`/`total` — прогресс игрока (кэш до 30 с). `bell` — число "
             "непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова "
             "notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш."
         ),
@@ -211,6 +242,8 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         page = await deps.get_shell(viewer)
         _cache_headers(response, personal=page.personal, policy=policy)
         return ShellPage.model_validate(page, from_attributes=True)
+
+    _register_event_page(router, deps)
 
     @router.get(
         "/pages/players/{user_id}",

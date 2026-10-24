@@ -3,18 +3,52 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 import structlog
 
 from gv_core.clock import Clock
-from notifications_service.application.ports import UnitOfWorkFactory
-from notifications_service.domain.catalog import TypeCatalog
+from notifications_service.application.ports import UnitOfWork, UnitOfWorkFactory
+from notifications_service.domain.catalog import NotificationType, TypeCatalog
 from notifications_service.domain.mapping import map_event, matches_filter
-from notifications_service.domain.notification import Notification
+from notifications_service.domain.notification import Candidate, Notification
 
 log = structlog.get_logger(__name__)
+
+
+async def store_candidate(
+    uow: UnitOfWork,
+    notification_type: NotificationType,
+    candidate: Candidate,
+    now: datetime,
+    new_id: UUID,
+) -> Notification | None:
+    """Сохранить уведомление с учётом настроек игрока.
+
+    Returns:
+        Созданное уведомление; ``None`` - игрок отключил тип или такая запись уже есть.
+    """
+    in_app = notification_type.channels.in_app
+    if notification_type.user_mutable:
+        pref = (await uow.preferences.all(candidate.user_id)).get(notification_type.key)
+        if pref is not None:
+            in_app = pref.in_app
+    if not in_app:
+        log.info("notifications.muted", type=notification_type.key)
+        return None
+    notification = Notification(
+        id=new_id,
+        user_id=candidate.user_id,
+        type_key=candidate.type_key,
+        dedup_key=candidate.dedup_key,
+        title=candidate.title,
+        body=candidate.body,
+        data=candidate.data,
+        created_at=now,
+    )
+    return notification if await uow.notifications.add(notification) else None
 
 
 class IngestEvent:
@@ -49,6 +83,8 @@ class IngestEvent:
         created: list[Notification] = []
         async with self._uow() as uow:
             for notification_type in self._catalog.for_event(event_type):
+                if notification_type.audience is not None:
+                    continue  # массовая доставка - задача FanOutAudience
                 if not matches_filter(notification_type.filter, payload):
                     continue
                 candidate = map_event(
@@ -57,25 +93,10 @@ class IngestEvent:
                     locale=self._catalog.default_locale,
                     default_locale=self._catalog.default_locale,
                 )
-                in_app = notification_type.channels.in_app
-                if notification_type.user_mutable:
-                    pref = (await uow.preferences.all(candidate.user_id)).get(notification_type.key)
-                    if pref is not None:
-                        in_app = pref.in_app
-                if not in_app:
-                    log.info("notifications.muted", type=notification_type.key)
-                    continue
-                notification = Notification(
-                    id=self._new_id(),
-                    user_id=candidate.user_id,
-                    type_key=candidate.type_key,
-                    dedup_key=candidate.dedup_key,
-                    title=candidate.title,
-                    body=candidate.body,
-                    data=candidate.data,
-                    created_at=self._clock.now(),
+                notification = await store_candidate(
+                    uow, notification_type, candidate, self._clock.now(), self._new_id()
                 )
-                if await uow.notifications.add(notification):
+                if notification is not None:
                     created.append(notification)
             await uow.commit()
         return created

@@ -31,6 +31,7 @@ urlpatterns = [
     path("rating/", include("admin_service.apps.rating.urls")),
     path("progression/", include("admin_service.apps.progression.urls")),
     path("shop/", include("admin_service.apps.shop.urls")),
+    path("events/", include("admin_service.apps.events.urls")),
     path("ugc/", include("admin_service.apps.ugc.urls")),
     path("broadcasts/", include("admin_service.apps.notifications.urls")),
     path("social/", include("admin_service.apps.social.urls")),

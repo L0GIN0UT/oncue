@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from bff_web_service.application.queries import (
     GetCollectionPage,
     GetCollectionsPage,
+    GetEventPage,
     GetHomePage,
     GetLeaderboardsPage,
     GetLibraryPage,
@@ -43,4 +44,5 @@ class BffDeps:
     get_player: GetPlayerPage
     get_shop: GetShopPage
     get_shell: GetShellPage
+    get_event_page: GetEventPage
     http_cache: HttpCacheSettings

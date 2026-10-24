@@ -15,6 +15,8 @@ from typing import Any
 from notifications_service.domain.errors import ConfigError
 
 PAYLOAD_ROOT = "payload"
+AUDIENCES = frozenset({"known_users"})
+"""Допустимые аудитории массовой доставки (тип без ``recipient``, ADR 0054)."""
 PLACEHOLDER = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 DEDUP_PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 
@@ -65,7 +67,7 @@ class NotificationType:
     Attributes:
         key: Ключ типа (стабильный контракт настроек игрока).
         source_event: ``<producer>.<Event>``.
-        recipient: Путь к ``user_id`` получателя (``payload.x``).
+        recipient: Путь к ``user_id`` получателя (``payload.x``); у типа с ``audience`` пусто.
         channels: Каналы по умолчанию.
         user_mutable: Игрок может отключить тип.
         dedup_key: Шаблон ключа дедупликации из полей payload (не ``event_id``).
@@ -76,7 +78,7 @@ class NotificationType:
 
     key: str
     source_event: str
-    recipient: str
+    recipient: str | None
     channels: Channels
     user_mutable: bool
     dedup_key: str
@@ -86,6 +88,8 @@ class NotificationType:
     lookups: Mapping[str, Lookup] = field(default_factory=dict)
     data: Mapping[str, str] = field(default_factory=dict)
     """Машинные поля для клиента: имя -> путь в событии (значения приводятся к строке)."""
+    audience: str | None = None
+    """Массовая доставка: событие порождает уведомление каждому игроку аудитории (пачками)."""
 
 
 def _require_payload_path(type_key: str, field_name: str, path: str) -> None:
@@ -114,7 +118,14 @@ def _parse_lookups(
 
 def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType:
     key = str(raw["key"])
-    _require_payload_path(key, "recipient", raw["recipient"])
+    recipient = raw.get("recipient")
+    audience = raw.get("audience")
+    if (recipient is None) == (audience is None):
+        raise ConfigError(f"{key}: нужен ровно один из recipient и audience")
+    if recipient is not None:
+        _require_payload_path(key, "recipient", recipient)
+    if audience is not None and audience not in AUDIENCES:
+        raise ConfigError(f"{key}: неизвестная audience `{audience}`")
     params: dict[str, str] = dict(raw["params"])
     for name, path in params.items():
         _require_payload_path(key, f"params.{name}", path)
@@ -144,7 +155,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
     return NotificationType(
         key=key,
         source_event=raw["source_event"],
-        recipient=raw["recipient"],
+        recipient=recipient,
         channels=Channels(channels["in_app"], channels["email"], channels["push"]),
         user_mutable=bool(raw["user_mutable"]),
         dedup_key=raw["dedup_key"],
@@ -153,6 +164,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
         filter=dict(raw.get("filter", {})),
         lookups=lookups,
         data=data,
+        audience=audience,
     )
 
 

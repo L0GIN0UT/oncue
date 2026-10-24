@@ -1,0 +1,19 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:EventCompleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок закрыл все находки события; основная награда выдана (ADR 0056). aggregate_id — user_id. Идемпотентно по `(run_id, user_id)`.",
+  "properties": {
+    "at": {"format": "date-time", "type": "string"},
+    "event_key": {"maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$", "type": "string"},
+    "event_title": {"maxLength": 120, "type": "string"},
+    "item_key": {"description": "Ключ предмета основной награды; null — награды-предмета нет", "maxLength": 64, "type": ["string", "null"]},
+    "run_id": {"format": "uuid", "type": "string"},
+    "user_id": {"format": "uuid", "type": "string"}
+  },
+  "required": ["run_id", "event_key", "event_title", "user_id", "item_key", "at"],
+  "title": "progression.EventCompleted v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

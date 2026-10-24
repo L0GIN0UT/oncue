@@ -3,7 +3,9 @@
 * ``progression.ledger.reconcile`` — сверка «сумма журнала = баланс / накопленный опыт»
   (ADR 0043): расхождение пишется в лог уровня ERROR и в метрику, данные не правятся;
 * ``progression.config.bootstrap`` — версия 1 конфига из ``GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR``
-  (только local/ci), если опубликованной версии нет.
+  (только local/ci), если опубликованной версии нет;
+* ``progression.events.tick`` — статусы запусков сезонных событий по времени и события
+  ``EventRunStarted`` / ``EventRunFinished`` (ADR 0054).
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ log = structlog.get_logger(__name__)
 
 RECONCILE_JOB = "progression.ledger.reconcile"
 BOOTSTRAP_JOB = "progression.config.bootstrap"
+EVENTS_TICK_JOB = "progression.events.tick"
 BOOTSTRAP_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
 SEED_FILE = "config.yaml"
 SEED_ACTOR = UUID(int=0)
@@ -69,7 +72,13 @@ def build_jobs(infra: Infrastructure) -> list[PeriodicJob]:
                 stored=m.stored,
             )
 
-    jobs = [PeriodicJob(RECONCILE_JOB, s.reconcile_interval_s, reconcile, s.reconcile_jitter_s)]
+    async def events_tick() -> None:
+        await c.event_ticker.run()
+
+    jobs = [
+        PeriodicJob(RECONCILE_JOB, s.reconcile_interval_s, reconcile, s.reconcile_jitter_s),
+        PeriodicJob(EVENTS_TICK_JOB, s.events_tick_interval_s, events_tick, s.events_tick_jitter_s),
+    ]
     directory = s.bootstrap_config_dir
     if directory is not None and c.settings.environment in BOOTSTRAP_ENVIRONMENTS:
 

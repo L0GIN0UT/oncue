@@ -125,6 +125,16 @@ class SqlNotifications:
         )
         return len((await self._s.execute(stmt)).all())
 
+    async def known_users_after(self, after: UUID | None, limit: int) -> list[UUID]:
+        n = t.notifications
+        p = t.notification_preferences
+        known = select(n.c.user_id).union(select(p.c.user_id)).subquery("known")
+        stmt = select(known.c.user_id)
+        if after is not None:
+            stmt = stmt.where(known.c.user_id > after)
+        stmt = stmt.order_by(known.c.user_id).limit(limit)
+        return [row[0] for row in (await self._s.execute(stmt)).all()]
+
 
 class SqlPreferences:
     """Настройки по типам."""

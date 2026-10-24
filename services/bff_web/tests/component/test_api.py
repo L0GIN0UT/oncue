@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -254,13 +254,22 @@ def _social_defaults(social: ServiceStub) -> None:
     )
 
 
+def _progression_defaults(progression: ServiceStub) -> None:
+    """Событий нет: тесты 5a-5c не знают о них, тесты 5d переопределяют ответы."""
+    progression.route("GET", "/v1/events/active").respond(200, json={"event": None})
+    progression.route("GET", "/v1/me/events").respond(200, json={"items": []})
+
+
 @pytest.fixture
 def stubs() -> Iterator[Stubs]:
     with ExitStack() as stack:
         social = stack.enter_context(stub_service(SOCIAL, service="social"))
         _social_defaults(social)
+        progression = stack.enter_context(stub_service(PROGRESSION, service="progression"))
+        _progression_defaults(progression)
         yield Stubs(
             social=social,
+            progression=progression,
             game=stack.enter_context(stub_service(GAME, service="game")),
             catalog=stack.enter_context(stub_service(CATALOG, service="catalog")),
             identity=stack.enter_context(stub_service(IDENTITY, service="identity")),
@@ -268,7 +277,6 @@ def stubs() -> Iterator[Stubs]:
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
             match=stack.enter_context(stub_service(MATCH, service="match")),
             rating=stack.enter_context(stub_service(RATING, service="rating")),
-            progression=stack.enter_context(stub_service(PROGRESSION, service="progression")),
             notifications=stack.enter_context(stub_service(NOTIFICATIONS, service="notifications")),
         )
 
@@ -392,6 +400,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
             "modes": {"status": "unavailable", "data": None},
             "weekly": {"status": "unavailable", "data": None},
             "progress": None,
+            "event": None,
         }
     }
 
@@ -1931,6 +1940,7 @@ async def test_profile_page_all_blocks_ok(bff: Bff) -> None:
         "appearance",
         "inventory",
         "avatar",
+        "events",
     }
     progress = blocks["progress"]["data"]
     assert (progress["level"], progress["xp_in_level"], progress["xp_to_next"]) == (7, 120, 380)
@@ -2034,6 +2044,7 @@ async def test_profile_page_each_block_degrades_independently(
     blocks = response.json()["blocks"]
     # Оформление собирается из слотов и адреса своей аватарки: падение аватара гасит оба блока.
     dead = {block, "appearance"} if block == "avatar" else {block}
+    assert blocks.pop("events") == []
     for name, value in blocks.items():
         assert value == UNAVAILABLE if name in dead else value["status"] == "ok", name
 
@@ -2065,7 +2076,9 @@ async def test_profile_page_progression_down_is_200_all_unavailable(bff: Bff) ->
     response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
-    assert response.json() == {"blocks": dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)}
+    assert response.json() == {
+        "blocks": {**dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE), "events": []}
+    }
 
 
 PROFILE_BLOCKS = (
@@ -2466,6 +2479,269 @@ async def test_shop_page_source_401_is_screen_401(bff: Bff) -> None:
     assert_problem(response, 401, "auth.unauthenticated")
 
 
+# ----------------------------------------------------------------------------- 5d: события
+ACTIVE_EVENT = {
+    "event": {
+        "run_id": str(SESSION),
+        "key": "winter",
+        "title": "Зимняя охота",
+        "theme_key": "winter",
+        "starts_at": "2026-12-01T00:00:00Z",
+        "ends_at": "2026-12-31T00:00:00Z",
+    }
+}
+EVENT_FIND = {
+    "key": "snowman",
+    "number": 1,
+    "title": "Снеговик",
+    "x_pct": 12.5,
+    "y_pct": 40.0,
+    "final": False,
+    "state": "found",
+    "diary": "Нашёл снеговика",
+    "reward": {"xp": 50, "verses": 5},
+    "play_page": "solo",
+    "trigger": {
+        "type": "ui_spot",
+        "page_key": "shop",
+        "metric": None,
+        "progress": None,
+        "target": None,
+        "period": None,
+    },
+    "found_at": "2026-12-02T10:00:00Z",
+}
+EVENT_PAGE = {
+    "key": "winter",
+    "title": "Зимняя охота",
+    "description": "Найди все",
+    "theme_key": "winter",
+    "status": "active",
+    "starts_at": "2026-12-01T00:00:00Z",
+    "ends_at": "2026-12-31T00:00:00Z",
+    "map_url": "/media/events/winter.webp",
+    "found": 1,
+    "total": 5,
+    "completed": False,
+    "reward_item": {"item_key": "frame", "title": "Рамка", "image_url": "/media/frame.webp"},
+    "finds": [EVENT_FIND],
+}
+BANNER_FOUND = {
+    "key": "winter",
+    "title": "Зимняя охота",
+    "ends_at": "2026-12-31T00:00:00Z",
+    "found": 1,
+    "total": 5,
+}
+BANNER_ANON = {**BANNER_FOUND, "found": None, "total": None}
+
+
+def _event_routes(bff: Bff, *, active: dict[str, Any] | None = None) -> None:
+    stub = bff.stubs.progression
+    stub.route("GET", "/v1/events/active").respond(200, json=active or ACTIVE_EVENT)
+    stub.route("GET", "/v1/events/winter").respond(200, json=EVENT_PAGE)
+
+
+async def test_shell_takes_theme_and_banner_from_active_event(bff: Bff) -> None:
+    _event_routes(bff)
+    _unread_route(bff)
+    token = bff.issuer.issue()
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(token))
+
+    body = response.json()
+    assert body["theme"] == {"key": "winter"}
+    assert body["event"] == {
+        "key": "winter",
+        "title": "Зимняя охота",
+        "ends_at": "2026-12-31T00:00:00Z",
+        "found": 1,
+        "total": 5,
+    }
+
+
+async def test_shell_anonymous_gets_banner_without_progress(bff: Bff) -> None:
+    _event_routes(bff)
+
+    response = await bff.client.get("/v1/pages/shell")
+
+    assert response.headers["cache-control"] == PUBLIC
+    assert response.json()["theme"] == {"key": "winter"}
+    assert response.json()["event"] == {**BANNER_ANON, "ends_at": "2026-12-31T00:00:00Z"}
+
+
+async def test_shell_active_event_is_cached_between_requests(bff: Bff) -> None:
+    _event_routes(bff)
+
+    await bff.client.get("/v1/pages/shell")
+    await bff.client.get("/v1/pages/shell")
+
+    assert bff.stubs.progression.route("GET", "/v1/events/active").call_count == 1
+
+
+async def test_shell_event_progress_is_cached_per_player(bff: Bff) -> None:
+    _event_routes(bff)
+    _unread_route(bff)
+    first, second = uuid4(), uuid4()
+
+    for user in (first, first, second):
+        response = await bff.client.get(
+            "/v1/pages/shell", headers=bff.bearer(bff.issuer.issue(user_id=user))
+        )
+        assert response.json()["event"]["found"] == 1
+
+    page_route = bff.stubs.progression.route("GET", "/v1/events/winter")
+    assert page_route.call_count == 2  # один вызов на игрока, а не на запрос
+
+
+async def test_event_page_screen_is_not_served_from_the_shell_cache(bff: Bff) -> None:
+    _event_routes(bff)
+    _unread_route(bff)
+    headers = bff.bearer(bff.issuer.issue(user_id=uuid4()))
+
+    await bff.client.get("/v1/pages/shell", headers=headers)
+    await bff.client.get("/v1/pages/events/winter", headers=headers)
+
+    page_route = bff.stubs.progression.route("GET", "/v1/events/winter")
+    assert page_route.call_count == 2
+
+
+@pytest.mark.parametrize("theme_key", ["", "Bad Key!"])
+async def test_shell_empty_or_unknown_theme_key_falls_back_to_default(
+    bff: Bff, theme_key: str
+) -> None:
+    active = {"event": {**ACTIVE_EVENT["event"], "theme_key": theme_key}}
+    _event_routes(bff, active=active)
+
+    response = await bff.client.get("/v1/pages/shell")
+
+    assert response.json()["theme"] == {"key": "default"}
+    assert response.json()["event"]["key"] == "winter"  # баннер остаётся
+
+
+@pytest.mark.parametrize("failure", ["503", "timeout", "contract"])
+async def test_shell_progression_down_degrades_to_default_theme(bff: Bff, failure: str) -> None:
+    route = bff.stubs.progression.route("GET", "/v1/events/active")
+    if failure == "timeout":
+        route.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "contract":
+        route.respond(200, json={"event": {"key": 1}})
+    else:
+        route.respond(503)
+
+    response = await bff.client.get("/v1/pages/shell")
+
+    assert response.status_code == 200
+    assert response.json()["theme"] == {"key": "default"}
+    assert response.json()["event"] is None
+
+
+async def test_shell_banner_survives_failed_event_page(bff: Bff) -> None:
+    _event_routes(bff)
+    bff.stubs.progression.route("GET", "/v1/events/winter").respond(503)
+    _unread_route(bff)
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.json()["event"]["found"] is None
+    assert response.json()["event"]["total"] is None
+
+
+async def test_shell_guest_banner_has_no_progress_and_no_page_call(bff: Bff) -> None:
+    _event_routes(bff)
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
+
+    assert response.json()["event"]["found"] is None
+    assert bff.stubs.progression.route("GET", "/v1/events/winter").call_count == 0
+
+
+async def test_home_has_event_banner(bff: Bff) -> None:
+    _event_routes(bff)
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES)
+
+    anonymous = await bff.client.get("/v1/pages/home")
+    assert anonymous.json()["blocks"]["event"]["found"] is None
+    assert anonymous.json()["blocks"]["event"]["key"] == "winter"
+
+
+async def test_event_page_returns_page_with_theme(bff: Bff) -> None:
+    _event_routes(bff)
+    token = bff.issuer.issue()
+
+    response = await bff.client.get("/v1/pages/events/winter", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    body = response.json()
+    assert body["theme"] == {"key": "winter"}
+    assert (body["found"], body["total"], body["map_url"]) == (1, 5, "/media/events/winter.webp")
+    assert body["finds"][0]["state"] == "found"
+    assert body["finds"][0]["x_pct"] == 12.5
+    route = bff.stubs.progression.route("GET", "/v1/events/winter")
+    assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_event_page_unknown_event_is_404(bff: Bff) -> None:
+    bff.stubs.progression.route("GET", "/v1/events/ghost").respond(
+        404, json={"code": "progression.event_not_found", "title": "x", "status": 404}
+    )
+
+    response = await bff.client.get(
+        "/v1/pages/events/ghost", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert_problem(response, 404, "progression.event_not_found")
+
+
+async def test_event_page_anonymous_401_guest_403_without_calls(bff: Bff) -> None:
+    _event_routes(bff)
+
+    anonymous = await bff.client.get("/v1/pages/events/winter")
+    guest = await bff.client.get(
+        "/v1/pages/events/winter", headers=bff.bearer(bff.issuer.issue_guest())
+    )
+
+    assert_problem(anonymous, 401, "auth.unauthenticated")
+    assert_problem(guest, 403, "auth.guest_forbidden")
+    assert bff.stubs.progression.route("GET", "/v1/events/winter").call_count == 0
+
+
+async def test_event_page_progression_down_is_503(bff: Bff) -> None:
+    bff.stubs.progression.route("GET", "/v1/events/winter").respond(503)
+
+    response = await bff.client.get(
+        "/v1/pages/events/winter", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 503
+
+
+async def test_profile_has_event_archive_and_survives_its_failure(bff: Bff) -> None:
+    item = {
+        "key": "winter",
+        "title": "Зимняя охота",
+        "status": "finished",
+        "starts_at": "2026-12-01T00:00:00Z",
+        "ends_at": "2026-12-31T00:00:00Z",
+        "found": 5,
+        "total": 5,
+        "completed": True,
+    }
+    route = bff.stubs.progression.route("GET", "/v1/me/events")
+    route.respond(200, json={"items": [item]})
+    _progression_routes(bff)
+    headers = bff.bearer(bff.issuer.issue())
+
+    ok = await bff.client.get("/v1/pages/profile", headers=headers)
+    route.respond(503)
+    down = await bff.client.get("/v1/pages/profile", headers=headers)
+
+    assert ok.json()["blocks"]["events"] == [item]
+    assert down.status_code == 200
+    assert down.json()["blocks"]["events"] == []
+
+
 # ----------------------------------------------------------------------------- 5b: оболочка
 def _unread_route(bff: Bff, count: int = 3) -> respx.Route:
     return bff.stubs.notifications.route("GET", "/v1/notifications/unread-count").respond(
@@ -2485,6 +2761,7 @@ async def test_shell_for_user_has_theme_key_and_bell(bff: Bff) -> None:
         "theme": {"key": "default"},  # только ключ: значений токенов в API нет
         "bell": {"status": "ok", "data": {"unread": 3}},
         "sanctions": EMPTY_SANCTIONS,
+        "event": None,
     }
     assert unread.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
@@ -2495,7 +2772,12 @@ async def test_shell_for_anonymous_is_public_without_bell_call(bff: Bff) -> None
     response = await bff.client.get("/v1/pages/shell")
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
+    assert response.json() == {
+        "theme": {"key": "default"},
+        "bell": None,
+        "sanctions": None,
+        "event": None,
+    }
     assert response.headers["cache-control"] == PUBLIC
     assert response.headers["vary"] == "Authorization, Cookie"
     assert unread.call_count == 0
@@ -2507,7 +2789,12 @@ async def test_shell_for_guest_has_no_bell_and_does_not_call_notifications(bff: 
     response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
+    assert response.json() == {
+        "theme": {"key": "default"},
+        "bell": None,
+        "sanctions": None,
+        "event": None,
+    }
     assert response.headers["cache-control"] == PRIVATE  # с токеном - личный ответ
     assert unread.call_count == 0
 
@@ -2531,6 +2818,7 @@ async def test_shell_notifications_failure_hides_bell_only(bff: Bff, failure: st
         "theme": {"key": "default"},
         "bell": UNAVAILABLE,
         "sanctions": EMPTY_SANCTIONS,
+        "event": None,
     }
 
 
@@ -2543,7 +2831,12 @@ def theme_env(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_shell_theme_key_comes_from_env(theme_env: None, bff: Bff) -> None:
     response = await bff.client.get("/v1/pages/shell")
 
-    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None, "sanctions": None}
+    assert response.json() == {
+        "theme": {"key": "autumn_event"},
+        "bell": None,
+        "sanctions": None,
+        "event": None,
+    }
 
 
 async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> None:
@@ -2559,7 +2852,12 @@ async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> 
         )
         shell = await bff.client.get("/v1/pages/shell", headers=headers)
         assert shell.status_code == 200
-        assert shell.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
+        assert shell.json() == {
+            "theme": {"key": "default"},
+            "bell": None,
+            "sanctions": None,
+            "event": None,
+        }
     assert all(route.call_count == 0 for route in routes.values())
     assert unread.call_count == 0
 

@@ -10,8 +10,10 @@ import httpx
 from bff_web_service.api.deps import BffDeps
 from bff_web_service.application.ports import PageCache
 from bff_web_service.application.queries import (
+    EventsContext,
     GetCollectionPage,
     GetCollectionsPage,
+    GetEventPage,
     GetHomePage,
     GetLeaderboardsPage,
     GetLibraryPage,
@@ -89,10 +91,18 @@ def build_deps(infra: Infrastructure) -> BffDeps:
     rating = HttpRatingClient(
         upstream("rating", up.rating_url), ttl_s=pc.leaderboard_ttl_s, cache_prefix=pc.key_prefix
     )
-    progression = HttpProgressionClient(upstream("progression", up.progression_url))
+    progression = HttpProgressionClient(
+        upstream("progression", up.progression_url),
+        active_event_ttl_s=pc.active_event_ttl_s,
+        event_progress_ttl_s=pc.event_progress_ttl_s,
+        cache_prefix=pc.key_prefix,
+    )
     notifications = HttpNotificationsClient(upstream("notifications", up.notifications_url))
     social = HttpSocialClient(upstream("social", up.social_url))
     pages = settings.pages
+    events = EventsContext(
+        progression, default_theme_key=pages.default_theme_key, concurrency=up.max_concurrency
+    )
     layout = PageLayout.of(
         random_source_types=pages.random_source_types,
         scheduled_source_types=pages.scheduled_source_types,
@@ -105,12 +115,14 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             game,
             concurrency=up.max_concurrency,
             layout=layout,
+            events=events,
             progress=HomeProgress(
                 progression,
                 concurrency=up.max_concurrency,
                 deadline_s=pages.home_progress_deadline_s,
             ),
         ),
+        get_event_page=GetEventPage(progression, events),
         get_profile=GetProfilePage(progression, concurrency=up.max_concurrency),
         get_player=GetPlayerPage(progression, concurrency=up.max_concurrency, social=social),
         get_shop=GetShopPage(progression, concurrency=up.max_concurrency),
@@ -118,6 +130,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             notifications,
             social=social,
             theme_key=pages.default_theme_key,
+            events=events,
             concurrency=up.max_concurrency,
         ),
         get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),

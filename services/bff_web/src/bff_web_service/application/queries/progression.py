@@ -15,6 +15,7 @@ import structlog
 from bff_web_service.application.dto import (
     AppearanceCard,
     BellCard,
+    EventArchiveCard,
     HomeProgressCard,
     MyAvatar,
     PlayerBlocks,
@@ -53,6 +54,7 @@ from bff_web_service.application.queries.common import (
     maybe,
     screen_error,
 )
+from bff_web_service.application.queries.events import EventsContext
 from bff_web_service.application.queries.rating import user_token
 from bff_web_service.domain import Block
 from gv_core.errors import ForbiddenError, UnauthenticatedError
@@ -95,10 +97,11 @@ class GetProfilePage:
                 limiter.attempt(p.my_appearance(token)),
                 limiter.attempt(p.inventory(token)),
                 limiter.attempt(p.my_avatar(token)),
+                limiter.attempt(p.my_events(token)),
             ),
         )
         progress, wallet, quests, badges, wheel = core
-        slots, inventory, avatar = cosmetics
+        slots, inventory, avatar, events = cosmetics
         _raise_auth_failure(progress, wallet, quests, badges, wheel, slots, inventory, avatar)
         # Оформление = слоты + адрес своей аватарки; без одной из частей показать его
         # нельзя (иначе фронт нарисует не тот аватар) - блок гаснет целиком.
@@ -119,8 +122,18 @@ class GetProfilePage:
                 avatar=Block.ok(avatar.card)
                 if isinstance(avatar, MyAvatar)
                 else block_of(avatar, "profile.avatar"),
+                # Архив - дополнение: сбой источника даёт пустой список, не падение профиля.
+                events=_archive(events),
             )
         )
+
+
+def _archive(events: list[EventArchiveCard] | UpstreamError) -> list[EventArchiveCard]:
+    """Архив событий; источник недоступен - пустой список, причина - в лог."""
+    if isinstance(events, list):
+        return events
+    block_of(events, "profile.events")
+    return []
 
 
 class GetPlayerPage:
@@ -253,14 +266,20 @@ class GetShellPage:
         theme_key: str,
         concurrency: int,
         social: SocialClient | None = None,
+        events: EventsContext | None = None,
     ) -> None:
         self._notifications, self._theme_key = notifications, theme_key
         self._concurrency = concurrency
         self._social = social
+        self._events = events
 
     async def __call__(self, viewer: Viewer) -> ShellPage:
-        """Собрать оболочку; сбой notifications гасит колокольчик, social — санкции."""
-        theme = ThemeCard(key=self._theme_key)
+        """Собрать оболочку; сбой notifications гасит колокольчик, social — санкции.
+
+        Тема и баннер - от активного события (5d); progression недоступен - тема по умолчанию.
+        """
+        snapshot = await self._events.snapshot(viewer) if self._events is not None else None
+        theme = ThemeCard(key=snapshot.theme_key if snapshot is not None else self._theme_key)
         token = user_token(viewer)
         bell: Block[BellCard] | None = None
         sanctions: Block[SanctionsCard] | None = None
@@ -281,7 +300,11 @@ class GetShellPage:
             if banned is not None:
                 sanctions = block_of(banned, "shell.sanctions")
         return ShellPage(
-            theme=theme, bell=bell, personal=viewer.token is not None, sanctions=sanctions
+            theme=theme,
+            bell=bell,
+            personal=viewer.token is not None,
+            sanctions=sanctions,
+            event=snapshot.banner if snapshot is not None else None,
         )
 
 

@@ -103,6 +103,7 @@ class ItemFields:
     level_required: int | None
     price: int | None
     active: bool
+    event_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +187,7 @@ class ItemCommands:
             "poster_url": (
                 None if item.poster_key is None else self._store.public_url(item.poster_key)
             ),
+            "event_key": item.event_key,
             "owners": owners,
             "created_at": item.created_at.isoformat(),
             "updated_at": item.updated_at.isoformat(),
@@ -209,6 +211,7 @@ class ItemCommands:
                 level_required=fields.level_required,
                 price=fields.price,
                 shop_cfg=published.config.shop,
+                event_key=fields.event_key,
             )
             shop.check_activation(active=fields.active, asset_key=None)
             now = self._clock.now()
@@ -226,6 +229,7 @@ class ItemCommands:
                 active=fields.active,
                 created_at=now,
                 updated_at=now,
+                event_key=fields.event_key,
             )
             if not await uow.items.add(item):
                 raise shop.ItemKeyTakenError
@@ -259,6 +263,7 @@ class ItemCommands:
                 level_required=fields.level_required,
                 price=fields.price,
                 shop_cfg=published.config.shop,
+                event_key=fields.event_key,
             )
             kind = MediaKind(fields.media_kind)
             if kind is not item.media_kind and item.asset_key is not None:
@@ -276,6 +281,7 @@ class ItemCommands:
                 level_required=fields.level_required,
                 price=fields.price,
                 active=fields.active,
+                event_key=fields.event_key,
                 updated_at=now,
             )
             await uow.items.save(updated)
@@ -385,6 +391,7 @@ def _fields_dict(fields: ItemFields, reason: str) -> dict[str, Any]:
         "level_required": fields.level_required,
         "price": fields.price,
         "active": fields.active,
+        "event_key": fields.event_key,
         "reason": reason,
     }
 
@@ -517,6 +524,8 @@ async def _check_members(uow: AdminUnitOfWork, item_ids: Sequence[UUID]) -> None
     found = await uow.items.by_ids(item_ids)
     if len(found) != len(item_ids):
         raise packs_domain.PackInvalidError("предмет не найден")
+    if any(i.event_key is not None for i in found.values()):
+        raise packs_domain.PackInvalidError("предмет события нельзя положить в пак")
 
 
 # ---------------------------------------------------------------------------- промокоды
@@ -604,7 +613,8 @@ class PromoCommands:
                 raise PromoExpiredError
             if fields.item_id is not None:
                 item = await uow.items.get(fields.item_id)
-                if item is None or not item.active:
+                # Предметы событий промокодом не выдаются (ADR 0056).
+                if item is None or not item.active or item.event_key is not None:
                     raise PromoItemNotFoundError
             emission = promo.batch_emission(fields.count, fields.max_uses, fields.verses_amount)
             if emission > 0:

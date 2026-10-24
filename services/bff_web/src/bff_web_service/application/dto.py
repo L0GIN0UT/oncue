@@ -355,6 +355,7 @@ class HomeBlocks:
     modes: Block[list[ModeCard]]
     weekly: Block[list[DailyCard]]
     progress: Block[HomeProgressCard] | None = None
+    event: EventBannerCard | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1193,6 +1194,7 @@ class ProfileBlocks:
     appearance: Block[AppearanceCard] | None = None
     inventory: Block[InventoryCard] | None = None
     avatar: Block[AvatarCard] | None = None
+    events: list[EventArchiveCard] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1354,6 +1356,122 @@ class ShellPage:
     bell: Block[BellCard] | None
     personal: bool
     sanctions: Block[SanctionsCard] | None = None
+    event: EventBannerCard | None = None
+
+
+# ----------------------------------------------------------------------------- события (5d)
+EventStatus = Literal["active", "finished", "stopped"]
+FindState = Literal["locked", "open", "found"]
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveEvent:
+    """Активный запуск (progression ``/v1/events/active``); ``theme_key`` пуст - без темы."""
+
+    key: str
+    title: str
+    theme_key: str
+    starts_at: datetime
+    ends_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class EventBannerCard:
+    """Баннер события; ``found``/``total`` - только вошедшему игроку."""
+
+    key: str
+    title: str
+    ends_at: datetime
+    found: int | None = None
+    total: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EventArchiveCard:
+    """Запуск в архиве игрока."""
+
+    key: str
+    title: str
+    status: EventStatus
+    starts_at: datetime
+    ends_at: datetime
+    found: int
+    total: int
+    completed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EventRewardCard:
+    """Основная награда события."""
+
+    item_key: str
+    title: str
+    image_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class EventFindRewardCard:
+    """Награда находки."""
+
+    xp: int
+    verses: int
+
+
+@dataclass(frozen=True, slots=True)
+class EventFindTriggerCard:
+    """Условие открытия находки."""
+
+    type: Literal["server", "ui_spot"]
+    page_key: str | None
+    metric: str | None
+    progress: int | None
+    target: int | None
+    period: Literal["day", "event"] | None
+
+
+@dataclass(frozen=True, slots=True)
+class EventFindCard:
+    """Находка с состоянием игрока."""
+
+    key: str
+    number: int
+    title: str
+    x_pct: float
+    y_pct: float
+    final: bool
+    state: FindState
+    diary: str
+    reward: EventFindRewardCard
+    play_page: str | None
+    trigger: EventFindTriggerCard
+    found_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class EventPageData:
+    """Страница события из progression."""
+
+    key: str
+    title: str
+    description: str
+    theme_key: str
+    status: EventStatus
+    starts_at: datetime
+    ends_at: datetime
+    map_url: str | None
+    found: int
+    total: int
+    completed: bool
+    reward_item: EventRewardCard | None
+    finds: list[EventFindCard]
+
+
+@dataclass(frozen=True, slots=True)
+class EventPageResult:
+    """Страница события и ключ темы экрана (``theme.key``)."""
+
+    page: EventPageData
+    theme: ThemeCard
 
 
 # ----------------------------------------------------------------------------- social (5c)

@@ -118,6 +118,15 @@ class FakeProgression:
     async def shop_packs(self, token: str) -> list[PackCard]:
         return await self._do("shop_packs", [])  # type: ignore[return-value]  # фейк
 
+    async def my_events(self, token: str) -> list[object]:
+        return await self._do("my_events", [])  # type: ignore[return-value]  # фейк
+
+    async def active_event(self) -> object:
+        return await self._do("active_event", None)
+
+    async def event_page(self, token: str, event_key: str) -> object:
+        return await self._do("event_page", None)
+
 
 @dataclass
 class FakeNotifications:

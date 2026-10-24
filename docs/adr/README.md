@@ -57,3 +57,6 @@
 | [0051](0051-reports-and-moderation-queue.md) | Жалобы, комментарии и очередь модерации (черновик) |
 | [0052](0052-sanctions-and-enforcement.md) | Санкции и их применение (черновик) |
 | [0053](0053-social-config-versioned-in-db.md) | Конфиг social: версии в БД (черновик) |
+| [0054](0054-seasonal-events-model.md) | Сезонные события: определение и запуски в БД (черновик) |
+| [0055](0055-event-find-triggers.md) | Триггеры находок события (черновик) |
+| [0056](0056-event-rewards-via-ledger.md) | Награды события через ledger (черновик) |

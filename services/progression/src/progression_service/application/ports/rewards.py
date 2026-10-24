@@ -102,6 +102,10 @@ class SpinRepository(Protocol):
         """``INSERT … ON CONFLICT DO NOTHING``; ``False`` - за сутки уже есть запись."""
         ...
 
+    async def days(self, user_id: UUID, since: date, until: date) -> set[date]:
+        """Сутки со спином игрока в ``[since, until]`` (для серии, ADR 0055)."""
+        ...
+
 
 class BoostRepository(Protocol):
     """Бусты опыта и их траты."""
