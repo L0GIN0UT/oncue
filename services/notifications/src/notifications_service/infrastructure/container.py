@@ -2,13 +2,12 @@
 
 Адаптеры создаются без подключений: экспорт OpenAPI и тесты собирают сервис без
 инфраструктуры; недоступная зависимость проявляется ошибкой при первом обращении.
-Проверки «ошибка старта» (ключ отписки, база ссылок вне local/ci) выполняются только в
+Проверки «ошибка старта» (база ссылок, e-mail-бэкенд вне local/ci) выполняются только в
 настоящем процессе - когда у ``Infrastructure`` есть база данных.
 """
 
 from __future__ import annotations
 
-import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
@@ -45,7 +44,6 @@ from notifications_service.application.ports import (
 )
 from notifications_service.application.unsubscribe import Unsubscribe
 from notifications_service.domain.catalog import TypeCatalog
-from notifications_service.domain.tokens import UnsubscribeTokens
 from notifications_service.infrastructure.config import load_catalog
 from notifications_service.infrastructure.db.repositories import SqlUnitOfWork
 from notifications_service.infrastructure.email import (
@@ -103,7 +101,6 @@ class NotificationsContainer:
         self.new_id = new_id
         adapters = adapters or Adapters()
         self.catalog: TypeCatalog = load_catalog(self._cfg.types_path)
-        self.tokens = self._build_tokens()
         self.public_base_url = self._build_base_url()
         self.realtime: RealtimePublisher = adapters.realtime or self._build_realtime()
         self.dispatcher = PostCommitDispatcher(self.realtime)
@@ -122,19 +119,6 @@ class NotificationsContainer:
     def is_local(self) -> bool:
         """local/ci: допустимы временные секреты и письма в лог."""
         return self.settings.environment in _LOCAL_ENVIRONMENTS
-
-    def _build_tokens(self) -> UnsubscribeTokens:
-        cfg = self._cfg
-        keys = {v: k.get_secret_value().encode() for v, k in cfg.unsubscribe_previous_keys.items()}
-        if cfg.unsubscribe_hmac_key is not None:
-            keys[cfg.unsubscribe_key_version] = cfg.unsubscribe_hmac_key.get_secret_value().encode()
-        elif self.is_local or not self.is_runtime:
-            # Временный ключ процесса: ссылки живут до перезапуска. Вне local/ci в рабочем
-            # процессе это ошибка старта (экспорт OpenAPI ключ не использует).
-            keys[cfg.unsubscribe_key_version] = secrets.token_bytes(32)
-        else:
-            raise StartupConfigError("не задан GV_NOTIFICATIONS__UNSUBSCRIBE_HMAC_KEY")
-        return UnsubscribeTokens(active_version=cfg.unsubscribe_key_version, keys=keys)
 
     def _build_base_url(self) -> str:
         if self._cfg.public_base_url is not None:
@@ -224,7 +208,6 @@ class NotificationsContainer:
             retry_after_s=cfg.limiter_retry_after_s,
         )
         return Unsubscribe(
-            self.tokens,
             limiter,
             self.uow_factory(),
             self.infra.clock,
@@ -249,11 +232,11 @@ class NotificationsContainer:
             self.uow_factory(),
             self.directory,
             self.email,
-            self.tokens,
             self.infra.clock,
             public_base_url=self.public_base_url,
             footer=self._cfg.unsubscribe_footer,
             batch_size=self._cfg.broadcast_batch_size,
+            token_ttl_days=self._cfg.unsubscribe_ttl_days,
         )
 
 

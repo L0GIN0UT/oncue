@@ -1,6 +1,7 @@
 """Информационные рассылки администрации: постановка и отправка (ADR 0047).
 
-Письмо уходит только подписавшимся (согласие), в письме - ссылка отписки с подписанным токеном.
+Письмо уходит только подписавшимся (согласие), в письме - ссылка отписки с персональным
+непрозрачным токеном (в БД только хеш).
 Воркер идемпотентен: перед отправкой занимает ``(broadcast_id, user_id)`` в
 ``broadcast_deliveries`` (UNIQUE), поэтому повтор задачи не шлёт письмо дважды; при сбое
 отправки занятие снимается и повтор дошлёт письмо.
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -31,9 +33,12 @@ from notifications_service.application.ports import (
     PermanentEmailError,
     UnitOfWorkFactory,
 )
-from notifications_service.domain.tokens import UnsubscribeTokens
+from notifications_service.domain.tokens import hash_token, new_token
 
 log = structlog.get_logger(__name__)
+
+# Путь one-click отписки (RFC 8058) на gateway; ручка - в api/public.
+ONE_CLICK_PATH = "/api/notifications/v1/unsubscribe/one-click"
 
 BROADCAST_TASK = "notifications.broadcast.send"
 BROADCAST_EMAILS = Counter(
@@ -159,32 +164,33 @@ class SendBroadcast:
         uow_factory: UnitOfWorkFactory,
         directory: EmailDirectory,
         sender: EmailSender,
-        tokens: UnsubscribeTokens,
         clock: Clock,
         *,
         public_base_url: str,
         footer: str,
         batch_size: int,
+        token_ttl_days: int,
     ) -> None:
         self._uow = uow_factory
         self._directory = directory
         self._sender = sender
-        self._tokens = tokens
         self._clock = clock
         self._base = public_base_url.rstrip("/")
         self._footer = footer
         self._batch = batch_size
+        self._ttl = timedelta(days=token_ttl_days)
 
-    def _message(self, broadcast: Broadcast, user_id: UUID, to: str) -> EmailMessage:
-        link = f"{self._base}/unsubscribe?token={self._tokens.issue(user_id, broadcast.id)}"
-        text = f"{broadcast.body}\n\n{self._footer.replace('{link}', link)}"
+    def _message(self, broadcast: Broadcast, token: str, to: str) -> EmailMessage:
+        # Для людей - страница; для почтовика (RFC 8058) - ручка API, принимающая только POST.
+        page = f"{self._base}/unsubscribe?token={token}"
+        one_click = f"{self._base}{ONE_CLICK_PATH}?token={token}"
+        text = f"{broadcast.body}\n\n{self._footer.replace('{link}', page)}"
         return EmailMessage(
             to=to,
             subject=broadcast.subject,
             body=text,
-            # RFC 8058: однократная отписка без перехода по ссылке; mailto не нужен.
             headers={
-                "List-Unsubscribe": f"<{link}>",
+                "List-Unsubscribe": f"<{one_click}>",
                 "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
             },
         )
@@ -251,19 +257,23 @@ class SendBroadcast:
     async def _send_batch(self, broadcast: Broadcast, recipients: list[Any]) -> int:
         sent = failures = refused = 0
         for recipient in recipients:
+            token = new_token()  # на каждую попытку занятия - свой; в БД только хеш
+            now = self._clock.now()
             async with self._uow() as uow:
                 # Занятие и проверка согласия - одним запросом: отписавшийся с начала порции
                 # письма уже не получит, повтор воркера второй раз не отправит.
                 claimed = await uow.broadcasts.claim(
-                    broadcast.id, recipient.user_id, self._clock.now()
+                    broadcast.id,
+                    recipient.user_id,
+                    now,
+                    token_hash=hash_token(token),
+                    token_expires_at=now + self._ttl,
                 )
                 await uow.commit()
             if not claimed:
                 continue
             try:
-                await self._sender.send(
-                    self._message(broadcast, recipient.user_id, recipient.email)
-                )
+                await self._sender.send(self._message(broadcast, token, recipient.email))
             except PermanentEmailError:
                 # Адрес отвергнут окончательно: доставка остаётся в таблице как failed, повтора нет.
                 log.warning("notifications.broadcast_email_refused")

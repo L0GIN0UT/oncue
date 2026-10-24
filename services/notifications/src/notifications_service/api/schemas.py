@@ -91,9 +91,11 @@ class EmailSubscriptionRequest(_Request):
 
 
 class UnsubscribeRequest(_Request):
-    """Отписка по подписанной ссылке из письма (one-click)."""
+    """Отписка по токену из письма (страница отписки)."""
 
-    token: str = Field(min_length=16, max_length=512)
+    # Без ограничений длины намеренно: формат проверяется только после лимита по IP, мусор
+    # тоже считается попыткой; негодный токен - тот же 422, что и неизвестный.
+    token: str = Field(description="Непрозрачный токен из ссылки в письме")
 
 
 class DeviceRequest(_Request):

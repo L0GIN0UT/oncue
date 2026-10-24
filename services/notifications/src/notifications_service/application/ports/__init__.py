@@ -182,8 +182,23 @@ class BroadcastRepository(Protocol):
         """Пометить доставку окончательно неудавшейся (запись остаётся, повтора не будет)."""
         ...
 
-    async def claim(self, broadcast_id: UUID, user_id: UUID, now: datetime) -> bool:
-        """Занять отправку получателю; ``False`` - уже отправлено/занято."""
+    async def claim(
+        self,
+        broadcast_id: UUID,
+        user_id: UUID,
+        now: datetime,
+        *,
+        token_hash: str,
+        token_expires_at: datetime,
+    ) -> bool:
+        """Занять отправку получателю и записать хеш его токена отписки.
+
+        ``False`` - уже отправлено/занято либо согласия нет.
+        """
+        ...
+
+    async def token_owner(self, token_hash: str, now: datetime) -> UUID | None:
+        """Владелец действующего (не истёкшего) токена по его хешу или ``None``."""
         ...
 
     async def release(self, broadcast_id: UUID, user_id: UUID) -> None:

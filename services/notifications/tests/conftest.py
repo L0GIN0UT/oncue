@@ -43,7 +43,6 @@ from gv_testkit import (
     service_client,
 )
 
-HMAC_KEY = "k" * 40
 LIMITER_PREFIX = "notifications:unsub:"
 ADMIN_PERMS = ("admin.access", "notifications.broadcast.send")
 
@@ -188,7 +187,6 @@ async def notifications(
         database_url=SecretStr(database_url),
         redis_url=SecretStr(infra.redis_url()),
         notifications=NotificationsSettings(
-            unsubscribe_hmac_key=SecretStr(HMAC_KEY),
             unsubscribe_attempts=3,
             unsubscribe_window_s=60,
             broadcast_batch_size=2,
