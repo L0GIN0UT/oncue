@@ -1,0 +1,27 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:FindUnlocked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок открыл находку события, награда находки выдана (ADR 0055, 0056). aggregate_id — user_id. Идемпотентно по `(run_id, find_key, user_id)`.",
+  "properties": {
+    "at": {"format": "date-time", "type": "string"},
+    "event_key": {"maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$", "type": "string"},
+    "find_key": {"maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$", "type": "string"},
+    "find_title": {"maxLength": 120, "type": "string"},
+    "found": {"description": "Сколько находок открыто, включая эту", "minimum": 1, "type": "integer"},
+    "reward": {
+      "additionalProperties": false,
+      "properties": {"verses": {"minimum": 0, "type": "integer"}, "xp": {"minimum": 0, "type": "integer"}},
+      "required": ["xp", "verses"],
+      "type": "object"
+    },
+    "run_id": {"format": "uuid", "type": "string"},
+    "total": {"description": "Сколько находок в событии", "minimum": 1, "type": "integer"},
+    "user_id": {"format": "uuid", "type": "string"}
+  },
+  "required": ["run_id", "event_key", "user_id", "find_key", "find_title", "found", "total", "reward", "at"],
+  "title": "progression.FindUnlocked v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

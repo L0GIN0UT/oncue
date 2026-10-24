@@ -1,0 +1,116 @@
+{
+  "$id": "urn:guessverse:contracts:progression:event_definition:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "progression: определение сезонного события v1",
+  "description": "Тело определения события (ADR 0054–0056). Хранится в `events.body`, на публикации запуска копируется в неизменяемый снимок. Сумм-границы — верхний предел опасных значений; тексты показываются экранированными.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "description", "theme_key", "finds", "reward"],
+  "properties": {
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "description": {"type": "string", "maxLength": 2000},
+    "theme_key": {
+      "description": "Ключ темы фронтенда (ADR 0049); пустая строка — тема не меняется",
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^([a-z][a-z0-9_-]*)?$"
+    },
+    "finds": {
+      "description": "Находки в порядке номеров; ровно одна с `final = true`",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/find"}
+    },
+    "reward": {
+      "description": "Основная награда за закрытие всех находок",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item_key"],
+      "properties": {
+        "item_key": {
+          "description": "Ключ предмета каталога (обычно рамка); null — только награды находок",
+          "type": ["string", "null"],
+          "maxLength": 64
+        }
+      }
+    }
+  },
+  "$defs": {
+    "find": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "number", "title", "diary_before", "diary_after", "x_pct", "y_pct", "reward", "final", "trigger"],
+      "properties": {
+        "key": {"type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$"},
+        "number": {"type": "integer", "minimum": 1, "maximum": 20},
+        "title": {"type": "string", "minLength": 1, "maxLength": 120},
+        "diary_before": {"description": "Текст дневника до открытия", "type": "string", "maxLength": 1000},
+        "diary_after": {"description": "Текст дневника после открытия", "type": "string", "maxLength": 1000},
+        "x_pct": {"description": "Координата точки на карте, % ширины", "type": "number", "minimum": 0, "maximum": 100},
+        "y_pct": {"description": "Координата точки на карте, % высоты", "type": "number", "minimum": 0, "maximum": 100},
+        "reward": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["xp", "verses"],
+          "properties": {
+            "xp": {"type": "integer", "minimum": 0, "maximum": 5000},
+            "verses": {"type": "integer", "minimum": 0, "maximum": 1000}
+          }
+        },
+        "final": {"description": "Финальная находка: закрыта, пока не открыты все остальные", "type": "boolean"},
+        "play_page": {
+          "description": "Раздел для кнопки «играть»; отсутствует — кнопки нет",
+          "enum": ["home", "daily", "solo", "online", "collections", "leaderboards", "wheel", "shop", "profile"]
+        },
+        "trigger": {
+          "oneOf": [
+            {"$ref": "#/$defs/server_trigger"},
+            {"$ref": "#/$defs/ui_spot_trigger"}
+          ]
+        }
+      }
+    },
+    "server_trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "metric", "target", "period"],
+      "properties": {
+        "type": {"const": "server"},
+        "metric": {
+          "description": "Метрика из реестра заданий progression (ADR 0042, 0055)",
+          "enum": [
+            "rounds_played", "correct_answers", "wins", "online_matches", "daily_completed",
+            "collection_published", "daily_streak", "duel_win", "weekly_top_place",
+            "wheel_spin_streak", "item_equipped", "collection_played"
+          ]
+        },
+        "target": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "period": {"description": "`day` — прогресс сбрасывается каждые сутки, `event` — копится за запуск", "enum": ["day", "event"]},
+        "params": {
+          "description": "Параметры метрики: `place_max` (weekly_top_place), `slot`/`item_key` (item_equipped), `domain` (метрики с доменом)",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "place_max": {"type": "integer", "minimum": 1, "maximum": 100},
+            "slot": {"description": "Ключ слота из `shop.slots` конфига", "type": "string", "maxLength": 32, "pattern": "^[a-z][a-z0-9_]*$"},
+            "item_key": {"type": "string", "maxLength": 64},
+            "domain": {"enum": ["music", "film"]}
+          }
+        }
+      }
+    },
+    "ui_spot_trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "page_key"],
+      "properties": {
+        "type": {"const": "ui_spot"},
+        "page_key": {
+          "description": "Страница, на которой спрятан элемент (белый список)",
+          "enum": ["home", "leaderboards", "profile", "collections", "match_summary", "shop", "wheel"]
+        }
+      }
+    }
+  }
+}

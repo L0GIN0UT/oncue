@@ -1,0 +1,19 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:EventRunStarted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Запуск сезонного события стал активным (ADR 0054). aggregate_id — run_id. Идемпотентно по `run_id`; публикуется задачей `progression.events.tick`.",
+  "properties": {
+    "ends_at": {"format": "date-time", "type": "string"},
+    "event_key": {"maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$", "type": "string"},
+    "run_id": {"format": "uuid", "type": "string"},
+    "starts_at": {"format": "date-time", "type": "string"},
+    "theme_key": {"description": "Ключ темы фронтенда; пустая строка — тема не меняется", "maxLength": 32, "type": "string"},
+    "title": {"maxLength": 120, "type": "string"}
+  },
+  "required": ["run_id", "event_key", "title", "theme_key", "starts_at", "ends_at"],
+  "title": "progression.EventRunStarted v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}

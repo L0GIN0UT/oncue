@@ -11,7 +11,7 @@
 - **`server`.** Триггер — метрика из реестра заданий (ADR 0042) с `target` и периодом `day | event`.
   Реестр расширен: `duel_win`, `weekly_top_place` (счёт при месте ≤ `params.place_max`),
   `wheel_spin_streak`, `item_equipped` (`params.slot` или `params.item_key`), `collection_played`
-  (`params.tag`). Находка засчитывается только событиями сервисов; предмет события — как у заданий
+  (сессия по сборнику; фильтра по тегу нет: `GameFinished` не несёт теги, решение 5d-1). Находка засчитывается только событиями сервисов; предмет события — как у заданий
   (`metric_marks`), поэтому повтор с новым `event_id` не двоит прогресс.
 - **`ui_spot`.** Белый список `page_key`: `home, leaderboards, profile, collections, match_summary,
   shop, wheel`. Клик шлёт `POST /v1/events/{key}/finds/{find}/claim`; сервер проверяет активный запуск,

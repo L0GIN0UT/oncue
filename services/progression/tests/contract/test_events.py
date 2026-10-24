@@ -36,6 +36,10 @@ PRODUCED = [
     "progression.ItemPurchased",
     "progression.ItemEquipped",
     "progression.PromoRedeemed",
+    "progression.EventRunStarted",
+    "progression.EventRunFinished",
+    "progression.FindUnlocked",
+    "progression.EventCompleted",
 ]
 
 
