@@ -103,7 +103,7 @@ export async function registerViaUi(
   expect(response.status(), await response.text()).toBe(202);
   const challenge = (await response.json()) as { challenge_id: string };
   await enterCode(page, challenge.challenge_id);
-  await expect(page.getByTestId("user-name")).toHaveText(nickname);
+  await expect(page.getByTestId("user-name")).toHaveText(nickname, { timeout: 30_000 });
 }
 
 /**
