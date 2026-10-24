@@ -24,6 +24,7 @@ import { cn } from "@/shared/lib/cn";
 import { blockData, hasBlock } from "@/shared/api/blocks";
 import { useSessionInfo, useViewer } from "@/features/auth/session";
 import { PlayerBadge, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
+import { EventsArchive } from "@/features/events/EventsArchive";
 import { fetchProfilePage, profileQueryKey } from "./api";
 import { isMaxLevel } from "./logic";
 import { AvatarBlock } from "./AvatarBlock";
@@ -133,6 +134,7 @@ function ProfileBlocks({ blocks }: { blocks: ProfilePage["blocks"] }) {
       <Section id="promo" title={t("promo.title")} block={{ status: "ok", data: true }}>
         {() => <PromoBlock />}
       </Section>
+      <EventsArchive events={blocks.events ?? []} />
       {hasBlock(blocks.avatar) && (
         <Section id="avatar" title={t("avatar.title")} block={blocks.avatar ?? undefined} wide>
           {(a) => <AvatarBlock avatar={a} currentUrl={appearance?.custom_avatar_url} />}

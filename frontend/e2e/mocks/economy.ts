@@ -20,6 +20,7 @@ import type {
   ShopPage,
 } from "../../src/shared/api/types";
 import { csrfOk, problem, subjectOf } from "./handlers";
+import { eventBanner, themeKeyOf } from "./events";
 import { sanctionsBlock } from "./social";
 import type { MockWorld } from "./world";
 
@@ -215,9 +216,10 @@ export function createEconomyHandlers(world: MockWorld): HttpHandler[] {
         : null;
       return HttpResponse.json(
         {
-          theme: { key: world.scenario.themeKey ?? "default" },
+          theme: { key: themeKeyOf(world) },
           bell,
           sanctions: subject?.startsWith("user.") ? sanctionsBlock(world) : null,
+          event: eventBanner(world, subject),
         },
         { headers: subject ? NO_STORE : { "Cache-Control": "public, max-age=30" } },
       );

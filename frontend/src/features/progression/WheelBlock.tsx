@@ -14,6 +14,7 @@ import type { PrizeCard, SpinResult, WheelCard, WheelSectorCard } from "@/shared
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { homeQueryKey } from "@/features/daily/DailyCards";
+import { EventSpot } from "@/features/events/EventSpot";
 import { profileQueryKey, spinWheel } from "./api";
 import { chancePercent, dayRelation, spinOutcome } from "./logic";
 
@@ -172,6 +173,7 @@ export function WheelBlock({ wheel }: { wheel: WheelCard }) {
           )}
         </div>
       </div>
+      <EventSpot pageKey="wheel" />
     </div>
   );
 }

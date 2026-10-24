@@ -4,7 +4,9 @@ import {
   Check,
   CircleAlert,
   Coins,
+  Compass,
   Lock,
+  Search,
   Sparkles,
   Shirt,
   ShoppingBag,
@@ -24,6 +26,8 @@ export const defaultIcons = {
   rarity: Sparkles,
   appearance: Shirt,
   warning: CircleAlert,
+  event: Compass,
+  spot: Search,
 } as const satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof defaultIcons;

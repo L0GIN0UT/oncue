@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 import { fetchHomePage } from "@/shared/api/server";
 import { DailyBoard } from "@/features/daily/DailyCards";
 import { HomeProgress } from "@/features/progression/HomeProgress";
+import { HomeEventBanner } from "@/features/events/EventBanner";
+import { EventSpot } from "@/features/events/EventSpot";
 
 /** Главная: SSR — каркас и публичные блоки bff, CSR — личный статус дейликов и отсчёт (D2). */
 export default async function HomePage() {
@@ -15,6 +17,7 @@ export default async function HomePage() {
         </h1>
         <p className="max-w-[56ch] text-lg text-ink-muted">{t("home.lead")}</p>
       </section>
+      <HomeEventBanner initial={page} />
       <HomeProgress initial={page} />
       <DailyBoard initial={page} />
       <section className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage/60 p-6 ring-1 ring-rule sm:flex-row sm:items-center sm:justify-between">
@@ -29,6 +32,7 @@ export default async function HomePage() {
           {t("home.moreAction")}
         </Link>
       </section>
+      <EventSpot pageKey="home" />
     </div>
   );
 }

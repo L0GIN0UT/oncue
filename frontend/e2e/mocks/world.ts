@@ -20,6 +20,7 @@ import type {
 import { dayIn, nextMidnight } from "@/features/daily/countdown-time";
 import { ProgressionWorld } from "./progression";
 import { EconomyWorld } from "./economy";
+import { EventsWorld } from "./events";
 import { NotificationsWorld } from "./notifications";
 import { SocialWorld, type SocialScenario } from "./social";
 import { COLLECTION_MODES, UgcWorld } from "./ugc";
@@ -447,6 +448,14 @@ export type Scenario = {
   avatarFail?: "too_large" | "invalid" | "rate";
   /** Этап 5b: предустановленная заявка на аватарку (право считается купленным). */
   avatarRequest?: "pending" | "approved" | "rejected";
+  /** Этап 5d: сезонное событие `winter` - идёт (тема, баннер) или завершено (только страница). */
+  event?: "active" | "finished";
+  /** Этап 5d: в архиве профиля есть прошлое событие. */
+  eventArchive?: boolean;
+  /** Этап 5d: засчёт находки отвечает 409. */
+  eventClaimConflict?: boolean;
+  /** Этап 5d: все находки уже найдены (событие пройдено). */
+  eventAllFound?: boolean;
   /** Этап 5b: notifications отвечает 503. */
   notificationsDown?: boolean;
   /** Этап 5c: сценарии social (см. social.ts). */
@@ -510,6 +519,7 @@ export class MockWorld {
   progression = new ProgressionWorld();
   /** Магазин, оформление, аватарка (этап 5b). */
   economy = new EconomyWorld();
+  events = new EventsWorld();
   /** Уведомления (этап 5b). */
   notifications = new NotificationsWorld();
   /** Друзья, комментарии, жалобы, санкции (этап 5c). */
@@ -541,6 +551,7 @@ export class MockWorld {
     this.ugc.reset();
     this.progression.reset();
     this.economy.reset();
+    this.events.reset();
     this.notifications.reset();
     this.social.reset();
     this.seq = 0;

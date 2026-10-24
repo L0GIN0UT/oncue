@@ -1,5 +1,5 @@
 /**
- * Иконки по ключу темы (ADR 0049): «ключ темы → набор». В 5b есть только `default`; у сезонной
+ * Иконки по ключу темы (ADR 0049): «ключ темы → набор». `winter` (5d) пока использует набор `default`; у сезонной
  * темы (5d) будет свой набор с тем же списком имён. Неизвестный ключ — набор `default`.
  */
 import { resolveThemeKey, type ThemeKey } from "@/styles/theme";
@@ -9,6 +9,7 @@ export type { IconName, IconSet };
 
 export const ICON_SETS: Record<ThemeKey, IconSet> = {
   default: defaultIcons,
+  winter: defaultIcons,
 };
 
 export function iconsFor(themeKey: unknown): IconSet {
