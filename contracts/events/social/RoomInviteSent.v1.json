@@ -1,0 +1,47 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:RoomInviteSent:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Друг приглашён в комнату из лобби. aggregate_id — invite_id. Получатель уведомления room_invite — to_user_id. Код комнаты не проверяется при отправке: проверка при входе в match (ADR 0050).",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "from_nickname": {
+      "maxLength": 24,
+      "minLength": 3,
+      "type": "string"
+    },
+    "from_user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "invite_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "room_code": {
+      "maxLength": 16,
+      "minLength": 4,
+      "pattern": "^[A-Z0-9]+$",
+      "type": "string"
+    },
+    "to_user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "from_nickname",
+    "from_user_id",
+    "invite_id",
+    "room_code",
+    "to_user_id"
+  ],
+  "title": "social.RoomInviteSent v1",
+  "type": "object",
+  "x-aggregate-type": "social",
+  "x-topic": "social.social.v1"
+}

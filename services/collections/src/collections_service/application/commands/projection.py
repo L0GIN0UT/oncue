@@ -21,11 +21,13 @@ import structlog
 from prometheus_client import Counter
 
 from collections_service.application.ports import (
+    AdminAction,
     CatalogItemSnapshot,
     CollectionsUnitOfWork,
     UnitOfWorkFactory,
 )
 from collections_service.domain.difficulty import DifficultyModel
+from collections_service.domain.model import Status
 from gv_core.clock import Clock
 
 log = structlog.get_logger(__name__)
@@ -165,6 +167,62 @@ class Completions:
             data.collection_id, self._model.score(ratio_sum, ratio_count)
         )
         await uow.stats.bump_daily(data.collection_id, data.finished_at.date(), likes=0, plays=1)
+        return True
+
+
+class ModerationEvents:
+    """Решения модерации social: сборник, признанный нарушением, скрывается.
+
+    Args:
+        clock: Часы.
+    """
+
+    def __init__(self, clock: Clock) -> None:
+        self._clock = clock
+
+    async def content_removed(
+        self,
+        uow: CollectionsUnitOfWork,
+        collection_id: UUID,
+        *,
+        case_id: UUID,
+        moderator_id: UUID,
+        target_user_id: UUID,
+    ) -> bool:
+        """``social.ContentModerated`` (content_removed, collection): скрыть сборник.
+
+        Тот же механизм, что у ручного скрытия админом (``hidden`` + ``CollectionUpdated``).
+        Идемпотентно: сборника нет, он удалён, не опубликован или уже скрыт - без изменений.
+
+        Returns:
+            ``True``, если сборник скрыт этим событием.
+        """
+        collection = await uow.collections.get(collection_id, for_update=True)
+        if collection is None or collection.state.status is not Status.PUBLISHED:
+            log.info("collections.moderation_skipped", collection_id=str(collection_id))
+            return False
+        if not collection.is_author(target_user_id):
+            # Событие о чужом объекте (рассинхрон или подмена id): скрывать нельзя.
+            log.warning(
+                "collections.moderation_author_mismatch",
+                collection_id=str(collection_id),
+                case_id=str(case_id),
+            )
+            return False
+        now = self._clock.now()
+        collection.hide(reason=f"social.case:{case_id}", actor_id=moderator_id, now=now)
+        await uow.collections.save(collection)
+        uow.track(collection)
+        await uow.audit.record(
+            AdminAction(
+                actor_id=moderator_id,
+                action="collection.hide",
+                target=str(collection_id),
+                reason=f"решение модерации social, кейс {case_id}",
+                at=now,
+                details={"case_id": str(case_id), "source": "social"},
+            )
+        )
         return True
 
 

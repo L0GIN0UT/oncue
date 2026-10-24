@@ -15,6 +15,7 @@ import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useModeTitle } from "@/features/online/lists";
 import { fetchCollection } from "@/features/collections/api";
+import { InvitePanel } from "@/features/friends/InvitePanel";
 import { ChatPanel } from "./ChatPanel";
 import { PlayersRail } from "./PlayersRail";
 import type { FeedItem } from "./room-store";
@@ -146,6 +147,8 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
           </ul>
         )}
       </section>
+
+      {me && <InvitePanel roomCode={room.code} />}
 
       {(room.settings.collection_ids?.length ?? 0) > 0 && (
         <LobbyCollections ids={room.settings.collection_ids ?? []} />

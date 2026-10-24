@@ -1,0 +1,10 @@
+# Лимиты запросов по IP (уровень http: limit_req_zone допустим только здесь). Рендерится
+# envsubst из GV_GATEWAY_* (дефолты — compose.gateway.yml). Burst подставляют отдельные
+# шаблоны limit-api.inc / limit-auth.inc: в limit_req переменные не поддерживаются.
+
+# Защита от перебора и всплесков. Тонкие лимиты по пользователю — в сервисах (Redis), т.к.
+# gateway не знает пользователя. Один NAT может скрывать много клиентов (e2e: шесть браузеров).
+limit_req_zone $binary_remote_addr zone=api_per_ip:20m rate=${GV_GATEWAY_API_RATE};
+# Вход, регистрация, сброс пароля: перебор паролей и спам письмами. Точные лимиты по IP и
+# аккаунту — в identity; здесь грубый внешний барьер, который не пускает поток до сервиса.
+limit_req_zone $binary_remote_addr zone=auth_per_ip:10m rate=${GV_GATEWAY_AUTH_RATE};

@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "admin_service.apps.shop",
     "admin_service.apps.ugc",
     "admin_service.apps.notifications",
+    "admin_service.apps.social",
 ]
 
 MIDDLEWARE = [

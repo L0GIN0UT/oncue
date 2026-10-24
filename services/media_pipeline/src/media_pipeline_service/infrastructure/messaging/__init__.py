@@ -41,6 +41,7 @@ CONSUMED_TOPICS: tuple[str, ...] = (
     "catalog.media_item.v1",
     "game.mode_config.v1",
     "collections.collection.v1",
+    "social.social.v1",
 )
 
 ITEM_CREATED = "catalog.MediaItemCreated"
@@ -54,6 +55,8 @@ CLUE_ASSETS_REQUESTED = "game.ClueAssetsRequested"
 COLLECTION_PUBLISHED = "collections.CollectionPublished"
 COLLECTION_UPDATED = "collections.CollectionUpdated"
 COLLECTION_DELETED = "collections.CollectionDeleted"
+# Топик social.social.v1: нужно только решение модерации по аватарке (остальное пропускается).
+CONTENT_MODERATED = "social.ContentModerated"
 
 
 class _Payload(BaseModel):
@@ -202,6 +205,14 @@ def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, 
     return tuple(sources)
 
 
+class _ContentModeratedPayload(_Payload):
+    case_id: UUID
+    decision: str
+    moderator_id: UUID
+    target_id: UUID
+    target_kind: str
+
+
 def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
     """Реестр обработчиков событий catalog, game и collections."""
     registry = EventHandlerRegistry()
@@ -258,6 +269,14 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
         use_case = container.sync_collection(container.uow_factory(session))
         await use_case.apply_deleted(p.collection_id, p.version)
 
+    async def on_content_moderated(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_ContentModeratedPayload, envelope.payload)
+        if p.decision != "content_removed" or p.target_kind != "avatar":
+            return  # сборники снимает collections, комментарии - social
+        use_case = container.remove_moderated_ugc(container.uow_factory(session))
+        await use_case.execute(p.target_id, moderator_id=p.moderator_id, case_id=p.case_id)
+
+    registry.register(CONTENT_MODERATED, on_content_moderated)
     registry.register(CLUE_ASSETS_REQUESTED, on_clue_assets_requested)
     registry.register(COLLECTION_PUBLISHED, on_collection)
     registry.register(COLLECTION_UPDATED, on_collection)

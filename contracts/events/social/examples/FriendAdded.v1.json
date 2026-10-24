@@ -1,0 +1,19 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+  "aggregate_type": "social",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0002",
+  "event_type": "social.FriendAdded",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:01:00Z",
+  "payload": {
+    "accepter_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002",
+    "accepter_nickname": "Bob",
+    "at": "2026-10-24T12:01:00Z",
+    "requester_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "user_a": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "user_b": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002"
+  },
+  "producer": "social"
+}

@@ -20,6 +20,7 @@ CONSUMED = [
     ("identity.UserDeleted", None),
     ("game.ModeConfigPublished", None),
     ("game.ModeConfigArchived", None),
+    ("social.UserSanctionsChanged", None),
 ]
 PRODUCED = [
     ("match.MatchStarted", None),

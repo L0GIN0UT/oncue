@@ -7,6 +7,10 @@
 * ``game.ModeConfigPublished`` / ``ModeConfigArchived`` — текущие версии шаблонов
   (``mode_heads``): по ним ``POST /rooms`` фиксирует версию.
 
+* ``social.UserSanctionsChanged`` — проекция санкций (``sanctions_proj``, ADR 0052); при
+  ``ONLINE``/``RANKED`` игрок снимается с очереди, при ``ONLINE`` покидает комнату
+  (системная команда ``evict`` владельцу, отзыв подписки Centrifugo с повтором);
+
 * ``rating.LadderPublished`` / ``SeasonStarted`` / ``RatingChanged`` — проекция для подбора
   (``ladders_proj``, ``ratings_proj``, ADR 0038): рейтинг игрока — только по возрастанию
   ``version``, мягкий сброс сезона применяет сам match; синхронных вызовов rating нет;
@@ -25,16 +29,26 @@ from uuid import UUID
 
 import structlog
 from prometheus_client import Counter
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from gv_auth import SanctionEntry
 from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError
 from match_service.application.ports import RoomCommand
 from match_service.domain.queue import FORMAT_ANSWER
+from match_service.domain.sanctions import ONLINE_BAN, RANKED_BAN, SanctionsSnapshot
 from match_service.infrastructure.container import MatchContainer
 from match_service.infrastructure.db.ladders import SqlLadders, ladder_config
 from match_service.infrastructure.db.repositories import SqlModeHeads, SqlUsers
+from match_service.infrastructure.db.sanctions import SqlSanctions
 
 log = structlog.get_logger(__name__)
 
@@ -46,6 +60,7 @@ CONSUMED_TOPICS: tuple[str, ...] = (
     "identity.user.v1",
     "game.mode_config.v1",
     "rating.rating.v1",
+    "social.social.v1",
 )
 
 USER_REGISTERED = "identity.UserRegistered"
@@ -56,6 +71,7 @@ MODE_ARCHIVED = "game.ModeConfigArchived"
 LADDER_PUBLISHED = "rating.LadderPublished"
 SEASON_STARTED = "rating.SeasonStarted"
 RATING_CHANGED = "rating.RatingChanged"
+SANCTIONS_CHANGED = "social.UserSanctionsChanged"
 
 
 class _Payload(BaseModel):
@@ -115,6 +131,19 @@ class _RatingChanged(_Payload):
     version: int = Field(ge=1)
     new: int
     at: datetime
+
+
+class _ActiveSanction(_Payload):
+    kind: str = Field(max_length=16)
+    expires_at: AwareDatetime | None
+
+
+class _SanctionsChanged(_Payload):
+    user_id: UUID
+    version: int = Field(ge=1)
+    mask: int = Field(ge=0, le=0xFFFF)
+    next_expiry_at: AwareDatetime | None
+    active: list[_ActiveSanction]
 
 
 def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
@@ -210,6 +239,27 @@ def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:  # 
             now=container.infra.clock.now(),
         )
 
+    async def on_sanctions(envelope: EventEnvelope, session: AsyncSession) -> None:
+        p = _parse(_SanctionsChanged, envelope.payload)
+        now = container.infra.clock.now()
+        snapshot = SanctionsSnapshot(
+            user_id=p.user_id,
+            version=p.version,
+            entries=tuple(SanctionEntry(a.kind, a.expires_at) for a in p.active),
+            mask=p.mask,
+            next_expiry_at=p.next_expiry_at,
+        )
+        if not await SqlSanctions.apply(session, snapshot, now):
+            return  # дубль или устаревшая версия: проекция не меняется, игрока не трогаем
+        live = snapshot.mask_at(now)
+        if live & (ONLINE_BAN | RANKED_BAN) and container.infra.redis is not None:
+            await container.ranked_queue.remove(p.user_id)  # идемпотентно
+        if live & ONLINE_BAN:
+            # Игрок покидает комнату/лобби через владельца (как кик), подписка отзывается.
+            await notify_room(p.user_id, "evict", envelope, {})
+            log.info("match.online_banned_evicted")
+
+    registry.register(SANCTIONS_CHANGED, on_sanctions)
     registry.register(LADDER_PUBLISHED, on_ladder)
     registry.register(SEASON_STARTED, on_season)
     registry.register(RATING_CHANGED, on_rating)

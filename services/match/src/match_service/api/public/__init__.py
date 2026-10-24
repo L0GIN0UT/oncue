@@ -381,14 +381,18 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
             "секрет подписок, публикации клиентов запрещены). Connection-токен — "
             "`POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) "
             "получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, "
-            "403 `match.not_participant`, 429 `match.rate_limited`."
+            "403 `match.not_participant`, 403 `match.online_banned` (санкция `ONLINE`; "
+            "продление токена перепроверяет её), 429 `match.rate_limited`."
         ),
         responses=problem_responses(401, 403, 404, 422, 429, 501),
     )
     async def realtime_token(code: RoomCodePath, user: User) -> RealtimeSubscription:
         return RealtimeSubscription.model_validate(
             await services().room_queries.realtime_token(
-                user.user_id, code, spectator=user.has_perm("match.spectate")
+                user.user_id,
+                code,
+                spectator=user.has_perm("match.spectate"),
+                claim_sanctions=int(user.sanctions),
             )
         )
 

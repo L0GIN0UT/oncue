@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Sequence
+from dataclasses import replace
 from uuid import UUID
 
 import structlog
 
 from bff_web_service.application.dto import (
+    FriendsCard,
     ItemCard,
     ItemShelves,
     LadderCard,
@@ -38,6 +40,7 @@ from bff_web_service.application.ports import (
     MatchClient,
     ProgressionClient,
     RatingClient,
+    SocialClient,
     UpstreamRejectedError,
     UpstreamUnavailableError,
 )
@@ -57,6 +60,7 @@ from gv_core.errors import ForbiddenError, UnauthenticatedError
 
 log = structlog.get_logger(__name__)
 
+_MIN_PLAYERS_TO_REPORT = 2
 AUTH_REQUIRED = OnlinePage(status=OnlineStatus.AUTH_REQUIRED)
 SESSION_EXPIRED = OnlinePage(status=OnlineStatus.SESSION_EXPIRED)
 
@@ -88,8 +92,10 @@ class GetOnlinePage:
         rooms_limit: int,
         matches_limit: int,
         weekly_limit: int,
+        social: SocialClient | None = None,
     ) -> None:
         self._match, self._game, self._rating = match, game, rating
+        self._social = social
         self._concurrency = concurrency
         self._rooms_limit, self._matches_limit = rooms_limit, matches_limit
         self._weekly_limit = weekly_limit
@@ -110,13 +116,13 @@ class GetOnlinePage:
         limiter = Limiter(self._concurrency)
         # Топ недели зависит от списка ladder-ов, но не ждёт остальных блоков: цепочка
         # «ladder-ы → топы» идёт параллельно с первыми вызовами, а не после них.
-        rooms, matches, modes, pool, ratings, (ladders, weekly) = await asyncio.gather(
+        rooms, matches, modes, pool, ratings, (ladders, weekly, friends) = await asyncio.gather(
             limiter.attempt(self._match.open_rooms(token, limit=self._rooms_limit)),
             limiter.attempt(self._match.my_matches(token, limit=self._matches_limit)),
             limiter.attempt(self._game.online_modes()),
             limiter.attempt(self._match.queue_pool(token)),
             limiter.attempt(self._rating.my_ratings(token)),
-            self._ladders_and_weekly(limiter, token),
+            self._rating_and_social(limiter, token),
         )
         personal = (rooms, matches, pool, ratings)
         if any(_is_unauthenticated(v) for v in personal):
@@ -136,8 +142,41 @@ class GetOnlinePage:
                 ratings=block_of(ratings, "online.ratings"),
                 seasons=_seasons(ladders),
                 weekly=weekly,
+                friends=friends,
             ),
         )
+
+    async def _friends(self, limiter: Limiter, token: str) -> Block[FriendsCard] | None:
+        """Друзья и число входящих заявок (social); ``None`` — клиент не подключён.
+
+        Любой из двух вызовов не удался — блок ``unavailable``: половина данных (друзья без
+        счётчика заявок) вводила бы в заблуждение. Токен social отверг (401/403) —
+        тоже только этот блок: сессию хаба решает match.
+        """
+        if self._social is None:
+            return None
+        friends, incoming = await asyncio.gather(
+            limiter.attempt(self._social.friends(token)),
+            limiter.attempt(self._social.incoming_requests(token)),
+        )
+        if isinstance(friends, list) and isinstance(incoming, int):
+            return Block.ok(FriendsCard(friends, incoming))
+        for failed in (friends, incoming):
+            if isinstance(failed, UpstreamUnavailableError | UpstreamRejectedError):
+                block_of(failed, "online.friends")  # причина уходит в лог
+                break
+        return Block.unavailable()
+
+    async def _rating_and_social(
+        self, limiter: Limiter, token: str
+    ) -> tuple[
+        list[LadderCard] | UpstreamError, Block[list[WeeklyTopCard]], Block[FriendsCard] | None
+    ]:
+        """Ladder-ы с топом недели и друзья - независимые цепочки параллельно."""
+        (ladders, weekly), friends = await asyncio.gather(
+            self._ladders_and_weekly(limiter, token), self._friends(limiter, token)
+        )
+        return ladders, weekly, friends
 
     async def _ladders_and_weekly(
         self, limiter: Limiter, token: str
@@ -241,6 +280,7 @@ class GetMatchPage:
                 raise error from exc
             log.warning("bff.block_unavailable", block="match", reason=exc.code)
             return _match_unavailable()
+        result = with_report_flags(result, viewer.user_id)
         ids = _round_item_ids(result)
         # Общий предел обоих блоков: до 50 единиц идут волнами по concurrency, и без него
         # страница ждала бы «волны × timeout_s». Блок, не успевший к сроку, гаснет сам.
@@ -304,6 +344,23 @@ class GetMatchPage:
                 return Block.unavailable()
             flags.append(block.data)
         return Block.ok(flags)
+
+
+def with_report_flags(result: MatchResult, viewer_id: UUID | None) -> MatchResult:
+    """Проставить ``can_report`` игрокам: жалоба на другого участника несоло-матча.
+
+    Решает bff по данным матча (social не вызывается): зритель обязан быть участником,
+    сам на себя пожаловаться нельзя, в матче с одним игроком жаловаться не на кого. Субъект
+    неизвестен (токен не проверялся локально) — кнопки нет: social всё равно проверит
+    право при подаче жалобы.
+    """
+    ids = {p.user_id for p in result.players}
+    if viewer_id is None or viewer_id not in ids or len(ids) < _MIN_PLAYERS_TO_REPORT:
+        return result
+    return replace(
+        result,
+        players=[replace(p, can_report=p.user_id != viewer_id) for p in result.players],
+    )
 
 
 def _match_unavailable() -> MatchPage:

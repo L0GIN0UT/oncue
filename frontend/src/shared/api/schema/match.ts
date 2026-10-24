@@ -470,7 +470,7 @@ export interface paths {
         put?: never;
         /**
          * Токен подписки на канал комнаты
-         * @description Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 429 `match.rate_limited`.
+         * @description Subscription-JWT Centrifugo для `room:{code}` — только участнику (D9; отдельный секрет подписок, публикации клиентов запрещены). Connection-токен — `POST /api/identity/v1/realtime/token`. Наблюдатель (право `match.spectate`) получает токен идущего матча как читатель. Ошибки: 404 `match.room_not_found`, 403 `match.not_participant`, 403 `match.online_banned` (санкция `ONLINE`; продление токена перепроверяет её), 429 `match.rate_limited`.
          */
         post: operations["realtime_token_v1_rooms__code__realtime_token_post"];
         delete?: never;

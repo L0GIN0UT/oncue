@@ -393,6 +393,7 @@ class RoomOwner:
             "away": self._away,
             "rename": self._rename,
             "remove": self._remove,
+            "evict": self._evict,
             "abort": self._abort,
         }
         self._handlers = handlers
@@ -1078,6 +1079,23 @@ class RoomOwner:
             # Команда приходит из транзакции consumer'а до её коммита: итог матча не может
             # полагаться только на users_proj.deleted (аудит §5).
             room.forgotten.add(cmd.user_id)
+        room.forget_ops(cmd.user_id)
+        await self._player_rooms.release(cmd.user_id, room.code)
+        await self._unsubscribe(cmd.user_id, room)
+        return self._version(room)
+
+    async def _evict(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
+        """Санкция ``ONLINE`` (``social.UserSanctionsChanged``, ADR 0052): игрок покидает комнату.
+
+        Как ``leave``, но по системной команде consumer'а: ник и история остаются (в отличие
+        от ``remove`` при удалении аккаунта); подписка Centrifugo отзывается с повтором.
+        """
+        seat = room.seat_of(cmd.user_id)
+        if seat is not None and seat.presence is not Presence.LEFT and not room.is_closed:
+            if room.in_match:
+                match_fsm.leave(room, self._require_rules(room), self._timing, cmd.user_id, now)
+            else:
+                room.leave_lobby(cmd.user_id, now)
         room.forget_ops(cmd.user_id)
         await self._player_rooms.release(cmd.user_id, room.code)
         await self._unsubscribe(cmd.user_id, room)

@@ -21,6 +21,7 @@ export const ADMIN = {
   identity: process.env.GV_SEED__IDENTITY_URL ?? "http://127.0.0.1:8100",
   media: process.env.GV_SEED__MEDIA_URL ?? "http://127.0.0.1:8102",
   progression: process.env.GV_SEED__PROGRESSION_URL ?? "http://127.0.0.1:8109",
+  social: process.env.GV_SEED__SOCIAL_URL ?? "http://127.0.0.1:8111",
 };
 export const HAS_ADMIN = Boolean(ADMIN.login && ADMIN.password && ADMIN.secret);
 export const NO_ADMIN_REASON =

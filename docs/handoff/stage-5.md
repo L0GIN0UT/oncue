@@ -1,6 +1,6 @@
 # Передача: этап 5 «Прогрессия и социальное»
 
-> Обновлено: 2026-10-23. Новая сессия начинается с чтения этого файла. 5a влит в `main`; 5b готов к PR (ветка `stage5b/integration`); 5c — в плане как модель.
+> Обновлено: 2026-10-24. Новая сессия начинается с чтения этого файла. 5a и 5b влиты в `main` (PR #27–#29); 5c в работе (ветка `stage5c/integration`, раздел [5c](#5c--social)).
 
 ## Состояние (2026-10-23)
 - 5a (progression) влит в `main`: PR #27 (`stage5a/integration`) и PR #28 (`GV_PUBLIC_ORIGINS` для progression, CSRF на спине колеса). Состав: 0a (контракты, rating-событие, права identity), P1 (домен, ledger, миграция `0002`, начисления), P2 (задания, бейджи, колесо, бусты, `0003`), P3 (admin-API, раздел админки, `0004`), P4 (bff `/pages/profile`, `/pages/players/{id}`, прогресс на главной; фронтенд `/profile`, `/players/[id]`, колесо), 0b (сид `seeds/progression/config.yaml`, задача `progression.config.bootstrap`, `e2e/progression.spec.ts`).
@@ -110,13 +110,88 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 8. **Тема.** `GV_PAGES__DEFAULT_THEME_KEY`, `data-theme` в первом HTML, нет литералов цвета (eslint) и контраст AA (тест); смена темы в рантайме не проверялась.
 9. **Прежние пункты** — 5a (чек-лист выше) и хвосты 4a/4b: identity (realtime-токен), match (античит), rating; допущения сидов 4b.
 
+## 5c — social
+
+Ветка `stage5c/integration` от `main` (95e51f9, после PR #29); один PR, потоки — ветки от неё; PR открывает владелец (метка `e2e`). План — [§10.1](../plans/stage-5.md); ADR 0050–0053 (черновики, на принятие владельцем).
+
+### Прогресс
+| Шаг | Статус |
+|---|---|
+| Шаг 0: roadmap, backlog (три раздела), handoff, детализация §10.1, ADR 0050–0052 | сделано, закоммичено (`9e4532c`) |
+| 0a контракты | сделано, закоммичено (`f679331`, см. «Шаг 0a» ниже) |
+| F1 (друзья, приватность, presence, конфиг в БД) ∥ F2 (комментарии, жалобы, кейсы-ядро, consumers) | сделано, слито, ревью пройдено, запушено (`66ff0df`); social 269, notifications 235 |
+| F3 (санкции, identity+match) ∥ F4 (очередь модерации, конфиг, Django-админка, аватарки) | сделано, ревью (security-reviewer, review-migration, code-reviewer) пройдены, слито, запушено (`4c90b4f`); social 382, identity 471, match 251, collections 235 |
+| F5a (bff) ∥ F5b (frontend), user_id в заявке | сделано, слито (`ab24e33`, `5b1e602`); bff_web 344, social 384, vitest 687, Playwright на моках 75 |
+| 0b (сид `seed_social`, живые `e2e/friends.spec.ts`, `e2e/moderation.spec.ts`) | написано, `tsc -p e2e` проходит, **на живом стеке не запускалось** |
+
+### Шаг 0a (контракты, сделано)
+- События `contracts/events/social/*` (11, с примерами `event_id` ...`7a0001`–`7a000b`); конфиг `contracts/social/social_config.v1.json` (+ пример).
+- OpenAPI social: `/v1` (друзья, заявки, код, блокировки, приватность, presence, приглашение, `players/{id}/relation`, комментарии, причины, жалобы, `me/sanctions`) и `/admin/v1` (кейсы: список, карточка, claim, escalate, resolve; `users/{id}/moderation`; выдача и снятие санкции). Заглушки 501, доступ по контракту (тесты `services/social/tests/component/test_stubs.py`).
+- bff: необязательные блоки `PlayerBlocks.social`, `OnlineBlocks.friends`, `CollectionBlocks.comments`, `ShellPage.sanctions`, `PlayerPage.restricted`, `MatchPlayerCard.can_report` (старые тесты обновлены на явные `null`/`false`).
+- notifications: 5 типов в `notification_types.yaml`, топик `social.social.v1` в `CONSUMED_TOPICS`, необязательное поле `data` (тип-уровень в конфиге, `NotificationItem.data`, realtime `notification.created`) — в 0a только контракт и схема, **заполнение `data` потребителем (room_code у `room_invite`) — задача F1**.
+- identity: миграция прав `0015_seed_social_perms` (admin — все четыре, moderator — без `social.sanctions.account`); `libs/auth`: `Sanction.ONLINE = 32`.
+- Инфраструктура: `social` в `COOKIE_MUTATION_SERVICES` (+ тест), `redis = true` у social в `services.toml` (+ `gv gen`), `social` в `gen-api.mjs`; снимки OpenAPI и типы фронтенда обновлены.
+- Проверки: `gv lint` зелёный; social 91, bff_web 318, notifications 227, identity unit 242 (+ integration `0014`/`0015`), tools/gv 178, libs/auth 75; frontend lint и typecheck зелёные, vitest 621/622 (известный нестабильный `CollectionEditor`, отдельно проходит).
+- Решения ассистента 0a: (9) «кто может звать» — это `friend_requests = all|none` (заявки в друзья), а не приглашения в комнату: приглашение доступно только друзьям; (10) `can_report` и блоки bff в 0a всегда `false`/`null` — решает F5; (11) права: `social.moderate`, `social.comments.delete_any`, `social.sanctions.manage`, `social.sanctions.account`; (12) срок санкции в запросе `duration_s` 60…315 360 000 с или `null` (бессрочно), пределы — конфиг.
+- Не сделано в 0a (по плану — потоки): внутренний `/internal/v1`, `contracts/realtime/room_invite` не создавался (приглашение идёт через `notification.created` с `data.room_code`).
+
+### Порядок ручных проверок (решение владельца 2026-10-24)
+Ручные проверки владельцем по 5a, 5b и 5c проводятся **одним заходом после всего этапа 5** (после 5c, перед 5d/релизом по решению владельца); потоки ими не блокируются. Сводный список — [backlog](../backlog.md#3-открытые-ручные-проверки-владельцем); чек-лист 5c дописывается в конце 5c. Решения ассистента 1–5 по 5c (gateway→match/social, без `PlayerForfeited`, `RoomInviteSent`/`ReportResolved`, `friend_requests`, биты санкций) приняты владельцем.
+
+### Поправка владельца: конфиг social в БД (2026-10-24, ADR 0053)
+Конфиг social — не файл в пакете, а версии в БД по образцу progression (`config_versions`: черновик → публикация → откат; публикация привязана к `body_sha256`). Причина: лимиты и порог жалоб крутят во время спама без деплоя, справочник причин правят модераторы. Контракт добавлен (`/admin/v1/config/versions[/{v}]`, `PUT /config/draft`, `POST /config/draft/publish`, `POST /config/versions/{v}/rollback`; права `social.config.manage` / `social.config.publish`, миграция identity `0016`: оба права у admin и moderator; `0018` снимает `publish` у moderator — публикует только admin). Разделение работ: **F1** — таблица `config_versions` (миграция `0002`), загрузка действующей версии с коротким кэшем (нет версии → 503 `social.config_unavailable`), задача relay `social.config.bootstrap` из `seeds/social/config.yaml` (только local/ci); **F4** — admin-ручки конфига и страница в админке.
+
+### Решения владельца (2026-10-24, поверх §10)
+Друзья: заявки по нику/коду, блокировки, онлайн-статус через presence, приглашение в комнату (in-app + realtime), список только владельцу, «кто может звать» все/никто, лимиты в конфиге. Комментарии: только сборники, плоские, ≤500, `gv_text.ugc`, правка 5 мин. Жалобы: игрок (матч, не соло), сборник, комментарий, аватарка; порог в очередь; очередь в админке; автоматики нет. Санкции `RANKED`, `CHAT`, `ONLINE`, `ACCOUNT` со сроком/бессрочно. Приватность: профиль и статистика публичны по умолчанию, скрыть можно; история матчей — владельцу. Notifications: 5 типов, только in-app + realtime.
+
+### Решения ассистента (не из списка владельца)
+1. Gateway санкции не применяет (Nginx не разбирает JWT): применяют identity (ACCOUNT, выпуск токена), match и social (`claim | proj`). Уточняет формулировку владельца «match и gateway».
+2. `PlayerForfeited` не вводим: счётчики из `MatchFinished.players[].finish` и `PlayerRated`.
+3. Новые события сверх списка: `RoomInviteSent`, `ReportResolved`.
+4. `CHAT` = `CHAT_MUTE | COMMENTS`; `CHAT_SLOW` резерв; `ONLINE=32`; `ACCOUNT` — флаг `account_banned`, не claim.
+5. Presence в social (Redis + проекция «в матче»); social получает зависимость Redis.
+6. Жалоба на игрока принимается из `PlayerRated` и через API social (при общем несоло-матче).
+7. Модератор не санкционирует себя; просрочку снимает периодическая задача relay.
+8. Очередь UGC-изображений media-pipeline в общую очередь social не подтягиваем (позже отдельным ADR).
+
+### Итоги F5 и 0b
+- **bff (F5a):** клиент social, блоки `social`/`restricted` (`/players/{id}`), `friends` (`/online`), `comments` (`/collections/{id}`), `sanctions` (`/shell`), `can_report` (`/match/{id}`). Приватность fail-closed: social не ответил — чужая статистика не отдаётся. `Viewer.user_id` — `sub` проверенного токена.
+- **frontend (F5b):** `/friends` (список со статусами, заявки, добавить по нику/коду/`user_id`, мой код, блокировки, приватность), heartbeat раз в 30 с (`features/friends/config.ts`), профиль игрока (кнопки, `restricted`), панель приглашения в лобби и «Войти» из уведомления `room_invite` (`data.room_code`), комментарии сборника, `ReportDialog` (итог матча, сборник, комментарий), баннер и страница `/sanctions`, сообщения `match.online_banned` и `auth.account_banned`.
+- **0b:** шаг `seed_social` в `gv dev seed` (ждёт публикации конфига, больше ничего не создаёт), `e2e/friends.spec.ts`, `e2e/moderation.spec.ts` (admin-ручки social — напрямую на `127.0.0.1:8111`, через gateway не проброшены). **Не запускались на живом стеке** — что проверять: селекторы (`request-out-*`, `my-code`, `player-restricted`, `report-reason-*`, `notification-join`), состав тела `PUT /config/draft`, окно доставки уведомлений ≤90 с и presence 30 с, лаг проекции санкций в match (опрос до 60 с), права сид-админа на `social.config.*`, `social.sanctions.account`, `social.moderate`, вход забаненного `account` с известного устройства (иначе `code_required`).
+- **Решения ассистента (F5):** друзья видят скрытый профиль друг друга (принято владельцем); добавить в друзья можно по `user_id` (тот же путь и те же 404, что у ника); кнопка «добавить» в итоге матча показывается при `can_report`.
+
+## Единый чек-лист ручных проверок владельцем (этап 5 целиком: 4a, 4b, 5a, 5b, 5c)
+Решение владельца 2026-10-24: один заход после этапа 5, потоки не блокируются. Зоны повышенной безопасности — **требуется ручная проверка владельцем**. Предусловие: `gv dev up`, `gv dev seed`, `E2E_SEEDED=1`.
+
+**Общее (живой стек)**
+1. Прогон e2e на полном стеке: `lobby/duel/party` (4a), `ranked` (4b), `progression` (5a), `shop`, `notifications` (5b), `friends`, `moderation` (5c). Селекторы и тайминги 5b/5c — по спискам выше.
+2. Миграции на чистой БД (вверх/вниз): progression `0002`–`0007`, notifications `0002`–`0005`, media_pipeline `0008`, identity `0014`–`0017`, social `0002`–`0005` (откат social `0004` прерывается, если есть санкции), match `0004`. `nginx -t` на образе 1.28 — в CI.
+
+**4a/4b: identity, match, rating**
+3. identity: realtime-токен (`/v1/realtime/token`, лимиты); match: античит, комнаты, отзыв подписки; rating: сезоны, топ недели. Допущения сидов 4b: K Эло 40/20, пороги званий, фильтры `similar`. Win-trading — детектор остаётся хвостом (ADR 0038).
+
+**5a: ledger progression (зона повышенной безопасности)**
+4. Роли Postgres: журналы защищены триггерами, но роль сервиса владеет таблицами (REVOKE — этап 7, риск принят). Начисления: дубль события даёт одну проводку; потолки соло и онлайн-Версов не обходятся параллельными матчами около полуночи. Конфиг: верхние границы сумм, публикация привязана к хешу, админ без `publish` не публикует. Ручная выдача и сторно (только `earned`, только кредиты, `no-store`). Награды сезона и недели (`rating.SeasonStandingsFinalized`, пачки). Живая проверка `/profile`, колеса (один спин в сутки), админки «Прогрессия». Пароль сид-админа локального стенда мог попасть в вывод — при необходимости сменить.
+
+**5b: экономика, файлы, уведомления**
+5. Покупка: одна проводка на `shop:{user}:{item}`, параллельные повторы, баланс не ниже нуля, `reconcile` сходится. Промокоды: только HMAC в БД, одинаковый 404, лимиты попыток (Redis fail-closed), потолки эмиссии, коды не в логах.
+6. Загрузка файлов: аватарка (1,5 МБ, статика, WebP, `p/` → `u/`), `/ugc/`, `/media/p/`, `/cosmetics/`, политика бакета, чистка осиротевших объектов.
+7. identity `POST /internal/v1/users/emails` (scope, лимиты fail-closed); отписка без входа (непрозрачный токен, one-click, `Referrer-Policy`, query вне логов); рассылка только подписавшимся; тема (`data-theme`, смена в рантайме не проверялась).
+
+**5c: social, санкции (зона повышенной безопасности)**
+8. identity: бан `account` — вход (пароль, код, Яндекс), refresh, admin-вход дают 403 `auth.account_banned` после проверки пароля; отзыв сессий и denylist; снятие бана; окно действия уже выданного access ≤15 мин; claim `sanctions` в токене.
+9. match: `ONLINE` — отказ на создании/входе в комнату, ready/start/guess/чате, очереди, realtime-токене; выбивание из очереди и лобби по событию, `unsubscribe` Centrifugo с повтором; fail-closed 503 при недоступной проекции; `RANKED`, `CHAT`.
+10. social: права (`manage`/`account`, модератор не снимает бан `account`, не санкционирует себя), история санкций, замена того же вида, истечение (задача relay), журнал `sanctions` append-only.
+11. Модерация: порог жалоб → кейс; claim/escalate (решить эскалированный может только admin)/resolve; `ContentModerated` скрывает сборник и комментарий, снимает аватарку; `ReportResolved` по заявителю; тексты жалоб только в админ-ответе и экранированы; конфиг social (черновик → публикация → откат): модератор читает и правит черновик, публикует и откатывает только admin (identity `0018`).
+12. Друзья и приватность: одинаковые ответы для неизвестного/скрывшего/заблокировавшего (в т.ч. по времени — принятый риск ADR 0050), коды (перевыпуск, перебор — лимит), список друзей только владельцу, блокировка закрывает комментарии в обе стороны (`social.blocked`), приглашение в комнату (`data.room_code`).
+13. Принять ADR 0042–0053 (сейчас черновики) или внести замечания.
+
 ## Открыто
-- Ручные проверки владельцем: чек-листы выше (5a и 5b).
-- Хвосты 5b — [docs/backlog.md](../backlog.md) и [roadmap](../09-roadmap.md#хвосты-этапа-5).
-- Допущения сидов 4b: K Эло 40/20, пороги званий, фильтры `similar`.
-- Win-trading — детектор (хвост ADR 0038), 5c.
-- Исключённый игрок может переподписаться на канал комнаты старым токеном (до 10 мин) — хвост 4a, при желании в 5c вместе с санкцией `ONLINE`.
+- Ручные проверки — единый список выше; хвосты — [docs/backlog.md](../backlog.md#проход-по-техдолгу) и [roadmap](../09-roadmap.md#хвосты-этапа-5).
+- Нерешённое в 5c (в backlog): ник и `asset_id` аватарки в `PlayerPage`/`PlayerAppearance` (нужны для жалобы на аватарку чужого игрока и ника в скрытом профиле), кнопка жалобы в истории матчей, страница для уже открытой сессии забаненного `account`, точный флаг «можно добавить» в итоге матча, disconnect Centrifugo для забаненного, алерт на лаг consumer social в match, иерархия модераторов.
+- Win-trading — детектор остаётся хвостом (ADR 0038): в 5c только счётчики порядочности для модератора.
+- Исключённый хозяином комнаты игрок может переподписаться на канал старым токеном (до 10 мин) — хвост 4a; для бана `ONLINE` закрыто (перепроверка при продлении).
 
 ## Дальше
-1. Владелец: ручная проверка (чек-лист 5b), живой прогон e2e, PR `stage5b/integration` → `main` с меткой `e2e`.
-2. После слияния — 5c (social, [план](../plans/stage-5.md) §10): друзья, комментарии, жалобы, санкции, приватность; затем 5d (сезонные события, §12). Очередь модерации UGC-изображений при 5c можно подтянуть в общую очередь `social` отдельным ADR.
+1. Владелец: PR `stage5c/integration` → `main` с меткой `e2e`; единый заход ручных проверок (чек-лист выше), живой прогон e2e.
+2. 5d (сезонные события, [план](../plans/stage-5.md) §12); затем рефакторинг фронтенда и проход по техдолгу ([backlog](../backlog.md)) до этапа 7.

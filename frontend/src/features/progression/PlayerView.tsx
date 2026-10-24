@@ -11,6 +11,7 @@ import { isApiError } from "@/shared/api/errors";
 import { blockData } from "@/shared/api/blocks";
 import { useViewer } from "@/features/auth/session";
 import { PlayerBadge, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
+import { PlayerActions } from "@/features/friends/PlayerActions";
 import { fetchPlayerPage, playerQueryKey } from "./api";
 import { gateOf, ProfileGate } from "./ProfileView";
 
@@ -45,9 +46,27 @@ export function PlayerView({ userId }: { userId: string }) {
   const data = block?.status === "ok" ? block.data : null;
   // Оформление необязательно: `null` или недоступный блок — игрок без рамки, титула и фона.
   const appearance = blockData(page.data?.blocks.appearance);
+  const social = blockData(page.data?.blocks.social);
+  // 5c: профиль закрыт, игрок заблокировал зрителя или неизвестен — ответы неразличимы.
+  if (page.data?.restricted) {
+    return (
+      <div className="flex flex-col gap-6 pt-6 sm:pt-10" data-testid="player-restricted">
+        <h1 className="font-display text-3xl font-bold">{t("progression.player.title")}</h1>
+        <ProfileBackdrop
+          appearance={appearance}
+          className="rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
+        >
+          <PlayerBadge nickname={t("nav.player")} appearance={appearance} size="lg" />
+        </ProfileBackdrop>
+        <p className="max-w-[60ch] text-ink-muted">{t("social.player.restricted")}</p>
+        {social?.blocked_by_me && <PlayerActions userId={userId} social={social} />}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-6 pt-6 sm:pt-10">
       <h1 className="font-display text-3xl font-bold">{t("progression.player.title")}</h1>
+      {social && <PlayerActions userId={userId} social={social} />}
       {!block ? (
         <p className="text-ink-muted" role="status">
           {t("common.loading")}

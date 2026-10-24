@@ -32,6 +32,12 @@ services:
     volumes:
       - ../../seeds/progression:/seeds/progression:ro
 {% endif %}
+{% if s.name == "social" %}
+      # Стартовый конфиг публикуется версией 1, если опубликованной нет (social.config.bootstrap, ADR 0053).
+      GV_SOCIAL__BOOTSTRAP_CONFIG_DIR: /seeds/social
+    volumes:
+      - ../../seeds/social:/seeds/social:ro
+{% endif %}
 {% if s.name == "catalog" %}
       # Файлы импорта каталога (`gv dev seed`): воркер читает их из этого каталога.
       GV_IMPORTS__FILES_DIR: /seeds/catalog

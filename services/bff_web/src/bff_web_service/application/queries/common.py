@@ -52,6 +52,11 @@ class Limiter:
             return exc
 
 
+async def maybe[T](call: Awaitable[T | UpstreamError] | None) -> T | UpstreamError | None:
+    """Вызов или ``None``, если его делать нельзя (приватность, нет клиента) — для ``gather``."""
+    return None if call is None else await call
+
+
 ANONYMOUS_SKIP = UpstreamRejectedError("game", HTTP_UNAUTHORIZED, "auth.unauthenticated")
 """Маркер «личный вызов не делался: зритель — аноним» (блок ``unavailable`` без лога)."""
 

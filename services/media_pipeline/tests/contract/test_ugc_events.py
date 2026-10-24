@@ -24,6 +24,23 @@ def test_asset_moderated_example_matches_schema_and_topic() -> None:
     assert example.topic == "media_pipeline.ugc_image.v1"
 
 
+def test_consumes_content_moderated_example_and_topic() -> None:
+    """Решение модерации social (аватарка): пример разбирается, топик подписан."""
+    from media_pipeline_service.infrastructure.messaging import (
+        CONSUMED_TOPICS,
+        CONTENT_MODERATED,
+        _ContentModeratedPayload,
+    )
+
+    example = load_example(CONTENT_MODERATED)
+    assert example.topic in CONSUMED_TOPICS
+    parsed = _ContentModeratedPayload.model_validate(example.payload)
+    assert parsed.case_id and parsed.moderator_id
+    schema = load_event_schema(CONTENT_MODERATED)
+    assert {"avatar", "collection"} <= set(schema["properties"]["target_kind"]["enum"])
+    assert set(schema["properties"]["decision"]["enum"]) >= {"content_removed"}
+
+
 def test_events_emitted_by_domain_match_schema() -> None:
     """Реальные события агрегата (одобрение, снятие) проходят схему и топик контракта."""
     image = UgcImage.submit(

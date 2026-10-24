@@ -328,3 +328,91 @@ async def test_0014_seeds_economy_perms_moderator_gets_only_ugc_and_is_reversibl
     assert after["admin"] >= PROGRESSION_PERMS  # права 0013 откат не трогает
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["admin"] >= ECONOMY_PERMS
+
+
+SOCIAL_PERMS = {
+    "social.moderate",
+    "social.comments.delete_any",
+    "social.sanctions.manage",
+    "social.sanctions.account",
+}
+
+
+async def test_0015_seeds_social_perms_moderator_has_no_account_ban_and_is_reversible(
+    database_url: str,
+) -> None:
+    """План этапа 5, §10.1: бан входа (`account`) - только admin; остальное - и moderator."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= SOCIAL_PERMS
+    assert grants["admin"] >= SOCIAL_PERMS
+    assert grants["moderator"] & SOCIAL_PERMS == SOCIAL_PERMS - {"social.sanctions.account"}
+    assert not grants.get("user", set()) & SOCIAL_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0014")
+    after = await _grants(database_url)
+    assert not after["*"] & SOCIAL_PERMS
+    assert after["admin"] >= ECONOMY_PERMS  # права 0014 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= SOCIAL_PERMS
+
+
+SOCIAL_CONFIG_PERMS = {"social.config.manage", "social.config.publish"}
+
+
+async def test_0016_seeds_social_config_perms_for_admin_and_moderator_and_is_reversible(
+    database_url: str,
+) -> None:
+    """ADR 0053: конфиг social крутят admin и moderator; обычный игрок - нет."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= SOCIAL_CONFIG_PERMS
+    assert grants["admin"] >= SOCIAL_CONFIG_PERMS
+    assert "social.config.manage" in grants["moderator"]
+    assert not grants.get("user", set()) & SOCIAL_CONFIG_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0015")
+    after = await _grants(database_url)
+    assert not after["*"] & SOCIAL_CONFIG_PERMS
+    assert after["admin"] >= SOCIAL_PERMS  # права 0015 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["moderator"] >= {"social.config.manage"}
+
+
+async def test_0018_leaves_publish_to_admin_only_and_is_reversible(database_url: str) -> None:
+    """Публикация конфига social - только admin; у moderator остаются чтение и черновик."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert "social.config.publish" in grants["admin"]
+    assert "social.config.publish" not in grants["moderator"]
+    assert "social.config.manage" in grants["moderator"]
+    assert "social.config.publish" in grants["*"]  # право в справочнике остаётся
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0017")
+    assert "social.config.publish" in (await _grants(database_url))["moderator"]
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert "social.config.publish" not in (await _grants(database_url))["moderator"]

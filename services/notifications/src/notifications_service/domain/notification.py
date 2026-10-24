@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -16,6 +17,7 @@ class Candidate:
     dedup_key: str
     title: str
     body: str
+    data: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +32,7 @@ class Notification:
     body: str
     created_at: datetime
     read_at: datetime | None = None
+    data: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

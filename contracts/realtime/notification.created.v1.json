@@ -17,6 +17,15 @@
           "format": "date-time",
           "type": "string"
         },
+        "data": {
+          "additionalProperties": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "description": "Необязательные машинные поля типа (room_invite: room_code); отсутствует или пусто — нет",
+          "maxProperties": 5,
+          "type": "object"
+        },
         "id": {
           "format": "uuid",
           "type": "string"

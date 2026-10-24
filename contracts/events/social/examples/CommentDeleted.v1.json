@@ -1,0 +1,18 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0003",
+  "aggregate_type": "social",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0007",
+  "event_type": "social.CommentDeleted",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:06:00Z",
+  "payload": {
+    "at": "2026-10-24T12:06:00Z",
+    "by_role": "collection_owner",
+    "collection_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0001",
+    "comment_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0003",
+    "deleted_by": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+  },
+  "producer": "social"
+}

@@ -87,6 +87,7 @@ from identity_service.domain import (
     User,
 )
 from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
+from identity_service.domain.user_sanctions import UserSanctions as UserSanctionsSnapshot
 
 from gv_core import ConflictError, DependencyUnavailableError, DomainEvent
 from gv_core.ids import uuid7
@@ -134,6 +135,7 @@ class Data:
     consents: list[Consent] = field(default_factory=list)
     challenges: dict[UUID, EmailChallenge] = field(default_factory=dict)
     devices: dict[tuple[UUID, str], TrustedDevice] = field(default_factory=dict)
+    sanctions: dict[UUID, UserSanctionsSnapshot] = field(default_factory=dict)
 
 
 class Users:
@@ -404,6 +406,23 @@ class Devices:
         return len(doomed)
 
 
+class UserSanctions:
+    """Снимки санкций: версия решает, применять ли событие."""
+
+    def __init__(self, d: Data) -> None:
+        self.d = d
+
+    async def get(self, user_id: UUID) -> UserSanctionsSnapshot | None:
+        return self.d.sanctions.get(user_id)
+
+    async def apply(self, snapshot: UserSanctionsSnapshot) -> bool:
+        known = self.d.sanctions.get(snapshot.user_id)
+        if known is not None and known.version >= snapshot.version:
+            return False
+        self.d.sanctions[snapshot.user_id] = snapshot
+        return True
+
+
 class FakeCodeService:
     """Детерминированные коды: 000001, 000002, ... ; «HMAC» — строка с id."""
 
@@ -606,6 +625,7 @@ class WorldUoW(FakeUnitOfWork):
         self.consents = Consents(self._data)
         self.email_challenges = Challenges(self._data, world.spent, world.spent_total)
         self.trusted_devices = Devices(self._data)
+        self.user_sanctions = UserSanctions(self._data)
         self.idempotency = world.idempotency
 
     async def __aenter__(self) -> Self:
@@ -641,10 +661,19 @@ class FakeHasher:
 class FakeTokens:
     def __init__(self) -> None:
         self.service_issued: list[tuple[str, str, frozenset[str], int]] = []
+        self.sanctions_issued: list[int] = []
+        """Маска ``sanctions`` каждого выпущенного access-токена по порядку."""
 
     def issue_access(
-        self, *, user_id: UUID, session_id: UUID, roles: Iterable[str], perms: Iterable[str]
+        self,
+        *,
+        user_id: UUID,
+        session_id: UUID,
+        roles: Iterable[str],
+        perms: Iterable[str],
+        sanctions: int = 0,
     ) -> IssuedAccess:
+        self.sanctions_issued.append(sanctions)
         return IssuedAccess(f"access:{user_id}:{session_id}:{','.join(perms)}", 900)
 
     def issue_service(

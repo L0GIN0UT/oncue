@@ -70,6 +70,10 @@ services:
     ports: ["127.0.0.1:8111:8000"]
     environment:
       GV_LOG_JSON: "false"
+      # Стартовый конфиг публикуется версией 1, если опубликованной нет (social.config.bootstrap, ADR 0053).
+      GV_SOCIAL__BOOTSTRAP_CONFIG_DIR: /seeds/social
+    volumes:
+      - ../../seeds/social:/seeds/social:ro
   notifications:
     ports: ["127.0.0.1:8112:8000"]
     environment:

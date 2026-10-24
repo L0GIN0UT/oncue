@@ -107,3 +107,72 @@ types:
       ru:
         title: Аватарка отклонена
         body: "Ваша аватарка {reason}."
+
+  # --- 5c: social (ADR 0050, 0051). Только in-app и realtime, e-mail нет. ---
+  - key: friend_request
+    source_event: social.FriendRequested
+    recipient: payload.to_user_id
+    dedup_key: "friend_request:{payload.request_id}"
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      nickname: payload.from_nickname
+    templates:
+      ru:
+        title: Заявка в друзья
+        body: "{nickname} хочет добавить вас в друзья."
+
+  - key: friend_accepted
+    source_event: social.FriendAdded
+    recipient: payload.requester_id
+    dedup_key: "friend_accepted:{payload.user_a}:{payload.user_b}:{payload.at}"
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      nickname: payload.accepter_nickname
+    templates:
+      ru:
+        title: Заявка принята
+        body: "{nickname} теперь в вашем списке друзей."
+
+  - key: room_invite
+    source_event: social.RoomInviteSent
+    recipient: payload.to_user_id
+    dedup_key: "room_invite:{payload.invite_id}"
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      nickname: payload.from_nickname
+    # Код комнаты клиент берёт из data, текст его не содержит.
+    data:
+      room_code: payload.room_code
+    templates:
+      ru:
+        title: Приглашение в комнату
+        body: "{nickname} зовёт вас в комнату."
+
+  - key: report_resolved
+    source_event: social.ReportResolved
+    recipient: payload.reporter_id
+    dedup_key: "report_resolved:{payload.report_id}"
+    user_mutable: false
+    channels: {in_app: true, email: false, push: false}
+    params: {}
+    templates:
+      ru:
+        title: Жалоба рассмотрена
+        body: Мы рассмотрели вашу жалобу и приняли решение. Спасибо, что помогаете сообществу.
+
+  - key: comment_on_my_collection
+    source_event: social.CommentPosted
+    recipient: payload.collection_author_id
+    dedup_key: "comment:{payload.comment_id}"
+    filter: {notify_owner: true}
+    user_mutable: true
+    channels: {in_app: true, email: false, push: false}
+    params:
+      nickname: payload.author_nickname
+    templates:
+      ru:
+        title: Новый комментарий
+        body: "{nickname} оставил(а) комментарий к вашему сборнику."

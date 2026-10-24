@@ -1,0 +1,3 @@
+# Подключается в location: `include /etc/nginx/conf.d/limit-api.inc;`.
+# Суффикс .inc (не .conf): файл не должен попасть в http-контекст через conf.d/*.conf.
+limit_req zone=api_per_ip burst=${GV_GATEWAY_API_BURST} nodelay;

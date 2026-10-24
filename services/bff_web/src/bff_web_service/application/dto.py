@@ -44,12 +44,15 @@ class Viewer:
         verified: Токен проверен локально (подпись, срок, отзыв).
         token_rejected: Токен был, но не прошёл локальную проверку (истёк, отозван,
             подделан): для экранов это аноним, а хаб онлайна просит фронт обновить сессию.
+        user_id: Субъект проверенного токена (``sub``); ``None`` — аноним или токен не
+            проверялся локально (JWKS недоступен): решения «это я» тогда не принимаются.
     """
 
     token: str | None = None
     kind: SubjectKind | None = None
     verified: bool = False
     token_rejected: bool = False
+    user_id: UUID | None = None
 
     @property
     def is_personal(self) -> bool:
@@ -642,6 +645,7 @@ class CollectionBlocks:
 
     collection: Block[CollectionDetail]
     modes: Block[list[CollectionMode]]
+    comments: Block[CommentsCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -769,6 +773,8 @@ class MatchPlayer:
     score: int
     outcome: DuelOutcome | None
     finish: PlayerFinish
+    can_report: bool = False
+    """5c: показывать кнопку жалобы; решает bff по данным матча, источник поле не отдаёт."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -977,6 +983,7 @@ class OnlineBlocks:
     ratings: Block[list[RatingCard]]
     seasons: Block[list[SeasonCard]]
     weekly: Block[list[WeeklyTopCard]]
+    friends: Block[FriendsCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1151,13 +1158,15 @@ class PlayerBlocks:
 
     progress: Block[PublicProgress]
     appearance: Block[AppearanceCard] | None = None
+    social: Block[PlayerSocialCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PlayerPage:
-    """``GET /v1/pages/players/{user_id}``."""
+    """``GET /v1/pages/players/{user_id}``; ``restricted`` — профиль скрыт от зрителя (5c)."""
 
     blocks: PlayerBlocks
+    restricted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1344,3 +1353,89 @@ class ShellPage:
     theme: ThemeCard
     bell: Block[BellCard] | None
     personal: bool
+    sanctions: Block[SanctionsCard] | None = None
+
+
+# ----------------------------------------------------------------------------- social (5c)
+FriendStatus = Literal["online", "in_match", "offline"]
+SanctionKind = Literal["ranked", "chat", "online", "account"]
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerRelation:
+    """Отношение зрителя к игроку (social ``/v1/players/{id}/relation``).
+
+    ``profile_visible = False`` одинаков для скрытого профиля, блокировки зрителя и
+    неизвестного игрока: различать причины нельзя (нет перечисления аккаунтов).
+    """
+
+    profile_visible: bool
+    stats_visible: bool
+    is_friend: bool
+    can_send_request: bool
+    blocked_by_me: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerSocialCard:
+    """Блок ``social`` профиля игрока."""
+
+    is_friend: bool
+    can_send_request: bool
+    blocked_by_me: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FriendCard:
+    """Друг со статусом (без деталей presence)."""
+
+    user_id: UUID
+    nickname: str
+    status: FriendStatus
+
+
+@dataclass(frozen=True, slots=True)
+class FriendsCard:
+    """Друзья владельца и число входящих заявок."""
+
+    items: list[FriendCard]
+    incoming_requests: int
+
+
+@dataclass(frozen=True, slots=True)
+class CommentCard:
+    """Комментарий к сборнику; ``can_*`` посчитаны social для зрителя."""
+
+    id: UUID
+    author_id: UUID
+    author_nickname: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None
+    can_edit: bool
+    can_delete: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CommentsCard:
+    """Первая страница комментариев сборника."""
+
+    items: list[CommentCard]
+    total: int
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SanctionCard:
+    """Действующая санкция (без данных модератора)."""
+
+    kind: SanctionKind
+    expires_at: datetime | None
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class SanctionsCard:
+    """Санкции игрока; пусто — ограничений нет."""
+
+    items: list[SanctionCard]

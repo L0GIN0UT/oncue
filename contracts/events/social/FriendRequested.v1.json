@@ -1,0 +1,40 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:FriendRequested:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Исходящая заявка в друзья создана. aggregate_id — request_id. Получатель уведомления friend_request — to_user_id. Ник отправителя денормализован для текста уведомления.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "from_nickname": {
+      "maxLength": 24,
+      "minLength": 3,
+      "type": "string"
+    },
+    "from_user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "to_user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "from_nickname",
+    "from_user_id",
+    "request_id",
+    "to_user_id"
+  ],
+  "title": "social.FriendRequested v1",
+  "type": "object",
+  "x-aggregate-type": "social",
+  "x-topic": "social.social.v1"
+}

@@ -22,7 +22,7 @@ def document() -> dict[str, Any]:
     return copy.deepcopy(read_document())
 
 
-def test_builtin_config_loads_all_types_of_stage_5b() -> None:
+def test_builtin_config_loads_all_types_of_stage_5c() -> None:
     catalog = load_catalog()
     assert {t.key for t in catalog.types} == {
         "level_up",
@@ -32,6 +32,11 @@ def test_builtin_config_loads_all_types_of_stage_5b() -> None:
         "season_reward",
         "avatar_approved",
         "avatar_rejected",
+        "friend_request",
+        "friend_accepted",
+        "room_invite",
+        "report_resolved",
+        "comment_on_my_collection",
     }
     assert catalog.default_locale == "ru"
 
@@ -55,6 +60,11 @@ def test_topics_follow_source_events() -> None:
             "progression.QuestCompleted",
             "progression.CurrencyCredited",
             "media_pipeline.AssetModerated",
+            "social.FriendRequested",
+            "social.FriendAdded",
+            "social.RoomInviteSent",
+            "social.ReportResolved",
+            "social.CommentPosted",
         }
     )
 

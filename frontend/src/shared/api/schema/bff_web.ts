@@ -48,7 +48,7 @@ export interface paths {
         };
         /**
          * Страница сборника
-         * @description Карточка (collections; `items` — только автору, админу и прошедшему, D6), режимы с играбельностью (game; недоступен — `modes: unavailable`, карточка отдаётся), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`. С токеном — `private, no-store`.
+         * @description Карточка (collections; `items` — только автору, админу и прошедшему, D6), режимы с играбельностью (game; недоступен — `modes: unavailable`, карточка отдаётся), `me` — только пользователю (гостю и анониму — null). Нет, скрыт для чужих или удалён — 404 `collections.not_found`. `comments` (5c, social) — первая страница комментариев, читают и анонимы; `can_edit`/`can_delete` — только с токеном пользователя. С токеном — `private, no-store`.
          */
         get: operations["collection_page_v1_pages_collections__collection_id__get"];
         put?: never;
@@ -145,7 +145,7 @@ export interface paths {
         };
         /**
          * Итог матча
-         * @description Итог (match) + карточки единиц раундов (catalog) + флаги «в медиатеке» (library). Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Нет или ещё идёт — 404 `match.match_not_found`. Упавший match — все блоки `unavailable`; catalog или library — только их блок. Всегда `private, no-store`.
+         * @description Итог (match) + карточки единиц раундов (catalog) + флаги «в медиатеке» (library). Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. `players[].can_report` (5c) решает bff: зритель — участник несоло-матча, игрок — не он сам. Нет или ещё идёт — 404 `match.match_not_found`. Упавший match — все блоки `unavailable`; catalog или library — только их блок. Всегда `private, no-store`.
          */
         get: operations["match_page_v1_pages_match__match_id__get"];
         put?: never;
@@ -165,7 +165,7 @@ export interface paths {
         };
         /**
          * Хаб онлайна
-         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
+         * @description Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие сезоны и топ недели (rating), друзья и входящие заявки `friends` (social, 5c). Каждый блок деградирует независимо (`unavailable`, страница 200). Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, `blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил 401 — `status: session_expired` (обновить сессию и повторить). Всегда `private, no-store`.
          */
         get: operations["online_page_v1_pages_online_get"];
         put?: never;
@@ -185,7 +185,7 @@ export interface paths {
         };
         /**
          * Профиль игрока: уровень, опыт, бейджи
-         * @description Публичная часть прогресса чужого (или своего) игрока. Только пользователь с аккаунтом: аноним — 401, гость — 403 `auth.guest_forbidden`, источники при этом не вызываются. Нет игрока — 404; недоступный progression — блок `unavailable`. Всегда `private, no-store`.
+         * @description Публичная часть прогресса чужого (или своего) игрока. Только пользователь с аккаунтом: аноним — 401, гость — 403 `auth.guest_forbidden`, источники при этом не вызываются. Нет игрока — 404; недоступный progression — блок `unavailable`. 5c: блок `social` (отношение зрителя) и `restricted` (скрытый профиль, блокировка или неизвестный игрок — неразличимо; статистика не запрашивается). Всегда `private, no-store`.
          */
         get: operations["player_page_v1_pages_players__user_id__get"];
         put?: never;
@@ -245,7 +245,7 @@ export interface paths {
         };
         /**
          * Оболочка приложения: тема и колокольчик
-         * @description Этап 5b. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
+         * @description Этап 5b. `sanctions` (5c) — действующие санкции пользователя. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
          */
         get: operations["shell_page_v1_pages_shell_get"];
         put?: never;
@@ -453,6 +453,24 @@ export interface components {
         /** Block[CollectionResults] */
         Block_CollectionResults_: {
             data?: components["schemas"]["CollectionResults"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[CommentsCard] */
+        Block_CommentsCard_: {
+            data?: components["schemas"]["CommentsCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[FriendsCard] */
+        Block_FriendsCard_: {
+            data?: components["schemas"]["FriendsCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -683,6 +701,15 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[PlayerSocialCard] */
+        Block_PlayerSocialCard_: {
+            data?: components["schemas"]["PlayerSocialCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[ProgressCard] */
         Block_ProgressCard_: {
             data?: components["schemas"]["ProgressCard"] | null;
@@ -713,6 +740,15 @@ export interface components {
         /** Block[ResultSummary] */
         Block_ResultSummary_: {
             data?: components["schemas"]["ResultSummary"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[SanctionsCard] */
+        Block_SanctionsCard_: {
+            data?: components["schemas"]["SanctionsCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -817,6 +853,8 @@ export interface components {
          */
         CollectionBlocks: {
             collection: components["schemas"]["Block_CollectionDetail_"];
+            /** @description 5c: комментарии (social); null — не вызывалось */
+            comments?: components["schemas"]["Block_CommentsCard_"] | null;
             modes: components["schemas"]["Block_list_CollectionModeCard__"];
         };
         /**
@@ -1044,6 +1082,49 @@ export interface components {
             blocks: components["schemas"]["CollectionsBlocks"];
         };
         /**
+         * CommentCard
+         * @description Комментарий к сборнику.
+         */
+        CommentCard: {
+            /**
+             * Author Id
+             * Format: uuid
+             */
+            author_id: string;
+            /** Author Nickname */
+            author_nickname: string;
+            /** Body */
+            body: string;
+            /** Can Delete */
+            can_delete: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edited At */
+            edited_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /**
+         * CommentsCard
+         * @description Первая страница комментариев сборника; дальше - social ``/v1/collections/{id}/comments``.
+         */
+        CommentsCard: {
+            /** Items */
+            items: components["schemas"]["CommentCard"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Total */
+            total: number;
+        };
+        /**
          * CosmeticCard
          * @description Предмет косметики (progression, 5b): картинка или анимация по ``media_kind``.
          */
@@ -1140,6 +1221,34 @@ export interface components {
             kind: string;
             /** Url */
             url: string;
+        };
+        /**
+         * FriendCard
+         * @description Друг в блоке «друзья» (только владельцу).
+         */
+        FriendCard: {
+            /** Nickname */
+            nickname: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "online" | "in_match" | "offline";
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * FriendsCard
+         * @description Блок друзей для хаба онлайна и лобби (приглашение в комнату).
+         */
+        FriendsCard: {
+            /** Incoming Requests */
+            incoming_requests: number;
+            /** Items */
+            items: components["schemas"]["FriendCard"][];
         };
         /**
          * HomeBlocks
@@ -1400,6 +1509,12 @@ export interface components {
          */
         MatchPlayerCard: {
             /**
+             * Can Report
+             * @description 5c: показывать кнопку жалобы (не сам игрок, матч не соло); решает bff
+             * @default false
+             */
+            can_report: boolean;
+            /**
              * Finish
              * @enum {string}
              */
@@ -1595,6 +1710,8 @@ export interface components {
          * @description Блоки хаба онлайна: каждый деградирует независимо.
          */
         OnlineBlocks: {
+            /** @description 5c: друзья со статусом и число входящих заявок (social); null — не вызывалось */
+            friends?: components["schemas"]["Block_FriendsCard_"] | null;
             /** @description Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`) */
             modes: components["schemas"]["Block_list_OnlineModeCard__"];
             my_matches: components["schemas"]["Block_MyMatchesList_"];
@@ -1796,6 +1913,8 @@ export interface components {
             /** @description Оформление игрока; null до потока S5 этапа 5b */
             appearance?: components["schemas"]["Block_AppearanceCard_"] | null;
             progress: components["schemas"]["Block_PublicProgressCard_"];
+            /** @description Друзья и блокировка; null — не вызывалось (5c, поток F5) */
+            social?: components["schemas"]["Block_PlayerSocialCard_"] | null;
         };
         /**
          * PlayerPage
@@ -1803,6 +1922,24 @@ export interface components {
          */
         PlayerPage: {
             blocks: components["schemas"]["PlayerBlocks"];
+            /**
+             * Restricted
+             * @description 5c: профиль скрыт, игрок заблокировал зрителя или неизвестен — показаны только ник, аватар и оформление, `progress` = `unavailable`; ответы неразличимы (нет перечисления)
+             * @default false
+             */
+            restricted: boolean;
+        };
+        /**
+         * PlayerSocialCard
+         * @description Отношение зрителя к игроку (social ``/v1/players/{id}/relation``, 5c).
+         */
+        PlayerSocialCard: {
+            /** Blocked By Me */
+            blocked_by_me: boolean;
+            /** Can Send Request */
+            can_send_request: boolean;
+            /** Is Friend */
+            is_friend: boolean;
         };
         /**
          * PresetCard
@@ -2183,6 +2320,32 @@ export interface components {
             user_id: string;
         };
         /**
+         * SanctionCard
+         * @description Действующая санкция игрока.
+         */
+        SanctionCard: {
+            /**
+             * Expires At
+             * @description null - бессрочно
+             */
+            expires_at: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ranked" | "chat" | "online" | "account";
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * SanctionsCard
+         * @description Блок санкций оболочки (экран санкции); пусто - ограничений нет.
+         */
+        SanctionsCard: {
+            /** Items */
+            items: components["schemas"]["SanctionCard"][];
+        };
+        /**
          * SeasonCard
          * @description Действующий сезон ladder-а.
          */
@@ -2306,6 +2469,8 @@ export interface components {
         ShellPage: {
             /** @description null — аноним или гость, notifications не вызывается */
             bell?: components["schemas"]["Block_BellCard_"] | null;
+            /** @description 5c: действующие санкции; null — аноним или гость */
+            sanctions?: components["schemas"]["Block_SanctionsCard_"] | null;
             theme: components["schemas"]["ThemeCard"];
         };
         /**

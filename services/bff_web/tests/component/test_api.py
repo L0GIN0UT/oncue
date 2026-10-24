@@ -31,6 +31,7 @@ MATCH = "http://match.test"
 RATING = "http://rating.test"
 PROGRESSION = "http://progression.test"
 NOTIFICATIONS = "http://notifications.test"
+SOCIAL = "http://social.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -217,6 +218,7 @@ class Stubs:
     rating: ServiceStub
     progression: ServiceStub
     notifications: ServiceStub
+    social: ServiceStub
 
 
 @dataclass
@@ -230,10 +232,35 @@ class Bff:
         return {"Authorization": f"Bearer {token}"}
 
 
+RELATION_OPEN = {
+    "profile_visible": True,
+    "stats_visible": True,
+    "is_friend": False,
+    "can_send_request": True,
+    "blocked_by_me": False,
+}
+
+
+def _social_defaults(social: ServiceStub) -> None:
+    """Пустой, но исправный social: тесты 5a-5b не знают о нём, тесты 5c переопределяют ответы."""
+    social.route("GET", f"/v1/players/{PLAYER_ID}/relation").respond(200, json=RELATION_OPEN)
+    social.route("GET", "/v1/me/friends").respond(200, json={"items": [], "total": 0})
+    social.route("GET", "/v1/me/friend-requests").respond(
+        200, json={"incoming": [], "outgoing": []}
+    )
+    social.route("GET", "/v1/me/sanctions").respond(200, json={"items": []})
+    social.route("GET", f"/v1/collections/{COLLECTION_ID}/comments").respond(
+        200, json={"items": [], "total": 0, "next_cursor": None}
+    )
+
+
 @pytest.fixture
 def stubs() -> Iterator[Stubs]:
     with ExitStack() as stack:
+        social = stack.enter_context(stub_service(SOCIAL, service="social"))
+        _social_defaults(social)
         yield Stubs(
+            social=social,
             game=stack.enter_context(stub_service(GAME, service="game")),
             catalog=stack.enter_context(stub_service(CATALOG, service="catalog")),
             identity=stack.enter_context(stub_service(IDENTITY, service="identity")),
@@ -264,6 +291,7 @@ async def bff(
             "rating_url": RATING,
             "progression_url": PROGRESSION,
             "notifications_url": NOTIFICATIONS,
+            "social_url": SOCIAL,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -1053,6 +1081,7 @@ RATING_SAMPLES: dict[str, Any] = json.loads(
     (Path(__file__).parents[1] / "data" / "rating.json").read_text(encoding="utf-8")
 )
 UNAVAILABLE = {"status": "unavailable", "data": None}
+EMPTY_SANCTIONS = {"status": "ok", "data": {"items": []}}
 
 
 def _online_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
@@ -1273,6 +1302,7 @@ async def test_online_page_match_stub_501_and_game_down_are_unavailable(bff: Bff
             "ratings": UNAVAILABLE,
             "seasons": UNAVAILABLE,
             "weekly": UNAVAILABLE,
+            "friends": {"status": "ok", "data": {"items": [], "incoming_requests": 0}},
         },
     }
 
@@ -1318,7 +1348,10 @@ async def test_match_page_result_items_and_library_flags(bff: Bff) -> None:
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == PRIVATE
     blocks = response.json()["blocks"]
-    assert blocks["match"] == {"status": "ok", "data": SAMPLES["match_result"]}
+    expected = SAMPLES["match_result"]
+    # 5c: `can_report` добавляет bff (в 0a - всегда false, решение в потоке F5).
+    players = [{**p, "can_report": False} for p in expected["players"]]
+    assert blocks["match"] == {"status": "ok", "data": {**expected, "players": players}}
     # Раунды 0 и 2 — одна единица: карточка и флаг по ней — по одному разу.
     assert [i["title"] for i in blocks["items"]["data"]] == ["Брат", "Брат 2"]
     assert blocks["library"] == {
@@ -2451,6 +2484,7 @@ async def test_shell_for_user_has_theme_key_and_bell(bff: Bff) -> None:
     assert response.json() == {
         "theme": {"key": "default"},  # только ключ: значений токенов в API нет
         "bell": {"status": "ok", "data": {"unread": 3}},
+        "sanctions": EMPTY_SANCTIONS,
     }
     assert unread.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
@@ -2461,7 +2495,7 @@ async def test_shell_for_anonymous_is_public_without_bell_call(bff: Bff) -> None
     response = await bff.client.get("/v1/pages/shell")
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None}
+    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
     assert response.headers["cache-control"] == PUBLIC
     assert response.headers["vary"] == "Authorization, Cookie"
     assert unread.call_count == 0
@@ -2473,7 +2507,7 @@ async def test_shell_for_guest_has_no_bell_and_does_not_call_notifications(bff: 
     response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None}
+    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
     assert response.headers["cache-control"] == PRIVATE  # с токеном - личный ответ
     assert unread.call_count == 0
 
@@ -2493,7 +2527,11 @@ async def test_shell_notifications_failure_hides_bell_only(bff: Bff, failure: st
     response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": UNAVAILABLE}
+    assert response.json() == {
+        "theme": {"key": "default"},
+        "bell": UNAVAILABLE,
+        "sanctions": EMPTY_SANCTIONS,
+    }
 
 
 @pytest.fixture
@@ -2505,7 +2543,7 @@ def theme_env(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_shell_theme_key_comes_from_env(theme_env: None, bff: Bff) -> None:
     response = await bff.client.get("/v1/pages/shell")
 
-    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None}
+    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None, "sanctions": None}
 
 
 async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> None:
@@ -2521,7 +2559,7 @@ async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> 
         )
         shell = await bff.client.get("/v1/pages/shell", headers=headers)
         assert shell.status_code == 200
-        assert shell.json() == {"theme": {"key": "default"}, "bell": None}
+        assert shell.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
     assert all(route.call_count == 0 for route in routes.values())
     assert unread.call_count == 0
 
@@ -2533,3 +2571,361 @@ async def test_shell_theme_and_5b_schemas_in_openapi(bff: Bff) -> None:
     assert schemas["ThemeCard"]["properties"]["key"]["pattern"] == "^[a-z][a-z0-9_]*$"
     assert "501" not in spec["paths"]["/v1/pages/shop"]["get"]["responses"]
     assert "501" not in spec["paths"]["/v1/pages/shell"]["get"]["responses"]
+
+
+# ----------------------------------------------------------------------------- 5c: social
+FRIEND_ID = "0192a3b4-c5d6-7e8f-9a0b-000000000f01"
+
+
+def _relation(bff: Bff, **fields: Any) -> respx.Route:
+    return bff.stubs.social.route("GET", f"/v1/players/{PLAYER_ID}/relation").respond(
+        200, json={**RELATION_OPEN, **fields}
+    )
+
+
+def _player_routes(bff: Bff) -> respx.Route:
+    """Статистика игрока (progression) + оформление; возвращает маршрут статистики."""
+    _appearance_route(bff)
+    return bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(
+        200, json=PLAYER
+    )
+
+
+async def test_player_page_social_block_and_open_profile(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    _player_routes(bff)
+    relation = _relation(bff, is_friend=True, can_send_request=False)
+
+    response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(token))
+
+    body = response.json()
+    assert body["restricted"] is False
+    assert body["blocks"]["social"] == {
+        "status": "ok",
+        "data": {"is_friend": True, "can_send_request": False, "blocked_by_me": False},
+    }
+    assert body["blocks"]["progress"]["status"] == "ok"
+    assert relation.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_player_page_hidden_profile_is_restricted_and_stats_not_requested(bff: Bff) -> None:
+    stats = _player_routes(bff)
+    _relation(bff, profile_visible=False, stats_visible=False, can_send_request=False)
+
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["restricted"] is True
+    assert body["blocks"]["progress"] == UNAVAILABLE
+    assert body["blocks"]["appearance"]["status"] == "ok"  # оформление остаётся
+    assert stats.call_count == 0
+
+
+async def test_player_page_hidden_stats_keeps_profile_visible(bff: Bff) -> None:
+    stats = _player_routes(bff)
+    _relation(bff, stats_visible=False)
+
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    body = response.json()
+    assert body["restricted"] is False
+    assert body["blocks"]["progress"] == UNAVAILABLE
+    assert body["blocks"]["social"]["status"] == "ok"
+    assert stats.call_count == 0
+
+
+@pytest.mark.parametrize("failure", ["503", "timeout", "401"])
+async def test_player_page_social_down_hides_stats_not_page(bff: Bff, failure: str) -> None:
+    """Приватность важнее доступности: без ответа social чужая статистика не отдаётся."""
+    stats = _player_routes(bff)
+    relation = _relation(bff)
+    if failure == "timeout":
+        relation.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "401":
+        relation.respond(401, json={"code": "auth.unauthenticated", "title": "x", "status": 401})
+    else:
+        relation.respond(503)
+
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["blocks"]["social"] == UNAVAILABLE
+    assert body["blocks"]["progress"] == UNAVAILABLE
+    assert body["restricted"] is False
+    assert stats.call_count == 0
+
+
+async def test_player_page_own_profile_does_not_call_social(bff: Bff) -> None:
+    stats = _player_routes(bff)
+    relation = _relation(bff, profile_visible=False)
+    token = bff.issuer.issue(user_id=UUID(PLAYER_ID))
+
+    response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(token))
+
+    body = response.json()
+    assert relation.call_count == 0
+    assert body["restricted"] is False and body["blocks"]["social"] is None
+    assert body["blocks"]["progress"]["status"] == "ok" and stats.call_count == 1
+
+
+async def test_player_page_guest_and_anonymous_do_not_call_social(bff: Bff) -> None:
+    relation = _relation(bff)
+    await bff.client.get(f"/v1/pages/players/{PLAYER_ID}")
+    await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue_guest())
+    )
+    assert relation.call_count == 0
+
+
+def _friends_routes(bff: Bff) -> tuple[respx.Route, respx.Route]:
+    friends = bff.stubs.social.route("GET", "/v1/me/friends").respond(
+        200,
+        json={
+            "items": [
+                {
+                    "user_id": FRIEND_ID,
+                    "nickname": "trinity",
+                    "status": "in_match",
+                    "friends_since": "2026-10-01T10:00:00Z",
+                }
+            ],
+            "total": 1,
+        },
+    )
+    request = {
+        "id": FRIEND_ID,
+        "user_id": FRIEND_ID,
+        "nickname": "morpheus",
+        "created_at": "2026-10-02T10:00:00Z",
+    }
+    requests = bff.stubs.social.route("GET", "/v1/me/friend-requests").respond(
+        200, json={"incoming": [request, request], "outgoing": []}
+    )
+    return friends, requests
+
+
+async def test_online_page_friends_block(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    _online_routes(bff)
+    friends, requests = _friends_routes(bff)
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(token))
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json()["blocks"]["friends"] == {
+        "status": "ok",
+        "data": {
+            "items": [{"user_id": FRIEND_ID, "nickname": "trinity", "status": "in_match"}],
+            "incoming_requests": 2,
+        },
+    }
+    assert friends.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert requests.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+@pytest.mark.parametrize("path", ["/v1/me/friends", "/v1/me/friend-requests"])
+async def test_online_page_friends_degrade_independently(bff: Bff, path: str) -> None:
+    _online_routes(bff)
+    _friends_routes(bff)
+    bff.stubs.social.route("GET", path).respond(503)
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["blocks"]["friends"] == UNAVAILABLE
+    assert body["blocks"]["open_rooms"]["status"] == "ok"
+
+
+async def test_online_page_social_401_does_not_expire_session(bff: Bff) -> None:
+    _online_routes(bff)
+    bff.stubs.social.route("GET", "/v1/me/friends").respond(
+        401, json={"code": "auth.unauthenticated", "title": "x", "status": 401}
+    )
+
+    response = await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.json()["status"] == "ok"
+    assert response.json()["blocks"]["friends"] == UNAVAILABLE
+
+
+async def test_online_page_guest_and_anonymous_do_not_call_social(bff: Bff) -> None:
+    friends, requests = _friends_routes(bff)
+    await bff.client.get("/v1/pages/online")
+    await bff.client.get("/v1/pages/online", headers=bff.bearer(bff.issuer.issue_guest()))
+    assert friends.call_count == 0 and requests.call_count == 0
+
+
+COMMENT = {
+    "id": FRIEND_ID,
+    "collection_id": str(COLLECTION_ID),
+    "author_id": FRIEND_ID,
+    "author_nickname": "trinity",
+    "body": "Отличный сборник",
+    "created_at": "2026-10-20T10:00:00Z",
+    "edited_at": None,
+    "can_edit": True,
+    "can_delete": True,
+}
+
+
+def _collection_routes(bff: Bff) -> respx.Route:
+    bff.stubs.collections.route("GET", f"/v1/collections/{COLLECTION_ID}").respond(
+        200, json=COLLECTION_DETAIL
+    )
+    bff.stubs.game.route("GET", f"/v1/collections/{COLLECTION_ID}/modes").respond(
+        200, json=COLLECTION_MODES
+    )
+    return bff.stubs.social.route("GET", f"/v1/collections/{COLLECTION_ID}/comments").respond(
+        200, json={"items": [COMMENT], "total": 41, "next_cursor": "c2Vjb25k"}
+    )
+
+
+async def test_collection_page_comments_for_user_pass_token_and_limit(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    comments = _collection_routes(bff)
+
+    response = await bff.client.get(
+        f"/v1/pages/collections/{COLLECTION_ID}", headers=bff.bearer(token)
+    )
+
+    assert response.status_code == 200
+    block = response.json()["blocks"]["comments"]
+    assert block["status"] == "ok"
+    assert block["data"]["total"] == 41 and block["data"]["next_cursor"] == "c2Vjb25k"
+    card = block["data"]["items"][0]
+    assert (card["author_nickname"], card["can_edit"], card["can_delete"]) == (
+        "trinity",
+        True,
+        True,
+    )
+    assert "collection_id" not in card
+    request = comments.calls.last.request
+    assert request.headers["authorization"] == f"Bearer {token}"
+    assert request.url.params["limit"] == "30"
+
+
+async def test_collection_page_comments_for_anonymous_and_guest_have_no_token(bff: Bff) -> None:
+    comments = _collection_routes(bff)
+    readonly = {**COMMENT, "can_edit": False, "can_delete": False}
+    comments.respond(200, json={"items": [readonly], "total": 1, "next_cursor": None})
+
+    anonymous = await bff.client.get(f"/v1/pages/collections/{COLLECTION_ID}")
+    guest = await bff.client.get(
+        f"/v1/pages/collections/{COLLECTION_ID}", headers=bff.bearer(bff.issuer.issue_guest())
+    )
+
+    assert anonymous.json()["blocks"]["comments"]["status"] == "ok"
+    assert guest.json()["blocks"]["comments"]["status"] == "ok"
+    assert comments.call_count == 2
+    assert all("authorization" not in c.request.headers for c in comments.calls)
+
+
+async def test_collection_page_comments_down_keeps_page(bff: Bff) -> None:
+    comments = _collection_routes(bff)
+    comments.respond(503)
+
+    response = await bff.client.get(f"/v1/pages/collections/{COLLECTION_ID}")
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["comments"] == UNAVAILABLE
+    assert blocks["collection"]["status"] == "ok" and blocks["modes"]["status"] == "ok"
+
+
+async def test_shell_sanctions_for_user(bff: Bff) -> None:
+    _unread_route(bff)
+    token = bff.issuer.issue()
+    sanctions = bff.stubs.social.route("GET", "/v1/me/sanctions").respond(
+        200,
+        json={
+            "items": [
+                {
+                    "kind": "chat",
+                    "started_at": "2026-10-20T10:00:00Z",
+                    "expires_at": None,
+                    "reason": "Спам в комментариях",
+                }
+            ]
+        },
+    )
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(token))
+
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json()["sanctions"] == {
+        "status": "ok",
+        "data": {"items": [{"kind": "chat", "expires_at": None, "reason": "Спам в комментариях"}]},
+    }
+    assert sanctions.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_shell_sanctions_failure_hides_only_that_block(bff: Bff) -> None:
+    _unread_route(bff)
+    bff.stubs.social.route("GET", "/v1/me/sanctions").respond(503)
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sanctions"] == UNAVAILABLE
+    assert body["bell"]["status"] == "ok"
+
+
+async def test_shell_guest_and_anonymous_do_not_call_social(bff: Bff) -> None:
+    _unread_route(bff)
+    sanctions = bff.stubs.social.route("GET", "/v1/me/sanctions").respond(200, json={"items": []})
+    anonymous = await bff.client.get("/v1/pages/shell")
+    guest = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
+    assert anonymous.json()["sanctions"] is None and guest.json()["sanctions"] is None
+    assert sanctions.call_count == 0
+
+
+PLAYER_1 = UUID(SAMPLES["match_result"]["players"][0]["user_id"])
+PLAYER_2 = UUID(SAMPLES["match_result"]["players"][1]["user_id"])
+
+
+async def _report_flags(bff: Bff, token: str) -> dict[str, bool]:
+    response = await bff.client.get(f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(token))
+    assert response.status_code == 200, response.text
+    players = response.json()["blocks"]["match"]["data"]["players"]
+    return {p["user_id"]: p["can_report"] for p in players}
+
+
+async def test_match_page_can_report_for_participant_only_on_others(bff: Bff) -> None:
+    _match_routes(bff)
+    flags = await _report_flags(bff, bff.issuer.issue(user_id=PLAYER_1))
+    assert flags == {str(PLAYER_1): False, str(PLAYER_2): True}
+
+
+async def test_match_page_can_report_false_for_non_participant(bff: Bff) -> None:
+    _match_routes(bff)
+    flags = await _report_flags(bff, bff.issuer.issue())
+    assert set(flags.values()) == {False}
+
+
+async def test_match_page_can_report_false_in_solo_match(bff: Bff) -> None:
+    result = SAMPLES["match_result"]
+    _match_routes(bff)
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json={**result, "players": result["players"][:1]}
+    )
+    flags = await _report_flags(bff, bff.issuer.issue(user_id=PLAYER_1))
+    assert flags == {str(PLAYER_1): False}
+
+
+async def test_match_page_does_not_call_social(bff: Bff) -> None:
+    _match_routes(bff)
+    friends, requests = _friends_routes(bff)
+    await _report_flags(bff, bff.issuer.issue(user_id=PLAYER_1))
+    assert friends.call_count == 0 and requests.call_count == 0

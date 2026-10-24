@@ -46,6 +46,7 @@ notifications = Table(
     Column("body", String(500), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("read_at", DateTime(timezone=True), nullable=True),
+    Column("data", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     UniqueConstraint("user_id", "dedup_key", name="uq_notifications_user_dedup"),
     Index("ix_notifications_user_created", "user_id", text("created_at DESC"), text("id DESC")),
     Index(

@@ -513,6 +513,9 @@ class LoginWithPassword:
         message: EmailMessage | None = None
         async with self._uow() as uow:
             user = await self._auth.authenticate(uow, login, password, ip, allow_unverified=True)
+            # Бан - сразу после верного пароля: забаненному не создаём challenge и не шлём
+            # письмо (без оракула: неверный пароль до этой точки не доходит).
+            await self._sessions.sanctions_mask(uow, user.id)
             if not user.email_verified:
                 # Письмо регистрации могло быть подавлено лимитом или потеряно: пароль верен,
                 # поэтому выдаём новый код подтверждения (его вводят через verify-email).
@@ -717,10 +720,13 @@ class RefreshSession:
                     raise invalid
                 if required_perm and required_perm not in matrix.effective_perms(user.roles):
                     raise ForbiddenError("нет доступа к админке", code="auth.forbidden")
+                mask = await self._sessions.sanctions_mask(uow, user.id)  # бан - 403
                 await uow.sessions.save_refresh(token)
                 await uow.sessions.add_refresh(result.token)
                 await uow.sessions.save(session)
-                issued = self._sessions.access(user, matrix, session.id, refresh_secret=secret)
+                issued = self._sessions.access(
+                    user, matrix, session.id, refresh_secret=secret, sanctions=mask
+                )
                 await uow.commit()
         if reused is not None:
             await revoke_quietly(self._revocation, [reused])

@@ -254,6 +254,15 @@
             "title": "Created At",
             "type": "string"
           },
+          "data": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Машинные поля типа (room_invite: room_code); пусто, если у типа нет `data`",
+            "maxProperties": 5,
+            "title": "Data",
+            "type": "object"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

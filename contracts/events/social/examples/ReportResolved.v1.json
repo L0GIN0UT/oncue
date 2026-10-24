@@ -1,0 +1,18 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0004",
+  "aggregate_type": "social",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0009",
+  "event_type": "social.ReportResolved",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:08:00Z",
+  "payload": {
+    "at": "2026-10-24T12:08:00Z",
+    "case_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0005",
+    "decision": "sanctioned",
+    "report_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0004",
+    "reporter_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001"
+  },
+  "producer": "social"
+}

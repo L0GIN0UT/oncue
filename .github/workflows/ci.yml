@@ -181,6 +181,8 @@ jobs:
             -e GV_MEDIA_SIGNING_SECRET=ci-nginx-check-not-a-secret-000000 \
             -e GV_MEDIA_ASSETS_BUCKET=gv-assets \
             -e GV_COSMETICS_BUCKET=gv-cosmetics \
+            -e GV_GATEWAY_API_RATE=40r/s -e GV_GATEWAY_API_BURST=80 \
+            -e GV_GATEWAY_AUTH_RATE=60r/m -e GV_GATEWAY_AUTH_BURST=20 \
             -v "$PWD/infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
             -v "$PWD/infra/nginx/generated:/etc/nginx/generated:ro" \
             -v "$PWD/infra/nginx/snippets:/etc/nginx/snippets:ro" \
@@ -195,7 +197,8 @@ jobs:
     # сборники этапа 3b (e2e/collections.spec.ts) и онлайн этапа 4a (e2e/lobby|duel|party.spec.ts:
     # несколько контекстов браузера, Centrifugo, процесс rooms в `match all`), прогресс 5a
     # (e2e/progression.spec.ts), магазин и промокоды 5b (e2e/shop.spec.ts) и уведомления с
-    # модерацией своей аватарки 5b (e2e/notifications.spec.ts; две последние ещё требуют
+    # модерацией своей аватарки 5b (e2e/notifications.spec.ts), друзья и модерация 5c
+    # (e2e/friends.spec.ts, e2e/moderation.spec.ts; shop, notifications и moderation требуют
     # учётных данных админа) — все, кроме смоука,
     # только при E2E_SEEDED=1, когда стек засеян, `pnpm test:e2e:stack` (testMatch
     # e2e/playwright.config.ts подхватывает все *.spec.ts). На main и по метке PR `e2e`.
@@ -209,6 +212,10 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
       E2E_BASE_URL: https://localhost
+      # Шесть браузеров e2e идут с одного IP раннера: лимиты gateway по IP поднимаем
+      # (подхватывает compose.gateway.yml; боевые дефолты — 40r/s и 60r/m).
+      GV_GATEWAY_API_RATE: 200r/s
+      GV_GATEWAY_AUTH_RATE: 300r/m
       # Стек `gv dev up services` + веб-клиент (compose.web.yml), пути — от infra/compose.
       E2E_COMPOSE_FILES: >-
         -f compose.infra.yml -f compose.infra.dev.yml -f compose.services.yml

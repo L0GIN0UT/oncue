@@ -12,11 +12,12 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 import structlog
 
+from gv_auth import Sanction
 from gv_core.clock import Clock
 from gv_core.errors import ConflictError
 from gv_core.ids import uuid7
@@ -48,6 +49,7 @@ from match_service.application.ports import (
     Users,
 )
 from match_service.application.rules import ModeTemplate, RulesFactory
+from match_service.application.sanctions import SanctionGate, online_banned
 from match_service.application.views import room_view
 from match_service.domain import errors
 from match_service.domain.errors import (
@@ -65,6 +67,10 @@ log = structlog.get_logger(__name__)
 
 CHAT_MAX_LENGTH = 200
 """Длина сообщения чата после нормализации (контракт ``ChatRequest``)."""
+ONLINE_ENTRY_KINDS = frozenset({"join", "rematch"})
+"""Команды входа в (новую) комнату: ``ONLINE`` закрывает их, недоступная проекция - 503."""
+ONLINE_EXEMPT_KINDS = frozenset({"leave", "abort"})
+"""Остальные команды при ``ONLINE`` закрыты; выход всегда разрешён, админский abort - не игрок."""
 _CODE_ATTEMPTS = 8
 _UGC_REASONS = {
     UGC_DENIED: "denylist",
@@ -92,6 +98,47 @@ class Actor:
     chat_slow: bool = False
     ranked_banned: bool = False
     ip: str | None = None
+    online_banned: bool = False
+    """Санкция ``ONLINE`` (ADR 0052): комнаты, лобби, очереди, реванш и приглашения закрыты."""
+    claim_sanctions: int = 0
+    """Маска claim токена: основа эффективной маски, если проекции игрока нет."""
+
+    def with_sanctions(self, mask: int) -> Actor:
+        """Копия с флагами, пересчитанными по эффективной маске."""
+        return replace(
+            self,
+            chat_muted=bool(mask & Sanction.CHAT_MUTE),
+            chat_slow=bool(mask & Sanction.CHAT_SLOW),
+            ranked_banned=bool(mask & Sanction.RANKED),
+            online_banned=bool(mask & Sanction.ONLINE),
+        )
+
+
+async def effective_actor(
+    gate: SanctionGate | None, actor: Actor, *, strict: bool = False
+) -> Actor:
+    """Субъект с санкциями по проекции (иначе по claim): проекция авторитетна для снятия.
+
+    ``strict`` - вход в онлайн: недоступная проекция даёт 503, а не деградацию до claim.
+    """
+    if gate is None:
+        return actor
+    return actor.with_sanctions(
+        await gate.mask(actor.user_id, actor.claim_sanctions, strict=strict)
+    )
+
+
+async def require_online(gate: SanctionGate | None, actor: Actor, *, strict: bool = True) -> None:
+    """Пропустить игрока без санкции ONLINE.
+
+    Raises:
+        MatchForbiddenError: ``match.online_banned``.
+        MatchUnavailableError: ``match.sanctions_unavailable`` (``strict``, проекция недоступна).
+    """
+    if gate is not None:
+        await gate.require_online(actor.user_id, actor.claim_sanctions, strict=strict)
+    elif actor.online_banned:
+        raise online_banned()
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,7 +184,9 @@ class RoomService:
         random: Random,
         limits: RoomLimits,
         audit: AdminAudit | None = None,
+        sanctions: SanctionGate | None = None,
     ) -> None:
+        self._sanctions = sanctions
         self._store = store
         self._bus = bus
         self._player_rooms = player_rooms
@@ -176,6 +225,8 @@ class RoomService:
             ConflictError: ``idempotency.key_reused``.
             MatchRateLimitedError: лимит создания.
         """
+        # Санкция ONLINE - до всего остального; недоступная проекция - 503 (fail-closed).
+        await require_online(self._sanctions, actor)
         fingerprint = request_fingerprint("room.create", None, request)
         replayed = await self._replay_create(actor, key, fingerprint)
         if replayed is not None:
@@ -303,7 +354,12 @@ class RoomService:
 
         Raises:
             AppError: ответ владельца с ошибкой (``match.*``) или 404/429/503 здесь.
+            MatchForbiddenError: ``match.online_banned`` (все команды, кроме ``leave``/``abort``).
+            MatchUnavailableError: ``match.sanctions_unavailable`` для ``join``/``rematch``;
+                для остальных команд игрока в комнате проекция деградирует до claim.
         """
+        if kind not in ONLINE_EXEMPT_KINDS:
+            await require_online(self._sanctions, actor, strict=kind in ONLINE_ENTRY_KINDS)
         room = await self._require_room(code)
         command = RoomCommand(op_id=op_id, kind=kind, user_id=actor.user_id, data=data or {})
         stored = room.op_reply(actor.user_id, op_id)
@@ -335,12 +391,34 @@ class RoomService:
             per_user=self._limits.join_by_code_per_user_per_min,
         )
         nickname = await self._users.nickname(actor.user_id) or ""
-        return await self.command(actor, code, "join", op_id, {"nickname": nickname})
+        outcome = await self.command(actor, code, "join", op_id, {"nickname": nickname})
+        await self._evict_if_banned_meanwhile(actor, code)
+        return outcome
+
+    async def _evict_if_banned_meanwhile(self, actor: Actor, code: str) -> None:
+        """Повторная проверка ONLINE после входа: закрывает гонку «join - бан».
+
+        Событие бана могло отработать, пока ``player:{id}:room`` ещё не стоял (evict
+        владельцу некуда слать). Если бан появился между проверкой и входом, игрока выбиваем
+        системной командой и отвечаем 403. Остаточное окно (миллисекунды между коммитом
+        события и этой проверкой) безопасно: любая команда забаненного уже отвечает 403.
+        """
+        if self._sanctions is None:
+            return
+        try:
+            await self._sanctions.require_online(actor.user_id, actor.claim_sanctions, strict=False)
+        except MatchForbiddenError:
+            evict = RoomCommand(
+                op_id=f"sys-evict-{uuid7().hex}", kind="evict", user_id=actor.user_id, data={}
+            )
+            await self._bus.send(code, evict)
+            raise
 
     async def emote(
         self, actor: Actor, code: str, op_id: str, kind: str, key: str
     ) -> CommandOutcome:
         """Эмоция или фраза: ``CHAT_MUTE`` — 403, ``CHAT_SLOW`` и свой лимит — 429."""
+        actor = await effective_actor(self._sanctions, actor)
         if actor.chat_muted:
             raise MatchForbiddenError("чат ограничен", code=errors.CHAT_MUTED)
         user = str(actor.user_id)
@@ -358,6 +436,7 @@ class RoomService:
             MatchRateLimitedError: ``CHAT_SLOW`` или ``GV_MATCH__CHAT_PER_PLAYER_PER_MIN``.
             MatchInvalidError: ``match.chat_rejected`` (``details.reason``).
         """
+        actor = await effective_actor(self._sanctions, actor)
         if actor.chat_muted:
             raise MatchForbiddenError("чат ограничен", code=errors.CHAT_MUTED)
         try:

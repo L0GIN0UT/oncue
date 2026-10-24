@@ -219,7 +219,7 @@ async def test_online_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> 
         body = page.model_dump(mode="json")
         assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/online"), body) == []
         if viewer is USER:
-            assert all(b["status"] == "ok" for b in body["blocks"].values())
+            assert all(b["status"] == "ok" for b in body["blocks"].values() if b is not None)
             assert all(m["online"] for m in body["blocks"]["modes"]["data"])
     assert body == {"status": "auth_required", "blocks": None}
 
@@ -253,7 +253,7 @@ async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> N
 
     assert _errors("bff_web", _bff_schema("MatchPage"), body) == []
     assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/match/{match_id}"), body) == []
-    assert all(b["status"] == "ok" for b in body["blocks"].values())
+    assert all(b["status"] == "ok" for b in body["blocks"].values() if b is not None)
     # Вызов оформления - с параметром, который описал progression (не больше 12 за раз).
     ids = upstreams["appearance"].calls.last.request.url.params.get_list("user_ids")
     assert ids == [p["user_id"] for p in SAMPLES["match_result"]["players"]]
@@ -272,7 +272,7 @@ async def test_leaderboards_page_matches_bff_snapshot(upstreams: respx.MockRoute
 
     assert _errors("bff_web", _bff_schema("LeaderboardsPage"), body) == []
     assert _errors("bff_web", _response_schema("bff_web", "/v1/pages/leaderboards"), body) == []
-    assert all(b["status"] == "ok" for b in body["blocks"].values())
+    assert all(b["status"] == "ok" for b in body["blocks"].values() if b is not None)
     # Параметры вызовов описаны в снимках rating.
     board = upstreams["board_film"].calls.last.request
     path = "/v1/ladders/{ladder}/leaderboard"

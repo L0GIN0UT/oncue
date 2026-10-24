@@ -149,6 +149,7 @@ class SeedConfig:
         progression_url: Базовый адрес progression (admin-ручки предметов, паков и конфига).
         progression_dir: Сиды progression (по умолчанию ``seeds/progression``); нет
             ``items/items.yaml`` - шаг пропускается.
+        social_url: Базовый адрес social (admin-ручки конфига, ADR 0053).
         admin_login: Логин администратора (e-mail или никнейм).
         admin_password: Пароль администратора.
         service_client_id: Идентификатор сервисного клиента (по умолчанию ``admin``).
@@ -184,6 +185,7 @@ class SeedConfig:
     collections_dir: Path | None = None
     progression_url: str = "http://127.0.0.1:8109"
     progression_dir: Path | None = None
+    social_url: str = "http://127.0.0.1:8111"
     http_timeout_s: float = 30.0
     poll_interval_s: float = 1.0
     import_timeout_s: float = 60.0
@@ -498,6 +500,7 @@ class Seeder:
         self._game_public = factory(config.game_url)
         self._collections = factory(config.collections_url)
         self._progression = factory(config.progression_url)
+        self._social = factory(config.social_url)
         self._admin_token: str | None = None
 
     def _clients(self) -> tuple[httpx.Client, ...]:
@@ -509,6 +512,7 @@ class Seeder:
             self._game_public,
             self._collections,
             self._progression,
+            self._social,
         )
 
     def close(self) -> None:
@@ -542,6 +546,7 @@ class Seeder:
         self.seed_collections(collections, items)
         self.wait_online_collections(lobby_collections, items)
         self.seed_progression()
+        self.seed_social()
         self._echo("seed: готово")
 
     # ------------------------------------------------------------------ шаг 1: вход
@@ -564,6 +569,7 @@ class Seeder:
             self._game,
             self._collections,
             self._progression,
+            self._social,
         ):
             client.headers["Authorization"] = f"Bearer {token}"
         return token
@@ -1277,6 +1283,31 @@ class Seeder:
         self._ensure_packs(pack_specs, by_key)
         if isinstance(avatar_key, str):
             self._ensure_avatar_config(body, avatar_key, by_key)
+
+    # ------------------------------------------------------------------ шаг 9: social
+    def seed_social(self) -> None:
+        """Дождаться опубликованного конфига social (5c, ADR 0053).
+
+        Конфиг v1 из ``seeds/social/config.yaml`` публикует задача ``social.config.bootstrap``
+        (только local/ci); без него ручки social отвечают 503 ``social.config_unavailable``.
+        Шаг ничего не создаёт: игроки e2e регистрируются сами, справочник причин и порог жалоб
+        - часть конфига. Нет сидов social - шаг пропускается.
+        """
+        if not (self._cfg.repo_root / "seeds" / "social" / "config.yaml").is_file():
+            self._echo("seed: сидов social нет, шаг пропущен")
+            return
+        self._echo("seed: social - ожидание опубликованного конфига")
+
+        def published() -> bool:
+            resp = self._social.get("/admin/v1/config/versions")
+            self._check(resp, {200}, "версии конфига social")
+            return any(c.get("status") == "published" for c in resp.json().get("items", []))
+
+        self._poll(
+            published,
+            timeout_s=self._cfg.assets_timeout_s,
+            what="опубликованный конфиг social (social.config.bootstrap)",
+        )
 
     def _wait_published_config(self) -> tuple[int, dict[str, Any]]:
         """Дождаться опубликованной версии конфига (bootstrap) и вернуть ``(версия, тело)``."""

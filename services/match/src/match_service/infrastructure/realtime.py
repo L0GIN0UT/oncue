@@ -13,6 +13,8 @@ Subscription-токен канала ``room:{code}`` — HS256 на отдель
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -28,14 +30,30 @@ from match_service.domain.errors import MatchUnavailableError
 log = structlog.get_logger(__name__)
 
 REALTIME_PUBLISH = Counter("gv_match_realtime_publish_total", "Публикации в Centrifugo", ["result"])
+UNSUBSCRIBE_FAILED = Counter(
+    "gv_match_unsubscribe_failed_total", "Отзыв подписки Centrifugo не удался после всех попыток"
+)
 
 
 class CentrifugoPublisher:
     """``RealtimePublisher`` поверх server API Centrifugo."""
 
-    def __init__(self, settings: RealtimeSettings, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: RealtimeSettings,
+        client: httpx.AsyncClient | None = None,
+        *,
+        unsubscribe_attempts: int = 1,
+        unsubscribe_retry_s: float = 0.0,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         if settings.api_url is None or settings.api_key is None:
             raise ValueError("нужны GV_REALTIME__API_URL и GV_REALTIME__API_KEY")
+        if unsubscribe_attempts < 1:
+            raise ValueError("unsubscribe_attempts должен быть >= 1")
+        self._unsubscribe_attempts = unsubscribe_attempts
+        self._unsubscribe_retry_s = unsubscribe_retry_s
+        self._sleep = sleep
         self._url = settings.api_url.rstrip("/") + "/publish"
         self._unsubscribe_url = settings.api_url.rstrip("/") + "/unsubscribe"
         self._headers = {"X-API-Key": settings.api_key.get_secret_value()}
@@ -67,7 +85,28 @@ class CentrifugoPublisher:
         REALTIME_PUBLISH.labels("ok").inc()
 
     async def unsubscribe(self, user_id: UUID, channel: str) -> None:
-        """Отписать пользователя от канала (``POST /api/unsubscribe``); отказ — лог."""
+        """Отписать пользователя от канала (``POST /api/unsubscribe``) с повтором.
+
+        До ``unsubscribe_attempts`` попыток с линейной паузой ``unsubscribe_retry_s``; каждая
+        неудача считается в ``gv_match_realtime_publish_total``, исчерпание попыток - в
+        ``gv_match_unsubscribe_failed_total`` и лог ``match.realtime_unsubscribe_gave_up``
+        (хвост 4a, ADR 0052). Исключение не бросается: подписка всё равно умрёт вместе с
+        subscription-токеном, а новый токен при ``ONLINE``-санкции не выдаётся.
+        """
+        for attempt in range(1, self._unsubscribe_attempts + 1):
+            if await self._unsubscribe_once(user_id, channel):
+                return
+            if attempt < self._unsubscribe_attempts:
+                await self._sleep(self._unsubscribe_retry_s * attempt)
+        UNSUBSCRIBE_FAILED.inc()
+        log.error(
+            "match.realtime_unsubscribe_gave_up",
+            channel=channel,
+            attempts=self._unsubscribe_attempts,
+        )
+
+    async def _unsubscribe_once(self, user_id: UUID, channel: str) -> bool:
+        """Одна попытка отзыва; ``True`` - успех."""
         try:
             response = await self._client.post(
                 self._unsubscribe_url,
@@ -77,18 +116,19 @@ class CentrifugoPublisher:
         except httpx.HTTPError as exc:
             REALTIME_PUBLISH.labels("unsubscribe_network").inc()
             log.warning("match.realtime_unsubscribe_failed", error_type=type(exc).__name__)
-            return
+            return False
         if response.status_code != httpx.codes.OK:
             REALTIME_PUBLISH.labels("unsubscribe_error").inc()
             log.warning("match.realtime_unsubscribe_rejected", status=response.status_code)
-            return
+            return False
         # Centrifugo отвечает 200 и при ошибке API: она — в теле (``{"error": {...}}``).
         body = response.json() if response.content else {}
         if isinstance(body, dict) and body.get("error"):
             REALTIME_PUBLISH.labels("unsubscribe_api_error").inc()
             log.warning("match.realtime_unsubscribe_api_error", code=body["error"].get("code"))
-            return
+            return False
         REALTIME_PUBLISH.labels("unsubscribe_ok").inc()
+        return True
 
 
 class NullPublisher:

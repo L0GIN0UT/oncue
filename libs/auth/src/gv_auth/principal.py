@@ -16,6 +16,7 @@ class Sanction(IntFlag):
     CHAT_SLOW = 4  # медленный чат
     CHAT_MUTE = 8  # чат выключен
     COMMENTS = 16  # комментарии выключены
+    ONLINE = 32  # нет онлайна: комнаты, лобби, очереди, приглашения (ADR 0052)
 
 
 class SubjectKind(StrEnum):

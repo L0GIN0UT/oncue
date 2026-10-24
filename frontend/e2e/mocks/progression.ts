@@ -27,6 +27,7 @@ import type {
 } from "../../src/shared/api/types";
 import { csrfOk, problem, subjectOf } from "./handlers";
 import { economyProfileBlocks, itemByKey } from "./economy";
+import { isRestricted, playerSocialBlock } from "./social";
 import type { MockWorld } from "./world";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
@@ -244,11 +245,15 @@ export function createProgressionHandlers(world: MockWorld): HttpHandler[] {
       const subject = subjectOf(request);
       if (!subject) return problem(401, "auth.unauthenticated");
       if (!subject.startsWith("user.")) return problem(403, "auth.guest_forbidden");
-      const player = PLAYERS.find((p) => p.user_id === String(params.id));
-      if (!player) return problem(404, "progression.user_not_found");
-      const progress = down(world, "player")
-        ? unavailable
-        : { status: "ok" as const, data: player };
+      const playerId = String(params.id);
+      const player = PLAYERS.find((p) => p.user_id === playerId);
+      // Недоступный профиль неотличим от закрытого: только оформление (5c).
+      const restricted = isRestricted(world, playerId);
+      if (!player && !restricted) return problem(404, "progression.user_not_found");
+      const progress =
+        down(world, "player") || restricted || !player
+          ? unavailable
+          : { status: "ok" as const, data: player };
       const appearance = down(world, "appearance")
         ? unavailable
         : {
@@ -258,9 +263,15 @@ export function createProgressionHandlers(world: MockWorld): HttpHandler[] {
               slots: [{ slot: "title", item: itemByKey("champion") }],
             },
           };
-      return HttpResponse.json({ blocks: { progress, appearance } } satisfies PlayerPage, {
-        headers: NO_STORE,
-      });
+      return HttpResponse.json(
+        {
+          blocks: { progress, appearance, social: playerSocialBlock(world, playerId) },
+          restricted,
+        } satisfies PlayerPage,
+        {
+          headers: NO_STORE,
+        },
+      );
     }),
 
     http.post("*/api/progression/v1/wheel/spin", ({ request }) => {

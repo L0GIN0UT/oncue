@@ -22,8 +22,10 @@ from bff_web_service.application.dto import (
     CollectionDetail,
     CollectionList,
     CollectionMode,
+    CommentsCard,
     DailyStatus,
     Domain,
+    FriendCard,
     InventoryCard,
     Item,
     ItemShelves,
@@ -38,11 +40,13 @@ from bff_web_service.application.dto import (
     PackCard,
     PersonalRecord,
     PlayerAppearanceCard,
+    PlayerRelation,
     ProgressCard,
     PublicProgress,
     QuestsCard,
     QueuePoolCard,
     RatingCard,
+    SanctionsCard,
     SessionResult,
     Shelf,
     ShelfItems,
@@ -288,6 +292,33 @@ class NotificationsClient(Protocol):
 
     async def unread_count(self, token: str) -> int:
         """Число непрочитанных (``/v1/notifications/unread-count``)."""
+        ...
+
+
+class SocialClient(Protocol):
+    """Публичный API social (5c): друзья, комментарии, санкции; не кэшируется.
+
+    Токен пользователя уходит как Bearer; у комментариев он необязателен (читают и анонимы).
+    """
+
+    async def relation(self, token: str, user_id: UUID) -> PlayerRelation:
+        """Отношение зрителя к игроку (``/v1/players/{id}/relation``)."""
+        ...
+
+    async def friends(self, token: str) -> list[FriendCard]:
+        """Друзья владельца со статусом (``/v1/me/friends``)."""
+        ...
+
+    async def incoming_requests(self, token: str) -> int:
+        """Число входящих заявок в друзья (``/v1/me/friend-requests``)."""
+        ...
+
+    async def comments(self, token: str | None, collection_id: UUID, *, limit: int) -> CommentsCard:
+        """Первая страница комментариев сборника; ``can_*`` — для зрителя, если есть токен."""
+        ...
+
+    async def sanctions(self, token: str) -> SanctionsCard:
+        """Действующие санкции владельца (``/v1/me/sanctions``)."""
         ...
 
 

@@ -16,7 +16,7 @@ import structlog
 from gv_core.clock import Clock
 from gv_core.errors import ConflictError
 from gv_db.idempotency import request_fingerprint
-from match_service.application.commands.rooms import Actor
+from match_service.application.commands.rooms import Actor, effective_actor
 from match_service.application.matchmaking import RankedTemplates
 from match_service.application.ports import (
     CommandBus,
@@ -32,6 +32,7 @@ from match_service.application.ports import (
     RoomCommand,
     RoomStore,
 )
+from match_service.application.sanctions import SanctionGate, online_banned
 from match_service.application.views import iso
 from match_service.domain import errors
 from match_service.domain.errors import (
@@ -76,7 +77,9 @@ class QueueService:
         creates: IdempotentCreates,
         clock: Clock,
         limits: QueueLimits,
+        sanctions: SanctionGate | None = None,
     ) -> None:
+        self._sanctions = sanctions
         self._queue = queue
         self._ladders = ladders
         self._templates = templates
@@ -105,6 +108,9 @@ class QueueService:
             MatchRateLimitedError: лимит входов.
             MatchUnavailableError: game недоступен при чтении рейтингового шаблона.
         """
+        actor = await effective_actor(self._sanctions, actor, strict=True)  # вход: fail-closed
+        if actor.online_banned:
+            raise online_banned()
         if actor.ranked_banned:
             raise MatchForbiddenError(
                 "рейтинговые игры вам недоступны", code=errors.RANKED_FORBIDDEN
@@ -208,6 +214,10 @@ class QueueService:
             limit=self._limits.tick_per_min,
             window_s=self._limits.window_s,
         )
+        actor = await effective_actor(self._sanctions, actor)
+        if actor.online_banned:
+            await self._queue.remove(actor.user_id)
+            raise online_banned()
         if actor.ranked_banned:
             # Санкцию могли выдать, пока игрок стоял в очереди: запись снимается.
             await self._queue.remove(actor.user_id)

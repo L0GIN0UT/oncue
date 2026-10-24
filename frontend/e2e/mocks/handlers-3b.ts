@@ -9,6 +9,7 @@ import { csrfOk, problem, subjectOf } from "./handlers";
 import type { MockWorld } from "./world";
 import { itemById } from "./world";
 import { META } from "./ugc";
+import { commentsBlock } from "./social";
 
 type Params = Record<string, string | readonly string[] | undefined>;
 type Ctx = { request: Request; params: Params };
@@ -60,6 +61,7 @@ export function createUgcHandlers(world: MockWorld): HttpHandler[] {
           col.status === "published"
             ? { status: "ok", data: ugc.modes(col) }
             : { status: "unavailable", data: null },
+        comments: col.status === "published" ? commentsBlock(world, id, subject) : null,
       },
       me: me ?? null,
     };

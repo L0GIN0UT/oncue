@@ -1,0 +1,58 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:ContentModerated:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Модератор решил кейс. aggregate_id — case_id. Потребители: collections (снять сборник с публикации при content_removed и target_kind = collection), media_pipeline (снять аватарку при target_kind = avatar), social (скрыть комментарий). Для target_kind = avatar target_id — идентификатор UGC-ассета. Заметка модератора не входит.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "case_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "dismissed",
+        "content_removed",
+        "sanctioned"
+      ],
+      "type": "string"
+    },
+    "moderator_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_kind": {
+      "enum": [
+        "player",
+        "collection",
+        "comment",
+        "avatar"
+      ],
+      "type": "string"
+    },
+    "target_user_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "case_id",
+    "decision",
+    "moderator_id",
+    "target_id",
+    "target_kind",
+    "target_user_id"
+  ],
+  "title": "social.ContentModerated v1",
+  "type": "object",
+  "x-aggregate-type": "social",
+  "x-topic": "social.social.v1"
+}

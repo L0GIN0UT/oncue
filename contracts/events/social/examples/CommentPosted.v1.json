@@ -1,0 +1,21 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0003",
+  "aggregate_type": "social",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0006",
+  "event_type": "social.CommentPosted",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:05:00Z",
+  "payload": {
+    "at": "2026-10-24T12:05:00Z",
+    "author_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002",
+    "author_nickname": "Bob",
+    "collection_author_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "collection_id": "0192a3b4-c5d6-7e8f-9a0b-0000000c0001",
+    "collection_title": "Саундтреки 90-х",
+    "comment_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0003",
+    "notify_owner": true
+  },
+  "producer": "social"
+}

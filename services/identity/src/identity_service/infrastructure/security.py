@@ -204,16 +204,22 @@ class JwtIssuer:
         self._issuer, self._audience, self._ttl = issuer, audience, access_ttl_s
 
     def issue_access(
-        self, *, user_id: UUID, session_id: UUID, roles: Iterable[str], perms: Iterable[str]
+        self,
+        *,
+        user_id: UUID,
+        session_id: UUID,
+        roles: Iterable[str],
+        perms: Iterable[str],
+        sanctions: int = 0,
     ) -> IssuedAccess:
-        """Подписать токен активным ключом."""
+        """Подписать токен активным ключом; ``sanctions`` - маска действующих санкций."""
         return self._sign(
             {
                 "sub": str(user_id),
                 "sid": str(session_id),
                 "roles": list(roles),
                 "perms": list(perms),
-                "sanctions": 0,
+                "sanctions": sanctions,
                 "plan": "free_all",
             }
         )

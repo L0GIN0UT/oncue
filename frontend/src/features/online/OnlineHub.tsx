@@ -13,6 +13,8 @@ import type { Domain } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { createRoom } from "@/features/match/api";
 import { matchErrorKey } from "@/features/match/errors";
+import { StatusDot } from "@/features/friends/StatusDot";
+import { useHasSanction } from "@/features/sanctions/use-sanctions";
 import { RatingPanel } from "@/features/rating/RatingPanel";
 import { WeeklyTopTable } from "@/features/rating/WeeklyTopTable";
 import { blockData, hasBlock, useOnlinePage, type OnlineModeCard } from "./bff";
@@ -24,11 +26,13 @@ import { QueuePanel } from "./QueuePanel";
 const HUB_ROOMS = 5;
 const HUB_MATCHES = 5;
 const HUB_WEEKLY = 3;
+const HUB_FRIENDS = 6;
 const DOMAINS: Domain[] = ["music", "film"];
 
 export function OnlineHub() {
   const t = useTranslations();
   const page = useOnlinePage();
+  const banned = useHasSanction("online");
 
   if (page.isPending) {
     return (
@@ -53,6 +57,7 @@ export function OnlineHub() {
   const matches = blockData(blocks?.my_matches);
   // Блоки 4b: пока bff их не отдаёт (null), секции не рисуем; unavailable — «не загрузилось».
   const weekly = blockData(blocks?.weekly);
+  const friends = blockData(blocks?.friends);
 
   return (
     <div className="flex flex-col gap-12 pt-6 sm:pt-10">
@@ -62,6 +67,19 @@ export function OnlineHub() {
         </h1>
         <p className="max-w-[60ch] text-ink-muted">{t("online.lead")}</p>
       </header>
+
+      {banned && (
+        <p
+          role="status"
+          data-testid="online-banned"
+          className="max-w-3xl rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-partial"
+        >
+          {t("online.banned")}{" "}
+          <Link href="/sanctions" className="underline underline-offset-4">
+            {t("social.sanctions.details")}
+          </Link>
+        </p>
+      )}
 
       {hasBlock(blocks?.queues) && <QueuePanel queues={blockData(blocks?.queues)} />}
 
@@ -95,6 +113,49 @@ export function OnlineHub() {
         </section>
         <JoinByCode />
       </div>
+
+      {hasBlock(blocks?.friends) && (
+        <section
+          aria-labelledby="online-friends"
+          className="flex flex-col gap-4"
+          data-testid="hub-friends"
+        >
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="online-friends" className="font-display text-xl font-semibold">
+              {t("social.hub.title")}
+            </h2>
+            <Link
+              href="/friends"
+              className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+              data-testid="hub-friends-all"
+            >
+              {friends?.incoming_requests
+                ? t("social.hub.allWithRequests", { count: friends.incoming_requests })
+                : t("social.hub.all")}
+            </Link>
+          </div>
+          {friends === null ? (
+            <p className="text-ink-muted">{t("online.blockUnavailable")}</p>
+          ) : friends.items.length === 0 ? (
+            <p className="text-ink-muted">{t("social.friends.empty")}</p>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {friends.items.slice(0, HUB_FRIENDS).map((f) => (
+                <li
+                  key={f.user_id}
+                  data-testid={`hub-friend-${f.nickname}`}
+                  className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-2 ring-1 ring-rule"
+                >
+                  <span dir="auto" className="font-medium">
+                    {f.nickname}
+                  </span>
+                  <StatusDot status={f.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section aria-labelledby="online-lobbies" className="flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-4">

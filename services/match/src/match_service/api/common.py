@@ -99,13 +99,19 @@ ServicesProvider = Callable[[], MatchServices]
 
 
 def actor_of(principal: Principal, request: Request | None = None) -> Actor:
-    """Субъект команды: пользователь, санкции чата из claim, IP (лимит перебора кодов)."""
+    """Субъект команды: пользователь, санкции из claim, IP (лимит перебора кодов).
+
+    Эффективную маску (проекция ``social.UserSanctionsChanged`` авторитетна, ADR 0052)
+    применяет application: ``effective_actor`` / ``require_online``.
+    """
     ip = request.client.host if request is not None and request.client else None
     return Actor(
         user_id=principal.user_id,
         chat_muted=principal.is_sanctioned(Sanction.CHAT_MUTE),
         chat_slow=principal.is_sanctioned(Sanction.CHAT_SLOW),
         ranked_banned=principal.is_sanctioned(Sanction.RANKED),
+        online_banned=principal.is_sanctioned(Sanction.ONLINE),
+        claim_sanctions=int(principal.sanctions),
         ip=ip,
     )
 

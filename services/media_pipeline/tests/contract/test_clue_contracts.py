@@ -188,6 +188,7 @@ def test_consumes_catalog_topic_and_examples() -> None:
         "catalog.media_item.v1",
         "game.mode_config.v1",
         "collections.collection.v1",
+        "social.social.v1",
     )
     for event_type in (ITEM_CREATED, ITEM_UPDATED):
         envelope = load_example(event_type)

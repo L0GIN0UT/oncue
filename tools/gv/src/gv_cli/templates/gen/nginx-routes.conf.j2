@@ -9,7 +9,7 @@ location /api/{{ s.public }}/ {
     location ~ ^/api/{{ s.public }}/(v[0-9]+/)?(internal|admin|health|metrics|docs|openapi\.json)(/|$) {
         return 404;
     }
-    limit_req zone=api_per_ip burst=40 nodelay;
+    include /etc/nginx/conf.d/limit-api.inc;
     proxy_pass http://gv_{{ s.name }}/;
     include /etc/nginx/snippets/proxy.conf;
 }

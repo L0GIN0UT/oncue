@@ -13,6 +13,7 @@ from uuid import UUID
 
 from gv_core.uow import UnitOfWork
 from gv_db.idempotency import IdempotencyStore
+from identity_service.application.ports.sanctions import UserSanctionRepository
 from identity_service.domain import (
     AuthIdentity,
     ChallengePurpose,
@@ -379,6 +380,11 @@ class IdentityUnitOfWork(UnitOfWork, Protocol):
         """Ключи идемпотентности admin-мутаций в этой же транзакции (gv_db.idempotency)."""
         ...
 
+    @property
+    def user_sanctions(self) -> UserSanctionRepository:
+        """Санкции игроков из событий social (маска токена, бан аккаунта)."""
+        ...
+
 
 UnitOfWorkFactory = Callable[[], IdentityUnitOfWork]
 
@@ -410,9 +416,15 @@ class TokenIssuer(Protocol):
     """Выпуск access JWT."""
 
     def issue_access(
-        self, *, user_id: UUID, session_id: UUID, roles: Iterable[str], perms: Iterable[str]
+        self,
+        *,
+        user_id: UUID,
+        session_id: UUID,
+        roles: Iterable[str],
+        perms: Iterable[str],
+        sanctions: int = 0,
     ) -> IssuedAccess:
-        """Подписать токен активным ключом."""
+        """Подписать токен активным ключом; ``sanctions`` - маска действующих санкций."""
         ...
 
 

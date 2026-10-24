@@ -90,8 +90,9 @@ async def test_seeded_matrix(sessions: async_sessionmaker[Any], fake_clock: Fake
     assert matrix.roles["admin"] == matrix.permissions
     # 9 этапа 1 + 5 прав game (0005, этап 2 §2.7) + 4 права сборников (0007, этап 3b §2.8)
     # + 4 права онлайна и рейтинга (0008, этап 4 §2.7) + 5 прав progression (0013, этап 5 §2.5)
-    # + 4 права экономики и модерации UGC (0014, этап 5 §9.2)
-    assert len(matrix.permissions) == 31
+    # + 4 права экономики и модерации UGC (0014, этап 5 §9.2) + 4 права social (0015) + 2 права
+    # конфига social (0016)
+    assert len(matrix.permissions) == 37
     assert matrix.roles["moderator"] == {
         "admin.access",
         "users.view",
@@ -104,6 +105,10 @@ async def test_seeded_matrix(sessions: async_sessionmaker[Any], fake_clock: Fake
         "collections.unpublish",
         "match.spectate",
         "media.ugc.moderate",
+        "social.moderate",  # 0015
+        "social.comments.delete_any",
+        "social.sanctions.manage",
+        "social.config.manage",  # 0016; publish у moderator снят в 0018
     }
 
 

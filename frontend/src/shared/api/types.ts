@@ -187,3 +187,29 @@ export type {
   TypeSetting,
   EmailSubscription,
 } from "./notifications-types";
+
+// Этап 5c: друзья, блокировки, комментарии, жалобы и санкции (social; блоки bff).
+export type {
+  FriendView,
+  FriendList,
+  FriendStatus,
+  FriendRequestView,
+  FriendRequests,
+  FriendCodeView,
+  BlockView,
+  PrivacySettings,
+  CommentView,
+  CommentPage,
+  ReportReason,
+  ReportKind,
+  ReportResult,
+  RoomInviteResult,
+  MySanction,
+  MySanctions,
+  SanctionKind,
+  CommentsCard,
+  CommentCard,
+  FriendsCard,
+  PlayerSocialCard,
+  SanctionsCard,
+} from "./social-types";

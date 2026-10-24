@@ -41,6 +41,7 @@ from identity_service.domain import (
 )
 from identity_service.domain.guest import subject_kind
 from identity_service.domain.values import TOMBSTONE_EMAIL_SUFFIX
+from identity_service.infrastructure.db.repositories_sanctions import SqlUserSanctionRepository
 from identity_service.infrastructure.db.tables import (
     TABLES,
     auth_identities,
@@ -764,6 +765,7 @@ class SqlIdentityUnitOfWork:
         self.email_challenges = SqlEmailChallengeRepository(s)
         self.trusted_devices = SqlTrustedDeviceRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
+        self.user_sanctions = SqlUserSanctionRepository(s)
         return self
 
     async def __aexit__(

@@ -1,0 +1,22 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0004",
+  "aggregate_type": "social",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0008",
+  "event_type": "social.ReportFiled",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:07:00Z",
+  "payload": {
+    "at": "2026-10-24T12:07:00Z",
+    "author_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "case_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0005",
+    "context_match_id": "0192a3b4-c5d6-7e8f-9a0b-0000000d0001",
+    "reason_code": "abusive_behaviour",
+    "report_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0004",
+    "target_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002",
+    "target_kind": "player",
+    "target_user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002"
+  },
+  "producer": "social"
+}

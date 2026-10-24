@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_social/_nav.html" %}
+<h2>{{ player.nickname|default:"Игрок" }} <code>{{ user_id }}</code></h2>
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% else %}
+<h3>Счётчики порядочности</h3>
+<p>Только справочно: автоматических санкций нет.</p>
+<table>
+  <tr><th>Матчей</th><td>{{ counters.matches_total }}</td></tr>
+  <tr><th>Сдач (forfeit)</th><td>{{ counters.forfeits }}</td></tr>
+  <tr><th>Выходов</th><td>{{ counters.leaves }}</td></tr>
+  <tr><th>Тех. поражений</th><td>{{ counters.tech_losses }}</td></tr>
+  <tr><th>Жалоб получено</th><td>{{ counters.reports_received }}</td></tr>
+  <tr><th>Похвал</th><td>{{ counters.praises }}</td></tr>
+</table>
+
+<h3>Санкции</h3>
+<table>
+  <thead><tr><th>Вид</th><th>С</th><th>До</th><th>Причина</th><th>Действует</th><th></th></tr></thead>
+  {% for s in sanctions %}
+  <tr>
+    <td>{{ s.kind }}</td><td>{{ s.started_at }}</td><td>{{ s.expires_at|default:"бессрочно" }}</td>
+    <td>{{ s.reason }}</td><td>{% if s.active %}да{% else %}нет{% endif %}</td>
+    <td>{% if s.active and can_sanction %}
+      <form method="post" action="{% url 'social:revoke' user_id %}">
+        {% csrf_token %}
+        <input type="hidden" name="sanction_id" value="{{ s.id }}">
+        <input type="hidden" name="idempotency_key" value="{{ s.idem }}">
+        <input type="text" name="reason" placeholder="причина снятия" minlength="3" required>
+        <input type="submit" value="Снять">
+      </form>{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="6">Санкций не было</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Кейсы</h3>
+<ul>
+  {% for c in player_cases %}<li><a href="{{ c.admin_url }}">{{ c.target_kind }} · {{ c.status }}</a> ({{ c.opened_at }})</li>
+  {% empty %}<li>Кейсов нет</li>{% endfor %}
+</ul>
+
+{% if can_sanction %}
+<h3>Выдать санкцию</h3>
+<form method="post" action="{% url 'social:grant' user_id %}">
+  {% csrf_token %}{{ grant_form.as_p }}<input type="submit" value="Выдать">
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

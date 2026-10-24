@@ -33,6 +33,7 @@ urlpatterns = [
     path("shop/", include("admin_service.apps.shop.urls")),
     path("ugc/", include("admin_service.apps.ugc.urls")),
     path("broadcasts/", include("admin_service.apps.notifications.urls")),
+    path("social/", include("admin_service.apps.social.urls")),
     # Статика django-admin прямо из пакетов (без collectstatic и отдельного сервера):
     # админка внутренняя и малонагруженная, а общий Dockerfile не меняем (D7).
     re_path(r"^static/(?P<path>.*)$", serve, {"insecure": True}),

@@ -1,0 +1,43 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:FriendRemoved:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Дружба разорвана: удаление из друзей или блокировка. aggregate_id — user_a. Пара упорядочена: user_a < user_b. Уведомления нет.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "removed",
+        "blocked",
+        "account_deleted"
+      ],
+      "type": "string"
+    },
+    "removed_by": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_a": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_b": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "reason",
+    "removed_by",
+    "user_a",
+    "user_b"
+  ],
+  "title": "social.FriendRemoved v1",
+  "type": "object",
+  "x-aggregate-type": "social",
+  "x-topic": "social.social.v1"
+}
