@@ -58,6 +58,50 @@ function fakeRealtime() {
   };
 }
 
+/**
+ * Личный канал `personal:#<user_id>` (уведомления, этап 5b) без Centrifugo: подменный транспорт
+ * опрашивает ленту мока `GET /api/notifications/__e2e/feed?after=N` (150 мс). Уведомление в ленту
+ * кладёт `POST /api/notifications/__e2e/push`. Ставится как `window.__GV_E2E_PERSONAL__`.
+ */
+function fakePersonal() {
+  type Handlers = { onNotification(item: unknown): void };
+  (window as unknown as { __GV_E2E_PERSONAL__: unknown }).__GV_E2E_PERSONAL__ = () => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let after = 0;
+    return {
+      start(h: Handlers) {
+        const poll = async () => {
+          if (stopped) return;
+          try {
+            const res = await fetch(`/api/notifications/__e2e/feed?after=${after}`, {
+              credentials: "same-origin",
+              cache: "no-store",
+            });
+            if (res.ok) {
+              const { messages, last } = (await res.json()) as {
+                messages: { data: { notification: unknown } }[];
+                last: number;
+              };
+              for (const m of messages) h.onNotification(m.data.notification);
+              after = Math.max(after, last);
+            }
+          } catch {
+            // Канал «потерян»: счётчик догонит опрос.
+          }
+          timer = setTimeout(poll, 150);
+        };
+        void poll();
+      },
+      stop() {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+      },
+    };
+  };
+}
+
 export async function installFakeRealtime(target: Page | BrowserContext): Promise<void> {
   await target.addInitScript(fakeRealtime);
+  await target.addInitScript(fakePersonal);
 }

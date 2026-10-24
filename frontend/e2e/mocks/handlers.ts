@@ -10,6 +10,8 @@ import { createUgcHandlers } from "./handlers-3b";
 import { createMatchHandlers } from "./handlers-match";
 import { createRatingHandlers } from "./handlers-rating";
 import { createProgressionHandlers, homeProgress } from "./progression";
+import { createEconomyHandlers } from "./economy";
+import { createNotificationsHandlers } from "./notifications";
 import { onlineModesOut, type MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
@@ -423,6 +425,8 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
     // ---------------------------------------------------------------- этап 3b
     ...createUgcHandlers(world),
     ...createProgressionHandlers(world),
+    ...createEconomyHandlers(world),
+    ...createNotificationsHandlers(world),
 
     // ---------------------------------------------------------------- этап 4a: онлайн
     ...(matchWorld ? createMatchHandlers(world, matchWorld) : []),

@@ -1,0 +1,20 @@
+/*
+ * Дизайн-токены OnCue (ADR 0049). Компоненты используют только токены: цвета, радиусы, шрифты
+ * и иконки не пишутся литералами (правило eslint `no-restricted-syntax` и тест
+ * `src/styles/no-hardcoded-colors.test.ts`).
+ *
+ * Значения цветов лежат в наборах тем `themes/<key>.css`; активная тема выбирается атрибутом
+ * `data-theme` на <html> (ключ приходит из bff `/v1/pages/shell`, список ключей — `theme.ts`).
+ * Подключая новую тему, добавьте файл, `@import` ниже и ключ в `THEME_KEYS` (проверяет тест).
+ */
+@import "./themes/default.css";
+
+@theme {
+    --font-sans: "Onest Variable", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "Unbounded Variable", "Onest Variable", ui-sans-serif, sans-serif;
+
+    --radius-ticket: 1.25rem;
+    --radius-control: 0.75rem;
+
+    --ease-reveal: cubic-bezier(0.2, 0.8, 0.2, 1);
+}

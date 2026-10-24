@@ -8,7 +8,9 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
+import { blockData } from "@/shared/api/blocks";
 import { useViewer } from "@/features/auth/session";
+import { PlayerBadge, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
 import { fetchPlayerPage, playerQueryKey } from "./api";
 import { gateOf, ProfileGate } from "./ProfileView";
 
@@ -41,6 +43,8 @@ export function PlayerView({ userId }: { userId: string }) {
   }
   const block = page.data?.blocks.progress;
   const data = block?.status === "ok" ? block.data : null;
+  // Оформление необязательно: `null` или недоступный блок — игрок без рамки, титула и фона.
+  const appearance = blockData(page.data?.blocks.appearance);
   return (
     <div className="flex flex-col gap-6 pt-6 sm:pt-10">
       <h1 className="font-display text-3xl font-bold">{t("progression.player.title")}</h1>
@@ -54,6 +58,12 @@ export function PlayerView({ userId }: { userId: string }) {
         </p>
       ) : (
         <>
+          <ProfileBackdrop
+            appearance={appearance}
+            className="rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
+          >
+            <PlayerBadge nickname={t("nav.player")} appearance={appearance} size="lg" />
+          </ProfileBackdrop>
           <p className="font-display text-4xl font-bold" data-testid="player-level">
             {t("progression.level.value", { level: data.level })}
           </p>

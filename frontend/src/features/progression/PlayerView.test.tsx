@@ -20,6 +20,19 @@ describe("PlayerView", () => {
     expect(screen.getByTestId("player-badge-streak_7")).toHaveTextContent("Неделя подряд");
   });
 
+  it("оформление игрока: титул под ником; блок appearance недоступен — страница цела", async () => {
+    signInAsUser();
+    const view = renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
+    expect(await screen.findByTestId("player-title")).toHaveTextContent("Чемпион");
+    view.unmount();
+
+    world.scenario.progressDown = ["appearance"];
+    renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
+    expect(await screen.findByTestId("player-level")).toBeInTheDocument();
+    expect(screen.getByTestId("player-badge")).toBeInTheDocument();
+    expect(screen.queryByTestId("player-title")).toBeNull();
+  });
+
   it("нет такого игрока — понятное сообщение", async () => {
     signInAsUser();
     renderWithProviders(<PlayerView userId="00000000-0000-4000-8000-0000000009ff" />);

@@ -39,6 +39,25 @@ describe("ProfileView", () => {
     }
   });
 
+  it("5b: карточка игрока, промокод и «Своя аватарка»; блоки 5b недоступны — профиль цел", async () => {
+    signInAsUser();
+    const view = renderWithProviders(<ProfileView />);
+    expect(await screen.findByTestId("player-badge")).toHaveTextContent("player");
+    expect(screen.getByTestId("promo-input")).toBeInTheDocument();
+    expect(screen.getByTestId("avatar-status")).toHaveAttribute("data-status", "none");
+    expect(screen.getByRole("link", { name: "Перейти в магазин" })).toHaveAttribute(
+      "href",
+      "/shop",
+    );
+    view.unmount();
+
+    world.scenario = { appearanceDown: true };
+    renderWithProviders(<ProfileView />);
+    expect(await screen.findByTestId("level-value")).toBeInTheDocument();
+    expect(screen.getByTestId("block-avatar-unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("player-badge")).toBeInTheDocument();
+  });
+
   it("аноним и гость — приглашение вместо профиля", async () => {
     renderWithProviders(<ProfileView />);
     expect(await screen.findByTestId("profile-gate")).toHaveTextContent("Профиль — для игроков");

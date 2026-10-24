@@ -14,6 +14,8 @@ import type { SummaryDelta } from "@/shared/realtime";
 import { Button } from "@/shared/ui/button";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
+import { PlayerBadge } from "@/features/cosmetics/PlayerBadge";
+import type { AppearanceLike } from "@/features/cosmetics/slots";
 import { SaveButton } from "@/features/library/SaveButton";
 import { blockData, useMatchPage, type MatchSummary } from "@/features/online/bff";
 import { useModeTitle } from "@/features/online/lists";
@@ -39,6 +41,11 @@ export function MatchSummaryView({ matchId, myId, fallback, actions }: Props) {
     (blockData(page.data?.blocks.items) ?? []).map((i) => [i.media_item_id, i]),
   );
 
+  // Оформление игроков — блок bff `appearance` (`null`/недоступен — итог без оформления).
+  const appearances = new Map<string, AppearanceLike>(
+    (blockData(page.data?.blocks.appearance) ?? []).map((a) => [a.user_id, a.appearance]),
+  );
+
   const placements: Placement[] =
     summary?.players.map((p) => ({ ...p })) ?? fallback?.placements ?? [];
   const domain = summary?.mode.domain ?? fallback?.domain ?? "music";
@@ -62,7 +69,7 @@ export function MatchSummaryView({ matchId, myId, fallback, actions }: Props) {
   return (
     <div className="flex flex-col gap-10" data-domain={domain} data-testid="match-summary">
       <Headline summary={summary} placements={placements} myId={myId} />
-      <Standings placements={placements} myId={myId} />
+      <Standings placements={placements} myId={myId} appearances={appearances} />
       {actions}
       {/* Дельта рейтинга — отдельный блок со своим опросом: итог не ждёт rating. */}
       {summary?.mode.ranked &&
@@ -114,7 +121,15 @@ function Headline({
   );
 }
 
-function Standings({ placements, myId }: { placements: Placement[]; myId: string | null }) {
+function Standings({
+  placements,
+  myId,
+  appearances,
+}: {
+  placements: Placement[];
+  myId: string | null;
+  appearances: Map<string, AppearanceLike>;
+}) {
   const t = useTranslations();
   const sorted = [...placements].sort((a, b) => a.place - b.place || b.score - a.score);
   return (
@@ -135,12 +150,14 @@ function Standings({ placements, myId }: { placements: Placement[]; myId: string
           <span className="tabular w-8 font-display text-2xl font-bold text-[var(--accent)]">
             {p.place}
           </span>
-          <span className="min-w-0 flex-1 truncate font-medium" dir="auto">
-            {p.nickname}
-            {p.user_id === myId && (
-              <span className="text-sm text-ink-faint"> {t("match.you")}</span>
-            )}
-          </span>
+          <PlayerBadge
+            className="flex-1"
+            nickname={p.nickname}
+            appearance={appearances.get(p.user_id)}
+            suffix={
+              p.user_id === myId && <span className="text-sm text-ink-faint">{t("match.you")}</span>
+            }
+          />
           {p.finish !== "completed" && p.finish !== "tech_win" && (
             <span className="text-sm text-ink-muted" data-testid="standing-finish">
               {t(`online.finish.${p.finish}`)}

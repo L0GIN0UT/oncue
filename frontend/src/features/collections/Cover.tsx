@@ -8,7 +8,8 @@ import { cn } from "@/shared/lib/cn";
 import { useCollectionsMeta } from "./api";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
-const FALLBACK = ["#2a2249", "#3b3263"];
+/** Запасной градиент — токены темы (ADR 0049), а не литералы. */
+const FALLBACK = ["var(--color-stage-raised)", "var(--color-rule)"];
 
 export function coverGradient(preset: CoverPreset | undefined): string {
   const colors = (preset?.gradient ?? []).filter((c) => HEX.test(c));

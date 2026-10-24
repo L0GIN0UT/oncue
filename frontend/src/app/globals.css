@@ -1,37 +1,6 @@
 @import "tailwindcss";
-
-/*
- * Токены дизайна OnCue. Тёмная тема по умолчанию (D3): «ночной зал» — глубокий сливовый фон,
- * два доменных акцента (латунь — музыка, плёнка — кино) и цвета исходов попытки.
- * Компоненты используют только эти токены; светлая тема — этап 7.
- */
-@theme {
-    --font-sans: "Onest Variable", ui-sans-serif, system-ui, sans-serif;
-    --font-display: "Unbounded Variable", "Onest Variable", ui-sans-serif, sans-serif;
-
-    --color-night: #16112a;
-    --color-stage: #201939;
-    --color-stage-raised: #2a2249;
-    --color-rule: #3b3263;
-    --color-ink: #f1ecfa;
-    --color-ink-muted: #b0a8cc;
-    --color-ink-faint: #958db6;
-
-    --color-music: #f4b942;
-    --color-music-deep: #8a5d10;
-    --color-film: #6fd6c9;
-    --color-film-deep: #1f6f66;
-
-    --color-exact: #8ee38b;
-    --color-partial: #f3d35c;
-    --color-miss: #ff8a7a;
-    --color-skip: #6d6591;
-
-    --radius-ticket: 1.25rem;
-    --radius-control: 0.75rem;
-
-    --ease-reveal: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
+/* Токены дизайна и наборы тем (ADR 0049): значения — в src/styles, здесь только их применение. */
+@import "../styles/tokens.css";
 
 @layer base {
     :root {
@@ -48,8 +17,8 @@
     body {
         min-height: 100dvh;
         background:
-            radial-gradient(60rem 30rem at 15% -10%, rgb(244 185 66 / 0.08), transparent 60%),
-            radial-gradient(50rem 30rem at 95% 0%, rgb(111 214 201 / 0.07), transparent 60%),
+            radial-gradient(60rem 30rem at 15% -10%, var(--color-glow-music), transparent 60%),
+            radial-gradient(50rem 30rem at 95% 0%, var(--color-glow-film), transparent 60%),
             var(--color-night);
         font-feature-settings: "ss01" on;
         line-height: 1.5;

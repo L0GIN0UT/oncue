@@ -5,7 +5,7 @@
 import "server-only";
 import createClient from "openapi-fetch";
 import type { paths as BffPaths } from "./schema/bff_web";
-import type { Domain, HomePage, SoloPage } from "./types";
+import type { Domain, HomePage, ShellPage, SoloPage } from "./types";
 
 const TIMEOUT_MS = 2000;
 
@@ -36,4 +36,9 @@ export function fetchSoloPage(domain?: Domain): Promise<SoloPage | null> {
       cache: "no-store",
     }),
   );
+}
+
+/** Оболочка (тема, колокольчик): без токена — публичный ответ; `null` — bff недоступен (тема default). */
+export function fetchShellPage(): Promise<ShellPage | null> {
+  return safe((signal) => bff().GET("/v1/pages/shell", { signal, cache: "no-store" }));
 }
