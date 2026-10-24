@@ -104,6 +104,20 @@ _MESSAGES: Mapping[str, str] = {
     "progression.pack_key_taken": "Пак с таким ключом уже есть",
     "progression.pack_not_found": "Пак не найден",
     "progression.pack_invalid": "Пак не прошёл проверку: проверьте состав предметов",
+    # progression, этап 5d: сезонные события
+    "progression.event_key_taken": "Событие с таким ключом уже есть",
+    "progression.event_not_found": "Событие не найдено",
+    "progression.event_run_not_found": "Запуск не найден",
+    "progression.event_definition_invalid": "Определение события не прошло проверку",
+    "progression.event_definition_locked": (
+        "Определение нельзя менять: есть опубликованный или активный запуск"
+    ),
+    "progression.event_map_invalid": "Карта не подходит: нужна статичная PNG или WebP",
+    "progression.event_map_too_large": "Файл карты больше допустимого",
+    "progression.event_period_invalid": "Период запуска не подходит: конец позже начала",
+    "progression.event_period_overlap": "Период пересекается с другим опубликованным запуском",
+    "progression.event_body_changed": "Определение изменили после просмотра — обновите страницу",
+    "progression.event_run_state_invalid": "Действие невозможно в текущем состоянии запуска",
     "progression.promo_not_found": "Партия промокодов не найдена",
     "progression.promo_reward_invalid": "Награда партии не подходит: проверьте Версы или предмет",
     "progression.codes_already_shown": (

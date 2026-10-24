@@ -48,6 +48,7 @@ def _item(**patch: Any) -> dict[str, Any]:
         "rarity": "rare",
         "title": "Золотая рамка",
         "media_kind": "static",
+        "event_key": None,
         "level_required": None,
         "price": 100,
         "active": False,

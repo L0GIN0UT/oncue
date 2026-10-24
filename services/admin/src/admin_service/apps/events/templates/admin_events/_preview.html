@@ -1,0 +1,7 @@
+{% load l10n %}
+<div style="position:relative;width:100%;max-width:640px;aspect-ratio:16/9;background:#ddd;border:1px solid #999;{% if map_url %}background-image:url('{{ map_url }}');background-size:100% 100%;{% endif %}" data-testid="map-preview">
+  {% for p in points %}
+  <span title="{{ p.number }}. {{ p.title }}" style="position:absolute;left:{{ p.x|unlocalize }}%;top:{{ p.y|unlocalize }}%;transform:translate(-50%,-50%);min-width:1.6em;text-align:center;border-radius:50%;background:{% if p.final %}#c0392b{% else %}#2874a6{% endif %};color:#fff;font-size:12px;">{{ p.number }}</span>
+  {% endfor %}
+</div>
+<p>Превью: точки по <code>x_pct</code>/<code>y_pct</code> (красная — финальная находка).{% if not map_url %} Карта не загружена.{% endif %}</p>
