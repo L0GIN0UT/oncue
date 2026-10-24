@@ -1,5 +1,6 @@
 {% load l10n %}
-<div style="position:relative;width:100%;max-width:640px;aspect-ratio:16/9;background:#ddd;border:1px solid #999;{% if map_url %}background-image:url('{{ map_url }}');background-size:100% 100%;{% endif %}" data-testid="map-preview">
+<div style="position:relative;width:100%;max-width:640px;aspect-ratio:16/9;background:#ddd;border:1px solid #999;" data-testid="map-preview">
+  {% if map_url %}<img src="{{ map_url }}" alt="Карта события" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;">{% endif %}
   {% for p in points %}
   <span title="{{ p.number }}. {{ p.title }}" style="position:absolute;left:{{ p.x|unlocalize }}%;top:{{ p.y|unlocalize }}%;transform:translate(-50%,-50%);min-width:1.6em;text-align:center;border-radius:50%;background:{% if p.final %}#c0392b{% else %}#2874a6{% endif %};color:#fff;font-size:12px;">{{ p.number }}</span>
   {% endfor %}

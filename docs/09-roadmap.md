@@ -158,7 +158,7 @@
 - social: друзья (заявки по нику и коду, блокировки, онлайн-статус, приглашение в комнату), комментарии к сборникам, жалобы, очередь модерации (+ раздел админки), санкции `RANKED`/`CHAT`/`ONLINE`/`ACCOUNT` и их применение (identity, match), приватность, счётчики порядочности для модератора.
 - notifications: `friend_request`, `friend_accepted`, `room_invite`, `report_resolved`, `comment_on_my_collection` (in-app и realtime, без e-mail).
 - Конфиг social — версии в БД (черновик → публикация → откат, [ADR 0053](adr/0053-social-config-versioned-in-db.md)); admin-раздел «Модерация» в Django.
-- **Осталось:** единый заход ручных проверок владельцем по этапу 5 ([чек-лист](handoff/stage-5.md#единый-чек-лист-ручных-проверок-владельцем-этап-5-целиком-4a-4b-5a-5b-5c)), живой прогон e2e `friends`/`moderation`; нерешённое — [backlog](backlog.md#проход-по-техдолгу).
+- **Осталось:** единый заход ручных проверок владельцем по этапу 5 ([чек-лист](handoff/stage-5.md#единый-чек-лист-ручных-проверок-владельцем-этап-5-целиком-4a-4b-5a-5b-5c-5d)), живой прогон e2e `friends`/`moderation`; нерешённое — [backlog](backlog.md#проход-по-техдолгу).
 
 ### Подэтап 5d — сезонные события (в работе, ветка `stage5d/integration`)
 План: [plans/stage-5.md](plans/stage-5.md) §12 и «Детализация 5d»; ADR 0054–0056 (черновики); передача — [handoff/stage-5.md](handoff/stage-5.md).

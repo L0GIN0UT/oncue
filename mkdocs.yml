@@ -59,6 +59,7 @@ nav:
       - Этап 3b: plans/stage-3b.md
       - Этап 4: plans/stage-4.md
       - Этап 5: plans/stage-5.md
+      - Этап 5d, API событий: plans/stage-5d-api.md
   - ADR:
       - adr/README.md
       - adr/0000-template.md
