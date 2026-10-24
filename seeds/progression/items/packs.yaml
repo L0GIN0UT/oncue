@@ -1,0 +1,9 @@
+# Паки косметики (5b: только модель и CRUD, продажа - вместе с billing, этап 6). Пак неактивен.
+packs:
+  - key: starter_pack
+    title: Стартовый набор
+    style: starter
+    item_keys: [ava_owl, frm_neon, bg_aurora]
+    verses_amount: 0
+    price_kopecks: 14900
+    active: false
