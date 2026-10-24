@@ -68,6 +68,7 @@
 | Disconnect Centrifugo для забаненного (ACCOUNT): открытое соединение живёт до `exp` connection-токена; нужен server API `disconnect` в identity | identity | [ADR 0052](adr/0052-sanctions-and-enforcement.md) | После 5c |
 | Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
 | Иерархия модераторов: сейчас модератор с `social.sanctions.manage` может санкционировать admin; запрет санкций выше своей роли | social, identity | ADR 0052 (решение владельца) | По решению владельца |
+| Фронт шумит: presence с каждой вкладки, `unread-count` и shell отдельными запросами (e2e упёрлись в лимиты gateway по IP, PR #30); свести в `/pages/shell` и один presence на браузер (лидер через `BroadcastChannel`) | frontend, bff | CI e2e, PR #30 | До релиза |
 | Лаг идентичности: решение о доступе по claim токена (≤ 15 мин) и проекциям разных сервисов расходится на время доставки событий | identity, match, social | ADR 0052 | Принятый риск |
 
 ## 2. Продуктовые идеи владельца
