@@ -173,9 +173,7 @@ def test_reward_item_exists_in_items_seed() -> None:
     frame = next(i for i in items if i["key"] == "frame_snowfall")
 
     assert frame["slot"] == "frame"
-    assert (
-        REPO / "seeds" / "progression" / "items" / "images" / "frame_snowfall.webp"
-    ).is_file()
+    assert (REPO / "seeds" / "progression" / "items" / "images" / "frame_snowfall.webp").is_file()
 
 
 # ------------------------------------------------------------------ шаг seed_events

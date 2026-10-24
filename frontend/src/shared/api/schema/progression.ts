@@ -134,7 +134,7 @@ export interface paths {
         put?: never;
         /**
          * Создать событие
-         * @description Ошибки: 409 `progression.event_key_taken`, 422 `progression.event_definition_invalid` (`details.errors` - пути и причины: одна финальная находка, уникальные ключи и номера, предмет награды есть в каталоге и т. п.).
+         * @description Ошибки: 409 `progression.event_key_taken`, 422 `progression.event_definition_invalid` (`details.errors` - пути и причины: одна финальная находка, уникальные ключи и номера, предмет награды - активный предмет этого события и т. п.).
          */
         post: operations["create_event_admin_v1_events_post"];
         delete?: never;
@@ -218,7 +218,7 @@ export interface paths {
         put?: never;
         /**
          * Опубликовать запуск
-         * @description Кладёт неизменяемый снимок определения. Ошибки: 404 `progression.event_not_found` / `progression.event_run_not_found`, 409 `progression.event_body_changed` (хеш определения иной), 409 `progression.event_period_overlap`, 409 `progression.event_run_state_invalid`.
+         * @description Кладёт неизменяемый снимок определения. Ошибки: 404 `progression.event_not_found` / `progression.event_run_not_found`, 409 `progression.event_body_changed` (хеш определения иной), 409 `progression.event_period_overlap`, 409 `progression.event_run_state_invalid`, 422 `progression.event_definition_invalid`.
          */
         post: operations["publish_run_admin_v1_events__event_key__runs__run_id__publish_post"];
         delete?: never;
@@ -1011,6 +1011,11 @@ export interface components {
              */
             created_at: string;
             /**
+             * Event Key
+             * @description Предмет награды события; null - обычный
+             */
+            event_key: string | null;
+            /**
              * Id
              * Format: uuid
              */
@@ -1459,6 +1464,11 @@ export interface components {
              * @default false
              */
             active: boolean;
+            /**
+             * Event Key
+             * @description Предмет только для награды сезонного события с этим ключом: без цены и уровня, не на витрине, не с колеса и не по промокоду (422 `progression.item_event_exclusive`)
+             */
+            event_key?: string | null;
             /** Key */
             key: string;
             /** Level Required */
@@ -2654,6 +2664,11 @@ export interface components {
              * @default false
              */
             active: boolean;
+            /**
+             * Event Key
+             * @description Предмет только для награды сезонного события с этим ключом: без цены и уровня, не на витрине, не с колеса и не по промокоду (422 `progression.item_event_exclusive`)
+             */
+            event_key?: string | null;
             /** Key */
             key: string;
             /** Level Required */
@@ -3154,16 +3169,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     create_event_admin_v1_events_post: {
@@ -3223,16 +3228,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3301,16 +3296,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3385,16 +3370,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3483,16 +3458,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     create_run_admin_v1_events__event_key__runs_post: {
@@ -3555,16 +3520,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3655,16 +3610,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     run_stats_admin_v1_events__event_key__runs__run_id__stats_get: {
@@ -3727,16 +3672,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3813,16 +3748,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4936,16 +4861,6 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     claim_v1_events__event_key__finds__find__claim_post: {
@@ -5033,16 +4948,6 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
             /** @description Зависимость временно недоступна */
             503: {
                 headers: {
@@ -5071,16 +4976,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActiveEvent"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5399,16 +5294,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
