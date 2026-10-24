@@ -21,7 +21,8 @@ KEY = {"Idempotency-Key": "idem-0192a3b4c5d6"}
 REASON = "проверка контракта"
 ISSUER = TestTokenIssuer()
 
-PUBLIC_USER: list[tuple[str, str, dict[str, Any]]] = [
+FRIENDS: list[tuple[str, str, dict[str, Any]]] = [
+    # Реализованы в F1: здесь проверяется только аутентификация, поведение - test_friends_api.py.
     ("GET", "/v1/me/friends", {}),
     ("DELETE", f"/v1/me/friends/{UID}", {}),
     ("GET", "/v1/me/friend-requests", {}),
@@ -47,6 +48,8 @@ PUBLIC_USER: list[tuple[str, str, dict[str, Any]]] = [
         {"json": {"room_code": "K7M2QX"}, "headers": KEY},
     ),
     ("GET", f"/v1/players/{UID}/relation", {}),
+]
+PUBLIC_USER: list[tuple[str, str, dict[str, Any]]] = [
     ("POST", f"/v1/collections/{OBJ}/comments", {"json": {"body": "Класс"}, "headers": KEY}),
     ("PATCH", f"/v1/comments/{OBJ}", {"json": {"body": "Правка"}}),
     ("DELETE", f"/v1/comments/{OBJ}", {}),
@@ -114,7 +117,7 @@ def _send(client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]], **ex
     return client.request(method, path, headers=headers, **kwargs)
 
 
-@pytest.mark.parametrize("call", PUBLIC_USER + ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")
+@pytest.mark.parametrize("call", FRIENDS + PUBLIC_USER + ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")
 async def test_requires_authentication(
     client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]]
 ) -> None:

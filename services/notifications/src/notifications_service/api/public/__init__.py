@@ -86,6 +86,7 @@ def _item(n: Notification) -> NotificationItem:
         body=n.body,
         created_at=n.created_at,
         read_at=n.read_at,
+        data=dict(n.data),
     )
 
 

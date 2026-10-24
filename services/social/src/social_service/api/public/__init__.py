@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from gv_service import Infrastructure
 from social_service.api.public.discussion import register_discussion_routes
 from social_service.api.public.friends import register_friend_routes
+from social_service.application.friends import FriendsService
 
 
 class ServiceMeta(BaseModel):
@@ -21,14 +24,14 @@ class ServiceMeta(BaseModel):
     status: str
 
 
-def build_public_router(infra: Infrastructure) -> APIRouter:
-    """Публичные ручки."""
+def build_public_router(infra: Infrastructure, friends: Callable[[], FriendsService]) -> APIRouter:
+    """Публичные ручки (``friends`` собирает use-case друзей на каждый запрос)."""
     router = APIRouter(prefix="/v1", tags=["social"])
 
     @router.get("/meta", response_model=ServiceMeta, summary="Сведения о сервисе")
     async def meta() -> ServiceMeta:
         return ServiceMeta(service=infra.settings.service_name, status="stub")
 
-    register_friend_routes(router)
+    register_friend_routes(router, friends)
     register_discussion_routes(router)
     return router

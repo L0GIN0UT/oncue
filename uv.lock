@@ -1923,6 +1923,8 @@ dependencies = [
     { name = "gv-db" },
     { name = "gv-messaging" },
     { name = "gv-service" },
+    { name = "jsonschema" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1932,6 +1934,8 @@ requires-dist = [
     { name = "gv-db", editable = "libs/db" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
+    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]

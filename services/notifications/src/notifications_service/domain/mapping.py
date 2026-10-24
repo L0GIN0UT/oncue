@@ -121,4 +121,8 @@ def map_event(
         dedup_key=_dedup_key(notification_type.dedup_key, payload),
         title=render(template.title, values)[:TITLE_MAX],
         body=render(template.body, values)[:BODY_MAX],
+        data={
+            name: _text(resolve_path(payload, path))
+            for name, path in notification_type.data.items()
+        },
     )
