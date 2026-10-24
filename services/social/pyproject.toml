@@ -3,7 +3,7 @@ name = "guessverse-social"
 version = "0.1.0"
 description = "Друзья, комментарии, жалобы, модерация, шкалы поведения и санкции, приватность"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "pyyaml>=6", "jsonschema>=4.23"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-text", "pyyaml>=6", "jsonschema>=4.23"]
 
 [project.scripts]
 social = "social_service.main:run"
