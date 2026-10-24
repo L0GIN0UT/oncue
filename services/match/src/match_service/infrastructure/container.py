@@ -58,7 +58,7 @@ from match_service.infrastructure.db.repositories import (
     SqlModeHeads,
     SqlUsers,
 )
-from match_service.infrastructure.db.sanctions import SqlSanctions
+from match_service.infrastructure.db.sanctions import SANCTIONS_UNAVAILABLE, SqlSanctions
 from match_service.infrastructure.ladder_cache import CachedLadders
 from match_service.infrastructure.limits import RedisRateLimiter
 from match_service.infrastructure.matchmaker import MatchmakerRunner
@@ -224,7 +224,7 @@ class MatchContainer:
             if self.infra.sessions is None:
                 return None
             projection = SqlSanctions(self.infra.sessions)
-        return SanctionGate(projection, self.infra.clock)
+        return SanctionGate(projection, self.infra.clock, on_failure=SANCTIONS_UNAVAILABLE.inc)
 
     @cached_property
     def game(self) -> GameClient:

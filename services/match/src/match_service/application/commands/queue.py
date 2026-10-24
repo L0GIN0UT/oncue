@@ -108,7 +108,7 @@ class QueueService:
             MatchRateLimitedError: лимит входов.
             MatchUnavailableError: game недоступен при чтении рейтингового шаблона.
         """
-        actor = await effective_actor(self._sanctions, actor)
+        actor = await effective_actor(self._sanctions, actor, strict=True)  # вход: fail-closed
         if actor.online_banned:
             raise online_banned()
         if actor.ranked_banned:

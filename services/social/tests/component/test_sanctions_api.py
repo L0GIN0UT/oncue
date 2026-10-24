@@ -146,7 +146,7 @@ async def test_same_kind_replaces_previous(social: SocialService) -> None:
     first = (await _grant(social, moderator, player)).json()
     second = (await _grant(social, moderator, player, duration_s=2 * HOUR2)).json()
     rows = {r.id: r for r in await social.rows(t.sanctions)}
-    assert rows[UUID(first["id"])].revoke_reason == "replaced"
+    assert rows[UUID(first["id"])].revoke_reason == "system:replaced"
     assert rows[UUID(second["id"])].revoked_at is None
     mine = await social.client.get("/v1/me/sanctions", headers=social.auth(player))
     assert [i["kind"] for i in mine.json()["items"]] == ["online"]
@@ -190,6 +190,25 @@ async def test_revoke_is_idempotent_and_unknown_is_404(social: SocialService) ->
     assert_problem(missing, 404, "social.sanction_not_found")
 
 
+async def test_revoking_account_ban_needs_account_right_and_reason_is_not_reserved(
+    social: SocialService,
+) -> None:
+    admin, moderator, player = uuid7(), uuid7(), await _player(social)
+    ban = (await _grant(social, admin, player, "account", None, perms=ACCOUNT)).json()
+    path = f"/admin/v1/sanctions/{ban['id']}/revoke"
+
+    def revoke(perms: tuple[str, ...], reason: str) -> Any:
+        return social.client.post(
+            path,
+            json={"reason": reason},
+            headers={**social.auth(moderator, perms), **social.key()},
+        )
+
+    assert_problem(await revoke(MANAGE, "ошибка"), 403, "social.account_sanction_forbidden")
+    assert_problem(await revoke(ACCOUNT, "system:replaced"), 422, "social.reason_reserved")
+    assert (await revoke(ACCOUNT, "ошибка")).status_code == 200
+
+
 async def test_moderator_cannot_revoke_own_sanction(social: SocialService) -> None:
     admin, moderator = uuid7(), await _player(social)
     sanction = (await _grant(social, admin, moderator)).json()
@@ -231,7 +250,7 @@ async def test_expiry_job_closes_and_publishes_with_null_actor(social: SocialSer
     last = events[-1].payload
     assert (last["version"], last["changed_by"], last["mask"]) == (3, None, int(Sanction.RANKED))
     expired = [r for r in await social.rows(t.sanctions) if r.kind == "online"]
-    assert expired[0].revoke_reason == "expired"
+    assert expired[0].revoke_reason == "system:expired"
     assert expired[0].revoked_by is None
 
 

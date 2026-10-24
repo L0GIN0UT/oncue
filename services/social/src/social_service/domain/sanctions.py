@@ -32,8 +32,11 @@ SANCTION_NOT_FOUND = "social.sanction_not_found"
 PLAYER_NOT_FOUND = "social.player_not_found"
 ACCOUNT_PERM = "social.sanctions.account"
 
-REVOKE_REPLACED = "replaced"
-REVOKE_EXPIRED = "expired"
+SYSTEM_REASON_PREFIX = "system:"
+"""Зарезервирован за системными причинами закрытия: модератор не может подделать «замену»."""
+REVOKE_REPLACED = SYSTEM_REASON_PREFIX + "replaced"
+REVOKE_EXPIRED = SYSTEM_REASON_PREFIX + "expired"
+REASON_RESERVED = "social.reason_reserved"
 SOCIAL_AGGREGATE = "social"
 
 

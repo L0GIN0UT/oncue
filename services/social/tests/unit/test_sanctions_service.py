@@ -148,7 +148,7 @@ async def test_same_kind_replaces_without_duplicates() -> None:
     active = await env.service.my_active(PLAYER)
     assert [r.id for r in active] == [second.id]
     closed = env.world.records[first.id]
-    assert closed.revoke_reason == "replaced"
+    assert closed.revoke_reason == "system:replaced"
     assert closed.revoked_by == MODERATOR
     assert second.expires_at == env.clock.now() + timedelta(hours=2)
     assert len(env.last_event().active) == 1
@@ -159,7 +159,7 @@ async def test_replacing_expired_unclosed_record_is_marked_expired() -> None:
     first = await env.service.grant(env.request("online", 60))
     env.clock.advance(timedelta(minutes=5))
     await env.service.grant(env.request("online", HOUR))
-    assert env.world.records[first.id].revoke_reason == "expired"
+    assert env.world.records[first.id].revoke_reason == "system:expired"
     assert env.world.records[first.id].revoked_by is None
 
 
@@ -242,3 +242,34 @@ async def test_unknown_player_is_404_for_admin_api_only() -> None:
         await env.service.grant_idempotent(env.request(user=stranger), "k")
     assert err.value.code == "social.player_not_found"
     await env.service.grant(env.request(user=stranger))  # порт для F4 игрока не проверяет
+
+
+async def test_revoking_account_ban_needs_account_permission() -> None:
+    env = Env()
+    ban = await env.service.grant(env.request("account", None, perms=ACCOUNT))
+    other = UUID(int=9)
+    with pytest.raises(ForbiddenError) as err:
+        await env.service.revoke(other, ban.id, "ошибка бана", MANAGE)
+    assert err.value.code == "social.account_sanction_forbidden"
+    assert env.world.records[ban.id].revoked_at is None
+    assert len(env.world.events) == 1  # снятия не было
+    revoked = await env.service.revoke(other, ban.id, "ошибка бана", ACCOUNT)
+    assert revoked.revoked_by == other
+    assert env.last_event().account_banned is False
+
+
+async def test_revoking_other_kinds_does_not_need_account_permission() -> None:
+    env = Env()
+    record = await env.service.grant(env.request("online"))
+    revoked = await env.service.revoke(UUID(int=9), record.id, "снято", MANAGE)
+    assert revoked.revoked_at is not None
+
+
+@pytest.mark.parametrize("reason", ["system:replaced", "system:expired", "system:anything"])
+async def test_moderator_reason_cannot_use_reserved_system_prefix(reason: str) -> None:
+    env = Env()
+    record = await env.service.grant(env.request("online"))
+    with pytest.raises(InvalidInputError) as err:
+        await env.service.revoke(UUID(int=9), record.id, reason, MANAGE)
+    assert err.value.code == "social.reason_reserved"
+    assert env.world.records[record.id].revoked_at is None

@@ -117,6 +117,28 @@ async def test_banned_account_cannot_login_with_neutral_error(world: Any) -> Non
     assert info.value.details == {}
 
 
+async def test_banned_account_on_new_device_gets_no_code_mail(world: Any) -> None:
+    """Бан проверяется сразу после пароля: ни письма с кодом, ни challenge для забаненного."""
+    user_id = await world.make_user()
+    await _deliver(world, _event(world, user_id, 1, [("account", None)]))
+    mails, challenges = len(world.emails), len(world.data.challenges)
+    with pytest.raises(ForbiddenError) as info:
+        await world.uc.login("neo_2026", PASSWORD, ip=None, device_token=None)
+    assert info.value.code == "auth.account_banned"
+    assert len(world.emails) == mails
+    assert len(world.data.challenges) == challenges
+
+
+async def test_wrong_password_on_new_device_for_banned_account_looks_ordinary(world: Any) -> None:
+    from gv_core import UnauthenticatedError
+
+    user_id = await world.make_user()
+    await _deliver(world, _event(world, user_id, 1, [("account", None)]))
+    with pytest.raises(UnauthenticatedError) as info:
+        await world.uc.login("neo_2026", "wrong password here", ip=None, device_token=None)
+    assert info.value.code != "auth.account_banned"
+
+
 async def test_banned_account_cannot_admin_login(world: Any) -> None:
     user_id = await world.make_user(roles=frozenset({"user", "moderator"}))
     await _deliver(world, _event(world, user_id, 1, [("account", None)]))

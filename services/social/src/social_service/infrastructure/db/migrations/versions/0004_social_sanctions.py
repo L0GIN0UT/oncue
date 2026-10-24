@@ -1,6 +1,7 @@
 """Санкции и версия набора санкций игрока (5c, поток F3; ADR 0052).
 
-Только новые таблицы (expand).
+Только новые таблицы (expand). Откат прерывается, если в ``sanctions`` есть записи: это журнал
+(append-only), модерационную историю миграция молча не удаляет.
 
 Revision ID: 0004
 Revises: 0003
@@ -76,7 +77,18 @@ def upgrade() -> None:
     )
 
 
+def _refuse_if_journal_has_rows() -> None:
+    """Прервать откат, если в журнале санкций есть записи (история append-only)."""
+    count = op.get_bind().execute(sa.text("SELECT count(*) FROM sanctions")).scalar_one()
+    if count:
+        raise RuntimeError(
+            f"откат 0004 запрещён: в журнале sanctions {count} записей; "
+            "история санкций не удаляется автоматически"
+        )
+
+
 def downgrade() -> None:
+    _refuse_if_journal_has_rows()
     op.drop_table("sanction_state")
     op.drop_index(
         "ix_sanctions_open_expires",

@@ -61,6 +61,10 @@
 | Анонимное чтение `p/*` в S3 (принятый риск): перейти на presigned-ссылки gateway | media_pipeline | 5b | Этап 7 |
 | Цвет аватарки: 16-битные и CMYK | media_pipeline | 5b | По желанию |
 | Окна лимитов social (`lookup_window_s`, `invite_window_s`) в коде, не в конфиге — перенести новой версией схемы конфига | social | 5c | По желанию |
+| Disconnect Centrifugo для забаненного (ACCOUNT): открытое соединение живёт до `exp` connection-токена; нужен server API `disconnect` в identity | identity | [ADR 0052](adr/0052-sanctions-and-enforcement.md) | После 5c |
+| Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
+| Иерархия модераторов: сейчас модератор с `social.sanctions.manage` может санкционировать admin; запрет санкций выше своей роли | social, identity | ADR 0052 (решение владельца) | По решению владельца |
+| Лаг идентичности: решение о доступе по claim токена (≤ 15 мин) и проекциям разных сервисов расходится на время доставки событий | identity, match, social | ADR 0052 | Принятый риск |
 
 ## 2. Продуктовые идеи владельца
 

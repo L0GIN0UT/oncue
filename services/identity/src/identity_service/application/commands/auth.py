@@ -513,6 +513,9 @@ class LoginWithPassword:
         message: EmailMessage | None = None
         async with self._uow() as uow:
             user = await self._auth.authenticate(uow, login, password, ip, allow_unverified=True)
+            # Бан - сразу после верного пароля: забаненному не создаём challenge и не шлём
+            # письмо (без оракула: неверный пароль до этой точки не доходит).
+            await self._sessions.sanctions_mask(uow, user.id)
             if not user.email_verified:
                 # Письмо регистрации могло быть подавлено лимитом или потеряно: пароль верен,
                 # поэтому выдаём новый код подтверждения (его вводят через verify-email).

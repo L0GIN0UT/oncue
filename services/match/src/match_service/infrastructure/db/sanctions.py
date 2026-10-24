@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
+from prometheus_client import Counter
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -17,6 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from gv_auth import parse_entries
 from match_service.domain.sanctions import SanctionsSnapshot
 from match_service.infrastructure.db.tables import sanctions_proj
+
+SANCTIONS_UNAVAILABLE = Counter(
+    "gv_match_sanctions_projection_failures_total",
+    "Сбои чтения проекции санкций при решении о доступе",
+)
 
 
 class SqlSanctions:

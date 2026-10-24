@@ -136,7 +136,7 @@ def build_sanctions_router(service: SanctionService) -> APIRouter:
         request: Request,
         response: Response,
     ) -> SanctionView:
-        record = await service.revoke(moderator.user_id, sanction_id, body.reason)
+        record = await service.revoke(moderator.user_id, sanction_id, body.reason, moderator.perms)
         response.headers["Cache-Control"] = NO_STORE
         return sanction_view(record, _now(request))
 

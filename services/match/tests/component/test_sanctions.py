@@ -202,3 +202,76 @@ async def test_realtime_token_is_rechecked_on_renewal(svc: MatchApp) -> None:
     assert (await svc.client.post(url, headers=host.headers)).status_code == 200
     await sanction(svc, host, 1, ("online", None))
     assert_problem(await svc.client.post(url, headers=host.headers), 403, "match.online_banned")
+
+
+async def test_banned_player_cannot_issue_game_commands(svc: MatchApp) -> None:
+    """join → бан → ready/start/guess/чат/эмоции закрыты 403, а не «не участник»."""
+    host, guest = svc.user(), svc.user()
+    code = (await svc.create(host, LOBBY, collection_ids=[str(uuid7())]))["code"]
+    await svc.join(code, guest)
+    await sanction(svc, guest, 1, ("online", None))
+    for path, body in (
+        ("ready", {"ready": True}),
+        ("start", {"expected_version": 1}),
+        (
+            "match/guess",
+            {"expected_version": 1, "round_index": 0, "level": 1, "answer": {"text": "x"}},
+        ),
+        ("match/chat", {"text": "привет"}),
+        ("match/emote", {"kind": "emote", "key": "gg"}),
+        ("match/skip", {"expected_version": 1, "round_index": 0, "level": 1}),
+        ("match/away", {"away": True}),
+    ):
+        response = await svc.post(guest, code, path, **body)
+        assert_problem(response, 403, "match.online_banned")
+
+
+async def test_join_racing_with_ban_is_evicted_after_the_fact(
+    svc: MatchApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Бан между проверкой и входом: повторная проверка после входа выбивает игрока."""
+    host, guest = svc.user(), svc.user()
+    code = (await svc.create(host, LOBBY, collection_ids=[str(uuid7())]))["code"]
+    gate = container_for(svc.infra).sanction_gate
+    assert gate is not None
+    calls = {"n": 0}
+
+    async def racing_mask(user_id: Any, claim: int, **_: Any) -> int:
+        calls["n"] += 1
+        return 0 if calls["n"] == 1 else ONLINE  # бан «проявился» между проверкой и входом
+
+    monkeypatch.setattr(gate, "mask", racing_mask)
+    assert_problem(await svc.post(guest, code, "join"), 403, "match.online_banned")
+    monkeypatch.undo()
+    state = await svc.until(host, code, lambda s: len(s["room"]["players"]) == 1)
+    assert state["room"]["players"][0]["user_id"] == str(host.user_id)
+
+
+class _BrokenProjection:
+    async def get(self, user_id: Any) -> Any:
+        raise RuntimeError("db down")
+
+
+async def test_unavailable_projection_is_fail_closed_on_entry_points(
+    svc: MatchApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from match_service.infrastructure.db.sanctions import SANCTIONS_UNAVAILABLE
+
+    await svc.ladder("music")
+    host, guest = svc.user(), svc.user()
+    code = (await svc.create(host, "music.duel.classic"))["code"]
+    gate = container_for(svc.infra).sanction_gate
+    assert gate is not None
+    monkeypatch.setattr(gate, "_projection", _BrokenProjection())
+    before = SANCTIONS_UNAVAILABLE._value.get()
+    unavailable = "match.sanctions_unavailable"
+    assert_problem(await _create(svc, guest), 503, unavailable)
+    assert_problem(await svc.post(guest, code, "join"), 503, unavailable)
+    assert_problem(await svc.post(host, code, "rematch"), 503, unavailable)
+    assert_problem(await svc.enter(guest), 503, unavailable)
+    token = await svc.client.post(f"/v1/rooms/{code}/realtime-token", headers=host.headers)
+    assert_problem(token, 503, unavailable)
+    assert SANCTIONS_UNAVAILABLE._value.get() == before + 5
+    # Игрок, уже сидящий в комнате: команды деградируют до claim (метрика растёт).
+    assert (await svc.post(host, code, "ready", ready=True)).status_code == 200
+    assert SANCTIONS_UNAVAILABLE._value.get() == before + 6

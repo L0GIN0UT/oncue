@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
 
@@ -14,7 +15,7 @@ import structlog
 
 from gv_core.clock import Clock
 from match_service.domain import errors
-from match_service.domain.errors import MatchForbiddenError
+from match_service.domain.errors import MatchForbiddenError, MatchUnavailableError
 from match_service.domain.sanctions import ONLINE_BAN, SanctionsSnapshot, effective_sanctions
 
 log = structlog.get_logger(__name__)
@@ -31,26 +32,47 @@ class SanctionsProjection(Protocol):
 class SanctionGate:
     """Эффективная маска санкций и проверки доступа к онлайну."""
 
-    def __init__(self, projection: SanctionsProjection, clock: Clock) -> None:
+    def __init__(
+        self,
+        projection: SanctionsProjection,
+        clock: Clock,
+        on_failure: Callable[[], None] = lambda: None,
+    ) -> None:
         self._projection = projection
         self._clock = clock
+        self._on_failure = on_failure
 
-    async def mask(self, user_id: UUID, claim: int) -> int:
-        """Маска для решения: проекция, если есть, иначе ``claim``."""
+    async def mask(self, user_id: UUID, claim: int, *, strict: bool = False) -> int:
+        """Маска для решения: проекция, если есть, иначе ``claim``.
+
+        Недоступная проекция: ``strict`` (входы в онлайн) - отказ, иначе (игрок уже в комнате)
+        деградация до ``claim``; оба случая считаются метрикой сбоев.
+
+        Raises:
+            MatchUnavailableError: ``match.sanctions_unavailable`` при ``strict``.
+        """
         try:
             snapshot = await self._projection.get(user_id)
-        except Exception:
-            log.warning("match.sanctions_projection_unavailable", exc_info=True)
+        except Exception as exc:
+            self._on_failure()
+            log.warning("match.sanctions_projection_unavailable", strict=strict, exc_info=True)
+            if strict:
+                raise MatchUnavailableError(
+                    "проверка санкций недоступна",
+                    code=errors.SANCTIONS_UNAVAILABLE,
+                    details={"retry_after": 5},
+                ) from exc
             return claim
         return effective_sanctions(snapshot, claim, self._clock.now())
 
-    async def require_online(self, user_id: UUID, claim: int) -> None:
+    async def require_online(self, user_id: UUID, claim: int, *, strict: bool = True) -> None:
         """Пропустить игрока без санкции ONLINE.
 
         Raises:
             MatchForbiddenError: ``match.online_banned``.
+            MatchUnavailableError: ``match.sanctions_unavailable`` при ``strict``.
         """
-        if await self.mask(user_id, claim) & ONLINE_BAN:
+        if await self.mask(user_id, claim, strict=strict) & ONLINE_BAN:
             raise online_banned()
 
 

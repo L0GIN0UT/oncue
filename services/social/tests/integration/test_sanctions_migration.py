@@ -76,6 +76,22 @@ async def test_0004_downgrades_and_upgrades_again(database_url: str, engine: Asy
     assert {"sanctions", "sanction_state"} <= await _tables(engine)
 
 
+async def test_downgrade_with_journal_rows_is_refused_and_empty_one_passes(
+    database_url: str, engine: AsyncEngine
+) -> None:
+    path = DEFINITION.migrations_path
+    assert path is not None
+    config = alembic_config(path, database_url)
+    await _insert(engine)
+    with pytest.raises(RuntimeError, match="откат 0004 запрещён"):
+        await asyncio.to_thread(command.downgrade, config, "0003")
+    assert {"sanctions", "sanction_state"} <= await _tables(engine)  # ничего не потеряно
+    async with engine.begin() as conn:
+        await conn.execute(text("DELETE FROM sanctions"))
+    await asyncio.to_thread(command.downgrade, config, "0003")
+    assert "sanctions" not in await _tables(engine)
+
+
 async def test_expiry_must_be_after_start(engine: AsyncEngine) -> None:
     with pytest.raises(IntegrityError):
         await _insert(engine, e=NOW)
@@ -93,7 +109,7 @@ async def test_revoke_fields_come_as_a_pair(engine: AsyncEngine) -> None:
         await _insert(engine, ra=None, rr="снято")
     with pytest.raises(IntegrityError):
         await _insert(engine, rb=ACTOR)
-    await _insert(engine, ra=NOW, rr="expired")  # истечение: снял не человек
+    await _insert(engine, ra=NOW, rr="system:expired")  # истечение: снял не человек
 
 
 async def test_one_open_record_per_user_and_kind(engine: AsyncEngine) -> None:
@@ -101,7 +117,7 @@ async def test_one_open_record_per_user_and_kind(engine: AsyncEngine) -> None:
     with pytest.raises(IntegrityError):
         await _insert(engine)
     await _insert(engine, k="chat")
-    await _insert(engine, ra=NOW, rr="replaced", rb=ACTOR)  # закрытые не мешают
+    await _insert(engine, ra=NOW, rr="system:replaced", rb=ACTOR)  # закрытые не мешают
 
 
 async def test_state_version_is_positive(engine: AsyncEngine) -> None:

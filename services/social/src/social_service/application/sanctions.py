@@ -221,13 +221,23 @@ class SanctionService:
             await repo.close(previous.id, at=now, by=actor_id, reason=rules.REVOKE_REPLACED)
 
     # ------------------------------------------------------------------ снятие
-    async def revoke(self, actor_id: UUID, sanction_id: UUID, reason: str) -> SanctionRecord:
+    async def revoke(
+        self,
+        actor_id: UUID,
+        sanction_id: UUID,
+        reason: str,
+        actor_perms: frozenset[str] = frozenset(),
+    ) -> SanctionRecord:
         """Снять санкцию вручную; повтор возвращает ту же (уже снятую) запись без события.
 
         Raises:
             NotFoundError: ``social.sanction_not_found``.
-            ForbiddenError: ``social.self_sanction_forbidden`` - санкция на самом модераторе.
+            ForbiddenError: ``social.self_sanction_forbidden`` - санкция на самом модераторе;
+                ``social.account_sanction_forbidden`` - бан аккаунта без права на него.
+            InvalidInputError: ``social.reason_reserved`` - причина с префиксом ``system:``.
         """
+        if reason.startswith(rules.SYSTEM_REASON_PREFIX):
+            raise InvalidInputError("причина зарезервирована", code=rules.REASON_RESERVED)
         async with self._uow() as uow:
             repo = uow.sanctions
             found = await repo.get(sanction_id)
@@ -235,6 +245,11 @@ class SanctionService:
                 raise NotFoundError("санкция не найдена", code=rules.SANCTION_NOT_FOUND)
             if found.user_id == actor_id:
                 raise ForbiddenError("свои санкции не снимают", code=rules.SELF_SANCTION_FORBIDDEN)
+            if found.kind == "account" and rules.ACCOUNT_PERM not in actor_perms:
+                raise ForbiddenError(
+                    "снятие бана аккаунта требует отдельного права",
+                    code=rules.ACCOUNT_SANCTION_FORBIDDEN,
+                )
             now = self._clock.now()
             version = await repo.lock_and_bump(found.user_id)
             current = await repo.get(sanction_id, for_update=True)
