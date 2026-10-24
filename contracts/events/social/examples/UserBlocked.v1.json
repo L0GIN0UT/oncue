@@ -1,0 +1,16 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002",
+  "aggregate_type": "block",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0004",
+  "event_type": "social.UserBlocked",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:03:00Z",
+  "payload": {
+    "at": "2026-10-24T12:03:00Z",
+    "blocked_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "blocker_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002"
+  },
+  "producer": "social"
+}

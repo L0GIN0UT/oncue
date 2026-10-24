@@ -258,9 +258,12 @@ export function createProgressionHandlers(world: MockWorld): HttpHandler[] {
               slots: [{ slot: "title", item: itemByKey("champion") }],
             },
           };
-      return HttpResponse.json({ blocks: { progress, appearance } } satisfies PlayerPage, {
-        headers: NO_STORE,
-      });
+      return HttpResponse.json(
+        { blocks: { progress, appearance }, restricted: false } satisfies PlayerPage,
+        {
+          headers: NO_STORE,
+        },
+      );
     }),
 
     http.post("*/api/progression/v1/wheel/spin", ({ request }) => {

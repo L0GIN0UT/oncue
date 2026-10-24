@@ -1273,6 +1273,7 @@ async def test_online_page_match_stub_501_and_game_down_are_unavailable(bff: Bff
             "ratings": UNAVAILABLE,
             "seasons": UNAVAILABLE,
             "weekly": UNAVAILABLE,
+            "friends": None,
         },
     }
 
@@ -1318,7 +1319,10 @@ async def test_match_page_result_items_and_library_flags(bff: Bff) -> None:
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == PRIVATE
     blocks = response.json()["blocks"]
-    assert blocks["match"] == {"status": "ok", "data": SAMPLES["match_result"]}
+    expected = SAMPLES["match_result"]
+    # 5c: `can_report` добавляет bff (в 0a - всегда false, решение в потоке F5).
+    players = [{**p, "can_report": False} for p in expected["players"]]
+    assert blocks["match"] == {"status": "ok", "data": {**expected, "players": players}}
     # Раунды 0 и 2 — одна единица: карточка и флаг по ней — по одному разу.
     assert [i["title"] for i in blocks["items"]["data"]] == ["Брат", "Брат 2"]
     assert blocks["library"] == {
@@ -2451,6 +2455,7 @@ async def test_shell_for_user_has_theme_key_and_bell(bff: Bff) -> None:
     assert response.json() == {
         "theme": {"key": "default"},  # только ключ: значений токенов в API нет
         "bell": {"status": "ok", "data": {"unread": 3}},
+        "sanctions": None,
     }
     assert unread.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
@@ -2461,7 +2466,7 @@ async def test_shell_for_anonymous_is_public_without_bell_call(bff: Bff) -> None
     response = await bff.client.get("/v1/pages/shell")
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None}
+    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
     assert response.headers["cache-control"] == PUBLIC
     assert response.headers["vary"] == "Authorization, Cookie"
     assert unread.call_count == 0
@@ -2473,7 +2478,7 @@ async def test_shell_for_guest_has_no_bell_and_does_not_call_notifications(bff: 
     response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": None}
+    assert response.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
     assert response.headers["cache-control"] == PRIVATE  # с токеном - личный ответ
     assert unread.call_count == 0
 
@@ -2493,7 +2498,7 @@ async def test_shell_notifications_failure_hides_bell_only(bff: Bff, failure: st
     response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
-    assert response.json() == {"theme": {"key": "default"}, "bell": UNAVAILABLE}
+    assert response.json() == {"theme": {"key": "default"}, "bell": UNAVAILABLE, "sanctions": None}
 
 
 @pytest.fixture
@@ -2505,7 +2510,7 @@ def theme_env(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_shell_theme_key_comes_from_env(theme_env: None, bff: Bff) -> None:
     response = await bff.client.get("/v1/pages/shell")
 
-    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None}
+    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None, "sanctions": None}
 
 
 async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> None:
@@ -2521,7 +2526,7 @@ async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> 
         )
         shell = await bff.client.get("/v1/pages/shell", headers=headers)
         assert shell.status_code == 200
-        assert shell.json() == {"theme": {"key": "default"}, "bell": None}
+        assert shell.json() == {"theme": {"key": "default"}, "bell": None, "sanctions": None}
     assert all(route.call_count == 0 for route in routes.values())
     assert unread.call_count == 0
 

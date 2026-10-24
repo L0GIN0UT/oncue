@@ -1,4 +1,8 @@
-"""Публичный API (/v1). На gateway: /api/social/v1/...."""
+"""Публичный API (/v1). На gateway: /api/social/v1/....
+
+Контракт этапа 5c (``docs/plans/stage-5.md`` §10.1, ADR 0050-0052): друзья и приватность
+(``friends.py``), комментарии, жалобы и свои санкции (``discussion.py``).
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from gv_service import Infrastructure
+from social_service.api.public.discussion import register_discussion_routes
+from social_service.api.public.friends import register_friend_routes
 
 
 class ServiceMeta(BaseModel):
@@ -23,4 +29,6 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
     async def meta() -> ServiceMeta:
         return ServiceMeta(service=infra.settings.service_name, status="stub")
 
+    register_friend_routes(router)
+    register_discussion_routes(router)
     return router

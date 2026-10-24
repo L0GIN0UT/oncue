@@ -32,6 +32,11 @@ class NotificationItem(BaseModel):
     body: str
     created_at: datetime
     read_at: datetime | None = Field(description="null - не прочитано")
+    data: dict[str, str] = Field(
+        default_factory=dict,
+        max_length=5,
+        description="Машинные поля типа (room_invite: room_code); пусто, если у типа нет `data`",
+    )
 
 
 class NotificationPage(BaseModel):

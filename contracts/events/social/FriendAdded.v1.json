@@ -1,0 +1,45 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:FriendAdded:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Дружба создана (заявка принята или встречные заявки слились). aggregate_id — user_a. Пара упорядочена: user_a < user_b. Получатель уведомления friend_accepted — requester_id (тот, чью заявку приняли).",
+  "properties": {
+    "accepter_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "accepter_nickname": {
+      "maxLength": 24,
+      "minLength": 3,
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "requester_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_a": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "user_b": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "accepter_id",
+    "accepter_nickname",
+    "at",
+    "requester_id",
+    "user_a",
+    "user_b"
+  ],
+  "title": "social.FriendAdded v1",
+  "type": "object",
+  "x-aggregate-type": "friendship",
+  "x-topic": "social.social.v1"
+}

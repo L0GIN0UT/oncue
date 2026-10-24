@@ -30,6 +30,7 @@ log = structlog.get_logger(__name__)
 CONSUMED_TOPICS: tuple[str, ...] = (
     "progression.progression.v1",
     "media_pipeline.ugc_image.v1",
+    "social.social.v1",
 )
 
 NOTIFICATIONS_CREATED = Counter("gv_notifications_created_total", "Созданные уведомления", ["type"])

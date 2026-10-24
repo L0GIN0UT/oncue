@@ -369,6 +369,9 @@ class ShellPage(BaseModel):
     bell: Block[BellCard] | None = Field(
         default=None, description="null — аноним или гость, notifications не вызывается"
     )
+    sanctions: Block[SanctionsCard] | None = Field(
+        default=None, description="5c: действующие санкции; null — аноним или гость"
+    )
 
 
 class ProfileBlocks(BaseModel):
@@ -413,6 +416,14 @@ class PublicProgressCard(BaseModel):
     badges: list[BadgeRefCard]
 
 
+class PlayerSocialCard(BaseModel):
+    """Отношение зрителя к игроку (social ``/v1/players/{id}/relation``, 5c)."""
+
+    is_friend: bool
+    can_send_request: bool
+    blocked_by_me: bool
+
+
 class PlayerBlocks(BaseModel):
     """Блоки профиля игрока."""
 
@@ -420,12 +431,72 @@ class PlayerBlocks(BaseModel):
     appearance: Block[AppearanceCard] | None = Field(
         default=None, description="Оформление игрока; null до потока S5 этапа 5b"
     )
+    social: Block[PlayerSocialCard] | None = Field(
+        default=None, description="Друзья и блокировка; null — не вызывалось (5c, поток F5)"
+    )
 
 
 class PlayerPage(BaseModel):
     """``GET /v1/pages/players/{user_id}``: только пользователь с аккаунтом, `private, no-store`."""
 
     blocks: PlayerBlocks
+    restricted: bool = Field(
+        default=False,
+        description=(
+            "5c: профиль скрыт, игрок заблокировал зрителя или неизвестен — показаны только ник, "
+            "аватар и оформление, `progress` = `unavailable`; ответы неразличимы (нет перечисления)"
+        ),
+    )
+
+
+class FriendCard(BaseModel):
+    """Друг в блоке «друзья» (только владельцу)."""
+
+    user_id: UUID
+    nickname: str
+    status: Literal["online", "in_match", "offline"]
+
+
+class FriendsCard(BaseModel):
+    """Блок друзей для хаба онлайна и лобби (приглашение в комнату)."""
+
+    items: list[FriendCard]
+    incoming_requests: int = Field(ge=0)
+
+
+class CommentCard(BaseModel):
+    """Комментарий к сборнику."""
+
+    id: UUID
+    author_id: UUID
+    author_nickname: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None
+    can_edit: bool
+    can_delete: bool
+
+
+class CommentsCard(BaseModel):
+    """Первая страница комментариев сборника; дальше - social ``/v1/collections/{id}/comments``."""
+
+    items: list[CommentCard]
+    total: int = Field(ge=0)
+    next_cursor: str | None
+
+
+class SanctionCard(BaseModel):
+    """Действующая санкция игрока."""
+
+    kind: Literal["ranked", "chat", "online", "account"]
+    expires_at: datetime | None = Field(description="null - бессрочно")
+    reason: str
+
+
+class SanctionsCard(BaseModel):
+    """Блок санкций оболочки (экран санкции); пусто - ограничений нет."""
+
+    items: list[SanctionCard]
 
 
 class HomeBlocks(BaseModel):
@@ -688,6 +759,9 @@ class CollectionBlocks(BaseModel):
 
     collection: Block[CollectionDetail]
     modes: Block[list[CollectionModeCard]]
+    comments: Block[CommentsCard] | None = Field(
+        default=None, description="5c: комментарии (social); null — не вызывалось"
+    )
 
 
 class CollectionPage(BaseModel):
@@ -998,6 +1072,10 @@ class OnlineBlocks(BaseModel):
     weekly: Block[list[WeeklyTopCard]] = Field(
         description="4b: топ недели по каждому ladder-у (`rating /v1/ladders/{key}/weekly`)"
     )
+    friends: Block[FriendsCard] | None = Field(
+        default=None,
+        description="5c: друзья со статусом и число входящих заявок (social); null — не вызывалось",
+    )
 
 
 class OnlinePage(BaseModel):
@@ -1023,6 +1101,10 @@ class MatchPlayerCard(BaseModel):
     score: int = Field(ge=0)
     outcome: DuelOutcome | None
     finish: PlayerFinish
+    can_report: bool = Field(
+        default=False,
+        description="5c: показывать кнопку жалобы (не сам игрок, матч не соло); решает bff",
+    )
 
 
 class RoundPlayerResultCard(BaseModel):

@@ -1,0 +1,19 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0002",
+  "aggregate_type": "invite",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a0005",
+  "event_type": "social.RoomInviteSent",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:04:00Z",
+  "payload": {
+    "at": "2026-10-24T12:04:00Z",
+    "from_nickname": "Alice",
+    "from_user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0001",
+    "invite_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0002",
+    "room_code": "K7M2QX",
+    "to_user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002"
+  },
+  "producer": "social"
+}

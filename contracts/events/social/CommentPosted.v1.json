@@ -1,0 +1,54 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:CommentPosted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Комментарий к сборнику опубликован. aggregate_id — comment_id. Текст комментария в событие не входит. notify_owner = false, если автор комментария — автор сборника (уведомление comment_on_my_collection не нужно). Получатель — collection_author_id.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "author_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "author_nickname": {
+      "maxLength": 24,
+      "minLength": 3,
+      "type": "string"
+    },
+    "collection_author_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "collection_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "collection_title": {
+      "maxLength": 120,
+      "type": "string"
+    },
+    "comment_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "notify_owner": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "at",
+    "author_id",
+    "author_nickname",
+    "collection_author_id",
+    "collection_id",
+    "collection_title",
+    "comment_id",
+    "notify_owner"
+  ],
+  "title": "social.CommentPosted v1",
+  "type": "object",
+  "x-aggregate-type": "comment",
+  "x-topic": "social.social.v1"
+}

@@ -351,6 +351,60 @@
         "title": "Block[CollectionResults]",
         "type": "object"
       },
+      "Block_CommentsCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CommentsCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[CommentsCard]",
+        "type": "object"
+      },
+      "Block_FriendsCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FriendsCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[FriendsCard]",
+        "type": "object"
+      },
       "Block_HomeProgressCard_": {
         "properties": {
           "data": {
@@ -513,6 +567,33 @@
         "title": "Block[OpenRoomsList]",
         "type": "object"
       },
+      "Block_PlayerSocialCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayerSocialCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[PlayerSocialCard]",
+        "type": "object"
+      },
       "Block_ProgressCard_": {
         "properties": {
           "data": {
@@ -619,6 +700,33 @@
           "status"
         ],
         "title": "Block[ResultSummary]",
+        "type": "object"
+      },
+      "Block_SanctionsCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SanctionsCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[SanctionsCard]",
         "type": "object"
       },
       "Block_ShelfItems_": {
@@ -1398,6 +1506,17 @@
           "collection": {
             "$ref": "#/components/schemas/Block_CollectionDetail_"
           },
+          "comments": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_CommentsCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "5c: комментарии (social); null — не вызывалось"
+          },
           "modes": {
             "$ref": "#/components/schemas/Block_list_CollectionModeCard__"
           }
@@ -1954,6 +2073,101 @@
         "title": "CollectionsPage",
         "type": "object"
       },
+      "CommentCard": {
+        "description": "Комментарий к сборнику.",
+        "properties": {
+          "author_id": {
+            "format": "uuid",
+            "title": "Author Id",
+            "type": "string"
+          },
+          "author_nickname": {
+            "title": "Author Nickname",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "author_id",
+          "author_nickname",
+          "body",
+          "created_at",
+          "edited_at",
+          "can_edit",
+          "can_delete"
+        ],
+        "title": "CommentCard",
+        "type": "object"
+      },
+      "CommentsCard": {
+        "description": "Первая страница комментариев сборника; дальше - social ``/v1/collections/{id}/comments``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommentCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "next_cursor"
+        ],
+        "title": "CommentsCard",
+        "type": "object"
+      },
       "CosmeticCard": {
         "description": "Предмет косметики (progression, 5b): картинка или анимация по ``media_kind``.",
         "properties": {
@@ -2161,6 +2375,59 @@
           "url"
         ],
         "title": "ExternalLink",
+        "type": "object"
+      },
+      "FriendCard": {
+        "description": "Друг в блоке «друзья» (только владельцу).",
+        "properties": {
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "online",
+              "in_match",
+              "offline"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname",
+          "status"
+        ],
+        "title": "FriendCard",
+        "type": "object"
+      },
+      "FriendsCard": {
+        "description": "Блок друзей для хаба онлайна и лобби (приглашение в комнату).",
+        "properties": {
+          "incoming_requests": {
+            "minimum": 0.0,
+            "title": "Incoming Requests",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FriendCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "incoming_requests"
+        ],
+        "title": "FriendsCard",
         "type": "object"
       },
       "HomeBlocks": {
@@ -2748,6 +3015,12 @@
       "MatchPlayerCard": {
         "description": "Игрок в итоге матча: место с ничьими (1, 1, 3), ``outcome`` — только у дуэли.",
         "properties": {
+          "can_report": {
+            "default": false,
+            "description": "5c: показывать кнопку жалобы (не сам игрок, матч не соло); решает bff",
+            "title": "Can Report",
+            "type": "boolean"
+          },
           "finish": {
             "enum": [
               "completed",
@@ -3177,6 +3450,17 @@
       "OnlineBlocks": {
         "description": "Блоки хаба онлайна: каждый деградирует независимо.",
         "properties": {
+          "friends": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_FriendsCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "5c: друзья со статусом и число входящих заявок (social); null — не вызывалось"
+          },
           "modes": {
             "$ref": "#/components/schemas/Block_list_OnlineModeCard__",
             "description": "Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`)"
@@ -3622,6 +3906,17 @@
           },
           "progress": {
             "$ref": "#/components/schemas/Block_PublicProgressCard_"
+          },
+          "social": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_PlayerSocialCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Друзья и блокировка; null — не вызывалось (5c, поток F5)"
           }
         },
         "required": [
@@ -3635,12 +3930,42 @@
         "properties": {
           "blocks": {
             "$ref": "#/components/schemas/PlayerBlocks"
+          },
+          "restricted": {
+            "default": false,
+            "description": "5c: профиль скрыт, игрок заблокировал зрителя или неизвестен — показаны только ник, аватар и оформление, `progress` = `unavailable`; ответы неразличимы (нет перечисления)",
+            "title": "Restricted",
+            "type": "boolean"
           }
         },
         "required": [
           "blocks"
         ],
         "title": "PlayerPage",
+        "type": "object"
+      },
+      "PlayerSocialCard": {
+        "description": "Отношение зрителя к игроку (social ``/v1/players/{id}/relation``, 5c).",
+        "properties": {
+          "blocked_by_me": {
+            "title": "Blocked By Me",
+            "type": "boolean"
+          },
+          "can_send_request": {
+            "title": "Can Send Request",
+            "type": "boolean"
+          },
+          "is_friend": {
+            "title": "Is Friend",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_friend",
+          "can_send_request",
+          "blocked_by_me"
+        ],
+        "title": "PlayerSocialCard",
         "type": "object"
       },
       "PresetCard": {
@@ -4559,6 +4884,62 @@
         "title": "RoundPlayerResultCard",
         "type": "object"
       },
+      "SanctionCard": {
+        "description": "Действующая санкция игрока.",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null - бессрочно",
+            "title": "Expires At"
+          },
+          "kind": {
+            "enum": [
+              "ranked",
+              "chat",
+              "online",
+              "account"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "expires_at",
+          "reason"
+        ],
+        "title": "SanctionCard",
+        "type": "object"
+      },
+      "SanctionsCard": {
+        "description": "Блок санкций оболочки (экран санкции); пусто - ограничений нет.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SanctionCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SanctionsCard",
+        "type": "object"
+      },
       "SeasonCard": {
         "description": "Действующий сезон ladder-а.",
         "properties": {
@@ -4860,6 +5241,17 @@
               }
             ],
             "description": "null — аноним или гость, notifications не вызывается"
+          },
+          "sanctions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_SanctionsCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "5c: действующие санкции; null — аноним или гость"
           },
           "theme": {
             "$ref": "#/components/schemas/ThemeCard"

@@ -139,16 +139,16 @@
 - **Слушает:** `UserDeleted`, `AccountsMerged`.
 
 ### 12. social
-- **Отвечает за:** друзей, заявки, коды добавления, блокировки, комментарии (к сборникам и профилям), жалобы, очередь модерации, шкалы поведения и санкции, приватность, похвалы.
+- **Отвечает за:** друзей, заявки, коды добавления, блокировки, комментарии (к сборникам; к профилям нет), жалобы, очередь модерации, шкалы поведения и санкции, приватность, похвалы.
 - **Данные:** Postgres (friendships, requests, blocks, comments, reports, moderation_cases, behaviour_scores, sanctions, privacy_settings).
-- **Публикует:** `FriendAdded`, `CommentPosted`, `ReportFiled`, `UserSanctionsChanged`, `ContentModerated`.
-- **Слушает:** `MatchFinished` (частые соперники), `PlayerRated`, `PlayerForfeited` (шкала порядочности), `UserDeleted`.
+- **Публикует** (`social.social.v1`, 5c): `FriendRequested`, `FriendAdded`, `FriendRemoved`, `UserBlocked`, `RoomInviteSent`, `CommentPosted`, `CommentDeleted`, `ReportFiled`, `ReportResolved`, `ContentModerated`, `UserSanctionsChanged`.
+- **Слушает:** `MatchStarted`, `MatchFinished` (счётчики порядочности из `players[].finish`; `PlayerForfeited` не вводится), `PlayerRated`, `collections.*` (проекция сборников), `identity.UserDeleted`, `UserProfileBasicsChanged`. Конфиг: `contracts/social/social_config.v1.json`; presence — Redis; санкции применяют identity и match ([ADR 0052](../adr/0052-sanctions-and-enforcement.md)).
 
 ### 13. notifications
 - **Отвечает за:** in-app уведомления (группировка, прочитано), доставку в realtime (публикация в Centrifugo), e-mail, web-push, Telegram-бота (позже), отключение по типам. Шаблоны и локализация.
 - **Данные:** Postgres (notifications, mutes, templates).
 - **Публикует:** — (терминальный потребитель).
-- **Слушает:** почти все события, которые имеют смысл для пользователя (5b: `ProgressionLevelChanged`, `BadgeUnlocked`, `QuestCompleted`, `CurrencyCredited` недели и сезона, `media_pipeline.AssetModerated`; [ADR 0047](../adr/0047-notifications-channels-mapping.md)). Маппинг «событие → тип уведомления» задаётся конфигом.
+- **Слушает:** почти все события, которые имеют смысл для пользователя (5c: `social.FriendRequested`, `FriendAdded`, `RoomInviteSent`, `ReportResolved`, `CommentPosted` — типы `friend_request`, `friend_accepted`, `room_invite`, `report_resolved`, `comment_on_my_collection`; 5b: `ProgressionLevelChanged`, `BadgeUnlocked`, `QuestCompleted`, `CurrencyCredited` недели и сезона, `media_pipeline.AssetModerated`; [ADR 0047](../adr/0047-notifications-channels-mapping.md)). Маппинг «событие → тип уведомления» задаётся конфигом.
 - **Деградация:** некритичен. Уведомления догоняют после восстановления.
 
 ---

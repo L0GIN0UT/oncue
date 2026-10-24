@@ -1,0 +1,188 @@
+{
+  "$defs": {
+    "PositiveInt": {
+      "maximum": 1000000,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "$id": "urn:guessverse:contracts:social:social_config:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Конфиг social 5c (ADR 0050-0052): лимиты, окна, справочник причин жалоб, пределы санкций. Значений в коде сервиса нет; файловый конфиг пакета, как у notifications. Нарушение схемы — сервис не стартует.",
+  "properties": {
+    "comments": {
+      "additionalProperties": false,
+      "properties": {
+        "edit_window_s": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Окно правки своего комментария (5 минут = 300)"
+        },
+        "max_length": {
+          "description": "Не больше 500 (граница схемы API)",
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "per_minute": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Комментариев в минуту на игрока"
+        }
+      },
+      "required": [
+        "edit_window_s",
+        "max_length",
+        "per_minute"
+      ],
+      "type": "object"
+    },
+    "friends": {
+      "additionalProperties": false,
+      "properties": {
+        "code_attempts_per_hour": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Попыток поиска по коду/нику в час на игрока и на IP (fail-closed)"
+        },
+        "invites_per_minute": {
+          "$ref": "#/$defs/PositiveInt"
+        },
+        "max_friends": {
+          "$ref": "#/$defs/PositiveInt"
+        },
+        "requests_per_day": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Исходящих заявок в сутки"
+        }
+      },
+      "required": [
+        "code_attempts_per_hour",
+        "invites_per_minute",
+        "max_friends",
+        "requests_per_day"
+      ],
+      "type": "object"
+    },
+    "presence": {
+      "additionalProperties": false,
+      "properties": {
+        "heartbeat_s": {
+          "$ref": "#/$defs/PositiveInt"
+        },
+        "ttl_s": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Должен быть больше heartbeat_s (проверка при загрузке)"
+        }
+      },
+      "required": [
+        "heartbeat_s",
+        "ttl_s"
+      ],
+      "type": "object"
+    },
+    "reports": {
+      "additionalProperties": false,
+      "properties": {
+        "per_day": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Жалоб в сутки на игрока-автора"
+        },
+        "reasons": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "target_kinds": {
+                "items": {
+                  "enum": [
+                    "player",
+                    "collection",
+                    "comment",
+                    "avatar"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "title": {
+                "additionalProperties": {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minProperties": 1,
+                "propertyNames": {
+                  "pattern": "^[a-z]{2}$"
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "target_kinds",
+              "title"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "text_max_length": {
+          "maximum": 300,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "threshold_per_day": {
+          "$ref": "#/$defs/PositiveInt",
+          "description": "Жалоб на один объект за сутки, после которых открывается кейс модерации; до порога жалобы копятся"
+        }
+      },
+      "required": [
+        "per_day",
+        "reasons",
+        "text_max_length",
+        "threshold_per_day"
+      ],
+      "type": "object"
+    },
+    "sanctions": {
+      "additionalProperties": false,
+      "properties": {
+        "max_duration_s": {
+          "description": "Верхняя граница срока; null в запросе — бессрочно (разрешено ролью)",
+          "maximum": 315360000,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "min_duration_s": {
+          "minimum": 60,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_duration_s",
+        "min_duration_s"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "comments",
+    "friends",
+    "presence",
+    "reports",
+    "sanctions",
+    "version"
+  ],
+  "title": "social config v1",
+  "type": "object"
+}

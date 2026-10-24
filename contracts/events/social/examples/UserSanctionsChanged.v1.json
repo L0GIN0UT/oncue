@@ -1,0 +1,32 @@
+{
+  "aggregate_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002",
+  "aggregate_type": "sanctions",
+  "causation_id": null,
+  "correlation_id": "0192a3b4-c5d6-7e8f-9a0b-000000000f01",
+  "event_id": "0192a3b4-c5d6-7e8f-9a0b-0000007a000b",
+  "event_type": "social.UserSanctionsChanged",
+  "event_version": 1,
+  "occurred_at": "2026-10-24T12:09:00Z",
+  "payload": {
+    "account_banned": false,
+    "active": [
+      {
+        "expires_at": "2026-10-31T12:09:00Z",
+        "kind": "online",
+        "sanction_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0006"
+      },
+      {
+        "expires_at": null,
+        "kind": "chat",
+        "sanction_id": "0192a3b4-c5d6-7e8f-9a0b-0000007b0007"
+      }
+    ],
+    "at": "2026-10-24T12:09:00Z",
+    "changed_by": "0192a3b4-c5d6-7e8f-9a0b-0000000a0001",
+    "mask": 56,
+    "next_expiry_at": "2026-10-31T12:09:00Z",
+    "user_id": "0192a3b4-c5d6-7e8f-9a0b-0000000b0002",
+    "version": 3
+  },
+  "producer": "social"
+}

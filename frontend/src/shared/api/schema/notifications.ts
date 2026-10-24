@@ -398,6 +398,13 @@ export interface components {
              */
             created_at: string;
             /**
+             * Data
+             * @description Машинные поля типа (room_invite: room_code); пусто, если у типа нет `data`
+             */
+            data?: {
+                [key: string]: string;
+            };
+            /**
              * Id
              * Format: uuid
              */

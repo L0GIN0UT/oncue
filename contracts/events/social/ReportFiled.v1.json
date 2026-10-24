@@ -1,0 +1,72 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:ReportFiled:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Жалоба принята. aggregate_id — report_id. Текст жалобы в событие не входит (персональные данные). case_id заполнен, если жалоба довела счётчик объекта за сутки до порога и открыла (или пополнила открытый) кейс модерации.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "author_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "case_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "context_match_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason_code": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "type": "string"
+    },
+    "report_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_kind": {
+      "enum": [
+        "player",
+        "collection",
+        "comment",
+        "avatar"
+      ],
+      "type": "string"
+    },
+    "target_user_id": {
+      "description": "Владелец объекта жалобы (игрок, автор сборника, комментария, аватарки)",
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "author_id",
+    "case_id",
+    "context_match_id",
+    "reason_code",
+    "report_id",
+    "target_id",
+    "target_kind",
+    "target_user_id"
+  ],
+  "title": "social.ReportFiled v1",
+  "type": "object",
+  "x-aggregate-type": "report",
+  "x-topic": "social.social.v1"
+}

@@ -340,6 +340,7 @@ def test_public_origins_for_cookie_mutation_services() -> None:
         "match",
         "progression",
         "notifications",
+        "social",
     ):
         value = services[name]["environment"]["GV_PUBLIC_ORIGINS"]
         assert value.startswith("${GV_PUBLIC_ORIGINS:?"), name

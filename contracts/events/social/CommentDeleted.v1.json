@@ -1,0 +1,47 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:CommentDeleted:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Комментарий удалён автором, автором сборника или модератором. aggregate_id — comment_id.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "by_role": {
+      "enum": [
+        "author",
+        "collection_owner",
+        "moderator",
+        "account_deleted"
+      ],
+      "type": "string"
+    },
+    "collection_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "comment_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "deleted_by": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "at",
+    "by_role",
+    "collection_id",
+    "comment_id",
+    "deleted_by"
+  ],
+  "title": "social.CommentDeleted v1",
+  "type": "object",
+  "x-aggregate-type": "comment",
+  "x-topic": "social.social.v1"
+}

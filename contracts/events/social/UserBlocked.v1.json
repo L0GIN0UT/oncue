@@ -1,0 +1,29 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:UserBlocked:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Игрок заблокировал другого (разблокировка события не публикует: источник правды — API social). aggregate_id — blocker_id. Блокировка запрещает заявки и приглашения в обе стороны.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "blocked_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "blocker_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "blocked_id",
+    "blocker_id"
+  ],
+  "title": "social.UserBlocked v1",
+  "type": "object",
+  "x-aggregate-type": "block",
+  "x-topic": "social.social.v1"
+}

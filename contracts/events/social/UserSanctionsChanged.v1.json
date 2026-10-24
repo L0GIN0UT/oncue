@@ -1,0 +1,94 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:UserSanctionsChanged:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Изменился набор активных санкций игрока (выдача, ручное снятие, истечение срока). aggregate_id — user_id. Событие несёт полное активное состояние, а не дельту: потребитель отбрасывает событие с version не больше уже применённой. mask — битовая маска claim `sanctions` (RANKED=1, CUSTOM_CONTENT=2, CHAT_SLOW=4, CHAT_MUTE=8, COMMENTS=16, ONLINE=32); санкция chat даёт CHAT_MUTE|COMMENTS. ACCOUNT в маску не входит — флаг account_banned. Причина и заметки в событие не входят (ADR 0052).",
+  "properties": {
+    "account_banned": {
+      "type": "boolean"
+    },
+    "active": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "description": "null — бессрочно",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "ranked",
+              "chat",
+              "online",
+              "account"
+            ],
+            "type": "string"
+          },
+          "sanction_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "kind",
+          "sanction_id"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "changed_by": {
+      "description": "Модератор; null — истечение срока",
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mask": {
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "next_expiry_at": {
+      "description": "Ближайшее истечение среди активных; null — нет срочных",
+      "format": "date-time",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "user_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "version": {
+      "description": "Монотонная версия набора санкций игрока",
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "account_banned",
+    "active",
+    "at",
+    "changed_by",
+    "mask",
+    "next_expiry_at",
+    "user_id",
+    "version"
+  ],
+  "title": "social.UserSanctionsChanged v1",
+  "type": "object",
+  "x-aggregate-type": "sanctions",
+  "x-topic": "social.social.v1"
+}

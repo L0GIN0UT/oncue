@@ -48,6 +48,19 @@
             ],
             "type": "object"
           },
+          "data": {
+            "additionalProperties": {
+              "maxLength": 120,
+              "pattern": "^payload\\.[a-z_][a-z0-9_.]*$",
+              "type": "string"
+            },
+            "description": "Машинные поля уведомления для клиента (например, room_code у room_invite): имя -> путь в событии; значения приводятся к строке. Необязательно (5c)",
+            "maxProperties": 5,
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
           "dedup_key": {
             "description": "Шаблон ключа дедупликации из полей события, например `level:{payload.user_id}:{payload.level}`; не event_id",
             "maxLength": 200,

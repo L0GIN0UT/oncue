@@ -1,0 +1,43 @@
+{
+  "$id": "urn:guessverse:contracts:events:social:ReportResolved:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Решение по кейсу сообщено заявителю: по одному событию на жалобу кейса. aggregate_id — report_id. Получатель уведомления report_resolved — reporter_id (только in-app). Заметки модератора не входят.",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "case_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "dismissed",
+        "content_removed",
+        "sanctioned"
+      ],
+      "type": "string"
+    },
+    "report_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "reporter_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "at",
+    "case_id",
+    "decision",
+    "report_id",
+    "reporter_id"
+  ],
+  "title": "social.ReportResolved v1",
+  "type": "object",
+  "x-aggregate-type": "report",
+  "x-topic": "social.social.v1"
+}

@@ -117,9 +117,20 @@ Consumers остаются в `infrastructure/messaging/__init__.py`; роли P
 ### Прогресс
 | Шаг | Статус |
 |---|---|
-| Шаг 0: roadmap, backlog (три раздела), handoff, детализация §10.1, ADR 0050–0052 | сделано, ждёт коммита |
-| 0a контракты | не начат |
+| Шаг 0: roadmap, backlog (три раздела), handoff, детализация §10.1, ADR 0050–0052 | сделано, закоммичено (`9e4532c`) |
+| 0a контракты | сделано, ждёт коммита (см. «Шаг 0a» ниже) |
 | F1 ∥ F2 → F3 ∥ F4 → F5 → 0b | не начаты |
+
+### Шаг 0a (контракты, сделано)
+- События `contracts/events/social/*` (11, с примерами `event_id` ...`7a0001`–`7a000b`); конфиг `contracts/social/social_config.v1.json` (+ пример).
+- OpenAPI social: `/v1` (друзья, заявки, код, блокировки, приватность, presence, приглашение, `players/{id}/relation`, комментарии, причины, жалобы, `me/sanctions`) и `/admin/v1` (кейсы: список, карточка, claim, escalate, resolve; `users/{id}/moderation`; выдача и снятие санкции). Заглушки 501, доступ по контракту (тесты `services/social/tests/component/test_stubs.py`).
+- bff: необязательные блоки `PlayerBlocks.social`, `OnlineBlocks.friends`, `CollectionBlocks.comments`, `ShellPage.sanctions`, `PlayerPage.restricted`, `MatchPlayerCard.can_report` (старые тесты обновлены на явные `null`/`false`).
+- notifications: 5 типов в `notification_types.yaml`, топик `social.social.v1` в `CONSUMED_TOPICS`, необязательное поле `data` (тип-уровень в конфиге, `NotificationItem.data`, realtime `notification.created`) — в 0a только контракт и схема, **заполнение `data` потребителем (room_code у `room_invite`) — задача F1**.
+- identity: миграция прав `0015_seed_social_perms` (admin — все четыре, moderator — без `social.sanctions.account`); `libs/auth`: `Sanction.ONLINE = 32`.
+- Инфраструктура: `social` в `COOKIE_MUTATION_SERVICES` (+ тест), `redis = true` у social в `services.toml` (+ `gv gen`), `social` в `gen-api.mjs`; снимки OpenAPI и типы фронтенда обновлены.
+- Проверки: `gv lint` зелёный; social 91, bff_web 318, notifications 227, identity unit 242 (+ integration `0014`/`0015`), tools/gv 178, libs/auth 75; frontend lint и typecheck зелёные, vitest 621/622 (известный нестабильный `CollectionEditor`, отдельно проходит).
+- Решения ассистента 0a: (9) «кто может звать» — это `friend_requests = all|none` (заявки в друзья), а не приглашения в комнату: приглашение доступно только друзьям; (10) `can_report` и блоки bff в 0a всегда `false`/`null` — решает F5; (11) права: `social.moderate`, `social.comments.delete_any`, `social.sanctions.manage`, `social.sanctions.account`; (12) срок санкции в запросе `duration_s` 60…315 360 000 с или `null` (бессрочно), пределы — конфиг.
+- Не сделано в 0a (по плану — потоки): внутренний `/internal/v1`, `contracts/realtime/room_invite` не создавался (приглашение идёт через `notification.created` с `data.room_code`).
 
 ### Решения владельца (2026-10-24, поверх §10)
 Друзья: заявки по нику/коду, блокировки, онлайн-статус через presence, приглашение в комнату (in-app + realtime), список только владельцу, «кто может звать» все/никто, лимиты в конфиге. Комментарии: только сборники, плоские, ≤500, `gv_text.ugc`, правка 5 мин. Жалобы: игрок (матч, не соло), сборник, комментарий, аватарка; порог в очередь; очередь в админке; автоматики нет. Санкции `RANKED`, `CHAT`, `ONLINE`, `ACCOUNT` со сроком/бессрочно. Приватность: профиль и статистика публичны по умолчанию, скрыть можно; история матчей — владельцу. Notifications: 5 типов, только in-app + realtime.
