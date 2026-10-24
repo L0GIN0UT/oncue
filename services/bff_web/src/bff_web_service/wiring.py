@@ -22,6 +22,8 @@ from bff_web_service.application.queries import (
     GetProfilePage,
     GetResultsPage,
     GetSession,
+    GetShellPage,
+    GetShopPage,
     GetSoloPage,
     HomeProgress,
     PageLayout,
@@ -34,6 +36,7 @@ from bff_web_service.infrastructure.clients import (
     HttpIdentityClient,
     HttpLibraryClient,
     HttpMatchClient,
+    HttpNotificationsClient,
     HttpProgressionClient,
     HttpRatingClient,
 )
@@ -86,6 +89,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         upstream("rating", up.rating_url), ttl_s=pc.leaderboard_ttl_s, cache_prefix=pc.key_prefix
     )
     progression = HttpProgressionClient(upstream("progression", up.progression_url))
+    notifications = HttpNotificationsClient(upstream("notifications", up.notifications_url))
     pages = settings.pages
     layout = PageLayout.of(
         random_source_types=pages.random_source_types,
@@ -107,6 +111,10 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         ),
         get_profile=GetProfilePage(progression, concurrency=up.max_concurrency),
         get_player=GetPlayerPage(progression, concurrency=up.max_concurrency),
+        get_shop=GetShopPage(progression, concurrency=up.max_concurrency),
+        get_shell=GetShellPage(
+            notifications, theme_key=pages.default_theme_key, concurrency=up.max_concurrency
+        ),
         get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),
         get_results=GetResultsPage(game, catalog, concurrency=up.max_concurrency),
         get_collections=GetCollectionsPage(
@@ -134,8 +142,10 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             match,
             catalog,
             library,
+            progression,
             concurrency=up.max_concurrency,
             items_deadline_s=pages.match_items_deadline_s,
+            appearance_batch_size=pages.appearance_batch_size,
         ),
         http_cache=settings.http_cache,
     )

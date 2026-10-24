@@ -12,7 +12,7 @@ class UpstreamSettings(BaseModel):
 
     Attributes:
         game_url / catalog_url / identity_url / collections_url / library_url / match_url /
-        rating_url / progression_url:
+        rating_url / progression_url / notifications_url:
             Внутренние адреса (``GV_UPSTREAMS__GAME_URL``, ``GV_UPSTREAMS__MATCH_URL`` …).
         timeout_s: Общий таймаут одного вызова: медленный источник не держит страницу.
         max_concurrency: Одновременных вызовов на один запрос страницы.
@@ -31,6 +31,7 @@ class UpstreamSettings(BaseModel):
     match_url: str = "http://match:8000"
     rating_url: str = "http://rating:8000"
     progression_url: str = "http://progression:8000"
+    notifications_url: str = "http://notifications:8000"
     timeout_s: float = Field(default=1.5, gt=0, le=30)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     breaker_failures: int = Field(default=5, ge=1)
@@ -98,6 +99,10 @@ class PagesSettings(BaseModel):
             предела страница ждала бы ``волны × timeout_s``. Не успел — блок ``unavailable``.
         home_progress_deadline_s: Общий предел на три вызова progression для блока
             ``progress`` главной; не успел — блок ``unavailable``, остальная главная цела.
+        default_theme_key: Ключ активной темы оболочки (ADR 0049: bff отдаёт только ключ,
+            наборы токенов лежат во фронтенде; в 5d ключ придёт от сезонного события).
+        appearance_batch_size: Игроков в одном вызове ``progression /v1/appearance``
+            (предел источника — 12); больше игроков матча режутся на пачки.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -114,6 +119,8 @@ class PagesSettings(BaseModel):
     online_weekly_limit: int = Field(default=5, ge=1, le=50)
     match_items_deadline_s: float = Field(default=2.0, gt=0, le=30)
     home_progress_deadline_s: float = Field(default=1.5, gt=0, le=30)
+    default_theme_key: str = Field(default="default", pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
+    appearance_batch_size: int = Field(default=12, ge=1, le=12)
 
 
 class Settings(ServiceSettings):

@@ -30,6 +30,7 @@ COLLECTIONS, LIBRARY = "http://collections.test", "http://library.test"
 MATCH = "http://match.test"
 RATING = "http://rating.test"
 PROGRESSION = "http://progression.test"
+NOTIFICATIONS = "http://notifications.test"
 SESSION = UUID("0192a3b4-c5d6-7e8f-9a0b-000000000700")
 ITEM = UUID("0192a3b4-c5d6-7e8f-9a0b-0000000000a1")
 PUBLIC = "public, max-age=30, stale-while-revalidate=60"
@@ -215,6 +216,7 @@ class Stubs:
     match: ServiceStub
     rating: ServiceStub
     progression: ServiceStub
+    notifications: ServiceStub
 
 
 @dataclass
@@ -240,6 +242,7 @@ def stubs() -> Iterator[Stubs]:
             match=stack.enter_context(stub_service(MATCH, service="match")),
             rating=stack.enter_context(stub_service(RATING, service="rating")),
             progression=stack.enter_context(stub_service(PROGRESSION, service="progression")),
+            notifications=stack.enter_context(stub_service(NOTIFICATIONS, service="notifications")),
         )
 
 
@@ -260,6 +263,7 @@ async def bff(
             "match_url": MATCH,
             "rating_url": RATING,
             "progression_url": PROGRESSION,
+            "notifications_url": NOTIFICATIONS,
             "timeout_s": 0.5,
             "breaker_failures": 3,
         },
@@ -1301,6 +1305,7 @@ def _match_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
     bff.stubs.library.route("GET", f"/v1/items/{ITEM_2}/shelves").respond(
         200, json={"media_item_id": str(ITEM_2), "shelves": []}
     )
+    _appearance_route(bff)
     return result, item_2, shelves_1
 
 
@@ -1369,7 +1374,7 @@ async def test_match_page_match_down_is_200_unavailable(bff: Bff, failure: str) 
             "match": UNAVAILABLE,
             "items": UNAVAILABLE,
             "library": UNAVAILABLE,
-            "appearance": None,
+            "appearance": UNAVAILABLE,
         }
     }
 
@@ -1475,7 +1480,7 @@ async def test_match_page_match_429_or_undescribed_4xx_is_unavailable(
             "match": UNAVAILABLE,
             "items": UNAVAILABLE,
             "library": UNAVAILABLE,
-            "appearance": None,
+            "appearance": UNAVAILABLE,
         }
     }
 
@@ -1808,6 +1813,59 @@ PROG_SPUN = {
 }
 
 
+def cosmetic(n: int, slot: str, **extra: Any) -> dict[str, Any]:
+    """Предмет косметики по снимку progression (``ItemView``)."""
+    return {
+        "id": str(UUID(int=n)),
+        "key": f"item_{n}",
+        "slot": slot,
+        "rarity": "common",
+        "title": f"Предмет {n}",
+        "media_kind": "static",
+        "asset_url": f"/media/cosmetics/{n}.webp",
+        "poster_url": None,
+        "level_required": None,
+        "price": 100,
+        "event_key": None,
+        **extra,
+    }
+
+
+PROG_APPEARANCE = {
+    "slots": [
+        {"slot": "frame", "item": cosmetic(1, "frame")},
+        {"slot": "title", "item": None},
+    ]
+}
+PROG_INVENTORY = {
+    "items": [
+        {
+            "item": cosmetic(1, "frame"),
+            "source": "purchase",
+            "acquired_at": "2026-10-20T10:00:00Z",
+            "expires_at": None,
+            "equipped": True,
+        }
+    ]
+}
+PROG_AVATAR = {
+    "entitled": True,
+    "current_url": "/media/avatars/me.webp",
+    "request": {
+        "asset_id": str(UUID(int=77)),
+        "status": "approved",
+        "submitted_at": "2026-10-21T10:00:00Z",
+        "reason_code": None,
+    },
+    "limits": {
+        "max_bytes": 262144,
+        "formats": ["webp", "png"],
+        "min_side_px": 64,
+        "max_side_px": 512,
+    },
+}
+
+
 def _progression_routes(bff: Bff, *, wheel: dict[str, Any] = PROG_WHEEL) -> dict[str, respx.Route]:
     stub = bff.stubs.progression
     return {
@@ -1816,6 +1874,9 @@ def _progression_routes(bff: Bff, *, wheel: dict[str, Any] = PROG_WHEEL) -> dict
         "quests": stub.route("GET", "/v1/me/quests").respond(200, json=PROG_QUESTS),
         "badges": stub.route("GET", "/v1/me/badges").respond(200, json=PROG_BADGES),
         "wheel": stub.route("GET", "/v1/wheel").respond(200, json=wheel),
+        "appearance": stub.route("GET", "/v1/me/appearance").respond(200, json=PROG_APPEARANCE),
+        "inventory": stub.route("GET", "/v1/me/inventory").respond(200, json=PROG_INVENTORY),
+        "avatar": stub.route("GET", "/v1/me/avatar").respond(200, json=PROG_AVATAR),
     }
 
 
@@ -1860,6 +1921,27 @@ async def test_profile_page_all_blocks_ok(bff: Bff) -> None:
         ("empty", "Пусто", 0.7),
     ]
     assert wheel["today"] is None
+    appearance = blocks["appearance"]["data"]
+    assert appearance["custom_avatar_url"] == "/media/avatars/me.webp"  # из /v1/me/avatar
+    assert [(s["slot"], s["item"] and s["item"]["key"]) for s in appearance["slots"]] == [
+        ("frame", "item_1"),
+        ("title", None),
+    ]
+    assert "event_key" not in appearance["slots"][0]["item"]  # поле 5d фронту не нужно
+    inventory = blocks["inventory"]["data"]["items"]
+    assert [(e["item"]["key"], e["source"], e["equipped"]) for e in inventory] == [
+        ("item_1", "purchase", True)
+    ]
+    assert blocks["avatar"]["data"] == {
+        "entitled": True,
+        "request": {
+            "status": "approved",
+            "submitted_at": "2026-10-21T10:00:00Z",
+            "reason_code": None,
+        },
+        "max_bytes": 262144,
+        "formats": ["webp", "png"],
+    }
     for route in routes.values():
         assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
@@ -1886,13 +1968,25 @@ async def test_profile_page_anonymous_and_guest_do_not_call_sources(bff: Bff) ->
     assert all(route.call_count == 0 for route in routes.values())
 
 
-@pytest.mark.parametrize("block", ["progress", "wallet", "quests", "badges", "wheel"])
+@pytest.mark.parametrize(
+    ("block", "route_name"),
+    [
+        ("progress", "progress"),
+        ("wallet", "wallet"),
+        ("quests", "quests"),
+        ("badges", "badges"),
+        ("wheel", "wheel"),
+        ("appearance", "appearance"),
+        ("inventory", "inventory"),
+        ("avatar", "avatar"),
+    ],
+)
 @pytest.mark.parametrize("failure", ["503", "501", "timeout", "garbage"])
 async def test_profile_page_each_block_degrades_independently(
-    bff: Bff, block: str, failure: str
+    bff: Bff, block: str, route_name: str, failure: str
 ) -> None:
     routes = _progression_routes(bff)
-    route = routes[block]
+    route = routes[route_name]
     if failure == "timeout":
         route.mock(side_effect=httpx.ReadTimeout("slow"))
     elif failure == "garbage":
@@ -1905,13 +1999,10 @@ async def test_profile_page_each_block_degrades_independently(
     assert response.status_code == 200
     assert response.headers["cache-control"] == PRIVATE
     blocks = response.json()["blocks"]
+    # Оформление собирается из слотов и адреса своей аватарки: падение аватара гасит оба блока.
+    dead = {block, "appearance"} if block == "avatar" else {block}
     for name, value in blocks.items():
-        if name == block:
-            assert value == UNAVAILABLE
-        elif value is None:
-            assert name in {"appearance", "inventory", "avatar"}  # блоки 5b - с потока S5
-        else:
-            assert value["status"] == "ok", name
+        assert value == UNAVAILABLE if name in dead else value["status"] == "ok", name
 
 
 async def test_profile_page_source_401_is_screen_401(bff: Bff) -> None:
@@ -1927,18 +2018,33 @@ async def test_profile_page_source_401_is_screen_401(bff: Bff) -> None:
 
 async def test_profile_page_progression_down_is_200_all_unavailable(bff: Bff) -> None:
     bff.stubs.progression.route("GET", "/v1/me/progress").respond(503)
-    for path in ("/v1/me/wallet", "/v1/me/quests", "/v1/me/badges", "/v1/wheel"):
+    for path in (
+        "/v1/me/wallet",
+        "/v1/me/quests",
+        "/v1/me/badges",
+        "/v1/wheel",
+        "/v1/me/appearance",
+        "/v1/me/inventory",
+        "/v1/me/avatar",
+    ):
         bff.stubs.progression.route("GET", path).mock(side_effect=httpx.ConnectError("refused"))
 
     response = await bff.client.get("/v1/pages/profile", headers=bff.bearer(bff.issuer.issue()))
 
     assert response.status_code == 200
-    expected: dict[str, Any] = dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)
-    expected.update(appearance=None, inventory=None, avatar=None)  # блоки 5b - с потока S5
-    assert response.json() == {"blocks": expected}
+    assert response.json() == {"blocks": dict.fromkeys(PROFILE_BLOCKS, UNAVAILABLE)}
 
 
-PROFILE_BLOCKS = ("progress", "wallet", "quests", "badges", "wheel")
+PROFILE_BLOCKS = (
+    "progress",
+    "wallet",
+    "quests",
+    "badges",
+    "wheel",
+    "appearance",
+    "inventory",
+    "avatar",
+)
 
 
 def _home_game(bff: Bff) -> None:
@@ -2073,21 +2179,26 @@ async def test_player_page_ok(bff: Bff) -> None:
     route = bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(
         200, json=PLAYER
     )
+    looks = _appearance_route(bff)
 
     response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(token))
 
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == PRIVATE
-    assert response.json() == {
-        "blocks": {"progress": {"status": "ok", "data": PLAYER}, "appearance": None}
-    }
+    blocks = response.json()["blocks"]
+    assert blocks["progress"] == {"status": "ok", "data": PLAYER}
+    assert blocks["appearance"]["status"] == "ok"
+    assert blocks["appearance"]["data"]["custom_avatar_url"] == "/media/avatars/p.webp"
+    assert blocks["appearance"]["data"]["slots"][0]["item"]["key"] == "item_1"
     assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    assert looks.calls.last.request.url.params.get_list("user_ids") == [PLAYER_ID]
 
 
 async def test_player_page_anonymous_and_guest_do_not_call_sources(bff: Bff) -> None:
     route = bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(
         200, json=PLAYER
     )
+    looks = _appearance_route(bff)
     guest = bff.bearer(bff.issuer.issue_guest())
 
     assert_problem(
@@ -2098,13 +2209,14 @@ async def test_player_page_anonymous_and_guest_do_not_call_sources(bff: Bff) -> 
         403,
         "auth.guest_forbidden",
     )
-    assert route.call_count == 0
+    assert route.call_count == 0 and looks.call_count == 0
 
 
 async def test_player_page_unknown_player_is_404_and_down_is_unavailable(bff: Bff) -> None:
     route = bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress")
     headers = bff.bearer(bff.issuer.issue())
 
+    _appearance_route(bff)
     route.respond(404, json={"code": "progression.user_not_found", "status": 404})
     assert_problem(
         await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=headers),
@@ -2115,9 +2227,309 @@ async def test_player_page_unknown_player_is_404_and_down_is_unavailable(bff: Bf
     route.respond(503)
     response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=headers)
     assert response.status_code == 200
-    assert response.json() == {"blocks": {"progress": UNAVAILABLE, "appearance": None}}
+    assert response.json()["blocks"]["progress"] == UNAVAILABLE
+    assert response.json()["blocks"]["appearance"]["status"] == "ok"
+
+
+async def test_player_page_appearance_degrades_independently(bff: Bff) -> None:
+    headers = bff.bearer(bff.issuer.issue())
+    bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(200, json=PLAYER)
+    looks = _appearance_route(bff)
+
+    for failure in (503, 404):  # 404 оформления - не 404 экрана: игрок есть
+        looks.respond(failure, json={"code": "progression.x", "status": failure})
+        response = await bff.client.get(f"/v1/pages/players/{PLAYER_ID}", headers=headers)
+        assert response.status_code == 200
+        blocks = response.json()["blocks"]
+        assert blocks["progress"]["status"] == "ok" and blocks["appearance"] == UNAVAILABLE
 
 
 async def test_player_page_requires_uuid(bff: Bff) -> None:
     response = await bff.client.get("/v1/pages/players/not-a-uuid")
     assert response.status_code == 422
+
+
+# ----------------------------------------------------------------------------- 5b: оформление
+def _appearance_route(bff: Bff) -> respx.Route:
+    """``GET /v1/appearance?user_ids=``: отвечает по каждому запрошенному id (как источник)."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("user_ids")
+        players = [
+            {
+                "user_id": i,
+                "appearance": PROG_APPEARANCE,
+                "custom_avatar_url": "/media/avatars/p.webp",
+            }
+            for i in ids
+        ]
+        return httpx.Response(200, json={"players": players})
+
+    return bff.stubs.progression.route("GET", "/v1/appearance").mock(side_effect=answer)
+
+
+async def test_match_page_appearance_batches_by_12_and_dedups(bff: Bff) -> None:
+    """14 игроков (+ дубль) - два вызова progression (12 и 2), порядок игроков сохранён."""
+    template = SAMPLES["match_result"]
+    players = [
+        {**template["players"][0], "user_id": str(UUID(int=n)), "nickname": f"p{n}", "slot": n}
+        for n in range(1, 15)
+    ]
+    players.append(players[2])
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json={**template, "players": players}
+    )
+    looks = _appearance_route(bff)
+    for item_id in (ITEM, ITEM_2):
+        bff.stubs.catalog.route("GET", f"/v1/items/{item_id}").respond(
+            200, json={**CARD, "id": str(item_id)}
+        )
+        bff.stubs.library.route("GET", f"/v1/items/{item_id}/shelves").respond(
+            200, json={"media_item_id": str(item_id), "shelves": []}
+        )
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200, response.text
+    sizes = sorted(len(c.request.url.params.get_list("user_ids")) for c in looks.calls)
+    assert sizes == [2, 12]
+    cards = response.json()["blocks"]["appearance"]["data"]
+    assert [c["user_id"] for c in cards] == [str(UUID(int=n)) for n in range(1, 15)]
+    assert cards[0]["appearance"]["custom_avatar_url"] == "/media/avatars/p.webp"
+
+
+@pytest.mark.parametrize("failure", ["503", "timeout", "garbage"])
+async def test_match_page_appearance_failure_hides_only_its_block(bff: Bff, failure: str) -> None:
+    _match_routes(bff)
+    route = bff.stubs.progression.route("GET", "/v1/appearance")
+    if failure == "timeout":
+        route.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "garbage":
+        route.respond(200, json={"nope": 1})
+    else:
+        route.respond(503)
+
+    response = await bff.client.get(
+        f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["appearance"] == UNAVAILABLE
+    assert blocks["match"]["status"] == blocks["items"]["status"] == "ok"
+    assert blocks["library"]["status"] == "ok"
+
+
+# ----------------------------------------------------------------------------- 5b: магазин
+SHOP_ITEMS = {
+    "items": [
+        {"item": cosmetic(1, "frame"), "state": "available"},
+        {"item": cosmetic(2, "title", level_required=10), "state": "locked"},
+        {"item": cosmetic(3, "frame"), "state": "owned"},
+        {"item": cosmetic(4, "background", price=None), "state": "owned"},
+    ],
+    "balance": 250,
+}
+SHOP_PACKS = {
+    "packs": [
+        {
+            "id": str(UUID(int=500)),
+            "key": "starter",
+            "title": "Стартовый",
+            "style": "classic",
+            "items": [cosmetic(1, "frame")],
+            "verses_amount": 50,
+            "price_kopecks": 19900,
+        }
+    ]
+}
+
+
+def _shop_routes(bff: Bff) -> dict[str, respx.Route]:
+    stub = bff.stubs.progression
+    return {
+        "items": stub.route("GET", "/v1/shop/items").respond(200, json=SHOP_ITEMS),
+        "packs": stub.route("GET", "/v1/shop/packs").respond(200, json=SHOP_PACKS),
+    }
+
+
+async def test_shop_page_catalog_and_packs(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    routes = _shop_routes(bff)
+
+    response = await bff.client.get("/v1/pages/shop", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    blocks = response.json()["blocks"]
+    catalog = blocks["catalog"]["data"]
+    assert catalog["balance"] == 250
+    assert catalog["slots"] == ["frame", "title", "background"]  # порядок появления в ответе
+    assert [(e["item"]["key"], e["state"]) for e in catalog["items"]] == [
+        ("item_1", "available"),
+        ("item_2", "locked"),
+        ("item_3", "owned"),
+        ("item_4", "owned"),
+    ]
+    assert catalog["items"][1]["item"]["level_required"] == 10
+    assert catalog["items"][3]["item"]["price"] is None
+    pack = blocks["packs"]["data"][0]
+    assert (pack["key"], pack["price_kopecks"], pack["items"][0]["key"]) == (
+        "starter",
+        19900,
+        "item_1",
+    )
+    for route in routes.values():
+        assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_shop_page_anonymous_and_guest_do_not_call_sources(bff: Bff) -> None:
+    routes = _shop_routes(bff)
+    guest = bff.bearer(bff.issuer.issue_guest())
+
+    assert_problem(await bff.client.get("/v1/pages/shop"), 401, "auth.unauthenticated")
+    assert_problem(
+        await bff.client.get("/v1/pages/shop", headers=guest), 403, "auth.guest_forbidden"
+    )
+    assert all(route.call_count == 0 for route in routes.values())
+
+
+async def test_shop_page_billing_disabled_gives_null_packs(bff: Bff) -> None:
+    routes = _shop_routes(bff)
+    routes["packs"].respond(
+        404, json={"code": "progression.billing_disabled", "title": "x", "status": 404}
+    )
+
+    response = await bff.client.get("/v1/pages/shop", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["packs"] is None
+    assert blocks["catalog"]["status"] == "ok"
+
+
+async def test_shop_page_blocks_degrade_independently(bff: Bff) -> None:
+    routes = _shop_routes(bff)
+    headers = bff.bearer(bff.issuer.issue())
+
+    routes["packs"].respond(503)
+    blocks = (await bff.client.get("/v1/pages/shop", headers=headers)).json()["blocks"]
+    assert blocks["packs"] == UNAVAILABLE and blocks["catalog"]["status"] == "ok"
+
+    routes["packs"].respond(200, json=SHOP_PACKS)
+    routes["items"].mock(side_effect=httpx.ReadTimeout("slow"))
+    blocks = (await bff.client.get("/v1/pages/shop", headers=headers)).json()["blocks"]
+    assert blocks["catalog"] == UNAVAILABLE and blocks["packs"]["status"] == "ok"
+
+
+async def test_shop_page_source_401_is_screen_401(bff: Bff) -> None:
+    routes = _shop_routes(bff)
+    routes["items"].respond(401, json={"code": "auth.unauthenticated", "title": "x", "status": 401})
+
+    response = await bff.client.get("/v1/pages/shop", headers=bff.bearer(bff.issuer.issue()))
+
+    assert_problem(response, 401, "auth.unauthenticated")
+
+
+# ----------------------------------------------------------------------------- 5b: оболочка
+def _unread_route(bff: Bff, count: int = 3) -> respx.Route:
+    return bff.stubs.notifications.route("GET", "/v1/notifications/unread-count").respond(
+        200, json={"count": count}
+    )
+
+
+async def test_shell_for_user_has_theme_key_and_bell(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    unread = _unread_route(bff)
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    assert response.json() == {
+        "theme": {"key": "default"},  # только ключ: значений токенов в API нет
+        "bell": {"status": "ok", "data": {"unread": 3}},
+    }
+    assert unread.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_shell_for_anonymous_is_public_without_bell_call(bff: Bff) -> None:
+    unread = _unread_route(bff)
+
+    response = await bff.client.get("/v1/pages/shell")
+
+    assert response.status_code == 200
+    assert response.json() == {"theme": {"key": "default"}, "bell": None}
+    assert response.headers["cache-control"] == PUBLIC
+    assert response.headers["vary"] == "Authorization, Cookie"
+    assert unread.call_count == 0
+
+
+async def test_shell_for_guest_has_no_bell_and_does_not_call_notifications(bff: Bff) -> None:
+    unread = _unread_route(bff)
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue_guest()))
+
+    assert response.status_code == 200
+    assert response.json() == {"theme": {"key": "default"}, "bell": None}
+    assert response.headers["cache-control"] == PRIVATE  # с токеном - личный ответ
+    assert unread.call_count == 0
+
+
+@pytest.mark.parametrize("failure", ["503", "timeout", "401", "garbage"])
+async def test_shell_notifications_failure_hides_bell_only(bff: Bff, failure: str) -> None:
+    route = _unread_route(bff)
+    if failure == "timeout":
+        route.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "garbage":
+        route.respond(200, json={"count": -1})
+    elif failure == "401":
+        route.respond(401, json={"code": "auth.unauthenticated", "title": "x", "status": 401})
+    else:
+        route.respond(503)
+
+    response = await bff.client.get("/v1/pages/shell", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    assert response.json() == {"theme": {"key": "default"}, "bell": UNAVAILABLE}
+
+
+@pytest.fixture
+def theme_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ключ темы из окружения; фикстура идёт раньше ``bff``, чтобы Settings увидел env."""
+    monkeypatch.setenv("GV_PAGES__DEFAULT_THEME_KEY", "autumn_event")
+
+
+async def test_shell_theme_key_comes_from_env(theme_env: None, bff: Bff) -> None:
+    response = await bff.client.get("/v1/pages/shell")
+
+    assert response.json() == {"theme": {"key": "autumn_event"}, "bell": None}
+
+
+async def test_rejected_token_gets_401_on_shop_and_anonymous_shell(bff: Bff) -> None:
+    """Токен не прошёл локальную проверку (подделан, истёк): источники не вызываются."""
+    from datetime import timedelta
+
+    routes = _shop_routes(bff)
+    unread = _unread_route(bff)
+    for token in (bff.issuer.issue(ttl=timedelta(seconds=-120)), TestTokenIssuer().issue()):
+        headers = bff.bearer(token)
+        assert_problem(
+            await bff.client.get("/v1/pages/shop", headers=headers), 401, "auth.unauthenticated"
+        )
+        shell = await bff.client.get("/v1/pages/shell", headers=headers)
+        assert shell.status_code == 200
+        assert shell.json() == {"theme": {"key": "default"}, "bell": None}
+    assert all(route.call_count == 0 for route in routes.values())
+    assert unread.call_count == 0
+
+
+async def test_shell_theme_and_5b_schemas_in_openapi(bff: Bff) -> None:
+    spec = (await bff.client.get("/openapi.json")).json()
+    schemas = spec["components"]["schemas"]
+    assert set(schemas["ThemeCard"]["properties"]) == {"key"}
+    assert schemas["ThemeCard"]["properties"]["key"]["pattern"] == "^[a-z][a-z0-9_]*$"
+    assert "501" not in spec["paths"]["/v1/pages/shop"]["get"]["responses"]
+    assert "501" not in spec["paths"]["/v1/pages/shell"]["get"]["responses"]
