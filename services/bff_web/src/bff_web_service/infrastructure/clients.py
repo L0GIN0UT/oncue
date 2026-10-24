@@ -16,6 +16,7 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
 from bff_web_service.application.dto import (
+    ActiveEvent,
     AnswerFormat,
     AppearanceCard,
     AppearanceSlotCard,
@@ -43,6 +44,12 @@ from bff_web_service.application.dto import (
     DailyStatus,
     Difficulty,
     Domain,
+    EventArchiveCard,
+    EventFindCard,
+    EventFindRewardCard,
+    EventFindTriggerCard,
+    EventPageData,
+    EventRewardCard,
     FriendCard,
     InventoryCard,
     InventoryEntryCard,
@@ -1405,10 +1412,47 @@ _WHEEL = TypeAdapter(_WheelIn)
 
 
 class HttpProgressionClient:
-    """Публичный API progression: всё личное, ничего не кэшируется."""
+    """Публичный API progression: всё личное и не кэшируется, кроме активного события.
 
-    def __init__(self, http: UpstreamHttp) -> None:
+    Активное событие общее для всех: кэшируется на ``active_event_ttl_s`` (<= 30 с, 5d).
+    """
+
+    def __init__(
+        self,
+        http: UpstreamHttp,
+        *,
+        active_event_ttl_s: int = 30,
+        cache_prefix: str = "bff_web:",
+    ) -> None:
         self._http = http
+        self._event_ttl, self._prefix = active_event_ttl_s, cache_prefix
+
+    async def active_event(self) -> ActiveEvent | None:
+        """``GET /v1/events/active`` (анонимно, общий кэш)."""
+        key = f"{self._prefix}progression:events:active:v1"
+        body, cached = await self._http.get_public("/v1/events/active", cache_key=key)
+        parsed = _parse(self._http.service, _ACTIVE_EVENT, body)
+        if not cached:
+            await self._http.remember(key, body, self._event_ttl)
+        e = parsed.event
+        return (
+            None if e is None else ActiveEvent(e.key, e.title, e.theme_key, e.starts_at, e.ends_at)
+        )
+
+    async def event_page(self, token: str, event_key: str) -> EventPageData:
+        """``GET /v1/events/{key}``."""
+        body = await self._http.get(f"/v1/events/{event_key}", token=token)
+        return _parse(self._http.service, _EVENT_PAGE, body).dto()
+
+    async def my_events(self, token: str) -> list[EventArchiveCard]:
+        """``GET /v1/me/events``."""
+        body = await self._http.get("/v1/me/events", token=token)
+        return [
+            EventArchiveCard(
+                i.key, i.title, i.status, i.starts_at, i.ends_at, i.found, i.total, i.completed
+            )
+            for i in _parse(self._http.service, _MY_EVENTS, body).items
+        ]
 
     async def progress(self, token: str) -> ProgressCard:
         """``GET /v1/me/progress``."""
@@ -1629,6 +1673,124 @@ _INVENTORY = TypeAdapter(_InventoryIn)
 _APPEARANCE = TypeAdapter(_AppearanceIn)
 _PLAYERS_APPEARANCE = TypeAdapter(_PlayersAppearanceIn)
 _AVATAR = TypeAdapter(_AvatarIn)
+
+
+class _EventBannerIn(_In):
+    key: str
+    title: str
+    theme_key: str
+    starts_at: datetime
+    ends_at: datetime
+
+
+class _ActiveEventIn(_In):
+    event: _EventBannerIn | None
+
+
+class _FindTriggerIn(_In):
+    type: Literal["server", "ui_spot"]
+    page_key: str | None = None
+    metric: str | None = None
+    progress: int | None = None
+    target: int | None = None
+    period: Literal["day", "event"] | None = None
+
+
+class _FindRewardIn(_In):
+    xp: int
+    verses: int
+
+
+class _EventFindIn(_In):
+    key: str
+    number: int
+    title: str
+    x_pct: float
+    y_pct: float
+    final: bool
+    state: Literal["locked", "open", "found"]
+    diary: str
+    reward: _FindRewardIn
+    play_page: str | None = None
+    trigger: _FindTriggerIn
+    found_at: datetime | None = None
+
+    def dto(self) -> EventFindCard:
+        t = self.trigger
+        return EventFindCard(
+            self.key,
+            self.number,
+            self.title,
+            self.x_pct,
+            self.y_pct,
+            self.final,
+            self.state,
+            self.diary,
+            EventFindRewardCard(self.reward.xp, self.reward.verses),
+            self.play_page,
+            EventFindTriggerCard(t.type, t.page_key, t.metric, t.progress, t.target, t.period),
+            self.found_at,
+        )
+
+
+class _EventRewardIn(_In):
+    item_key: str
+    title: str
+    image_url: str
+
+
+class _EventPageIn(_In):
+    key: str
+    title: str
+    description: str
+    theme_key: str
+    status: Literal["active", "finished", "stopped"]
+    starts_at: datetime
+    ends_at: datetime
+    map_url: str | None = None
+    found: int
+    total: int
+    completed: bool
+    reward_item: _EventRewardIn | None = None
+    finds: list[_EventFindIn]
+
+    def dto(self) -> EventPageData:
+        r = self.reward_item
+        return EventPageData(
+            self.key,
+            self.title,
+            self.description,
+            self.theme_key,
+            self.status,
+            self.starts_at,
+            self.ends_at,
+            self.map_url,
+            self.found,
+            self.total,
+            self.completed,
+            EventRewardCard(r.item_key, r.title, r.image_url) if r else None,
+            [f.dto() for f in self.finds],
+        )
+
+
+class _EventArchiveIn(_In):
+    key: str
+    title: str
+    status: Literal["active", "finished", "stopped"]
+    starts_at: datetime
+    ends_at: datetime
+    found: int
+    total: int
+    completed: bool
+
+
+class _MyEventsIn(_In):
+    items: list[_EventArchiveIn]
+
+
+_ACTIVE_EVENT = TypeAdapter(_ActiveEventIn)
+_EVENT_PAGE = TypeAdapter(_EventPageIn)
+_MY_EVENTS = TypeAdapter(_MyEventsIn)
 
 
 class _UnreadIn(_In):

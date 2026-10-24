@@ -6555,7 +6555,7 @@
     },
     "/v1/pages/events/{event_key}": {
       "get": {
-        "description": "Этап 5d, контракт (реализация — поток E3; до тех пор 501). Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Данные — progression `GET /v1/events/{key}` + `theme.key` запуска; нет события — 404 `progression.event_not_found`. Засчитать находку-элемент интерфейса браузер просит прямо в progression (`POST /v1/events/{key}/finds/{find}/claim`).",
+        "description": "Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Данные — progression `GET /v1/events/{key}` + `theme.key` запуска; нет события — 404 `progression.event_not_found`; progression недоступен — 503. Засчитать находку-элемент интерфейса браузер просит прямо в progression (`POST /v1/events/{key}/finds/{find}/claim`).",
         "operationId": "event_page_v1_pages_events__event_key__get",
         "parameters": [
           {
@@ -6638,7 +6638,7 @@
             },
             "description": "Validation Error"
           },
-          "501": {
+          "503": {
             "content": {
               "application/json": {
                 "schema": {
@@ -6651,7 +6651,7 @@
                 }
               }
             },
-            "description": "Не реализовано"
+            "description": "Зависимость временно недоступна"
           }
         },
         "summary": "Сезонное событие: карта, находки, дневник",

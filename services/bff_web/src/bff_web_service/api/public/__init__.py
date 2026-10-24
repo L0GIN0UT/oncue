@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import asdict
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -45,7 +46,6 @@ from bff_web_service.settings import HttpCacheSettings
 from gv_auth import JwtVerifier, extract_token
 from gv_core.errors import (
     DependencyUnavailableError,
-    NotImplementedYetError,
     UnauthenticatedError,
 )
 from gv_service import problem_responses
@@ -120,29 +120,32 @@ REJECTED = Viewer(token_rejected=True)
 CurrentViewer = Annotated[Viewer, Depends(resolve_viewer)]
 
 
-def _register_event_page_stub(router: APIRouter) -> None:
-    """Заглушка страницы события (5d, шаг 0a): реализация - поток E3."""
+def _register_event_page(router: APIRouter, deps: BffDeps) -> None:
+    """Страница сезонного события (5d)."""
 
     @router.get(
         "/pages/events/{event_key}",
         response_model=EventPageView,
         summary="Сезонное событие: карта, находки, дневник",
         description=(
-            "Этап 5d, контракт (реализация — поток E3; до тех пор 501). Только пользователь с "
-            "аккаунтом (аноним — 401, гость — 403), `private, no-store`. Данные — progression "
-            "`GET /v1/events/{key}` + `theme.key` запуска; нет события — 404 "
-            "`progression.event_not_found`. Засчитать находку-элемент интерфейса браузер "
-            "просит прямо в progression (`POST /v1/events/{key}/finds/{find}/claim`)."
+            "Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. "
+            "Данные — progression `GET /v1/events/{key}` + `theme.key` запуска; нет события — "
+            "404 `progression.event_not_found`; progression недоступен — 503. Засчитать "
+            "находку-элемент интерфейса браузер просит прямо в progression "
+            "(`POST /v1/events/{key}/finds/{find}/claim`)."
         ),
-        responses=problem_responses(401, 403, 404, 501),
+        responses=problem_responses(401, 403, 404, 503),
     )
     async def event_page(
-        event_key: Annotated[  # noqa: ARG001
+        event_key: Annotated[
             str, Path(pattern=r"^[a-z][a-z0-9_]*$", max_length=64, description="Ключ события")
         ],
-        viewer: CurrentViewer,  # noqa: ARG001
+        viewer: CurrentViewer,
+        response: Response,
     ) -> EventPageView:
-        raise NotImplementedYetError("страница события появится в потоке E3 этапа 5d")
+        result = await deps.get_event_page(viewer, event_key)
+        _cache_headers(response, personal=True, policy=deps.http_cache)
+        return EventPageView.model_validate({**asdict(result.page), "theme": asdict(result.theme)})
 
 
 def _cache_headers(
@@ -239,7 +242,7 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         _cache_headers(response, personal=page.personal, policy=policy)
         return ShellPage.model_validate(page, from_attributes=True)
 
-    _register_event_page_stub(router)
+    _register_event_page(router, deps)
 
     @router.get(
         "/pages/players/{user_id}",
