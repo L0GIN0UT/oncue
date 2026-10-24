@@ -74,6 +74,16 @@ class World:
     participants: dict[tuple[UUID, UUID], bool] = field(default_factory=dict)
     counters: dict[UUID, dict[str, int]] = field(default_factory=lambda: defaultdict(dict))
     events: list[DomainEvent] = field(default_factory=list)
+    blocks: set[tuple[UUID, UUID]] = field(default_factory=set)
+    """Блокировки ``(blocker_id, blocked_id)``."""
+
+
+class _Blocks:
+    def __init__(self, w: World) -> None:
+        self.w = w
+
+    async def is_blocked(self, blocker: UUID, blocked: UUID) -> bool:
+        return (blocker, blocked) in self.w.blocks
 
 
 class _Comments:
@@ -83,7 +93,7 @@ class _Comments:
     async def add(self, comment: Comment) -> None:
         self.w.comments[comment.id] = comment
 
-    async def get(self, comment_id: UUID) -> Comment | None:
+    async def get(self, comment_id: UUID, *, for_update: bool = False) -> Comment | None:
         return self.w.comments.get(comment_id)
 
     async def set_body(self, comment_id: UUID, body: str, edited_at: datetime) -> None:
@@ -170,11 +180,15 @@ class _Reports:
     async def count_by_author_since(self, author_id: UUID, since: datetime) -> int:
         return sum(1 for r in self.w.reports if r.author_id == author_id and r.created_at >= since)
 
-    async def recent_ids(self, kind: str, target_id: UUID, since: datetime) -> list[UUID]:
+    async def unassigned_ids(self, kind: str, target_id: UUID, since: datetime) -> list[UUID]:
+        attached = {rid for _, rid in self.w.case_reports}
         return [
             r.id
             for r in self.w.reports
-            if r.target_kind == kind and r.target_id == target_id and r.created_at >= since
+            if r.target_kind == kind
+            and r.target_id == target_id
+            and r.created_at >= since
+            and r.id not in attached
         ]
 
     async def open_case(
@@ -241,6 +255,7 @@ class FakeUow:
         self.nicknames = _Nicknames(world)
         self.reports = _Reports(world)
         self.matches = _Matches(world)
+        self.blocks = _Blocks(world)
         self.idempotency = idempotency
         self._pending: list[DomainEvent] = []
         self._snapshot: dict[str, Any] | None = None

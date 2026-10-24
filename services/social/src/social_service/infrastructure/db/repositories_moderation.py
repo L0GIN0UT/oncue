@@ -25,6 +25,7 @@ from gv_messaging import EventEnvelope
 from gv_messaging.outbox import OutboxWriter
 from social_service.application.ports.discussion import NewReport
 from social_service.domain.discussion import CollectionRef, Comment
+from social_service.infrastructure.db import tables_friends
 from social_service.infrastructure.db import tables_moderation as t
 from social_service.infrastructure.db.tables import TABLES
 
@@ -68,10 +69,11 @@ class SqlComments:
             )
         )
 
-    async def get(self, comment_id: UUID) -> Comment | None:
-        row = (
-            await self._s.execute(select(t.comments).where(t.comments.c.id == comment_id))
-        ).first()
+    async def get(self, comment_id: UUID, *, for_update: bool = False) -> Comment | None:
+        stmt = select(t.comments).where(t.comments.c.id == comment_id)
+        if for_update:
+            stmt = stmt.with_for_update()
+        row = (await self._s.execute(stmt)).first()
         return _comment(row) if row else None
 
     async def set_body(self, comment_id: UUID, body: str, edited_at: datetime) -> None:
@@ -187,6 +189,18 @@ class SqlNicknames:
         return {r.user_id: r.nickname for r in rows if r.nickname}
 
 
+class SqlBlocks:
+    """Блокировки: чтение таблицы потока друзей (та же БД сервиса)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def is_blocked(self, blocker: UUID, blocked: UUID) -> bool:
+        b = tables_friends.blocks
+        stmt = select(b.c.blocker_id).where(b.c.blocker_id == blocker, b.c.blocked_id == blocked)
+        return (await self._s.execute(stmt)).first() is not None
+
+
 class SqlReports:
     """Жалобы и кейсы."""
 
@@ -235,10 +249,14 @@ class SqlReports:
         )
         return int(await self._s.scalar(stmt) or 0)
 
-    async def recent_ids(self, kind: str, target_id: UUID, since: datetime) -> list[UUID]:
+    async def unassigned_ids(self, kind: str, target_id: UUID, since: datetime) -> list[UUID]:
         r = t.reports
+        attached = select(t.case_reports.c.report_id).where(t.case_reports.c.report_id == r.c.id)
         stmt = select(r.c.id).where(
-            r.c.target_kind == kind, r.c.target_id == target_id, r.c.created_at >= since
+            r.c.target_kind == kind,
+            r.c.target_id == target_id,
+            r.c.created_at >= since,
+            ~attached.exists(),
         )
         return [row.id for row in (await self._s.execute(stmt)).all()]
 
@@ -343,6 +361,7 @@ class SqlDiscussionUnitOfWork:
     nicknames: SqlNicknames
     reports: SqlReports
     matches: SqlMatches
+    blocks: SqlBlocks
     idempotency: SqlIdempotencyStore
 
     def __init__(
@@ -381,6 +400,7 @@ class SqlDiscussionUnitOfWork:
         self.nicknames = SqlNicknames(s)
         self.reports = SqlReports(s)
         self.matches = SqlMatches(s)
+        self.blocks = SqlBlocks(s)
         self.idempotency = SqlIdempotencyStore(s, t.COMMENT_IDEMPOTENCY, self._clock)
         return self
 

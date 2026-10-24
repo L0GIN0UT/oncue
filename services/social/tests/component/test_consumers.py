@@ -89,6 +89,23 @@ async def test_player_rated_report_creates_single_report(social: SocialService) 
     assert len(await social.outbox_events("social.ReportFiled")) == 1
 
 
+async def test_player_rated_report_without_player_reasons_is_skipped_not_retried(
+    social: SocialService,
+) -> None:
+    from social_fakes import example_config
+
+    only_content = [
+        {"code": "spam", "target_kinds": ["comment"], "title": {"ru": "Спам"}},
+    ]
+    social.config.config = example_config(reports={"reasons": only_content})
+    outcome = await social.deliver(
+        social.event("match.PlayerRated", kind="report", reason="cheating")
+    )
+    assert outcome is Outcome.PROCESSED  # без ретраев и DLQ: партицию не блокируем
+    assert social.dead_letters.letters == []
+    assert await social.count(t.reports) == 0
+
+
 async def test_player_rated_praise_counts(social: SocialService) -> None:
     await social.deliver(social.event("match.PlayerRated", kind="praise", reason=None))
     (row,) = await social.rows(t.behaviour_counters)

@@ -361,6 +361,28 @@ async def test_lookup_rate_limit_by_user_and_by_ip(social: Social) -> None:
     assert_problem(await send(social, other, code="ABCD2345"), 429, "social.lookup_rate_limited")
 
 
+async def test_replay_with_same_key_does_not_spend_lookup_budget(social: Social) -> None:
+    await social.publish_config(friends__code_attempts_per_hour=2)
+    alice = await social.register("Alice")
+    await social.register("Bobby")
+    headers = {**social.headers(alice), **social.key()}
+    for _ in range(5):  # повтор готового ответа не тратит бюджет перебора
+        response = await social.client.post(REQUESTS, json={"nickname": "Bobby"}, headers=headers)
+        assert response.status_code == 201
+    # бюджет цел: после одного выполненного запроса остался ещё один поиск
+    assert_problem(await send(social, alice, nickname="Nobody"), 404, "social.player_not_found")
+    assert_problem(await send(social, alice, nickname="Nobody"), 429, "social.lookup_rate_limited")
+
+
+async def test_sender_without_profile_gets_503_before_target_lookup(social: Social) -> None:
+    await social.publish_config()
+    await social.register("Bobby")
+    stranger = uuid7()  # проекции identity для отправителя ещё нет
+    for target in ("Bobby", "Nobody"):  # существование цели не раскрывается
+        response = await send(social, stranger, nickname=target)
+        assert_problem(response, 503, "social.profile_not_ready")
+
+
 async def test_config_missing_closes_dependent_operations(social: Social) -> None:
     alice = await social.register("Alice")
     response = await send(social, alice, nickname="Bobby")

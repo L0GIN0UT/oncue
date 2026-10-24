@@ -70,6 +70,44 @@ async def test_post_by_collection_author_does_not_notify_owner() -> None:
     assert event.notify_owner is False
 
 
+async def test_post_by_user_blocked_by_owner_is_published_but_owner_not_notified() -> None:
+    h, service = _setup()
+    h.world.blocks.add((OWNER, AUTHOR.user_id))  # владелец заблокировал автора
+    dto = await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    assert dto.id in h.world.comments  # комментировать заблокированному не запрещаем
+    (event,) = h.events("CommentPosted")
+    assert isinstance(event, CommentPosted)
+    assert event.notify_owner is False
+
+
+async def test_block_in_other_direction_does_not_silence_notification() -> None:
+    h, service = _setup()
+    h.world.blocks.add((AUTHOR.user_id, OWNER))  # автор заблокировал владельца
+    await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    (event,) = h.events("CommentPosted")
+    assert isinstance(event, CommentPosted)
+    assert event.notify_owner is True
+
+
+async def test_replay_does_not_spend_comment_limiter_budget() -> None:
+    h, service = _setup()
+    await service.post(AUTHOR, COLLECTION, "Один", "key-aaaaaaaaaaaa")
+    spent = dict(h.limiter.counts)
+    await service.post(AUTHOR, COLLECTION, "Один", "key-aaaaaaaaaaaa")
+    assert dict(h.limiter.counts) == spent
+
+
+async def test_edit_in_unpublished_collection_is_not_found() -> None:
+    h, service = _setup()
+    dto = await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    h.world.collections[COLLECTION] = CollectionRef(
+        COLLECTION, OWNER, "Хиты 90-х", published=False, version=2
+    )
+    with pytest.raises(NotFoundError) as err:
+        await service.edit(AUTHOR, dto.id, "Правка")
+    assert err.value.code == "social.collection_not_found"
+
+
 async def test_post_is_idempotent_by_key() -> None:
     h, service = _setup()
     first = await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")

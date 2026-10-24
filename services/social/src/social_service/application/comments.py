@@ -15,7 +15,6 @@ from uuid import UUID
 from gv_core.clock import Clock
 from gv_core.errors import (
     ConflictError,
-    DependencyUnavailableError,
     ForbiddenError,
     InvalidInputError,
     NotFoundError,
@@ -24,7 +23,8 @@ from gv_core.errors import (
 from gv_core.pagination import clamp_limit, decode_cursor, encode_cursor
 from gv_db.idempotency import request_fingerprint, run_idempotent
 from gv_text.ugc import UgcPolicy, UgcViolation
-from social_service.application.ports.config import ConfigProvider, ConfigUnavailableError
+from social_service.application.config_access import current_config
+from social_service.application.ports.config import ConfigProvider
 from social_service.application.ports.discussion import DiscussionUowFactory, RateLimiter
 from social_service.domain import discussion as rules
 from social_service.domain.config import SocialConfig
@@ -101,16 +101,6 @@ class CommentPageDto:
     total: int
 
 
-async def current_config(provider: ConfigProvider) -> SocialConfig:
-    """Действующий конфиг; нет версии - 503 ``social.config_unavailable``."""
-    try:
-        return await provider.current()
-    except ConfigUnavailableError as exc:
-        raise DependencyUnavailableError(
-            "конфиг social недоступен", code=rules.CONFIG_UNAVAILABLE
-        ) from exc
-
-
 class CommentService:
     """Use-cases комментариев."""
 
@@ -177,6 +167,12 @@ class CommentService:
                 )
                 # У кураторского сборника автора нет: схема требует uuid, уведомлять некого.
                 owner = ref.author_id or actor.user_id
+                # Заблокированному комментировать можно, но владельца не уведомляем (ADR 0051).
+                notify = (
+                    ref.author_id is not None
+                    and ref.author_id != actor.user_id
+                    and not await uow.blocks.is_blocked(ref.author_id, actor.user_id)
+                )
                 uow.emit(
                     CommentPosted(
                         aggregate_id=str(comment.id),
@@ -187,7 +183,7 @@ class CommentService:
                         collection_id=collection_id,
                         collection_title=ref.title[:TITLE_MAX],
                         comment_id=comment.id,
-                        notify_owner=ref.author_id is not None and ref.author_id != actor.user_id,
+                        notify_owner=notify,
                     )
                 )
                 return self._dto(comment, nick, actor, ref.author_id, cfg).to_json()
@@ -204,15 +200,17 @@ class CommentService:
             raise ForbiddenError("комментарии отключены санкцией", code=rules.CHAT_MUTED)
         cfg = await current_config(self._config)
         async with self._uow() as uow:
-            comment = await uow.comments.get(comment_id)
+            comment = await uow.comments.get(comment_id, for_update=True)
             if comment is None or comment.is_deleted or comment.author_id != actor.user_id:
                 raise NotFoundError("комментарий не найден", code=rules.COMMENT_NOT_FOUND)
+            ref = await uow.collections.get(comment.collection_id)
+            if ref is None or not ref.published:
+                raise NotFoundError("сборник не найден", code=rules.COLLECTION_NOT_FOUND)
             now = self._clock.now()
             if not rules.can_edit(comment, actor.user_id, now, cfg.comments.edit_window_s):
                 raise ConflictError("время правки истекло", code=rules.COMMENT_EDIT_EXPIRED)
             text = self._check_text(body, cfg)
             await uow.comments.set_body(comment_id, text, now)
-            ref = await uow.collections.get(comment.collection_id)
             nick = (await uow.nicknames.get([actor.user_id])).get(actor.user_id, FALLBACK_NICKNAME)
             edited = Comment(
                 id=comment.id,
@@ -223,7 +221,7 @@ class CommentService:
                 edited_at=now,
             )
             await uow.commit()
-        return self._dto(edited, nick, actor, ref.author_id if ref else None, cfg)
+        return self._dto(edited, nick, actor, ref.author_id, cfg)
 
     async def delete(self, actor: Actor, comment_id: UUID) -> None:
         """Удалить комментарий (автор, автор сборника, модератор); повтор - без эффекта."""
@@ -318,4 +316,4 @@ def _decode(cursor: str) -> tuple[datetime, UUID]:
         raise InvalidInputError("неверный курсор", code="pagination.bad_cursor") from exc
 
 
-__all__ = ["Actor", "CommentDto", "CommentPageDto", "CommentService", "current_config"]
+__all__ = ["Actor", "CommentDto", "CommentPageDto", "CommentService"]

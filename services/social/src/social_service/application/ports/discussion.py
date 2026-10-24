@@ -36,8 +36,8 @@ class CommentRepository(Protocol):
         """Сохранить новый комментарий."""
         ...
 
-    async def get(self, comment_id: UUID) -> Comment | None:
-        """Комментарий (в том числе удалённый) или ``None``."""
+    async def get(self, comment_id: UUID, *, for_update: bool = False) -> Comment | None:
+        """Комментарий (в том числе удалённый) или ``None``; ``for_update`` блокирует строку."""
         ...
 
     async def set_body(self, comment_id: UUID, body: str, edited_at: datetime) -> None:
@@ -85,6 +85,14 @@ class Nicknames(Protocol):
         ...
 
 
+class Blocks(Protocol):
+    """Блокировки игроков (таблица ведёт поток друзей; здесь только чтение)."""
+
+    async def is_blocked(self, blocker: UUID, blocked: UUID) -> bool:
+        """Заблокировал ли ``blocker`` игрока ``blocked``."""
+        ...
+
+
 class ReportRepository(Protocol):
     """Жалобы и кейсы. Операции вызываются в одной транзакции под блокировкой объекта."""
 
@@ -104,8 +112,11 @@ class ReportRepository(Protocol):
         """Сколько жалоб автор подал с момента ``since``."""
         ...
 
-    async def recent_ids(self, kind: str, target_id: UUID, since: datetime) -> list[UUID]:
-        """Жалобы на объект с момента ``since``."""
+    async def unassigned_ids(self, kind: str, target_id: UUID, since: datetime) -> list[UUID]:
+        """Жалобы на объект с момента ``since``, не привязанные ни к одному кейсу.
+
+        Жалобы, уже учтённые кейсом (в том числе решённым), порог не набирают.
+        """
         ...
 
     async def open_case(
@@ -163,6 +174,9 @@ class DiscussionUnitOfWork(Protocol):
 
     @property
     def matches(self) -> MatchRepository: ...
+
+    @property
+    def blocks(self) -> Blocks: ...
 
     @property
     def idempotency(self) -> IdempotencyStore: ...

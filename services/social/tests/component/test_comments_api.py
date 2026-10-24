@@ -32,6 +32,22 @@ async def _post(
     return data
 
 
+async def test_post_by_user_blocked_by_owner_does_not_notify_owner(social: SocialService) -> None:
+    from sqlalchemy import text
+
+    owner, author = uuid7(), uuid7()
+    collection = await social.publish_collection(owner)
+    assert social.infra.sessions is not None
+    async with social.infra.sessions() as session, session.begin():
+        await session.execute(
+            text("INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (:a, :b, now())"),
+            {"a": owner, "b": author},
+        )
+    await _post(social, collection, author)
+    (event,) = await social.outbox_events("social.CommentPosted")
+    assert event.payload["notify_owner"] is False
+
+
 async def test_post_requires_account(social: SocialService) -> None:
     collection = await social.publish_collection(uuid7())
     url = f"/v1/collections/{collection}/comments"

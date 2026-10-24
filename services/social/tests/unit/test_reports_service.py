@@ -162,6 +162,36 @@ async def test_reports_outside_day_window_do_not_count() -> None:
     assert not h.world.cases
 
 
+async def test_resolved_case_is_not_resurrected_by_one_new_report() -> None:
+    h, service = _setup()
+    h.config.config = example_config(reports={"threshold_per_day": 3})
+    authors = [UUID(int=1000 + i) for i in range(6)]
+    for a in authors:
+        h.world.participants[MATCH, a] = False
+    for a in authors[:3]:
+        await _report_player(service, author=a)
+    (first_case,) = h.world.cases
+    h.world.cases[first_case]["status"] = "resolved"
+
+    await _report_player(service, author=authors[3])
+    assert list(h.world.cases) == [first_case]  # старые жалобы уже учтены кейсом
+
+    await _report_player(service, author=authors[4])
+    await _report_player(service, author=authors[5])
+    (second_case,) = (c for c in h.world.cases if c != first_case)
+    attached = {r for c, r in h.world.case_reports if c == second_case}
+    assert attached == {r.id for r in h.world.reports[3:]}
+
+
+async def test_rating_report_without_player_reasons_is_skipped() -> None:
+    h, service = _setup()
+    h.config.config = example_config(
+        reports={"reasons": [{"code": "spam", "target_kinds": ["comment"], "title": {"ru": "С"}}]}
+    )
+    assert await service.file_from_rating(AUTHOR, TARGET, MATCH, "cheating") is None
+    assert not h.world.reports
+
+
 async def test_per_day_limit_per_author() -> None:
     h, service = _setup()
     h.config.config = example_config(reports={"per_day": 2})

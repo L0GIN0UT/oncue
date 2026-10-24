@@ -60,6 +60,7 @@
 | Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |
 | Анонимное чтение `p/*` в S3 (принятый риск): перейти на presigned-ссылки gateway | media_pipeline | 5b | Этап 7 |
 | Цвет аватарки: 16-битные и CMYK | media_pipeline | 5b | По желанию |
+| Окна лимитов social (`lookup_window_s`, `invite_window_s`) в коде, не в конфиге — перенести новой версией схемы конфига | social | 5c | По желанию |
 
 ## 2. Продуктовые идеи владельца
 

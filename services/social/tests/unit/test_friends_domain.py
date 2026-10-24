@@ -130,6 +130,12 @@ def test_limits_come_from_config() -> None:
     )
 
 
+def test_daily_limit_retry_after_is_the_whole_day_window() -> None:
+    with pytest.raises(DailyRequestsLimitError) as err:
+        decide_request(A, B, replace(OK, sent_in_window=2), CFG)
+    assert err.value.details == {"retry_after": 86400}
+
+
 @given(sent=st.integers(0, 50), limit=st.integers(1, 50))
 def test_daily_limit_is_monotonic(sent: int, limit: int) -> None:
     cfg = replace(CFG, requests_per_day=limit)

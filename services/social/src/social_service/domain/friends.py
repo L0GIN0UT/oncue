@@ -27,6 +27,9 @@ FRIEND_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 """Алфавит кодов комнат match (без неоднозначных 0/O, 1/I)."""
 FRIEND_CODE_LENGTH = 8
 
+DAY_WINDOW_S = 86400
+"""Окно суточного лимита заявок (совпадает с ``DAY`` в application)."""
+
 POLICY_ALL = "all"
 POLICY_NONE = "none"
 
@@ -194,7 +197,7 @@ def decide_request(
         raise FriendsLimitError("достигнут предел числа друзей")
     if facts.sent_in_window >= cfg.requests_per_day:
         raise DailyRequestsLimitError(
-            "суточный лимит заявок исчерпан", details={"retry_after": 3600}
+            "суточный лимит заявок исчерпан", details={"retry_after": DAY_WINDOW_S}
         )
     return RequestAction.CREATE
 

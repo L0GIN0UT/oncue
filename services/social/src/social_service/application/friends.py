@@ -154,13 +154,14 @@ class FriendsService:
             ForbiddenError: отправитель сам заблокировал адресата.
         """
         cfg = await current_config(self._config)
-        await self._check_lookup(cfg, sender, client_ip)
         fingerprint = request_fingerprint(
             "friend_request.create", None, {"nickname": nickname, "code": code}
         )
         async with self._uow() as uow:
 
             async def perform() -> Json:
+                # Лимит - только на выполняемом пути: повтор с тем же ключом бюджет не тратит.
+                await self._check_lookup(cfg, sender, client_ip)
                 return await self._send(uow, cfg, sender, nickname, code)
 
             response, _ = await run_idempotent(
@@ -178,6 +179,10 @@ class FriendsService:
         code: str | None,
     ) -> Json:
         repo = uow.repo
+        # Ник отправителя - до поиска цели, иначе 503/404 раскрывали бы существование игрока.
+        sender_nick = await repo.nickname(sender)
+        if sender_nick is None:
+            raise ProfileNotReadyError("профиль ещё не готов, повторите позже")
         target = (
             await repo.user_by_nickname(nickname)
             if nickname is not None
@@ -186,9 +191,6 @@ class FriendsService:
         target_nick = None if target is None else await repo.nickname(target)
         if target is None or target_nick is None:
             raise PlayerNotFoundError
-        sender_nick = await repo.nickname(sender)
-        if sender_nick is None:
-            raise ProfileNotReadyError("профиль ещё не готов, повторите позже")
         await repo.lock_users(sender, target)
         await repo.lock_pair(sender, target)
         now = self._clock.now()

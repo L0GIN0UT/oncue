@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
 
+import structlog
+
 from gv_core.clock import Clock
 from gv_core.errors import (
     InvalidInputError,
@@ -19,7 +21,7 @@ from gv_core.errors import (
     NotImplementedYetError,
     RateLimitedError,
 )
-from social_service.application.comments import current_config
+from social_service.application.config_access import current_config
 from social_service.application.ports.config import ConfigProvider
 from social_service.application.ports.discussion import (
     DiscussionUnitOfWork,
@@ -30,6 +32,7 @@ from social_service.domain import discussion as rules
 from social_service.domain.discussion_events import ReportFiled
 
 DAY = timedelta(days=1)
+log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,7 @@ class ReportService:
 
         Матч уже подтвердил участие, поэтому проверки «общий матч» и суточный лимит не
         применяются; неизвестная причина заменяется первой причиной для игроков из справочника.
+        Нет ни одной причины для игроков - жалоба пропускается (``None``), событие не ретраится.
         """
         if author_id == target_user_id:
             return None
@@ -129,9 +133,11 @@ class ReportService:
         if known is None or "player" not in known.target_kinds:
             known = next((r for r in cfg.reports.reasons if "player" in r.target_kinds), None)
         if known is None:
-            raise InvalidInputError(
-                "в конфиге нет причин для игроков", code=rules.REPORT_REASON_UNKNOWN
+            # Ошибка конфигурации повтором не лечится, а исключение блокировало бы партицию.
+            log.warning(
+                "social.rating_report_skipped", reason="no_player_reasons", match_id=match_id
             )
+            return None
         async with self._uow() as uow:
             outcome = await self._record(
                 uow,
@@ -209,7 +215,8 @@ class ReportService:
         if case_id is not None:
             await uow.reports.attach(case_id, [report.id])
         else:
-            recent = await uow.reports.recent_ids(report.target_kind, report.target_id, since)
+            # Порог - только по жалобам вне кейсов: решённый кейс одной новой жалобой не оживает.
+            recent = await uow.reports.unassigned_ids(report.target_kind, report.target_id, since)
             if rules.threshold_reached(len(recent), threshold):
                 case_id = await uow.reports.open_case(
                     self._new_id(), report.target_kind, report.target_id, report.target_user_id, now
