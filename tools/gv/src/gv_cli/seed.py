@@ -127,6 +127,9 @@ SOURCES_BY_DOMAIN: Mapping[str, tuple[SourceSpec, ...]] = {
     ),
 }
 
+# Статусы запуска события, при которых определение неизменяемо (409 ``event_definition_locked``).
+LOCKING_RUN_STATUSES = frozenset({"published", "active"})
+
 ClientFactory = Callable[[str], httpx.Client]
 EchoFn = Callable[[str], None]
 MediaGenerator = Callable[[Path], None]
@@ -546,6 +549,7 @@ class Seeder:
         self.seed_collections(collections, items)
         self.wait_online_collections(lobby_collections, items)
         self.seed_progression()
+        self.seed_events()
         self.seed_social()
         self._echo("seed: готово")
 
@@ -1283,6 +1287,81 @@ class Seeder:
         self._ensure_packs(pack_specs, by_key)
         if isinstance(avatar_key, str):
             self._ensure_avatar_config(body, avatar_key, by_key)
+
+    # ------------------------------------------------------------------ шаг 8b: события
+    def seed_events(self) -> None:
+        """Определения сезонных событий из ``seeds/progression/events/*.yaml`` (5d, ADR 0054).
+
+        Файл: ``key``, ``body`` (по ``event_definition.v1.json``), необязательный ``map_image``
+        (путь относительно папки событий; нет файла - карта не грузится). Создаётся только
+        определение: запуски (период, публикация) заводит владелец в админке, поэтому событие
+        остаётся без запусков. Повторный запуск идемпотентен: совпавшее тело не трогаем,
+        изменённое заменяем (``PUT``), если нет запуска ``published/active`` (иначе сервер
+        ответил бы 409 ``event_definition_locked``); карту грузим, пока у события её нет.
+        Предмет-награда должен существовать - шаг идёт после :meth:`seed_progression`.
+        Нет папки событий - шаг пропускается.
+        """
+        root = self._cfg.progression_path() / "events"
+        files = sorted(root.glob("*.yaml")) if root.is_dir() else []
+        if not files:
+            self._echo("seed: событий progression нет, шаг пропущен")
+            return
+        for path in files:
+            try:
+                raw = _mapping(yaml.safe_load(path.read_text(encoding="utf-8")))
+                key, body = str(raw["key"]), _mapping(raw["body"])
+                map_image = str(raw["map_image"]) if raw.get("map_image") else None
+            except (KeyError, TypeError, yaml.YAMLError) as exc:
+                raise SeedError(f"сид события {path.name} некорректен: {exc!r}") from exc
+            event = self._ensure_event(key, body)
+            if map_image and not event.get("map_url"):
+                self._upload_event_map(key, root / map_image)
+
+    def _ensure_event(self, key: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Событие с определением из сида: создать, заменить тело или оставить как есть."""
+        digest = _content_digest(body)
+        got = self._progression.get(f"/admin/v1/events/{key}")
+        if got.status_code == httpx.codes.NOT_FOUND:
+            self._echo(f"seed: событие {key} - создание")
+            resp = self._progression.post(
+                "/admin/v1/events",
+                headers={"Idempotency-Key": f"seed-event-create-{key}-{digest}"},
+                json={"key": key, "body": body, "reason": REASON},
+            )
+            self._check(resp, {201}, f"создание события {key}")
+            return _mapping(resp.json())
+        self._check(got, {200}, f"событие {key}")
+        event = _mapping(got.json())
+        if event.get("body") == body:
+            return event
+        runs = event.get("runs") or []
+        if any(r.get("status") in LOCKING_RUN_STATUSES for r in runs):
+            self._echo(f"seed: событие {key} - есть опубликованный запуск, определение не меняю")
+            return event
+        self._echo(f"seed: событие {key} - обновление определения")
+        resp = self._progression.put(
+            f"/admin/v1/events/{key}",
+            headers={"Idempotency-Key": f"seed-event-update-{key}-{digest}"},
+            json={"body": body, "reason": REASON},
+        )
+        self._check(resp, {200}, f"обновление события {key}")
+        return _mapping(resp.json())
+
+    def _upload_event_map(self, key: str, path: Path) -> None:
+        """Картинка карты события (PNG/WebP); нет файла - пропуск."""
+        if not path.is_file():
+            self._echo(f"seed: карта события {key}: нет файла {path.name}, пропуск")
+            return
+        data = path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()[:12]
+        mime = "image/png" if path.suffix.lower() == ".png" else "image/webp"
+        resp = self._progression.put(
+            f"/admin/v1/events/{key}/map",
+            headers={"Idempotency-Key": f"seed-event-map-{key}-{digest}"},
+            files={"file": (path.name, data, mime)},
+            data={"reason": REASON},
+        )
+        self._check(resp, {200}, f"карта события {key}")
 
     # ------------------------------------------------------------------ шаг 9: social
     def seed_social(self) -> None:

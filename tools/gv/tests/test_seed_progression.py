@@ -399,7 +399,9 @@ def test_item_idempotency_keys_include_field_hash(tmp_path: Path) -> None:
         r.headers["Idempotency-Key"] for r in stack.sent("PUT", rf"/admin/v1/items/{_UUID}")
     }
 
-    assert all(re.fullmatch(r"seed-item-(create|activate)-[a-z_]+-[0-9a-f]{12}", k) for k in keys)
+    assert all(
+        re.fullmatch(r"seed-item-(create|activate)-[a-z0-9_]+-[0-9a-f]{12}", k) for k in keys
+    )
 
 
 def _copy_seeds(tmp_path: Path) -> Path:
