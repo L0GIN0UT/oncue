@@ -4,11 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gv_service import ServiceDefinition, main
-from social_service.api import build_routers
+from fastapi import APIRouter
+
+from gv_service import Infrastructure, ServiceDefinition, main
+from social_service.api import build_routers as build_api_routers
+from social_service.api.discussion_services import DiscussionServices
 from social_service.infrastructure.db.tables import TABLES
+from social_service.infrastructure.discussion_container import container_for
 from social_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from social_service.settings import Settings
+
+
+def build_routers(infra: Infrastructure) -> list[APIRouter]:
+    """Роутеры: use-cases контейнера процесса передаются в слой api."""
+    container = container_for(infra)
+    return build_api_routers(
+        infra, DiscussionServices(comments=container.comments, reports=container.reports())
+    )
+
 
 DEFINITION = ServiceDefinition(
     name="social",

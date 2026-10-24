@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from gv_service import Infrastructure
+from social_service.api.discussion_services import DiscussionServices
 from social_service.api.public.discussion import register_discussion_routes
 from social_service.api.public.friends import register_friend_routes
 
@@ -21,7 +22,7 @@ class ServiceMeta(BaseModel):
     status: str
 
 
-def build_public_router(infra: Infrastructure) -> APIRouter:
+def build_public_router(infra: Infrastructure, discussion: DiscussionServices) -> APIRouter:
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["social"])
 
@@ -30,5 +31,5 @@ def build_public_router(infra: Infrastructure) -> APIRouter:
         return ServiceMeta(service=infra.settings.service_name, status="stub")
 
     register_friend_routes(router)
-    register_discussion_routes(router)
+    register_discussion_routes(router, discussion)
     return router
