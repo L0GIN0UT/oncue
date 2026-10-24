@@ -717,10 +717,13 @@ class RefreshSession:
                     raise invalid
                 if required_perm and required_perm not in matrix.effective_perms(user.roles):
                     raise ForbiddenError("нет доступа к админке", code="auth.forbidden")
+                mask = await self._sessions.sanctions_mask(uow, user.id)  # бан - 403
                 await uow.sessions.save_refresh(token)
                 await uow.sessions.add_refresh(result.token)
                 await uow.sessions.save(session)
-                issued = self._sessions.access(user, matrix, session.id, refresh_secret=secret)
+                issued = self._sessions.access(
+                    user, matrix, session.id, refresh_secret=secret, sanctions=mask
+                )
                 await uow.commit()
         if reused is not None:
             await revoke_quietly(self._revocation, [reused])

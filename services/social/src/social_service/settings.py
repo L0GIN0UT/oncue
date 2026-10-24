@@ -24,6 +24,8 @@ class SocialSettings(BaseModel):
     # и только пока нет опубликованной версии.
     bootstrap_config_dir: Path | None = None
     bootstrap_interval_s: float = Field(default=60.0, gt=0)
+    # Как часто задача relay снимает истёкшие санкции (ADR 0052).
+    sanction_expiry_interval_s: float = Field(default=30.0, gt=0)
     # Подсказка клиенту, когда лимитер (Redis) недоступен и операция закрыта (503).
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
     # Heartbeat присутствия: не больше стольких вызовов за окно `presence.heartbeat_s` конфига.

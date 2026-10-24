@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
+import structlog
+
+from gv_auth import Sanction
 from gv_core.clock import Clock
 from gv_core.errors import NotFoundError
 from gv_core.ids import uuid7
@@ -29,6 +32,7 @@ from social_service.application.ports.friends import (
     PresenceStore,
     RequestRow,
 )
+from social_service.application.ports.sanctions import SanctionReader
 from social_service.domain.config import SocialConfig
 from social_service.domain.friend_events import (
     FriendAdded,
@@ -62,6 +66,8 @@ INVITE_WINDOW_S = 60
 DAY = timedelta(days=1)
 CODE_ATTEMPTS = 8
 """Сколько раз пробуем новый код при столкновении (алфавит 32^8 - столкновения редки)."""
+log = structlog.get_logger(__name__)
+
 STATUS_ONLINE = "online"
 STATUS_IN_MATCH = "in_match"
 STATUS_OFFLINE = "offline"
@@ -124,7 +130,9 @@ class FriendsService:
         limiter: AttemptLimiter,
         presence: PresenceStore,
         presence_burst: int,
+        sanctions: SanctionReader | None = None,
     ) -> None:
+        self._sanctions = sanctions
         self._uow = uow
         self._config = config
         self._clock = clock
@@ -488,6 +496,22 @@ class FriendsService:
         await self._presence.touch(user, cfg.presence.ttl_s)
 
     # ------------------------------------------------------------------ приглашения
+    async def _online_banned(self, user: UUID, *, claim: bool) -> bool:
+        """Санкция ONLINE: объединение claim токена и действующих записей ``sanctions``.
+
+        Таблица social ловит санкцию, выданную после выпуска токена; claim остаётся запасным,
+        если чтение недоступно (ADR 0052). Цена объединения: снятая санкция держит приглашения
+        закрытыми до истечения токена (≤ access TTL) - приглашение не критично для безопасности.
+        """
+        if claim or self._sanctions is None:
+            return claim
+        try:
+            mask = await self._sanctions.active_mask(user)
+        except Exception:
+            log.warning("social.sanctions_unavailable", exc_info=True)
+            return False
+        return bool(mask & Sanction.ONLINE)
+
     async def invite(
         self, user: UUID, friend: UUID, room_code: str, *, key: str, online_banned: bool
     ) -> InviteOutcome:
@@ -498,7 +522,7 @@ class FriendsService:
             InvitesRateLimitedError: больше ``invites_per_minute`` в минуту.
             ProfileNotReadyError: нет ника отправителя в проекции.
         """
-        if online_banned or user == friend:
+        if user == friend or await self._online_banned(user, claim=online_banned):
             raise InviteForbiddenError("приглашения недоступны")
         cfg = await current_config(self._config)
         fingerprint = request_fingerprint("invite.send", friend, {"room_code": room_code})

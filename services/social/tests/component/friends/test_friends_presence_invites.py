@@ -148,6 +148,24 @@ async def test_online_sanction_forbids_invites(social: Social, friends: tuple[UU
     assert ok.status_code == 202
 
 
+async def test_online_sanction_in_social_table_forbids_invites_with_clean_token(
+    social: Social, friends: tuple[UUID, UUID]
+) -> None:
+    """Санкцию выдали после выпуска токена: claim чист, но social знает о ней (ADR 0052)."""
+    from social_service.application.ports.sanctions import GrantRequest
+
+    alice, bobby = friends
+    moderator = uuid7()
+    await social.container.sanctions().grant(
+        GrantRequest(moderator, frozenset(), alice, "online", 7200, "нарушение правил")
+    )
+    assert_problem(await invite(social, alice, bobby), 403, "social.invite_forbidden")
+    assert (await invite(social, bobby, alice)).status_code == 202  # получателю санкция не мешает
+    chat_only = await social.register("Chatty")
+    await social.befriend(chat_only, bobby)
+    assert (await invite(social, chat_only, bobby)).status_code == 202
+
+
 async def test_invites_per_minute_limit_and_replay_does_not_consume_it(social: Social) -> None:
     await social.publish_config(friends__invites_per_minute=2)
     alice, bobby = await social.register("Alice"), await social.register("Bobby")

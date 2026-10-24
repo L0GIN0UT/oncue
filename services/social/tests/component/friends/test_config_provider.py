@@ -22,6 +22,7 @@ from social_service.infrastructure.db.repositories_config import DbConfigProvide
 from social_service.infrastructure.db.tables_friends import config_versions
 from social_service.infrastructure.jobs import (
     BOOTSTRAP_JOB,
+    EXPIRY_JOB,
     SEED_ACTOR,
     SEED_REASON,
     bootstrap_config,
@@ -247,11 +248,13 @@ async def test_job_is_registered_only_in_local_and_ci_with_directory(social: Soc
         )
         local_infra = type(infra)(settings=settings, tables=infra.tables, clock=infra.clock)
         local_infra.sessions = infra.sessions
-        return [j.name for j in build_jobs(local_infra)]
+        return [j.name for j in build_jobs(local_infra) if j.name == BOOTSTRAP_JOB]
 
     del container
     assert jobs_for(Environment.LOCAL, SEEDS) == [BOOTSTRAP_JOB]
     assert jobs_for(Environment.CI, SEEDS) == [BOOTSTRAP_JOB]
     assert jobs_for(Environment.PRODUCTION, SEEDS) == []
     assert jobs_for(Environment.LOCAL, None) == []
+    all_jobs = [j.name for j in build_jobs(infra)]
+    assert EXPIRY_JOB in all_jobs  # снятие истёкших санкций работает во всех средах
     assert SEED_REASON

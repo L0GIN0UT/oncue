@@ -10,5 +10,5 @@ TABLES = create_metadata()
 
 # Таблицы областей объявляются в своих модулях на общем ``TABLES.metadata``; импорт нужен ради
 # регистрации (модули импортируют ``TABLES`` отсюда, поэтому подключаем после его создания).
-for _module in ("tables_friends", "tables_moderation"):
+for _module in ("tables_friends", "tables_moderation", "tables_sanctions"):
     importlib.import_module(f"{__package__}.{_module}")

@@ -15,6 +15,7 @@ from social_service.application.friends import FriendsService
 from social_service.application.friends_projections import FriendsProjectionService
 from social_service.application.ports.config import ConfigProvider, ConfigUnavailableError
 from social_service.application.ports.friends import AttemptLimiter, PresenceStore
+from social_service.application.sanctions import SanctionService
 from social_service.domain.config import SocialConfig
 from social_service.infrastructure.adapters import (
     RedisAttemptLimiter,
@@ -24,6 +25,7 @@ from social_service.infrastructure.adapters import (
 )
 from social_service.infrastructure.config_validation import validate_config_body
 from social_service.infrastructure.db.repositories_config import DbConfigProvider
+from social_service.infrastructure.db.repositories_sanctions import SqlSanctionsUnitOfWork
 from social_service.infrastructure.db.uow_friends import SqlFriendsUnitOfWork
 from social_service.settings import Settings
 
@@ -59,6 +61,26 @@ class SocialContainer:
             )
 
         return factory
+
+    def sanctions(self, session: AsyncSession | None = None) -> SanctionService:
+        """Санкции (ADR 0052): ``SanctionGranter`` и ``SanctionReader`` в одном объекте.
+
+        С ``session`` работает в уже открытой транзакции (SAVEPOINT): кейс модерации и
+        санкция фиксируются атомарно вместе с событием в outbox.
+        """
+        infra = self.infra
+        producer = self.settings.service_name
+
+        def factory() -> SqlSanctionsUnitOfWork:
+            if session is not None:
+                return SqlSanctionsUnitOfWork(producer=producer, clock=infra.clock, session=session)
+            if infra.sessions is None:
+                raise DependencyUnavailableError("база данных не настроена (GV_DATABASE_URL)")
+            return SqlSanctionsUnitOfWork(
+                producer=producer, clock=infra.clock, sessions=infra.sessions
+            )
+
+        return SanctionService(factory, self.config, infra.clock)
 
     @cached_property
     def config(self) -> ConfigProvider:
@@ -96,6 +118,7 @@ class SocialContainer:
             limiter=self.limiter,
             presence=self.presence,
             presence_burst=self.settings.social.presence_burst,
+            sanctions=self.sanctions() if self.infra.sessions is not None else None,
         )
 
     def projections(self, session: AsyncSession) -> FriendsProjectionService:

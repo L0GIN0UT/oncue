@@ -30,6 +30,8 @@ class MatchSettings(BaseModel):
         commands_per_player_per_s: Команды игрока в секунду.
         chat_per_player_per_min: Сообщения чата игрока в минуту.
         chat_slow_interval_s: Санкция ``CHAT_SLOW``: не чаще одного сообщения за интервал.
+        unsubscribe_attempts: Попытки отзыва подписки Centrifugo (кик, выход, санкция ONLINE).
+        unsubscribe_retry_s: Пауза между попытками отзыва подписки (растёт линейно).
         realtime_tokens_per_user_per_min: Выдача subscription-токенов.
         rate_per_user_per_hour: Оценки игроков после матча.
         room_idle_close_min: Простой лобби и показ итога до закрытия комнаты.
@@ -93,6 +95,8 @@ class MatchSettings(BaseModel):
     commands_per_player_per_s: int = Field(default=10, ge=1)
     chat_per_player_per_min: int = Field(default=20, ge=1)
     chat_slow_interval_s: int = Field(default=10, ge=1)
+    unsubscribe_attempts: int = Field(default=3, ge=1, le=10)
+    unsubscribe_retry_s: float = Field(default=0.2, ge=0, le=5)
     realtime_tokens_per_user_per_min: int = Field(default=30, ge=1)
     rate_per_user_per_hour: int = Field(default=60, ge=1)
     room_idle_close_min: float = Field(default=30, gt=0)

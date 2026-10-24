@@ -1,7 +1,9 @@
 """Периодические задачи social (relay, под advisory lock; идемпотентны).
 
 * ``social.config.bootstrap`` - версия 1 конфига из ``GV_SOCIAL__BOOTSTRAP_CONFIG_DIR``
-  (только local/ci), если опубликованной версии нет (ADR 0053).
+  (только local/ci), если опубликованной версии нет (ADR 0053);
+* ``social.sanctions.expire`` - закрывает истёкшие санкции и публикует ``UserSanctionsChanged``
+  (``changed_by = null``, ADR 0052).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from social_service.infrastructure.container import container_for
 log = structlog.get_logger(__name__)
 
 BOOTSTRAP_JOB = "social.config.bootstrap"
+EXPIRY_JOB = "social.sanctions.expire"
 BOOTSTRAP_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
 SEED_FILE = "config.yaml"
 SEED_ACTOR = UUID(int=0)
@@ -43,6 +46,12 @@ def build_jobs(infra: Infrastructure) -> list[PeriodicJob]:
             await bootstrap_config(c.config_commands, directory)
 
         jobs.append(PeriodicJob(BOOTSTRAP_JOB, s.bootstrap_interval_s, bootstrap, 0.0))
+    sanctions = c.sanctions()
+
+    async def expire_sanctions() -> int:
+        return await sanctions.expire_due()
+
+    jobs.append(PeriodicJob(EXPIRY_JOB, s.sanction_expiry_interval_s, expire_sanctions, 5.0))
     return jobs
 
 

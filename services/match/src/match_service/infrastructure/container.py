@@ -43,6 +43,7 @@ from match_service.application.ports import (
 from match_service.application.queries.matches import MatchQueries, RatePlayer
 from match_service.application.queries.rooms import QueryLimits, RoomQueries
 from match_service.application.rules import RulesFactory
+from match_service.application.sanctions import SanctionGate, SanctionsProjection
 from match_service.infrastructure.breaker import CircuitBreaker
 from match_service.infrastructure.clients import (
     GameClient,
@@ -57,6 +58,7 @@ from match_service.infrastructure.db.repositories import (
     SqlModeHeads,
     SqlUsers,
 )
+from match_service.infrastructure.db.sanctions import SqlSanctions
 from match_service.infrastructure.ladder_cache import CachedLadders
 from match_service.infrastructure.limits import RedisRateLimiter
 from match_service.infrastructure.matchmaker import MatchmakerRunner
@@ -130,6 +132,7 @@ class MatchAdapters:
     modes: ModeSource | None = None
     mode_keys: ModeKeys | None = None
     ladders: LadderProjection | None = None
+    sanctions: SanctionsProjection | None = None
     limiter: RateLimiter | None = None
     random: Random = field(default_factory=SystemRandom)
     instance: str | None = None
@@ -214,6 +217,16 @@ class MatchContainer:
         return SqlUsers(self.infra.sessions)
 
     @cached_property
+    def sanction_gate(self) -> SanctionGate | None:
+        """Эффективные санкции игрока (проекция ``social``, ADR 0052); без БД - только claim."""
+        projection = self.adapters.sanctions
+        if projection is None:
+            if self.infra.sessions is None:
+                return None
+            projection = SqlSanctions(self.infra.sessions)
+        return SanctionGate(projection, self.infra.clock)
+
+    @cached_property
     def game(self) -> GameClient:
         """Клиент game."""
         m = self.settings.match
@@ -285,7 +298,11 @@ class MatchContainer:
         if realtime is None or realtime.api_url is None or realtime.api_key is None:
             log.warning("match.realtime_not_configured")
             return NullPublisher()
-        publisher = CentrifugoPublisher(realtime)
+        publisher = CentrifugoPublisher(
+            realtime,
+            unsubscribe_attempts=self.settings.match.unsubscribe_attempts,
+            unsubscribe_retry_s=self.settings.match.unsubscribe_retry_s,
+        )
         self.infra.add_closer(publisher.aclose)
         return publisher
 
@@ -372,6 +389,7 @@ class MatchContainer:
                 pending_room_ms=m.pending_room_ms,
                 window_s=m.rate_window_s,
             ),
+            sanctions=self.sanction_gate,
         )
 
     @cached_property
@@ -425,6 +443,7 @@ class MatchContainer:
                 pending_room_ms=m.pending_room_ms,
             ),
             audit=self.audit if self.infra.sessions is not None else None,
+            sanctions=self.sanction_gate,
         )
 
     @cached_property
@@ -449,6 +468,7 @@ class MatchContainer:
                 spectator_ttl_s=int(m.snapshot_ttl_h * 3600),
             ),
             spectators=self.spectators,
+            sanctions=self.sanction_gate,
         )
 
     @cached_property

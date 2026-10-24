@@ -19,4 +19,7 @@ def build_routers(
     discussion: DiscussionServices,
 ) -> list[APIRouter]:
     """Все роутеры сервиса (use-cases приходят из composition root, ``main.py``)."""
-    return [build_public_router(infra, friends, discussion), build_admin_router()]
+    return [
+        build_public_router(infra, friends, discussion),
+        build_admin_router(discussion.sanctions),
+    ]

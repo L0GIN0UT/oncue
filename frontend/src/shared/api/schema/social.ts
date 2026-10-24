@@ -250,7 +250,7 @@ export interface paths {
         put?: never;
         /**
          * Выдать санкцию
-         * @description `ranked | chat | online | account`, со сроком или бессрочно. Публикует `UserSanctionsChanged` (полное активное состояние, `version`).
+         * @description `ranked | chat | online | account`, со сроком или бессрочно. Публикует `UserSanctionsChanged` (полное активное состояние, `version`). Повтор того же вида заменяет прежнюю санкцию (она закрывается как `replaced`). Ошибки: 403 `social.self_sanction_forbidden`, 403 `social.account_sanction_forbidden`, 422 `social.sanction_duration_invalid`, 404 `social.player_not_found`.
          */
         post: operations["grant_admin_v1_users__user_id__sanctions_post"];
         delete?: never;
@@ -2296,16 +2296,6 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
         };
     };
     user_moderation_admin_v1_users__user_id__moderation_get: {
@@ -2366,16 +2356,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -2450,16 +2430,6 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3721,16 +3691,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Не реализовано */
-            501: {
                 headers: {
                     [name: string]: unknown;
                 };

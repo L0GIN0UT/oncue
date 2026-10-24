@@ -21,6 +21,7 @@ from match_service.application.ports import (
     SpectatorRegistry,
     SubscriptionTokens,
 )
+from match_service.application.sanctions import SanctionGate
 from match_service.application.views import iso, mode_ref, room_state, room_view, settings_json
 from match_service.domain import errors
 from match_service.domain.errors import (
@@ -84,7 +85,9 @@ class RoomQueries:
         clock: Clock,
         limits: QueryLimits,
         spectators: SpectatorRegistry | None = None,
+        sanctions: SanctionGate | None = None,
     ) -> None:
+        self._sanctions = sanctions
         self._store = store
         self._presence = presence
         self._tokens = tokens
@@ -185,12 +188,21 @@ class RoomQueries:
             "state": room_state(room, user_id, now) if fresh else None,
         }
 
-    async def realtime_token(self, user_id: UUID, code: str, *, spectator: bool = False) -> Json:
+    async def realtime_token(
+        self, user_id: UUID, code: str, *, spectator: bool = False, claim_sanctions: int = 0
+    ) -> Json:
         """Subscription-токен канала ``room:{code}`` — участнику и наблюдателю (D9, D19).
 
         Канал публикует одни и те же дельты всем подписчикам (личное в него не попадает),
-        публикации клиентов запрещены — наблюдатель только читает.
+        публикации клиентов запрещены — наблюдатель только читает. Выдача и продление токена
+        перепроверяют санкцию ``ONLINE`` (ADR 0052): отзыв подписки Centrifugo может не дойти,
+        а новый токен уже не выдаётся (хвост 4a).
+
+        Raises:
+            MatchForbiddenError: ``match.online_banned``.
         """
+        if self._sanctions is not None:
+            await self._sanctions.require_online(user_id, claim_sanctions)
         await self._limiter.hit(
             "rt_token", str(user_id), limit=self._limits.tokens_per_min, window_s=60
         )

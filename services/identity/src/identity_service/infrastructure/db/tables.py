@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -259,3 +260,19 @@ trusted_devices = Table(
 
 # Ключи идемпотентности admin-мутаций (gv_db.idempotency; миграция 0004).
 idempotency_keys = idempotency_table(_md)
+
+# Санкции игрока из событий social (ADR 0052; миграция 0017). ``active`` - записи вида и срока:
+# по ним маска и бан считаются на момент выпуска токена (истёкшие не входят).
+user_sanctions = Table(
+    "user_sanctions",
+    _md,
+    Column("user_id", Uuid, primary_key=True),
+    Column("mask", Integer, nullable=False),
+    Column("account_banned", Boolean, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("next_expiry_at", _TS, nullable=True),
+    Column("active", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("updated_at", _TS, nullable=False),
+    CheckConstraint("version >= 1", name="sanctions_version_positive"),
+    CheckConstraint("mask BETWEEN 0 AND 65535", name="sanctions_mask_range"),
+)

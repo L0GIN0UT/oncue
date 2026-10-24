@@ -25,7 +25,11 @@ def routers(infra: Infrastructure) -> list[APIRouter]:
     return build_routers(
         infra,
         lambda: container_for(infra).friends,
-        DiscussionServices(comments=discussion.comments, reports=discussion.reports()),
+        DiscussionServices(
+            comments=discussion.comments,
+            reports=discussion.reports(),
+            sanctions=container_for(infra).sanctions(),
+        ),
     )
 
 

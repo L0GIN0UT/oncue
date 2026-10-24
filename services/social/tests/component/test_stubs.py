@@ -49,10 +49,6 @@ FRIENDS: list[tuple[str, str, dict[str, Any]]] = [
     ),
     ("GET", f"/v1/players/{UID}/relation", {}),
 ]
-PUBLIC_USER: list[tuple[str, str, dict[str, Any]]] = [
-    # Комментарии и жалобы (F2) реализованы: см. test_comments_api.py, test_reports_api.py.
-    ("GET", "/v1/me/sanctions", {}),
-]
 ADMIN: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/admin/v1/cases", {}),
     ("GET", f"/admin/v1/cases/{OBJ}", {}),
@@ -66,17 +62,6 @@ ADMIN: list[tuple[str, str, dict[str, Any]]] = [
         "POST",
         f"/admin/v1/cases/{OBJ}/resolve",
         {"json": {"version": 1, "decision": "dismissed", "reason": REASON}, "headers": KEY},
-    ),
-    ("GET", f"/admin/v1/users/{UID}/moderation", {}),
-    (
-        "POST",
-        f"/admin/v1/users/{UID}/sanctions",
-        {"json": {"kind": "online", "duration_s": 3600, "reason": REASON}, "headers": KEY},
-    ),
-    (
-        "POST",
-        f"/admin/v1/sanctions/{OBJ}/revoke",
-        {"json": {"reason": REASON}, "headers": KEY},
     ),
 ]
 
@@ -103,19 +88,11 @@ def _send(client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]], **ex
     return client.request(method, path, headers=headers, **kwargs)
 
 
-@pytest.mark.parametrize("call", FRIENDS + PUBLIC_USER + ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")
+@pytest.mark.parametrize("call", FRIENDS + ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")
 async def test_requires_authentication(
     client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]]
 ) -> None:
     assert_problem(await _send(client, call), 401, "auth.unauthenticated")
-
-
-@pytest.mark.parametrize("call", PUBLIC_USER, ids=lambda c: f"{c[0]} {c[1][:40]}")
-async def test_public_stub_answers_501_for_user(
-    client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]]
-) -> None:
-    response = await _send(client, call, headers=_auth())
-    assert_problem(response, 501, "common.not_implemented")
 
 
 @pytest.mark.parametrize("call", ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")

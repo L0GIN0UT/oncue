@@ -24,6 +24,9 @@ if _SUPPORT not in sys.path:
 
 from pydantic import SecretStr  # noqa: E402
 from social_fakes import FakeConfig  # noqa: E402
+from social_service.infrastructure.container import (  # noqa: E402
+    container_for as social_container_for,
+)
 from social_service.infrastructure.db import tables_moderation as t  # noqa: E402
 from social_service.infrastructure.db.tables import TABLES  # noqa: E402
 from social_service.infrastructure.discussion_container import (  # noqa: E402
@@ -187,6 +190,8 @@ async def social(
     assert runtime.sessions is not None
     config = FakeConfig()
     container = container_for(runtime, Adapters(config=config))
+    # Санкции берут конфиг из контейнера друзей: подменяем его тем же двойником.
+    social_container_for(runtime).config = config  # type: ignore[assignment]  # cached_property
     dead_letters = FakeDeadLetterSink()
 
     async def no_sleep(_: float) -> None:

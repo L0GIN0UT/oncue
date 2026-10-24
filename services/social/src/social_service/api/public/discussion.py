@@ -19,7 +19,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path, Query, Response
 
 from gv_auth import Principal, Sanction, optional_principal, require_user
-from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
 from social_service.api.discussion_services import DiscussionServices
 from social_service.api.schemas import (
@@ -27,6 +26,7 @@ from social_service.api.schemas import (
     CommentPage,
     CommentView,
     Cursor,
+    MySanction,
     MySanctions,
     ReportCreate,
     ReportReason,
@@ -42,10 +42,6 @@ CommentIdPath = Annotated[UUID, Path(description="Идентификатор к�
 
 
 _MUTING = Sanction.CHAT_MUTE | Sanction.COMMENTS
-
-
-def _stub() -> NotImplementedYetError:
-    return NotImplementedYetError("ручка появится в потоке F3 (5c)")
 
 
 def _actor(principal: Principal) -> Actor:
@@ -179,7 +175,16 @@ def register_discussion_routes(router: APIRouter, services: DiscussionServices) 
         response_model=MySanctions,
         summary="Мои санкции",
         description="Действующие ограничения со сроком и причиной (экран санкции).",
-        responses=problem_responses(401, 403, 501),
+        responses=problem_responses(401, 403),
     )
-    async def my_sanctions(user: User) -> MySanctions:
-        raise _stub()
+    async def my_sanctions(user: User, response: Response) -> MySanctions:
+        records = await services.sanctions.my_active(user.user_id)
+        response.headers["Cache-Control"] = "no-store"
+        return MySanctions(
+            items=[
+                MySanction(
+                    kind=r.kind, started_at=r.started_at, expires_at=r.expires_at, reason=r.reason
+                )
+                for r in records
+            ]
+        )

@@ -200,6 +200,21 @@ ratings_proj = Table(
     CheckConstraint("version >= 0", name="version_not_negative"),
 )
 
+# Санкции игрока из ``social.UserSanctionsChanged`` (ADR 0052, миграция 0004): по ``active``
+# маска считается на момент запроса (истёкшие записи не входят); версия монотонна.
+sanctions_proj = Table(
+    "sanctions_proj",
+    _md,
+    Column("user_id", Uuid(as_uuid=True), primary_key=True),
+    Column("mask", Integer, nullable=False),
+    Column("version", Integer, nullable=False),
+    _ts("next_expiry_at", nullable=True),
+    Column("active", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    _ts("updated_at"),
+    CheckConstraint("version >= 1", name="sanctions_version_positive"),
+    CheckConstraint("mask BETWEEN 0 AND 65535", name="sanctions_mask_range"),
+)
+
 admin_actions = Table(
     "admin_actions",
     _md,
