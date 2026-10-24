@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
+
 from gv_db import create_metadata
 
 TABLES = create_metadata()
 
-# Регистрация таблиц потоков на TABLES.metadata (по строке на модуль; порядок не важен).
-from social_service.infrastructure.db import tables_friends  # noqa: E402, F401  # isort: skip
+# Таблицы областей объявляются в своих модулях на общем ``TABLES.metadata``; импорт нужен ради
+# регистрации (модули импортируют ``TABLES`` отсюда, поэтому подключаем после его создания).
+for _module in ("tables_friends", "tables_moderation"):
+    importlib.import_module(f"{__package__}.{_module}")

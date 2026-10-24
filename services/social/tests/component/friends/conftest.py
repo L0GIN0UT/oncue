@@ -42,7 +42,7 @@ from gv_testkit import (
 )
 
 EXAMPLE_CONFIG = (
-    Path(__file__).resolve().parents[4]
+    Path(__file__).resolve().parents[5]
     / "contracts"
     / "social"
     / "examples"

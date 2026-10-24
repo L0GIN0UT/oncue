@@ -316,6 +316,9 @@ def test_generated_compose_passes_stage2_settings() -> None:
     )
     assert dev["progression"]["volumes"] == ["../../seeds/progression:/seeds/progression:ro"]
     assert (ROOT / "seeds/progression/config.yaml").is_file()
+    assert dev["social"]["environment"]["GV_SOCIAL__BOOTSTRAP_CONFIG_DIR"] == "/seeds/social"
+    assert dev["social"]["volumes"] == ["../../seeds/social:/seeds/social:ro"]
+    assert (ROOT / "seeds/social/config.yaml").is_file()
     mail = dev["identity"]["environment"]
     assert mail["GV_EMAIL__BACKEND"] == "${GV_EMAIL__BACKEND:-log}"
     assert not any("LINK" in key for key in mail)  # ссылок с токенами нет (ADR 0041)

@@ -38,7 +38,7 @@ from .conftest import ADMIN, config_body
 pytestmark = pytest.mark.component
 
 Social = Any  # фикстура `social` описана в conftest.py
-SEEDS = Path(__file__).resolve().parents[4] / "seeds" / "social"
+SEEDS = Path(__file__).resolve().parents[5] / "seeds" / "social"
 
 
 def commands(social: Social) -> Any:

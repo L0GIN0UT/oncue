@@ -50,22 +50,8 @@ FRIENDS: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", f"/v1/players/{UID}/relation", {}),
 ]
 PUBLIC_USER: list[tuple[str, str, dict[str, Any]]] = [
-    ("POST", f"/v1/collections/{OBJ}/comments", {"json": {"body": "Класс"}, "headers": KEY}),
-    ("PATCH", f"/v1/comments/{OBJ}", {"json": {"body": "Правка"}}),
-    ("DELETE", f"/v1/comments/{OBJ}", {}),
-    (
-        "POST",
-        "/v1/reports",
-        {
-            "json": {"target_kind": "collection", "target_id": OBJ, "reason_code": "spam"},
-            "headers": KEY,
-        },
-    ),
+    # Комментарии и жалобы (F2) реализованы: см. test_comments_api.py, test_reports_api.py.
     ("GET", "/v1/me/sanctions", {}),
-]
-PUBLIC_OPEN: list[tuple[str, str, dict[str, Any]]] = [
-    ("GET", f"/v1/collections/{OBJ}/comments", {}),
-    ("GET", "/v1/report-reasons", {}),
 ]
 ADMIN: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/admin/v1/cases", {}),
@@ -130,13 +116,6 @@ async def test_public_stub_answers_501_for_user(
 ) -> None:
     response = await _send(client, call, headers=_auth())
     assert_problem(response, 501, "common.not_implemented")
-
-
-@pytest.mark.parametrize("call", PUBLIC_OPEN, ids=lambda c: f"{c[0]} {c[1][:40]}")
-async def test_open_stub_answers_501_without_token(
-    client: httpx.AsyncClient, call: tuple[str, str, dict[str, Any]]
-) -> None:
-    assert_problem(await _send(client, call), 501, "common.not_implemented")
 
 
 @pytest.mark.parametrize("call", ADMIN, ids=lambda c: f"{c[0]} {c[1][:40]}")

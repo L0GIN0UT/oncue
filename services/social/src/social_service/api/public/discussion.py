@@ -1,7 +1,6 @@
 """Комментарии к сборникам, жалобы, свои санкции (5c, поток F2; ADR 0051, 0052).
 
-Шаг 0a: ручки объявлены, реализация - потоки F2 и F3; до тех пор отвечают 501
-``common.not_implemented``.
+Комментарии и жалобы реализованы (F2); `/me/sanctions` - заглушка 501 до потока F3.
 
 * чтение комментариев открыто всем (в т.ч. гостю); запись, жалобы и санкции - аккаунт;
 * комментарии: плоские, ≤ 500 символов, `gv_text.ugc`, лимит в минуту, правка 5 минут (значения
@@ -17,11 +16,12 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Response
 
-from gv_auth import Principal, optional_principal, require_user
+from gv_auth import Principal, Sanction, optional_principal, require_user
 from gv_core.errors import NotImplementedYetError
 from gv_service import IdempotencyKey, problem_responses
+from social_service.api.discussion_services import DiscussionServices
 from social_service.api.schemas import (
     CommentBody,
     CommentPage,
@@ -29,9 +29,11 @@ from social_service.api.schemas import (
     Cursor,
     MySanctions,
     ReportCreate,
+    ReportReason,
     ReportReasons,
     ReportResult,
 )
+from social_service.application.comments import Actor, CommentDto
 
 User = Annotated[Principal, Depends(require_user)]
 Viewer = Annotated[Principal | None, Depends(optional_principal)]
@@ -39,11 +41,26 @@ CollectionIdPath = Annotated[UUID, Path(description="Идентификатор 
 CommentIdPath = Annotated[UUID, Path(description="Идентификатор комментария")]
 
 
+_MUTING = Sanction.CHAT_MUTE | Sanction.COMMENTS
+
+
 def _stub() -> NotImplementedYetError:
-    return NotImplementedYetError("ручка появится в потоках F2/F3 (5c)")
+    return NotImplementedYetError("ручка появится в потоке F3 (5c)")
 
 
-def register_discussion_routes(router: APIRouter) -> None:
+def _actor(principal: Principal) -> Actor:
+    return Actor(
+        user_id=principal.user_id,
+        perms=principal.perms,
+        muted=principal.is_sanctioned(_MUTING),
+    )
+
+
+def _view(dto: CommentDto) -> CommentView:
+    return CommentView.model_validate(dto, from_attributes=True)
+
+
+def register_discussion_routes(router: APIRouter, services: DiscussionServices) -> None:
     """Добавить в ``/v1`` ручки комментариев, жалоб и своих санкций."""
 
     @router.get(
@@ -55,7 +72,7 @@ def register_discussion_routes(router: APIRouter) -> None:
             "`can_edit`/`can_delete` - для зрителя (для гостя `false`). Неопубликованный "
             "или неизвестный сборник - 404 `social.collection_not_found`."
         ),
-        responses=problem_responses(404, 501),
+        responses=problem_responses(404, 422, 503),
     )
     async def list_comments(
         collection_id: CollectionIdPath,
@@ -63,7 +80,11 @@ def register_discussion_routes(router: APIRouter) -> None:
         cursor: Annotated[Cursor | None, Query()] = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 30,
     ) -> CommentPage:
-        raise _stub()
+        actor = _actor(viewer) if viewer is not None and not viewer.is_guest else None
+        page = await services.comments.page(actor, collection_id, cursor, limit)
+        return CommentPage(
+            items=[_view(i) for i in page.items], next_cursor=page.next_cursor, total=page.total
+        )
 
     @router.post(
         "/collections/{collection_id}/comments",
@@ -75,12 +96,13 @@ def register_discussion_routes(router: APIRouter) -> None:
             "`social.comments_rate_limit`, 403 `social.chat_muted` (санкция `CHAT`), 404 "
             "`social.collection_not_found`. Повтор по `Idempotency-Key` - тот же комментарий."
         ),
-        responses=problem_responses(401, 403, 404, 422, 429, 501),
+        responses=problem_responses(401, 403, 404, 409, 422, 429, 503),
     )
     async def post_comment(
         collection_id: CollectionIdPath, body: CommentBody, user: User, key: IdempotencyKey
     ) -> CommentView:
-        raise _stub()
+        dto = await services.comments.post(_actor(user), collection_id, body.body, key)
+        return _view(dto)
 
     @router.patch(
         "/comments/{comment_id}",
@@ -90,10 +112,10 @@ def register_discussion_routes(router: APIRouter) -> None:
             "Только автор, не позже `comments.edit_window_s` (5 минут): иначе 409 "
             "`social.comment_edit_expired`. Чужой комментарий - 404."
         ),
-        responses=problem_responses(401, 403, 404, 409, 422, 501),
+        responses=problem_responses(401, 403, 404, 409, 422, 503),
     )
     async def edit_comment(comment_id: CommentIdPath, body: CommentBody, user: User) -> CommentView:
-        raise _stub()
+        return _view(await services.comments.edit(_actor(user), comment_id, body.body))
 
     @router.delete(
         "/comments/{comment_id}",
@@ -103,20 +125,23 @@ def register_discussion_routes(router: APIRouter) -> None:
             "Автор, автор сборника или модератор (`social.comments.delete_any`); событие "
             "`CommentDeleted`. Повтор - 204; остальным - 404."
         ),
-        responses=problem_responses(401, 403, 404, 501),
+        responses=problem_responses(401, 403, 404),
     )
     async def delete_comment(comment_id: CommentIdPath, user: User) -> None:
-        raise _stub()
+        await services.comments.delete(_actor(user), comment_id)
 
     @router.get(
         "/report-reasons",
         response_model=ReportReasons,
         summary="Причины жалоб",
         description="Справочник из конфига; `target_kinds` - к каким объектам причина применима.",
-        responses=problem_responses(501),
+        responses=problem_responses(503),
     )
     async def report_reasons() -> ReportReasons:
-        raise _stub()
+        items = await services.reports.reasons()
+        return ReportReasons(
+            items=[ReportReason.model_validate(r, from_attributes=True) for r in items]
+        )
 
     @router.post(
         "/reports",
@@ -130,10 +155,23 @@ def register_discussion_routes(router: APIRouter) -> None:
             "Порог жалоб за сутки по объекту открывает кейс модерации. Текст не попадает в "
             "события. Событие `ReportFiled`. Лимит жалоб в сутки: 429."
         ),
-        responses=problem_responses(401, 403, 404, 422, 429, 501),
+        responses=problem_responses(401, 403, 404, 422, 429, 501, 503),
     )
-    async def file_report(body: ReportCreate, user: User, key: IdempotencyKey) -> ReportResult:
-        raise _stub()
+    async def file_report(
+        body: ReportCreate, user: User, key: IdempotencyKey, response: Response
+    ) -> ReportResult:
+        # Идемпотентность естественная - по (автор, объект); ключ принят ради единообразия.
+        outcome = await services.reports.file(
+            user.user_id,
+            body.target_kind,
+            body.target_id,
+            body.context_match_id,
+            body.reason_code,
+            body.text,
+        )
+        if outcome.repeated:
+            response.status_code = 200
+        return ReportResult(id=outcome.id, repeated=outcome.repeated)
 
     @router.get(
         "/me/sanctions",

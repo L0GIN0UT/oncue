@@ -8,16 +8,25 @@ from fastapi import APIRouter
 
 from gv_service import Infrastructure, ServiceDefinition, main
 from social_service.api import build_routers
+from social_service.api.discussion_services import DiscussionServices
 from social_service.infrastructure import jobs
 from social_service.infrastructure.container import container_for
 from social_service.infrastructure.db.tables import TABLES
+from social_service.infrastructure.discussion_container import (
+    container_for as discussion_container_for,
+)
 from social_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from social_service.settings import Settings
 
 
 def routers(infra: Infrastructure) -> list[APIRouter]:
-    """Роутеры: use-cases контейнера процесса передаются в слой api."""
-    return build_routers(infra, lambda: container_for(infra).friends)
+    """Роутеры: use-cases контейнеров процесса передаются в слой api."""
+    discussion = discussion_container_for(infra)
+    return build_routers(
+        infra,
+        lambda: container_for(infra).friends,
+        DiscussionServices(comments=discussion.comments, reports=discussion.reports()),
+    )
 
 
 DEFINITION = ServiceDefinition(
