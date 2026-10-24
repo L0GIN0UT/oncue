@@ -1,0 +1,6 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_social/_nav.html" %}
+<form method="get">{{ form.as_p }}<input type="submit" value="Найти"></form>
+{% endblock %}

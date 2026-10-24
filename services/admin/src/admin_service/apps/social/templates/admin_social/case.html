@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_social/_nav.html" %}
+<p><a href="{% url 'social:cases' %}">← к очереди</a></p>
+<table>
+  <tr><th>Объект</th><td>{{ case.target_kind }} <code>{{ case.target_id }}</code></td></tr>
+  <tr><th>Игрок</th><td>{% if player_url %}<a href="{{ player_url }}"><code>{{ case.target_user_id }}</code></a>{% else %}<code>{{ case.target_user_id }}</code>{% endif %}</td></tr>
+  <tr><th>Статус</th><td>{{ case.status }} (версия {{ case.version }})</td></tr>
+  <tr><th>Исполнитель</th><td>{{ case.assignee_id|default:"—" }}</td></tr>
+  <tr><th>Решение</th><td>{{ case.decision|default:"—" }}</td></tr>
+  <tr><th>Фрагмент</th><td>{% if case.target_preview %}<blockquote>{{ case.target_preview }}</blockquote>{% else %}—{% endif %}</td></tr>
+</table>
+
+<h2>Жалобы ({{ reports|length }})</h2>
+<table>
+  <thead><tr><th>Время</th><th>Заявитель</th><th>Причина</th><th>Текст</th><th>Матч</th></tr></thead>
+  {% for r in reports %}
+  <tr>
+    <td>{{ r.created_at }}</td><td><code>{{ r.author_id }}</code></td>
+    <td><code>{{ r.reason_code }}</code></td><td>{{ r.text|default:"—" }}</td>
+    <td>{{ r.context_match_id|default:"" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if escalated_waiting %}<p>Кейс эскалирован: решает только старший модератор.</p>{% endif %}
+
+{% if can_claim %}
+<h3>Взять в работу</h3>
+<form method="post" action="{% url 'social:claim' case.id %}">
+  {% csrf_token %}{{ claim_form.as_p }}<input type="submit" value="Взять">
+</form>
+{% endif %}
+
+{% if can_escalate %}
+<h3>Эскалировать</h3>
+<form method="post" action="{% url 'social:escalate' case.id %}">
+  {% csrf_token %}{{ escalate_form.as_p }}<input type="submit" value="Эскалировать старшему">
+</form>
+{% endif %}
+
+{% if can_resolve %}
+<h3>Решить</h3>
+<form method="post" action="{% url 'social:resolve' case.id %}">
+  {% csrf_token %}{{ resolve_form.as_p }}
+  {% if not can_sanction %}<p>Санкции выдаёт модератор с правом «санкции».</p>{% endif %}
+  <input type="submit" value="Решить">
+</form>
+{% endif %}
+{% endblock %}

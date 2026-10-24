@@ -35,8 +35,10 @@ from media_pipeline_service.application.commands.profiles import (
 )
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.commands.ugc import (
+    DeferredUgcPurger,
     ModerateUgcImage,
     PreviewUgcImage,
+    RemoveModeratedUgcImage,
     SubmitUgcImage,
     SweepOrphanUgcObjects,
     UgcObjectPurger,
@@ -256,6 +258,15 @@ class MediaContainer:
             self.plan(uow),
             self.adapters.storage,
             emoji_max_graphemes=self.settings.media.collection_emoji_max_graphemes,
+        )
+
+    def remove_moderated_ugc(self, uow: UnitOfWorkFactory) -> RemoveModeratedUgcImage:
+        """Снятие аватарки решением модерации social (``uow`` привязан к сессии consumer)."""
+        a = self.adapters
+        purger = DeferredUgcPurger(uow, a.storage)
+        return RemoveModeratedUgcImage(
+            ModerateUgcImage(uow, self.clock, a.storage, a.tokens, self.ugc_catalog, purger),
+            reason_code=self.settings.media.ugc_social_removal_reason,
         )
 
     def sync_media_item(self, uow: UnitOfWorkFactory) -> SyncMediaItem:

@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 from social_fakes import Harness, example_config
+from social_service.application.ports.cases import AvatarRef
 from social_service.application.ports.discussion import NewReport
 from social_service.application.projections import ProjectionService
 from social_service.application.reports import ReportService
@@ -16,7 +17,6 @@ from social_service.domain.discussion_events import ReportFiled
 from gv_core.errors import (
     InvalidInputError,
     NotFoundError,
-    NotImplementedYetError,
     RateLimitedError,
 )
 from gv_core.ids import uuid7
@@ -106,10 +106,24 @@ async def test_collection_and_comment_reports_resolve_owner() -> None:
         await service.file(TARGET, "comment", COMMENT, None, "spam", None)
 
 
-async def test_avatar_reports_are_not_implemented() -> None:
-    _, service = _setup()
-    with pytest.raises(NotImplementedYetError):
-        await service.file(AUTHOR, "avatar", UUID(int=7), None, "other", None)
+async def test_avatar_report_uses_owner_from_projection() -> None:
+    h, service = _setup()
+    asset, owner = UUID(int=7), UUID(int=8)
+    h.world.avatars[asset] = AvatarRef(asset, owner, "approved", 1)
+    outcome = await service.file(AUTHOR, "avatar", asset, None, "inappropriate_content", None)
+    assert not outcome.repeated
+    assert h.world.reports[0].target_user_id == owner
+    assert h.world.counters[owner]["reports_received"] == 1
+
+
+async def test_avatar_report_unknown_or_rejected_asset_is_not_found() -> None:
+    h, service = _setup()
+    rejected = UUID(int=9)
+    h.world.avatars[rejected] = AvatarRef(rejected, UUID(int=8), "rejected", 2)
+    for asset in (UUID(int=7), rejected):
+        with pytest.raises(NotFoundError) as err:
+            await service.file(AUTHOR, "avatar", asset, None, "inappropriate_content", None)
+        assert err.value.code == "social.report_target_not_found"
 
 
 async def test_report_is_idempotent_per_author_and_object() -> None:

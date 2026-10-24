@@ -9,6 +9,8 @@
 * ``case_reports`` - жалобы, вошедшие в кейс;
 * ``match_participants_proj`` - участники матчей (для проверки «общий матч» при жалобе);
 * ``behaviour_counters`` - счётчики порядочности (без автосанкций);
+* ``avatar_proj`` - владельцы UGC-аватарок из ``media_pipeline.AssetModerated`` (для жалоб);
+* ``moderation_audit`` - аудит ручных действий (кейсы, конфиг): кто, что, над чем, причина;
 * ``comment_idempotency_keys`` - ключи идемпотентности публикации комментариев.
 """
 
@@ -25,10 +27,12 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
     String,
     Table,
+    Text,
     UniqueConstraint,
     Uuid,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 
 from gv_db.idempotency import idempotency_table
 from social_service.infrastructure.db.tables import TABLES
@@ -149,6 +153,30 @@ behaviour_counters = Table(
     Column("reports_received", Integer, nullable=False, server_default="0"),
     Column("praises", Integer, nullable=False, server_default="0"),
     Column("matches_total", Integer, nullable=False, server_default="0"),
+)
+
+avatar_proj = Table(
+    "avatar_proj",
+    _md,
+    Column("asset_id", Uuid(as_uuid=True), primary_key=True),
+    Column("owner_user_id", Uuid(as_uuid=True), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("version", Integer, nullable=False),
+    CheckConstraint("status IN ('approved', 'rejected')", name="status_known"),
+)
+
+moderation_audit = Table(
+    "moderation_audit",
+    _md,
+    Column("id", Uuid(as_uuid=True), primary_key=True),
+    Column("actor_id", Uuid(as_uuid=True), nullable=False),
+    Column("action", String(64), nullable=False),
+    Column("target", String(200), nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("details", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
+    Column("at", _TS, nullable=False),
+    Index("ix_moderation_audit_target_at", "target", "at"),
+    Index("ix_moderation_audit_actor_at", "actor_id", "at"),
 )
 
 COMMENT_IDEMPOTENCY = idempotency_table(_md, "comment_idempotency_keys")

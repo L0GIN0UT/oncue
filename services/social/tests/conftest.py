@@ -23,7 +23,7 @@ if _SUPPORT not in sys.path:
     sys.path.insert(0, _SUPPORT)
 
 from pydantic import SecretStr  # noqa: E402
-from social_fakes import FakeConfig  # noqa: E402
+from social_fakes import FakeConfig, FakeGranterFactory, FakeSanctionReader  # noqa: E402
 from social_service.infrastructure.container import (  # noqa: E402
     container_for as social_container_for,
 )
@@ -70,7 +70,11 @@ class SocialService:
         issuer: TestTokenIssuer,
         clock: FakeClock,
         config: FakeConfig,
+        sanctions: FakeSanctionReader,
+        granter: FakeGranterFactory,
     ) -> None:
+        self.sanctions = sanctions
+        self.granter = granter
         self.client = client
         self.infra = infra
         self.container = container
@@ -189,7 +193,11 @@ async def social(
     runtime = await Infrastructure.open(settings, TABLES, clock=fake_clock)
     assert runtime.sessions is not None
     config = FakeConfig()
-    container = container_for(runtime, Adapters(config=config))
+    sanctions = FakeSanctionReader()
+    granter = FakeGranterFactory()
+    container = container_for(
+        runtime, Adapters(config=config, sanctions=sanctions, granter_factory=granter)
+    )
     # Санкции берут конфиг из контейнера друзей: подменяем его тем же двойником.
     social_container_for(runtime).config = config  # type: ignore[assignment]  # cached_property
     dead_letters = FakeDeadLetterSink()
@@ -219,6 +227,8 @@ async def social(
                 issuer=token_issuer,
                 clock=fake_clock,
                 config=config,
+                sanctions=sanctions,
+                granter=granter,
             )
     finally:
         await runtime.close()

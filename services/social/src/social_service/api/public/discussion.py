@@ -152,7 +152,7 @@ def register_discussion_routes(router: APIRouter, services: DiscussionServices) 
             "Порог жалоб за сутки по объекту открывает кейс модерации. Текст не попадает в "
             "события. Событие `ReportFiled`. Лимит жалоб в сутки: 429."
         ),
-        responses=problem_responses(401, 403, 404, 422, 429, 501, 503),
+        responses=problem_responses(401, 403, 404, 422, 429, 503),
     )
     async def file_report(
         body: ReportCreate, user: User, key: IdempotencyKey, response: Response

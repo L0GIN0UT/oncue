@@ -1,7 +1,8 @@
 """Обработчики событий для комментариев, жалоб и шкал порядочности (5c, поток F2).
 
 Слушаем ``collections.*`` (проекция сборников), ``match.MatchFinished`` / ``PlayerRated``
-(участники, счётчики, жалобы из оценок) и ``identity.UserDeleted`` (обезличивание). Обработчик
+(участники, счётчики, жалобы из оценок), ``identity.UserDeleted`` (обезличивание) и
+``media_pipeline.AssetModerated`` (владельцы аватарок для жалоб). Обработчик
 работает в транзакции ``EventProcessor``: отметка inbox и запись атомарны. Событие, не
 соответствующее контракту, - ``PermanentError`` (сразу в DLQ).
 """
@@ -23,6 +24,7 @@ MODERATION_TOPICS: tuple[str, ...] = (
     "collections.collection.v1",
     "match.match.v1",
     "identity.user.v1",
+    "media_pipeline.ugc_image.v1",
 )
 
 type Handler = Callable[[EventEnvelope, AsyncSession], Awaitable[None]]
@@ -35,6 +37,7 @@ _HANDLERS: dict[str, _Apply] = {
     "match.MatchFinished": lambda s: s.match_finished,
     "match.PlayerRated": lambda s: s.player_rated,
     "identity.UserDeleted": lambda s: s.user_deleted,
+    "media_pipeline.AssetModerated": lambda s: s.asset_moderated,
 }
 
 

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from gv_auth import Sanction
 from gv_core.clock import Clock
 from gv_core.errors import (
     ConflictError,
@@ -25,7 +26,12 @@ from gv_db.idempotency import request_fingerprint, run_idempotent
 from gv_text.ugc import UgcPolicy, UgcViolation
 from social_service.application.config_access import current_config
 from social_service.application.ports.config import ConfigProvider
-from social_service.application.ports.discussion import DiscussionUowFactory, RateLimiter
+from social_service.application.ports.discussion import (
+    DiscussionUnitOfWork,
+    DiscussionUowFactory,
+    RateLimiter,
+)
+from social_service.application.ports.sanctions import SanctionReader
 from social_service.domain import discussion as rules
 from social_service.domain.config import SocialConfig
 from social_service.domain.discussion import Comment
@@ -36,6 +42,8 @@ FALLBACK_NICKNAME = "Игрок"
 COMMENTS_WINDOW_S = 60
 """Окно лимита ``comments.per_minute`` - минута по определению параметра."""
 TITLE_MAX = 120
+MUTING = Sanction.CHAT_MUTE | Sanction.COMMENTS
+"""Санкция ``CHAT`` для комментариев: чат выключен или комментарии выключены."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +120,9 @@ class CommentService:
         limiter: RateLimiter,
         clock: Clock,
         new_id: Callable[[], UUID],
+        sanctions: SanctionReader,
     ) -> None:
+        self._sanctions = sanctions
         self._uow = uow_factory
         self._config = config
         self._ugc = ugc
@@ -131,10 +141,26 @@ class CommentService:
                 details={"violation": exc.code},
             ) from exc
 
+    async def _ensure_not_muted(self, actor: Actor) -> None:
+        """Санкция ``CHAT`` по эффективной маске: claim токена или действующие санкции в БД."""
+        if actor.muted or int(await self._sanctions.active_mask(actor.user_id)) & int(MUTING):
+            raise ForbiddenError("комментарии отключены санкцией", code=rules.CHAT_MUTED)
+
+    @staticmethod
+    async def _ensure_not_blocked(
+        uow: DiscussionUnitOfWork, actor: UUID, collection_author: UUID | None
+    ) -> None:
+        """Блокировка закрывает комментирование в обе стороны (поправка владельца 5c)."""
+        if collection_author is None or collection_author == actor:
+            return
+        if await uow.blocks.is_blocked(collection_author, actor) or await uow.blocks.is_blocked(
+            actor, collection_author
+        ):
+            raise ForbiddenError("комментирование недоступно из-за блокировки", code=rules.BLOCKED)
+
     async def post(self, actor: Actor, collection_id: UUID, body: str, key: str) -> CommentDto:
         """Опубликовать комментарий (повтор по ``Idempotency-Key`` - тот же)."""
-        if actor.muted:
-            raise ForbiddenError("комментарии отключены санкцией", code=rules.CHAT_MUTED)
+        await self._ensure_not_muted(actor)
         cfg = await current_config(self._config)
         fingerprint = request_fingerprint("comment.post", collection_id, {"body": body})
         async with self._uow() as uow:
@@ -143,6 +169,7 @@ class CommentService:
                 ref = await uow.collections.get(collection_id)
                 if ref is None or not ref.published:
                     raise NotFoundError("сборник не найден", code=rules.COLLECTION_NOT_FOUND)
+                await self._ensure_not_blocked(uow, actor.user_id, ref.author_id)
                 text = self._check_text(body, cfg)
                 hits = await self._limiter.hit(
                     f"comments:{actor.user_id}", window_s=COMMENTS_WINDOW_S
@@ -167,7 +194,7 @@ class CommentService:
                 )
                 # У кураторского сборника автора нет: схема требует uuid, уведомлять некого.
                 owner = ref.author_id or actor.user_id
-                # Заблокированному комментировать можно, но владельца не уведомляем (ADR 0051).
+                # Защита: заблокированный сюда не доходит, но владельца ему не уведомляем.
                 notify = (
                     ref.author_id is not None
                     and ref.author_id != actor.user_id
@@ -196,8 +223,7 @@ class CommentService:
 
     async def edit(self, actor: Actor, comment_id: UUID, body: str) -> CommentDto:
         """Изменить свой комментарий в окне правки."""
-        if actor.muted:
-            raise ForbiddenError("комментарии отключены санкцией", code=rules.CHAT_MUTED)
+        await self._ensure_not_muted(actor)
         cfg = await current_config(self._config)
         async with self._uow() as uow:
             comment = await uow.comments.get(comment_id, for_update=True)
@@ -206,6 +232,7 @@ class CommentService:
             ref = await uow.collections.get(comment.collection_id)
             if ref is None or not ref.published:
                 raise NotFoundError("сборник не найден", code=rules.COLLECTION_NOT_FOUND)
+            await self._ensure_not_blocked(uow, actor.user_id, ref.author_id)
             now = self._clock.now()
             if not rules.can_edit(comment, actor.user_id, now, cfg.comments.edit_window_s):
                 raise ConflictError("время правки истекло", code=rules.COMMENT_EDIT_EXPIRED)

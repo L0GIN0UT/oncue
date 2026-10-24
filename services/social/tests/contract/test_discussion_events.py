@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from social_service.domain.discussion_events import CommentDeleted, CommentPosted, ReportFiled
+from social_service.domain.discussion_events import (
+    CommentDeleted,
+    CommentPosted,
+    ContentModerated,
+    ReportFiled,
+    ReportResolved,
+)
 from social_service.infrastructure.messaging import CONSUMED_TOPICS
 from social_service.infrastructure.messaging.moderation import _HANDLERS
 
@@ -53,6 +59,24 @@ def _events() -> list[DomainEvent]:
             target_id=uuid7(),
             target_kind="collection",
             target_user_id=uuid7(),
+        ),
+        ContentModerated(
+            aggregate_id=str(cid),
+            at=NOW,
+            case_id=cid,
+            decision="content_removed",
+            moderator_id=uid,
+            target_id=uuid7(),
+            target_kind="avatar",
+            target_user_id=uuid7(),
+        ),
+        ReportResolved(
+            aggregate_id=str(rid),
+            at=NOW,
+            case_id=cid,
+            decision="dismissed",
+            report_id=rid,
+            reporter_id=uid,
         ),
     ]
 

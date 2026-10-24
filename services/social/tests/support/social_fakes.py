@@ -6,14 +6,17 @@ import copy
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
+from social_service.application.ports.cases import AuditEntry, AvatarRef, CaseReportRow
 from social_service.application.ports.config import ConfigUnavailableError
 from social_service.application.ports.discussion import NewReport
+from social_service.application.ports.sanctions import GrantRequest, SanctionRecord
+from social_service.domain.cases import ModerationCase
 from social_service.domain.config import SocialConfig
 from social_service.domain.discussion import CollectionRef, Comment
 
@@ -76,6 +79,9 @@ class World:
     events: list[DomainEvent] = field(default_factory=list)
     blocks: set[tuple[UUID, UUID]] = field(default_factory=set)
     """Блокировки ``(blocker_id, blocked_id)``."""
+    avatars: dict[UUID, AvatarRef] = field(default_factory=dict)
+    audit: list[AuditEntry] = field(default_factory=list)
+    grants: list[GrantRequest] = field(default_factory=list)
 
 
 class _Blocks:
@@ -196,7 +202,18 @@ class _Reports:
     ) -> UUID | None:
         if await self.active_case_id(kind, target_id) is not None:
             return None
-        self.w.cases[case_id] = {"kind": kind, "target": target_id, "status": "open"}
+        self.w.cases[case_id] = {
+            "kind": kind,
+            "target": target_id,
+            "target_user": target_user_id,
+            "status": "open",
+            "assignee": None,
+            "decision": None,
+            "resolved_by": None,
+            "resolved_at": None,
+            "opened_at": now,
+            "version": 1,
+        }
         return case_id
 
     async def active_case_id(self, kind: str, target_id: UUID) -> UUID | None:
@@ -245,11 +262,117 @@ class _Matches:
         row[field_name] = row.get(field_name, 0) + by
 
 
+class _Cases:
+    def __init__(self, w: World) -> None:
+        self.w = w
+
+    def _model(self, case_id: UUID) -> ModerationCase:
+        c = self.w.cases[case_id]
+        return ModerationCase(
+            id=case_id,
+            target_kind=c["kind"],
+            target_id=c["target"],
+            target_user_id=c["target_user"],
+            status=c["status"],
+            assignee_id=c["assignee"],
+            opened_at=c["opened_at"],
+            version=c["version"],
+            reports_count=max(1, sum(1 for cid, _ in self.w.case_reports if cid == case_id)),
+            decision=c["decision"],
+            resolved_by=c["resolved_by"],
+            resolved_at=c["resolved_at"],
+        )
+
+    async def get(self, case_id: UUID, *, for_update: bool = False) -> ModerationCase | None:
+        return self._model(case_id) if case_id in self.w.cases else None
+
+    async def page(
+        self,
+        *,
+        status: str | None,
+        target_kind: str | None,
+        assignee_id: UUID | None,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> list[ModerationCase]:
+        rows = [self._model(cid) for cid in self.w.cases]
+        rows = [
+            c
+            for c in rows
+            if (status is None or c.status == status)
+            and (target_kind is None or c.target_kind == target_kind)
+            and (assignee_id is None or c.assignee_id == assignee_id)
+        ]
+        rows.sort(key=lambda c: (c.opened_at, c.id))
+        if after is not None:
+            rows = [c for c in rows if (c.opened_at, c.id) > after]
+        return rows[:limit]
+
+    async def save(self, case: ModerationCase, *, expected_version: int) -> bool:
+        stored = self.w.cases[case.id]
+        if stored["version"] != expected_version:
+            return False
+        stored.update(
+            status=case.status,
+            assignee=case.assignee_id,
+            decision=case.decision,
+            resolved_by=case.resolved_by,
+            resolved_at=case.resolved_at,
+            version=case.version,
+        )
+        return True
+
+    async def reports(self, case_id: UUID) -> list[CaseReportRow]:
+        ids = {rid for cid, rid in self.w.case_reports if cid == case_id}
+        rows = sorted(
+            (r for r in self.w.reports if r.id in ids), key=lambda r: (r.created_at, r.id)
+        )
+        return [
+            CaseReportRow(
+                r.id, r.author_id, r.reason_code, r.text, r.context_match_id, r.created_at
+            )
+            for r in rows
+        ]
+
+    async def preview(self, kind: str, target_id: UUID) -> str | None:
+        if kind == "comment":
+            comment = self.w.comments.get(target_id)
+            return (comment.body or None) if comment else None
+        if kind == "collection":
+            ref = self.w.collections.get(target_id)
+            return (ref.title or None) if ref else None
+        return None
+
+
+class _Avatars:
+    def __init__(self, w: World) -> None:
+        self.w = w
+
+    async def get(self, asset_id: UUID) -> AvatarRef | None:
+        return self.w.avatars.get(asset_id)
+
+    async def apply(self, ref: AvatarRef) -> None:
+        known = self.w.avatars.get(ref.asset_id)
+        if known is None or known.version < ref.version:
+            self.w.avatars[ref.asset_id] = ref
+
+
+class _Audit:
+    def __init__(self, w: World) -> None:
+        self.w = w
+
+    async def add(self, entry: AuditEntry) -> None:
+        self.w.audit.append(entry)
+
+
 class FakeUow:
     """UoW над ``World``: без коммита изменения откатываются."""
 
     def __init__(self, world: World, idempotency: InMemoryIdempotencyStore) -> None:
         self.world = world
+        self.cases = _Cases(world)
+        self.avatars = _Avatars(world)
+        self.audit = _Audit(world)
         self.comments = _Comments(world)
         self.collections = _Collections(world)
         self.nicknames = _Nicknames(world)
@@ -283,6 +406,66 @@ class FakeUow:
         self._committed = True
 
 
+class FakeSanctionReader:
+    """``SanctionReader``: маска по игроку (по умолчанию 0)."""
+
+    def __init__(self) -> None:
+        self.masks: dict[UUID, int] = {}
+
+    async def active_mask(self, user_id: UUID) -> int:
+        return self.masks.get(user_id, 0)
+
+
+class FakeGranter:
+    """``SanctionGranter`` в транзакции UoW: запись в ``world.grants`` откатывается вместе с ней."""
+
+    def __init__(self, world: World, error: Exception | None = None) -> None:
+        self.world = world
+        self.error = error
+
+    async def grant(self, request: GrantRequest) -> SanctionRecord:
+        if self.error is not None:
+            raise self.error
+        self.world.grants.append(request)
+        return SanctionRecord(
+            id=UUID(int=len(self.world.grants)),
+            user_id=request.user_id,
+            kind=request.kind,
+            started_at=datetime(2026, 10, 24, tzinfo=UTC),
+            expires_at=None,
+            reason=request.reason,
+            actor_id=request.actor_id,
+        )
+
+
+class FakeGranterFactory:
+    """Фабрика ``SanctionGranter`` для компонентных тестов: запоминает выдачи, может падать."""
+
+    def __init__(self) -> None:
+        self.grants: list[GrantRequest] = []
+        self.error: Exception | None = None
+
+    def __call__(self, _uow: object) -> FakeGranter:
+        outer = self
+
+        class _Granter(FakeGranter):
+            async def grant(self, request: GrantRequest) -> SanctionRecord:
+                if outer.error is not None:
+                    raise outer.error
+                outer.grants.append(request)
+                return SanctionRecord(
+                    id=UUID(int=len(outer.grants)),
+                    user_id=request.user_id,
+                    kind=request.kind,
+                    started_at=datetime(2026, 10, 24, tzinfo=UTC),
+                    expires_at=None,
+                    reason=request.reason,
+                    actor_id=request.actor_id,
+                )
+
+        return _Granter(World())
+
+
 @dataclass
 class Harness:
     """Мир, часы и фабрика UoW для unit-тестов use-case."""
@@ -291,9 +474,15 @@ class Harness:
     clock: FakeClock = field(default_factory=FakeClock)
     config: FakeConfig = field(default_factory=FakeConfig)
     limiter: FakeLimiter = field(default_factory=FakeLimiter)
+    sanctions: FakeSanctionReader = field(default_factory=FakeSanctionReader)
+    grant_error: Exception | None = None
 
     def __post_init__(self) -> None:
         self._idem = InMemoryIdempotencyStore(self.clock)
+
+    def granter(self, _uow: object) -> FakeGranter:
+        """Фабрика выдачи санкции для ``CaseService``."""
+        return FakeGranter(self.world, self.grant_error)
 
     def uow(self) -> FakeUow:
         return FakeUow(self.world, self._idem)

@@ -11,6 +11,7 @@ from social_service.application.comments import Actor, CommentService
 from social_service.domain.discussion import CollectionRef, Comment
 from social_service.domain.discussion_events import CommentDeleted, CommentPosted
 
+from gv_auth import Sanction
 from gv_core.errors import (
     ConflictError,
     DependencyUnavailableError,
@@ -44,6 +45,7 @@ def _setup(*, published: bool = True, owner: UUID | None = OWNER) -> tuple[Harne
         h.limiter,
         h.clock,
         uuid7,
+        h.sanctions,
     )
     return h, service
 
@@ -70,23 +72,69 @@ async def test_post_by_collection_author_does_not_notify_owner() -> None:
     assert event.notify_owner is False
 
 
-async def test_post_by_user_blocked_by_owner_is_published_but_owner_not_notified() -> None:
+@pytest.mark.parametrize(
+    "block",
+    [(OWNER, AUTHOR.user_id), (AUTHOR.user_id, OWNER)],
+    ids=["owner_blocked_me", "i_blocked"],
+)
+async def test_block_in_either_direction_closes_posting(block: tuple[UUID, UUID]) -> None:
     h, service = _setup()
-    h.world.blocks.add((OWNER, AUTHOR.user_id))  # владелец заблокировал автора
+    h.world.blocks.add(block)
+    with pytest.raises(ForbiddenError) as err:
+        await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    assert err.value.code == "social.blocked"
+    assert not h.world.comments
+    assert not h.events("CommentPosted")
+
+
+async def test_unblock_reopens_posting_and_reading_works_under_block() -> None:
+    h, service = _setup()
+    h.world.blocks.add((OWNER, AUTHOR.user_id))
+    page = await service.page(None, COLLECTION, None, 10)  # чтение публичное
+    assert page.items == []
+    h.world.blocks.clear()
     dto = await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
-    assert dto.id in h.world.comments  # комментировать заблокированному не запрещаем
-    (event,) = h.events("CommentPosted")
-    assert isinstance(event, CommentPosted)
-    assert event.notify_owner is False
+    assert dto.id in h.world.comments
 
 
-async def test_block_in_other_direction_does_not_silence_notification() -> None:
+async def test_block_closes_editing_too() -> None:
     h, service = _setup()
-    h.world.blocks.add((AUTHOR.user_id, OWNER))  # автор заблокировал владельца
-    await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
-    (event,) = h.events("CommentPosted")
-    assert isinstance(event, CommentPosted)
-    assert event.notify_owner is True
+    dto = await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    h.world.blocks.add((OWNER, AUTHOR.user_id))
+    with pytest.raises(ForbiddenError) as err:
+        await service.edit(AUTHOR, dto.id, "Правка")
+    assert err.value.code == "social.blocked"
+
+
+async def test_block_does_not_apply_to_own_collection() -> None:
+    h, service = _setup()
+    h.world.blocks.add((OWNER, OWNER))  # вырожденный случай: автор сборника пишет у себя
+    dto = await service.post(Actor(OWNER), COLLECTION, "Спасибо", "key-aaaaaaaaaaaa")
+    assert dto.id in h.world.comments
+
+
+async def test_chat_sanction_from_reader_blocks_posting_with_clean_claim() -> None:
+    h, service = _setup()
+    h.sanctions.masks[AUTHOR.user_id] = int(Sanction.CHAT_MUTE | Sanction.COMMENTS)
+    with pytest.raises(ForbiddenError) as err:
+        await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    assert err.value.code == "social.chat_muted"
+
+
+async def test_chat_sanction_from_claim_blocks_posting_with_zero_reader() -> None:
+    _, service = _setup()
+    with pytest.raises(ForbiddenError) as err:
+        await service.post(
+            Actor(AUTHOR.user_id, muted=True), COLLECTION, "Привет", "key-aaaaaaaaaaaa"
+        )
+    assert err.value.code == "social.chat_muted"
+
+
+async def test_unrelated_sanction_does_not_mute_comments() -> None:
+    h, service = _setup()
+    h.sanctions.masks[AUTHOR.user_id] = int(Sanction.RANKED)
+    dto = await service.post(AUTHOR, COLLECTION, "Привет", "key-aaaaaaaaaaaa")
+    assert dto.id in h.world.comments
 
 
 async def test_replay_does_not_spend_comment_limiter_budget() -> None:

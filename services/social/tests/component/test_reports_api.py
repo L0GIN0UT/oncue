@@ -152,13 +152,41 @@ async def test_collection_and_comment_reports(social: SocialService) -> None:
     assert_problem(own, 422, "social.report_self")
 
 
-async def test_avatar_reports_are_not_implemented(social: SocialService) -> None:
-    response = await _file(
-        social,
-        uuid7(),
-        {"target_kind": "avatar", "target_id": str(uuid7()), "reason_code": "other"},
+async def test_avatar_report_needs_known_asset_and_targets_owner(social: SocialService) -> None:
+    asset, owner = uuid7(), uuid7()
+    body = {"target_kind": "avatar", "target_id": str(asset), "reason_code": "other"}
+    assert_problem(await _file(social, uuid7(), body), 404, "social.report_target_not_found")
+    outcome = await social.deliver(
+        social.event(
+            "media_pipeline.AssetModerated",
+            asset_id=str(asset),
+            owner_user_id=str(owner),
+            purpose="avatar",
+            status="approved",
+            public_key="u/0123456789abcdef0123456789abcdef.webp",
+            reason_code=None,
+            version=1,
+        )
     )
-    assert_problem(response, 501, "common.not_implemented")
+    assert outcome.name == "PROCESSED"
+    ok = await _file(social, uuid7(), body)
+    assert ok.status_code == 201, ok.text
+    (report,) = await social.rows(t.reports)
+    assert report.target_user_id == owner and report.target_kind == "avatar"
+    # Отклонённое изображение (новая версия) больше не принимает жалоб.
+    await social.deliver(
+        social.event(
+            "media_pipeline.AssetModerated",
+            asset_id=str(asset),
+            owner_user_id=str(owner),
+            purpose="avatar",
+            status="rejected",
+            public_key=None,
+            reason_code="nsfw",
+            version=2,
+        )
+    )
+    assert_problem(await _file(social, uuid7(), body), 404, "social.report_target_not_found")
 
 
 async def test_daily_limit_is_429(social: SocialService) -> None:

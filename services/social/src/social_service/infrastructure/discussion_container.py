@@ -16,12 +16,20 @@ from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
 from gv_service import Infrastructure
 from gv_text.ugc import UgcPolicy
+from social_service.application.cases import CaseService
 from social_service.application.comments import CommentService
+from social_service.application.ports.cases import GranterFactory
 from social_service.application.ports.config import ConfigProvider
-from social_service.application.ports.discussion import DiscussionUowFactory, RateLimiter
+from social_service.application.ports.discussion import (
+    DiscussionUnitOfWork,
+    DiscussionUowFactory,
+    RateLimiter,
+)
+from social_service.application.ports.sanctions import SanctionGranter, SanctionReader
 from social_service.application.projections import ProjectionService
 from social_service.application.reports import ReportService
 from social_service.infrastructure.config_provider import config_provider_for
+from social_service.infrastructure.container import container_for as social_container_for
 from social_service.infrastructure.db.repositories_moderation import SqlDiscussionUnitOfWork
 from social_service.infrastructure.limiter import RedisRateLimiter
 
@@ -33,6 +41,8 @@ class Adapters:
     config: ConfigProvider | None = None
     limiter: RateLimiter | None = None
     ugc: UgcPolicy | None = None
+    sanctions: SanctionReader | None = None
+    granter_factory: GranterFactory | None = None
 
 
 class DiscussionContainer:
@@ -50,6 +60,16 @@ class DiscussionContainer:
         self.config: ConfigProvider = adapters.config or config_provider_for(infra)
         self.ugc = adapters.ugc or UgcPolicy.from_file()
         self.limiter: RateLimiter = adapters.limiter or RedisRateLimiter(lambda: infra.redis)
+        self.sanctions: SanctionReader = (
+            adapters.sanctions or social_container_for(infra).sanctions()
+        )
+        self.granter_factory: GranterFactory = adapters.granter_factory or self._sql_granter
+
+    def _sql_granter(self, uow: DiscussionUnitOfWork) -> SanctionGranter:
+        """Выдача санкции в транзакции UoW кейса (решение и санкция атомарны, ADR 0052)."""
+        if not isinstance(uow, SqlDiscussionUnitOfWork):
+            raise TypeError("ожидается SQL Unit of Work")
+        return social_container_for(self.infra).sanctions(session=uow.session)
 
     def uow_factory(self, session: AsyncSession | None = None) -> DiscussionUowFactory:
         """Фабрика UoW: своя транзакция или SAVEPOINT в транзакции consumer."""
@@ -73,8 +93,19 @@ class DiscussionContainer:
     def comments(self) -> CommentService:
         """Комментарии."""
         return CommentService(
-            self.uow_factory(), self.config, self.ugc, self.limiter, self.infra.clock, self.new_id
+            self.uow_factory(),
+            self.config,
+            self.ugc,
+            self.limiter,
+            self.infra.clock,
+            self.new_id,
+            self.sanctions,
         )
+
+    @property
+    def cases(self) -> CaseService:
+        """Очередь модерации."""
+        return CaseService(self.uow_factory(), self.granter_factory, self.infra.clock, self.new_id)
 
     def reports(self, session: AsyncSession | None = None) -> ReportService:
         """Жалобы (в транзакции consumer - с ``session``)."""

@@ -61,3 +61,31 @@ class ReportFiled(DomainEvent):
     target_id: UUID
     target_kind: str
     target_user_id: UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContentModerated(DomainEvent):
+    """Модератор решил кейс (``aggregate_id`` - ``case_id``); заметки модератора не входят."""
+
+    aggregate_type: ClassVar[str] = SOCIAL_AGGREGATE
+
+    at: datetime
+    case_id: UUID
+    decision: str
+    moderator_id: UUID
+    target_id: UUID
+    target_kind: str
+    target_user_id: UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReportResolved(DomainEvent):
+    """Решение по кейсу сообщено заявителю (по событию на жалобу; ``aggregate_id`` - report_id)."""
+
+    aggregate_type: ClassVar[str] = SOCIAL_AGGREGATE
+
+    at: datetime
+    case_id: UUID
+    decision: str
+    report_id: UUID
+    reporter_id: UUID

@@ -6,12 +6,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from types import TracebackType
-from typing import Protocol, Self
+from typing import TYPE_CHECKING, Protocol, Self
 from uuid import UUID
 
 from gv_core.domain import DomainEvent
 from gv_db.idempotency import IdempotencyStore
 from social_service.domain.discussion import CollectionRef, Comment
+
+if TYPE_CHECKING:
+    from social_service.application.ports.cases import AuditLog, AvatarProjection, CaseRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,6 +180,15 @@ class DiscussionUnitOfWork(Protocol):
 
     @property
     def blocks(self) -> Blocks: ...
+
+    @property
+    def cases(self) -> CaseRepository: ...
+
+    @property
+    def avatars(self) -> AvatarProjection: ...
+
+    @property
+    def audit(self) -> AuditLog: ...
 
     @property
     def idempotency(self) -> IdempotencyStore: ...

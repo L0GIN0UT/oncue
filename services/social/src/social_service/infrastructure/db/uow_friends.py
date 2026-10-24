@@ -18,6 +18,7 @@ from gv_messaging import EventEnvelope
 from gv_messaging.outbox import OutboxWriter
 from social_service.infrastructure.db.repositories_config import SqlConfigStore
 from social_service.infrastructure.db.repositories_friends import SqlFriendsRepository
+from social_service.infrastructure.db.repositories_moderation import SqlAudit
 from social_service.infrastructure.db.tables import TABLES
 from social_service.infrastructure.db.tables_friends import idempotency_keys
 
@@ -27,6 +28,7 @@ class SqlFriendsUnitOfWork:
 
     repo: SqlFriendsRepository
     configs: SqlConfigStore
+    audit: SqlAudit
     idempotency: SqlIdempotencyStore
 
     def __init__(
@@ -61,6 +63,7 @@ class SqlFriendsUnitOfWork:
             self._tx = await self._session.begin()
         self.repo = SqlFriendsRepository(self._session)
         self.configs = SqlConfigStore(self._session)
+        self.audit = SqlAudit(self._session)
         self.idempotency = SqlIdempotencyStore(self._session, idempotency_keys, self._clock)
         return self
 

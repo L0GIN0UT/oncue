@@ -30,6 +30,7 @@ from media_pipeline_service.application.ugc import UgcImageView, UgcPreview
 from media_pipeline_service.domain.errors import (
     UgcClientForbiddenError,
     UgcNotFoundError,
+    UgcNotPendingError,
     UgcTooLargeError,
 )
 from media_pipeline_service.domain.ugc import (
@@ -90,6 +91,55 @@ class UgcObjectPurger:
                 await uow.ugc.forget_purge(keys)
                 await uow.commit()
             total += len(keys)
+
+
+class DeferredUgcPurger(UgcObjectPurger):
+    """Очередь удаления без быстрого пути: для решений внутри транзакции consumer.
+
+    Объекты удаляет задача ``media.ugc.purge`` после коммита, а не обработчик события до
+    коммита внешней транзакции (откат оставил бы строку ``approved`` без файла).
+    """
+
+    async def delete_now(self, keys: Sequence[str]) -> None:  # noqa: ARG002 - как у базового
+        """Ничего не делает: ключи уже в ``ugc_object_purge``."""
+        return
+
+
+class RemoveModeratedUgcImage:
+    """Решение модерации social ``content_removed`` по аватарке: снять одобренное изображение.
+
+    Событие ``social.ContentModerated`` (ADR 0051). Идемпотентно: ключ решения —
+    ``social-case:<case_id>``; ассета нет или он уже отклонён — без изменений.
+
+    Args:
+        moderate: Решения модератора (UoW привязан к транзакции consumer).
+        reason_code: Код причины из конфига назначений.
+    """
+
+    def __init__(self, moderate: ModerateUgcImage, *, reason_code: str) -> None:
+        self._moderate = moderate
+        self._reason_code = reason_code
+
+    async def execute(self, asset_id: UUID, *, moderator_id: UUID, case_id: UUID) -> bool:
+        """Снять изображение.
+
+        Returns:
+            ``True``, если изображение отклонено этим вызовом.
+        """
+        try:
+            await self._moderate.reject(
+                asset_id,
+                moderator_id=moderator_id,
+                reason_code=self._reason_code,
+                reason=f"решение модерации social, кейс {case_id}",
+                idempotency_key=f"social-case:{case_id}",
+            )
+        except UgcNotFoundError:
+            log.warning("ugc.removal_unknown_asset", asset_id=str(asset_id))
+            return False
+        except UgcNotPendingError:
+            return False  # уже отклонено (в том числе прошлой доставкой)
+        return True
 
 
 class SweepOrphanUgcObjects:
