@@ -8,6 +8,7 @@ import "@fontsource-variable/unbounded";
 import "./globals.css";
 import { Providers } from "@/shared/ui/providers";
 import { SiteHeader } from "@/features/auth/SiteHeader";
+import { SanctionsBanner } from "@/features/sanctions/SanctionsBanner";
 import { getThemeKey } from "@/shared/api/shell";
 import { ThemeProvider } from "@/shared/ui/theme-provider";
 import { THEME_META } from "@/styles/theme";
@@ -43,6 +44,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 {t("nav.skip")}
               </a>
               <SiteHeader />
+              <SanctionsBanner />
               <main
                 id="main"
                 className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 pb-16 sm:px-6"

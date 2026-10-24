@@ -23,6 +23,8 @@ import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
+import { CommentsSection } from "@/features/comments/CommentsSection";
+import { ReportButton } from "@/features/reports/ReportDialog";
 import { SaveButton } from "@/features/library/SaveButton";
 import { PlayWithFriends } from "@/features/match/PlayWithFriends";
 import { collectionKeys, fetchCollectionPage, setFavorite, setLike } from "../api";
@@ -141,6 +143,17 @@ function CollectionBody({
 
       <ModesBlock page={page} detail={detail} />
       <PlayWithFriends collectionId={detail.collection_id} domain={detail.domain} />
+      <CommentsSection collectionId={detail.collection_id} block={page.blocks.comments} />
+      {me && !me.is_author && (
+        <div className="flex">
+          <ReportButton
+            kind="collection"
+            targetId={detail.collection_id}
+            label={t("social.report.collection")}
+            testId="collection-report"
+          />
+        </div>
+      )}
 
       {items && (
         <section

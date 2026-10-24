@@ -9,6 +9,7 @@
 import { http, HttpResponse, type HttpHandler } from "msw";
 import { csrfOk, problem, subjectOf } from "./handlers";
 import { ratingBlocks } from "./handlers-rating";
+import { friendsBlock } from "./social";
 import { ONLINE_MODES, type MatchWorld } from "./match";
 import type { MockWorld } from "./world";
 
@@ -217,6 +218,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       if (userId instanceof Response) return userId;
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       if (!request.headers.get("idempotency-key")) return problem(422, "idempotency.key_required");
+      if (world.scenario.social?.onlineBanned) return problem(403, "match.online_banned");
       const body = (await request.json()) as {
         mode_key: string;
         settings?: Record<string, unknown>;
@@ -487,6 +489,7 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
           status: "ok",
           blocks: {
             ...ratingBlocks(mw),
+            friends: friendsBlock(world),
             open_rooms: { status: "ok", data: { items: mw.openRooms(), next_cursor: null } },
             my_matches: { status: "ok", data: { items: mw.myMatches(userId), next_cursor: null } },
             modes: {
@@ -529,7 +532,13 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       return HttpResponse.json(
         {
           blocks: {
-            match: { status: "ok", data: r },
+            match: {
+              status: "ok",
+              data: {
+                ...r,
+                players: r.players.map((p) => ({ ...p, can_report: p.user_id !== userId })),
+              },
+            },
             items: { status: "ok", data: r.rounds.map((x) => mw.itemCard(x.media_item_id)) },
             library: { status: "ok", data: [] },
           },

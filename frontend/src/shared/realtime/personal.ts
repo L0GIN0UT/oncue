@@ -36,6 +36,7 @@ export function parseNotificationMessage(data: unknown): NotificationItem | null
   if (!str(r.body) || !r.body) return null;
   if (!str(r.created_at)) return null;
   if (r.read_at !== null && !str(r.read_at)) return null;
+  const fields = stringFields(r.data);
   return {
     id: r.id,
     type: r.type,
@@ -43,7 +44,16 @@ export function parseNotificationMessage(data: unknown): NotificationItem | null
     body: r.body,
     created_at: r.created_at,
     read_at: r.read_at,
+    ...(fields ? { data: fields } : {}),
   };
+}
+
+/** Машинные поля типа (`room_invite`: `room_code`): только строковые значения. */
+function stringFields(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value)) if (str(v)) out[k] = v;
+  return Object.keys(out).length ? out : null;
 }
 
 export function createCentrifugePersonalTransport(userId: string): PersonalTransport {

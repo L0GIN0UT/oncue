@@ -32,6 +32,7 @@ export const MATCH_ERROR_CODES = [
   "not_in_queue",
   "not_host",
   "not_participant",
+  "online_banned",
   "option_unknown",
   "phase_mismatch",
   "player_not_found",

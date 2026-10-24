@@ -74,15 +74,21 @@ export class NotificationsWorld {
     return this.items.filter((i) => i.read_at === null).length;
   }
 
-  push(title = "Новое задание", body = "Задание выполнено"): NotificationItem {
+  push(
+    title = "Новое задание",
+    body = "Задание выполнено",
+    type = "quest_completed",
+    data?: Record<string, string>,
+  ): NotificationItem {
     this.seq += 1;
     const item: NotificationItem = {
       id: `0192a000-0000-7000-a000-${String(this.seq).padStart(12, "0")}`,
-      type: "quest_completed",
+      type,
       title,
       body,
       created_at: new Date().toISOString(),
       read_at: null,
+      ...(data ? { data } : {}),
     };
     this.items.unshift(item);
     this.feed.push({ n: this.feed.length + 1, item });
@@ -192,8 +198,13 @@ export function createNotificationsHandlers(world: MockWorld): HttpHandler[] {
 
     // ------------------------------------------------ управление realtime в e2e
     http.post("*/api/notifications/__e2e/push", async ({ request }) => {
-      const body = (await request.json().catch(() => ({}))) as { title?: string; body?: string };
-      return HttpResponse.json(n.push(body.title, body.body));
+      const body = (await request.json().catch(() => ({}))) as {
+        title?: string;
+        body?: string;
+        type?: string;
+        data?: Record<string, string>;
+      };
+      return HttpResponse.json(n.push(body.title, body.body, body.type, body.data));
     }),
 
     http.get("*/api/notifications/__e2e/feed", ({ request }) => {

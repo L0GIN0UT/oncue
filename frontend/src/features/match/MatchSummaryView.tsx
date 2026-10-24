@@ -7,7 +7,7 @@
  */
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Flag, ThumbsUp } from "lucide-react";
+import { ThumbsUp } from "lucide-react";
 import { isApiError } from "@/shared/api/errors";
 import type { Domain, ItemCard } from "@/shared/api/types";
 import type { SummaryDelta } from "@/shared/realtime";
@@ -20,10 +20,12 @@ import { SaveButton } from "@/features/library/SaveButton";
 import { blockData, useMatchPage, type MatchSummary } from "@/features/online/bff";
 import { useModeTitle } from "@/features/online/lists";
 import { RatingChangeBlock } from "@/features/rating/RatingChangeBlock";
+import { ReportButton } from "@/features/reports/ReportDialog";
 import { rateOpponent } from "./api";
 import { matchErrorKey } from "./errors";
 
-type Placement = SummaryDelta["placements"][number] & { nickname: string };
+/** `can_report` — решение bff (не сам игрок, матч не соло); у мест из канала его нет. */
+type Placement = SummaryDelta["placements"][number] & { nickname: string; can_report?: boolean };
 
 type Props = {
   matchId: string;
@@ -285,15 +287,16 @@ function RateOpponents({
                   <ThumbsUp aria-hidden />
                   {t("match.rate.praise")}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => rate(p.user_id, "report")}
-                  data-testid="rate-report"
-                >
-                  <Flag aria-hidden />
-                  {t("match.rate.report")}
-                </Button>
+                {p.can_report && (
+                  <ReportButton
+                    kind="player"
+                    targetId={p.user_id}
+                    contextMatchId={matchId}
+                    label={t("match.rate.report")}
+                    ariaLabel={t("social.report.playerLabel", { name: p.nickname })}
+                    testId="rate-report"
+                  />
+                )}
               </>
             )}
           </li>

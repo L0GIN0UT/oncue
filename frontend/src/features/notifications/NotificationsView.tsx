@@ -15,6 +15,7 @@ import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { useViewer } from "@/features/auth/session";
 import { ProfileGate } from "@/features/progression/ProfileView";
+import { roomInviteHref } from "./invite";
 import { unreadIn, withAllRead, withRead, type ListData } from "./cache";
 import {
   fetchNotifications,
@@ -160,6 +161,7 @@ function Row({ item, onRead }: { item: NotificationItem; onRead: () => void }) {
   const t = useTranslations();
   const f = useFormatter();
   const isRead = item.read_at !== null;
+  const invite = roomInviteHref(item);
   return (
     <li
       data-testid="notification-item"
@@ -181,17 +183,31 @@ function Row({ item, onRead }: { item: NotificationItem; onRead: () => void }) {
           {f.dateTime(new Date(item.created_at), { dateStyle: "medium", timeStyle: "short" })}
         </time>
       </div>
-      {!isRead && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onRead}
-          aria-label={`${t("notifications.markRead")}: ${item.title}`}
-          className="self-start"
-        >
-          {t("notifications.markRead")}
-        </Button>
-      )}
+      <div className="flex flex-wrap items-start gap-2">
+        {invite && (
+          <Button asChild size="sm">
+            <Link
+              href={invite}
+              onClick={isRead ? undefined : onRead}
+              data-testid="notification-join"
+              aria-label={`${t("notifications.join")}: ${item.title}`}
+            >
+              {t("notifications.join")}
+            </Link>
+          </Button>
+        )}
+        {!isRead && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRead}
+            aria-label={`${t("notifications.markRead")}: ${item.title}`}
+            className="self-start"
+          >
+            {t("notifications.markRead")}
+          </Button>
+        )}
+      </div>
     </li>
   );
 }

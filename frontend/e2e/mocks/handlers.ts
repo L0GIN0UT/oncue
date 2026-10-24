@@ -12,6 +12,7 @@ import { createRatingHandlers } from "./handlers-rating";
 import { createProgressionHandlers, homeProgress } from "./progression";
 import { createEconomyHandlers } from "./economy";
 import { createNotificationsHandlers } from "./notifications";
+import { createSocialHandlers } from "./social";
 import { onlineModesOut, type MatchWorld } from "./match";
 import { COLLECTION_MODES } from "./ugc";
 
@@ -427,6 +428,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
     ...createProgressionHandlers(world),
     ...createEconomyHandlers(world),
     ...createNotificationsHandlers(world),
+    ...createSocialHandlers(world),
 
     // ---------------------------------------------------------------- этап 4a: онлайн
     ...(matchWorld ? createMatchHandlers(world, matchWorld) : []),
@@ -458,6 +460,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
       );
       if (!user) return problem(401, "auth.invalid_credentials");
       if (!user.verified) return problem(403, "auth.email_not_verified");
+      if (world.scenario.social?.accountBanned) return problem(403, "auth.account_banned");
       return withCookies(
         HttpResponse.json({
           status: "authenticated",
