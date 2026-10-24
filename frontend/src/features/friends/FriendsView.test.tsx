@@ -146,4 +146,19 @@ describe("FriendsView: блокировки и приватность", () => {
     await waitFor(() => expect(world.social.privacy.friend_requests).toBe("none"));
     expect(screen.getByTestId("privacy-requests-none")).toBeChecked();
   });
+
+  it("переключатель меняется сразу, при отказе сервера возвращается", async () => {
+    server.use(
+      http.put("*/api/social/v1/me/privacy", () =>
+        HttpResponse.json({ code: "social.unavailable", title: "x", status: 503 }, { status: 503 }),
+      ),
+    );
+    await open("privacy");
+    const box = await screen.findByTestId("privacy-profile");
+    expect(box).toBeChecked();
+    await userEvent.click(box);
+    expect(await screen.findByTestId("social-error")).toBeInTheDocument();
+    expect(screen.getByTestId("privacy-profile")).toBeChecked();
+    expect(world.social.privacy.profile_public).toBe(true);
+  });
 });

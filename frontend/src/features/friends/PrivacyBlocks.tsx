@@ -95,8 +95,10 @@ export function PrivacyPanel() {
   const settings = query.data;
   const update = async (patch: Partial<PrivacySettings>) => {
     const next = { ...settings, ...patch };
+    // Оптимистично: управляемый чекбокс переключается сразу, при отказе возвращаем прежнее.
+    client.setQueryData(friendsKeys.privacy, next);
     const r = await action.run("privacy", () => savePrivacy(next));
-    if (r.ok) client.setQueryData(friendsKeys.privacy, r.value);
+    client.setQueryData(friendsKeys.privacy, r.ok ? r.value : settings);
   };
 
   return (
