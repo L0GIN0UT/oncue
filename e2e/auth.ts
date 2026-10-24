@@ -59,11 +59,21 @@ export async function submitThrottled(
   button: string,
   apiPath: string,
 ): Promise<Response> {
+  return postThrottled(page, apiPath, () => page.getByRole("button", { name: button }).click());
+}
+
+/** То же для произвольного клика (кнопка без доступного имени, например `code-submit`). */
+async function postThrottled(
+  page: Page,
+  apiPath: string | string[],
+  click: () => Promise<void>,
+): Promise<Response> {
   for (let attempt = 0; attempt < 20; attempt++) {
     const response = page.waitForResponse(
-      (r) => new URL(r.url()).pathname === apiPath && r.request().method() === "POST",
+      (r) =>
+        [apiPath].flat().includes(new URL(r.url()).pathname) && r.request().method() === "POST",
     );
-    await page.getByRole("button", { name: button }).click();
+    await click();
     const done = await response;
     if (done.status() !== 429) return done;
     await page.waitForTimeout(3_000); // окно лимита nginx — 2 с на запрос; пауза здесь осознанна
@@ -81,7 +91,13 @@ export async function enterCode(page: Page, challengeId: string): Promise<void> 
     })
     .not.toBeNull();
   await page.getByTestId("code-input").fill(code!);
-  await page.getByTestId("code-submit").click();
+  // Подтверждение тоже под лимитом auth_per_ip: 429 пережидаем, как на регистрации.
+  await postThrottled(
+    page,
+    // Регистрация и сброс подтверждаются verify-email, вход с нового устройства — login/confirm.
+    ["/api/identity/v1/auth/verify-email", "/api/identity/v1/auth/login/confirm"],
+    () => page.getByTestId("code-submit").click(),
+  );
 }
 
 /** Регистрация через UI → код из письма → сессия (подтверждение входит в аккаунт). */
