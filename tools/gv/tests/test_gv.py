@@ -423,6 +423,34 @@ class TestRealtime:
         assert len(conn) >= 32 and len(sub) >= 32 and conn != sub
         assert values["CENTRIFUGO_ALLOWED_ORIGINS"] == "https://localhost"
 
+    def test_gateway_limits_come_from_environment(self) -> None:
+        """Rate и burst лимитов по IP - из GV_GATEWAY_*; зоны остаются в http-контексте."""
+        rendered = generate.render_all(load_services(ROOT))
+        env = rendered["infra/compose/.env.example"]
+        for line in (
+            "GV_GATEWAY_API_RATE=40r/s",
+            "GV_GATEWAY_API_BURST=80",
+            "GV_GATEWAY_AUTH_RATE=60r/m",
+            "GV_GATEWAY_AUTH_BURST=20",
+        ):
+            assert line in env
+        routes = rendered["infra/nginx/generated/routes.conf"]
+        assert "burst=" not in routes and "limit-api.inc" in routes
+
+        nginx = ROOT / "infra/nginx"
+        main = (nginx / "nginx.conf").read_text(encoding="utf-8")
+        assert "limit_req_zone $binary_remote_addr zone=api_per_ip" not in main
+        assert "zone=api_per_ip" not in main and "zone=auth_per_ip" not in main
+        zones = (nginx / "templates/limits.conf.template").read_text(encoding="utf-8")
+        assert "zone=api_per_ip:20m rate=${GV_GATEWAY_API_RATE}" in zones
+        assert "zone=auth_per_ip:10m rate=${GV_GATEWAY_AUTH_RATE}" in zones
+        for name, var in (("api", "API"), ("auth", "AUTH")):
+            inc = (nginx / f"templates/limit-{name}.inc.template").read_text(encoding="utf-8")
+            assert f"burst=${{GV_GATEWAY_{var}_BURST}}" in inc
+        compose = (ROOT / "infra/compose/compose.gateway.yml").read_text(encoding="utf-8")
+        for default in ("API_RATE:-40r/s", "API_BURST:-80", "AUTH_RATE:-60r/m", "AUTH_BURST:-20"):
+            assert default in compose
+
     def test_centrifugo_config(self) -> None:
         """Конфиг v6: без анонимов, без клиентских публикаций, отдельный секрет подписок."""
         import json

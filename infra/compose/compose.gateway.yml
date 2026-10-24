@@ -29,6 +29,12 @@ services:
       GV_MEDIA_SIGNING_SECRET: ${GV_MEDIA_SIGNING_SECRET:?задайте GV_MEDIA_SIGNING_SECRET}
       GV_MEDIA_ASSETS_BUCKET: ${GV_MEDIA_ASSETS_BUCKET:-gv-assets}
       GV_COSMETICS_BUCKET: ${GV_COSMETICS_BUCKET:-gv-cosmetics}
+      # Лимиты по IP (templates/limits.conf.template, limit-*.inc.template): rate вида `40r/s`,
+      # `60r/m`; burst — число. За одним NAT бывает много клиентов — на проде поднимать осознанно.
+      GV_GATEWAY_API_RATE: ${GV_GATEWAY_API_RATE:-40r/s}
+      GV_GATEWAY_API_BURST: ${GV_GATEWAY_API_BURST:-80}
+      GV_GATEWAY_AUTH_RATE: ${GV_GATEWAY_AUTH_RATE:-60r/m}
+      GV_GATEWAY_AUTH_BURST: ${GV_GATEWAY_AUTH_BURST:-20}
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../nginx/generated:/etc/nginx/generated:ro
