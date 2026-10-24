@@ -9,18 +9,28 @@ from uuid import UUID
 
 import pytest
 from bff_web_service.application.dto import (
+    AppearanceSlotCard,
+    AvatarCard,
     BadgeRef,
+    InventoryCard,
+    MyAvatar,
+    PackCard,
+    PlayerAppearanceCard,
     ProgressCard,
     PublicProgress,
     QuestsCard,
+    ShopCatalogCard,
     SubjectKind,
     Viewer,
+    WalletCard,
     WheelCard,
 )
-from bff_web_service.application.ports import UpstreamRejectedError
+from bff_web_service.application.ports import UpstreamRejectedError, UpstreamUnavailableError
 from bff_web_service.application.queries.progression import (
     GetPlayerPage,
     GetProfilePage,
+    GetShellPage,
+    GetShopPage,
     HomeProgress,
 )
 
@@ -62,7 +72,7 @@ class FakeProgression:
         return await self._do("progress", PROGRESS)  # type: ignore[return-value]  # фейк
 
     async def wallet(self, token: str) -> object:
-        return await self._do("wallet", None)
+        return await self._do("wallet", WalletCard(0, 0, 0))
 
     async def quests(self, token: str) -> QuestsCard:
         return await self._do("quests", QuestsCard([], []))  # type: ignore[return-value]  # фейк
@@ -81,6 +91,44 @@ class FakeProgression:
             raise self.public
         assert self.public is not None
         return self.public
+
+    async def my_appearance(self, token: str) -> list[AppearanceSlotCard]:
+        return await self._do("my_appearance", [AppearanceSlotCard("frame")])  # type: ignore[return-value]  # фейк
+
+    async def inventory(self, token: str) -> InventoryCard:
+        return await self._do("inventory", InventoryCard([]))  # type: ignore[return-value]  # фейк
+
+    async def my_avatar(self, token: str) -> MyAvatar:
+        return await self._do(
+            "my_avatar",
+            MyAvatar(
+                AvatarCard(entitled=True, request=None, max_bytes=1024, formats=["webp"]),
+                "/a/me.webp",
+            ),
+        )  # type: ignore[return-value]  # фейк
+
+    async def players_appearance(
+        self, token: str, user_ids: list[UUID]
+    ) -> list[PlayerAppearanceCard]:
+        return await self._do("players_appearance", [])  # type: ignore[return-value]  # фейк
+
+    async def shop_items(self, token: str) -> ShopCatalogCard:
+        return await self._do("shop_items", ShopCatalogCard([], 0, []))  # type: ignore[return-value]  # фейк
+
+    async def shop_packs(self, token: str) -> list[PackCard]:
+        return await self._do("shop_packs", [])  # type: ignore[return-value]  # фейк
+
+
+@dataclass
+class FakeNotifications:
+    count: int | Exception = 3
+    calls: list[str] = field(default_factory=list)
+
+    async def unread_count(self, token: str) -> int:
+        self.calls.append(token)
+        if isinstance(self.count, Exception):
+            raise self.count
+        return self.count
 
 
 def rejected(status: int, code: str) -> UpstreamRejectedError:
@@ -164,3 +212,77 @@ async def test_player_page_ok_and_source_failures() -> None:
         concurrency=5,  # type: ignore[arg-type]
     )
     assert not (await down(USER, PLAYER)).blocks.progress.is_ok
+
+
+async def test_player_appearance_404_does_not_become_screen_404() -> None:
+    """Игрок есть, а оформление недоступно - гаснет только блок оформления."""
+    card = PublicProgress(user_id=PLAYER, level=1, total_xp=0, badges=[])
+    fake = FakeProgression(public=card, fail={"players_appearance": rejected(404, "x.y")})
+    page = await GetPlayerPage(fake, concurrency=5)(USER, PLAYER)  # type: ignore[arg-type]
+    assert page.blocks.progress.is_ok
+    assert page.blocks.appearance is not None and not page.blocks.appearance.is_ok
+
+
+async def test_profile_appearance_needs_avatar_url_and_hides_independently() -> None:
+    fake = FakeProgression(fail={"my_avatar": UpstreamUnavailableError("progression", "t")})
+    blocks = (await GetProfilePage(fake, concurrency=5)(USER)).blocks  # type: ignore[arg-type]
+    assert blocks.progress.is_ok and blocks.inventory is not None and blocks.inventory.is_ok
+    assert blocks.avatar is not None and not blocks.avatar.is_ok
+    assert blocks.appearance is not None and not blocks.appearance.is_ok  # без адреса аватара
+
+    ok = (await GetProfilePage(FakeProgression(), concurrency=5)(USER)).blocks  # type: ignore[arg-type]
+    assert ok.appearance is not None and ok.appearance.data is not None
+    assert ok.appearance.data.custom_avatar_url == "/a/me.webp"
+
+
+async def test_shop_requires_account_without_calls() -> None:
+    fake = FakeProgression()
+    page = GetShopPage(fake, concurrency=5)  # type: ignore[arg-type]
+    with pytest.raises(UnauthenticatedError):
+        await page(Viewer())
+    with pytest.raises(ForbiddenError):
+        await page(GUEST)
+    assert fake.calls == []
+
+
+async def test_shop_billing_disabled_means_null_packs_other_failures_unavailable() -> None:
+    off = FakeProgression(fail={"shop_packs": rejected(404, "progression.billing_disabled")})
+    blocks = (await GetShopPage(off, concurrency=5)(USER)).blocks  # type: ignore[arg-type]
+    assert blocks.catalog.is_ok and blocks.packs is None
+
+    other = FakeProgression(fail={"shop_packs": rejected(404, "progression.other")})
+    blocks = (await GetShopPage(other, concurrency=5)(USER)).blocks  # type: ignore[arg-type]
+    assert blocks.packs is not None and not blocks.packs.is_ok
+
+    down = FakeProgression(fail={"shop_items": UpstreamUnavailableError("progression", "t")})
+    blocks = (await GetShopPage(down, concurrency=5)(USER)).blocks  # type: ignore[arg-type]
+    assert not blocks.catalog.is_ok and blocks.packs is not None and blocks.packs.is_ok
+
+
+async def test_shop_source_403_is_screen_error() -> None:
+    fake = FakeProgression(fail={"shop_items": rejected(403, "auth.forbidden")})
+    with pytest.raises(ForbiddenError):
+        await GetShopPage(fake, concurrency=5)(USER)  # type: ignore[arg-type]
+
+
+async def test_shell_theme_is_key_only_and_bell_only_for_users() -> None:
+    notifications = FakeNotifications()
+    shell = GetShellPage(notifications, theme_key="autumn", concurrency=5)  # type: ignore[arg-type]
+
+    for viewer in (Viewer(), GUEST, Viewer(token="x", token_rejected=True)):
+        page = await shell(viewer)
+        assert page.theme.key == "autumn" and page.bell is None
+    assert notifications.calls == []
+
+    page = await shell(USER)
+    assert page.bell is not None and page.bell.data is not None and page.bell.data.unread == 3
+    assert page.personal is True
+    assert (await shell(Viewer())).personal is False
+    assert (await shell(GUEST)).personal is True
+
+
+async def test_shell_bell_failure_is_unavailable_not_error() -> None:
+    for failure in (UpstreamUnavailableError("notifications", "t"), rejected(401, "a.b")):
+        shell = GetShellPage(FakeNotifications(count=failure), theme_key="default", concurrency=5)  # type: ignore[arg-type]
+        page = await shell(USER)
+        assert page.bell is not None and not page.bell.is_ok

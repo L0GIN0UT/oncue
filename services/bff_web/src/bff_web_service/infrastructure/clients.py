@@ -17,6 +17,10 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, Valid
 
 from bff_web_service.application.dto import (
     AnswerFormat,
+    AppearanceCard,
+    AppearanceSlotCard,
+    AvatarCard,
+    AvatarRequestCard,
     BadgeCard,
     BadgeRef,
     BoostCard,
@@ -31,11 +35,14 @@ from bff_web_service.application.dto import (
     CollectionList,
     CollectionMe,
     CollectionMode,
+    CosmeticCard,
     CustomClue,
     DailyRoundStat,
     DailyStatus,
     Difficulty,
     Domain,
+    InventoryCard,
+    InventoryEntryCard,
     Item,
     ItemShelves,
     LadderCard,
@@ -48,14 +55,17 @@ from bff_web_service.application.dto import (
     Me,
     Mode,
     ModeStart,
+    MyAvatar,
     MyMatch,
     MyMatches,
     OnlineChat,
     OnlineRules,
     OpenRoom,
     OpenRooms,
+    PackCard,
     Person,
     PersonalRecord,
+    PlayerAppearanceCard,
     Presentation,
     Preset,
     PrizeCard,
@@ -77,6 +87,8 @@ from bff_web_service.application.dto import (
     Shelf,
     ShelfItem,
     ShelfItems,
+    ShopCatalogCard,
+    ShopEntryCard,
     SpinCard,
     StreakCard,
     SubjectPick,
@@ -1433,3 +1445,200 @@ class HttpProgressionClient:
             p.total_xp,
             [BadgeRef(b.key, b.title, b.unlocked_at) for b in p.badges],
         )
+
+    async def shop_items(self, token: str) -> ShopCatalogCard:
+        """``GET /v1/shop/items``; слоты витрины — в порядке появления в ответе."""
+        body = await self._http.get("/v1/shop/items", token=token)
+        c = _parse(self._http.service, _SHOP_CATALOG, body)
+        return ShopCatalogCard(
+            items=[ShopEntryCard(e.item.dto(), e.state) for e in c.items],
+            balance=c.balance,
+            slots=list(dict.fromkeys(e.item.slot for e in c.items)),
+        )
+
+    async def shop_packs(self, token: str) -> list[PackCard]:
+        """``GET /v1/shop/packs`` (при ``billing.enabled=false`` источник отвечает 404)."""
+        body = await self._http.get("/v1/shop/packs", token=token)
+        return [
+            PackCard(
+                p.id,
+                p.key,
+                p.title,
+                p.style,
+                [i.dto() for i in p.items],
+                p.verses_amount,
+                p.price_kopecks,
+            )
+            for p in _parse(self._http.service, _PACKS, body).packs
+        ]
+
+    async def inventory(self, token: str) -> InventoryCard:
+        """``GET /v1/me/inventory``."""
+        body = await self._http.get("/v1/me/inventory", token=token)
+        inv = _parse(self._http.service, _INVENTORY, body)
+        return InventoryCard(
+            [
+                InventoryEntryCard(e.item.dto(), e.source, e.equipped, e.expires_at)
+                for e in inv.items
+            ]
+        )
+
+    async def my_appearance(self, token: str) -> list[AppearanceSlotCard]:
+        """``GET /v1/me/appearance``."""
+        body = await self._http.get("/v1/me/appearance", token=token)
+        return _parse(self._http.service, _APPEARANCE, body).dto()
+
+    async def my_avatar(self, token: str) -> MyAvatar:
+        """``GET /v1/me/avatar``."""
+        body = await self._http.get("/v1/me/avatar", token=token)
+        a = _parse(self._http.service, _AVATAR, body)
+        request = (
+            AvatarRequestCard(a.request.status, a.request.submitted_at, a.request.reason_code)
+            if a.request
+            else None
+        )
+        card = AvatarCard(a.entitled, request, a.limits.max_bytes, list(a.limits.formats))
+        return MyAvatar(card, a.current_url)
+
+    async def players_appearance(
+        self, token: str, user_ids: list[UUID]
+    ) -> list[PlayerAppearanceCard]:
+        """``GET /v1/appearance?user_ids=...`` (повторяющийся параметр; не больше 12)."""
+        query = urlencode([("user_ids", str(i)) for i in user_ids])
+        body = await self._http.get(f"/v1/appearance?{query}", token=token)
+        players = _parse(self._http.service, _PLAYERS_APPEARANCE, body).players
+        if not {p.user_id for p in players} <= set(user_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return [
+            PlayerAppearanceCard(p.user_id, AppearanceCard(p.appearance.dto(), p.custom_avatar_url))
+            for p in players
+        ]
+
+
+class _ItemViewIn(_In):
+    id: UUID
+    key: str
+    slot: str
+    rarity: str
+    title: str
+    media_kind: Literal["static", "animated"]
+    asset_url: str
+    poster_url: str | None
+    level_required: int | None
+    price: int | None
+
+    def dto(self) -> CosmeticCard:
+        return CosmeticCard(
+            self.id,
+            self.key,
+            self.slot,
+            self.rarity,
+            self.title,
+            self.media_kind,
+            self.asset_url,
+            self.poster_url,
+            self.level_required,
+            self.price,
+        )
+
+
+class _ShopItemIn(_In):
+    item: _ItemViewIn
+    state: Literal["locked", "available", "owned"]
+
+
+class _ShopCatalogIn(_In):
+    items: list[_ShopItemIn]
+    balance: int = Field(ge=0)
+
+
+class _PackIn(_In):
+    id: UUID
+    key: str
+    title: str
+    style: str
+    items: list[_ItemViewIn]
+    verses_amount: int = Field(ge=0)
+    price_kopecks: int = Field(ge=1)
+
+
+class _PacksIn(_In):
+    packs: list[_PackIn]
+
+
+class _InventoryEntryIn(_In):
+    item: _ItemViewIn
+    source: str
+    equipped: bool
+    expires_at: datetime | None
+
+
+class _InventoryIn(_In):
+    items: list[_InventoryEntryIn]
+
+
+class _AppearanceSlotIn(_In):
+    slot: str
+    item: _ItemViewIn | None
+
+
+class _AppearanceIn(_In):
+    slots: list[_AppearanceSlotIn]
+
+    def dto(self) -> list[AppearanceSlotCard]:
+        return [AppearanceSlotCard(s.slot, s.item.dto() if s.item else None) for s in self.slots]
+
+
+class _PlayerAppearanceIn(_In):
+    user_id: UUID
+    appearance: _AppearanceIn
+    custom_avatar_url: str | None
+
+
+class _PlayersAppearanceIn(_In):
+    players: list[_PlayerAppearanceIn]
+
+
+class _AvatarRequestIn(_In):
+    status: Literal["pending", "approved", "rejected"]
+    submitted_at: datetime
+    reason_code: str | None
+
+
+class _AvatarLimitsIn(_In):
+    max_bytes: int = Field(ge=1)
+    formats: list[str]
+
+
+class _AvatarIn(_In):
+    entitled: bool
+    current_url: str | None
+    request: _AvatarRequestIn | None
+    limits: _AvatarLimitsIn
+
+
+_SHOP_CATALOG = TypeAdapter(_ShopCatalogIn)
+_PACKS = TypeAdapter(_PacksIn)
+_INVENTORY = TypeAdapter(_InventoryIn)
+_APPEARANCE = TypeAdapter(_AppearanceIn)
+_PLAYERS_APPEARANCE = TypeAdapter(_PlayersAppearanceIn)
+_AVATAR = TypeAdapter(_AvatarIn)
+
+
+class _UnreadIn(_In):
+    count: int = Field(ge=0)
+
+
+_UNREAD = TypeAdapter(_UnreadIn)
+
+
+class HttpNotificationsClient:
+    """Публичный API notifications: только личное число непрочитанных, не кэшируется."""
+
+    def __init__(self, http: UpstreamHttp) -> None:
+        self._http = http
+
+    async def unread_count(self, token: str) -> int:
+        """``GET /v1/notifications/unread-count``."""
+        body = await self._http.get("/v1/notifications/unread-count", token=token)
+        return _parse(self._http.service, _UNREAD, body).count

@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from bff_web_service.application.dto import (
+    AppearanceSlotCard,
     BadgeCard,
     CatalogQuery,
     CollectionDetail,
@@ -23,6 +24,7 @@ from bff_web_service.application.dto import (
     CollectionMode,
     DailyStatus,
     Domain,
+    InventoryCard,
     Item,
     ItemShelves,
     LadderCard,
@@ -30,9 +32,12 @@ from bff_web_service.application.dto import (
     MatchResult,
     Me,
     Mode,
+    MyAvatar,
     MyMatches,
     OpenRooms,
+    PackCard,
     PersonalRecord,
+    PlayerAppearanceCard,
     ProgressCard,
     PublicProgress,
     QuestsCard,
@@ -41,6 +46,7 @@ from bff_web_service.application.dto import (
     SessionResult,
     Shelf,
     ShelfItems,
+    ShopCatalogCard,
     WalletCard,
     WeeklyTopCard,
     WheelCard,
@@ -248,6 +254,40 @@ class ProgressionClient(Protocol):
 
     async def player(self, token: str, user_id: UUID) -> PublicProgress:
         """Публичный прогресс игрока (``/v1/users/{id}/progress``). Нет игрока — 404."""
+        ...
+
+    async def shop_items(self, token: str) -> ShopCatalogCard:
+        """Витрина с состояниями и балансом (``/v1/shop/items``)."""
+        ...
+
+    async def shop_packs(self, token: str) -> list[PackCard]:
+        """Паки (``/v1/shop/packs``); при ``billing.enabled=false`` — 404 ``billing_disabled``."""
+        ...
+
+    async def inventory(self, token: str) -> InventoryCard:
+        """Инвентарь (``/v1/me/inventory``)."""
+        ...
+
+    async def my_appearance(self, token: str) -> list[AppearanceSlotCard]:
+        """Слоты оформления субъекта (``/v1/me/appearance``)."""
+        ...
+
+    async def my_avatar(self, token: str) -> MyAvatar:
+        """Своя аватарка: право, заявка, лимиты, действующий адрес (``/v1/me/avatar``)."""
+        ...
+
+    async def players_appearance(
+        self, token: str, user_ids: list[UUID]
+    ) -> list[PlayerAppearanceCard]:
+        """Оформление игроков (``/v1/appearance?user_ids=``, до 12); неизвестные пропущены."""
+        ...
+
+
+class NotificationsClient(Protocol):
+    """Публичный API notifications (5b): только личное, не кэшируется."""
+
+    async def unread_count(self, token: str) -> int:
+        """Число непрочитанных (``/v1/notifications/unread-count``)."""
         ...
 
 
