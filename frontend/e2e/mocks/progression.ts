@@ -26,6 +26,7 @@ import type {
   WheelSectorCard,
 } from "../../src/shared/api/types";
 import { csrfOk, problem, subjectOf } from "./handlers";
+import { economyProfileBlocks, itemByKey } from "./economy";
 import type { MockWorld } from "./world";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
@@ -171,10 +172,15 @@ export function profilePage(world: MockWorld, subject: string): ProfilePage {
   return {
     blocks: {
       progress: block("progress", PROGRESS),
-      wallet: block("wallet", WALLET),
+      wallet: block("wallet", {
+        ...WALLET,
+        earned: world.economy.balance,
+        total: world.economy.balance + WALLET.paid,
+      }),
       quests: block("quests", QUESTS),
       badges: block("badges", BADGES),
       wheel: block("wheel", wheelCard(world, subject)),
+      ...economyProfileBlocks(world),
     },
   };
 }
@@ -243,7 +249,16 @@ export function createProgressionHandlers(world: MockWorld): HttpHandler[] {
       const progress = down(world, "player")
         ? unavailable
         : { status: "ok" as const, data: player };
-      return HttpResponse.json({ blocks: { progress } } satisfies PlayerPage, {
+      const appearance = down(world, "appearance")
+        ? unavailable
+        : {
+            status: "ok" as const,
+            data: {
+              custom_avatar_url: null,
+              slots: [{ slot: "title", item: itemByKey("champion") }],
+            },
+          };
+      return HttpResponse.json({ blocks: { progress, appearance } } satisfies PlayerPage, {
         headers: NO_STORE,
       });
     }),

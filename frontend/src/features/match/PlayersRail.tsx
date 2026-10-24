@@ -9,6 +9,8 @@ import { Crown, WifiOff } from "lucide-react";
 import type { MatchPlayerView, PlayerSlot } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
+import { usePlayersAppearance } from "@/features/cosmetics/api";
+import { PlayerBadge } from "@/features/cosmetics/PlayerBadge";
 import type { FeedItem } from "./room-store";
 
 const STATUS_STYLE = {
@@ -32,6 +34,8 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
   const dt = useDynamicT();
   const byUser = new Map((matchPlayers ?? []).map((p) => [p.user_id, p]));
   const sorted = [...players].sort((a, b) => a.slot - b.slot);
+  // Оформление необязательно: нет ответа или отказ — ник без аватара и рамки.
+  const appearances = usePlayersAppearance(players.map((p) => p.user_id));
   return (
     <ul
       className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
@@ -53,20 +57,23 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
             )}
           >
             <div className="flex min-w-0 flex-1 flex-col">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span className="truncate" dir="auto">
-                  {p.nickname}
-                </span>
-                {p.is_host && (
-                  <Crown
-                    className="size-4 shrink-0 text-[var(--color-music)]"
-                    aria-label={t("match.host")}
-                  />
-                )}
-                {p.user_id === myId && (
-                  <span className="text-sm text-ink-faint">{t("match.you")}</span>
-                )}
-              </span>
+              <PlayerBadge
+                nickname={p.nickname}
+                appearance={appearances.get(p.user_id)}
+                suffix={
+                  <>
+                    {p.is_host && (
+                      <Crown
+                        className="size-4 shrink-0 text-[var(--color-music)]"
+                        aria-label={t("match.host")}
+                      />
+                    )}
+                    {p.user_id === myId && (
+                      <span className="text-sm text-ink-faint">{t("match.you")}</span>
+                    )}
+                  </>
+                }
+              />
               <span className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
                 {p.presence === "disconnected" && (
                   <span

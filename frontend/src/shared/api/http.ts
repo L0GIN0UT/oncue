@@ -22,7 +22,12 @@ function shouldRefresh(code: string | null, csrfAtRequest: string | null): boole
 }
 
 function prepare(request: Request): Request {
-  const headers = new Headers(request.headers);
+  // Копия заголовков перебором. Воспроизведение — AvatarBlock.test.tsx («превью, отправка multipart…»): у multipart-запроса в
+  // окружении vitest (jsdom + undici) `new Headers(request.headers)` оставляла только
+  // `content-type` с границей и теряла `Idempotency-Key`. Причина в среде не выяснена,
+  // перебор безопасен везде.
+  const headers = new Headers();
+  request.headers.forEach((value, name) => headers.append(name, value));
   if (!SAFE_METHODS.has(request.method)) {
     const csrf = csrfToken();
     if (csrf) headers.set(CSRF_HEADER, csrf);

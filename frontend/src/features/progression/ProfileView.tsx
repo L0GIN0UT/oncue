@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type {
+  AppearanceCard,
   BadgeCard,
   ProfilePage,
   ProgressCard,
@@ -20,9 +21,13 @@ import type {
 } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
-import { useViewer } from "@/features/auth/session";
+import { blockData, hasBlock } from "@/shared/api/blocks";
+import { useSessionInfo, useViewer } from "@/features/auth/session";
+import { PlayerBadge, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
 import { fetchProfilePage, profileQueryKey } from "./api";
 import { isMaxLevel } from "./logic";
+import { AvatarBlock } from "./AvatarBlock";
+import { PromoBlock } from "./PromoBlock";
 import { WheelBlock } from "./WheelBlock";
 import { XpBar } from "./XpBar";
 
@@ -106,8 +111,10 @@ export function ProfileView() {
 
 function ProfileBlocks({ blocks }: { blocks: ProfilePage["blocks"] }) {
   const t = useTranslations();
+  const appearance = blockData(blocks.appearance);
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      <IdentityCard appearance={appearance} />
       <Section id="level" title={t("progression.level.title")} block={blocks.progress}>
         {(p: ProgressCard) => <LevelCard progress={p} />}
       </Section>
@@ -123,7 +130,35 @@ function ProfileBlocks({ blocks }: { blocks: ProfilePage["blocks"] }) {
       <Section id="wheel" title={t("progression.wheel.title")} block={blocks.wheel}>
         {(w) => <WheelBlock wheel={w} />}
       </Section>
+      <Section id="promo" title={t("promo.title")} block={{ status: "ok", data: true }}>
+        {() => <PromoBlock />}
+      </Section>
+      {hasBlock(blocks.avatar) && (
+        <Section id="avatar" title={t("avatar.title")} block={blocks.avatar ?? undefined} wide>
+          {(a) => <AvatarBlock avatar={a} currentUrl={appearance?.custom_avatar_url} />}
+        </Section>
+      )}
     </div>
+  );
+}
+
+/** Шапка профиля: ник, аватар, рамка и титул на выбранном фоне; ссылка в магазин. */
+function IdentityCard({ appearance }: { appearance: AppearanceCard | null }) {
+  const t = useTranslations();
+  const { data } = useSessionInfo();
+  const name = data?.subject?.display_name ?? t("nav.player");
+  return (
+    <ProfileBackdrop
+      appearance={appearance}
+      className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule lg:col-span-2"
+    >
+      <PlayerBadge nickname={name} appearance={appearance} size="lg" />
+      <Button asChild variant="secondary">
+        <Link href="/shop" data-testid="to-shop">
+          {t("nav.shop")}
+        </Link>
+      </Button>
+    </ProfileBackdrop>
   );
 }
 
