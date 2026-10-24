@@ -411,3 +411,16 @@ async def test_social_removal_takes_approved_avatar_down_idempotently(media: Any
 async def test_social_removal_of_unknown_asset_is_noop(media: Any) -> None:
     assert await _removal(media).execute(uuid7(), moderator_id=MODERATOR, case_id=uuid7()) is False
     assert media.db.events == []
+
+
+async def test_social_removal_of_already_rejected_asset_logs_skip(media: Any) -> None:
+    from structlog.testing import capture_logs
+
+    view = await _approved(media)
+    removal = _removal(media)
+    await removal.execute(view.asset_id, moderator_id=MODERATOR, case_id=uuid7())
+    with capture_logs() as logs:
+        assert (
+            await removal.execute(view.asset_id, moderator_id=MODERATOR, case_id=uuid7()) is False
+        )
+    assert [e["event"] for e in logs] == ["ugc.removal_skipped"]

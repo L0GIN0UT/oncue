@@ -16,6 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path, Query, Response
 
 from gv_auth import Principal, require_perm
+from gv_core.errors import ForbiddenError
 from gv_service import IdempotencyKey, problem_responses
 from social_service.api.admin.services import AdminServices
 from social_service.api.schemas import (
@@ -38,6 +39,16 @@ CaseIdPath = Annotated[UUID, Path(description="Идентификатор кей
 
 def _staff(principal: Principal) -> Staff:
     return Staff(user_id=principal.user_id, perms=principal.perms)
+
+
+def _require_sanction_perms(principal: Principal, kind: str | None) -> None:
+    """Права на санкцию проверяются здесь, не полагаясь на реализацию гранта (ADR 0052)."""
+    if not principal.has_all("social.sanctions.manage"):
+        raise ForbiddenError("недостаточно прав", code="auth.forbidden")
+    if kind == "account" and not principal.has_all("social.sanctions.account"):
+        raise ForbiddenError(
+            "бан аккаунта требует отдельного права", code="social.account_sanction_forbidden"
+        )
 
 
 def register_case_routes(router: APIRouter, services: AdminServices) -> None:
@@ -142,6 +153,8 @@ def register_case_routes(router: APIRouter, services: AdminServices) -> None:
         key: IdempotencyKey,
         response: Response,
     ) -> CaseDetail:
+        if body.decision == "sanctioned":
+            _require_sanction_perms(moderator, body.sanction.kind if body.sanction else None)
         sanction = (
             SanctionSpec(body.sanction.kind, body.sanction.duration_s, body.sanction.reason)
             if body.sanction is not None

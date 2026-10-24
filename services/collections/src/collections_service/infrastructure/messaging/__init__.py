@@ -81,6 +81,7 @@ class _ModeratedPayload(_Payload):
     moderator_id: UUID
     target_id: UUID
     target_kind: str
+    target_user_id: UUID
 
 
 class _UserDeletedPayload(_Payload):
@@ -160,7 +161,11 @@ def build_event_handlers(container: CollectionsContainer) -> EventHandlerRegistr
             return  # остальные решения (комментарии, аватарки, санкции) сборников не касаются
         async with container.uow_factory(session)() as uow:
             await container.moderation.content_removed(
-                uow, p.target_id, case_id=p.case_id, moderator_id=p.moderator_id
+                uow,
+                p.target_id,
+                case_id=p.case_id,
+                moderator_id=p.moderator_id,
+                target_user_id=p.target_user_id,
             )
             await uow.commit()
 

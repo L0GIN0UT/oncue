@@ -181,7 +181,13 @@ class ModerationEvents:
         self._clock = clock
 
     async def content_removed(
-        self, uow: CollectionsUnitOfWork, collection_id: UUID, *, case_id: UUID, moderator_id: UUID
+        self,
+        uow: CollectionsUnitOfWork,
+        collection_id: UUID,
+        *,
+        case_id: UUID,
+        moderator_id: UUID,
+        target_user_id: UUID,
     ) -> bool:
         """``social.ContentModerated`` (content_removed, collection): скрыть сборник.
 
@@ -194,6 +200,14 @@ class ModerationEvents:
         collection = await uow.collections.get(collection_id, for_update=True)
         if collection is None or collection.state.status is not Status.PUBLISHED:
             log.info("collections.moderation_skipped", collection_id=str(collection_id))
+            return False
+        if not collection.is_author(target_user_id):
+            # Событие о чужом объекте (рассинхрон или подмена id): скрывать нельзя.
+            log.warning(
+                "collections.moderation_author_mismatch",
+                collection_id=str(collection_id),
+                case_id=str(case_id),
+            )
             return False
         now = self._clock.now()
         collection.hide(reason=f"social.case:{case_id}", actor_id=moderator_id, now=now)

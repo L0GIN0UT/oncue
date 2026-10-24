@@ -19,6 +19,7 @@ pytestmark = pytest.mark.component
 
 MODERATE = ("admin.access", "social.moderate")
 SENIOR = ("admin.access", "social.moderate", "social.sanctions.account")
+SANCTIONER = (*MODERATE, "social.sanctions.manage")
 REASON = "решение по правилам"
 SPAM_TEXT = "очень секретный текст жалобы"
 
@@ -179,16 +180,40 @@ async def test_sanctioned_goes_through_granter_and_failure_rolls_everything_back
     sanction = {"kind": "chat", "duration_s": 3600, "reason": "оскорбления"}
     social.granter.error = ForbiddenError("себе нельзя", code="social.self_sanction_forbidden")
     body = {"version": 2, "decision": "sanctioned", "sanction": sanction, "reason": REASON}
-    failed = await env.act("resolve", body)
+    failed = await env.act("resolve", body, social.auth(env.moderator, perms=SANCTIONER))
     assert_problem(failed, 403, "social.self_sanction_forbidden")
     (case,) = await social.rows(t.moderation_cases)
     assert (case.status, case.version) == ("in_work", 2)
     assert not await social.outbox_events("social.ContentModerated")
 
     social.granter.error = None
-    ok = await env.act("resolve", body)
+    ok = await env.act("resolve", body, social.auth(env.moderator, perms=SANCTIONER))
     assert ok.status_code == 200, ok.text
     (grant,) = social.granter.grants
     assert grant.user_id == env.commenter and grant.kind == "chat" and grant.duration_s == 3600
     assert grant.actor_id == env.moderator
     assert len(await social.outbox_events("social.ContentModerated")) == 1
+
+
+async def test_claim_audit_has_no_hardcoded_reason(social: SocialService) -> None:
+    env = Env(social)
+    await env.open_case()
+    await env.act("claim", {"version": 1})
+    (audit,) = [r for r in await social.rows(t.moderation_audit) if r.action == "case.claim"]
+    assert audit.reason == ""
+
+
+async def test_sanctioned_requires_manage_and_account_perms_in_api(social: SocialService) -> None:
+    env = Env(social)
+    await env.open_case()
+    await env.act("claim", {"version": 1})
+    sanction = {"kind": "chat", "duration_s": 3600, "reason": "оскорбления"}
+    body = {"version": 2, "decision": "sanctioned", "sanction": sanction, "reason": REASON}
+    denied = await env.act("resolve", body)
+    assert_problem(denied, 403, "auth.forbidden")
+    account = {**body, "sanction": {"kind": "account", "duration_s": None, "reason": "бан"}}
+    denied = await env.act("resolve", account, social.auth(env.moderator, perms=SANCTIONER))
+    assert_problem(denied, 403, "social.account_sanction_forbidden")
+    assert not social.granter.grants
+    (case,) = await social.rows(t.moderation_cases)
+    assert (case.status, case.version) == ("in_work", 2)

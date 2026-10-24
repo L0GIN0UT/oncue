@@ -205,6 +205,14 @@ def known_sources(items: Sequence[_SourceMediaPayload]) -> tuple[CatalogSource, 
     return tuple(sources)
 
 
+class _ContentModeratedPayload(_Payload):
+    case_id: UUID
+    decision: str
+    moderator_id: UUID
+    target_id: UUID
+    target_kind: str
+
+
 def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
     """Реестр обработчиков событий catalog, game и collections."""
     registry = EventHandlerRegistry()
@@ -278,14 +286,6 @@ def build_event_handlers(container: MediaContainer) -> EventHandlerRegistry:
     registry.register(ITEM_BLOCKED, on_status(ItemStatus.BLOCKED))
     registry.register(ITEM_UNBLOCKED, on_status(ItemStatus.ACTIVE))
     return registry
-
-
-class _ContentModeratedPayload(_Payload):
-    case_id: UUID
-    decision: str
-    moderator_id: UUID
-    target_id: UUID
-    target_kind: str
 
 
 class _GeneratePayload(_Payload):

@@ -157,7 +157,7 @@ class CaseService:
                 updated = rules.claim(case, staff.user_id, version)
                 if updated is not case:
                     await self._save(uow, updated, case.version)
-                    await self._audit(uow, staff, "case.claim", case_id, "взят в работу", {})
+                    await self._audit(uow, staff, "case.claim", case_id, "", {})
                 return summary(updated)
 
             data, _ = await run_idempotent(

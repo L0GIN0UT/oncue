@@ -138,7 +138,9 @@ class RemoveModeratedUgcImage:
             log.warning("ugc.removal_unknown_asset", asset_id=str(asset_id))
             return False
         except UgcNotPendingError:
-            return False  # уже отклонено (в том числе прошлой доставкой)
+            # Уже отклонено/замещено (в том числе прошлой доставкой): решение пропускаем.
+            log.info("ugc.removal_skipped", asset_id=str(asset_id), case_id=str(case_id))
+            return False
         return True
 
 

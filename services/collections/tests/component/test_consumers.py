@@ -219,7 +219,7 @@ async def _moderated(svc: Any, target: UUID | str, **changes: Any) -> Outcome:
 async def test_content_removed_hides_collection_once(svc: Any) -> None:
     author, player = svc.user(), svc.user()
     cid = (await svc.published(author))["collection_id"]
-    assert await _moderated(svc, cid) is Outcome.PROCESSED
+    assert await _moderated(svc, cid, target_user_id=str(author.user_id)) is Outcome.PROCESSED
     (event,) = await svc.events("collections.CollectionUpdated", cid)
     assert_event_matches_schema(event)
     assert event.payload["status"] == "hidden"
@@ -230,9 +230,32 @@ async def test_content_removed_hides_collection_once(svc: Any) -> None:
     )
     assert audit.action == "collection.hide" and audit.details["source"] == "social"
     # Повтор под другим event_id и событие по неизвестному сборнику - без изменений.
-    assert await _moderated(svc, cid) is Outcome.PROCESSED
+    assert await _moderated(svc, cid, target_user_id=str(author.user_id)) is Outcome.PROCESSED
     assert await _moderated(svc, uuid7()) is Outcome.PROCESSED
     assert len(await svc.events("collections.CollectionUpdated", cid)) == 1
+
+
+async def test_content_removed_with_foreign_target_user_is_skipped(svc: Any) -> None:
+    author = svc.user()
+    cid = (await svc.published(author))["collection_id"]
+    outcome = await _moderated(svc, cid, target_user_id=str(uuid7()))
+    assert outcome is Outcome.PROCESSED
+    assert await svc.events("collections.CollectionUpdated", cid) == []
+
+
+async def test_author_cannot_undo_moderation_hide(svc: Any) -> None:
+    author = svc.user()
+    cid = (await svc.published(author))["collection_id"]
+    assert await _moderated(svc, cid, target_user_id=str(author.user_id)) is Outcome.PROCESSED
+    draft = await svc.client.get(f"/v1/collections/{cid}/draft", headers=author.headers)
+    revision = draft.json()["revision"]
+    body = draft.json()["body"]
+    saved = await svc.save(author, cid, body, base=revision)
+    assert_problem(saved, 409, "collections.hidden")
+    published = await svc.publish(author, cid, max(revision, 1))
+    assert_problem(published, 409, "collections.hidden")
+    card = await svc.client.get(f"/v1/collections/{cid}", headers=svc.user().headers)
+    assert card.status_code == 404
 
 
 @pytest.mark.parametrize(
