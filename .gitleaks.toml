@@ -12,3 +12,11 @@ regexes = [
   '''^(daily|weekly|once)_[a-z0-9_]+$''',
   '''^idem-[0-9a-z-]+$''',
 ]
+
+[[rules.allowlists]]
+description = "Тестовые файлы целиком: фикстуры вроде SECRET = «tok-…» и Idempotency-Key — не секреты"
+paths = [
+  '''(^|/)tests?/''',
+  '''\.test\.tsx?$''',
+  '''\.spec\.tsx?$''',
+]
