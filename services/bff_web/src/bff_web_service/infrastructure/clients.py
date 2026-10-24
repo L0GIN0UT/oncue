@@ -35,12 +35,15 @@ from bff_web_service.application.dto import (
     CollectionList,
     CollectionMe,
     CollectionMode,
+    CommentCard,
+    CommentsCard,
     CosmeticCard,
     CustomClue,
     DailyRoundStat,
     DailyStatus,
     Difficulty,
     Domain,
+    FriendCard,
     InventoryCard,
     InventoryEntryCard,
     Item,
@@ -66,6 +69,7 @@ from bff_web_service.application.dto import (
     Person,
     PersonalRecord,
     PlayerAppearanceCard,
+    PlayerRelation,
     Presentation,
     Preset,
     PrizeCard,
@@ -81,6 +85,8 @@ from bff_web_service.application.dto import (
     RoomSettings,
     RoundPlayerResult,
     RoundsChoice,
+    SanctionCard,
+    SanctionsCard,
     SeasonCard,
     SessionResult,
     Share,
@@ -1642,3 +1648,118 @@ class HttpNotificationsClient:
         """``GET /v1/notifications/unread-count``."""
         body = await self._http.get("/v1/notifications/unread-count", token=token)
         return _parse(self._http.service, _UNREAD, body).count
+
+
+# ----------------------------------------------------------------------------- social (5c)
+class _RelationIn(_In):
+    profile_visible: bool
+    stats_visible: bool
+    is_friend: bool
+    can_send_request: bool
+    blocked_by_me: bool
+
+
+class _FriendIn(_In):
+    user_id: UUID
+    nickname: str
+    status: Literal["online", "in_match", "offline"]
+
+
+class _FriendListIn(_In):
+    items: list[_FriendIn]
+
+
+class _RequestsIn(_In):
+    incoming: list[JsonValue]
+
+
+class _CommentIn(_In):
+    id: UUID
+    author_id: UUID
+    author_nickname: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None
+    can_edit: bool
+    can_delete: bool
+
+
+class _CommentPageIn(_In):
+    items: list[_CommentIn]
+    total: int = Field(ge=0)
+    next_cursor: str | None
+
+
+class _SanctionIn(_In):
+    kind: Literal["ranked", "chat", "online", "account"]
+    expires_at: datetime | None
+    reason: str
+
+
+class _SanctionListIn(_In):
+    items: list[_SanctionIn]
+
+
+_RELATION = TypeAdapter(_RelationIn)
+_FRIENDS = TypeAdapter(_FriendListIn)
+_REQUESTS = TypeAdapter(_RequestsIn)
+_COMMENTS = TypeAdapter(_CommentPageIn)
+_SANCTIONS = TypeAdapter(_SanctionListIn)
+
+
+class HttpSocialClient:
+    """Публичный API social: личное и комментарии; не кэшируется (ответ зависит от зрителя)."""
+
+    def __init__(self, http: UpstreamHttp) -> None:
+        self._http = http
+
+    async def relation(self, token: str, user_id: UUID) -> PlayerRelation:
+        """``GET /v1/players/{id}/relation``."""
+        body = await self._http.get(f"/v1/players/{user_id}/relation", token=token)
+        r = _parse(self._http.service, _RELATION, body)
+        return PlayerRelation(
+            r.profile_visible, r.stats_visible, r.is_friend, r.can_send_request, r.blocked_by_me
+        )
+
+    async def friends(self, token: str) -> list[FriendCard]:
+        """``GET /v1/me/friends``."""
+        body = await self._http.get("/v1/me/friends", token=token)
+        listed = _parse(self._http.service, _FRIENDS, body)
+        return [FriendCard(f.user_id, f.nickname, f.status) for f in listed.items]
+
+    async def incoming_requests(self, token: str) -> int:
+        """``GET /v1/me/friend-requests`` - число входящих."""
+        body = await self._http.get("/v1/me/friend-requests", token=token)
+        return len(_parse(self._http.service, _REQUESTS, body).incoming)
+
+    async def comments(self, token: str | None, collection_id: UUID, *, limit: int) -> CommentsCard:
+        """``GET /v1/collections/{id}/comments?limit=`` (без токена - как аноним)."""
+        body = await self._http.get(
+            f"/v1/collections/{collection_id}/comments",
+            token=token,
+            params={"limit": str(limit)},
+        )
+        page = _parse(self._http.service, _COMMENTS, body)
+        return CommentsCard(
+            [
+                CommentCard(
+                    c.id,
+                    c.author_id,
+                    c.author_nickname,
+                    c.body,
+                    c.created_at,
+                    c.edited_at,
+                    c.can_edit,
+                    c.can_delete,
+                )
+                for c in page.items
+            ],
+            page.total,
+            page.next_cursor,
+        )
+
+    async def sanctions(self, token: str) -> SanctionsCard:
+        """``GET /v1/me/sanctions``."""
+        body = await self._http.get("/v1/me/sanctions", token=token)
+        listed = _parse(self._http.service, _SANCTIONS, body)
+        return SanctionsCard([SanctionCard(s.kind, s.expires_at, s.reason) for s in listed.items])

@@ -28,9 +28,11 @@ from bff_web_service.application.dto import (
 from bff_web_service.application.ports import (
     CollectionsClient,
     GameClient,
+    SocialClient,
     UpstreamRejectedError,
 )
-from bff_web_service.application.queries.common import Limiter, block_of, screen_error
+from bff_web_service.application.queries.common import Limiter, block_of, maybe, screen_error
+from bff_web_service.application.queries.rating import user_token
 from bff_web_service.domain import Block
 
 log = structlog.get_logger(__name__)
@@ -107,9 +109,16 @@ class GetCollectionPage:
     """Страница сборника: карточка (collections) + режимы с играбельностью (game) + ``me``."""
 
     def __init__(
-        self, collections: CollectionsClient, game: GameClient, *, concurrency: int
+        self,
+        collections: CollectionsClient,
+        game: GameClient,
+        *,
+        concurrency: int,
+        social: SocialClient | None = None,
+        comments_limit: int = 30,
     ) -> None:
         self._collections, self._game, self._concurrency = collections, game, concurrency
+        self._social, self._comments_limit = social, comments_limit
 
     async def __call__(self, viewer: Viewer, collection_id: UUID) -> CollectionPage:
         """Собрать страницу.
@@ -120,9 +129,19 @@ class GetCollectionPage:
             UnauthenticatedError / ForbiddenError: collections не принял токен.
         """
         limiter = Limiter(self._concurrency)
-        detail, modes = await asyncio.gather(
+        # Комментарии читают и анонимы; токен нужен только ради `can_edit`/`can_delete`.
+        # Гостю и отвергнутому токену он не уходит. Скрытый сборник отсекает 404 карточки.
+        comments_call = (
+            limiter.attempt(
+                self._social.comments(user_token(viewer), collection_id, limit=self._comments_limit)
+            )
+            if self._social is not None
+            else None
+        )
+        detail, modes, comments = await asyncio.gather(
             limiter.attempt(self._collections.detail(viewer.token, collection_id)),
             limiter.attempt(self._game.collection_modes(collection_id)),
+            maybe(comments_call),
         )
         if isinstance(detail, UpstreamRejectedError) and (
             error := screen_error(detail, not_found="сборник не найден")
@@ -130,8 +149,11 @@ class GetCollectionPage:
             raise error
         collection: Block[CollectionDetail] = block_of(detail, "collection")
         modes_block = block_of(modes, "collection.modes")
+        comments_block = None if comments is None else block_of(comments, "collection.comments")
         return CollectionPage(
-            blocks=CollectionBlocks(collection=collection, modes=modes_block),
+            blocks=CollectionBlocks(
+                collection=collection, modes=modes_block, comments=comments_block
+            ),
             personal=viewer.is_personal,
             me=collection_me(viewer, collection.data),
         )

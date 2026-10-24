@@ -12,7 +12,7 @@ class UpstreamSettings(BaseModel):
 
     Attributes:
         game_url / catalog_url / identity_url / collections_url / library_url / match_url /
-        rating_url / progression_url / notifications_url:
+        rating_url / progression_url / notifications_url / social_url:
             Внутренние адреса (``GV_UPSTREAMS__GAME_URL``, ``GV_UPSTREAMS__MATCH_URL`` …).
         timeout_s: Общий таймаут одного вызова: медленный источник не держит страницу.
         max_concurrency: Одновременных вызовов на один запрос страницы.
@@ -32,6 +32,7 @@ class UpstreamSettings(BaseModel):
     rating_url: str = "http://rating:8000"
     progression_url: str = "http://progression:8000"
     notifications_url: str = "http://notifications:8000"
+    social_url: str = "http://social:8000"
     timeout_s: float = Field(default=1.5, gt=0, le=30)
     max_concurrency: int = Field(default=10, ge=1, le=100)
     breaker_failures: int = Field(default=5, ge=1)
@@ -103,6 +104,8 @@ class PagesSettings(BaseModel):
             наборы токенов лежат во фронтенде; в 5d ключ придёт от сезонного события).
         appearance_batch_size: Игроков в одном вызове ``progression /v1/appearance``
             (предел источника — 12); больше игроков матча режутся на пачки.
+        comments_limit: Комментариев в первой странице блока ``comments`` страницы сборника
+            (дальше — курсор social напрямую; предел источника — 100).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -121,6 +124,7 @@ class PagesSettings(BaseModel):
     home_progress_deadline_s: float = Field(default=1.5, gt=0, le=30)
     default_theme_key: str = Field(default="default", pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
     appearance_batch_size: int = Field(default=12, ge=1, le=12)
+    comments_limit: int = Field(default=30, ge=1, le=100)
 
 
 class Settings(ServiceSettings):

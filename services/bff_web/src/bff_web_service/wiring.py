@@ -39,6 +39,7 @@ from bff_web_service.infrastructure.clients import (
     HttpNotificationsClient,
     HttpProgressionClient,
     HttpRatingClient,
+    HttpSocialClient,
 )
 from bff_web_service.infrastructure.http import CircuitBreaker, UpstreamHttp
 from bff_web_service.settings import Settings
@@ -90,6 +91,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
     )
     progression = HttpProgressionClient(upstream("progression", up.progression_url))
     notifications = HttpNotificationsClient(upstream("notifications", up.notifications_url))
+    social = HttpSocialClient(upstream("social", up.social_url))
     pages = settings.pages
     layout = PageLayout.of(
         random_source_types=pages.random_source_types,
@@ -110,10 +112,13 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             ),
         ),
         get_profile=GetProfilePage(progression, concurrency=up.max_concurrency),
-        get_player=GetPlayerPage(progression, concurrency=up.max_concurrency),
+        get_player=GetPlayerPage(progression, concurrency=up.max_concurrency, social=social),
         get_shop=GetShopPage(progression, concurrency=up.max_concurrency),
         get_shell=GetShellPage(
-            notifications, theme_key=pages.default_theme_key, concurrency=up.max_concurrency
+            notifications,
+            social=social,
+            theme_key=pages.default_theme_key,
+            concurrency=up.max_concurrency,
         ),
         get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),
         get_results=GetResultsPage(game, catalog, concurrency=up.max_concurrency),
@@ -123,7 +128,13 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             showcase_limit=pages.collections_showcase_limit,
             results_limit=pages.collections_results_limit,
         ),
-        get_collection=GetCollectionPage(collections, game, concurrency=up.max_concurrency),
+        get_collection=GetCollectionPage(
+            collections,
+            game,
+            social=social,
+            concurrency=up.max_concurrency,
+            comments_limit=pages.comments_limit,
+        ),
         get_library=GetLibraryPage(library, concurrency=up.max_concurrency),
         get_library_shelf=GetLibraryShelfPage(
             library, concurrency=up.max_concurrency, items_limit=pages.library_items_limit
@@ -132,6 +143,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             match,
             game,
             rating,
+            social=social,
             concurrency=up.max_concurrency,
             rooms_limit=pages.online_rooms_limit,
             matches_limit=pages.online_matches_limit,

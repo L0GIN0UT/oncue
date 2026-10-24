@@ -19,10 +19,14 @@ from bff_web_service.application.dto import (
     MyAvatar,
     PlayerBlocks,
     PlayerPage,
+    PlayerRelation,
+    PlayerSocialCard,
     ProfileBlocks,
     ProfilePage,
     ProgressCard,
+    PublicProgress,
     QuestsCard,
+    SanctionsCard,
     ShellPage,
     ShopBlocks,
     ShopPage,
@@ -34,6 +38,7 @@ from bff_web_service.application.dto import (
 from bff_web_service.application.ports import (
     NotificationsClient,
     ProgressionClient,
+    SocialClient,
     UpstreamRejectedError,
     UpstreamUnavailableError,
 )
@@ -43,7 +48,9 @@ from bff_web_service.application.queries.common import (
     HTTP_NOT_FOUND,
     HTTP_UNAUTHORIZED,
     Limiter,
+    UpstreamError,
     block_of,
+    maybe,
     screen_error,
 )
 from bff_web_service.application.queries.rating import user_token
@@ -119,11 +126,24 @@ class GetProfilePage:
 class GetPlayerPage:
     """Профиль чужого игрока: публичный прогресс (уровень, опыт, бейджи). Только с аккаунтом."""
 
-    def __init__(self, progression: ProgressionClient, *, concurrency: int) -> None:
+    def __init__(
+        self,
+        progression: ProgressionClient,
+        *,
+        concurrency: int,
+        social: SocialClient | None = None,
+    ) -> None:
         self._progression, self._concurrency = progression, concurrency
+        self._social = social
 
     async def __call__(self, viewer: Viewer, user_id: UUID) -> PlayerPage:
         """Собрать страницу.
+
+        Приватность (5c): сначала отношение из social. Скрытый профиль, блокировка и
+        неизвестный игрок неразличимы — ``restricted``, статистика не запрашивается. Скрытая
+        статистика при видимом профиле — ``progress`` ``unavailable`` без вызова progression.
+        Social недоступен — статистика чужого игрока не отдаётся (приватность важнее
+        доступности), оформление остаётся.
 
         Raises:
             UnauthenticatedError: аноним или progression не принял токен.
@@ -137,8 +157,33 @@ class GetPlayerPage:
                 "профиль игрока доступен только пользователям", code=GUEST_FORBIDDEN
             )
         limiter = Limiter(self._concurrency)
+        # Свой профиль и социальные ограничения не касаются: social не вызывается.
+        is_self = viewer.user_id is not None and viewer.user_id == user_id
+        relation: PlayerRelation | UpstreamError | None = None
+        if self._social is not None and not is_self:
+            relation = await limiter.attempt(self._social.relation(viewer.token, user_id))
+        social_block: Block[PlayerSocialCard] | None = None
+        if relation is not None:
+            social_block = (
+                Block.ok(
+                    PlayerSocialCard(
+                        relation.is_friend, relation.can_send_request, relation.blocked_by_me
+                    )
+                )
+                if isinstance(relation, PlayerRelation)
+                else block_of(relation, "player.social")
+            )
+        stats_allowed = relation is None or (
+            isinstance(relation, PlayerRelation) and relation.stats_visible
+        )
+        restricted = isinstance(relation, PlayerRelation) and not relation.profile_visible
+        stats_call = (
+            limiter.attempt(self._progression.player(viewer.token, user_id))
+            if stats_allowed and not restricted
+            else None
+        )
         result, looks = await asyncio.gather(
-            limiter.attempt(self._progression.player(viewer.token, user_id)),
+            maybe(stats_call),
             limiter.attempt(self._progression.players_appearance(viewer.token, [user_id])),
         )
         if isinstance(result, UpstreamRejectedError) and (
@@ -153,8 +198,12 @@ class GetPlayerPage:
             appearance = Block.ok(mine or AppearanceCard(slots=[]))
         else:
             appearance = block_of(looks, "player.appearance")
+        progress: Block[PublicProgress] = (
+            Block.unavailable() if result is None else block_of(result, "player.progress")
+        )
         return PlayerPage(
-            blocks=PlayerBlocks(progress=block_of(result, "player.progress"), appearance=appearance)
+            blocks=PlayerBlocks(progress=progress, appearance=appearance, social=social_block),
+            restricted=restricted,
         )
 
 
@@ -198,25 +247,42 @@ class GetShellPage:
     """Оболочка: ключ темы (настройка) и колокольчик (только пользователю)."""
 
     def __init__(
-        self, notifications: NotificationsClient, *, theme_key: str, concurrency: int
+        self,
+        notifications: NotificationsClient,
+        *,
+        theme_key: str,
+        concurrency: int,
+        social: SocialClient | None = None,
     ) -> None:
         self._notifications, self._theme_key = notifications, theme_key
         self._concurrency = concurrency
+        self._social = social
 
     async def __call__(self, viewer: Viewer) -> ShellPage:
-        """Собрать оболочку; сбой notifications гасит только колокольчик."""
+        """Собрать оболочку; сбой notifications гасит колокольчик, social — санкции."""
         theme = ThemeCard(key=self._theme_key)
         token = user_token(viewer)
         bell: Block[BellCard] | None = None
+        sanctions: Block[SanctionsCard] | None = None
         if token is not None:
-            count = await Limiter(self._concurrency).attempt(
-                self._notifications.unread_count(token)
+            limiter = Limiter(self._concurrency)
+            count, banned = await asyncio.gather(
+                limiter.attempt(self._notifications.unread_count(token)),
+                maybe(
+                    limiter.attempt(self._social.sanctions(token))
+                    if self._social is not None
+                    else None
+                ),
             )
             if isinstance(count, UpstreamUnavailableError | UpstreamRejectedError):
                 bell = block_of(count, "shell.bell")
             else:
                 bell = Block.ok(BellCard(unread=count))
-        return ShellPage(theme=theme, bell=bell, personal=viewer.token is not None)
+            if banned is not None:
+                sanctions = block_of(banned, "shell.sanctions")
+        return ShellPage(
+            theme=theme, bell=bell, personal=viewer.token is not None, sanctions=sanctions
+        )
 
 
 def _raise_auth_failure(*results: object) -> None:

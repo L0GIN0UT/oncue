@@ -178,7 +178,7 @@
 
 | Вызывающий | Вызываемый | Зачем | Если недоступен |
 |---|---|---|---|
-| bff-web | game, identity, catalog, collections, library, match, rating | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
+| bff-web | game, identity, catalog, collections, library, match, rating, progression, notifications, social | Агрегация экранов (токен пользователя как Bearer) | Блок `unavailable`, страница 200 |
 | game | media-pipeline (internal, сервисный токен) | Подписанная ссылка на ассет уровня и ревила | Ретрай; 503 `game.assets_unavailable` |
 | game, admin | identity (internal) | Сервисный токен (client credentials) | Старый токен до `exp`, затем вызов не выполняется |
 | match | game (internal `round-plans`, тело конфига режима) | План раундов при старте матча, [ADR 0033](../adr/0033-match-round-plan-from-game.md) | Отказ старта: `start_error` в лобби, повтор хостом |

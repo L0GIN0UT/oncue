@@ -109,7 +109,7 @@ async def resolve_viewer(request: Request) -> Viewer:
         log.warning("bff.jwks_unavailable")
         return Viewer(token=token)
     kind = SubjectKind.GUEST if principal.is_guest else SubjectKind.USER
-    return Viewer(token=token, kind=kind, verified=True)
+    return Viewer(token=token, kind=kind, verified=True, user_id=principal.user_id)
 
 
 REJECTED = Viewer(token_rejected=True)
@@ -200,7 +200,7 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         response_model=ShellPage,
         summary="Оболочка приложения: тема и колокольчик",
         description=(
-            "Этап 5b. `theme.key` — ключ "
+            "Этап 5b. `sanctions` (5c) — действующие санкции пользователя. `theme.key` — ключ "
             "активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного "
             "события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число "
             "непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова "
@@ -220,6 +220,8 @@ def build_public_router(deps: BffDeps) -> APIRouter:
             "Публичная часть прогресса чужого (или своего) игрока. Только пользователь с "
             "аккаунтом: аноним — 401, гость — 403 `auth.guest_forbidden`, источники при этом не "
             "вызываются. Нет игрока — 404; недоступный progression — блок `unavailable`. "
+            "5c: блок `social` (отношение зрителя) и `restricted` (скрытый профиль, блокировка "
+            "или неизвестный игрок — неразличимо; статистика не запрашивается). "
             "Всегда `private, no-store`."
         ),
         responses=problem_responses(401, 403, 404, 422),
@@ -316,7 +318,9 @@ def build_public_router(deps: BffDeps) -> APIRouter:
             "Карточка (collections; `items` — только автору, админу и прошедшему, D6), "
             "режимы с играбельностью (game; недоступен — `modes: unavailable`, карточка "
             "отдаётся), `me` — только пользователю (гостю и анониму — null). Нет, скрыт "
-            "для чужих или удалён — 404 `collections.not_found`. С токеном — "
+            "для чужих или удалён — 404 `collections.not_found`. `comments` (5c, social) — "
+            "первая страница комментариев, читают и анонимы; `can_edit`/`can_delete` — "
+            "только с токеном пользователя. С токеном — "
             "`private, no-store`."
         ),
         responses=problem_responses(401, 403, 404, 422),
@@ -375,7 +379,8 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         description=(
             "Блоки: открытые лобби и мои последние матчи (match), онлайн-режимы для создания "
             "комнаты (game), очереди рейтингового подбора (match), мои рейтинги, действующие "
-            "сезоны и топ недели (rating). Каждый блок деградирует независимо (`unavailable`, "
+            "сезоны и топ недели (rating), друзья и входящие заявки `friends` (social, 5c). "
+            "Каждый блок деградирует независимо (`unavailable`, "
             "страница 200). "
             "Онлайн только с аккаунтом (D13): гостю и анониму — `status: auth_required`, "
             "`blocks: null`, match не вызывается. Токен не прошёл проверку или match ответил "
@@ -423,7 +428,9 @@ def build_public_router(deps: BffDeps) -> APIRouter:
         description=(
             "Итог (match) + карточки единиц раундов (catalog) + флаги «в медиатеке» (library). "
             "Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. "
-            "Нет или ещё идёт — 404 `match.match_not_found`. Упавший match — все блоки "
+            "`players[].can_report` (5c) решает bff: зритель — участник несоло-матча, "
+            "игрок — не он сам. Нет или ещё идёт — 404 `match.match_not_found`. "
+            "Упавший match — все блоки "
             "`unavailable`; catalog или library — только их блок. Всегда `private, no-store`."
         ),
         responses=problem_responses(401, 403, 404, 422),
