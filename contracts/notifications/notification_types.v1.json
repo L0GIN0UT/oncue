@@ -27,6 +27,13 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "audience": {
+            "description": "Массовая доставка: вместо `recipient` - аудитория, каждому игроку которой событие порождает уведомление пачками (ADR 0054). Ровно одно из `recipient` и `audience`. `known_users` - игроки, о которых знает notifications",
+            "enum": [
+              "known_users"
+            ],
+            "type": "string"
+          },
           "channels": {
             "additionalProperties": false,
             "description": "Каналы по умолчанию; игрок может отключить in_app и email по типу, если user_mutable",
@@ -176,7 +183,6 @@
         "required": [
           "key",
           "source_event",
-          "recipient",
           "channels",
           "user_mutable",
           "dedup_key",

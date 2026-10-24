@@ -99,6 +99,10 @@ class NotificationRepository(Protocol):
         """Отметить все; вернуть число изменённых."""
         ...
 
+    async def known_users_after(self, after: UUID | None, limit: int) -> list[UUID]:
+        """Аудитория ``known_users``: игроки с уведомлениями или настройками, по возрастанию id."""
+        ...
+
 
 class PreferenceRepository(Protocol):
     """Настройки по типам."""

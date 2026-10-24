@@ -55,6 +55,8 @@ class NotificationsSettings(BaseModel):
     unsubscribe_window_s: int = Field(default=600, ge=1, le=86_400)
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
     broadcast_batch_size: int = Field(default=100, ge=1, le=1000)
+    fanout_batch_size: int = Field(default=200, ge=1, le=2000)
+    """Игроков в одной пачке массовой доставки (``audience``)."""
     unsubscribe_footer: str = Field(
         default="Чтобы отписаться от рассылки, перейдите по ссылке: {link}",
         min_length=1,

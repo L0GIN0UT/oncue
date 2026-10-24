@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError, TaskHandler
 from gv_service import Infrastructure
+from notifications_service.application.audience import FANOUT_TASK
 from notifications_service.application.broadcasts import BROADCAST_TASK
 from notifications_service.domain.errors import MappingError
 from notifications_service.infrastructure.container import container_for
@@ -50,6 +51,13 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
         for notification in created:
             NOTIFICATIONS_CREATED.labels(notification.type_key).inc()
         container.dispatcher.schedule(session, created)
+        # Массовая доставка: одна задача на тип; пачки и идемпотентность - в воркере.
+        for type_key in container.fan_out.audience_types(envelope.event_type, envelope.payload):
+            await container.tasks.enqueue(
+                FANOUT_TASK,
+                {"type_key": type_key, "payload": dict(envelope.payload)},
+                task_id=f"{type_key}:{envelope.event_id}",
+            )
 
     for event_type in sorted(container.catalog.source_events):
         registry.register(event_type, handle)
@@ -71,7 +79,17 @@ def build_task_handlers(infra: Infrastructure) -> dict[str, TaskHandler]:
             raise PermanentError("в задаче нет корректного broadcast_id") from exc
         await container.send_broadcast.execute(broadcast_id)
 
-    return {BROADCAST_TASK: send}
+    async def fan_out(payload: dict[str, Any]) -> None:
+        type_key = payload.get("type_key")
+        event_payload = payload.get("payload")
+        if not isinstance(type_key, str) or not isinstance(event_payload, dict):
+            raise PermanentError("в задаче нет type_key и payload")
+        try:
+            await container.fan_out.execute(type_key, event_payload)
+        except (MappingError, ValueError) as exc:
+            raise PermanentError(f"массовая доставка не собирается: {exc}") from exc
+
+    return {BROADCAST_TASK: send, FANOUT_TASK: fan_out}
 
 
 __all__ = ["CONSUMED_TOPICS", "build_event_handlers", "build_task_handlers"]
