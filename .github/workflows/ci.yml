@@ -193,7 +193,10 @@ jobs:
     # Полный стек на compose: смоук (e2e/stack.spec.ts, в том числе экран «Онлайн доступен после
     # регистрации»), сценарии «дейлик» (e2e/daily.spec.ts), режимы этапа 3a (e2e/modes.spec.ts),
     # сборники этапа 3b (e2e/collections.spec.ts) и онлайн этапа 4a (e2e/lobby|duel|party.spec.ts:
-    # несколько контекстов браузера, Centrifugo, процесс rooms в `match all`) — все, кроме смоука,
+    # несколько контекстов браузера, Centrifugo, процесс rooms в `match all`), прогресс 5a
+    # (e2e/progression.spec.ts), магазин и промокоды 5b (e2e/shop.spec.ts) и уведомления с
+    # модерацией своей аватарки 5b (e2e/notifications.spec.ts; две последние ещё требуют
+    # учётных данных админа) — все, кроме смоука,
     # только при E2E_SEEDED=1, когда стек засеян, `pnpm test:e2e:stack` (testMatch
     # e2e/playwright.config.ts подхватывает все *.spec.ts). На main и по метке PR `e2e`.
     name: E2E smoke (compose)
