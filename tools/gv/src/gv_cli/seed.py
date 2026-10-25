@@ -728,6 +728,14 @@ class Seeder:
             # из catalog — единица появится, ждём, а не падаем.
             if resp.status_code == httpx.codes.NOT_FOUND:
                 return False
+            if (
+                resp.status_code == httpx.codes.CONFLICT
+                and self._key_reused(resp)
+                and self._source_uploaded(media_item_id, spec)
+            ):
+                # Ключ занят другими байтами, но исходник вида и позиции уже загружен:
+                # повторный засев стенда — считаем готовым.
+                return True
             self._check(resp, {200, 201}, f"загрузка исходника {path.name}")
             return True
 
@@ -735,6 +743,21 @@ class Seeder:
             upload,
             timeout_s=self._cfg.assets_timeout_s,
             what=f"единица {seed_key} в media-pipeline",
+        )
+
+    @staticmethod
+    def _key_reused(resp: httpx.Response) -> bool:
+        try:
+            return bool(resp.json().get("code") == "idempotency.key_reused")
+        except ValueError:
+            return False
+
+    def _source_uploaded(self, media_item_id: str, spec: SourceSpec) -> bool:
+        """Есть ли у единицы исходник этого вида и позиции (``GET /admin/v1/sources``)."""
+        resp = self._media.get("/admin/v1/sources", params={"media_item_id": media_item_id})
+        self._check(resp, {200}, f"исходники единицы {media_item_id}")
+        return any(
+            s.get("kind") == spec.kind and s.get("position") == spec.position for s in resp.json()
         )
 
     def _wait_assets(self, media_item_id: str, seed_key: str) -> None:

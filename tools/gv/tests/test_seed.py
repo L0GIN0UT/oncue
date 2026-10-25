@@ -62,6 +62,8 @@ class FakeStack:
     import_status: str = "done"  # статус задания импорта в ответе GET
     item_detail_status: int = 200  # для проверки неожиданного ответа каталога
     media_unknown_polls: int = 0  # сколько загрузок ответят 404 (media не знает единицу)
+    sources_key_reused: bool = False  # повторный засев: те же ключи, другие байты → 409
+    sources_present: bool = True  # GET /admin/v1/sources отдаёт уже загруженные исходники
     media_drops: int = 0  # сколько загрузок оборвут соединение (рестарт media-pipeline)
     profiles_pending_polls: int = 0  # сколько опросов профилей вернут pending
     profile_failed: int = 0  # проваленных наборов статического профиля
@@ -113,6 +115,7 @@ class FakeStack:
             ("GET", r"/admin/v1/items", self._items_list),
             ("GET", r"/admin/v1/items/[0-9a-f-]+", self._item_detail),
             ("POST", r"/admin/v1/sources", self._sources_post),
+            ("GET", r"/admin/v1/sources", self._sources_list),
             ("GET", r"/admin/v1/asset-sets", self._asset_sets),
             ("GET", r"/admin/v1/profiles", self._profiles),
             ("GET", r"/admin/v1/projection/items", self._projection),
@@ -236,8 +239,17 @@ class FakeStack:
         )
 
     # ---------------------------------------------------------------- media-pipeline
+    def _sources_list(self, request: httpx.Request) -> httpx.Response:
+        if not self.sources_present:
+            return httpx.Response(200, json=[])
+        every = [("audio", 1), ("soundtrack", 1), ("audio_clip", 1)]
+        every += [("frame", n) for n in range(1, 7)]
+        return httpx.Response(200, json=[{"kind": k, "position": p} for k, p in every])
+
     def _sources_post(self, request: httpx.Request) -> httpx.Response:
         assert request.headers["Idempotency-Key"].startswith("seed-source-")
+        if self.sources_key_reused:
+            return httpx.Response(409, json={"code": "idempotency.key_reused"})
         assert request.headers["content-type"].startswith("multipart/form-data")
         if self._tick("sources_drop") <= self.media_drops:
             raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
@@ -813,6 +825,17 @@ class TestSeedHappyPath:
         keys = [r.headers["Idempotency-Key"] for r in stack.recorded("POST", "/admin/v1/sources")]
         assert len(keys) == FILM_SOURCES + MUSIC_SOURCES + 2
         assert keys[0] == keys[1] == keys[2]
+
+    def test_repeated_seed_counts_uploaded_sources(self, workspace: Path) -> None:
+        # Повторный засев: ffmpeg дал другие байты → 409 key_reused; исходники уже есть → ок.
+        stack = FakeStack(sources_key_reused=True)
+        _run(stack, workspace)
+        assert stack.recorded("GET", "/admin/v1/sources")
+
+    def test_key_reused_without_uploaded_source_fails(self, workspace: Path) -> None:
+        stack = FakeStack(sources_key_reused=True, sources_present=False)
+        with pytest.raises(SeedError, match="409"):
+            _run(stack, workspace)
 
 
 class TestPeriodSetValidation:
@@ -1434,6 +1457,30 @@ def _load_generator() -> ModuleType:
 
 
 class TestMediaGenerator:
+    def test_existing_files_not_regenerated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gen = _load_generator()
+        calls: list[Path] = []
+        monkeypatch.setattr(gen.subprocess, "run", lambda args, **_: calls.append(Path(args[-1])))
+        target = tmp_path / "a.m4a"
+        target.write_bytes(b"old")
+        gen._ffmpeg_audio("0", 1, target)
+        assert calls == []
+        assert target.read_bytes() == b"old"
+        gen._ffmpeg_audio("0", 1, tmp_path / "b.m4a")
+        assert calls == [tmp_path / "b.m4a"]
+
+    def test_ffmpeg_output_is_bitexact(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        gen = _load_generator()
+        seen: list[list[str]] = []
+        monkeypatch.setattr(gen.subprocess, "run", lambda args, **_: seen.append(list(args)))
+        gen._ffmpeg_audio("0", 1, tmp_path / "c.m4a")
+        assert "+bitexact" in seen[0]
+        assert seen[0][seen[0].index("-map_metadata") + 1] == "-1"
+
     def test_film_audio_long_enough(self) -> None:
         gen = _load_generator()
         # Динамические профили (запрос ассетов) могут начинать отрывок позже: ≥ 45 с.
