@@ -278,16 +278,22 @@ test("финал: событие пройдено, рамка события в 
   await expect(page.getByTestId("event-reward")).toHaveAttribute("data-completed", "true");
 
   // Основная награда — рамка события — выдаётся асинхронно (журнал наград, ADR 0056).
+  // Опрашиваем JSON инвентаря, а не перезагружаем /shop: каждая загрузка страницы тянет
+  // realtime-токен и упирается в лимит identity (429). Страницу открываем один раз после.
   await expect
     .poll(
       async () => {
-        await page.goto("/shop");
-        await page.getByTestId("shop-tab-inventory").click();
-        return page.getByTestId(`inventory-item-${ITEM_KEY}`).count();
+        const res = await api(page, "progression").get("/me/inventory");
+        if (!res.ok()) return false; // 429/5xx — ждём следующего опроса
+        const { items } = (await res.json()) as { items: { item: { key: string } }[] };
+        return items.some((entry) => entry.item.key === ITEM_KEY);
       },
-      { timeout: DELIVERY_TIMEOUT_MS, message: "рамка события в инвентаре" },
+      { timeout: DELIVERY_TIMEOUT_MS, intervals: [3_000], message: "рамка события в инвентаре" },
     )
-    .toBeGreaterThan(0);
+    .toBe(true);
+  await page.goto("/shop");
+  await page.getByTestId("shop-tab-inventory").click();
+  await expect(page.getByTestId(`inventory-item-${ITEM_KEY}`)).toBeVisible();
 
   await expect
     .poll(async () => (await noticesOf(page)).filter((n) => n.type === "event_completed").length, {
