@@ -12,6 +12,7 @@ from notifications_service.infrastructure.config import load_catalog
 from notifications_service.infrastructure.messaging import CONSUMED_TOPICS
 from notifications_service.main import DEFINITION
 
+from gv_core.ids import uuid7
 from gv_testkit import load_example
 from gv_testkit.contracts import load_event_schema, validation_errors
 
@@ -36,7 +37,9 @@ def test_builtin_types_cover_the_contract_example_types() -> None:
         notification_type = catalog.by_key(item["key"])
         assert notification_type is not None, item["key"]
         assert notification_type.source_event == item["source_event"]
-        assert notification_type.recipient == item["recipient"]
+        assert notification_type.recipient == item.get("recipient")
+        assert notification_type.audience == item.get("audience")
+        assert dict(notification_type.data) == item.get("data", {})
         assert notification_type.dedup_key == item["dedup_key"]
         assert dict(notification_type.filter) == item.get("filter", {})
         assert dict(notification_type.params) == item["params"]
@@ -59,7 +62,17 @@ def test_registry_listens_exactly_to_catalog_events() -> None:
     infra = Infrastructure(settings=DEFINITION.settings_cls(), tables=DEFINITION.tables)
     assert DEFINITION.build_event_handlers is not None
     registry = DEFINITION.build_event_handlers(infra)
-    assert registry.event_types == load_catalog().source_events
+    assert registry.event_types == load_catalog().source_events | {"progression.EventRunFinished"}
+
+
+def test_event_run_finished_example_is_consumable() -> None:
+    """Контракт EventRunFinished: пример валиден, топик потребляется, run_id как у старта."""
+    payload = dict(load_example("progression.EventRunFinished").payload)
+    assert validation_errors("progression.EventRunFinished", payload) == []
+    assert load_event_schema("progression.EventRunFinished")["x-topic"] in CONSUMED_TOPICS
+    assert payload["reason"] in {"ended", "stopped"}
+    started = dict(load_example("progression.EventRunStarted").payload)
+    assert payload["run_id"] == started["run_id"]
 
 
 @pytest.mark.parametrize(
@@ -69,6 +82,8 @@ def test_registry_listens_exactly_to_catalog_events() -> None:
         ("progression.BadgeUnlocked", None),
         ("progression.QuestCompleted", None),
         ("media_pipeline.AssetModerated", None),
+        ("progression.FindUnlocked", None),
+        ("progression.EventCompleted", None),
     ],
 )
 def test_contract_example_reaches_a_notification(event_type: str, variant: str | None) -> None:
@@ -110,3 +125,16 @@ def test_other_currency_reasons_produce_no_notification() -> None:
     assert not any(
         matches_filter(t.filter, payload) for t in catalog.for_event("progression.CurrencyCredited")
     )
+
+
+def test_event_run_started_example_selects_audience_type() -> None:
+    catalog = load_catalog()
+    payload = dict(load_example("progression.EventRunStarted").payload)
+    assert validation_errors("progression.EventRunStarted", payload) == []
+    [notification_type] = catalog.for_event("progression.EventRunStarted")
+    assert notification_type.audience == "known_users"
+    user = uuid7()
+    result = map_event(notification_type, payload, locale="ru", default_locale="ru", user_id=user)
+    assert result.user_id == user
+    assert result.dedup_key == f"event_started:{payload['run_id']}"
+    assert result.data == {"event_key": payload["event_key"]}

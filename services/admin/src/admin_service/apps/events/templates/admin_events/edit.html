@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% block extrastyle %}{{ block.super }}{% include "admin_game_config/_styles.html" %}{% endblock %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_events/_nav.html" %}
+{% if event_key %}<p><a href="{% url 'events:card' event_key=event_key %}">← к событию {{ event_key }}</a></p>{% endif %}
+<p>Определение события (YAML/JSON, <code>event_definition.v1</code>): находки, награды, тема <code>theme_key</code>. Период задаётся запуском на странице события; полную проверку выполняет progression.</p>
+{% if field_errors %}
+<ul class="messagelist"><li class="error">Ошибки проверки: {{ field_errors|length }}</li></ul>
+<table>
+  <thead><tr><th>Строка</th><th>Поле</th><th>Причина</th></tr></thead>
+  {% for e in field_errors %}
+  <tr><td>{{ e.line|default:"—" }}</td><td><code>{{ e.path }}</code></td><td>{{ e.message }}</td></tr>
+  {% endfor %}
+</table>
+<div class="gv-lines">{% for l in lines %}<div{% if l.error %} class="err"{% endif %}><span class="num">{{ l.number }}</span>{{ l.text }}</div>{% endfor %}</div>
+{% endif %}
+{% if points %}{% include "admin_events/_preview.html" %}{% endif %}
+<form method="post">
+  {% csrf_token %}
+  {% if key_form %}{{ key_form.key.errors }}<p>{{ key_form.key.label_tag }} {{ key_form.key }}</p>{% endif %}
+  {{ form.non_field_errors }}
+  {{ form.fmt.errors }}<p>{{ form.fmt.label_tag }} {{ form.fmt }}</p>
+  {{ form.text.errors }}{{ form.text }}
+  {{ form.base_revision }}{{ form.idempotency_key }}
+  {{ form.reason.errors }}<p>{{ form.reason.label_tag }}<br>{{ form.reason }}</p>
+  <button type="submit">Сохранить</button>
+</form>
+{% endblock %}

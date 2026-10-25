@@ -137,7 +137,7 @@ def test_items_match_config_and_media_limits(
     assert 12 <= len(items) <= 15
     assert {i["slot"] for i in items} == slots
     assert all(i["rarity"] in rarities for i in items)
-    assert all(i["level_required"] or i["price"] for i in items)
+    assert all(i["level_required"] or i["price"] or i.get("event_key") for i in items)
     for slot in ("frame", "background"):
         assert any(i["slot"] == slot and i["media_kind"] == "animated" for i in items)
     avatar = next(i for i in items if i["key"] == items_spec["custom_avatar_item_key"])

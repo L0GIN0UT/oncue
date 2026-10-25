@@ -18,6 +18,9 @@ items:
   - {key: frm_simple, slot: frame, rarity: common, title: Простая рамка, media_kind: static, level_required: 3, price: null, active: true}
   - {key: frm_neon, slot: frame, rarity: rare, title: Неоновая рамка, media_kind: animated, level_required: null, price: 200, active: true}
   - {key: frm_gold, slot: frame, rarity: epic, title: Золотая рамка, media_kind: animated, level_required: null, price: 700, active: true}
+  # Награда события «Новый год» (seeds/progression/events/new_year_2026.yaml): выдаётся только
+  # событием (event_key), без цены и уровня - в магазине не продаётся.
+  - {key: frame_snowfall, slot: frame, rarity: epic, title: Зимняя рамка 2026, media_kind: animated, level_required: null, price: null, event_key: new_year_2026, active: true}
   # --- титулы
   - {key: ttl_rookie, slot: title, rarity: common, title: Новичок, media_kind: static, level_required: 1, price: null, active: true}
   - {key: ttl_melomaniac, slot: title, rarity: rare, title: Меломан, media_kind: static, level_required: null, price: 150, active: true}

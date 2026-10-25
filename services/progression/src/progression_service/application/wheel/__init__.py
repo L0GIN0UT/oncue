@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -26,11 +26,13 @@ from progression_service.application.ports import (
     UnitOfWorkFactory,
 )
 from progression_service.application.ports.rewards import SpinRecord
-from progression_service.domain import boosts, wheel
+from progression_service.application.quests.tracker import ProgressTracker
+from progression_service.domain import boosts, metrics, wheel
 from progression_service.domain.boosts import Boost
 from progression_service.domain.config import PrizeDef, PrizeKind, SectorDef
 from progression_service.domain.events import PrizePayload, WheelSpun
 from progression_service.domain.inventory import InventoryItem, Source
+from progression_service.domain.metrics import MetricUpdate
 
 log = structlog.get_logger(__name__)
 
@@ -136,6 +138,7 @@ class WheelService:
                     raise RuntimeError("спин не записан и не найден")
                 return SpinOutcome(stored, repeated=True)
             await self._grant(uow, poster, record)
+            await self._track_streak(uow, user_id, day, now)
             uow.publish(
                 WheelSpun(
                     aggregate_id=str(user_id),
@@ -150,6 +153,20 @@ class WheelService:
             await uow.commit()
         log.info("progression.wheel_spun", sector=sector.key, prize=prize.kind)
         return SpinOutcome(record, repeated=False)
+
+    async def _track_streak(
+        self, uow: ProgressionUnitOfWork, user_id: UUID, day: date, now: datetime
+    ) -> None:
+        """Серия суток со спином - уровень метрики ``wheel_spin_streak`` (в транзакции спина)."""
+
+        async def build(_: PublishedConfig, tx: ProgressionUnitOfWork) -> list[MetricUpdate]:
+            since = day - timedelta(days=wheel.STREAK_LOOKBACK_DAYS)
+            streak = wheel.spin_streak(await tx.spins.days(user_id, since, day), day)
+            return [MetricUpdate(metrics.WHEEL_SPIN_STREAK, streak)]
+
+        await ProgressTracker(self._uow, self._clock).apply(
+            uow, f"wheel:{user_id}:{day.isoformat()}", user_id, now, build
+        )
 
     @staticmethod
     async def _effective_prize(
@@ -229,7 +246,8 @@ async def _grant_item(
     assert key is not None  # noqa: S101
     day, op = _ref(record)
     item = await uow.items.get_by_key(key)
-    if item is None or not item.active:  # снятый с продажи предмет - как отсутствующий
+    # Снятый с продажи предмет и предмет события (выдаётся только событием) - как отсутствующие.
+    if item is None or not item.active or item.event_key is not None:
         log.error("progression.wheel_item_missing", item_key=key)
         await uow.grants.add(record.user_id, WHEEL_REASON, op, key, record.spun_at)
         return

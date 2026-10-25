@@ -621,7 +621,7 @@ def _flag(parent: Mapping[str, Any], name: str, where: str) -> bool:
 
 def _metric(parent: Mapping[str, Any], where: str) -> str:
     value = parent.get("metric")
-    if not isinstance(value, str) or not metrics.is_known(value):
+    if not isinstance(value, str) or not metrics.is_config_metric(value):
         raise ConfigInvalidError(f"{where}.metric: неизвестная метрика {value!r}")
     return value
 

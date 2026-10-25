@@ -59,6 +59,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/events/{event_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Сезонное событие: карта, находки, дневник
+         * @description Только пользователь с аккаунтом (аноним — 401, гость — 403), `private, no-store`. Данные — progression `GET /v1/events/{key}` + `theme.key` запуска; нет события — 404 `progression.event_not_found`; progression недоступен — 503. Засчитать находку-элемент интерфейса браузер просит прямо в progression (`POST /v1/events/{key}/finds/{find}/claim`).
+         */
+        get: operations["event_page_v1_pages_events__event_key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/home": {
         parameters: {
             query?: never;
@@ -245,7 +265,7 @@ export interface paths {
         };
         /**
          * Оболочка приложения: тема и колокольчик
-         * @description Этап 5b. `sanctions` (5c) — действующие санкции пользователя. `theme.key` — ключ активной темы (в 5b — настройка bff `default_theme_key`, в 5d — от сезонного события; наборы токенов лежат во фронтенде, ADR 0049). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
+         * @description Этап 5b. `sanctions` (5c) — действующие санкции пользователя. `theme.key` — ключ активной темы (тема активного сезонного события, иначе настройка bff `default_theme_key`; наборы токенов лежат во фронтенде, ADR 0054). `event` — баннер активного события; `found`/`total` — прогресс игрока (кэш до 30 с). `bell` — число непрочитанных уведомлений пользователя; аноним и гость — `null` без вызова notifications. Страница с токеном — `private, no-store`, без токена — публичный кэш.
          */
         get: operations["shell_page_v1_pages_shell_get"];
         put?: never;
@@ -1213,6 +1233,177 @@ export interface components {
             title_key: string;
         };
         /**
+         * EventArchiveCard
+         * @description Запуск события в архиве игрока (5d).
+         */
+        EventArchiveCard: {
+            /** Completed */
+            completed: boolean;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Found */
+            found: number;
+            /** Key */
+            key: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "finished" | "stopped";
+            /** Title */
+            title: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EventBannerCard
+         * @description Активное сезонное событие для шапки и главной (5d, ADR 0054).
+         */
+        EventBannerCard: {
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Found
+             * @description Найдено игроком; null - аноним
+             */
+            found?: number | null;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /**
+             * Total
+             * @description Всего находок; null - аноним
+             */
+            total?: number | null;
+        };
+        /**
+         * EventFindCard
+         * @description Находка события с состоянием для игрока.
+         */
+        EventFindCard: {
+            /** Diary */
+            diary: string;
+            /** Final */
+            final: boolean;
+            /** Found At */
+            found_at?: string | null;
+            /** Key */
+            key: string;
+            /** Number */
+            number: number;
+            /** Play Page */
+            play_page?: string | null;
+            reward: components["schemas"]["EventFindRewardCard"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "locked" | "open" | "found";
+            /** Title */
+            title: string;
+            trigger: components["schemas"]["EventFindTriggerCard"];
+            /** X Pct */
+            x_pct: number;
+            /** Y Pct */
+            y_pct: number;
+        };
+        /**
+         * EventFindRewardCard
+         * @description Награда находки.
+         */
+        EventFindRewardCard: {
+            /** Verses */
+            verses: number;
+            /** Xp */
+            xp: number;
+        };
+        /**
+         * EventFindTriggerCard
+         * @description Условие открытия находки; у закрытой финальной `progress = null`.
+         */
+        EventFindTriggerCard: {
+            /** Metric */
+            metric?: string | null;
+            /** Page Key */
+            page_key?: string | null;
+            /** Period */
+            period?: ("day" | "event") | null;
+            /** Progress */
+            progress?: number | null;
+            /** Target */
+            target?: number | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "server" | "ui_spot";
+        };
+        /**
+         * EventPageView
+         * @description ``GET /v1/pages/events/{key}``: страница события + тема (5d). Только пользователь.
+         */
+        EventPageView: {
+            /** Completed */
+            completed: boolean;
+            /** Description */
+            description: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Finds */
+            finds: components["schemas"]["EventFindCard"][];
+            /** Found */
+            found: number;
+            /** Key */
+            key: string;
+            /** Map Url */
+            map_url?: string | null;
+            reward_item?: components["schemas"]["EventRewardCard"] | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "finished" | "stopped";
+            theme: components["schemas"]["ThemeCard"];
+            /** Theme Key */
+            theme_key: string;
+            /** Title */
+            title: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EventRewardCard
+         * @description Основная награда события.
+         */
+        EventRewardCard: {
+            /** Image Url */
+            image_url: string;
+            /** Item Key */
+            item_key: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * ExternalLink
          * @description Ссылка на внешний сервис (TMDB, MusicBrainz …).
          */
@@ -1257,6 +1448,8 @@ export interface components {
         HomeBlocks: {
             /** @description Наборы дня (без недельной сетки) */
             dailies: components["schemas"]["Block_list_DailyCard__"];
+            /** @description 5d: активное событие; null - нет события или progression недоступен */
+            event?: components["schemas"]["EventBannerCard"] | null;
             modes: components["schemas"]["Block_list_ModeCard__"];
             /** @description Прогресс игрока; null — гость или аноним */
             progress?: components["schemas"]["Block_HomeProgressCard_"] | null;
@@ -1293,6 +1486,11 @@ export interface components {
             xp_in_level: number;
             /** Xp To Next */
             xp_to_next: number | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
         };
         /**
          * InventoryCard
@@ -2019,6 +2217,11 @@ export interface components {
             /** @description Своя аватарка; null до потока S5 этапа 5b */
             avatar?: components["schemas"]["Block_AvatarCard_"] | null;
             badges: components["schemas"]["Block_list_BadgeCard__"];
+            /**
+             * Events
+             * @description 5d: архив событий игрока (новые первыми); пусто - нет
+             */
+            events?: components["schemas"]["EventArchiveCard"][];
             /** @description Инвентарь; null до потока S5 этапа 5b */
             inventory?: components["schemas"]["Block_InventoryCard_"] | null;
             progress: components["schemas"]["Block_ProgressCard_"];
@@ -2469,6 +2672,8 @@ export interface components {
         ShellPage: {
             /** @description null — аноним или гость, notifications не вызывается */
             bell?: components["schemas"]["Block_BellCard_"] | null;
+            /** @description 5d: активное событие; null - нет события или progression недоступен */
+            event?: components["schemas"]["EventBannerCard"] | null;
             /** @description 5c: действующие санкции; null — аноним или гость */
             sanctions?: components["schemas"]["Block_SanctionsCard_"] | null;
             theme: components["schemas"]["ThemeCard"];
@@ -2622,6 +2827,19 @@ export interface components {
             step: number | null;
             /** Title Key */
             title_key: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
         };
         /**
          * WalletCard
@@ -2819,6 +3037,78 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    event_page_v1_pages_events__event_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ключ события */
+                event_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventPageView"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

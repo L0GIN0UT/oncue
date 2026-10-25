@@ -125,6 +125,37 @@ class SqlNotifications:
         )
         return len((await self._s.execute(stmt)).all())
 
+    async def known_users_after(self, after: UUID | None, limit: int) -> list[UUID]:
+        n = t.notifications
+        p = t.notification_preferences
+        known = select(n.c.user_id).union(select(p.c.user_id)).subquery("known")
+        stmt = select(known.c.user_id)
+        if after is not None:
+            stmt = stmt.where(known.c.user_id > after)
+        stmt = stmt.order_by(known.c.user_id).limit(limit)
+        return [row[0] for row in (await self._s.execute(stmt)).all()]
+
+
+class SqlFinishedRuns:
+    """Завершённые запуски событий."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def mark(self, run_id: UUID, reason: str, at: datetime) -> None:
+        """Запомнить завершение (повтор не меняет первую запись)."""
+        stmt = (
+            pg_insert(t.finished_event_runs)
+            .values(run_id=run_id, reason=reason, finished_at=at)
+            .on_conflict_do_nothing(index_elements=["run_id"])
+        )
+        await self._s.execute(stmt)
+
+    async def is_finished(self, run_id: UUID) -> bool:
+        """Запуск завершён (``ended``/``stopped``)."""
+        r = t.finished_event_runs
+        return (await self._s.scalar(select(r.c.run_id).where(r.c.run_id == run_id))) is not None
+
 
 class SqlPreferences:
     """Настройки по типам."""
@@ -380,6 +411,7 @@ class SqlUnitOfWork:
 
     notifications: SqlNotifications
     preferences: SqlPreferences
+    finished_runs: SqlFinishedRuns
     subscriptions: SqlSubscriptions
     devices: SqlDevices
     broadcasts: SqlBroadcasts
@@ -420,6 +452,7 @@ class SqlUnitOfWork:
         s = self._session
         self.notifications = SqlNotifications(s)
         self.preferences = SqlPreferences(s)
+        self.finished_runs = SqlFinishedRuns(s)
         self.subscriptions = SqlSubscriptions(s)
         self.devices = SqlDevices(s)
         self.broadcasts = SqlBroadcasts(s)

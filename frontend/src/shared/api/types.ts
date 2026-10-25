@@ -167,6 +167,10 @@ export type { SpinResult } from "./progression-types";
 // Этап 5b: магазин, оформление, своя аватарка (bff читает, мутации — прямо в progression),
 // shell (тема, колокольчик) и уведомления.
 export type ShellPage = B["ShellPage"];
+export type EventPageView = B["EventPageView"];
+export type EventFindCard = B["EventFindCard"];
+export type EventBannerCard = B["EventBannerCard"];
+export type EventArchiveCard = B["EventArchiveCard"];
 export type ShopPage = B["ShopPage"];
 export type ShopCatalogCard = B["ShopCatalogCard"];
 export type ShopEntryCard = B["ShopEntryCard"];

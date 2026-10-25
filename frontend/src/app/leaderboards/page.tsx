@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { EventSpot } from "@/features/events/EventSpot";
 import { LeaderboardsView } from "@/features/rating/LeaderboardsView";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -8,5 +9,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function LeaderboardsPage() {
-  return <LeaderboardsView />;
+  return (
+    <>
+      <LeaderboardsView />
+      <EventSpot pageKey="leaderboards" />
+    </>
+  );
 }

@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_events/_nav.html" %}
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Ключ</th><th>Название</th><th>Статус</th><th>Последний запуск</th></tr></thead>
+  {% for e in rows %}
+  <tr>
+    <td><a href="{% url 'events:card' event_key=e.key %}"><code>{{ e.key }}</code></a></td>
+    <td>{{ e.title }}</td>
+    <td>{{ e.status|default:"нет запусков" }}</td>
+    <td>{% if e.latest_run %}#{{ e.latest_run.seq }}: {{ e.latest_run.starts_at }} — {{ e.latest_run.ends_at }}{% else %}—{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="4">Событий нет</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

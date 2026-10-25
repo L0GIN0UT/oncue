@@ -53,8 +53,19 @@ class ProgressionSettings(BaseModel):
     # Заявок на аватарку на игрока в окне (до вызова media-pipeline: декодирование дорогое).
     avatar_submit_limit: int = Field(default=5, ge=1, le=1000)
     avatar_submit_window_s: int = Field(default=3600, ge=1, le=86_400)
+    # Сезонные события 5d (ADR 0054, 0055): лимит кликов по спрятанным элементам на игрока
+    # (`<N>/<окно_с>`, Redis, fail-closed) и период задачи `progression.events.tick`.
+    event_claim_limit: str = Field(default="30/60", pattern=r"^[1-9][0-9]{0,5}/[1-9][0-9]{0,5}$")
+    events_tick_interval_s: float = Field(default=30.0, gt=0)
+    events_tick_jitter_s: float = Field(default=3.0, ge=0)
     # Подсказка клиенту, когда лимитер попыток (Redis) недоступен и ввод кода закрыт (503).
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
+
+    @property
+    def event_claim_rate(self) -> tuple[int, int]:
+        """``(попыток, окно в секундах)`` из ``event_claim_limit``."""
+        count, _, window = self.event_claim_limit.partition("/")
+        return int(count), int(window)
 
 
 class S3Settings(BaseModel):

@@ -274,6 +274,17 @@ bff: блоки `/pages/profile` (уровень, опыт, Версы, зада
 - **Что 5b готовит:** `items.event_id` (nullable, без внешнего ключа), `source` инвентаря допускает `event`, bff отдаёт `theme.key` (в 5b — настройка `default_theme_key`, в 5d — от события), типы уведомлений и шаблоны — конфиг (новые типы без кода).
 - **Чего 5b не делает:** сущностей события, находок, карты, логики перевода в постоянный.
 
+### 12.1. Детализация 5d (решения владельца 2026-10-24; при расхождении с §12 приоритет здесь)
+
+ADR [0054](../adr/0054-seasonal-events-model.md) (модель события и запусков), [0055](../adr/0055-event-find-triggers.md) (триггеры находок), [0056](../adr/0056-event-rewards-via-ledger.md) (награды). Временные предметы §12 в 5d не используются.
+
+**Модель.** `events` (определение: key, тело JSON по `contracts/progression/event_definition.v1.json`, картинка карты в S3) и `event_runs` (запуск: период, статус `draft|published|active|finished|stopped`, неизменяемый снимок определения с `body_sha256` на публикации). Статусы `active`/`finished` материализует задача relay `progression.events.tick`; чтение считает статус по времени. Один активный запуск: при публикации advisory-lock и проверка пересечения периодов (409 `progression.event_period_overlap`). Перезапуск = новый `event_runs` с теми же находками (новое определение не нужно).
+**Прогресс.** `event_finds_progress(run_id, user_id, find_key, period_key, progress, unlocked_at)`; `event_completions(run_id, user_id, completed_at)`. Награды находки — проводки ledger `event:{run}:{find}:{user}`; главная награда — предмет `source=event` при закрытии всех находок (`event:{run}:complete:{user}`).
+**Триггеры.** `server` — метрика (`rounds_played`, `correct_answers`, `wins`, `online_matches`, `daily_completed`, `daily_streak`, `collection_published` + новые `duel_win`, `weekly_top_place` (≤ `params.place_max`), `wheel_spin_streak`, `item_equipped` (`params.slot|item_key`), `collection_played` (сессия по сборнику, `collection_id != null`; фильтра по тегу нет — в `GameFinished` тегов нет, хвост в backlog)), `target`, период `day|event`; засчитывается только по событиям сервисов. `ui_spot` — `page_key` ∈ {home, leaderboards, profile, collections, match_summary, shop, wheel}; `POST /v1/events/{key}/finds/{find}/claim` (идемпотентно, лимит на игрока fail-closed). Финальная находка (`final`) закрыта до остальных (409 `progression.event_find_locked`).
+**API.** Публичное `/v1/events/active` (анонимно: key, название, тема, период), `/v1/events/{key}` (страница игрока), `/v1/me/events` (архив), `claim`. Админ `/admin/v1/events` (CRUD определения, картинка карты, запуски, публикация, остановка, статистика); права `progression.events.manage` (определение, запуски, статистика), `progression.events.publish` (публикация и остановка, только admin).
+**События** `progression.progression.v1`: `EventRunStarted`, `FindUnlocked`, `EventCompleted`, `EventRunFinished`. **bff**: `theme.key` от активного запуска (иначе `default_theme_key`), блок `event` на `/pages/home` и `/pages/shell`, `/pages/events/{key}`, архив в `/pages/profile`. **notifications**: `event_started` (рассылка в приложении), `find_unlocked`, `event_completed`; без e-mail, отключаемые.
+**Потоки.** 0a (контракты, заглушки) → параллельно E1 (progression), E3 (bff + фронтенд на моках, тема winter), 0b (сиды, `gv dev seed`) → E2 (notifications, админка, `e2e/events.spec.ts`).
+
 ## 13. Миграции и совместимость
 
 - `0002_progression_core` (P1), `0003_quests_wheel` (P2) — только расширяющие, без переименований; `review-migration` до коммита.

@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+{% load l10n %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_events/_nav.html" %}
+<h2>{{ definition.title }} (<code>{{ event.key }}</code>)</h2>
+<p>{{ definition.description }}</p>
+<p>Тема: <code>{{ definition.theme_key|default:"по умолчанию" }}</code> · награда-предмет: <code>{{ definition.reward.item_key|default:"—" }}</code> ·
+   хеш определения: <code>{{ event.body_sha256 }}</code> ·
+   <a href="{% url 'events:edit' event_key=event.key %}">Править определение</a></p>
+
+<h3>Карта и находки</h3>
+{% include "admin_events/_preview.html" with map_url=event.map_url %}
+<table>
+  <thead><tr><th>№</th><th>Ключ</th><th>Название</th><th>x, %</th><th>y, %</th><th>Триггер</th><th>Награда</th><th>Финал</th></tr></thead>
+  {% for f in finds %}
+  <tr>
+    <td>{{ f.number }}</td><td><code>{{ f.key }}</code></td><td>{{ f.title }}</td>
+    <td>{{ f.x_pct|unlocalize }}</td><td>{{ f.y_pct|unlocalize }}</td>
+    <td>{{ f.trigger.type }}{% if f.trigger.page_key %}: {{ f.trigger.page_key }}{% endif %}{% if f.trigger.metric %}: {{ f.trigger.metric }} ≥ {{ f.trigger.target }}{% endif %}</td>
+    <td>{{ f.reward.xp }} XP, {{ f.reward.verses }} Версов</td><td>{{ f.final|yesno:"да,нет" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h3>Карта (изображение)</h3>
+<form method="post" enctype="multipart/form-data" action="{% url 'events:map' event_key=event.key %}">
+  {% csrf_token %}{{ map_form.non_field_errors }}
+  {{ map_form.file.errors }}<p>{{ map_form.file.label_tag }} {{ map_form.file }} (до {{ map_limit }} байт)</p>
+  {{ map_form.idempotency_key }}
+  {{ map_form.reason.errors }}<p>{{ map_form.reason.label_tag }}<br>{{ map_form.reason }}</p>
+  <button type="submit">Загрузить карту</button>
+</form>
+
+<h3>Запуски</h3>
+<table>
+  <thead><tr><th>№</th><th>Статус</th><th>Начало</th><th>Конец</th><th>Действия</th></tr></thead>
+  {% for r in runs %}
+  <tr data-testid="run-{{ r.seq }}">
+    <td>{{ r.seq }}</td><td>{{ r.status }}</td><td>{{ r.starts_at }}</td><td>{{ r.ends_at }}</td>
+    <td>
+      {% if r.status != "draft" %}<a href="{% url 'events:stats' event_key=event.key run_id=r.id %}">Статистика</a>{% endif %}
+      {% if can_publish and r.publish_form %}
+      <form method="post" action="{% url 'events:publish' event_key=event.key run_id=r.id %}">
+        {% csrf_token %}{{ r.publish_form.non_field_errors }}{{ r.publish_form.body_sha256 }}{{ r.publish_form.idempotency_key }}
+        {{ r.publish_form.confirm.errors }}<p>{{ r.publish_form.confirm }} {{ r.publish_form.confirm.label }}<br>хеш <code>{{ event.body_sha256 }}</code></p>
+        {{ r.publish_form.reason.errors }}<p>{{ r.publish_form.reason }}</p>
+        <button type="submit">Опубликовать</button>
+      </form>
+      {% endif %}
+      {% if can_publish and r.stop_form %}
+      <form method="post" action="{% url 'events:stop' event_key=event.key run_id=r.id %}">
+        {% csrf_token %}{{ r.stop_form.non_field_errors }}{{ r.stop_form.idempotency_key }}
+        {{ r.stop_form.reason.errors }}<p>{{ r.stop_form.reason }}</p>
+        <button type="submit">Остановить</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% empty %}<tr><td colspan="5">Запусков нет</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Новый запуск (в том числе перезапуск с новым периодом)</h3>
+<form method="post" action="{% url 'events:run_new' event_key=event.key %}">
+  {% csrf_token %}{{ run_form.non_field_errors }}
+  {{ run_form.starts_at.errors }}<p>{{ run_form.starts_at.label_tag }} {{ run_form.starts_at }}</p>
+  {{ run_form.ends_at.errors }}<p>{{ run_form.ends_at.label_tag }} {{ run_form.ends_at }}</p>
+  {{ run_form.idempotency_key }}
+  {{ run_form.reason.errors }}<p>{{ run_form.reason.label_tag }}<br>{{ run_form.reason }}</p>
+  <button type="submit">Создать запуск (черновик)</button>
+</form>
+{% endblock %}

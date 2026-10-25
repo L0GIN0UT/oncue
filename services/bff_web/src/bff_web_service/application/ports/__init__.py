@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from bff_web_service.application.dto import (
+    ActiveEvent,
     AppearanceSlotCard,
     BadgeCard,
     CatalogQuery,
@@ -25,6 +26,8 @@ from bff_web_service.application.dto import (
     CommentsCard,
     DailyStatus,
     Domain,
+    EventArchiveCard,
+    EventPageData,
     FriendCard,
     InventoryCard,
     Item,
@@ -284,6 +287,22 @@ class ProgressionClient(Protocol):
         self, token: str, user_ids: list[UUID]
     ) -> list[PlayerAppearanceCard]:
         """Оформление игроков (``/v1/appearance?user_ids=``, до 12); неизвестные пропущены."""
+        ...
+
+    async def active_event(self) -> ActiveEvent | None:
+        """Активное событие (``/v1/events/active``, анонимно, кэш до 30 с); нет — ``None``."""
+        ...
+
+    async def event_page(self, token: str, event_key: str) -> EventPageData:
+        """Страница события (``/v1/events/{key}``); нет события — 404."""
+        ...
+
+    async def event_progress(self, token: str, user_id: UUID, event_key: str) -> EventPageData:
+        """Та же страница для баннера оболочки: короткий кэш на игрока."""
+        ...
+
+    async def my_events(self, token: str) -> list[EventArchiveCard]:
+        """Архив событий игрока (``/v1/me/events``)."""
         ...
 
 

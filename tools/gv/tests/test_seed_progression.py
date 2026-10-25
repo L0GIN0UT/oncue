@@ -152,7 +152,7 @@ class FakeProgression:
             return _problem(422, "progression.item_slot_unknown")
         if body["rarity"] not in {r["key"] for r in shop.get("rarities", [])}:
             return _problem(422, "progression.item_rarity_unknown")
-        if not body.get("level_required") and not body.get("price"):
+        if not body.get("level_required") and not body.get("price") and not body.get("event_key"):
             return _problem(422, "progression.item_unlock_required")
         item = {
             **{k: v for k, v in body.items() if k != "reason"},
@@ -399,7 +399,9 @@ def test_item_idempotency_keys_include_field_hash(tmp_path: Path) -> None:
         r.headers["Idempotency-Key"] for r in stack.sent("PUT", rf"/admin/v1/items/{_UUID}")
     }
 
-    assert all(re.fullmatch(r"seed-item-(create|activate)-[a-z_]+-[0-9a-f]{12}", k) for k in keys)
+    assert all(
+        re.fullmatch(r"seed-item-(create|activate)-[a-z0-9_]+-[0-9a-f]{12}", k) for k in keys
+    )
 
 
 def _copy_seeds(tmp_path: Path) -> Path:

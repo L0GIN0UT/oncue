@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { EventSpot } from "@/features/events/EventSpot";
 import { MatchResultView } from "@/features/match/MatchResultView";
 import { safeDecode } from "@/shared/lib/decode";
 
@@ -12,5 +13,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function MatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <MatchResultView matchId={safeDecode(id)} />;
+  return (
+    <>
+      <MatchResultView matchId={safeDecode(id)} />
+      <EventSpot pageKey="match_summary" />
+    </>
+  );
 }

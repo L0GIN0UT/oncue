@@ -28,6 +28,7 @@ import type {
 import { csrfOk, problem, subjectOf } from "./handlers";
 import { economyProfileBlocks, itemByKey } from "./economy";
 import { isRestricted, playerSocialBlock } from "./social";
+import { eventsArchive } from "./events";
 import type { MockWorld } from "./world";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
@@ -182,6 +183,7 @@ export function profilePage(world: MockWorld, subject: string): ProfilePage {
       badges: block("badges", BADGES),
       wheel: block("wheel", wheelCard(world, subject)),
       ...economyProfileBlocks(world),
+      events: eventsArchive(world),
     },
   };
 }

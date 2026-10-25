@@ -1,0 +1,51 @@
+# Второй пример определения события (для тестов засева и админки): без дат, без темы,
+# без награды-предмета. Формат - как в new_year_2026.yaml.
+key: halloween
+body:
+  title: Хеллоуин
+  description: Четыре жутковатые находки.
+  theme_key: ""
+  finds:
+    - key: pumpkin
+      number: 1
+      title: Тыква
+      diary_before: Тыква прячется на главной.
+      diary_after: Тыква нашлась и ухмыльнулась.
+      x_pct: 20
+      y_pct: 30
+      reward: {xp: 30, verses: 5}
+      final: false
+      trigger: {type: ui_spot, page_key: home}
+    - key: ghost_rounds
+      number: 2
+      title: Призрак раундов
+      diary_before: Призрак появляется после десяти сыгранных раундов.
+      diary_after: Призрак наигрался и исчез.
+      x_pct: 45
+      y_pct: 65
+      reward: {xp: 50, verses: 10}
+      final: false
+      play_page: solo
+      trigger: {type: server, metric: rounds_played, target: 10, period: event}
+    - key: bat_top
+      number: 3
+      title: Летучая мышь
+      diary_before: Мышь висит под таблицей лидеров.
+      diary_after: Мышь взмахнула крыльями.
+      x_pct: 70
+      y_pct: 25
+      reward: {xp: 40, verses: 5}
+      final: false
+      trigger: {type: ui_spot, page_key: leaderboards}
+    - key: witch_cauldron
+      number: 4
+      title: Котёл ведьмы
+      diary_before: Котёл закипит, когда найдены все остальные находки.
+      diary_after: Зелье сварено.
+      x_pct: 85
+      y_pct: 80
+      reward: {xp: 100, verses: 20}
+      final: true
+      trigger: {type: ui_spot, page_key: profile}
+  reward:
+    item_key: null

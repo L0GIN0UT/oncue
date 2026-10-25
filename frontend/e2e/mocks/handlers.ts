@@ -11,6 +11,7 @@ import { createMatchHandlers } from "./handlers-match";
 import { createRatingHandlers } from "./handlers-rating";
 import { createProgressionHandlers, homeProgress } from "./progression";
 import { createEconomyHandlers } from "./economy";
+import { createEventsHandlers, eventBanner } from "./events";
 import { createNotificationsHandlers } from "./notifications";
 import { createSocialHandlers } from "./social";
 import { onlineModesOut, type MatchWorld } from "./match";
@@ -382,6 +383,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
             ? { status: "unavailable", data: null }
             : { status: "ok", data: world.dailyCards(subject, true) },
           progress: homeProgress(world, subject),
+          event: eventBanner(world, subject),
         },
       });
     }),
@@ -427,6 +429,7 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
     ...createUgcHandlers(world),
     ...createProgressionHandlers(world),
     ...createEconomyHandlers(world),
+    ...createEventsHandlers(world),
     ...createNotificationsHandlers(world),
     ...createSocialHandlers(world),
 

@@ -24,6 +24,7 @@ from gv_service import (
     ServiceAuthNotConfiguredError,
     build_service_token_provider,
 )
+from notifications_service.application.audience import FanOutAudience, RecordRunFinished
 from notifications_service.application.broadcasts import (
     BroadcastQueries,
     CreateBroadcast,
@@ -213,6 +214,22 @@ class NotificationsContainer:
             self.infra.clock,
             max_attempts=cfg.unsubscribe_attempts,
             window_s=cfg.unsubscribe_window_s,
+        )
+
+    def run_finished(self, session: AsyncSession | None = None) -> RecordRunFinished:
+        """Запись завершения запуска (в транзакции consumer - с ``session``)."""
+        return RecordRunFinished(self.uow_factory(session))
+
+    @property
+    def fan_out(self) -> FanOutAudience:
+        """Массовая доставка in-app по аудитории типа."""
+        return FanOutAudience(
+            self.uow_factory(),
+            self.catalog,
+            self.infra.clock,
+            self.new_id,
+            self.dispatcher,
+            batch_size=self._cfg.fanout_batch_size,
         )
 
     @property

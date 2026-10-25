@@ -1,0 +1,65 @@
+{
+  "title": "Осенняя экспедиция",
+  "description": "Найдите три следа осени и откройте финальную находку.",
+  "theme_key": "autumn",
+  "finds": [
+    {
+      "key": "first_leaf",
+      "number": 1,
+      "title": "Первый лист",
+      "diary_before": "Где-то на главной шуршит лист.",
+      "diary_after": "Лист найден: он был спрятан у входа.",
+      "x_pct": 12.5,
+      "y_pct": 40,
+      "reward": {"xp": 50, "verses": 10},
+      "final": false,
+      "play_page": "home",
+      "trigger": {"type": "ui_spot", "page_key": "home"}
+    },
+    {
+      "key": "duel_trail",
+      "number": 2,
+      "title": "След дуэли",
+      "diary_before": "След ведёт к победителю дуэли.",
+      "diary_after": "Дуэль выиграна, след найден.",
+      "x_pct": 55,
+      "y_pct": 62.5,
+      "reward": {"xp": 100, "verses": 20},
+      "final": false,
+      "play_page": "online",
+      "trigger": {"type": "server", "metric": "duel_win", "target": 3, "period": "event"}
+    },
+    {
+      "key": "shelf_trail",
+      "number": 3,
+      "title": "След полки",
+      "diary_before": "След ведёт к избранным сборникам.",
+      "diary_after": "Сборник сыгран, след найден.",
+      "x_pct": 30,
+      "y_pct": 75,
+      "reward": {"xp": 80, "verses": 15},
+      "final": false,
+      "play_page": "collections",
+      "trigger": {
+        "type": "server",
+        "metric": "collection_played",
+        "target": 2,
+        "period": "event",
+        "params": {"collection_keys": ["0190a000-0000-7000-8000-00000000000a"]}
+      }
+    },
+    {
+      "key": "golden_grove",
+      "number": 4,
+      "title": "Золотая роща",
+      "diary_before": "Роща откроется, когда будут найдены все следы.",
+      "diary_after": "Роща открыта, экспедиция завершена.",
+      "x_pct": 80,
+      "y_pct": 20,
+      "reward": {"xp": 300, "verses": 100},
+      "final": true,
+      "trigger": {"type": "ui_spot", "page_key": "leaderboards"}
+    }
+  ],
+  "reward": {"item_key": "frame_autumn"}
+}

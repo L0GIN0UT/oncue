@@ -17,7 +17,7 @@ from django.conf import settings
 from django.core.exceptions import RequestDataTooBig
 from django.core.files.uploadhandler import FileUploadHandler
 
-_SHOP_MEDIA_PATH = re.compile(r"^/shop/items/[^/]+/media/$")
+_SHOP_MEDIA_PATH = re.compile(r"^/(shop/items/[^/]+/media|events/[^/]+/map)/$")
 _OVERHEAD = 64 * 1024  # поля формы и границы multipart
 
 

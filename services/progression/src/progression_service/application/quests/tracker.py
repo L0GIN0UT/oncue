@@ -23,8 +23,9 @@ from progression_service.application.accrual.match import (
     rounds_stats,
 )
 from progression_service.application.accrual.posting import Poster, local_day
-from progression_service.application.accrual.rating_rewards import SeasonStandings
+from progression_service.application.accrual.rating_rewards import SeasonStandings, WeeklyTop
 from progression_service.application.badges import unlock_badges
+from progression_service.application.events.progress import apply_metric_updates
 from progression_service.application.ports import (
     ProgressionUnitOfWork,
     PublishedConfig,
@@ -34,7 +35,7 @@ from progression_service.application.ports.rewards import AssignedQuest
 from progression_service.application.quests import ensure_assigned
 from progression_service.domain import badges, metrics, quests
 from progression_service.domain.events import QuestCompleted, RewardPayload
-from progression_service.domain.experience import NO_REWARD_FINISHES, OnlineResult
+from progression_service.domain.experience import NO_REWARD_FINISHES, MatchFormat, OnlineResult
 from progression_service.domain.metrics import MetricUpdate, merge
 
 log = structlog.get_logger(__name__)
@@ -56,6 +57,7 @@ class SoloFinished:
     finished_at: datetime
     rounds_played: int
     correct_answers: int
+    collection_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +111,8 @@ def _match_updates(match: FinishedMatch, player: MatchPlayerResult, domain: str)
         ratio = published.config.min_rounds_ratio
         if result.result_bonuses_allowed(ratio) and result.is_win():
             updates.append(MetricUpdate(metrics.WINS, 1, domain))
+            if match.format is MatchFormat.DUEL:
+                updates.append(MetricUpdate(metrics.DUEL_WIN, 1, domain))
         return updates
 
     return build
@@ -130,6 +134,15 @@ class ProgressTracker:
             MetricUpdate(metrics.ROUNDS_PLAYED, game.rounds_played, game.domain),
             MetricUpdate(metrics.CORRECT_ANSWERS, game.correct_answers, game.domain),
         ]
+        if game.collection_id is not None:  # фильтра по тегу нет: GameFinished тегов не несёт
+            updates.append(
+                MetricUpdate(
+                    metrics.COLLECTION_PLAYED,
+                    1,
+                    game.domain,
+                    collection_id=str(game.collection_id),
+                )
+            )
         return await self.record(
             f"game:{game.session_id}", game.user_id, game.finished_at, _fixed(updates)
         )
@@ -171,6 +184,19 @@ class ProgressTracker:
             f"collection:{done.collection_id}", done.author_id, done.published_at, _fixed(updates)
         )
 
+    async def on_weekly_top(self, top: WeeklyTop) -> int:
+        """Место игрока в топе недели (для триггера ``weekly_top_place``); число засчитанных."""
+        counted = 0
+        for entry in sorted(top.top, key=lambda e: e.user_id):
+            update = MetricUpdate(metrics.WEEKLY_TOP_PLACE, 1, place=entry.place)
+            counted += await self.record(
+                f"weekly:{top.ladder}:{top.week_start.isoformat()}:{entry.user_id}",
+                entry.user_id,
+                top.closed_at,
+                _fixed([update]),
+            )
+        return counted
+
     async def on_season_standings(self, standings: SeasonStandings) -> int:
         """Звание на конец сезона каждому игроку пачки; вернуть число засчитанных."""
         async with self._uow() as uow:
@@ -198,22 +224,37 @@ class ProgressTracker:
             ConfigUnavailableError: нет опубликованного конфига (повторимо).
         """
         async with self._uow() as uow:
-            published = await config_at(uow, at)
-            now = self._clock.now()
-            poster = Poster(uow, published, now)
-            await poster.lock_user(user_id)
-            if not await uow.metrics.mark(subject_key, user_id, now):
+            if not await self.apply(uow, subject_key, user_id, at, build):
                 return False
-            updates = await build(published, uow)
-            values = await uow.metrics.values(user_id)
-            for update in updates:
-                values[update.metric] = merge(values.get(update.metric, 0), update)
-                await uow.metrics.save(user_id, update.metric, values[update.metric], now)
-            day = local_day(at, published)
-            for assigned in await ensure_assigned(uow, published, user_id, day, now):
-                await self._advance(uow, poster, assigned, updates, user_id, day, now)
-            await unlock_badges(uow, published, user_id, values, now)
             await uow.commit()
+        return True
+
+    async def apply(
+        self,
+        uow: ProgressionUnitOfWork,
+        subject_key: str,
+        user_id: UUID,
+        at: datetime,
+        build: UpdateBuilder,
+    ) -> bool:
+        """То же, что ``record``, в транзакции вызывающего (колесо): коммитит вызывающий."""
+        published = await config_at(uow, at)
+        now = self._clock.now()
+        poster = Poster(uow, published, now)
+        await poster.lock_user(user_id)
+        if not await uow.metrics.mark(subject_key, user_id, now):
+            return False
+        updates = await build(published, uow)
+        values = await uow.metrics.values(user_id)
+        for update in updates:
+            values[update.metric] = merge(values.get(update.metric, 0), update)
+            await uow.metrics.save(user_id, update.metric, values[update.metric], now)
+        day = local_day(at, published)
+        for assigned in await ensure_assigned(uow, published, user_id, day, now):
+            await self._advance(uow, poster, assigned, updates, user_id, day, now)
+        await unlock_badges(uow, published, user_id, values, now)
+        # Находки сезонного события (ADR 0055): время события, в той же транзакции.
+        await apply_metric_updates(uow, published, poster, user_id, at, updates, now)
         log.info("progression.metrics_recorded", subject=subject_key, updates=len(updates))
         return True
 

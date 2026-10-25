@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { Wordmark } from "@/shared/ui/wordmark";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { PresenceHeartbeat } from "@/features/friends/use-presence";
+import { HeaderEventLink } from "@/features/events/EventBanner";
 import { useSessionInfo } from "./session";
 
 export function SiteHeader() {
@@ -20,6 +21,7 @@ export function SiteHeader() {
         <Wordmark />
       </Link>
       <nav className="flex items-center gap-1 text-sm sm:gap-3">
+        <HeaderEventLink />
         <Link href="/solo" className="rounded-md px-3 py-2 text-ink-muted hover:text-ink">
           {t("nav.solo")}
         </Link>

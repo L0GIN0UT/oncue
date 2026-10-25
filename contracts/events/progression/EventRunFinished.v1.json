@@ -1,0 +1,17 @@
+{
+  "$id": "urn:guessverse:contracts:events:progression:EventRunFinished:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Запуск сезонного события закончился по времени или остановлен досрочно (ADR 0054). aggregate_id — run_id. Идемпотентно по `run_id`.",
+  "properties": {
+    "at": {"format": "date-time", "type": "string"},
+    "event_key": {"maxLength": 64, "pattern": "^[a-z][a-z0-9_]*$", "type": "string"},
+    "reason": {"description": "`ended` — вышел срок, `stopped` — остановлен админом", "enum": ["ended", "stopped"], "type": "string"},
+    "run_id": {"format": "uuid", "type": "string"}
+  },
+  "required": ["run_id", "event_key", "reason", "at"],
+  "title": "progression.EventRunFinished v1",
+  "type": "object",
+  "x-aggregate-type": "progression",
+  "x-topic": "progression.progression.v1"
+}
