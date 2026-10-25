@@ -81,7 +81,7 @@ services:
         limits: {memory: 1G}
 
   redpanda:
-    image: redpandadata/redpanda:v24.3.7
+    image: redpandadata/redpanda:v26.2.5
     restart: unless-stopped
     networks: [backend]
     logging: *logging
