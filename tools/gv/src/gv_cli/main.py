@@ -30,6 +30,7 @@ import typer
 
 from gv_cli import contracts, generate, hooks, scaffold, workspace
 from gv_cli.generate import service_secret_env
+from gv_cli.preflight import PreflightError, check_env
 from gv_cli.registry import NAME_RE, load_services, repo_root
 
 app = typer.Typer(help="CLI разработчика Guessverse", no_args_is_help=True)
@@ -239,6 +240,13 @@ def up(
     services: Annotated[list[str] | None, typer.Argument(help="Только эти сервисы")] = None,
 ) -> None:
     """Поднять стек (по умолчанию — только инфраструктура)."""
+    root = repo_root()
+    if stack != "observability":  # Centrifugo в наблюдаемости не участвует
+        try:
+            check_env(root / COMPOSE_DIR / ".env", os.environ)
+        except PreflightError as exc:
+            typer.secho(f"preflight: {exc}", fg="red")
+            raise typer.Exit(1) from exc
     raise typer.Exit(
         _compose(repo_root(), stack, ["up", "-d", "--build", "--wait", *(services or [])])
     )

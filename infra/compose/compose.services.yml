@@ -67,6 +67,9 @@ services:
       GV_REALTIME__CONNECTION_TOKEN_SECRET: ${CENTRIFUGO_TOKEN_HMAC_SECRET:?задайте CENTRIFUGO_TOKEN_HMAC_SECRET}
       GV_PUBLIC_ORIGINS: ${GV_PUBLIC_ORIGINS:?задайте GV_PUBLIC_ORIGINS}
       GV_SERVICE_CLIENTS: ${GV_SERVICE_CLIENTS:-[]}
+      # Лимиты выдачи сервисных токенов (умолчания identity; заменили PER_CLIENT_PER_MIN).
+      GV_SERVICE_TOKEN_LIMIT__FAILURES_PER_CLIENT_IP_PER_MIN: ${GV_SERVICE_TOKEN_LIMIT__FAILURES_PER_CLIENT_IP_PER_MIN:-30}
+      GV_SERVICE_TOKEN_LIMIT__SUCCESS_PER_CLIENT_PER_MIN: ${GV_SERVICE_TOKEN_LIMIT__SUCCESS_PER_CLIENT_PER_MIN:-600}
       # Пусто — временный ключ (только local/ci); вне них identity не стартует без ключей.
       GV_JWT__SIGNING_KEYS: ${GV_JWT__SIGNING_KEYS:-}
       # Коды из писем (ADR 0041): вне local/ci backend=smtp и ключ HMAC обязательны.

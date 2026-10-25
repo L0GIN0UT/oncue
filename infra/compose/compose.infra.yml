@@ -205,7 +205,8 @@ services:
         limits: {memory: 512M}
 
   centrifugo:
-    image: centrifugo/centrifugo:v6
+    # Точная версия: образ с плавающим v6 менял бы поведение realtime без правки репозитория.
+    image: centrifugo/centrifugo:v6.9.7
     restart: unless-stopped
     networks: [backend]
     logging: *logging
