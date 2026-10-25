@@ -221,11 +221,18 @@ class MemorySubscriptions:
 
     revoked: list[tuple[UUID, str]] = field(default_factory=list)
     fail: bool = False
+    disconnects: list[tuple[UUID, bool, str]] = field(default_factory=list)
+    fail_disconnect: bool = False
 
     async def unsubscribe(self, user_id: UUID, channel: str) -> None:
         if self.fail:
             raise ConnectionError("centrifugo недоступен (двойник)")
         self.revoked.append((user_id, channel))
+
+    async def disconnect(self, user_id: UUID, *, reconnect: bool, reason: str) -> None:
+        if self.fail_disconnect:
+            raise ConnectionError("centrifugo недоступен (двойник)")
+        self.disconnects.append((user_id, reconnect, reason))
 
 
 @dataclass

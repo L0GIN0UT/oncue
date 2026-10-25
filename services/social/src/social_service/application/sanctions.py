@@ -177,6 +177,11 @@ class SanctionService:
             raise ForbiddenError(
                 "бан аккаунта требует отдельного права", code=rules.ACCOUNT_SANCTION_FORBIDDEN
             )
+        if not await uow.sanctions.target_perms(request.user_id) <= request.actor_perms:
+            raise ForbiddenError(
+                "права игрока выше ваших: санкция недопустима",
+                code=rules.SANCTION_TARGET_OUTRANKS,
+            )
         if not rules.duration_in_bounds(
             request.duration_s, min_s=limits.min_duration_s, max_s=limits.max_duration_s
         ):

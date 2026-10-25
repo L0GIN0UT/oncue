@@ -114,6 +114,39 @@ async def test_moderator_cannot_sanction_self() -> None:
     assert env.world.events == []
 
 
+ADMIN_PERMS = frozenset(
+    {"social.sanctions.manage", "social.sanctions.account", "admin.users.manage"}
+)
+OTHER_ADMIN = UUID(int=3)
+OTHER_MODERATOR = UUID(int=4)
+
+
+async def test_moderator_cannot_sanction_admin() -> None:
+    env = Env()
+    env.world.staff_perms[OTHER_ADMIN] = ADMIN_PERMS
+    with pytest.raises(ForbiddenError) as err:
+        await env.service.grant(env.request(user=OTHER_ADMIN))
+    assert err.value.code == "social.sanction_target_outranks"
+    assert env.world.records == {} and env.world.events == []
+
+
+async def test_admin_can_sanction_admin_and_moderator() -> None:
+    env = Env()
+    env.world.staff_perms[OTHER_ADMIN] = ADMIN_PERMS
+    env.world.staff_perms[OTHER_MODERATOR] = MANAGE
+    await env.service.grant(env.request(user=OTHER_ADMIN, perms=ADMIN_PERMS))
+    await env.service.grant(env.request(user=OTHER_MODERATOR, perms=ADMIN_PERMS))
+    assert len(env.world.records) == 2
+
+
+async def test_moderator_can_sanction_equal_moderator_and_plain_player() -> None:
+    env = Env()
+    env.world.staff_perms[OTHER_MODERATOR] = MANAGE
+    await env.service.grant(env.request(user=OTHER_MODERATOR))
+    await env.service.grant(env.request(user=PLAYER))  # записи в проекции нет - прав нет
+    assert len(env.world.records) == 2
+
+
 async def test_account_needs_its_own_permission() -> None:
     env = Env()
     with pytest.raises(ForbiddenError) as err:

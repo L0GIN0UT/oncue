@@ -837,26 +837,6 @@
         "title": "UgcImagePage",
         "type": "object"
       },
-      "UgcImagePreview": {
-        "description": "Короткая ссылка для просмотра модератором (в том числе `pending`).",
-        "properties": {
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
-          "url": {
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "url",
-          "expires_at"
-        ],
-        "title": "UgcImagePreview",
-        "type": "object"
-      },
       "UgcLimits": {
         "description": "Лимиты назначения (из конфига media-pipeline).",
         "properties": {
@@ -2078,7 +2058,7 @@
     },
     "/admin/v1/ugc-images/{asset_id}/preview": {
       "get": {
-        "description": "Короткая подписанная ссылка на `pending`-объект (`/media/p/...`, секрет тот же, что у ассетов), у одобренного - публичный адрес; выдача пишется в аудит. У отклонённого объекта нет (404 `ugc.not_found`). Просроченная ссылка не работает.",
+        "description": "Только для `pending` (ADR 0061): тело `image/webp` читается из хранилища по ключам сервиса, ссылок и адресов S3 в ответе нет. Заголовки: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`. Выдача пишется в аудит. Не `pending` - 409 `ugc.not_pending`, нет ассета или объекта - 404 `ugc.not_found`.",
         "operationId": "preview_admin_v1_ugc_images__asset_id__preview_get",
         "parameters": [
           {
@@ -2097,13 +2077,14 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "image/webp": {
                 "schema": {
-                  "$ref": "#/components/schemas/UgcImagePreview"
+                  "format": "binary",
+                  "type": "string"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "Изображение WebP"
           },
           "401": {
             "content": {
@@ -2150,6 +2131,21 @@
             },
             "description": "Не найдено"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2161,7 +2157,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Ссылка для просмотра",
+        "summary": "Содержимое pending-изображения",
         "tags": [
           "admin"
         ]

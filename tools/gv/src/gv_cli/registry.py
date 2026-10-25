@@ -38,6 +38,10 @@ class Service:
     s3: bool = False
     realtime: bool = False
     """Сервис работает с Centrifugo (публикация через server API, выдача токенов; D9 этапа 4)."""
+    app_role: bool = False
+    """Отдельная роль Postgres для рантайма (``<имя>_app``): владелец схемы (миграции) отличается
+    от роли api/relay/consumer, у которой нет прав менять и отключать триггеры append-only
+    журналов (ADR 0060)."""
 
     @property
     def is_django(self) -> bool:
@@ -74,6 +78,16 @@ class Service:
     def db_password_env(self) -> str:
         """Переменная окружения с паролем БД сервиса."""
         return f"PG_PASSWORD_{self.name.upper()}"
+
+    @property
+    def db_app_user(self) -> str:
+        """Рантайм-роль БД при ``app_role`` (владелец схемы остаётся ``name``)."""
+        return f"{self.name}_app"
+
+    @property
+    def db_app_password_env(self) -> str:
+        """Переменная окружения с паролем рантайм-роли."""
+        return f"PG_PASSWORD_{self.name.upper()}_APP"
 
 
 FRAMEWORKS = frozenset({"fastapi", "django"})
@@ -126,6 +140,7 @@ def load_services(root: Path) -> list[Service]:
                 apt=_apt(name, raw),
                 s3=bool(raw.get("s3", False)),
                 realtime=bool(raw.get("realtime", False)),
+                app_role=bool(raw.get("app_role", False)),
             )
         )
     return services

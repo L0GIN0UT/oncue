@@ -347,11 +347,18 @@ async def test_takedown_of_approved_bumps_version_and_removes_public_object(
         )
 
 
-async def test_preview_signs_pending_only_and_audits(media: Any) -> None:
+async def test_preview_returns_pending_bytes_from_storage_and_audits(media: Any) -> None:
     view = await _submit(media)
+    [key] = media.storage.keys(StorageArea.ASSETS)
+    stored, _ = media.storage.objects[(StorageArea.ASSETS, key)]
     preview = await media.ugc.preview.execute(view.asset_id, moderator_id=MODERATOR)
-    assert "/p/" in preview.url and "expires=" in preview.url
+    assert preview.data == stored and preview.content_type == "image/webp"
+    assert not hasattr(preview, "url")  # ссылок и адресов S3 нет
     assert [a.action for a in media.db.audit] == ["ugc.preview"]
+
+
+async def test_preview_refuses_not_pending_and_unknown(media: Any) -> None:
+    view = await _submit(media)
     await media.ugc.moderate.reject(
         view.asset_id,
         moderator_id=MODERATOR,
@@ -359,6 +366,21 @@ async def test_preview_signs_pending_only_and_audits(media: Any) -> None:
         reason=REASON,
         idempotency_key="mod-1",
     )
+    with pytest.raises(UgcNotPendingError):
+        await media.ugc.preview.execute(view.asset_id, moderator_id=MODERATOR)
+    approved = await _submit(media, owner=uuid7(), key="idem-approved-01")
+    await media.ugc.moderate.approve(
+        approved.asset_id, moderator_id=MODERATOR, reason=REASON, idempotency_key="mod-2"
+    )
+    with pytest.raises(UgcNotPendingError):
+        await media.ugc.preview.execute(approved.asset_id, moderator_id=MODERATOR)
+    with pytest.raises(UgcNotFoundError):
+        await media.ugc.preview.execute(uuid7(), moderator_id=MODERATOR)
+
+
+async def test_preview_missing_object_is_not_found(media: Any) -> None:
+    view = await _submit(media)
+    media.storage.objects.clear()
     with pytest.raises(UgcNotFoundError):
         await media.ugc.preview.execute(view.asset_id, moderator_id=MODERATOR)
 

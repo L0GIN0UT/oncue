@@ -118,6 +118,16 @@ class ProjectionService:
             author, target, UUID(payload["match_id"]), payload.get("reason")
         )
 
+    async def roles_changed(self, payload: Mapping[str, Any]) -> None:
+        """``identity.UserRolesChanged``: полный снимок прав (иерархия модераторов, ADR 0058)."""
+        async with self._uow() as uow:
+            await uow.staff_perms.apply(
+                UUID(payload["user_id"]),
+                frozenset(str(p) for p in payload["perms"]),
+                int(payload["version"]),
+            )
+            await uow.commit()
+
     async def user_deleted(self, payload: Mapping[str, Any]) -> None:
         """``UserDeleted``: комментарии удаляются (``account_deleted``), тексты жалоб очищаются."""
         user_id = UUID(payload["user_id"])
@@ -135,4 +145,5 @@ class ProjectionService:
                     )
                 )
             await uow.reports.anonymize_author(user_id)
+            await uow.staff_perms.delete(user_id)
             await uow.commit()

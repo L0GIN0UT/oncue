@@ -83,10 +83,10 @@ class UgcImageView:
 
 @dataclass(frozen=True, slots=True)
 class UgcPreview:
-    """Ссылка для просмотра модератором."""
+    """Содержимое ``pending``-изображения для просмотра модератором (ADR 0061)."""
 
-    url: str
-    expires_at: datetime
+    data: bytes
+    content_type: str
 
 
 @dataclass(frozen=True, slots=True)

@@ -308,6 +308,25 @@ async def test_prepare_storage_creates_buckets_and_assets_policy(s3_endpoint: S3
     assert _canonical_policy(raw["Policy"]) == _canonical_policy(expected)
 
 
+async def test_prepare_storage_overwrites_old_policy_with_pending_prefix(
+    s3_endpoint: S3Endpoint,
+) -> None:
+    """Выкат ADR 0061: прежняя политика с анонимным ``p/*`` заменяется, а не дополняется."""
+    settings = s3_settings(s3_endpoint)
+    await prepare_storage(settings)
+    storage = S3Storage(settings)
+    bucket = storage.bucket(StorageArea.ASSETS)
+    old = json.loads(assets_read_policy(bucket))
+    old["Statement"][0]["Resource"].append(f"arn:aws:s3:::{bucket}/p/*")
+    async with storage._client() as s3:
+        await s3.put_bucket_policy(Bucket=bucket, Policy=json.dumps(old))
+    await prepare_storage(settings)
+    async with storage._client() as s3:
+        raw = await s3.get_bucket_policy(Bucket=bucket)
+    assert "/p/" not in raw["Policy"]
+    assert _canonical_policy(raw["Policy"]) == _canonical_policy(assets_read_policy(bucket))
+
+
 def _canonical_policy(text: str) -> list[dict[str, object]]:
     """Сравнение по смыслу IAM: хранилища вправе вернуть список из одного элемента строкой."""
     statements = json.loads(text)["Statement"]

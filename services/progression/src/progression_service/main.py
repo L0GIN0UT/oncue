@@ -6,11 +6,13 @@ from pathlib import Path
 
 from fastapi import APIRouter
 
+from gv_core.errors import DependencyUnavailableError
 from gv_service import Infrastructure, ServiceDefinition, ServiceSettings, main
 from progression_service.api import build_api_routers
 from progression_service.infrastructure import jobs
 from progression_service.infrastructure.adapters import hmac_key
 from progression_service.infrastructure.container import container_for
+from progression_service.infrastructure.db.runtime_role import ensure_runtime_grants
 from progression_service.infrastructure.db.tables import TABLES
 from progression_service.infrastructure.messaging import CONSUMED_TOPICS, build_event_handlers
 from progression_service.infrastructure.storage import prepare_storage
@@ -39,6 +41,10 @@ async def prepare_resources(settings: ServiceSettings) -> None:
     hmac_key(settings)  # вне local/ci без ключа кодов job migrate (а с ним и деплой) падает
     p = settings.progression
     await prepare_storage(settings.s3, bucket=p.cosmetics_bucket, base_url=p.cosmetics_base_url)
+    if p.runtime_role is not None:
+        if settings.database_url is None:
+            raise DependencyUnavailableError("выдача прав рантайм-роли требует GV_DATABASE_URL")
+        await ensure_runtime_grants(settings.database_url.get_secret_value(), p.runtime_role)
 
 
 DEFINITION = ServiceDefinition(

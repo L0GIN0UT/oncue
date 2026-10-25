@@ -1,8 +1,9 @@
 """Представления раздела «UGC-изображения» (право ``media.ugc.moderate``).
 
 Очередь и решения - только через admin-API media-pipeline (``core.media_client``). Карточка
-запрашивает короткую подписанную ссылку на превью при каждом открытии и нигде её не хранит
-(ни в сессии, ни в аудите; страница ``no-store``). Решение - форма с обязательной причиной
+показывает картинку через ``preview`` - прокси admin: байты ``pending``-изображения
+читаются у media-pipeline с токеном модератора и отдаются браузеру (``no-store``, ``nosniff``);
+подписанных ссылок и адресов S3 в страницах нет (ADR 0061). Решение - форма с обязательной причиной
 и ``Idempotency-Key``; «снять с публикации» - тот же ``reject`` из статуса ``approved``.
 """
 
@@ -19,11 +20,17 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from admin_service.apps.ugc.forms import STATUSES, ApproveForm, RejectForm
-from admin_service.core.media_client import MEDIA, MediaAdminClient
+from admin_service.core.media_client import MEDIA, UGC_PREVIEW_TYPE, MediaAdminClient
 from admin_service.core.payload import as_dict, as_list
 from admin_service.core.permissions import require_perm
 from admin_service.core.service_client import ServiceClient, ServiceError
-from admin_service.core.views import audit_read, mutate, read, service_error_response
+from admin_service.core.views import (
+    audit_read,
+    error_status,
+    mutate,
+    read,
+    service_error_response,
+)
 
 MODERATE = "media.ugc.moderate"
 _SCAN_PAGES = 20
@@ -135,24 +142,18 @@ def _card_page(
     if row is None:
         raise Http404("Изображение не найдено в этом статусе (возможно, уже обработано)")
     settings_data, settings_error = _settings(request)
-    preview, preview_error = read(request, MEDIA, _client(lambda c: c.ugc_preview(asset_id)))
-    if preview_error is None:
-        # Просмотр картинки игрока аудируется (без подписанной ссылки).
-        audit_read(
-            request,
-            action="ugc.view_preview",
-            service=MEDIA,
-            target_type="ugc_image",
-            target_id=str(asset_id),
-        )
     suffix = "?" + urlencode({"status": status})
     context = {
         "title": "UGC-изображение",
         "row": row,
         "status": status,
-        "preview_url": as_dict(preview).get("url"),
-        "preview_expires_at": as_dict(preview).get("expires_at"),
-        "error": preview_error.message if preview_error else settings_error,
+        # Превью - только у pending (ADR 0061); остальным media-pipeline отвечает 409.
+        "preview_url": (
+            reverse("ugc:preview", kwargs={"asset_id": asset_id})
+            if row.get("status") == "pending"
+            else None
+        ),
+        "error": settings_error,
         "approve_form": approve_form or ApproveForm(auto_id="id_ap_%s"),
         "reject_form": reject_form
         or RejectForm(reasons=_reasons(settings_data), auto_id="id_rj_%s"),
@@ -161,7 +162,7 @@ def _card_page(
         "reject_label": "Снять с публикации" if row.get("status") == "approved" else "Отклонить",
     }
     response = render(request, "admin_ugc/card.html", context, status=status_code)
-    # Подписанная ссылка живёт минуты и не должна оседать в кэше браузера или прокси.
+    # Страница с данными игроков не должна оседать в кэше браузера или прокси.
     response["Cache-Control"] = "no-store, private"
     response["Pragma"] = "no-cache"
     return response
@@ -169,8 +170,32 @@ def _card_page(
 
 @require_GET
 @require_perm(MODERATE)
+def preview(request: HttpRequest, asset_id: UUID) -> HttpResponse:
+    """Прокси превью ``pending``-изображения: байты из media-pipeline, токен браузеру не уходит."""
+    data, error = read(request, MEDIA, _client(lambda c: c.ugc_preview(asset_id)))
+    if error is not None:
+        # Картинке нужен статус, а не страница: 404/409 (уже обработано) - 404, сбои - 502/503.
+        status = 404 if error.status in (404, 409) else error_status(error)
+        return HttpResponse(error.message, status=status, content_type="text/plain; charset=utf-8")
+    audit_read(
+        request,
+        action="ugc.view_preview",
+        service=MEDIA,
+        target_type="ugc_image",
+        target_id=str(asset_id),
+    )
+    response = HttpResponse(data, content_type=UGC_PREVIEW_TYPE)
+    response["Cache-Control"] = "no-store, private"
+    response["Pragma"] = "no-cache"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Disposition"] = "inline"
+    return response
+
+
+@require_GET
+@require_perm(MODERATE)
 def card(request: HttpRequest, asset_id: UUID) -> HttpResponse:
-    """Карточка с превью (ссылка запрашивается при открытии) и действиями."""
+    """Карточка с превью (картинка грузится через ``preview``) и действиями."""
     return _card_page(request, asset_id)
 
 

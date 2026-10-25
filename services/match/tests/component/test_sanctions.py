@@ -275,3 +275,23 @@ async def test_unavailable_projection_is_fail_closed_on_entry_points(
     # Игрок, уже сидящий в комнате: команды деградируют до claim (метрика растёт).
     assert (await svc.post(host, code, "ready", ready=True)).status_code == 200
     assert SANCTIONS_UNAVAILABLE._value.get() == before + 6
+
+
+async def test_account_ban_disconnects_without_reconnect_and_is_idempotent(svc: MatchApp) -> None:
+    host, guest = svc.user(), svc.user()
+    code = (await svc.create(host, LOBBY, collection_ids=[str(uuid7())]))["code"]
+    await svc.join(code, guest)
+    assert await sanction(svc, guest, 1, ("account", None)) is Outcome.PROCESSED
+    assert svc.subscriptions.disconnects == [(guest.user_id, False, "account_banned")]
+    await svc.until(host, code, lambda s: len(s["room"]["players"]) == 1)
+    # Повтор того же состояния (новый event_id, та же версия) второго disconnect не даёт.
+    await sanction(svc, guest, 1, ("account", None))
+    assert len(svc.subscriptions.disconnects) == 1
+    await sanction(svc, guest, 2, ("account", None))  # новая версия, бан всё ещё действует
+    assert len(svc.subscriptions.disconnects) == 2
+
+
+async def test_online_ban_without_account_ban_does_not_disconnect(svc: MatchApp) -> None:
+    player = svc.user()
+    await sanction(svc, player, 1, ("online", None))
+    assert svc.subscriptions.disconnects == []

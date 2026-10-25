@@ -162,9 +162,9 @@ def test_alembic_has_single_head_and_linear_chain() -> None:
     config = Config()
     config.set_main_option("script_location", str(DEFINITION.migrations_path))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0008"]
+    assert script.get_heads() == ["0009"]
     chain = [rev.revision for rev in script.walk_revisions()]
-    assert chain == ["0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert chain == ["0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
 
 
 async def test_downgrade_0007_is_blocked_by_data_and_empty_one_reapplies(

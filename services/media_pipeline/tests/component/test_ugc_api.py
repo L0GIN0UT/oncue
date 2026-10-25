@@ -241,8 +241,14 @@ async def test_queue_preview_approve_flow(ugc_client: Client) -> None:
     )
 
     preview = await client.get(f"/admin/v1/ugc-images/{first['asset_id']}/preview", headers=mod)
-    assert preview.status_code == 200 and "/p/" in preview.json()["url"]
+    [key] = media.storage.keys(StorageArea.ASSETS)
+    assert preview.status_code == 200
+    assert preview.content == media.storage.objects[(StorageArea.ASSETS, key)][0]
+    assert preview.headers["Content-Type"] == "image/webp"
     assert preview.headers["Cache-Control"] == "no-store"
+    assert preview.headers["X-Content-Type-Options"] == "nosniff"
+    assert preview.headers["Content-Disposition"] == "inline"
+    assert key not in str(preview.headers)  # ключ объекта наружу не попадает
 
     approve_headers = {**mod, "Idempotency-Key": "idem-bbbbbbbbbbbb"}
     approved = await client.post(
@@ -268,6 +274,12 @@ async def test_queue_preview_approve_flow(ugc_client: Client) -> None:
     ).json()
     assert [i["asset_id"] for i in done["items"]] == [first["asset_id"]]
     assert len(media.db.events) == 1
+    # одобренное изображение через предпросмотр не отдаётся (оно публично на /ugc/)
+    assert_problem(
+        await client.get(f"/admin/v1/ugc-images/{first['asset_id']}/preview", headers=mod),
+        409,
+        "ugc.not_pending",
+    )
 
 
 async def test_reject_and_takedown_rules(ugc_client: Client) -> None:
@@ -322,9 +334,14 @@ async def test_reject_and_takedown_rules(ugc_client: Client) -> None:
         "ugc.not_found",
     )
     assert [a.action for a in media.db.audit] == ["ugc.reject"]
-    # отклонённому ссылка на просмотр не выдаётся
+    # отклонённому просмотр не отдаётся (только pending), несуществующему - 404
     assert_problem(
         await client.get(f"/admin/v1/ugc-images/{asset}/preview", headers=mod),
+        409,
+        "ugc.not_pending",
+    )
+    assert_problem(
+        await client.get(f"/admin/v1/ugc-images/{UNKNOWN}/preview", headers=mod),
         404,
         "ugc.not_found",
     )

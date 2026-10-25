@@ -63,6 +63,7 @@ from identity_service.application.commands.service_tokens import (
     IssueServiceToken,
     ServiceTokenConfig,
 )
+from identity_service.application.commands.staff_perms import ReannounceStaffPerms
 from identity_service.application.config import AuthConfig, CodeConfig, LimitConfig
 from identity_service.application.container import IdentityUseCases
 from identity_service.application.ports import (
@@ -377,6 +378,23 @@ async def ensure_bootstrap_admin(settings: Settings) -> None:
             password_policy=PasswordPolicy(banned=common_passwords()),
         )
         await ensure(login=creds.login, password=creds.password, nickname=creds.nickname)
+    finally:
+        await infra.close()
+
+
+async def reannounce_staff_perms(settings: Settings) -> int:
+    """Повторно опубликовать права сотрудников (команда ``migrate``, по флагу настроек)."""
+    infra = await Infrastructure.open(settings, TABLES)
+    try:
+        sessions = infra.sessions
+        if sessions is None:
+            raise DependencyUnavailableError("бэкфилл прав требует GV_DATABASE_URL")
+        clock = infra.clock
+
+        def uow() -> IdentityUnitOfWork:
+            return SqlIdentityUnitOfWork(sessions, producer=settings.service_name, clock=clock)
+
+        return await ReannounceStaffPerms(uow)()
     finally:
         await infra.close()
 

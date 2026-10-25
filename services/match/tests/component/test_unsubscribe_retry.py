@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 from match_service.infrastructure.realtime import (
+    DISCONNECT_FAILED,
     REALTIME_PUBLISH,
     UNSUBSCRIBE_FAILED,
     CentrifugoPublisher,
@@ -93,3 +94,54 @@ def test_attempts_must_be_positive() -> None:
             RealtimeSettings(api_url=CENTRIFUGO, api_key=SecretStr("k" * 40)),
             unsubscribe_attempts=0,
         )
+
+
+@pytest.mark.parametrize(("reconnect", "code"), [(True, 3000), (False, 3500)])
+async def test_disconnect_request_shape(reconnect: bool, code: int) -> None:
+    import json
+
+    publisher = _publisher(1, [])
+    user = uuid7()
+    try:
+        with stub_service(CENTRIFUGO) as centrifugo:
+            route = centrifugo.route("POST", "/disconnect")
+            route.respond(200, json={"result": {}})
+            await publisher.disconnect(user, reconnect=reconnect, reason="kicked")
+            request = route.calls.last.request
+    finally:
+        await publisher.aclose()
+    assert json.loads(request.content) == {
+        "user": str(user),
+        "disconnect": {"code": code, "reason": "kicked"},
+    }
+    assert request.headers["X-API-Key"] == "k" * 40
+
+
+async def test_disconnect_retries_and_counts_giving_up() -> None:
+    sleeps: list[float] = []
+    publisher = _publisher(3, sleeps)
+    before = DISCONNECT_FAILED._value.get()
+    try:
+        with stub_service(CENTRIFUGO) as centrifugo:
+            route = centrifugo.route("POST", "/disconnect")
+            route.respond(200, json={"error": {"code": 100, "message": "internal"}})
+            await publisher.disconnect(uuid7(), reconnect=False, reason="account_banned")
+            assert route.call_count == 3
+    finally:
+        await publisher.aclose()
+    assert DISCONNECT_FAILED._value.get() == before + 1
+    assert sleeps == [0.5, 1.0]
+
+
+async def test_disconnect_transient_failure_succeeds() -> None:
+    publisher = _publisher(3, [])
+    before = DISCONNECT_FAILED._value.get()
+    try:
+        with stub_service(CENTRIFUGO) as centrifugo:
+            route = centrifugo.route("POST", "/disconnect")
+            route.side_effect = [httpx.ConnectError("down"), httpx.Response(200, json={})]
+            await publisher.disconnect(uuid7(), reconnect=True, reason="kicked")
+            assert route.call_count == 2
+    finally:
+        await publisher.aclose()
+    assert DISCONNECT_FAILED._value.get() == before

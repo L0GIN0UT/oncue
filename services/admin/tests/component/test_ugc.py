@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.component, pytest.mark.django_db]
 NOW = "2026-10-23T10:00:00Z"
 ASSET = str(uuid.uuid4())
 BASE = "/admin/v1/ugc-images"
-SIGNED = "https://s3.test/ugc/a.webp?X-Signature=SECRETSIG"
+WEBP = b"RIFF\x24\x00\x00\x00WEBPVP8 fake-image-bytes"
 ONLY = ("admin.access", "media.ugc.moderate")
 SETTINGS = {
     "purposes": [
@@ -60,7 +60,7 @@ def _image(**patch: Any) -> dict[str, Any]:
 def _stub(media: Any, *rows: dict[str, Any], next_cursor: str | None = None) -> Any:
     media.route("GET", f"{BASE}/settings").respond(200, json=SETTINGS)
     media.route("GET", f"{BASE}/{ASSET}/preview").respond(
-        200, json={"url": SIGNED, "expires_at": NOW}
+        200, content=WEBP, headers={"Content-Type": "image/webp", "Cache-Control": "no-store"}
     )
     return media.route("GET", BASE).respond(
         200, json={"items": list(rows) or [_image()], "next_cursor": next_cursor}
@@ -75,6 +75,7 @@ def test_hidden_and_forbidden_without_perm(client: Any, login: Any) -> None:
     assert 'href="/ugc/"' not in client.get("/").content.decode()
     assert client.get("/ugc/").status_code == 403
     assert client.get(f"/ugc/{ASSET}/").status_code == 403
+    assert client.get(f"/ugc/{ASSET}/preview/").status_code == 403
     body = {"reason": "причина", "idempotency_key": _key()}
     assert client.post(f"/ugc/{ASSET}/approve/", body).status_code == 403
     assert client.post(f"/ugc/{ASSET}/reject/", body | {"reason_code": "nsfw"}).status_code == 403
@@ -126,22 +127,78 @@ def test_queue_survives_service_errors(  # noqa: PLR0917
 # ------------------------------------------------------------------------------ карточка
 
 
-def test_card_requests_signed_preview_each_time_and_does_not_store_it(
+def test_card_points_image_to_admin_proxy_and_has_no_external_link(
     client: Any, login: Any, media: Any
 ) -> None:
     login()
     _stub(media)
     response = client.get(f"/ugc/{ASSET}/")
     page = response.content.decode()
-    assert f'src="{SIGNED}"'.replace("&", "&amp;") in page or SIGNED in page
+    assert f'src="/ugc/{ASSET}/preview/"' in page
+    assert "http" not in page.split("<img", 1)[1].split(">", 1)[0]  # внешних адресов нет
     assert "no-store" in response["Cache-Control"]
-    preview = media.route("GET", f"{BASE}/{ASSET}/preview")
-    client.get(f"/ugc/{ASSET}/")
-    assert preview.call_count == 2
-    # ссылка не сохраняется ни в сессии, ни в аудите, ни в куках
-    assert "SECRETSIG" not in json.dumps(dict(client.session.items()), default=str)
-    assert "SECRETSIG" not in str(client.cookies)
-    assert {e.action for e in AuditEntry.objects.all()} == {"ugc.view_preview"}
+    # карточка сама байты не запрашивает: их читает только прокси-view
+    assert media.route("GET", f"{BASE}/{ASSET}/preview").call_count == 0
+
+
+def test_card_of_approved_has_no_preview_image(client: Any, login: Any, media: Any) -> None:
+    login()
+    _stub(media, _image(status="approved"))
+    page = client.get(f"/ugc/{ASSET}/?status=approved").content.decode()
+    assert "<img" not in page and "/preview/" not in page
+
+
+def test_preview_proxy_streams_bytes_with_safe_headers_and_audits(
+    client: Any, login: Any, media: Any
+) -> None:
+    login()
+    _stub(media)
+    response = client.get(f"/ugc/{ASSET}/preview/")
+    assert response.status_code == 200
+    assert response.content == WEBP
+    assert response["Content-Type"] == "image/webp"
+    assert "no-store" in response["Cache-Control"]
+    assert response["X-Content-Type-Options"] == "nosniff"
+    assert response["Content-Disposition"] == "inline"
+    assert [e.action for e in AuditEntry.objects.all()] == ["ugc.view_preview"]
+    # токен модератора уходит в media-pipeline, но не в ответ браузеру
+    sent = media.route("GET", f"{BASE}/{ASSET}/preview").calls.last.request
+    assert sent.headers["Authorization"].startswith("Bearer ")
+    token = sent.headers["Authorization"].removeprefix("Bearer ")
+    assert token not in str(response.headers) and token.encode() not in response.content
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "expected"),
+    [
+        (404, "ugc.not_found", 404),
+        (409, "ugc.not_pending", 404),
+        (403, "auth.forbidden", 403),
+    ],
+)
+def test_preview_proxy_maps_service_errors_to_status_without_audit(  # noqa: PLR0917
+    client: Any, login: Any, media: Any, problem: Any, status: int, code: str, expected: int
+) -> None:
+    login()
+    _stub(media)
+    media.route("GET", f"{BASE}/{ASSET}/preview").respond(status, json=problem(status, code))
+    response = client.get(f"/ugc/{ASSET}/preview/")
+    assert response.status_code == expected
+    assert b"RIFF" not in response.content
+    assert not AuditEntry.objects.exists()
+
+
+def test_preview_proxy_service_down_is_503_and_wrong_type_is_refused(
+    client: Any, login: Any, media: Any, problem: Any
+) -> None:
+    login()
+    _stub(media)
+    route = media.route("GET", f"{BASE}/{ASSET}/preview")
+    route.respond_off_contract(503, json=problem(503, "dependency.unavailable"))
+    assert client.get(f"/ugc/{ASSET}/preview/").status_code == 503
+    route.respond(200, content=b"<svg/>", headers={"Content-Type": "image/svg+xml"})
+    assert client.get(f"/ugc/{ASSET}/preview/").status_code == 502  # чужой тип не пересылаем
+    assert not AuditEntry.objects.exists()
 
 
 def test_card_of_missing_image_is_404(client: Any, login: Any, media: Any) -> None:
@@ -317,13 +374,13 @@ def test_card_distinguishes_service_errors_from_not_found(
     assert client.get(f"/ugc/{ASSET}/").status_code == 503
 
 
-def test_card_view_is_audited_without_signed_link(client: Any, login: Any, media: Any) -> None:
+def test_preview_view_is_audited_without_image_content(client: Any, login: Any, media: Any) -> None:
     login()
     _stub(media)
-    client.get(f"/ugc/{ASSET}/")
+    client.get(f"/ugc/{ASSET}/preview/")
     entry = AuditEntry.objects.get(action="ugc.view_preview")
     assert (entry.service, entry.target_id) == ("media_pipeline", ASSET)
-    assert "SECRETSIG" not in json.dumps([entry.after, entry.before, entry.reason])
+    assert "fake-image-bytes" not in json.dumps([entry.after, entry.before, entry.reason])
 
 
 def test_decision_audit_takes_status_from_real_row(client: Any, login: Any, media: Any) -> None:

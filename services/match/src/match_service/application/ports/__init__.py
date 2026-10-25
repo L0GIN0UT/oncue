@@ -214,6 +214,14 @@ class Subscriptions(Protocol):
         """Отписать пользователя от канала (кик, выход, удаление аккаунта)."""
         ...
 
+    async def disconnect(self, user_id: UUID, *, reconnect: bool, reason: str) -> None:
+        """Разорвать все соединения пользователя (ADR 0059).
+
+        ``reconnect=True`` - клиент переподключится сам (кик: токен подписки ему не выдадут);
+        ``False`` - без переподключения (бан аккаунта).
+        """
+        ...
+
 
 class SubscriptionTokens(Protocol):
     """Subscription-токены каналов комнат (D9, свой секрет)."""

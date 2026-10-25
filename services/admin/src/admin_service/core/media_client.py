@@ -13,6 +13,9 @@ from admin_service.core.service_client import ServiceClient
 
 MEDIA = "media_pipeline"
 _SOURCES = "/admin/v1/sources"
+UGC_PREVIEW_TYPE = "image/webp"
+UGC_PREVIEW_MAX_BYTES = 5 * 1024 * 1024
+"""Потолок тела предпросмотра (лимиты назначений media - до 1,5 МБ)."""
 
 
 class MediaAdminClient:
@@ -100,9 +103,13 @@ class MediaAdminClient:
         """Настройки модерации → ``{purposes, reasons[{code, title}]}``."""
         return self._client.get("/admin/v1/ugc-images/settings")
 
-    def ugc_preview(self, asset_id: UUID) -> Any:
-        """Короткая подписанная ссылка на превью → ``{url, expires_at}`` (не сохранять)."""
-        return self._client.get(f"/admin/v1/ugc-images/{asset_id}/preview")
+    def ugc_preview(self, asset_id: UUID) -> bytes:
+        """Байты WebP ``pending``-изображения (ADR 0061); ссылок и адресов S3 нет."""
+        return self._client.get_bytes(
+            f"/admin/v1/ugc-images/{asset_id}/preview",
+            accept=UGC_PREVIEW_TYPE,
+            max_bytes=UGC_PREVIEW_MAX_BYTES,
+        )
 
     def ugc_approve(self, asset_id: UUID, *, reason: str, idempotency_key: str) -> Any:
         """Одобрить изображение."""

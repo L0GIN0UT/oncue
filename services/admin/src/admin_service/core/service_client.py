@@ -272,6 +272,30 @@ class ServiceClient:
         clean = {k: v for k, v in (params or {}).items() if v not in (None, "")}
         return self._send("GET", path, params=clean)
 
+    def get_bytes(self, path: str, *, accept: str, max_bytes: int) -> bytes:
+        """GET бинарного ответа (картинка): тип должен совпасть с ``accept``, размер - в пределе.
+
+        Ошибки сервиса (Problem Details) приходят как ``ServiceError`` с кодом сервиса.
+
+        Raises:
+            ServiceError: сервис отказал, недоступен или вернул не тот тип/слишком большое тело.
+        """
+        try:
+            response = self._client.get(path, headers={"Accept": accept})
+        except httpx.HTTPError as exc:
+            log.warning("service.unavailable", service=self.service, method="GET", error=repr(exc))
+            raise ServiceError(
+                self.service, None, "service.unavailable", f"Сервис {self.service} недоступен"
+            ) from exc
+        if response.is_error:
+            raise problem_to_error(self.service, response)
+        content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+        if content_type != accept or len(response.content) > max_bytes:
+            raise ServiceError(
+                self.service, response.status_code, "service.bad_response", "Некорректный ответ"
+            )
+        return response.content
+
     def post(
         self,
         path: str,

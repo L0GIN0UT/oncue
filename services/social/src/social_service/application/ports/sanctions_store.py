@@ -85,6 +85,10 @@ class SanctionsRepository(Protocol):
         """Известен ли игрок (проекция пользователей)."""
         ...
 
+    async def target_perms(self, user_id: UUID) -> frozenset[str]:
+        """Эффективные права игрока из проекции ``UserRolesChanged`` (нет записи - пусто)."""
+        ...
+
     async def user_card(self, user_id: UUID, case_limit: int) -> UserCardData:
         """Ник, счётчики порядочности и последние кейсы игрока (простое чтение)."""
         ...

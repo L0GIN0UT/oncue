@@ -132,3 +132,46 @@ async def test_bootstrap_does_not_set_password_on_existing(seeding: Any) -> None
     async with seeding.app(settings, prefix) as (client, headers):
         response = await _admin_login(client, headers)
     assert response.status_code != 200, "пароль существующему аккаунту не восстанавливается"
+
+
+async def _roles_events(database_url: str) -> list[dict[str, Any]]:
+    """Payload-ы ``UserRolesChanged`` из outbox (по порядку записи)."""
+    from identity_service.main import DEFINITION
+
+    from gv_testkit import outbox_envelopes
+
+    assert DEFINITION.tables is not None
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            from sqlalchemy.ext.asyncio import AsyncSession
+
+            async with AsyncSession(bind=conn) as session:
+                envelopes = await outbox_envelopes(session, DEFINITION.tables.outbox)
+    finally:
+        await engine.dispose()
+    return [e.payload for e in envelopes if e.event_type == "identity.UserRolesChanged"]
+
+
+async def test_reannounce_staff_perms_republishes_staff_only(seeding: Any) -> None:
+    """Бэкфилл проекций: права сотрудника публикуются заново с большей версией (ADR 0058)."""
+    from identity_service.wiring import reannounce_staff_perms
+
+    settings, _ = seeding.settings(
+        bootstrap_admin={"login": LOGIN, "password": SecretStr(PASSWORD)},
+        reannounce_staff_perms=True,
+    )
+    await ensure_bootstrap_admin(settings)
+    before = await _roles_events(seeding.database_url)
+    assert len(before) == 1  # выдача роли admin при создании
+
+    assert await reannounce_staff_perms(settings) == 1
+    after = await _roles_events(seeding.database_url)
+    assert len(after) == 2
+    first, second = after
+    assert second["user_id"] == first["user_id"]
+    assert second["version"] > first["version"]
+    assert second["perms"] == first["perms"]
+    assert "admin" in second["roles"]
+    assert second["reason"] == "staff_perms_backfill"
+    assert second["actor_id"] is None

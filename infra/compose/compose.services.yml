@@ -42,6 +42,8 @@ services:
       <<: *common-env
       GV_SERVICE_NAME: identity
       GV_DATABASE_URL: postgresql+asyncpg://identity:${PG_PASSWORD_IDENTITY:?задайте PG_PASSWORD_IDENTITY}@postgres:5432/identity
+      # Бэкфилл проекций прав сотрудников при выкладке иерархии модераторов (ADR 0058); после выкладки снять.
+      GV_REANNOUNCE_STAFF_PERMS: ${GV_REANNOUNCE_STAFF_PERMS:-false}
     depends_on:
       postgres: {condition: service_healthy}
     deploy:
@@ -519,6 +521,8 @@ services:
       # Job migrate создаёт бакет косметики и проверяет ключ промокодов (prepare_resources).
       GV_PROGRESSION__PROMO_HMAC_KEY: ${GV_PROGRESSION__PROMO_HMAC_KEY:?задайте GV_PROGRESSION__PROMO_HMAC_KEY}
       GV_PROGRESSION__COSMETICS_BUCKET: ${GV_COSMETICS_BUCKET:-gv-cosmetics}
+      # Рантайм-роль БД (ADR 0060): migrate выдаёт ей права и падает, если роли нет.
+      GV_PROGRESSION__RUNTIME_ROLE: progression_app
     depends_on:
       postgres: {condition: service_healthy}
       s3: {condition: service_healthy}
@@ -537,7 +541,8 @@ services:
     environment:
       <<: *common-env
       GV_SERVICE_NAME: progression
-      GV_DATABASE_URL: postgresql+asyncpg://progression:${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}@postgres:5432/progression
+      # Рантайм — рантайм-роль без прав менять журналы (ADR 0060); миграции идут владельцем.
+      GV_DATABASE_URL: postgresql+asyncpg://progression_app:${PG_PASSWORD_PROGRESSION_APP:?задайте PG_PASSWORD_PROGRESSION_APP}@postgres:5432/progression
       GV_DATABASE_POOL_SIZE: "5"
       GV_REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD}@redis:6379/0
       GV_KAFKA_BOOTSTRAP: redpanda:9092

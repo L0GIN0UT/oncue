@@ -4,6 +4,8 @@
   `social.moderate`; `account` дополнительно требует `social.sanctions.account`
   (проверка в application-слое: 403 `social.account_sanction_forbidden`);
 * модератор не выдаёт и не снимает санкции себе (403 `social.self_sanction_forbidden`);
+* выдать можно, только если права цели ⊆ прав актёра, иначе 403 `social.sanction_target_outranks`
+  (ADR 0058);
 * аудит - `actor_id` и `revoked_by` записи и `changed_by` события `UserSanctionsChanged`;
 * ответы - `Cache-Control: no-store`.
 """
@@ -94,7 +96,8 @@ def build_sanctions_router(service: SanctionService) -> APIRouter:
             "`ranked | chat | online | account`, со сроком или бессрочно. Публикует "
             "`UserSanctionsChanged` (полное активное состояние, `version`). Повтор того же вида "
             "заменяет прежнюю санкцию (она закрывается как `replaced`). Ошибки: 403 "
-            "`social.self_sanction_forbidden`, 403 `social.account_sanction_forbidden`, 422 "
+            "`social.self_sanction_forbidden`, 403 `social.account_sanction_forbidden`, "
+            "403 `social.sanction_target_outranks` (права игрока шире ваших), 422 "
             "`social.sanction_duration_invalid`, 404 `social.player_not_found`."
         ),
         responses=problem_responses(401, 403, 404, 409, 422),

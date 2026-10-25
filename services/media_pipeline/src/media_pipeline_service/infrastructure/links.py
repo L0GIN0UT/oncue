@@ -14,7 +14,7 @@ from redis.exceptions import RedisError
 
 from gv_core.errors import DependencyUnavailableError
 
-_SIGNABLE_KEY = re.compile(r"^[ap]/[A-Za-z0-9]+\.[a-z0-9]+$")
+_SIGNABLE_KEY = re.compile(r"^a/[A-Za-z0-9]+\.[a-z0-9]+$")
 
 
 def md5_b64url(text: str) -> str:
@@ -53,10 +53,11 @@ class NginxSecureLinkSigner:
         return md5_b64url(f"{expires}{uri} {self._secret}")
 
     def sign(self, object_key: str, expires_at: datetime) -> str:
-        """Подписанный URL объекта ассета (``a/…``) или UGC на модерации (``p/…``).
+        """Подписанный URL объекта ассета (``a/…``).
 
-        Публичный ``u/…`` подписи не требует и сюда не допускается; регэксп location
-        ``/media/`` на gateway пропускает только ``(a|p)/<hex>.<ext>``.
+        UGC на модерации (``p/…``) не подписывается вовсе (ADR 0061: предпросмотр идёт через
+        сервисы), публичный ``u/…`` подписи не требует; регэксп location ``/media/`` на
+        gateway пропускает только ``a/<ключ>.<ext>``.
 
         Raises:
             ValueError: ключ вне подписываемых префиксов или с посторонними символами.

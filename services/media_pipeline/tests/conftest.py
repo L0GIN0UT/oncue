@@ -514,6 +514,8 @@ class FakeStorage:
         self.objects[(area, key)] = (data, content_type)
 
     async def get(self, area: StorageArea, key: str, *, max_bytes: int) -> bytes:
+        if (area, key) not in self.objects:  # как S3Storage.get
+            raise GenerationError("source.missing", retryable=False)
         data, _ = self.objects[(area, key)]
         if len(data) > max_bytes:
             raise GenerationError("source.too_large", retryable=False)
@@ -873,9 +875,7 @@ class MediaHarness:
             moderate=ModerateUgcImage(
                 uow, self.clock, self.storage, self.tokens, self.ugc_catalog, purger
             ),
-            preview=PreviewUgcImage(
-                uow, self.clock, FakeSigner(), ttl_s=120, public_base_url="/ugc/"
-            ),
+            preview=PreviewUgcImage(uow, self.clock, self.storage),
             queue=ListUgcQueue(uow),
             purger=purger,
             orphans=SweepOrphanUgcObjects(

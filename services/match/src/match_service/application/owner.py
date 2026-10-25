@@ -736,6 +736,13 @@ class RoomOwner:
         except Exception:
             log.exception("match.unsubscribe_failed", room=room.code)
 
+    async def _disconnect(self, user_id: UUID, room: Room, *, reason: str) -> None:
+        """Разорвать соединения исключённого игрока (ADR 0059); сбой - только лог."""
+        try:
+            await self._subscriptions.disconnect(user_id, reconnect=True, reason=reason)
+        except Exception:
+            log.exception("match.disconnect_failed", room=room.code)
+
     async def _claim(self, room: Room, user_id: UUID) -> None:
         await claim_room(
             self._player_rooms,
@@ -804,6 +811,7 @@ class RoomOwner:
         room.forget_ops(target)
         await self._player_rooms.release(target, room.code)
         await self._unsubscribe(target, room)
+        await self._disconnect(target, room, reason="kicked")
         return self._room_result(room)
 
     async def _transfer_host(self, room: Room, cmd: RoomCommand, now: int) -> Builder:

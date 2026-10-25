@@ -33,6 +33,13 @@ REALTIME_PUBLISH = Counter("gv_match_realtime_publish_total", "Публикац�
 UNSUBSCRIBE_FAILED = Counter(
     "gv_match_unsubscribe_failed_total", "Отзыв подписки Centrifugo не удался после всех попыток"
 )
+DISCONNECT_FAILED = Counter(
+    "gv_match_disconnect_failed_total", "Отзыв соединений Centrifugo не удался после всех попыток"
+)
+
+# Коды отключения Centrifugo: 3000-3499 - клиент переподключается, 3500-3999 - нет (ADR 0059).
+DISCONNECT_CODE_RECONNECT = 3000
+DISCONNECT_CODE_NO_RECONNECT = 3500
 
 
 class CentrifugoPublisher:
@@ -56,6 +63,7 @@ class CentrifugoPublisher:
         self._sleep = sleep
         self._url = settings.api_url.rstrip("/") + "/publish"
         self._unsubscribe_url = settings.api_url.rstrip("/") + "/unsubscribe"
+        self._disconnect_url = settings.api_url.rstrip("/") + "/disconnect"
         self._headers = {"X-API-Key": settings.api_key.get_secret_value()}
         self._client = client or httpx.AsyncClient(timeout=settings.timeout_s)
 
@@ -105,6 +113,46 @@ class CentrifugoPublisher:
             attempts=self._unsubscribe_attempts,
         )
 
+    async def disconnect(self, user_id: UUID, *, reconnect: bool, reason: str) -> None:
+        """Разорвать соединения пользователя (``POST /api/disconnect``) с повтором.
+
+        Попытки и пауза - как у ``unsubscribe``; исчерпание - ``gv_match_disconnect_failed_total``
+        и лог, исключения нет (ADR 0059: остаточный риск - старые токены живут до TTL).
+        """
+        code = DISCONNECT_CODE_RECONNECT if reconnect else DISCONNECT_CODE_NO_RECONNECT
+        body = {"user": str(user_id), "disconnect": {"code": code, "reason": reason}}
+        for attempt in range(1, self._unsubscribe_attempts + 1):
+            if await self._disconnect_once(body):
+                return
+            if attempt < self._unsubscribe_attempts:
+                await self._sleep(self._unsubscribe_retry_s * attempt)
+        DISCONNECT_FAILED.inc()
+        log.error(
+            "match.realtime_disconnect_gave_up", reason=reason, attempts=self._unsubscribe_attempts
+        )
+
+    async def _disconnect_once(self, body: dict[str, Any]) -> bool:  # Any: JSON
+        """Одна попытка разрыва; ``True`` - успех."""
+        try:
+            response = await self._client.post(
+                self._disconnect_url, json=body, headers=self._headers
+            )
+        except httpx.HTTPError as exc:
+            REALTIME_PUBLISH.labels("disconnect_network").inc()
+            log.warning("match.realtime_disconnect_failed", error_type=type(exc).__name__)
+            return False
+        if response.status_code != httpx.codes.OK:
+            REALTIME_PUBLISH.labels("disconnect_error").inc()
+            log.warning("match.realtime_disconnect_rejected", status=response.status_code)
+            return False
+        result = response.json() if response.content else {}
+        if isinstance(result, dict) and result.get("error"):
+            REALTIME_PUBLISH.labels("disconnect_api_error").inc()
+            log.warning("match.realtime_disconnect_api_error", code=result["error"].get("code"))
+            return False
+        REALTIME_PUBLISH.labels("disconnect_ok").inc()
+        return True
+
     async def _unsubscribe_once(self, user_id: UUID, channel: str) -> bool:
         """Одна попытка отзыва; ``True`` - успех."""
         try:
@@ -140,6 +188,9 @@ class NullPublisher:
 
     async def unsubscribe(self, user_id: UUID, channel: str) -> None:
         """Подписок нет — отзывать нечего."""
+
+    async def disconnect(self, user_id: UUID, *, reconnect: bool, reason: str) -> None:
+        """Соединений нет — разрывать нечего."""
 
 
 class SubscriptionTokenIssuer:

@@ -257,6 +257,36 @@ async def test_collection_deleted_unpublishes() -> None:
     assert not ref.published and ref.author_id == TARGET
 
 
+def _roles(version: int, perms: list[str]) -> dict[str, object]:
+    return {
+        "user_id": str(TARGET),
+        "roles": ["moderator"],
+        "perms": perms,
+        "version": version,
+        "actor_id": None,
+        "reason": None,
+    }
+
+
+async def test_roles_changed_keeps_latest_snapshot_and_ignores_stale() -> None:
+    h = Harness()
+    projections = _projections(h)
+    await projections.roles_changed(_roles(3, ["a.b", "c.d"]))
+    await projections.roles_changed(_roles(2, ["x.y"]))
+    await projections.roles_changed(_roles(3, ["x.y"]))  # тот же version - не новее
+    assert h.world.staff_perms[TARGET] == (frozenset({"a.b", "c.d"}), 3)
+    await projections.roles_changed(_roles(4, []))
+    assert h.world.staff_perms[TARGET] == (frozenset(), 4)
+
+
+async def test_user_deleted_clears_staff_perms() -> None:
+    h = Harness()
+    projections = _projections(h)
+    await projections.roles_changed(_roles(1, ["a.b"]))
+    await projections.user_deleted({"user_id": str(TARGET)})
+    assert TARGET not in h.world.staff_perms
+
+
 def _finished(*, aborted: bool = False) -> dict[str, object]:
     def player(user: UUID, finish: str) -> dict[str, object]:
         return {

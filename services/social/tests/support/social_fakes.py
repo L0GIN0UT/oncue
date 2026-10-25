@@ -81,6 +81,8 @@ class World:
     """Блокировки ``(blocker_id, blocked_id)``."""
     avatars: dict[UUID, AvatarRef] = field(default_factory=dict)
     audit: list[AuditEntry] = field(default_factory=list)
+    staff_perms: dict[UUID, tuple[frozenset[str], int]] = field(default_factory=dict)
+    """Проекция прав сотрудников: ``user_id -> (perms, version)``."""
     grants: list[GrantRequest] = field(default_factory=list)
 
 
@@ -357,6 +359,19 @@ class _Avatars:
             self.w.avatars[ref.asset_id] = ref
 
 
+class _StaffPerms:
+    def __init__(self, w: World) -> None:
+        self.w = w
+
+    async def apply(self, user_id: UUID, perms: frozenset[str], version: int) -> None:
+        known = self.w.staff_perms.get(user_id)
+        if known is None or known[1] < version:
+            self.w.staff_perms[user_id] = (perms, version)
+
+    async def delete(self, user_id: UUID) -> None:
+        self.w.staff_perms.pop(user_id, None)
+
+
 class _Audit:
     def __init__(self, w: World) -> None:
         self.w = w
@@ -372,6 +387,7 @@ class FakeUow:
         self.world = world
         self.cases = _Cases(world)
         self.avatars = _Avatars(world)
+        self.staff_perms = _StaffPerms(world)
         self.audit = _Audit(world)
         self.comments = _Comments(world)
         self.collections = _Collections(world)
