@@ -129,7 +129,7 @@ test.beforeAll(async ({ browser }) => {
     await admin.post(`/admin/v1/events/${EVENT_KEY}/runs`, {
       headers: headers(),
       data: {
-        starts_at: new Date(now - 60_000).toISOString(),
+        starts_at: new Date(now - 20_000).toISOString(),
         ends_at: new Date(now + 2 * 3600_000).toISOString(),
         reason: `e2e: запуск ${RUN}`,
       },
