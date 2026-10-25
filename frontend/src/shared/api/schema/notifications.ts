@@ -23,6 +23,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/notification-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Типы уведомлений и их включённость */
+        get: operations["notification_types_admin_v1_notification_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/notification-types/{type_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Включить или выключить тип уведомлений
+         * @description Выключенный тип не создаёт уведомлений (события принимаются без ошибки, настройки игроков и рассылки не затрагиваются). Решение вступает в силу сразу в этом процессе, в остальных - не позже чем через `GV_NOTIFICATIONS__TYPE_FLAGS_CACHE_TTL_S`. Системные типы (`switchable = false`: итоги модерации) выключить нельзя - 422 `notifications.type_not_switchable`. Повтор с тем же `Idempotency-Key` возвращает тот же ответ.
+         */
+        put: operations["set_type_enabled_admin_v1_notification_types__type_key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/devices": {
         parameters: {
             query?: never;
@@ -440,6 +477,57 @@ export interface components {
             types: components["schemas"]["TypeSetting"][];
         };
         /**
+         * NotificationTypeAdmin
+         * @description Тип уведомления и решение админа о его включённости.
+         */
+        NotificationTypeAdmin: {
+            /**
+             * Changed At
+             * @description Когда менял; null - решения админа не было
+             */
+            changed_at: string | null;
+            /**
+             * Changed By
+             * @description Кто менял; null - решения админа не было
+             */
+            changed_by: string | null;
+            /**
+             * Default Enabled
+             * @description Значение без решения админа
+             */
+            default_enabled: boolean;
+            /**
+             * Enabled
+             * @description false - уведомления этого типа не создаются
+             */
+            enabled: boolean;
+            /**
+             * Switchable
+             * @description false - системный тип, выключить нельзя (422 `type_not_switchable`)
+             */
+            switchable: boolean;
+            /** Type */
+            type: string;
+        };
+        /**
+         * NotificationTypeAdminPage
+         * @description Все типы каталога.
+         */
+        NotificationTypeAdminPage: {
+            /** Items */
+            items: components["schemas"]["NotificationTypeAdmin"][];
+        };
+        /**
+         * NotificationTypeEnabledRequest
+         * @description Включить или выключить тип.
+         */
+        NotificationTypeEnabledRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * Problem
          * @description RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).
          *
@@ -651,6 +739,125 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notification_types_admin_v1_notification_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTypeAdminPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    set_type_enabled_admin_v1_notification_types__type_key__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                type_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationTypeEnabledRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTypeAdmin"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

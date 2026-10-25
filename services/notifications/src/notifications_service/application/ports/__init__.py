@@ -10,10 +10,12 @@ from typing import Any, Protocol, Self
 from uuid import UUID
 
 from gv_db.idempotency import IdempotencyStore
+from gv_email import PermanentEmailError as PermanentEmailError  # реэкспорт: тот же класс
 from notifications_service.domain.notification import (
     Device,
     Notification,
     Subscription,
+    TypeFlag,
     TypePreference,
 )
 
@@ -63,10 +65,6 @@ class EmailMessage:
     body: str
     headers: Mapping[str, str] = field(default_factory=dict)
     """Дополнительные заголовки (``List-Unsubscribe`` и др.); значения без CR/LF."""
-
-
-class PermanentEmailError(Exception):
-    """Адрес отвергнут окончательно (получатель отклонён SMTP-сервером): повтор бесполезен."""
 
 
 class NotificationRepository(Protocol):
@@ -124,6 +122,18 @@ class PreferenceRepository(Protocol):
         ...
 
     async def save(self, user_id: UUID, type_key: str, pref: TypePreference, now: datetime) -> None:
+        """Сохранить (upsert)."""
+        ...
+
+
+class TypeFlagRepository(Protocol):
+    """Решения админов о включённости типов."""
+
+    async def all(self) -> dict[str, TypeFlag]:
+        """Все решения по ключам типов (типы без решения включены)."""
+        ...
+
+    async def save(self, flag: TypeFlag) -> None:
         """Сохранить (upsert)."""
         ...
 
@@ -242,6 +252,9 @@ class UnitOfWork(Protocol):
 
     @property
     def finished_runs(self) -> FinishedRunRepository: ...
+
+    @property
+    def type_flags(self) -> TypeFlagRepository: ...
 
     @property
     def subscriptions(self) -> SubscriptionRepository: ...

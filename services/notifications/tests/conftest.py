@@ -45,6 +45,7 @@ from gv_testkit import (
 
 LIMITER_PREFIX = "notifications:unsub:"
 ADMIN_PERMS = ("admin.access", "notifications.broadcast.send")
+TYPES_ADMIN_PERMS = ("admin.access", "notifications.types.manage")
 
 
 @dataclass
@@ -138,6 +139,9 @@ class NotificationsService:
 
     def admin(self, user_id: UUID | None = None) -> dict[str, str]:
         return self.auth(user_id, ADMIN_PERMS)
+
+    def types_admin(self, user_id: UUID | None = None) -> dict[str, str]:
+        return self.auth(user_id, TYPES_ADMIN_PERMS)
 
     # ------------------------------------------------------------------ события
     @staticmethod

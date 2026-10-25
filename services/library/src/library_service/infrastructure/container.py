@@ -103,7 +103,12 @@ class LibraryContainer:
     @cached_property
     def queries(self) -> LibraryQueries:
         """Чтение."""
-        return LibraryQueries(self.uow_factory(), self.adapters.catalog, self.limits)
+        return LibraryQueries(
+            self.uow_factory(),
+            self.adapters.catalog,
+            self.limits,
+            batch_max=self.settings.library.item_shelves_batch_max,
+        )
 
     @cached_property
     def catalog_events(self) -> ApplyCatalogEvent:

@@ -161,6 +161,7 @@ class OwnerSettings:
     poison_limit: int = 3
     op_users_max: int = 16
     pending_room_ms: int = 10_000
+    empty_lobby_ms: int = 0
 
     @property
     def timing(self) -> Timing:
@@ -169,6 +170,7 @@ class OwnerSettings:
             idle_ms=self.idle_ms,
             presence_timeout_ms=self.presence_timeout_ms,
             memory_limit=self.memory_limit,
+            empty_lobby_ms=self.empty_lobby_ms,
         )
 
 

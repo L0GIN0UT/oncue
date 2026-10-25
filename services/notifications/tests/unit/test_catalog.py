@@ -208,3 +208,17 @@ def test_type_needs_exactly_one_of_recipient_and_audience(document: dict[str, An
     del started["recipient"], started["audience"]
     with pytest.raises(ConfigError, match="ровно один"):
         TypeCatalog.parse(document)
+
+
+def test_admin_switchable_defaults_to_user_mutable(document: dict[str, Any]) -> None:
+    catalog = load_catalog()
+    for key in ("avatar_approved", "avatar_rejected", "report_resolved"):
+        assert catalog.by_key(key).admin_switchable is False  # type: ignore[union-attr]
+    assert catalog.by_key("level_up").admin_switchable is True  # type: ignore[union-attr]
+
+    first = document["types"][0]
+    first["user_mutable"] = False
+    first["admin_switchable"] = True
+    validate_document(document)
+    parsed = TypeCatalog.parse(document)
+    assert parsed.by_key(first["key"]).admin_switchable is True  # type: ignore[union-attr]

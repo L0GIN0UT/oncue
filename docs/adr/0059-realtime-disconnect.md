@@ -17,3 +17,6 @@ Centrifugo OSS не умеет отзывать выданные токены. �
 
 ## Вариант без реализации
 Connect/subscribe proxy Centrifugo: на каждое подключение/подписку Centrifugo вызывает наш endpoint, который проверяет санкцию и членство. Закрывает риск полностью, но добавляет синхронную зависимость realtime от сервиса на горячем пути - отдельное решение.
+
+## Дополнение (security-ревью): бан-отзыв мимо очереди
+Disconnect при `account_banned` не ставится в фоновую очередь `RevocationQueue` ([0063](0063-match-shared-command-reader.md)): задание могло потеряться (переполнение, `aclose`, сброс при SIGTERM), а повтор события невозможен - дубль отсекает проекция. Consumer вызывает адаптер синхронно через `DirectRevoker` (`infrastructure/revocation.py`, повторы - внутри адаптера, `GV_MATCH__UNSUBSCRIBE_ATTEMPTS`). Провал после повторов - лог `match.direct_disconnect_failed` и `gv_match_disconnect_failed_total`, исключение не бросается (иначе откатится проекция санкций). Кик и выход по-прежнему идут через очередь.

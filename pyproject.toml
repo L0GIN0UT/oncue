@@ -17,6 +17,7 @@ gv-testkit = { workspace = true }
 gv-cli = { workspace = true }
 gv-text = { workspace = true }
 gv-game-kernel = { workspace = true }
+gv-email = { workspace = true }
 
 [dependency-groups]
 dev = [

@@ -87,6 +87,17 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 Обязательные дашборды: RED по сервисам, consumer lag, глубина очередей, активные комнаты и игроки, ошибки провайдеров, ресурсы хоста.
 Обязательные алерты: 5xx > порога, p95 > SLO, lag > N, DLQ не пуст, диск > 80 %, бэкап не выполнен.
 
+### 6.1. Правила Prometheus и runbook match (realtime и санкции)
+
+Правила лежат в `infra/observability/prometheus/rules/*.yml` (подключены `rule_files` в `prometheus.yml`; каталог монтируется вместе с конфигом). Синтаксис: `docker run --rm --entrypoint promtool -v <каталог prometheus>:/w prom/prometheus check rules /w/rules/match.yml`. Решение — ADR 0063.
+
+| Алерт | Условие | Что делать |
+|---|---|---|
+| `MatchSanctionsProjectionLag` | лаг последнего применённого `social.UserSanctionsChanged` > 60 с (порог N - константа в выражении) и события шли за 15 мин | consumer match отстаёт от `social.social.v1`: смотреть `gv_events_consumed_total`, DLQ, нагрузку Postgres/Redpanda; пока лаг есть, забаненный игрок может остаться в комнате/очереди. Зависший consumer без новых событий этим правилом не виден - нужен lag группы из экспортёра Kafka |
+| `MatchDisconnectFailed` | рост `gv_match_disconnect_failed_total` за 10 мин | `POST /api/disconnect` Centrifugo не удался после `GV_MATCH__UNSUBSCRIBE_ATTEMPTS` попыток: проверить доступность Centrifugo и `GV_REALTIME__API_KEY` у match; забаненный аккаунт держит WebSocket до TTL токена (ADR 0059) - при необходимости отозвать вручную через server API |
+| `MatchUnsubscribeFailed` | рост `gv_match_unsubscribe_failed_total` за 10 мин | то же для `unsubscribe` (кик, выход, санкция `ONLINE`, ADR 0052) |
+| `MatchRevocationDropped` | рост `gv_match_revocation_dropped_total` за 10 мин | очередь отзыва (`GV_MATCH__REVOCATION_QUEUE_SIZE`) переполнена или сброшена при остановке дольше `GV_MATCH__REVOCATION_DRAIN_S`: Centrifugo медленный/недоступен; после восстановления повторить отзыв вручную для затронутых игроков |
+
 ## 7. Переход на Kubernetes (план)
 
 1. Helm-чарт `service` (общий шаблон) + values на каждый сервис. Сгенерировать из compose-описания.

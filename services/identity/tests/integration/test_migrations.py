@@ -442,3 +442,33 @@ async def test_0019_seeds_events_perms_for_admin_only_and_is_reversible(database
     assert not (await _grants(database_url))["*"] & EVENTS_PERMS
     await asyncio.to_thread(command.upgrade, config, "head")
     assert (await _grants(database_url))["admin"] >= EVENTS_PERMS
+
+
+NOTIFICATION_TYPES_PERMS = {"notifications.types.manage"}
+
+
+async def test_0020_seeds_notification_types_perm_for_admin_only_and_is_reversible(
+    database_url: str,
+) -> None:
+    """Право выключателей типов уведомлений: только admin (moderator и игрок - нет)."""
+    import asyncio
+
+    from alembic import command
+
+    from gv_db.migrations import alembic_config
+
+    assert DEFINITION.migrations_path is not None
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    grants = await _grants(database_url)
+    assert grants["*"] >= NOTIFICATION_TYPES_PERMS
+    assert grants["admin"] >= NOTIFICATION_TYPES_PERMS
+    assert not grants.get("moderator", set()) & NOTIFICATION_TYPES_PERMS
+    assert not grants.get("user", set()) & NOTIFICATION_TYPES_PERMS
+
+    config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0019")
+    after = await _grants(database_url)
+    assert not after["*"] & NOTIFICATION_TYPES_PERMS
+    assert after["admin"] >= EVENTS_PERMS  # права 0019 откат не трогает
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert (await _grants(database_url))["admin"] >= NOTIFICATION_TYPES_PERMS

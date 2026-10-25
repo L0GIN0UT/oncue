@@ -54,6 +54,7 @@ CARD: dict[str, Any] = {
     "title": "Брат",
     "original_title": None,
     "year": 1997,
+    "subtitle": None,
     "genres": [],
     "persons": [],
 }
@@ -188,14 +189,23 @@ def upstreams() -> Iterator[respx.MockRouter]:
                 },
             )
         )
-        for rnd in SAMPLES["match_result"]["rounds"]:
-            item_id = rnd["media_item_id"]
-            router.get(f"http://catalog.test/v1/items/{item_id}").respond(
-                200, json={**CARD, "id": item_id}
+        router.get("http://catalog.test/v1/items", name="items").mock(
+            side_effect=lambda request: httpx.Response(
+                200,
+                json={"items": [{**CARD, "id": i} for i in request.url.params.get_list("ids")]},
             )
-            router.get(f"http://library.test/v1/items/{item_id}/shelves").respond(
-                200, json={"media_item_id": item_id, "shelves": ["system:watched"]}
+        )
+        router.get("http://library.test/v1/items/shelves", name="items_shelves").mock(
+            side_effect=lambda request: httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {"media_item_id": i, "shelves": ["system:watched"]}
+                        for i in request.url.params.get_list("ids")
+                    ]
+                },
             )
+        )
         yield router
 
 
@@ -259,6 +269,19 @@ async def test_match_page_matches_bff_snapshot(upstreams: respx.MockRouter) -> N
     assert ids == [p["user_id"] for p in SAMPLES["match_result"]["players"]]
     described = _spec("progression")["paths"]["/v1/appearance"]["get"]["parameters"][0]
     assert described["name"] == "user_ids" and len(ids) <= described["schema"]["maxItems"]
+    # Пакетные вызовы: ответы заглушек проходят схемы источников, параметр `ids` описан ими.
+    round_ids = list(dict.fromkeys(r["media_item_id"] for r in SAMPLES["match_result"]["rounds"]))
+    for service, route, path in (
+        ("catalog", "items", "/v1/items"),
+        ("library", "items_shelves", "/v1/items/shelves"),
+    ):
+        call = upstreams[route].calls.last
+        assert upstreams[route].call_count == 1
+        assert call.request.url.params.get_list("ids") == round_ids
+        parameters = _spec(service)["paths"][path]["get"]["parameters"]
+        assert [p["name"] for p in parameters if p["in"] == "query"] == ["ids"]
+        sample = json.loads(call.response.content)
+        assert _errors(service, _response_schema(service, path), sample) == []
 
 
 def _leaderboards_query() -> GetLeaderboardsPage:

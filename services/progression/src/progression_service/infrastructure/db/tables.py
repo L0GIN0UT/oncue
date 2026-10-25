@@ -186,3 +186,18 @@ reward_periods = Table(
     _ts("awarded_at"),
     PrimaryKeyConstraint("period_key", "user_id"),
 )
+
+reconcile_checkpoints = Table(
+    "reconcile_checkpoints",
+    _md,
+    # Имя журнала (``xp_ledger`` / ``currency_ledger``): по строке на журнал.
+    Column("ledger", String(32), primary_key=True),
+    # Id последней проводки, покрытой сверкой (uuid7 упорядочен по времени создания).
+    Column("last_id", Uuid(as_uuid=True), nullable=True),
+    _ts("last_full_at", nullable=True),
+    # Расхождения последнего полного прохода: держат алерт между инкрементальными проходами.
+    Column("full_mismatches", Integer, nullable=False, server_default=text("0")),
+    _ts("updated_at"),
+    CheckConstraint("full_mismatches >= 0", name="full_mismatches_non_negative"),
+)
+"""Контрольные точки инкрементальной сверки (ADR 0062). Не журнал: точка только сдвигается."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -132,8 +133,26 @@ class Search(_SearchBase):
 class GetItem:
     """Карточка единицы."""
 
-    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+    def __init__(self, uow_factory: UnitOfWorkFactory, *, batch_max: int = 50) -> None:
         self._uow = uow_factory
+        self._batch_max = batch_max
+
+    async def public_many(self, item_ids: Sequence[uuid.UUID]) -> list[MediaItem]:
+        """Активные единицы пачкой: дубли схлопнуты, неизвестные и заблокированные пропущены.
+
+        Raises:
+            InvalidInputError: ``catalog.batch_too_large`` - уникальных id больше предела.
+        """
+        ids = list(dict.fromkeys(item_ids))
+        if len(ids) > self._batch_max:
+            raise InvalidInputError(
+                "слишком много единиц в запросе",
+                code="catalog.batch_too_large",
+                details={"max": self._batch_max},
+            )
+        async with self._uow() as uow:
+            items = await uow.items.get_many(ids)
+        return [i for i in items if i.is_active]
 
     async def public(self, item_id: uuid.UUID) -> MediaItem:
         """Активная единица; заблокированная неотличима от несуществующей."""

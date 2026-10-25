@@ -170,6 +170,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             progression,
             concurrency=up.max_concurrency,
             items_deadline_s=pages.match_items_deadline_s,
+            items_batch_size=pages.match_items_batch_size,
             appearance_batch_size=pages.appearance_batch_size,
         ),
         http_cache=settings.http_cache,

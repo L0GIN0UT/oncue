@@ -65,3 +65,7 @@
 | [0059](0059-realtime-disconnect.md) | Отзыв соединений Centrifugo при бане аккаунта и кике (черновик) |
 | [0060](0060-postgres-runtime-role.md) | Рантайм-роль Postgres для сервисов с журналами (черновик) |
 | [0061](0061-ugc-pending-preview-via-service.md) | Предпросмотр pending UGC через сервисы, без анонимного `p/*` (черновик; уточняет 0048, 0012) |
+| [0062](0062-progression-ledger-partitioning.md) | Партиционирование журналов progression: оценка, решение — отложить до порога (черновик; уточняет 0043, 0060) |
+| [0063](0063-match-shared-command-reader.md) | match: общий читатель команд комнат, фоновый отзыв Centrifugo, закрытие пустого лобби, алерты (черновик; уточняет 0034, 0052, 0059) |
+| [0065](0065-admin-keeps-django-inbox.md) | Admin оставляет собственный inbox на Django ORM (черновик) |
+| [0066](0066-notification-type-switches-and-email-lib.md) | Admin-выключатели типов уведомлений и общая библиотека `libs/email` (черновик; уточняет 0047, 0041) |

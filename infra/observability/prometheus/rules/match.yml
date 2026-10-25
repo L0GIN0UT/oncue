@@ -1,0 +1,52 @@
+# Алерты match (realtime и санкции): ADR 0052, 0059, 0063; runbook — docs/07-infrastructure.md §6.1.
+# Порог N проекции санкций — константа 60 в выражении первого правила (секунды).
+groups:
+  - name: match-sanctions-realtime
+    rules:
+      - alert: MatchSanctionsProjectionLag
+        # Последнее применённое событие social.UserSanctionsChanged опоздало больше N=60 с
+        # (now - occurred_at конверта), и события недавно шли. Зависший consumer без новых
+        # событий этим правилом не виден (нужен offset-lag экспортёра Kafka).
+        expr: >
+          gv_match_sanctions_projection_last_lag_seconds > 60
+          and on (instance)
+          changes(gv_match_sanctions_projection_lag_seconds_count[15m]) > 0
+        for: 2m
+        labels: {severity: warning, service: match}
+        annotations:
+          summary: "match: проекция санкций отстаёт больше 60 с ({{ $labels.instance }})"
+          description: "Забаненный игрок может дольше оставаться в комнате/очереди. Runbook: docs/07-infrastructure.md §6.1."
+
+      - alert: MatchDisconnectFailed
+        # Отзыв соединений Centrifugo (бан аккаунта, кик) не удался после всех попыток.
+        expr: increase(gv_match_disconnect_failed_total[10m]) > 0
+        labels: {severity: warning, service: match}
+        annotations:
+          summary: "match: disconnect Centrifugo не удался ({{ $labels.instance }})"
+          description: "Забаненный аккаунт может держать WebSocket до TTL токена (ADR 0059). Runbook: docs/07-infrastructure.md §6.1."
+
+      - alert: MatchUnsubscribeFailed
+        # Отзыв подписки Centrifugo не удался после всех попыток.
+        expr: increase(gv_match_unsubscribe_failed_total[10m]) > 0
+        labels: {severity: warning, service: match}
+        annotations:
+          summary: "match: unsubscribe Centrifugo не удался ({{ $labels.instance }})"
+          description: "Кикнутый или забаненный игрок может читать канал комнаты до TTL токена (ADR 0052). Runbook: docs/07-infrastructure.md §6.1."
+
+      - alert: MatchRevocationDropped
+        # Очередь отзыва переполнена или сброшена при остановке (ADR 0063).
+        expr: increase(gv_match_revocation_dropped_total[10m]) > 0
+        labels: {severity: warning, service: match}
+        annotations:
+          summary: "match: отзывы Centrifugo отброшены ({{ $labels.kind }}, {{ $labels.instance }})"
+          description: "Очередь отзыва переполнена (GV_MATCH__REVOCATION_QUEUE_SIZE) или сброшена при остановке. Runbook: docs/07-infrastructure.md §6.1."
+
+      - alert: MatchCommandReaderErrors
+        # Общий читатель команд комнат (ADR 0063) сбоит: перезапускается сам, но команды
+        # комнат инстанса запаздывают на время паузы.
+        expr: increase(gv_match_command_reader_errors_total[5m]) > 3
+        for: 5m
+        labels: {severity: warning, service: match}
+        annotations:
+          summary: "match: общий читатель команд сбоит ({{ $labels.instance }})"
+          description: "Рост gv_match_command_reader_errors_total: Redis недоступен или баг в разборе записи (лог match.command_reader_crashed). Runbook: docs/07-infrastructure.md §6.1."

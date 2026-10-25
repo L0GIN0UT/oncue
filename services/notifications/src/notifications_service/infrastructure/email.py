@@ -1,29 +1,24 @@
 """Отправка писем: log (local/ci), SMTP, фон; справочник адресов; Push-заглушка.
 
-Адаптеры скопированы по образцу identity (``identity_service.infrastructure.clients``):
-межсервисные импорты запрещены, вынос в общую библиотеку - отдельный хвост.
-Адрес получателя не логируется никогда (ПДн).
+Отправители писем (SMTP, лог, фон) - общая библиотека ``libs/email`` (ADR 0066); здесь тонкий
+адаптер порта. Адрес получателя не логируется никогда (ПДн).
 """
 
 from __future__ import annotations
 
-import asyncio
-from email.message import EmailMessage as MimeMessage
 from typing import Protocol
 from uuid import UUID
 
-import aiosmtplib
 import httpx
 import structlog
 
 from gv_core.errors import DependencyUnavailableError
+from gv_email import EmailTransport, OutgoingEmail, SmtpEmailSender
 from notifications_service.application.ports import (
     DIRECTORY_FORBIDDEN,
     DIRECTORY_UNAVAILABLE,
     DIRECTORY_UNCONFIGURED,
     EmailMessage,
-    EmailSender,
-    PermanentEmailError,
     Recipient,
 )
 from notifications_service.settings import SmtpSettings
@@ -31,79 +26,33 @@ from notifications_service.settings import SmtpSettings
 log = structlog.get_logger(__name__)
 
 
-class LogEmailSender:
-    """Письма в лог (только local/ci); тело - лишь при ``include_body`` (e2e читает ссылку)."""
+class GvEmailSender:
+    """Адаптер порта ``EmailSender`` к транспорту ``gv_email`` (SMTP, лог из ``libs/email``)."""
 
-    def __init__(self, *, include_body: bool = False) -> None:
-        self._include_body = include_body
-
-    async def send(self, message: EmailMessage) -> None:
-        """«Отправить» письмо."""
-        extra = {"body": message.body} if self._include_body else {}
-        log.info("email.logged", subject=message.subject, **extra)
-
-
-class BackgroundEmailSender:
-    """Отправка вне запроса: время ответа не зависит от SMTP. Сбой логируется, не пробрасывается.
-
-    При ``max_pending`` задачах в полёте отправка идёт синхронно: очередь не растёт без границ.
-    """
-
-    def __init__(self, inner: EmailSender, *, max_pending: int = 100) -> None:
-        self._inner, self._max_pending = inner, max_pending
-        self._tasks: set[asyncio.Task[None]] = set()
+    def __init__(self, transport: EmailTransport) -> None:
+        self._transport = transport
 
     async def send(self, message: EmailMessage) -> None:
-        """Поставить письмо в фон (или отправить сразу, если очередь заполнена)."""
-        if len(self._tasks) >= self._max_pending:
-            await self._deliver(message)
-            return
-        task = asyncio.get_running_loop().create_task(self._deliver(message))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-    async def drain(self, timeout_s: float = 10.0) -> None:
-        """Дождаться уже запущенных отправок (остановка процесса, тесты)."""
-        if self._tasks:
-            await asyncio.wait(set(self._tasks), timeout=timeout_s)
-
-    async def _deliver(self, message: EmailMessage) -> None:
-        try:
-            await self._inner.send(message)
-        except Exception as exc:
-            log.warning("email.send_failed", error=type(exc).__name__)
-
-
-class SmtpEmailSender:
-    """Отправка через SMTP: STARTTLS (по умолчанию) или неявный TLS (порт 465)."""
-
-    def __init__(self, settings: SmtpSettings) -> None:
-        self._s = settings
-
-    async def send(self, message: EmailMessage) -> None:
-        """Отправить письмо."""
-        mime = MimeMessage()
-        mime["From"] = self._s.sender
-        mime["To"] = message.to
-        mime["Subject"] = message.subject
-        for name, value in message.headers.items():
-            mime[name] = value
-        mime.set_content(message.body)
-        try:
-            await aiosmtplib.send(
-                mime,
-                hostname=self._s.host,
-                port=self._s.port,
-                username=self._s.username,
-                password=self._s.password.get_secret_value() if self._s.password else None,
-                start_tls=self._s.start_tls,
-                use_tls=self._s.use_tls,
-                timeout=self._s.timeout_s,
+        """Передать письмо транспорту; ``PermanentEmailError`` пробрасывается как есть."""
+        await self._transport.send(
+            OutgoingEmail(
+                to=message.to, subject=message.subject, body=message.body, headers=message.headers
             )
-        except (aiosmtplib.SMTPRecipientsRefused, aiosmtplib.SMTPRecipientRefused) as exc:
-            # Получатель отвергнут сервером: повтор не поможет. Ошибки входа, соединения
-            # и прочие 5xx (проблема нашей стороны) остаются обычными - их повторят.
-            raise PermanentEmailError("получатель отвергнут SMTP-сервером") from exc
+        )
+
+
+def smtp_transport(settings: SmtpSettings) -> SmtpEmailSender:
+    """SMTP-транспорт из настроек сервиса (``GV_NOTIFICATIONS__SMTP__*``)."""
+    return SmtpEmailSender(
+        host=settings.host,
+        port=settings.port,
+        sender=settings.sender,
+        username=settings.username,
+        password=settings.password.get_secret_value() if settings.password else None,
+        start_tls=settings.start_tls,
+        use_tls=settings.use_tls,
+        timeout_s=settings.timeout_s,
+    )
 
 
 class UnconfiguredEmailDirectory:

@@ -1330,27 +1330,47 @@ async def test_online_modes_are_cached_under_own_key(bff: Bff) -> None:
 
 
 # ----------------------------------------------------------------------------- итог матча
+def _items_batch_route(bff: Bff) -> respx.Route:
+    """``GET /v1/items?ids=``: карточка на каждый запрошенный id, в обратном порядке."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("ids")
+        cards = [{**CARD, "id": i, "title": MATCH_TITLES.get(i, "Брат")} for i in reversed(ids)]
+        return httpx.Response(200, json={"items": cards})
+
+    return bff.stubs.catalog.route("GET", "/v1/items").mock(side_effect=answer)
+
+
+def _shelves_batch_route(bff: Bff) -> respx.Route:
+    """``GET /v1/items/shelves?ids=``: запись на каждый id, ``ITEM`` лежит на «просмотрено»."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("ids")
+        items = [
+            {"media_item_id": i, "shelves": ["system:watched"] if i == str(ITEM) else []}
+            for i in ids
+        ]
+        return httpx.Response(200, json={"items": items})
+
+    return bff.stubs.library.route("GET", "/v1/items/shelves").mock(side_effect=answer)
+
+
+MATCH_TITLES = {str(ITEM_2): "Брат 2"}
+
+
 def _match_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
     result = bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
         200, json=SAMPLES["match_result"]
     )
-    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
-    item_2 = bff.stubs.catalog.route("GET", f"/v1/items/{ITEM_2}").respond(
-        200, json={**CARD, "id": str(ITEM_2), "title": "Брат 2"}
-    )
-    shelves_1 = bff.stubs.library.route("GET", f"/v1/items/{ITEM}/shelves").respond(
-        200, json=SAMPLES["item_shelves"]
-    )
-    bff.stubs.library.route("GET", f"/v1/items/{ITEM_2}/shelves").respond(
-        200, json={"media_item_id": str(ITEM_2), "shelves": []}
-    )
+    items = _items_batch_route(bff)
+    shelves = _shelves_batch_route(bff)
     _appearance_route(bff)
-    return result, item_2, shelves_1
+    return result, items, shelves
 
 
 async def test_match_page_result_items_and_library_flags(bff: Bff) -> None:
     token = bff.issuer.issue()
-    result, _, shelves_1 = _match_routes(bff)
+    result, items, shelves = _match_routes(bff)
 
     response = await bff.client.get(f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(token))
 
@@ -1371,8 +1391,11 @@ async def test_match_page_result_items_and_library_flags(bff: Bff) -> None:
         ],
     }
     assert result.calls.last.request.headers["authorization"] == f"Bearer {token}"
-    assert shelves_1.calls.last.request.headers["authorization"] == f"Bearer {token}"
-    assert shelves_1.call_count == 1
+    assert shelves.calls.last.request.headers["authorization"] == f"Bearer {token}"
+    # N+1 нет: по одному пакетному вызову на источник, дубли единиц схлопнуты.
+    assert items.call_count == shelves.call_count == 1
+    assert sorted(items.calls.last.request.url.params.get_list("ids")) == [str(ITEM), str(ITEM_2)]
+    assert "authorization" not in items.calls.last.request.headers  # карточки публичные
 
 
 async def test_match_page_requires_user_without_calling_match(bff: Bff) -> None:
@@ -1422,8 +1445,8 @@ async def test_match_page_match_down_is_200_unavailable(bff: Bff, failure: str) 
 
 
 async def test_match_page_catalog_and_library_degrade_independently(bff: Bff) -> None:
-    _, item_2, _ = _match_routes(bff)
-    item_2.respond(503)
+    _, items, _ = _match_routes(bff)
+    items.mock(return_value=httpx.Response(503))
 
     response = await bff.client.get(
         f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
@@ -1437,10 +1460,8 @@ async def test_match_page_catalog_and_library_degrade_independently(bff: Bff) ->
 
 
 async def test_match_page_library_timeout_hides_only_flags(bff: Bff) -> None:
-    _match_routes(bff)
-    bff.stubs.library.route("GET", f"/v1/items/{ITEM_2}/shelves").mock(
-        side_effect=httpx.ReadTimeout("slow")
-    )
+    _, _, shelves = _match_routes(bff)
+    shelves.mock(side_effect=httpx.ReadTimeout("slow"))
 
     response = await bff.client.get(
         f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
@@ -1452,8 +1473,8 @@ async def test_match_page_library_timeout_hides_only_flags(bff: Bff) -> None:
 
 
 async def test_match_page_blocked_item_is_skipped(bff: Bff) -> None:
-    _, item_2, _ = _match_routes(bff)
-    item_2.respond(404, json={"code": "catalog.item_not_found", "title": "Nf", "status": 404})
+    _, items, _ = _match_routes(bff)
+    items.mock(return_value=httpx.Response(200, json={"items": [{**CARD, "id": str(ITEM)}]}))
 
     response = await bff.client.get(
         f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
@@ -1541,8 +1562,12 @@ async def test_match_page_foreign_match_id_in_answer_is_contract_violation(bff: 
 
 
 async def test_match_page_foreign_item_in_shelves_answer_is_contract_violation(bff: Bff) -> None:
-    _, _, shelves_1 = _match_routes(bff)
-    shelves_1.respond(200, json={"media_item_id": str(ITEM_2), "shelves": ["system:watched"]})
+    _, _, shelves = _match_routes(bff)
+    foreign = {
+        "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-0000000000ff",
+        "shelves": ["system:watched"],
+    }
+    shelves.mock(return_value=httpx.Response(200, json={"items": [foreign]}))
 
     response = await bff.client.get(
         f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())
@@ -2326,13 +2351,8 @@ async def test_match_page_appearance_batches_by_12_and_dedups(bff: Bff) -> None:
         200, json={**template, "players": players}
     )
     looks = _appearance_route(bff)
-    for item_id in (ITEM, ITEM_2):
-        bff.stubs.catalog.route("GET", f"/v1/items/{item_id}").respond(
-            200, json={**CARD, "id": str(item_id)}
-        )
-        bff.stubs.library.route("GET", f"/v1/items/{item_id}/shelves").respond(
-            200, json={"media_item_id": str(item_id), "shelves": []}
-        )
+    _items_batch_route(bff)
+    _shelves_batch_route(bff)
 
     response = await bff.client.get(
         f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(bff.issuer.issue())

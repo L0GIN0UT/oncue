@@ -48,6 +48,7 @@ async def test_link_issuance_purge_deletes_old_rows_in_batches(database_url: str
     rows = [(i, now - timedelta(days=8)) for i in old] + [(fresh, now - timedelta(days=6))]
     labels = {"job": "media.link_issuance.purge", "result": "ok"}
     before = REGISTRY.get_sample_value("gv_periodic_job_runs_total", labels) or 0.0
+    purged_before = REGISTRY.get_sample_value("gv_media_link_issuance_purged_total") or 0.0
     try:
         assert infra.sessions is not None
         async with infra.sessions() as session, session.begin():
@@ -71,5 +72,7 @@ async def test_link_issuance_purge_deletes_old_rows_in_batches(database_url: str
         assert not left & set(old)
         after = REGISTRY.get_sample_value("gv_periodic_job_runs_total", labels)
         assert after == before + 1
+        purged = REGISTRY.get_sample_value("gv_media_link_issuance_purged_total")
+        assert purged == purged_before + len(old)
     finally:
         await infra.close()

@@ -118,6 +118,32 @@ class Device(BaseModel):
     registered_at: datetime
 
 
+class NotificationTypeAdmin(BaseModel):
+    """Тип уведомления и решение админа о его включённости."""
+
+    type: Key
+    enabled: bool = Field(description="false - уведомления этого типа не создаются")
+    default_enabled: bool = Field(description="Значение без решения админа")
+    changed_by: UUID | None = Field(description="Кто менял; null - решения админа не было")
+    changed_at: datetime | None = Field(description="Когда менял; null - решения админа не было")
+    switchable: bool = Field(
+        description="false - системный тип, выключить нельзя (422 `type_not_switchable`)"
+    )
+
+
+class NotificationTypeAdminPage(BaseModel):
+    """Все типы каталога."""
+
+    items: list[NotificationTypeAdmin]
+
+
+class NotificationTypeEnabledRequest(_Request):
+    """Включить или выключить тип."""
+
+    enabled: bool
+    reason: Reason
+
+
 class BroadcastRequest(_Request):
     """Информационная рассылка подписчикам."""
 

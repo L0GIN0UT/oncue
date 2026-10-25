@@ -291,7 +291,49 @@ async def test_account_ban_disconnects_without_reconnect_and_is_idempotent(svc: 
     assert len(svc.subscriptions.disconnects) == 2
 
 
+async def test_account_ban_disconnect_failure_does_not_roll_back_projection(
+    svc: MatchApp,
+) -> None:
+    host, guest = svc.user(), svc.user()
+    code = (await svc.create(host, LOBBY, collection_ids=[str(uuid7())]))["code"]
+    await svc.join(code, guest)
+    svc.subscriptions.fail_disconnect = True
+    assert await sanction(svc, guest, 1, ("account", None)) is Outcome.PROCESSED
+    await svc.until(host, code, lambda s: len(s["room"]["players"]) == 1)  # evict выполнен
+
+
 async def test_online_ban_without_account_ban_does_not_disconnect(svc: MatchApp) -> None:
     player = svc.user()
     await sanction(svc, player, 1, ("online", None))
     assert svc.subscriptions.disconnects == []
+
+
+async def test_projection_lag_is_measured_from_event_time(svc: MatchApp) -> None:
+    """Лаг проекции = «сейчас» - ``occurred_at`` конверта (алерт «проекция отстаёт»)."""
+    from match_service.infrastructure.messaging import SANCTIONS_LAG, SANCTIONS_LAG_LAST
+
+    player = svc.user()
+    base = load_example("social.UserSanctionsChanged", fresh_id=True)
+    payload = {
+        **base.payload,
+        "user_id": str(player.user_id),
+        "version": 1,
+        "active": [],
+        "mask": 0,
+        "account_banned": False,
+        "next_expiry_at": None,
+    }
+    behind = svc.clock.now() - timedelta(seconds=90)
+    count_before = SANCTIONS_LAG._sum.get()
+    outcome = await svc.deliver(
+        base.model_copy(
+            update={
+                "aggregate_id": str(player.user_id),
+                "payload": payload,
+                "occurred_at": behind,
+            }
+        )
+    )
+    assert outcome is Outcome.PROCESSED
+    assert SANCTIONS_LAG_LAST._value.get() == pytest.approx(90, abs=1)
+    assert SANCTIONS_LAG._sum.get() - count_before == pytest.approx(90, abs=1)

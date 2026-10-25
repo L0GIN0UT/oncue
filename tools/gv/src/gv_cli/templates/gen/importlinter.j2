@@ -13,6 +13,7 @@ root_packages =
     gv_testkit
     gv_text
     gv_game_kernel
+    gv_email
 {% for s in services %}
     {{ s.package }}
 {% endfor %}
@@ -32,6 +33,7 @@ forbidden_modules =
     gv_testkit
     gv_text
     gv_game_kernel
+    gv_email
     sqlalchemy
     fastapi
     pydantic
@@ -56,6 +58,7 @@ forbidden_modules =
     gv_observability
     gv_flags
     gv_testkit
+    gv_email
 
 [importlinter:contract:text-pure]
 name = gv_text — чистый Python (только stdlib)
@@ -79,6 +82,7 @@ forbidden_modules =
     gv_flags
     gv_testkit
     gv_game_kernel
+    gv_email
 
 [importlinter:contract:libs-do-not-import-services]
 name = Библиотеки не импортируют сервисы
@@ -94,6 +98,7 @@ source_modules =
     gv_testkit
     gv_text
     gv_game_kernel
+    gv_email
 forbidden_modules =
 {% for s in services %}
     {{ s.package }}

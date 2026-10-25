@@ -19,6 +19,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/items/shelves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * На каких полках единицы (пачкой)
+         * @description `ids` повторяется в запросе; дубли схлопываются, по записи на единицу (пустой `shelves` — нигде не лежит). Больше `item_shelves_batch_max` единиц — 422 `library.batch_too_large`.
+         */
+        get: operations["items_shelves_v1_items_shelves_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta": {
         parameters: {
             query?: never;
@@ -133,6 +153,14 @@ export interface components {
         CreateShelfRequest: {
             /** Title */
             title: string;
+        };
+        /**
+         * ItemShelvesBatchOut
+         * @description Полки пачки единиц: по записи на каждую запрошенную (пустой список — нигде не лежит).
+         */
+        ItemShelvesBatchOut: {
+            /** Items */
+            items: components["schemas"]["ItemShelvesOut"][];
         };
         /**
          * ItemShelvesOut
@@ -372,6 +400,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ItemShelvesOut"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    items_shelves_v1_items_shelves_get: {
+        parameters: {
+            query: {
+                ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemShelvesBatchOut"];
                 };
             };
             /** @description Не аутентифицирован */

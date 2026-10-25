@@ -178,6 +178,10 @@
           "user_mutable": {
             "description": "Игрок может отключить тип в настройках",
             "type": "boolean"
+          },
+          "admin_switchable": {
+            "description": "Админ может выключить тип для всех; по умолчанию равно user_mutable (системные типы не выключаются)",
+            "type": "boolean"
           }
         },
         "required": [

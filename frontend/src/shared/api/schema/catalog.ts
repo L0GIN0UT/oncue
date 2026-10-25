@@ -199,6 +199,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Карточки единиц пачкой
+         * @description `ids` повторяется в запросе; дубли схлопываются, неизвестные и заблокированные пропускаются, порядок не гарантирован. Больше `items_batch_max` уникальных id - 422 `catalog.batch_too_large`.
+         */
+        get: operations["get_items_v1_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/items/{item_id}": {
         parameters: {
             query?: never;
@@ -530,6 +550,14 @@ export interface components {
             title: string;
             /** Year */
             year: number | null;
+        };
+        /**
+         * ItemCardList
+         * @description Пачка карточек (порядок не гарантирован).
+         */
+        ItemCardList: {
+            /** Items */
+            items: components["schemas"]["ItemCard"][];
         };
         /**
          * MediaDomain
@@ -1502,6 +1530,38 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_items_v1_items_get: {
+        parameters: {
+            query: {
+                ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCardList"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

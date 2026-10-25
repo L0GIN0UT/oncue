@@ -14,8 +14,14 @@
 
 from __future__ import annotations
 
+from prometheus_client import Counter
+
 from gv_service import PeriodicJob
 from media_pipeline_service.infrastructure.container import MediaContainer
+
+LINK_ISSUANCE_PURGED = Counter(
+    "gv_media_link_issuance_purged_total", "Удалённые записи журнала выдачи ссылок"
+)
 
 
 def build_jobs(container: MediaContainer) -> list[PeriodicJob]:
@@ -23,7 +29,7 @@ def build_jobs(container: MediaContainer) -> list[PeriodicJob]:
     m = container.settings.media
 
     async def purge_links() -> None:
-        await container.purge_links.execute()
+        LINK_ISSUANCE_PURGED.inc(await container.purge_links.execute())
 
     async def purge_ugc() -> None:
         await container.ugc.purger.sweep()

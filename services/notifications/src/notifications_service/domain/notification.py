@@ -58,3 +58,17 @@ class Device:
     id: UUID
     platform: str
     registered_at: datetime
+
+
+DEFAULT_TYPE_ENABLED = True
+"""Тип без решения админа включён."""
+
+
+@dataclass(frozen=True, slots=True)
+class TypeFlag:
+    """Решение админа о включённости типа (причина живёт в аудите, не здесь)."""
+
+    type_key: str
+    enabled: bool
+    changed_by: UUID
+    changed_at: datetime

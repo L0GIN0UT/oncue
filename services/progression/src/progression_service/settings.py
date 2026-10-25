@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from gv_service import ServiceSettings
 
@@ -25,6 +25,24 @@ class ProgressionSettings(BaseModel):
     reconcile_limit: int = Field(default=100, ge=1, le=10000)
     # Потолок времени запроса сверки: тяжёлая агрегация не должна держать БД дольше.
     reconcile_statement_timeout_ms: int = Field(default=30_000, ge=100, le=600_000)
+    # Инкрементальная сверка (ADR 0062): полный проход журнала раз в ``reconcile_full_every_s``
+    # (ловит правку в обход), между ними - только игроки с проводками новее контрольной точки.
+    reconcile_full_every_s: float = Field(default=86_400.0, gt=0, le=2_592_000)
+    # Лаг контрольной точки: проводки моложе лага не считаются «покрытыми» (uuid7 создаётся до
+    # коммита, транзакция с меньшим id может закоммититься позже). Больше длины любой транзакции.
+    reconcile_lag_s: float = Field(default=300.0, ge=1, le=3600)
+    # Сколько проводок (по id) в одном куске прохода; точка сохраняется после каждого куска.
+    reconcile_batch: int = Field(default=50_000, ge=1, le=1_000_000)
+    # Ретенция (ADR 0062): ``metric_marks`` нужна только для дедупликации повторной доставки
+    # события, ``quest_progress`` - закрытым периодам заданий. Журналы не чистятся никогда.
+    # Минимум 14 дней - дольше любой реалистичной повторной доставки/перепроигрывания топика.
+    retention_metric_marks_days: int = Field(default=180, ge=14, le=3650)
+    retention_quest_progress_days: int = Field(default=180, ge=14, le=3650)
+    retention_batch: int = Field(default=5000, ge=1, le=100_000)
+    # Пауза между пачками: удаление не должно вытеснять рабочую нагрузку.
+    retention_pause_s: float = Field(default=0.2, ge=0, le=60)
+    retention_interval_s: float = Field(default=3600.0, gt=0)
+    retention_jitter_s: float = Field(default=60.0, ge=0)
     # Сколько последних проводок отдаёт ``GET /v1/me/wallet``.
     wallet_recent_limit: int = Field(default=20, ge=1, le=100)
     # Каталог со стартовым конфигом (`config.yaml`): публикуется как версия 1 только в local/ci
@@ -63,6 +81,12 @@ class ProgressionSettings(BaseModel):
     events_tick_jitter_s: float = Field(default=3.0, ge=0)
     # Подсказка клиенту, когда лимитер попыток (Redis) недоступен и ввод кода закрыт (503).
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
+
+    @model_validator(mode="after")
+    def _full_pass_not_more_often_than_tick(self) -> ProgressionSettings:
+        if self.reconcile_full_every_s < self.reconcile_interval_s:
+            raise ValueError("reconcile_full_every_s не может быть меньше reconcile_interval_s")
+        return self
 
     @property
     def event_claim_rate(self) -> tuple[int, int]:

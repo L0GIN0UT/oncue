@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -23,6 +23,9 @@ from redis.exceptions import RedisError
 from match_service.application.ports import Json, RoomCommand, RoomPointer
 from match_service.domain.errors import MatchUnavailableError
 from match_service.infrastructure.rooms import keys
+
+if TYPE_CHECKING:
+    from match_service.infrastructure.rooms.reader import SharedCommandReader
 
 FIELD = "c"
 _RELEASE_PLAYER = """
@@ -107,31 +110,37 @@ class RedisCommandBus:
         return reply
 
 
-class CommandStream:
-    """Поток команд глазами владельца."""
+def parse_field(raw: Any) -> RoomCommand | None:  # Any: поле записи Redis
+    """Команда из поля записи потока; битая или пустая запись - ``None``."""
+    if raw is None:
+        return None
+    try:
+        return decode_command(_text(raw))
+    except (ValueError, KeyError, TypeError):
+        return None
 
-    def __init__(self, redis: Redis, *, reply_ttl_s: int) -> None:
+
+class CommandStream:
+    """Поток команд глазами владельца.
+
+    Чтение - через общий ``SharedCommandReader`` инстанса (ADR 0063): одно блокирующее
+    ``XREAD`` на все комнаты, а не по одному на комнату.
+    """
+
+    def __init__(self, redis: Redis, *, reply_ttl_s: int, reader: SharedCommandReader) -> None:
         self._redis = redis
         self._reply_ttl_s = reply_ttl_s
+        self._reader = reader
 
     async def read(
         self, code: str, cursor: str, *, block_ms: int, count: int
     ) -> list[tuple[str, RoomCommand | None]]:
-        """Команды после ``cursor`` (ждать не дольше ``block_ms``); битая запись — ``None``."""
-        # Any: ответ redis-py XREAD — [[ключ, [(id, {поле: значение})]]].
-        result: Any = await self._redis.xread(
-            {keys.commands(code): cursor}, count=count, block=max(1, block_ms)
-        )
-        out: list[tuple[str, RoomCommand | None]] = []
-        for _, entries in result or []:
-            for entry_id, fields in entries:
-                raw = fields.get(FIELD.encode()) or fields.get(FIELD)
-                try:
-                    command = decode_command(_text(raw)) if raw is not None else None
-                except (ValueError, KeyError, TypeError):
-                    command = None
-                out.append((_text(entry_id), command))
-        return out
+        """Команды после ``cursor`` (ждать не дольше ``block_ms``); битая запись - ``None``."""
+        return await self._reader.read(code, cursor, block_ms=block_ms, count=count)
+
+    def detach(self, code: str) -> None:
+        """Комната ушла от инстанса: общий читатель её больше не читает."""
+        self._reader.detach(code)
 
     async def reply(self, code: str, command: RoomCommand, reply: Json) -> None:
         """Отдать ответ отправителю команды."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
@@ -108,6 +109,19 @@ class SqlLibraryRepository:
         rows = await self._s.execute(
             select(shelf_items).where(
                 shelf_items.c.user_id == user_id, shelf_items.c.media_item_id == media_item_id
+            )
+        )
+        return [_item(r) for r in rows]
+
+    async def placements_many(
+        self, user_id: UUID, media_item_ids: Sequence[UUID]
+    ) -> list[ShelfItem]:
+        """Строки нескольких единиц пользователя одним запросом (тот же индекс)."""
+        if not media_item_ids:
+            return []
+        rows = await self._s.execute(
+            select(shelf_items).where(
+                shelf_items.c.user_id == user_id, shelf_items.c.media_item_id.in_(media_item_ids)
             )
         )
         return [_item(r) for r in rows]

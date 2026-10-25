@@ -1,0 +1,13 @@
+[project]
+name = "gv-email"
+version = "0.1.0"
+description = "Отправка писем: SMTP, лог (local/ci), фоновая обёртка. Без знания о доменных письмах сервисов."
+requires-python = ">=3.13"
+dependencies = ["aiosmtplib>=3.0", "structlog>=24.0"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gv_email"]

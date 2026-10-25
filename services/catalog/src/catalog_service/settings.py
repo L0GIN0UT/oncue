@@ -114,6 +114,8 @@ class CatalogSettings(BaseModel):
     )
     # Единиц в одной порции задачи переопубликации (POST /admin/v1/items/republish).
     republish_batch: int = Field(default=200, ge=1, le=5_000)
+    # Предел пачки GET /v1/items?ids=...; больше - 422 catalog.batch_too_large.
+    items_batch_max: int = Field(default=50, ge=1, le=500)
 
 
 class NormalizerSettings(BaseModel):

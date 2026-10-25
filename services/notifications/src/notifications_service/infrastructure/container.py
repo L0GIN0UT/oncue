@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
+from gv_email import LogEmailSender
 from gv_messaging.ports import TaskQueue
 from gv_service import (
     Environment,
@@ -43,16 +44,18 @@ from notifications_service.application.ports import (
     RealtimePublisher,
     UnitOfWorkFactory,
 )
+from notifications_service.application.type_flags import NotificationTypeAdmin
+from notifications_service.application.type_switch import TypeSwitch
 from notifications_service.application.unsubscribe import Unsubscribe
 from notifications_service.domain.catalog import TypeCatalog
 from notifications_service.infrastructure.config import load_catalog
 from notifications_service.infrastructure.db.repositories import SqlUnitOfWork
 from notifications_service.infrastructure.email import (
+    GvEmailSender,
     HttpEmailDirectory,
-    LogEmailSender,
     NullPushSender,
-    SmtpEmailSender,
     UnconfiguredEmailDirectory,
+    smtp_transport,
 )
 from notifications_service.infrastructure.limiter import RedisAttemptLimiter
 from notifications_service.infrastructure.realtime import (
@@ -102,6 +105,7 @@ class NotificationsContainer:
         self.new_id = new_id
         adapters = adapters or Adapters()
         self.catalog: TypeCatalog = load_catalog(self._cfg.types_path)
+        self.type_switch = TypeSwitch(infra.clock, ttl_s=self._cfg.type_flags_cache_ttl_s)
         self.public_base_url = self._build_base_url()
         self.realtime: RealtimePublisher = adapters.realtime or self._build_realtime()
         self.dispatcher = PostCommitDispatcher(self.realtime)
@@ -138,12 +142,12 @@ class NotificationsContainer:
 
     def _build_email(self) -> EmailSender:
         if self._cfg.email_backend == "smtp":
-            return SmtpEmailSender(self._cfg.smtp)
+            return GvEmailSender(smtp_transport(self._cfg.smtp))
         if self.is_runtime and not self.is_local:
             raise StartupConfigError(
                 "GV_NOTIFICATIONS__EMAIL_BACKEND=log допустим только в local/ci"
             )
-        return LogEmailSender(include_body=self.is_local)
+        return GvEmailSender(LogEmailSender(include_secrets=self.is_local, log_body=True))
 
     def _build_directory(self) -> EmailDirectory:
         """Адреса из identity; без ``GV_SERVICE_AUTH__*`` - заглушка (рассылка ``failed``)."""
@@ -182,7 +186,9 @@ class NotificationsContainer:
 
     def ingest(self, session: AsyncSession | None = None) -> IngestEvent:
         """Приём события (в транзакции consumer - с ``session``)."""
-        return IngestEvent(self.uow_factory(session), self.catalog, self.infra.clock, self.new_id)
+        return IngestEvent(
+            self.uow_factory(session), self.catalog, self.infra.clock, self.new_id, self.type_switch
+        )
 
     @property
     def queries(self) -> NotificationQueries:
@@ -229,6 +235,7 @@ class NotificationsContainer:
             self.infra.clock,
             self.new_id,
             self.dispatcher,
+            switch=self.type_switch,
             batch_size=self._cfg.fanout_batch_size,
         )
 
@@ -236,6 +243,13 @@ class NotificationsContainer:
     def create_broadcast(self) -> CreateBroadcast:
         """Постановка рассылки."""
         return CreateBroadcast(self.uow_factory(), self.tasks, self.infra.clock, self.new_id)
+
+    @property
+    def type_admin(self) -> NotificationTypeAdmin:
+        """Admin-выключатели типов."""
+        return NotificationTypeAdmin(
+            self.uow_factory(), self.catalog, self.type_switch, self.infra.clock, self.new_id
+        )
 
     @property
     def broadcast_queries(self) -> BroadcastQueries:

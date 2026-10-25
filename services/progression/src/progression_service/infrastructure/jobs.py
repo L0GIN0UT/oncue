@@ -2,6 +2,9 @@
 
 * ``progression.ledger.reconcile`` — сверка «сумма журнала = баланс / накопленный опыт»
   (ADR 0043): расхождение пишется в лог уровня ERROR и в метрику, данные не правятся;
+  сверка инкрементальная (контрольная точка в БД + полный проход раз в сутки, ADR 0062);
+* ``progression.retention.purge`` — удаление старых ``metric_marks`` / ``quest_progress`` пачками
+  (журналы не чистятся, ADR 0062);
 * ``progression.config.bootstrap`` — версия 1 конфига из ``GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR``
   (только local/ci), если опубликованной версии нет;
 * ``progression.events.tick`` — статусы запусков сезонных событий по времени и события
@@ -11,6 +14,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -22,12 +27,14 @@ from prometheus_client import Counter, Gauge
 from gv_service import Environment, Infrastructure, PeriodicJob
 from progression_service.application.admin.common import ConfigDraftInvalidError
 from progression_service.application.admin.configs import ConfigCommands
-from progression_service.application.reconcile import LedgerReconciler
+from progression_service.application.reconcile import IncrementalReconciler
+from progression_service.application.retention import RetentionPurger
 from progression_service.infrastructure.container import container_for
 
 log = structlog.get_logger(__name__)
 
 RECONCILE_JOB = "progression.ledger.reconcile"
+RETENTION_JOB = "progression.retention.purge"
 BOOTSTRAP_JOB = "progression.config.bootstrap"
 EVENTS_TICK_JOB = "progression.events.tick"
 BOOTSTRAP_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
@@ -45,21 +52,48 @@ LEDGER_MISMATCH_FOUND = Counter(
 )
 
 
+RETENTION_DELETED = Counter(
+    "gv_progression_retention_deleted_total",
+    "Строки, удалённые ретенцией (журналы не чистятся)",
+    ["table"],
+)
+
+
+def _wall_ms() -> int:
+    """Системное время (мс): в этой же шкале ``uuid7()`` метит проводки журналов."""
+    return time.time_ns() // 1_000_000
+
+
 def build_jobs(infra: Infrastructure) -> list[PeriodicJob]:
     """Задачи сервиса (без БД — нет задач)."""
     if infra.sessions is None:
         return []
     c = container_for(infra)
     s = c.settings.progression
-    reconciler = LedgerReconciler(
+    reconciler = IncrementalReconciler(
         c.uow_factory(),
+        infra.clock,
         limit=s.reconcile_limit,
         statement_timeout_ms=s.reconcile_statement_timeout_ms,
+        full_every=timedelta(seconds=s.reconcile_full_every_s),
+        lag=timedelta(seconds=s.reconcile_lag_s),
+        batch=s.reconcile_batch,
+        now_ms=_wall_ms,
+    )
+    purger = RetentionPurger(
+        c.uow_factory(),
+        infra.clock,
+        marks_days=s.retention_metric_marks_days,
+        quest_progress_days=s.retention_quest_progress_days,
+        batch=s.retention_batch,
+        pause_s=s.retention_pause_s,
     )
 
     async def reconcile() -> None:
-        found = await reconciler.run()
-        LEDGER_MISMATCHES.set(len(found))
+        result = await reconciler.run()
+        found = result.mismatches
+        # Открытые расхождения полного прохода не гаснут между инкрементальными запусками.
+        LEDGER_MISMATCHES.set(result.outstanding)
         for m in found:
             LEDGER_MISMATCH_FOUND.labels(m.kind).inc()
             # user_id — внутренний идентификатор, не PII; суммы нужны для разбора.
@@ -72,11 +106,17 @@ def build_jobs(infra: Infrastructure) -> list[PeriodicJob]:
                 stored=m.stored,
             )
 
+    async def retention() -> None:
+        result = await purger.run()
+        RETENTION_DELETED.labels("metric_marks").inc(result.metric_marks)
+        RETENTION_DELETED.labels("quest_progress").inc(result.quest_progress)
+
     async def events_tick() -> None:
         await c.event_ticker.run()
 
     jobs = [
         PeriodicJob(RECONCILE_JOB, s.reconcile_interval_s, reconcile, s.reconcile_jitter_s),
+        PeriodicJob(RETENTION_JOB, s.retention_interval_s, retention, s.retention_jitter_s),
         PeriodicJob(EVENTS_TICK_JOB, s.events_tick_interval_s, events_tick, s.events_tick_jitter_s),
     ]
     directory = s.bootstrap_config_dir

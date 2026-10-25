@@ -3,7 +3,7 @@ name = "guessverse-notifications"
 version = "0.1.0"
 description = "In-app уведомления, realtime-доставка, e-mail, web-push, отключение по типам"
 requires-python = ">=3.13"
-dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "pyyaml>=6", "jsonschema>=4.23", "httpx>=0.28", "aiosmtplib>=3.0"]
+dependencies = ["gv-core", "gv-db", "gv-messaging", "gv-service", "gv-auth", "gv-email", "pyyaml>=6", "jsonschema>=4.23", "httpx>=0.28"]
 
 [project.scripts]
 notifications = "notifications_service.main:run"

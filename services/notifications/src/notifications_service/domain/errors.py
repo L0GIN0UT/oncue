@@ -43,6 +43,15 @@ class TypeNotMutableError(InvalidInputError):
         super().__init__("этот тип уведомлений нельзя отключить")
 
 
+class TypeNotSwitchableError(InvalidInputError):
+    """Системный тип (``admin_switchable = false``) админ выключить не может."""
+
+    default_code = "notifications.type_not_switchable"
+
+    def __init__(self) -> None:
+        super().__init__("этот тип уведомлений нельзя выключить")
+
+
 class DeviceNotFoundError(NotFoundError):
     """Устройства нет или оно чужое."""
 

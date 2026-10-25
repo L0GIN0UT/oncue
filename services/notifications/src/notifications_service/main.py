@@ -27,6 +27,7 @@ def build_routers(infra: Infrastructure) -> list[APIRouter]:
         unsubscribe=c.unsubscribe,
         create_broadcast=c.create_broadcast,
         broadcast_queries=c.broadcast_queries,
+        type_admin=c.type_admin,
     )
     return build_api_routers(infra, services)
 

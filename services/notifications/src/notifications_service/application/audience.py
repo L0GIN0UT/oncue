@@ -4,7 +4,8 @@
 аудитории ``known_users`` пачками по ``batch_size`` (keyset по ``user_id``), каждая пачка -
 отдельная короткая транзакция. Идемпотентность - ``UNIQUE(user_id, dedup_key)``
 (``event_started:{run_id}``): повтор задачи и рестарт середины рассылки второй записи не создают.
-Игрок, отключивший тип, не получает уведомления. E-mail не используется.
+Игрок, отключивший тип, не получает уведомления; тип, выключенный админом, не рассылается
+(проверка в начале каждой пачки, ADR 0066). E-mail не используется.
 
 Выбор: порта «все пользователи» (список из identity) нет, поэтому аудитория - игроки, о которых
 знает сам notifications (есть уведомления или настройки). Игроки без единого уведомления
@@ -30,6 +31,7 @@ from prometheus_client import Counter
 from gv_core.clock import Clock
 from notifications_service.application.ingest import store_candidate
 from notifications_service.application.ports import UnitOfWorkFactory
+from notifications_service.application.type_switch import TypeSwitch
 from notifications_service.domain.catalog import TypeCatalog
 from notifications_service.domain.mapping import map_event, matches_filter
 from notifications_service.domain.notification import Notification
@@ -84,8 +86,10 @@ class FanOutAudience:
         new_id: Callable[[], UUID],
         dispatcher: CommitPublisher,
         *,
+        switch: TypeSwitch,
         batch_size: int,
     ) -> None:
+        self._switch = switch
         self._uow = uow_factory
         self._catalog = catalog
         self._clock = clock
@@ -117,6 +121,11 @@ class FanOutAudience:
             async with self._uow() as uow:
                 if run_id is not None and await uow.finished_runs.is_finished(run_id):
                     log.info("notifications.fanout_cancelled", run_id=str(run_id), delivered=total)
+                    return total
+                if notification_type.admin_switchable and not await self._switch.is_enabled(
+                    uow, type_key
+                ):
+                    log.info("notifications.type_disabled", type=type_key, delivered=total)
                     return total
                 users = await uow.notifications.known_users_after(cursor, self._batch)
                 if not users:

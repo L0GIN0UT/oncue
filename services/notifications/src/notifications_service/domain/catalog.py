@@ -74,6 +74,7 @@ class NotificationType:
         params: Подстановки шаблона: имя -> путь в событии.
         templates: Шаблоны по локали.
         filter: Условие равенства по полям payload.
+        admin_switchable: Админ может выключить тип для всех (по умолчанию = ``user_mutable``).
     """
 
     key: str
@@ -90,6 +91,7 @@ class NotificationType:
     """Машинные поля для клиента: имя -> путь в событии (значения приводятся к строке)."""
     audience: str | None = None
     """Массовая доставка: событие порождает уведомление каждому игроку аудитории (пачками)."""
+    admin_switchable: bool = True
 
 
 def _require_payload_path(type_key: str, field_name: str, path: str) -> None:
@@ -165,6 +167,7 @@ def _parse_type(raw: Mapping[str, Any], default_locale: str) -> NotificationType
         lookups=lookups,
         data=data,
         audience=audience,
+        admin_switchable=bool(raw.get("admin_switchable", raw["user_mutable"])),
     )
 
 

@@ -35,6 +35,7 @@ from notifications_service.domain.notification import (
     Device,
     Notification,
     Subscription,
+    TypeFlag,
     TypePreference,
 )
 from notifications_service.infrastructure.db import tables as t
@@ -178,6 +179,33 @@ class SqlPreferences:
             set_={"in_app": pref.in_app, "email": pref.email, "updated_at": now},
         )
         await self._s.execute(stmt)
+
+
+class SqlTypeFlags:
+    """Решения админов о включённости типов."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def all(self) -> dict[str, TypeFlag]:
+        f = t.notification_type_flags
+        rows = (await self._s.execute(select(f))).all()
+        return {
+            r.type: TypeFlag(
+                type_key=r.type, enabled=r.enabled, changed_by=r.changed_by, changed_at=r.changed_at
+            )
+            for r in rows
+        }
+
+    async def save(self, flag: TypeFlag) -> None:
+        f = t.notification_type_flags
+        values = {
+            "enabled": flag.enabled,
+            "changed_by": flag.changed_by,
+            "changed_at": flag.changed_at,
+        }
+        stmt = pg_insert(f).values(type=flag.type_key, **values)
+        await self._s.execute(stmt.on_conflict_do_update(index_elements=[f.c.type], set_=values))
 
 
 class SqlSubscriptions:
@@ -412,6 +440,7 @@ class SqlUnitOfWork:
     notifications: SqlNotifications
     preferences: SqlPreferences
     finished_runs: SqlFinishedRuns
+    type_flags: SqlTypeFlags
     subscriptions: SqlSubscriptions
     devices: SqlDevices
     broadcasts: SqlBroadcasts
@@ -453,6 +482,7 @@ class SqlUnitOfWork:
         self.notifications = SqlNotifications(s)
         self.preferences = SqlPreferences(s)
         self.finished_runs = SqlFinishedRuns(s)
+        self.type_flags = SqlTypeFlags(s)
         self.subscriptions = SqlSubscriptions(s)
         self.devices = SqlDevices(s)
         self.broadcasts = SqlBroadcasts(s)
