@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with: { fetch-depth: 0 }
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa  # v10.3.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
         with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
       - run: uv sync --all-packages
       - id: matrix
@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with: { fetch-depth: 0 }
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa  # v10.3.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
         with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
       - run: uv sync --all-packages
       - name: ruff, mypy, import-linter, gen --check, contracts (актуальность)
@@ -92,7 +92,7 @@ jobs:
       GV_TEST_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa  # v10.3.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
         with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
       - run: uv sync --all-packages
       - name: Системные пакеты для тестов media-pipeline
@@ -231,7 +231,7 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
             echo "::notice::нет frontend/package.json или e2e/playwright.config.ts — e2e пропущен"
           fi
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa  # v10.3.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
         if: steps.app.outputs.present == 'true'
         with: { enable-cache: true, python-version: "${{ env.PYTHON_VERSION }}" }
       - if: steps.app.outputs.present == 'true'
