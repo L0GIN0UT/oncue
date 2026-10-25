@@ -19,30 +19,22 @@
 | Пункт | Где | Источник | Когда |
 |---|---|---|---|
 | Живой прогон CI: `nginx -t`, integration OpenSearch (проверено CI #18) и демонстрация §0 этапа 1 на compose | весь стек | [хвосты 1](09-roadmap.md#хвосты-этапа-1) | До релиза |
-| Общий подключаемый inbox для Django (у admin свой) | `libs/messaging`, admin | [хвосты 1](09-roadmap.md#хвосты-этапа-1) | Этап 5 (в 5c — решить) |
 | Зеркало образов под своим контролем | `infra/` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Этап 7 |
 | Подтвердить правку эталона `libs/text` (союз «&») | `libs/text`, `libs/game_kernel` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Решение владельца |
-| Журнал `link_issuance` чистится внутри `IssueAssetLink`, а не задачей | media_pipeline | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | По желанию |
-| `ILIKE` без trigram-индекса в `/admin/v1/projection/items` | game | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | При росте каталога |
 | Ссылка финального кадра ревила живёт 60 с | game, frontend | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | По желанию |
 | Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` | match, game | [хвосты 4a](09-roadmap.md#хвосты-4a) | После решения по плану раундов |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` | [хвосты 4a](09-roadmap.md#хвосты-4a) | Геймдизайн |
-| Блокирующий `XREAD` на комнату (~300 соединений Redis на инстанс) | match | [хвосты 4a](09-roadmap.md#хвосты-4a) | Нагрузка, этап 7 |
-| Пакетные ручки catalog/library для итога матча | bff-web, catalog, library | [хвосты 4a](09-roadmap.md#хвосты-4a) | При росте раундов |
 | Win-trading: детектор | rating, match | [хвосты 4b](09-roadmap.md), ADR 0038 | После 5c (в 5c только счётчики) |
 | Допущения сидов: K Эло 40/20, пороги званий, фильтры `similar` | `seeds/rating`, `seeds/game` | [хвосты 4b](09-roadmap.md) | Подтверждение владельцем |
 | Срыв отсчёта без штрафа: сталкинг очереди | match | [хвосты 4b](09-roadmap.md) | По данным |
-| Пустое лобби висит до `room_idle_close_min` при недоступной шине | match | [хвосты 4b](09-roadmap.md) | Этап 7 |
 | Centrifugo OSS не отзывает выданные токены: враждебный клиент переподключается/переподписывается старым токеном до `token_ttl_s` (≤ 10 мин) после бана/кика; закрывает только connect/subscribe proxy | match, identity, `infra/centrifugo` | [ADR 0059](adr/0059-realtime-disconnect.md) | Этап 7 |
+| Зависший consumer `social.social.v1` не виден метрикой лага (лаг считается по обработанным событиям): нужен экспортёр lag группы Kafka | match, observability | PR C, ADR 0063 | При выкладке |
+| Общий `XREAD` match использует многоключевой запрос — не работает в Redis Cluster (`CROSSSLOT`); при переходе на кластер нужен выбор схемы | match | [ADR 0063](adr/0063-match-shared-command-reader.md) | Этап 7 |
+| Поиск персон по имени (`subjects`, jsonb lateral) в game без индекса | game | PR C | При росте каталога |
 | Presence и join/leave в Centrifugo `room` выключены: при включении скрыть наблюдателей | `infra/centrifugo` | [хвосты 4b](09-roadmap.md) | При включении |
-| Тест тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Нестабильный `party.spec` (в `e2e/online.spec.ts`; `GameScreen.modes` и `CollectionEditor` — таймаут `waitFor` поднят, PR #36): причина не найдена, не воспроизводится | e2e | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Windows: ffmpeg-тесты `media_pipeline`, `admin test_runtime` (зелёные в CI) | media_pipeline, admin | [хвосты 5a](09-roadmap.md#хвосты-5a) | Не чинить |
-| Инкрементальная сверка журнала progression и партиционирование | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
-| Ретенция `metric_marks` / `quest_progress` | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
-| Admin-API включения и выключения типов уведомлений | notifications | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | После 5b |
-| Вынос `SmtpEmailSender`/`LogEmailSender`/`BackgroundEmailSender` в `libs/` | identity, notifications | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | После 5b |
-| `client_max_body_size 2m` на gateway ограничивает загрузку аватарки | gateway, media_pipeline | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Следить |
+| Партиционирование журналов progression по месяцам: отложено, конфликт с `UNIQUE(op_id)`; путь миграции и пороги — [ADR 0062](adr/0062-progression-ledger-partitioning.md) | progression | ADR 0062 | По порогу объёма |
 | GET предмета по id в admin-API (админка листает до 20 страниц) | progression, admin | 5b | По желанию |
 | GET карточки UGC-изображения по id в admin-API | media_pipeline, admin | 5b | По желанию |
 | Число получателей в подтверждении рассылки (`GET /admin/v1/broadcasts/audience`) | notifications, admin | 5b | По желанию |
@@ -86,3 +78,4 @@
 - `gv dev seed` не идемпотентен на засеянном стенде (409 `idempotency.key_reused`) — [PR #35](https://github.com/L0GIN0UT/oncue/pull/35).
 - Шум фронта (presence с каждой вкладки, `unread-count` рядом с shell), `ranked.spec` «очередь», общий `adminContext` в e2e, таймаут `waitFor` в `GameScreen.modes`/`CollectionEditor` — [PR #36](https://github.com/L0GIN0UT/oncue/pull/36).
 - Группа B (безопасность): разделение ролей Postgres для журналов (ADR 0060), disconnect Centrifugo для бана `ACCOUNT` и кика из комнаты (ADR 0059), иерархия модераторов (ADR 0058), `p/*` в S3 без анонимного чтения (ADR 0061), preflight секретов Centrifugo, тег Centrifugo и trivy по CRITICAL с digest-пиннингом (ADR 0057), `no-store` в admin progression (тест-страж), env лимитов сервисных токенов — [PR #38](https://github.com/L0GIN0UT/oncue/pull/38).
+- Группа C (ops): инкрементальная сверка и ретенция progression (ADR 0062), общий `XREAD` и фоновый отзыв realtime, закрытие пустого лобби, алерты match (ADR 0063), trigram-индекс game, лимит тела аватарки на gateway, тест тай-брейка сезона на Redis, переключатели типов уведомлений и `libs/email` (ADR 0066), пакетные ручки catalog/library для итога матча, решение по inbox Django (ADR 0065) — [PR #45](https://github.com/L0GIN0UT/oncue/pull/45).

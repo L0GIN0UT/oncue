@@ -36,7 +36,7 @@
 | Живой прогон integration-тестов OpenSearch и `nginx -t` на образе nginx 1.28 в CI | `.github/workflows`, catalog, `infra/nginx` | Открыт — перенесён в хвосты этапа 2 |
 | `mypy_django_plugin` для admin | admin | ✅ этап 2 |
 | Протокол вместо `EventProcessor` в `KafkaEventConsumer` | `libs/messaging` | ✅ этап 2: `EventProcessorPort`, admin без `cast` |
-| Общий подключаемый inbox для Django (сейчас свой в admin) | `libs/messaging`, admin | Этап 5 (модерация в админке) |
+| Общий подключаемый inbox для Django (сейчас свой в admin) | `libs/messaging`, admin | Этап 5 (модерация в админке) | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Ручная security-проверка владельцем: identity, `libs/auth`, вход в admin | — | Открыт, до публичного запуска |
 
 **Принятый риск:** лимитеры входа и denylist `sid` при отказе Redis работают **fail-open** (с метрикой и логом): перебор сдерживает argon2id с ограниченным параллелизмом, окно отозванного access-токена ≤ access TTL. Исключение — лимит выдачи ссылок media-pipeline: fail-closed (503). Подробнее — [architecture/security.md](architecture/security.md#7-реализация-этапа-1).
@@ -64,8 +64,8 @@
 | Скан образов trivy: вернуть блокировку по CRITICAL и выгрузку SARIF в GitHub Security после digest-пиннинга базового образа и Dependabot на него ([ADR 0022](adr/0022-image-scan-reporting-not-gating.md)) | `.github/workflows` | Этап 7 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 | Ручная проверка владельцем: identity (гостевые сессии, сервисные токены), `libs/auth` | — | До слияния в `main` |
 | Подтвердить правку эталона `libs/text`: союз «&» теперь удаляется (`("&", "")`) при сверке ответов | `libs/text`, `libs/game_kernel` | До слияния в `main` |
-| Журнал `link_issuance` чистится внутри `IssueAssetLink` (не чаще раза в 10 мин), а не периодической задачей | media_pipeline | Этап 3 |
-| Поиск кандидатов по проекции game (`/admin/v1/projection/items`) — `ILIKE` без trigram-индекса | game | При росте каталога |
+| Журнал `link_issuance` чистится внутри `IssueAssetLink` (не чаще раза в 10 мин), а не периодической задачей | media_pipeline | Этап 3 | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
+| Поиск кандидатов по проекции game (`/admin/v1/projection/items`) — `ILIKE` без trigram-индекса | game | При росте каталога | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Ссылка финального кадра ревила живёт 60 с и может истечь, если ревил открыт поздно | game, frontend | Этап 3 |
 | Лимит сервисных токенов разделён: `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` из плана заменён на `FAILURES_PER_CLIENT_IP_PER_MIN` и `SUCCESS_PER_CLIENT_PER_MIN` — обновить env окружений | identity, `infra/` | При выкладке | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 
@@ -97,9 +97,9 @@
 |---|---|---|
 | Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` game: старт отказывает с `not_supported_yet` | match, game | После решения по плану раундов |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` (конфиги режимов) | Решение по геймдизайну |
-| Блокирующий `XREAD` на комнату: ~300 соединений Redis на инстанс | match | Нагрузка этапа 7 |
+| Блокирующий `XREAD` на комнату: ~300 соединений Redis на инстанс | match | Нагрузка этапа 7 | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Окно отзыва connection-токена Centrifugo — до 10 мин (отзыв сессии не рвёт соединение) | identity, match | Принятый риск; пересмотреть на этапе 7 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
-| Пакетные ручки catalog/library для итога матча (сейчас вызовы по единице) | bff-web, catalog, library | При росте числа раундов |
+| Пакетные ручки catalog/library для итога матча (сейчас вызовы по единице) | bff-web, catalog, library | При росте числа раундов | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Ручная проверка владельцем: identity (realtime-токен) и match (античит) | — | До слияния в `main` |
 | Тег образа Centrifugo (`v6`) не закреплён до точной версии | `infra/compose` | Этап 7 (зеркало образов) | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 | Исключённый игрок может переподписаться на канал комнаты старым subscription-токеном (до 10 мин): видит лобби и чат, ответов нет | match | Короткий TTL подписки или канал с эпохой состава — этап 5 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
@@ -140,7 +140,7 @@
 | Пункт | Где | Когда |
 |---|---|---|
 | `Cache-Control: no-store` в admin-ручках progression ставится до `raise`: проверить на успешных ответах | progression | 5b | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
-| Нет теста тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | 5b |
+| Нет теста тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | 5b | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Нестабильные под нагрузкой тесты: `GameScreen.modes`, `CollectionEditor` (автосохранение) — таймаут `waitFor` поднят ([PR #36](https://github.com/L0GIN0UT/oncue/pull/36)); `party.spec` — открыт | frontend, e2e | 5b |
 | Windows-окружение (на `main` тоже): 3 integration-теста ffmpeg `test_media_adapters` (код 4294967283) и 2 errors в `unit/test_use_cases::test_upload_validation` (идентификаторы параметров), `admin test_runtime` (`/health/live`) | media_pipeline, admin | Не чинить в 5b; зелёные в CI/Linux |
 | Win-trading: детектор ([ADR 0038](adr/0038-matchmaking-queues.md)) | rating, match | 5c |
@@ -170,11 +170,11 @@
 
 ### Хвосты этапа 5
 - этап 7: разделение ролей Postgres для журналов progression (владелец миграций / рабочая роль SELECT, INSERT) - риск принят владельцем.
-- этап 7: инкрементальная сверка журнала progression вместе с партиционированием.
-- этап 7: ретенция metric_marks / quest_progress (очистка или партиционирование).
-- после 5b: admin-API для включения и выключения типов уведомлений (сами типы, шаблоны и маппинг остаются файловым конфигом в пакете notifications: новый тип требует кода consumer-а и рендера на фронте) — решение владельца 2026-10-23.
-- после 5b: вынести `SmtpEmailSender`/`LogEmailSender`/`BackgroundEmailSender` из identity и notifications в `libs/` (в 5b — копия в notifications «по образцу identity»).
-- 5b (S3): `client_max_body_size 2m` на gateway ограничивает загрузку своей аватарки; лимит размера в конфиге media-pipeline не выше него.
+- этап 7: инкрементальная сверка журнала progression вместе с партиционированием. ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45)
+- этап 7: ретенция metric_marks / quest_progress (очистка или партиционирование). ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45)
+- после 5b: admin-API для включения и выключения типов уведомлений (сами типы, шаблоны и маппинг остаются файловым конфигом в пакете notifications: новый тип требует кода consumer-а и рендера на фронте) — решение владельца 2026-10-23. ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45)
+- после 5b: вынести `SmtpEmailSender`/`LogEmailSender`/`BackgroundEmailSender` из identity и notifications в `libs/` (в 5b — копия в notifications «по образцу identity»). ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45)
+- 5b (S3): `client_max_body_size 2m` на gateway ограничивает загрузку своей аватарки; лимит размера в конфиге media-pipeline не выше него. ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45)
 
 ## Этап 6. Интеграции и биллинг
 - integrations: Shikimori/AniList, Trakt, Spotify, Яндекс (после проверки API). Экспорт и синхронизация.
