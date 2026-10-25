@@ -77,7 +77,7 @@ test.beforeAll(async ({ browser }) => {
       headers: headers(),
       multipart: {
         reason: `e2e: картинка ${RUN}`,
-        file: { name: "frame.png", mimeType: "image/png", buffer: makePng(256) },
+        file: { name: "frame.png", mimeType: "image/png", buffer: makePng(96) },
       },
     }),
   );
