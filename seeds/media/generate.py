@@ -2,8 +2,8 @@
 
 Никаких записей и кадров третьих лиц (ADR 0014): каждый трек — синус своей частоты с
 огибающей, каждый кадр — градиент с геометрическими фигурами, цвета выводятся из ключа
-единицы каталога. Результат детерминирован и пересобирается в любой момент, поэтому
-бинарные файлы в git не хранятся.
+единицы каталога. Результат детерминирован, существующие файлы не перегенерируются
+(повторный засев шлёт те же байты), поэтому бинарные файлы в git не хранятся.
 
 Этап 3a (план §10): на фильм — шесть разных кадров ``film-<slug>-{1..6}.jpg``
 (``frame_sequence``, ``position`` = номер), саундтрек ``soundtrack-<slug>.m4a`` и звук фильма
@@ -60,9 +60,14 @@ def _seed(key: str) -> bytes:
 
 
 def _ffmpeg_audio(expr: str, seconds: int, path: Path) -> Path:
+    if path.exists():
+        return path
+    # ``-map_metadata -1`` и bitexact: без времени создания и версии кодировщика в теге,
+    # иначе повторная генерация даёт другие байты (media-pipeline: 409 key_reused).
     subprocess.run(  # noqa: S603 — аргументы формируются здесь же, без ввода пользователя
         ["ffmpeg", "-v", "error", "-nostdin", "-y", "-f", "lavfi",  # noqa: S607
          "-i", f"aevalsrc={expr}:s=44100:d={seconds}",
+         "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact",
          "-c:a", "aac", "-b:a", "96k", str(path)],
         check=True,
     )  # fmt: skip
@@ -107,6 +112,10 @@ def frame(key: str, out: Path, number: int | None = None) -> Path:
         number: Номер кадра ``frame_sequence`` (1..6) — свой рисунок и имя
             ``<slug>-<n>.jpg``; ``None`` — основной кадр этапа 2 ``<slug>.jpg``.
     """
+    name = _slug(key) if number is None else f"{_slug(key)}-{number}"
+    path = out / f"{name}.jpg"
+    if path.exists():
+        return path
     s = _seed(key if number is None else f"{key}#frame{number}")
     w, h = FRAME_SIZE
     image = Image.new("RGB", FRAME_SIZE)
@@ -124,8 +133,6 @@ def frame(key: str, out: Path, number: int | None = None) -> Path:
         color = (b[3], 255 - b[3], (b[0] + b[1]) % 256)
         shape = draw.ellipse if i % 2 else draw.rectangle
         shape([x - r, y - r, x + r, y + r], fill=color)
-    name = _slug(key) if number is None else f"{_slug(key)}-{number}"
-    path = out / f"{name}.jpg"
     image.save(path, format="JPEG", quality=88)
     return path
 
