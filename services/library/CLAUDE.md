@@ -18,4 +18,5 @@
 - Проекция `catalog_items_proj`: порядок по `version`; блокировка не убирает единицу с полок — она показывается `status: unavailable`, удалить её можно, сохранить — нет (422 `library.item_unavailable`).
 - `domain` хранится в строке `shelf_items` (на момент сохранения): событие удаления не зависит от проекции.
 - `identity.UserDeleted`: consumer ставит отметку `user_purges` и удаляет первую порцию; задача relay `library.users.purge` дочищает порциями `GV_LIBRARY__PURGE_BATCH` (каждая — своя транзакция), в конце — полки, версия и ключи идемпотентности.
+- `GET /v1/items/shelves?ids=` — полки пачки единиц пользователя (запись на каждую уникальную, пустой `shelves` — нигде не лежит; один запрос `placements_many`); предел `GV_LIBRARY__ITEM_SHELVES_BATCH_MAX` (50, больше — 422 `library.batch_too_large`); доступ как у `/v1/items/{id}/shelves`. Путь `/items/shelves` не пересекается с `/items/{id}/shelves`.
 - Ответы и ошибки — `Cache-Control: no-store` (`api/common.NoStoreRoute`); CSRF/Origin для cookie — в `gv_auth.require_user`.

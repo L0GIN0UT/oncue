@@ -17,6 +17,7 @@ from prometheus_client import Counter
 
 from gv_auth import Authenticator, JwtVerifier, RedisRevocationChecker, ServiceAuthenticator
 from gv_core.errors import DependencyUnavailableError
+from gv_email import BackgroundEmailSender, LogEmailSender, SmtpEmailSender
 from gv_service import Environment, Infrastructure, PeriodicJob
 from identity_service.api.common import ApiDeps
 from identity_service.application.code_service import MIN_KEY_BYTES, HmacCodeService
@@ -88,9 +89,7 @@ from identity_service.domain import (
 )
 from identity_service.domain.service_client import ServiceClient, ServiceClientRegistry
 from identity_service.infrastructure.clients import (
-    BackgroundEmailSender,
-    LogEmailSender,
-    SmtpEmailSender,
+    IdentityEmailSender,
     YandexOAuthProvider,
 )
 from identity_service.infrastructure.db.challenge_purger import SqlChallengePurger
@@ -629,25 +628,29 @@ def build_periodic_jobs(infra: Infrastructure) -> list[PeriodicJob]:
 
 
 def _email_sender(settings: Settings) -> EmailSender:
+    ttl_s = settings.email_code.ttl_s
     if settings.email.backend == "smtp":
         smtp = settings.smtp
-        # SMTP — в фоне: время ответа не должно зависеть от почтового сервера.
-        return BackgroundEmailSender(
-            SmtpEmailSender(
-                host=smtp.host,
-                port=smtp.port,
-                sender=settings.email.sender,
-                username=smtp.username,
-                password=smtp.password.get_secret_value() if smtp.password else None,
-                start_tls=smtp.start_tls,
-                use_tls=smtp.use_tls,
-                timeout_s=smtp.timeout_s,
-                code_ttl_s=settings.email_code.ttl_s,
-            )
+        # SMTP - в фоне: время ответа не должно зависеть от почтового сервера.
+        return IdentityEmailSender(
+            BackgroundEmailSender(
+                SmtpEmailSender(
+                    host=smtp.host,
+                    port=smtp.port,
+                    sender=settings.email.sender,
+                    username=smtp.username,
+                    password=smtp.password.get_secret_value() if smtp.password else None,
+                    start_tls=smtp.start_tls,
+                    use_tls=smtp.use_tls,
+                    timeout_s=smtp.timeout_s,
+                )
+            ),
+            code_ttl_s=ttl_s,
         )
-    # Код из письма — секрет: в лог его пишем только в local/ci (e2e читают его оттуда).
-    return LogEmailSender(
-        include_secrets=settings.environment in (Environment.LOCAL, Environment.CI)
+    # Код из письма - секрет: в лог его пишем только в local/ci (e2e читают его оттуда).
+    return IdentityEmailSender(
+        LogEmailSender(include_secrets=settings.environment in (Environment.LOCAL, Environment.CI)),
+        code_ttl_s=ttl_s,
     )
 
 

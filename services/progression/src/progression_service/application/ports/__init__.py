@@ -13,6 +13,10 @@ from uuid import UUID
 from gv_core.domain import DomainEvent
 from progression_service.application.ports.avatar import AvatarRepository
 from progression_service.application.ports.events import EventRepository
+from progression_service.application.ports.ops import (
+    ReconcileCheckpointRepository,
+    RetentionRepository,
+)
 from progression_service.application.ports.rewards import (
     BadgeRepository,
     BoostRepository,
@@ -157,6 +161,21 @@ class LedgerRepository(Protocol):
         """Расхождения «сумма журнала ≠ баланс/опыт» (не больше ``limit``)."""
         ...
 
+    async def next_chunk(
+        self, ledger: str, after: UUID | None, bound: UUID, batch: int
+    ) -> tuple[UUID | None, int]:
+        """Кусок проводок журнала ``ledger`` с ``after < id <= bound``, не больше ``batch``.
+
+        Возвращает ``(id последней проводки куска, сколько проводок в куске)``; ``None`` - пусто.
+        """
+        ...
+
+    async def mismatches_in_range(
+        self, ledger: str, after: UUID | None, upto: UUID, limit: int
+    ) -> list[LedgerMismatch]:
+        """Расхождения у игроков с проводками ``after < id <= upto`` (суммы - по всему журналу)."""
+        ...
+
 
 class BalanceRepository(Protocol):
     """Балансы Версов по бакетам."""
@@ -291,6 +310,12 @@ class ProgressionUnitOfWork(Protocol):
 
     @property
     def events(self) -> EventRepository: ...
+
+    @property
+    def reconcile(self) -> ReconcileCheckpointRepository: ...
+
+    @property
+    def retention(self) -> RetentionRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

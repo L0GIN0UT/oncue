@@ -523,3 +523,39 @@ async def test_republish_publishes_version_plus_one_in_batches(
     for event in republished:
         assert_event_matches_schema(event)
         assert event.payload["version"] == before[event.aggregate_id] + 1
+
+
+async def test_items_batch_returns_public_cards(
+    client: httpx.AsyncClient, catalog_infra: Infrastructure, token_issuer: TestTokenIssuer
+) -> None:
+    """Пакет карточек: неизвестные и заблокированные пропущены, дубли схлопнуты, те же поля."""
+    await run_import(
+        client,
+        catalog_infra,
+        token_issuer,
+        {"source": "file", "file_id": "films.jsonl", "reason": "сиды"},
+    )
+    admin = auth(token_issuer, *ADMIN_PERMS)
+    page = (await client.get("/admin/v1/items", params={"limit": 3}, headers=admin)).json()
+    ids = [row["id"] for row in page["items"]]
+    assert len(ids) == 3
+    blocked = ids[2]
+    body = {"reason": "жалоба правообладателя", "reason_code": "copyright.claim"}
+    assert (
+        await client.post(f"/admin/v1/items/{blocked}/block", json=body, headers=admin | key())
+    ).status_code == 200
+
+    params = [("ids", i) for i in [*ids, ids[0], str(uuid7())]]
+    response = await client.get("/v1/items", params=params)
+    assert response.status_code == 200, response.text
+    cards = response.json()["items"]
+    assert sorted(c["id"] for c in cards) == sorted(ids[:2])
+    single = (await client.get(f"/v1/items/{ids[0]}")).json()
+    assert next(c for c in cards if c["id"] == ids[0]) == single
+
+
+async def test_items_batch_limits(client: httpx.AsyncClient) -> None:
+    too_many = [("ids", str(uuid7())) for _ in range(51)]
+    assert_problem(await client.get("/v1/items", params=too_many), 422, "catalog.batch_too_large")
+    assert (await client.get("/v1/items")).status_code == 422
+    assert (await client.get("/v1/items", params={"ids": "x"})).status_code == 422

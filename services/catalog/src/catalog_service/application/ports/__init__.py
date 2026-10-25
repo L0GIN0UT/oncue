@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from typing import Protocol
 
 from catalog_service.application.dto import (
@@ -54,6 +54,10 @@ class MediaItemRepository(Protocol):
 
     async def get(self, item_id: uuid.UUID) -> MediaItem | None:
         """Единица по id или ``None``."""
+        ...
+
+    async def get_many(self, item_ids: Sequence[uuid.UUID]) -> list[MediaItem]:
+        """Существующие единицы из списка (неизвестные пропущены, порядок не гарантирован)."""
         ...
 
     async def find_by_external_ref(

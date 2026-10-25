@@ -16,6 +16,7 @@ import structlog
 
 from bff_web_service.application.dto import (
     FriendsCard,
+    Item,
     ItemCard,
     ItemShelves,
     LadderCard,
@@ -47,7 +48,6 @@ from bff_web_service.application.ports import (
 from bff_web_service.application.queries.common import (
     GUEST_FORBIDDEN,
     HTTP_FORBIDDEN,
-    HTTP_NOT_FOUND,
     HTTP_UNAUTHORIZED,
     Limiter,
     UpstreamError,
@@ -246,11 +246,13 @@ class GetMatchPage:
         concurrency: int,
         items_deadline_s: float,
         appearance_batch_size: int = 12,
+        items_batch_size: int = 50,
     ) -> None:
         self._match, self._catalog, self._library = match, catalog, library
         self._progression = progression
         self._concurrency, self._deadline_s = concurrency, items_deadline_s
         self._batch = appearance_batch_size
+        self._items_batch = items_batch_size
 
     async def __call__(self, viewer: Viewer, match_id: UUID) -> MatchPage:
         """Собрать экран.
@@ -314,36 +316,47 @@ class GetMatchPage:
         return Block.ok(cards)
 
     async def _items(self, limiter: Limiter, ids: list[UUID]) -> Block[list[ItemCard]]:
-        fetched = await asyncio.gather(*(limiter.attempt(self._catalog.get_item(i)) for i in ids))
-        cards: list[ItemCard] = []
-        for item_id, value in zip(ids, fetched, strict=True):
-            if isinstance(value, UpstreamRejectedError) and value.status == HTTP_NOT_FOUND:
-                # Единицу заблокировали после матча — карточки нет, остальные показываем.
-                log.info("bff.item_missing", media_item_id=str(item_id))
-                continue
+        """Карточки пачками (предел источника); пропавшие (заблокированы) пропускаем."""
+        fetched = await asyncio.gather(
+            *(
+                limiter.attempt(self._catalog.get_items(chunk))
+                for chunk in _chunks(ids, self._items_batch)
+            )
+        )
+        found: dict[UUID, Item] = {}
+        for value in fetched:
             block = block_of(value, "match.items")
             if block.data is None:
                 return Block.unavailable()
-            cards.append(item_card(block.data))
+            found.update((i.id, i) for i in block.data)
+        # Порядок - по раундам, а не по ответу источника (он не гарантирован).
+        cards: list[ItemCard] = []
+        for item_id in ids:
+            if item_id not in found:
+                # Единицу заблокировали после матча — карточки нет, остальные показываем.
+                log.info("bff.item_missing", media_item_id=str(item_id))
+                continue
+            cards.append(item_card(found[item_id]))
         return Block.ok(cards)
 
     async def _shelves(
         self, limiter: Limiter, token: str, ids: list[UUID]
     ) -> Block[list[ItemShelves]]:
-        """Флаги «в медиатеке»: library отдаёт полки по одной единице (как кнопка в 3b)."""
-        fetched: list[ItemShelves | UpstreamError] = await asyncio.gather(
-            *(limiter.attempt(self._library.item_shelves(token, i)) for i in ids)
+        """Флаги «в медиатеке»: library отдаёт полки пачками (предел источника)."""
+        fetched = await asyncio.gather(
+            *(
+                limiter.attempt(self._library.items_shelves(token, chunk))
+                for chunk in _chunks(ids, self._items_batch)
+            )
         )
-        flags: list[ItemShelves] = []
-        for item_id, value in zip(ids, fetched, strict=True):
-            if isinstance(value, UpstreamRejectedError) and value.status == HTTP_NOT_FOUND:
-                flags.append(ItemShelves(item_id, []))
-                continue
+        found: dict[UUID, ItemShelves] = {}
+        for value in fetched:
             block = block_of(value, "match.library")
             if block.data is None:
                 return Block.unavailable()
-            flags.append(block.data)
-        return Block.ok(flags)
+            found.update((f.media_item_id, f) for f in block.data)
+        # Единицы, которых нет в ответе, - нигде не лежат; порядок - по раундам.
+        return Block.ok([found.get(i, ItemShelves(i, [])) for i in ids])
 
 
 def with_report_flags(result: MatchResult, viewer_id: UUID | None) -> MatchResult:
@@ -383,6 +396,11 @@ async def _until[T](deadline: float, call: Awaitable[Block[T]], block: str) -> B
     except TimeoutError:
         log.warning("bff.block_unavailable", block=block, reason="deadline")
         return Block.unavailable()
+
+
+def _chunks(ids: list[UUID], size: int) -> list[list[UUID]]:
+    """Пачки не больше ``size``."""
+    return [ids[i : i + size] for i in range(0, len(ids), size)]
 
 
 def _round_item_ids(result: MatchResult) -> list[UUID]:

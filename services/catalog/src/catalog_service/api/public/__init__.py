@@ -89,6 +89,12 @@ class ItemCard(BaseModel):
         )
 
 
+class ItemCardList(BaseModel):
+    """Пачка карточек (порядок не гарантирован)."""
+
+    items: list[ItemCard]
+
+
 def build_public_router(c: CatalogServices) -> APIRouter:
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["catalog"])
@@ -135,6 +141,22 @@ def build_public_router(c: CatalogServices) -> APIRouter:
     ) -> SuggestionList:
         hits = await c.search(q, domain, limit)
         return SuggestionList(items=[SuggestionOut.of(s) for s in hits])
+
+    @router.get(
+        "/items",
+        response_model=ItemCardList,
+        summary="Карточки единиц пачкой",
+        description=(
+            "`ids` повторяется в запросе; дубли схлопываются, неизвестные и заблокированные "
+            "пропускаются, порядок не гарантирован. Больше `items_batch_max` уникальных id - "
+            "422 `catalog.batch_too_large`."
+        ),
+        responses=problem_responses(422),
+    )
+    async def get_items(
+        ids: Annotated[list[uuid.UUID], Query(min_length=1, max_length=1000)],
+    ) -> ItemCardList:
+        return ItemCardList(items=[ItemCard.of(i) for i in await c.get_item.public_many(ids)])
 
     @router.get(
         "/items/{item_id}",

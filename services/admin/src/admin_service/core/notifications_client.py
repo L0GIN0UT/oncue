@@ -8,6 +8,7 @@ from admin_service.core.service_client import ServiceClient
 
 NOTIFICATIONS = "notifications"
 _BROADCASTS = "/admin/v1/broadcasts"
+_TYPES = "/admin/v1/notification-types"
 
 
 class NotificationsAdminClient:
@@ -28,4 +29,18 @@ class NotificationsAdminClient:
             _BROADCASTS,
             idempotency_key=idempotency_key,
             json={"subject": subject, "body": body, "reason": reason},
+        )
+
+    def types(self) -> Any:
+        """Типы уведомлений и их включённость -> ``{items}``."""
+        return self._client.get(_TYPES)
+
+    def set_type_enabled(
+        self, type_key: str, *, enabled: bool, reason: str, idempotency_key: str
+    ) -> Any:
+        """Включить или выключить тип (200) -> ``NotificationTypeAdmin``."""
+        return self._client.put(
+            f"{_TYPES}/{type_key}",
+            idempotency_key=idempotency_key,
+            json={"enabled": enabled, "reason": reason},
         )

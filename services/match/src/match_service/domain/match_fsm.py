@@ -150,11 +150,14 @@ class Timing:
         idle_ms: ``GV_MATCH__ROOM_IDLE_CLOSE_MIN`` — простой лобби и длительность итога.
         presence_timeout_ms: Без heartbeat дольше — «Отключён».
         memory_limit: Сколько единиц помнит лобби (``exclude_ids`` плана).
+        empty_lobby_ms: ``GV_MATCH__EMPTY_LOBBY_CLOSE_S`` - лобби, где никто не онлайн дольше
+            этого срока, закрывается владельцем (0 - выключено); шина не участвует.
     """
 
     idle_ms: int
     presence_timeout_ms: int
     memory_limit: int
+    empty_lobby_ms: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -614,6 +617,26 @@ def presence(
             if player is not None and player.active and player.disconnected_at_ms is None:
                 _on_disconnect(room, seat.user_id, now_ms)
     _grace(room, rules, timing, now_ms)
+    _close_abandoned_lobby(room, timing, seen_ms, now_ms)
+
+
+def _close_abandoned_lobby(
+    room: Room, timing: Timing, seen_ms: Mapping[UUID, int], now_ms: int
+) -> None:
+    """Лобби без единого онлайн-игрока дольше ``empty_lobby_ms`` - закрыть (локально).
+
+    Решает только владелец по heartbeat и своим часам: ни Postgres, ни Redpanda, ни
+    Centrifugo не нужны (матча не было - писать в outbox нечего), поэтому недоступная
+    шина закрытие не задерживает. Дельта ``closed`` уйдёт в канал после снимка.
+    """
+    if timing.empty_lobby_ms <= 0 or room.phase is not Phase.LOBBY:
+        return
+    alive = [s for s in room.seats if s.presence is not Presence.LEFT]
+    if not alive:
+        return
+    latest = max(max(seen_ms.get(s.user_id, 0), s.joined_at_ms) for s in alive)
+    if now_ms - latest >= timing.empty_lobby_ms:
+        room.close("empty_timeout", now_ms)
 
 
 def rejoin(room: Room, user_id: UUID, now_ms: int) -> None:

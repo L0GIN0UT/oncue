@@ -20,6 +20,7 @@ from gv_testkit import apply_migrations
 pytestmark = pytest.mark.integration
 
 CORE = {"notifications", "notification_preferences", "email_subscriptions", "devices"}
+FLAGS = {"notification_type_flags"}
 BROADCASTS = {"broadcasts", "broadcast_deliveries", "admin_actions", "idempotency_keys"}
 
 
@@ -45,7 +46,7 @@ async def test_migrations_apply_and_match_metadata(database_url: str) -> None:
     finally:
         await engine.dispose()
     assert diff == [], f"миграции расходятся с метаданными: {diff}"
-    assert await tables_of(database_url) >= (CORE | BROADCASTS)
+    assert await tables_of(database_url) >= (CORE | BROADCASTS | FLAGS)
 
 
 async def columns_of(url: str, table: str) -> set[str]:
@@ -71,6 +72,11 @@ async def test_migrations_downgrade_and_upgrade_again(database_url: str) -> None
     await apply_migrations(database_url, DEFINITION.migrations_path)
 
     config = alembic_config(DEFINITION.migrations_path, database_url)
+    await asyncio.to_thread(command.downgrade, config, "0006")
+    assert not (FLAGS & await tables_of(database_url))  # 0007 откатывается отдельно
+    await asyncio.to_thread(command.upgrade, config, "0007")
+    assert await tables_of(database_url) >= FLAGS
+
     await asyncio.to_thread(command.downgrade, config, "0003")
     columns = await columns_of(database_url, "broadcast_deliveries")
     assert {"broadcast_id", "user_id"} <= columns
@@ -88,4 +94,4 @@ async def test_migrations_downgrade_and_upgrade_again(database_url: str) -> None
     assert not (CORE & await tables_of(database_url))
 
     await asyncio.to_thread(command.upgrade, config, "head")
-    assert await tables_of(database_url) >= (CORE | BROADCASTS)
+    assert await tables_of(database_url) >= (CORE | BROADCASTS | FLAGS)

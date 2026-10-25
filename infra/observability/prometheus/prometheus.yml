@@ -2,6 +2,10 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Правила алертов: каталог rules/ смонтирован вместе с prometheus.yml (compose.observability.yml).
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   # Сервисы Guessverse: список целей генерирует `gv gen` (services.yml).
   - job_name: guessverse-services

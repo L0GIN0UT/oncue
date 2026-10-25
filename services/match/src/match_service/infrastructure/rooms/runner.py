@@ -6,8 +6,9 @@
 
 Цикл ``RoomActor`` (один писатель на комнату):
 
-1. ``XREAD`` команд после курсора снимка (ожидание — до дедлайна фазы, не дольше
-   ``GV_MATCH__ROOMS_POLL_MS``);
+1. команды после курсора снимка из общего читателя инстанса (``SharedCommandReader``,
+   ADR 0063: один блокирующий ``XREAD`` на все комнаты; ожидание — до дедлайна фазы, не
+   дольше ``GV_MATCH__ROOMS_POLL_MS``);
 2. ``RoomOwner.handle`` каждой команды, затем ``RoomOwner.tick`` (дедлайны, присутствие);
 3. если состояние изменилось — Lua-CAS снимка с эпохой; отказ = lease потерян: комната
    брошена без ответов (их даст новый владелец, применив команды заново с курсора);
@@ -41,8 +42,14 @@ from match_service.domain.room import Room
 from match_service.infrastructure.rooms import keys
 from match_service.infrastructure.rooms.codec import dumps
 from match_service.infrastructure.rooms.lease import Grant, Lease
+from match_service.infrastructure.rooms.reader import READER_ERRORS, SharedCommandReader
 from match_service.infrastructure.rooms.snapshot import RedisRoomStore
-from match_service.infrastructure.rooms.stream import CommandStream, RedisPresence
+from match_service.infrastructure.rooms.stream import (
+    FIELD,
+    CommandStream,
+    RedisPresence,
+    parse_field,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -70,6 +77,7 @@ class RunnerSettings:
     reply_ttl_s: int
     presence_ttl_s: int
     batch: int = 50
+    reader_backoff_max_s: float = 5.0
 
 
 def _channel(code: str) -> str:
@@ -137,6 +145,7 @@ class RoomActor:
         try:
             await self._run(stop)
         finally:
+            self._stream.detach(self.code)
             self.stopped = stop.is_set() and not self.lost
             if self._room is not None:
                 self._owner.forget(self._room)
@@ -272,7 +281,15 @@ class RoomsRunner:
         self._clock = clock
         self._settings = settings
         self.lease = Lease(redis, settings.instance, settings.lease_ttl_ms)
-        self._stream = CommandStream(redis, reply_ttl_s=settings.reply_ttl_s)
+        self.reader = SharedCommandReader(
+            redis,
+            poll_ms=settings.poll_ms,
+            batch=settings.batch,
+            parse=parse_field,
+            field_name=FIELD,
+            backoff_max_s=settings.reader_backoff_max_s,
+        )
+        self._stream = CommandStream(redis, reply_ttl_s=settings.reply_ttl_s, reader=self.reader)
         self._presence = RedisPresence(redis, ttl_s=settings.presence_ttl_s)
         self.actors: dict[str, RoomActor] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -285,6 +302,7 @@ class RoomsRunner:
     async def run(self, stop: asyncio.Event) -> None:
         """Брать комнаты до сигнала остановки; затем дождаться выхода актёров."""
         last_scan = 0.0
+        reader = asyncio.create_task(self._supervised_reader(), name="match.command_reader")
         try:
             while not stop.is_set():
                 self._reap()
@@ -304,7 +322,28 @@ class RoomsRunner:
                     task.cancel()
             if self._tasks:
                 await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+            # Читатель - после актёров: они выходят на границе итерации, ожидая свой ящик.
+            reader.cancel()
+            await asyncio.gather(reader, return_exceptions=True)
             self._reap()
+
+    async def _supervised_reader(self) -> None:
+        """Перезапуск читателя команд при неожиданном завершении (ADR 0063).
+
+        ``reader.run`` сам переживает сбои цикла; это второй рубеж на случай выхода из него:
+        ERROR, метрика и перезапуск с паузой. Курсоры живут в ящиках читателя, не теряются.
+        """
+        failures = 0
+        while True:
+            try:
+                await self.reader.run()
+                log.error("match.command_reader_exited")
+            except Exception:
+                log.exception("match.command_reader_supervisor_caught")
+            READER_ERRORS.inc()
+            failures += 1
+            pause = min(self._settings.reader_backoff_max_s, 0.25 * 2 ** min(failures, 10))
+            await asyncio.sleep(pause)
 
     async def handoff(self) -> None:
         """Отдать все комнаты другим инстансам."""

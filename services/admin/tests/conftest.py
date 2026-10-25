@@ -75,6 +75,7 @@ ADMIN_PERMS = (
     "progression.events.publish",
     "media.ugc.moderate",
     "notifications.broadcast.send",
+    "notifications.types.manage",
     "social.moderate",
     "social.comments.delete_any",
     "social.sanctions.manage",

@@ -20,6 +20,7 @@ from library_service.api.common import ApiServices, NoStoreRoute
 from library_service.api.schemas import (
     CreateShelfRequest,
     Cursor,
+    ItemShelvesBatchOut,
     ItemShelvesOut,
     RenameShelfRequest,
     SaveItemRequest,
@@ -159,6 +160,23 @@ def build_public_router(services: ApiServices) -> APIRouter:
         return await commands.remove_item(
             user.user_id, shelf_ref, media_item_id, SaveSourceEnum(source), key
         )
+
+    @router.get(
+        "/items/shelves",
+        response_model=ItemShelvesBatchOut,
+        summary="На каких полках единицы (пачкой)",
+        description=(
+            "`ids` повторяется в запросе; дубли схлопываются, по записи на единицу "
+            "(пустой `shelves` — нигде не лежит). Больше `item_shelves_batch_max` единиц — "
+            "422 `library.batch_too_large`."
+        ),
+        responses=_READ,
+    )
+    async def items_shelves(
+        user: User,
+        ids: Annotated[list[UUID], Query(min_length=1, max_length=1000)],
+    ) -> dict[str, Any]:
+        return await queries.items_shelves(user.user_id, ids)
 
     @router.get(
         "/items/{media_item_id}/shelves",

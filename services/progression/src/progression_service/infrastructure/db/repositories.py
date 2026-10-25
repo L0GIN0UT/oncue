@@ -32,6 +32,11 @@ from progression_service.domain.daily_streak import Streak
 from progression_service.domain.ledger import Bucket, Direction, Entry
 from progression_service.infrastructure.db.repositories_avatar import SqlAvatars
 from progression_service.infrastructure.db.repositories_events import SqlEvents
+from progression_service.infrastructure.db.repositories_ops import (
+    SqlLedgerRanges,
+    SqlReconcileCheckpoints,
+    SqlRetention,
+)
 from progression_service.infrastructure.db.repositories_rewards import (
     SqlBadges,
     SqlBoosts,
@@ -183,7 +188,7 @@ class SqlProgress:
         )
 
 
-class SqlLedger:
+class SqlLedger(SqlLedgerRanges):
     """Журналы опыта и Версов (только добавление и чтение)."""
 
     def __init__(self, session: AsyncSession) -> None:
@@ -508,6 +513,8 @@ class SqlProgressionUnitOfWork:
     packs: SqlPacks
     avatars: SqlAvatars
     events: SqlEvents
+    reconcile: SqlReconcileCheckpoints
+    retention: SqlRetention
 
     def __init__(
         self,
@@ -561,6 +568,8 @@ class SqlProgressionUnitOfWork:
         self.packs = SqlPacks(s)
         self.avatars = SqlAvatars(s)
         self.events = SqlEvents(s)
+        self.reconcile = SqlReconcileCheckpoints(s)
+        self.retention = SqlRetention(s)
         return self
 
     async def __aexit__(

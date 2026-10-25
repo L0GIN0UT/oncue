@@ -8,6 +8,7 @@
 * ``broadcasts`` / ``broadcast_deliveries`` - рассылки администрации и факты отправки;
 * ``finished_event_runs`` - завершённые запуски событий progression (``EventRunFinished``): по ним
   воркер массовой доставки прекращает рассылку (ADR 0054);
+* ``notification_type_flags`` - решение админа о включённости типа (нет строки - включён, ADR 0066);
 * ``admin_actions`` / ``idempotency_keys`` - аудит и ключи идемпотентности admin-мутаций.
 """
 
@@ -145,6 +146,15 @@ broadcast_deliveries = Table(
     Index("ix_broadcast_deliveries_token_expires_at", "token_expires_at"),
 )
 
+notification_type_flags = Table(
+    "notification_type_flags",
+    _md,
+    Column("type", String(64), primary_key=True),
+    Column("enabled", Boolean, nullable=False),
+    Column("changed_by", Uuid(as_uuid=True), nullable=False),
+    Column("changed_at", DateTime(timezone=True), nullable=False),
+)
+
 admin_actions = Table(
     "admin_actions",
     _md,
@@ -170,5 +180,6 @@ __all__ = [
     "email_subscriptions",
     "idempotency_keys",
     "notification_preferences",
+    "notification_type_flags",
     "notifications",
 ]

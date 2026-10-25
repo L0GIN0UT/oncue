@@ -90,6 +90,8 @@ quest_progress = Table(
         ],
     ),
     CheckConstraint("progress >= 0", name="progress_non_negative"),
+    # Ретенция (ADR 0062): поиск закрытых периодов без полного скана.
+    Index("ix_quest_progress_period_start", "period_start"),
 )
 
 badges_unlocked = Table(
@@ -120,6 +122,8 @@ metric_marks = Table(
     Column("subject_key", String(200), primary_key=True),
     Column("user_id", Uuid(as_uuid=True), nullable=False),
     _ts("at"),
+    # Ретенция (ADR 0062): удаление старых отметок по времени.
+    Index("ix_metric_marks_at", "at"),
 )
 
 wheel_spins = Table(

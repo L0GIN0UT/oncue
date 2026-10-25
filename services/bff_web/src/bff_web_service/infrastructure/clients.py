@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Literal
 from urllib.parse import urlencode
@@ -475,6 +476,13 @@ class _ItemIn(_In):
 _ITEM = TypeAdapter(_ItemIn)
 
 
+class _ItemsIn(_In):
+    items: list[_ItemIn]
+
+
+_ITEMS = TypeAdapter(_ItemsIn)
+
+
 class HttpCatalogClient:
     """Публичный API catalog: карточки единиц кэшируются (ключ без пользователя)."""
 
@@ -492,6 +500,15 @@ class HttpCatalogClient:
         if not cached:
             await self._http.remember(key, body, self._ttl)
         return item.dto()
+
+    async def get_items(self, item_ids: Sequence[UUID]) -> list[Item]:
+        """``GET /v1/items?ids=...``: пачка карточек (не кэшируется - один вызов на пачку)."""
+        query = urlencode([("ids", str(i)) for i in item_ids])
+        body = await self._http.get(f"/v1/items?{query}", token=None)
+        items = _parse(self._http.service, _ITEMS, body).items
+        if not {i.id for i in items} <= set(item_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return [i.dto() for i in items]
 
 
 # ----------------------------------------------------------------------------- identity
@@ -766,6 +783,13 @@ _SHELF_ITEMS = TypeAdapter(_ShelfItemsIn)
 _ITEM_SHELVES = TypeAdapter(_ItemShelvesIn)
 
 
+class _ItemsShelvesIn(_In):
+    items: list[_ItemShelvesIn]
+
+
+_ITEMS_SHELVES = TypeAdapter(_ItemsShelvesIn)
+
+
 class HttpLibraryClient:
     """Публичный API library: всё личное, ничего не кэшируется."""
 
@@ -799,6 +823,15 @@ class HttpLibraryClient:
         if page.media_item_id != media_item_id:
             raise UpstreamUnavailableError(self._http.service, "contract_violation")
         return ItemShelves(media_item_id, list(page.shelves))
+
+    async def items_shelves(self, token: str, media_item_ids: Sequence[UUID]) -> list[ItemShelves]:
+        """``GET /v1/items/shelves?ids=...``: полки пачки единиц, запись на каждую."""
+        query = urlencode([("ids", str(i)) for i in media_item_ids])
+        body = await self._http.get(f"/v1/items/shelves?{query}", token=token)
+        page = _parse(self._http.service, _ITEMS_SHELVES, body).items
+        if not {p.media_item_id for p in page} <= set(media_item_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return [ItemShelves(p.media_item_id, list(p.shelves)) for p in page]
 
 
 # ----------------------------------------------------------------------------- match

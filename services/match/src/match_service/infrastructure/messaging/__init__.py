@@ -28,7 +28,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import structlog
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge, Histogram
 from pydantic import (
     AwareDatetime,
     BaseModel,
@@ -54,6 +54,16 @@ log = structlog.get_logger(__name__)
 
 UNKNOWN_FORMATS = Counter(
     "gv_match_ladder_unknown_formats_total", "LadderPublished с форматами вне FORMAT_ANSWER"
+)
+
+SANCTIONS_LAG = Histogram(
+    "gv_match_sanctions_projection_lag_seconds",
+    "Время от публикации social.UserSanctionsChanged до применения в match",
+    buckets=(0.5, 1, 2, 5, 10, 30, 60, 120, 300, 900, 3600),
+)
+SANCTIONS_LAG_LAST = Gauge(
+    "gv_match_sanctions_projection_last_lag_seconds",
+    "Лаг последнего применённого события санкций (для алерта «проекция отстаёт»)",
 )
 
 CONSUMED_TOPICS: tuple[str, ...] = (
@@ -243,6 +253,10 @@ def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:  # 
     async def on_sanctions(envelope: EventEnvelope, session: AsyncSession) -> None:
         p = _parse(_SanctionsChanged, envelope.payload)
         now = container.infra.clock.now()
+        # Лаг проекции (ADR 0063): время события из конверта, без новых зависимостей.
+        lag = max(0.0, (now - envelope.occurred_at).total_seconds())
+        SANCTIONS_LAG.observe(lag)
+        SANCTIONS_LAG_LAST.set(lag)
         snapshot = SanctionsSnapshot(
             user_id=p.user_id,
             version=p.version,
@@ -257,9 +271,10 @@ def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:  # 
         if banned and container.infra.redis is not None:
             await container.ranked_queue.remove(p.user_id)  # идемпотентно
         if p.account_banned:
-            # Бан аккаунта (ADR 0059): ключ server API есть у match, не у identity. Повтор
-            # безопасен: дубль/старая версия отсечены выше, disconnect идемпотентен.
-            await container.subscriptions.disconnect(
+            # Бан аккаунта (ADR 0059): ключ server API есть у match, не у identity. Синхронно,
+            # мимо фоновой очереди: потерянное задание не вернуть (дубль отсечён проекцией).
+            # Сбой после повторов адаптера - лог и метрика, без исключения (иначе откат).
+            await container.ban_revoker.disconnect(
                 p.user_id, reconnect=False, reason="account_banned"
             )
             log.info("match.account_banned_disconnected")

@@ -765,6 +765,23 @@
         "title": "ItemCard",
         "type": "object"
       },
+      "ItemCardList": {
+        "description": "Пачка карточек (порядок не гарантирован).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ItemCardList",
+        "type": "object"
+      },
       "MediaDomain": {
         "description": "Предметная область единицы.",
         "enum": [
@@ -2509,6 +2526,60 @@
           }
         },
         "summary": "Автокомплит названий (только активные единицы)",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/items": {
+      "get": {
+        "description": "`ids` повторяется в запросе; дубли схлопываются, неизвестные и заблокированные пропускаются, порядок не гарантирован. Больше `items_batch_max` уникальных id - 422 `catalog.batch_too_large`.",
+        "operationId": "get_items_v1_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "title": "Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemCardList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Карточки единиц пачкой",
         "tags": [
           "catalog"
         ]

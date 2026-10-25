@@ -600,3 +600,22 @@ async def test_late_regeneration_of_old_set_does_not_replace_newer_set(env: Env)
 async def test_mark_clue_assets_unknown_item(env: Env) -> None:
     uow = env.uow()
     assert not await MarkClueAssets(uow.items, uow.clue_status)(clue_event(uuid7(), 1))
+
+
+async def test_public_many_skips_unknown_and_blocked_and_dedups(env: Env) -> None:
+    first = await env.create_film()
+    await env.upsert(track("t2", "Другая песня"))
+    second = next(reversed(env.store.items))
+    await BlockItem(env.uow, env.cache)(second, "moderation", env.ctx())
+    unknown = uuid.uuid4()
+    items = await GetItem(env.uow).public_many([first, first, second, unknown])
+    assert [i.id for i in items] == [first]
+
+
+async def test_public_many_rejects_oversized_batch(env: Env) -> None:
+    ids = [uuid.uuid4() for _ in range(3)]
+    with pytest.raises(InvalidInputError) as exc:
+        await GetItem(env.uow, batch_max=2).public_many(ids)
+    assert exc.value.code == "catalog.batch_too_large"
+    # дубли не считаются
+    assert await GetItem(env.uow, batch_max=2).public_many([ids[0], ids[0], ids[1]]) == []

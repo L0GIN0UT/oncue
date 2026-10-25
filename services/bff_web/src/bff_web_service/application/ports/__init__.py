@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from contextvars import ContextVar
 from typing import Any, Protocol
 from uuid import UUID
@@ -135,6 +136,13 @@ class CatalogClient(Protocol):
         """Публичная карточка единицы (кэшируется). 404 — ``UpstreamRejectedError``."""
         ...
 
+    async def get_items(self, item_ids: Sequence[UUID]) -> list[Item]:
+        """Карточки пачкой (``GET /v1/items?ids=``, не больше предела источника).
+
+        Неизвестные и заблокированные единицы в ответе отсутствуют, порядок не гарантирован.
+        """
+        ...
+
 
 class IdentityClient(Protocol):
     """Публичный API identity."""
@@ -177,6 +185,10 @@ class LibraryClient(Protocol):
 
     async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
         """На каких полках пользователя лежит единица (флаг «в медиатеке»)."""
+        ...
+
+    async def items_shelves(self, token: str, media_item_ids: Sequence[UUID]) -> list[ItemShelves]:
+        """Полки пачки единиц (``GET /v1/items/shelves?ids=``): запись на каждую единицу."""
         ...
 
 

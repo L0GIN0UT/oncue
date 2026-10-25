@@ -91,8 +91,9 @@ async def test_seeded_matrix(sessions: async_sessionmaker[Any], fake_clock: Fake
     # 9 этапа 1 + 5 прав game (0005, этап 2 §2.7) + 4 права сборников (0007, этап 3b §2.8)
     # + 4 права онлайна и рейтинга (0008, этап 4 §2.7) + 5 прав progression (0013, этап 5 §2.5)
     # + 4 права экономики и модерации UGC (0014, этап 5 §9.2) + 4 права social (0015) + 2 права
-    # конфига social (0016) + 2 права событий progression (0019, 5d)
-    assert len(matrix.permissions) == 39
+    # конфига social (0016) + 2 права событий progression (0019, 5d) + 1 право выключателей типов
+    # уведомлений (0020)
+    assert len(matrix.permissions) == 40
     assert matrix.roles["moderator"] == {
         "admin.access",
         "users.view",

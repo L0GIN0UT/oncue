@@ -57,6 +57,9 @@ class NotificationsSettings(BaseModel):
     broadcast_batch_size: int = Field(default=100, ge=1, le=1000)
     fanout_batch_size: int = Field(default=200, ge=1, le=2000)
     """Игроков в одной пачке массовой доставки (``audience``)."""
+    type_flags_cache_ttl_s: float = Field(default=15.0, ge=0, le=3600)
+    """Кэш выключателей типов в процессе (секунды); 0 - без кэша. Другой процесс увидит
+    решение админа не позже чем через TTL."""
     unsubscribe_footer: str = Field(
         default="Чтобы отписаться от рассылки, перейдите по ссылке: {link}",
         min_length=1,

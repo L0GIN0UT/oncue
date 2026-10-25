@@ -10,6 +10,7 @@ from notifications_service.application.player import (
     NotificationQueries,
     PreferenceService,
 )
+from notifications_service.application.type_flags import NotificationTypeAdmin
 from notifications_service.application.unsubscribe import Unsubscribe
 
 
@@ -23,3 +24,4 @@ class ApiServices:
     unsubscribe: Unsubscribe
     create_broadcast: CreateBroadcast
     broadcast_queries: BroadcastQueries
+    type_admin: NotificationTypeAdmin

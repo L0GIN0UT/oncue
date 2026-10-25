@@ -32,9 +32,14 @@ class MatchSettings(BaseModel):
         chat_slow_interval_s: Санкция ``CHAT_SLOW``: не чаще одного сообщения за интервал.
         unsubscribe_attempts: Попытки отзыва подписки Centrifugo (кик, выход, санкция ONLINE).
         unsubscribe_retry_s: Пауза между попытками отзыва подписки (растёт линейно).
+        revocation_workers: Воркеры фонового отзыва подписок/соединений Centrifugo (на процесс).
+        revocation_queue_size: Ёмкость очереди отзыва; переполнение - метрика и лог, не блок.
+        revocation_drain_s: Сколько ждать очередь отзыва при остановке (SIGTERM), остаток сброс.
         realtime_tokens_per_user_per_min: Выдача subscription-токенов.
         rate_per_user_per_hour: Оценки игроков после матча.
         room_idle_close_min: Простой лобби и показ итога до закрытия комнаты.
+        empty_lobby_close_s: Лобби без онлайн-игроков закрывается владельцем через столько
+            секунд (0 - выключено); не зависит от шины и Centrifugo.
         op_window: Сколько последних итогов команд помнит комната на игрока (повтор ``op_id``).
         poison_limit: Сбоев обработки комнаты подряд до её прерывания (``internal_error``).
         tick_per_player_per_min: Heartbeat игрока в минуту (без WebSocket — раз в секунду).
@@ -46,6 +51,7 @@ class MatchSettings(BaseModel):
             считается занятым (создание или вход в процессе).
         op_users_max: Сколько игроков максимум хранят окно ``op_id`` в снимке комнаты.
         memory_limit: Сколько сыгранных единиц помнит лобби (``exclude_ids`` ≤ 5000).
+        command_reader_backoff_max_s: Потолок паузы перезапуска общего читателя команд (ADR 0063).
         rooms_poll_ms: Максимальная пауза цикла владельца (таймеры, присутствие).
         orphan_scan_s: Проверка комнат без владельца (захват после падения).
         snapshot_ttl_h: TTL снимка активной комнаты (страховка от вечных ключей).
@@ -97,9 +103,13 @@ class MatchSettings(BaseModel):
     chat_slow_interval_s: int = Field(default=10, ge=1)
     unsubscribe_attempts: int = Field(default=3, ge=1, le=10)
     unsubscribe_retry_s: float = Field(default=0.2, ge=0, le=5)
+    revocation_workers: int = Field(default=4, ge=1, le=64)
+    revocation_queue_size: int = Field(default=1000, ge=1, le=100_000)
+    revocation_drain_s: float = Field(default=5, ge=0, le=60)
     realtime_tokens_per_user_per_min: int = Field(default=30, ge=1)
     rate_per_user_per_hour: int = Field(default=60, ge=1)
     room_idle_close_min: float = Field(default=30, gt=0)
+    empty_lobby_close_s: int = Field(default=120, ge=0, le=86_400)
     op_window: int = Field(default=32, ge=4, le=1024)
     poison_limit: int = Field(default=3, ge=1, le=100)
     tick_per_player_per_min: int = Field(default=150, ge=1)
@@ -110,6 +120,7 @@ class MatchSettings(BaseModel):
     op_users_max: int = Field(default=16, ge=2, le=256)
     pending_room_ms: int = Field(default=10_000, ge=1000, le=120_000)
     memory_limit: int = Field(default=2000, ge=0, le=5000)
+    command_reader_backoff_max_s: float = Field(default=5, gt=0, le=60)
     rooms_poll_ms: int = Field(default=250, ge=5, le=1500)
     orphan_scan_s: float = Field(default=2, gt=0, le=60)
     snapshot_ttl_h: float = Field(default=24, gt=0)
@@ -145,6 +156,10 @@ class MatchSettings(BaseModel):
     def _timings(self) -> MatchSettings:
         if self.lease_renew_s * 2 > self.lease_ttl_s:
             raise ValueError("GV_MATCH__LEASE_RENEW_S должен быть не больше половины LEASE_TTL_S")
+        if 0 < self.empty_lobby_close_s < self.presence_timeout_s:
+            raise ValueError(
+                "GV_MATCH__EMPTY_LOBBY_CLOSE_S не должен быть меньше PRESENCE_TIMEOUT_S"
+            )
         if self.rooms_poll_ms >= _REDIS_SOCKET_TIMEOUT_MS:
             raise ValueError("GV_MATCH__ROOMS_POLL_MS должен быть меньше socket_timeout Redis")
         if self.matcher_poll_ms >= _REDIS_SOCKET_TIMEOUT_MS:

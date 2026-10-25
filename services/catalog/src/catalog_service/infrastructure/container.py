@@ -293,7 +293,7 @@ class CatalogContainer:
     @cached_property
     def get_item(self) -> GetItem:
         """Карточка."""
-        return GetItem(self.uow)
+        return GetItem(self.uow, batch_max=self.settings.catalog.items_batch_max)
 
     @cached_property
     def list_items(self) -> ListItems:

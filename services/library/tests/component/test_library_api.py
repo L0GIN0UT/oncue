@@ -516,3 +516,67 @@ async def test_user_deleted_purges_library_in_batches(library: Any) -> None:
     assert (
         await library.client.get(f"/v1/shelves/{shelf['ref']}/items", headers=me)
     ).status_code == 404
+
+
+async def test_items_shelves_batch_returns_own_placements(library: Any) -> None:
+    """Пакет «в каких полках единицы»: только свои полки, дубли схлопнуты, пустые — с []."""
+    _, me = library.user()
+    _, other = library.user()
+    first, second, third = [await library.add_item() for _ in range(3)]
+    await library.save(me, "system:favorite", first)
+    await library.save(me, "system:watched", first)
+    await library.save(me, "system:favorite", second)
+    await library.save(other, "system:watched", third)
+
+    response = await library.client.get(
+        "/v1/items/shelves",
+        params=[
+            ("ids", str(first)),
+            ("ids", str(second)),
+            ("ids", str(third)),
+            ("ids", str(first)),
+        ],
+        headers=me,
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == "no-store"
+    by_id = {i["media_item_id"]: i["shelves"] for i in response.json()["items"]}
+    assert len(response.json()["items"]) == 3
+    assert by_id[str(first)] == ["system:watched", "system:favorite"]  # порядок показа
+    assert by_id[str(second)] == ["system:favorite"]
+    assert by_id[str(third)] == []  # чужая полка не видна
+
+
+async def test_items_shelves_batch_matches_single_endpoint(library: Any) -> None:
+    _, me = library.user()
+    item = await library.add_item()
+    await library.save(me, "system:favorite", item)
+    single = (await library.client.get(f"/v1/items/{item}/shelves", headers=me)).json()
+    batch = await library.client.get("/v1/items/shelves", params={"ids": str(item)}, headers=me)
+    assert batch.json()["items"] == [single]
+
+
+async def test_items_shelves_batch_limits(library: Any) -> None:
+    _, me = library.user()
+    too_many = [("ids", str(uuid7())) for _ in range(51)]
+    assert_problem(
+        await library.client.get("/v1/items/shelves", params=too_many, headers=me),
+        422,
+        "library.batch_too_large",
+    )
+    empty = await library.client.get("/v1/items/shelves", headers=me)
+    assert empty.status_code == 422
+    bad = await library.client.get("/v1/items/shelves", params={"ids": "nope"}, headers=me)
+    assert bad.status_code == 422
+
+
+@pytest.mark.parametrize("auth", ["anon", "guest"])
+async def test_items_shelves_batch_requires_user(library: Any, auth: str) -> None:
+    headers = {} if auth == "anon" else {"Authorization": f"Bearer {library.issuer.issue_guest()}"}
+    response = await library.client.get(
+        "/v1/items/shelves", params={"ids": str(uuid7())}, headers=headers
+    )
+    if auth == "anon":
+        assert_problem(response, 401, "auth.unauthenticated")
+    else:
+        assert_problem(response, 403, "auth.guest_forbidden")

@@ -100,6 +100,9 @@ class PagesSettings(BaseModel):
         match_items_deadline_s: Общий предел на блоки ``items`` (catalog) и ``library``
             итога матча: до 50 единиц идут волнами по ``max_concurrency``, и без общего
             предела страница ждала бы ``волны × timeout_s``. Не успел — блок ``unavailable``.
+        match_items_batch_size: Единиц в одном пакетном вызове catalog (``/v1/items?ids=``)
+            и library (``/v1/items/shelves?ids=``) для итога матча; пределы источников — 50,
+            больше единиц режутся на пачки.
         home_progress_deadline_s: Общий предел на три вызова progression для блока
             ``progress`` главной; не успел — блок ``unavailable``, остальная главная цела.
         default_theme_key: Ключ активной темы оболочки (ADR 0049: bff отдаёт только ключ,
@@ -123,6 +126,7 @@ class PagesSettings(BaseModel):
     online_matches_limit: int = Field(default=10, ge=1, le=50)
     online_weekly_limit: int = Field(default=5, ge=1, le=50)
     match_items_deadline_s: float = Field(default=2.0, gt=0, le=30)
+    match_items_batch_size: int = Field(default=50, ge=1, le=50)
     home_progress_deadline_s: float = Field(default=1.5, gt=0, le=30)
     default_theme_key: str = Field(default="default", pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
     appearance_batch_size: int = Field(default=12, ge=1, le=12)

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
-from email.message import EmailMessage as MimeMessage
 from urllib.parse import urlencode
 
-import aiosmtplib
 import httpx
 import structlog
 
 from gv_core.errors import DependencyUnavailableError
-from identity_service.application.ports import EmailMessage, EmailSender, ExternalProfile
+from gv_email import EmailTransport, OutgoingEmail
+from identity_service.application.ports import EmailMessage, ExternalProfile
 from identity_service.application.security import OAuthStateError
 from identity_service.domain import Provider
 
@@ -154,103 +152,38 @@ class YandexOAuthProvider:
         )
 
 
-class LogEmailSender:
-    """Письма в лог (local/ci).
+class IdentityEmailSender:
+    """Тонкий адаптер порта ``EmailSender``: рендер письма identity и передача транспорту.
 
-    Код пишется в лог только при ``include_secrets`` (local/ci, e2e читают код оттуда);
-    иначе — лишь факт и назначение. Адрес получателя не логируется никогда (ПДн).
+    Транспорт (SMTP, лог, фон) - общая библиотека ``libs/email``. Секреты (код, ссылка) идут
+    только в ``secret_log_fields`` - в лог они попадают в local/ci.
     """
 
-    def __init__(self, *, include_secrets: bool = False) -> None:
-        self._include_secrets = include_secrets
-
-    async def send(self, message: EmailMessage) -> None:
-        """«Отправить» письмо."""
-        extra: dict[str, object] = {}
-        if message.providers:
-            extra["providers"] = list(message.providers)
-        if self._include_secrets:
-            if message.code:
-                extra["code"] = message.code
-            if message.link:
-                extra["link"] = message.link
-        if message.challenge_id is not None:
-            extra["challenge_id"] = str(message.challenge_id)  # не секрет: по нему e2e ищет код
-        log.info("email.logged", purpose=message.purpose, **extra)
-
-
-class BackgroundEmailSender:
-    """Отправка письма вне запроса: время ответа не зависит от SMTP (ADR 0041, ревью).
-
-    Иначе ``forgot`` отвечал бы дольше для существующего адреса (письмо уходит только ему), и по
-    времени ответа адрес был бы различим. Задача не переживает остановку процесса — письмо
-    тогда не дойдёт, пользователь запросит код повторно (resend). При ``max_pending`` задачах в
-    полёте отправка идёт синхронно: очередь не растёт без границ.
-    """
-
-    def __init__(self, inner: EmailSender, *, max_pending: int = 100) -> None:
-        self._inner, self._max_pending = inner, max_pending
-        self._tasks: set[asyncio.Task[None]] = set()
-
-    async def send(self, message: EmailMessage) -> None:
-        """Поставить письмо в фон (или отправить сразу, если очередь заполнена)."""
-        if len(self._tasks) >= self._max_pending:
-            await self._deliver(message)
-            return
-        task = asyncio.get_running_loop().create_task(self._deliver(message))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-    async def drain(self, timeout_s: float = 10.0) -> None:
-        """Дождаться уже запущенных отправок (остановка процесса, тесты)."""
-        if self._tasks:
-            await asyncio.wait(set(self._tasks), timeout=timeout_s)
-
-    async def _deliver(self, message: EmailMessage) -> None:
-        try:
-            await self._inner.send(message)
-        except Exception as exc:
-            log.warning("email.send_failed", purpose=message.purpose, error=type(exc).__name__)
-
-
-class SmtpEmailSender:
-    """Отправка через SMTP: STARTTLS (по умолчанию) или неявный TLS (``use_tls``, порт 465)."""
-
-    def __init__(
-        self,
-        *,
-        host: str,
-        port: int,
-        sender: str,
-        code_ttl_s: int,
-        username: str | None = None,
-        password: str | None = None,
-        start_tls: bool = True,
-        use_tls: bool = False,
-        timeout_s: float = 10.0,
-    ) -> None:
-        if use_tls and start_tls:
-            raise ValueError("use_tls и start_tls взаимоисключающи")
-        self._host, self._port, self._from = host, port, sender
-        self._user, self._password = username, password
-        self._start_tls, self._use_tls, self._timeout = start_tls, use_tls, timeout_s
+    def __init__(self, transport: EmailTransport, *, code_ttl_s: int) -> None:
+        self._transport = transport
         self._code_ttl_s = code_ttl_s
 
     async def send(self, message: EmailMessage) -> None:
-        """Отправить письмо."""
+        """Отрендерить и отправить письмо."""
         subject, body = render_email(message, code_ttl_s=self._code_ttl_s)
-        mime = MimeMessage()
-        mime["From"] = self._from
-        mime["To"] = message.to.value
-        mime["Subject"] = subject
-        mime.set_content(body)
-        await aiosmtplib.send(
-            mime,
-            hostname=self._host,
-            port=self._port,
-            username=self._user,
-            password=self._password,
-            start_tls=self._start_tls,
-            use_tls=self._use_tls,
-            timeout=self._timeout,
+        log_fields: dict[str, object] = {"purpose": message.purpose}
+        if message.providers:
+            log_fields["providers"] = list(message.providers)
+        if message.challenge_id is not None:
+            log_fields["challenge_id"] = str(
+                message.challenge_id
+            )  # не секрет, по нему e2e ищет код
+        secret_fields: dict[str, object] = {}
+        if message.code:
+            secret_fields["code"] = message.code
+        if message.link:
+            secret_fields["link"] = message.link
+        await self._transport.send(
+            OutgoingEmail(
+                to=message.to.value,
+                subject=subject,
+                body=body,
+                log_fields=log_fields,
+                secret_log_fields=secret_fields,
+            )
         )

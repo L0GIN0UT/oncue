@@ -41,6 +41,12 @@ class LibraryRepository(Protocol):
         """Строки единицы на полках пользователя."""
         ...
 
+    async def placements_many(
+        self, user_id: UUID, media_item_ids: Sequence[UUID]
+    ) -> list[ShelfItem]:
+        """Строки нескольких единиц на полках пользователя (одним запросом)."""
+        ...
+
     async def shelf_items(self, shelf_id: UUID) -> list[ShelfItem]:
         """Все строки полки (для удаления полки; их не больше ``items_per_shelf_max``)."""
         ...

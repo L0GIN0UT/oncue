@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from uuid import UUID
@@ -183,25 +184,43 @@ class FakeGame:
 @dataclass
 class FakeCatalog:
     items: dict[UUID, Item | Exception] = field(default_factory=dict)
+    batches: list[list[UUID]] = field(default_factory=list)
 
     async def get_item(self, item_id: UUID) -> Item:
-        value = self.items.get(item_id, item(item_id))
-        if isinstance(value, Exception):
-            raise value
-        return value
+        raise AssertionError("итог матча берёт карточки пачкой")
+
+    async def get_items(self, item_ids: Sequence[UUID]) -> list[Item]:
+        self.batches.append(list(item_ids))
+        found: list[Item] = []
+        for item_id in reversed(item_ids):  # порядок ответа источника не гарантирован
+            value = self.items.get(item_id, item(item_id))
+            if isinstance(value, UpstreamRejectedError) and value.status == 404:
+                continue  # неизвестна или заблокирована - в пачке отсутствует
+            if isinstance(value, Exception):
+                raise value
+            found.append(value)
+        return found
 
 
 @dataclass
 class FakeLibrary:
     flags: dict[UUID, list[str] | Exception] = field(default_factory=dict)
-    calls: list[UUID] = field(default_factory=list)
+    calls: list[list[UUID]] = field(default_factory=list)
 
     async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
-        self.calls.append(media_item_id)
-        value = self.flags.get(media_item_id, [])
-        if isinstance(value, Exception):
-            raise value
-        return ItemShelves(media_item_id, value)
+        raise AssertionError("итог матча берёт полки пачкой")
+
+    async def items_shelves(self, token: str, media_item_ids: Sequence[UUID]) -> list[ItemShelves]:
+        self.calls.append(list(media_item_ids))
+        found: list[ItemShelves] = []
+        for item_id in media_item_ids:
+            value = self.flags.get(item_id, [])
+            if isinstance(value, UpstreamRejectedError) and value.status == 404:
+                continue  # источник пропустил единицу - считаем «нигде не лежит»
+            if isinstance(value, Exception):
+                raise value
+            found.append(ItemShelves(item_id, value))
+        return found
 
     async def shelves(self, token: str) -> list[Shelf]:
         raise AssertionError("итог матча не читает полки")
@@ -255,6 +274,7 @@ def match_page(
     deadline_s: float = 5.0,
     progression: FakeAppearance | None = None,
     batch: int = 12,
+    items_batch: int = 50,
 ) -> GetMatchPage:
     return GetMatchPage(
         match,
@@ -264,6 +284,7 @@ def match_page(
         concurrency=concurrency,
         items_deadline_s=deadline_s,
         appearance_batch_size=batch,
+        items_batch_size=items_batch,
     )
 
 
@@ -399,7 +420,7 @@ async def test_match_page_joins_items_and_flags_without_duplicates() -> None:
         ItemShelves(ITEM_A, ["system:watched"]),
         ItemShelves(ITEM_B, []),
     ]
-    assert library.calls == [ITEM_A, ITEM_B]
+    assert library.calls == [[ITEM_A, ITEM_B]]  # одна пачка без дублей
 
 
 async def test_match_page_anonymous_401_guest_403_without_match_call() -> None:
@@ -427,6 +448,31 @@ async def test_match_page_match_down_gives_all_blocks_unavailable() -> None:
     assert page.blocks.items.status is BlockStatus.UNAVAILABLE
     assert page.blocks.library.status is BlockStatus.UNAVAILABLE
     assert library.calls == []
+
+
+async def test_match_page_one_call_per_source_for_eight_rounds() -> None:
+    ids = [UUID(int=i + 1) for i in range(8)]
+    catalog, library = FakeCatalog(), FakeLibrary()
+
+    page = await match_page(FakeMatch(outcome=result(*ids)), catalog, library)(USER, MATCH_ID)
+
+    assert [c.media_item_id for c in page.blocks.items.data or []] == ids
+    assert len(catalog.batches) == len(library.calls) == 1  # а не 8 + 8
+
+
+async def test_match_page_splits_into_chunks_by_batch_size() -> None:
+    ids = [UUID(int=i + 1) for i in range(7)]
+    catalog, library = FakeCatalog(), FakeLibrary()
+
+    page = await match_page(FakeMatch(outcome=result(*ids)), catalog, library, items_batch=3)(
+        USER, MATCH_ID
+    )
+
+    assert sorted(len(b) for b in catalog.batches) == [1, 3, 3]
+    assert sorted(len(b) for b in library.calls) == [1, 3, 3]
+    # порядок раундов сохранён, хотя источник отвечает вразнобой
+    assert [c.media_item_id for c in page.blocks.items.data or []] == ids
+    assert [f.media_item_id for f in page.blocks.library.data or []] == ids
 
 
 async def test_match_page_catalog_and_library_degrade_independently() -> None:
@@ -482,18 +528,18 @@ class InFlight:
 class CountingCatalog(FakeCatalog):
     flight: InFlight = field(default_factory=InFlight)
 
-    async def get_item(self, item_id: UUID) -> Item:
+    async def get_items(self, item_ids: Sequence[UUID]) -> list[Item]:
         await self.flight.hold()
-        return item(item_id)
+        return [item(i) for i in item_ids]
 
 
 @dataclass
 class CountingLibrary(FakeLibrary):
     flight: InFlight = field(default_factory=InFlight)
 
-    async def item_shelves(self, token: str, media_item_id: UUID) -> ItemShelves:
+    async def items_shelves(self, token: str, media_item_ids: Sequence[UUID]) -> list[ItemShelves]:
         await self.flight.hold()
-        return ItemShelves(media_item_id, [])
+        return [ItemShelves(i, []) for i in media_item_ids]
 
 
 async def test_match_page_limiter_holds_concurrency_threshold() -> None:
@@ -501,17 +547,17 @@ async def test_match_page_limiter_holds_concurrency_threshold() -> None:
     flight = InFlight()
     catalog, library = CountingCatalog(flight=flight), CountingLibrary(flight=flight)
 
-    page = await match_page(FakeMatch(outcome=result(*ids)), catalog, library, concurrency=3)(
-        USER, MATCH_ID
-    )
+    page = await match_page(
+        FakeMatch(outcome=result(*ids)), catalog, library, concurrency=3, items_batch=5
+    )(USER, MATCH_ID)
 
     assert len(page.blocks.items.data or []) == len(page.blocks.library.data or []) == 25
-    assert flight.peak == 3  # 50 вызовов, но не больше 3 одновременно (match уже ответил)
+    assert flight.peak == 3  # 2 источника x 5 пачек по 5, но не больше 3 одновременно
 
 
 @dataclass
 class SlowCatalog(FakeCatalog):
-    async def get_item(self, item_id: UUID) -> Item:
+    async def get_items(self, item_ids: Sequence[UUID]) -> list[Item]:
         await asyncio.sleep(10)
         raise AssertionError("должен был сработать дедлайн")
 

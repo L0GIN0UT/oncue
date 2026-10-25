@@ -20,4 +20,10 @@ class NotificationsConfig(AppConfig):
             "notifications.broadcast.send",
             "объявления всем игрокам: создание с подтверждением и история",
         ),
+        MenuEntry(
+            "Типы уведомлений",
+            "notification_types:list",
+            "notifications.types.manage",
+            "включение и выключение типов уведомлений с причиной",
+        ),
     )

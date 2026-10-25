@@ -34,6 +34,7 @@ urlpatterns = [
     path("events/", include("admin_service.apps.events.urls")),
     path("ugc/", include("admin_service.apps.ugc.urls")),
     path("broadcasts/", include("admin_service.apps.notifications.urls")),
+    path("notification-types/", include("admin_service.apps.notifications.type_urls")),
     path("social/", include("admin_service.apps.social.urls")),
     # Статика django-admin прямо из пакетов (без collectstatic и отдельного сервера):
     # админка внутренняя и малонагруженная, а общий Dockerfile не меняем (D7).

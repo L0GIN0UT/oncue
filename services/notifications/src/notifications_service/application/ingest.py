@@ -11,6 +11,7 @@ import structlog
 
 from gv_core.clock import Clock
 from notifications_service.application.ports import UnitOfWork, UnitOfWorkFactory
+from notifications_service.application.type_switch import TypeSwitch
 from notifications_service.domain.catalog import NotificationType, TypeCatalog
 from notifications_service.domain.mapping import map_event, matches_filter
 from notifications_service.domain.notification import Candidate, Notification
@@ -56,7 +57,8 @@ class IngestEvent:
 
     Идемпотентность - по ``(user_id, dedup_key)`` (предмет события), поэтому повтор события
     с новым ``event_id`` второй записи не создаёт. Игрок, отключивший in-app для типа с
-    ``user_mutable``, уведомления не получает; тип с ``user_mutable = false`` отключить нельзя.
+    ``user_mutable``, уведомления не получает; тип с ``user_mutable = false`` игрок отключить
+    не может. Тип, выключенный админом (``TypeSwitch``), пропускается для всех (ADR 0066).
     """
 
     def __init__(
@@ -65,7 +67,9 @@ class IngestEvent:
         catalog: TypeCatalog,
         clock: Clock,
         new_id: Callable[[], UUID],
+        switch: TypeSwitch,
     ) -> None:
+        self._switch = switch
         self._uow = uow_factory
         self._catalog = catalog
         self._clock = clock
@@ -86,6 +90,11 @@ class IngestEvent:
                 if notification_type.audience is not None:
                     continue  # массовая доставка - задача FanOutAudience
                 if not matches_filter(notification_type.filter, payload):
+                    continue
+                if notification_type.admin_switchable and not await self._switch.is_enabled(
+                    uow, notification_type.key
+                ):
+                    log.info("notifications.type_disabled", type=notification_type.key)
                     continue
                 candidate = map_event(
                     notification_type,

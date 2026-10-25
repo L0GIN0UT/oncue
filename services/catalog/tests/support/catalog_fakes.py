@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import copy
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 
 from catalog_service.application.dto import (
@@ -91,6 +91,9 @@ class InMemoryItems:
     async def get(self, item_id: uuid.UUID) -> MediaItem | None:
         item = self._s.items.get(item_id)
         return clone_item(item) if item else None
+
+    async def get_many(self, item_ids: Sequence[uuid.UUID]) -> list[MediaItem]:
+        return [clone_item(self._s.items[i]) for i in item_ids if i in self._s.items]
 
     async def find_by_external_ref(
         self, source: ExternalSource, external_id: str

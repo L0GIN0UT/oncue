@@ -46,6 +46,7 @@ class Harness:
     op_window: int = 64
     poison_limit: int = 3
     op_users_max: int = 16
+    empty_lobby_ms: int = 0
     _ops: int = 0
 
     def __post_init__(self) -> None:
@@ -68,6 +69,7 @@ class Harness:
                 memory_limit=500,
                 idle_ms=IDLE_MS,
                 presence_timeout_ms=PRESENCE_TIMEOUT_MS,
+                empty_lobby_ms=self.empty_lobby_ms,
                 poison_limit=self.poison_limit,
                 op_users_max=self.op_users_max,
             ),

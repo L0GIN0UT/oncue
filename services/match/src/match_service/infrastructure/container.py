@@ -68,6 +68,7 @@ from match_service.infrastructure.realtime import (
     NullPublisher,
     SubscriptionTokenIssuer,
 )
+from match_service.infrastructure.revocation import DirectRevoker, RevocationQueue
 from match_service.infrastructure.rooms.runner import RoomsRunner, RunnerSettings
 from match_service.infrastructure.rooms.snapshot import (
     RedisIdempotentCreates,
@@ -312,9 +313,29 @@ class MatchContainer:
         if self.adapters.subscriptions is not None:
             return self.adapters.subscriptions
         publisher = self.publisher
-        if isinstance(publisher, CentrifugoPublisher | NullPublisher):
-            return publisher
+        if isinstance(publisher, CentrifugoPublisher):
+            # Повторы с паузой - в фоне (ADR 0063): владелец комнаты Centrifugo не ждёт.
+            m = self.settings.match
+            queue = RevocationQueue(
+                publisher,
+                workers=m.revocation_workers,
+                capacity=m.revocation_queue_size,
+                drain_s=m.revocation_drain_s,
+            )
+            # Закрытие LIFO: очередь допускается до закрытия HTTP-клиента публикатора.
+            self.infra.add_closer(queue.aclose)
+            return queue
         return NullPublisher()
+
+    @cached_property
+    def ban_revoker(self) -> DirectRevoker:
+        """Синхронный отзыв соединений при бане аккаунта (мимо очереди, ADR 0059/0063)."""
+        if self.adapters.subscriptions is not None:
+            return DirectRevoker(self.adapters.subscriptions)
+        publisher = self.publisher
+        if isinstance(publisher, CentrifugoPublisher):
+            return DirectRevoker(publisher)
+        return DirectRevoker(NullPublisher())
 
     @cached_property
     def audit(self) -> SqlAdminAudit:
@@ -359,6 +380,7 @@ class MatchContainer:
                 poison_limit=m.poison_limit,
                 op_users_max=m.op_users_max,
                 pending_room_ms=m.pending_room_ms,
+                empty_lobby_ms=int(m.empty_lobby_close_s * MS),
             ),
             transient=_transient,
             ranked=QueueHooks(self.ranked_queue),
@@ -520,6 +542,7 @@ class MatchContainer:
                 closed_ttl_s=m.closed_ttl_s,
                 reply_ttl_s=m.reply_ttl_s,
                 presence_ttl_s=self._presence_ttl_s,
+                reader_backoff_max_s=m.command_reader_backoff_max_s,
             ),
         )
 

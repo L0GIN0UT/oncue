@@ -28,6 +28,7 @@ members = [
     "gv-cli",
     "gv-core",
     "gv-db",
+    "gv-email",
     "gv-flags",
     "gv-game-kernel",
     "gv-messaging",
@@ -1679,13 +1680,13 @@ name = "guessverse-identity"
 version = "0.1.0"
 source = { editable = "services/identity" }
 dependencies = [
-    { name = "aiosmtplib" },
     { name = "argon2-cffi" },
     { name = "cryptography" },
     { name = "email-validator" },
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
+    { name = "gv-email" },
     { name = "gv-messaging" },
     { name = "gv-service" },
     { name = "httpx" },
@@ -1693,13 +1694,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosmtplib", specifier = ">=3.0" },
     { name = "argon2-cffi", specifier = ">=23.1" },
     { name = "cryptography", specifier = ">=43" },
     { name = "email-validator", specifier = ">=2.2" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
+    { name = "gv-email", editable = "libs/email" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
     { name = "httpx", specifier = ">=0.28" },
@@ -1818,10 +1819,10 @@ name = "guessverse-notifications"
 version = "0.1.0"
 source = { editable = "services/notifications" }
 dependencies = [
-    { name = "aiosmtplib" },
     { name = "gv-auth" },
     { name = "gv-core" },
     { name = "gv-db" },
+    { name = "gv-email" },
     { name = "gv-messaging" },
     { name = "gv-service" },
     { name = "httpx" },
@@ -1831,10 +1832,10 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosmtplib", specifier = ">=3.0" },
     { name = "gv-auth", editable = "libs/auth" },
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-db", editable = "libs/db" },
+    { name = "gv-email", editable = "libs/email" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "gv-service", editable = "libs/service" },
     { name = "httpx", specifier = ">=0.28" },
@@ -2002,6 +2003,21 @@ requires-dist = [
     { name = "gv-core", editable = "libs/core" },
     { name = "gv-messaging", editable = "libs/messaging" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
+]
+
+[[package]]
+name = "gv-email"
+version = "0.1.0"
+source = { editable = "libs/email" }
+dependencies = [
+    { name = "aiosmtplib" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiosmtplib", specifier = ">=3.0" },
+    { name = "structlog", specifier = ">=24.0" },
 ]
 
 [[package]]

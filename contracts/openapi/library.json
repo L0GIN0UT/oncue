@@ -18,6 +18,23 @@
         "title": "CreateShelfRequest",
         "type": "object"
       },
+      "ItemShelvesBatchOut": {
+        "description": "Полки пачки единиц: по записи на каждую запрошенную (пустой список — нигде не лежит).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemShelvesOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ItemShelvesBatchOut",
+        "type": "object"
+      },
       "ItemShelvesOut": {
         "description": "На каких полках пользователя лежит единица (для кнопки «Сохранить»).",
         "properties": {
@@ -449,6 +466,105 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/items/shelves": {
+      "get": {
+        "description": "`ids` повторяется в запросе; дубли схлопываются, по записи на единицу (пустой `shelves` — нигде не лежит). Больше `item_shelves_batch_max` единиц — 422 `library.batch_too_large`.",
+        "operationId": "items_shelves_v1_items_shelves_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "title": "Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemShelvesBatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "На каких полках единицы (пачкой)",
+        "tags": [
+          "library"
+        ]
+      }
+    },
     "/v1/items/{media_item_id}/shelves": {
       "get": {
         "operationId": "item_shelves_v1_items__media_item_id__shelves_get",

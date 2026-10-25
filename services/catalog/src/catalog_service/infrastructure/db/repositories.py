@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
+from collections.abc import Sequence
 from typing import Any, Self
 
 from sqlalchemy import Row, delete, exists, func, insert, select, update
@@ -78,7 +80,16 @@ class SqlMediaItemRepository:
         row = (
             await self._s.execute(select(media_items).where(media_items.c.id == item_id))
         ).first()
-        return None if row is None else await self._restore(row)
+        return None if row is None else (await self._restore_rows([row]))[0]
+
+    async def get_many(self, item_ids: Sequence[uuid.UUID]) -> list[MediaItem]:
+        """Единицы пачкой: строки и дочерние данные - по одному запросу на таблицу (без N+1)."""
+        if not item_ids:
+            return []
+        rows = (
+            await self._s.execute(select(media_items).where(media_items.c.id.in_(item_ids)))
+        ).all()
+        return await self._restore_rows(rows)
 
     async def find_by_external_ref(
         self, source: ExternalSource, external_id: str
@@ -273,35 +284,75 @@ class SqlMediaItemRepository:
                 ],
             )
 
-    async def _restore(self, row: Row[Any]) -> MediaItem:
-        item_id = row.id
-        alias_rows = await self._s.execute(
-            select(aliases).where(aliases.c.media_item_id == item_id).order_by(aliases.c.position)
-        )
-        person_rows = await self._s.execute(
-            select(media_item_persons.c.person_id, media_item_persons.c.role)
-            .add_columns(media_item_persons.c.position, persons.c.name)
+    async def _restore_rows(self, rows: Sequence[Row[Any]]) -> list[MediaItem]:
+        """Собрать агрегаты: дочерние строки всех единиц - одним запросом на таблицу (``IN``)."""
+        ids = [row.id for row in rows]
+        by_item: dict[str, dict[uuid.UUID, list[Any]]] = {
+            name: defaultdict(list) for name in ("aliases", "persons", "genres", "refs", "media")
+        }
+        for a in await self._s.execute(
+            select(aliases).where(aliases.c.media_item_id.in_(ids)).order_by(aliases.c.position)
+        ):
+            by_item["aliases"][a.media_item_id].append(a)
+        for p in await self._s.execute(
+            select(media_item_persons.c.media_item_id, media_item_persons.c.person_id)
+            .add_columns(media_item_persons.c.role, media_item_persons.c.position, persons.c.name)
             .join(persons, persons.c.id == media_item_persons.c.person_id)
-            .where(media_item_persons.c.media_item_id == item_id)
-        )
-        genre_rows = await self._s.execute(
-            select(media_item_genres.c.genre_slug)
-            .where(media_item_genres.c.media_item_id == item_id)
+            .where(media_item_persons.c.media_item_id.in_(ids))
+            .order_by(media_item_persons.c.position)
+        ):
+            by_item["persons"][p.media_item_id].append(p)
+        for g in await self._s.execute(
+            select(media_item_genres.c.media_item_id, media_item_genres.c.genre_slug)
+            .where(media_item_genres.c.media_item_id.in_(ids))
             .order_by(media_item_genres.c.position)
-        )
-        ref_rows = await self._s.execute(
-            select(external_refs.c.source, external_refs.c.external_id).where(
-                external_refs.c.media_item_id == item_id
+        ):
+            by_item["genres"][g.media_item_id].append(g)
+        for r in await self._s.execute(
+            select(
+                external_refs.c.media_item_id, external_refs.c.source, external_refs.c.external_id
+            ).where(external_refs.c.media_item_id.in_(ids))
+        ):
+            by_item["refs"][r.media_item_id].append(r)
+        metrics_by_item = {
+            m.media_item_id: m.data
+            for m in await self._s.execute(
+                select(media_metrics.c.media_item_id, media_metrics.c.data).where(
+                    media_metrics.c.media_item_id.in_(ids)
+                )
             )
-        )
-        metrics_data = await self._s.scalar(
-            select(media_metrics.c.data).where(media_metrics.c.media_item_id == item_id)
-        )
-        media_rows = await self._s.execute(
+        }
+        for m in await self._s.execute(
             select(source_media_refs)
-            .where(source_media_refs.c.media_item_id == item_id)
+            .where(source_media_refs.c.media_item_id.in_(ids))
             .order_by(source_media_refs.c.position)
-        )
+        ):
+            by_item["media"][m.media_item_id].append(m)
+        return [
+            self._build(
+                row,
+                alias_rows=by_item["aliases"][row.id],
+                person_rows=by_item["persons"][row.id],
+                genre_rows=by_item["genres"][row.id],
+                ref_rows=by_item["refs"][row.id],
+                metrics_data=metrics_by_item.get(row.id),
+                media_rows=by_item["media"][row.id],
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def _build(
+        row: Row[Any],
+        *,
+        alias_rows: Sequence[Any],
+        person_rows: Sequence[Any],
+        genre_rows: Sequence[Any],
+        ref_rows: Sequence[Any],
+        metrics_data: Any,  # Any: jsonb-колонка
+        media_rows: Sequence[Any],
+    ) -> MediaItem:
+        item_id = row.id
         return MediaItem.restore(
             item_id,
             kind=MediaKind(row.kind),

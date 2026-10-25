@@ -40,6 +40,8 @@ class LibrarySettings(BaseModel):
         purge_users_per_run: Пользователей за один запуск задачи удаления.
         purge_interval_s: Пауза между запусками задачи ``library.users.purge`` (relay).
         purge_jitter_s: Случайная добавка к паузе.
+        item_shelves_batch_max: Предел пачки ``GET /v1/items/shelves`` (число единиц);
+            больше — 422 ``library.batch_too_large``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -50,6 +52,7 @@ class LibrarySettings(BaseModel):
     purge_users_per_run: int = Field(default=20, ge=1, le=1000)
     purge_interval_s: float = Field(default=60, gt=0)
     purge_jitter_s: float = Field(default=10, ge=0)
+    item_shelves_batch_max: int = Field(default=50, ge=1, le=500)
 
     @field_validator("shelves_config", mode="before")
     @classmethod

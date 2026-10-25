@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -45,14 +46,21 @@ class LibraryQueries:
         uow: Фабрика Unit of Work.
         catalog: Конфиг полок.
         limits: Лимиты (агрегат строится для разбора ссылок и порядка показа).
+        batch_max: Предел пачки единиц в ``items_shelves``.
     """
 
     def __init__(
-        self, uow: UnitOfWorkFactory, catalog: ShelfCatalog, limits: LibraryLimits
+        self,
+        uow: UnitOfWorkFactory,
+        catalog: ShelfCatalog,
+        limits: LibraryLimits,
+        *,
+        batch_max: int = 50,
     ) -> None:
         self._uow = uow
         self._catalog = catalog
         self._limits = limits
+        self._batch_max = batch_max
 
     async def shelves(self, user_id: UUID) -> list[Json]:
         """Системные полки (по конфигу, даже несозданные), затем свои."""
@@ -97,6 +105,30 @@ class LibraryQueries:
         return {
             "media_item_id": str(media_item_id),
             "shelves": [str(r) for r in lib.refs_with(media_item_id)],
+        }
+
+    async def items_shelves(self, user_id: UUID, media_item_ids: Sequence[UUID]) -> Json:
+        """Полки пачки единиц (``ItemShelvesBatchOut``): дубли схлопнуты, порядок запроса.
+
+        Raises:
+            InvalidInputError: ``library.batch_too_large`` — единиц больше предела.
+        """
+        ids = list(dict.fromkeys(media_item_ids))
+        if len(ids) > self._batch_max:
+            raise InvalidInputError(
+                "слишком много единиц в запросе",
+                code="library.batch_too_large",
+                details={"max": self._batch_max},
+            )
+        async with self._uow() as uow:
+            shelves = await uow.library.shelves(user_id)
+            items = await uow.library.placements_many(user_id, ids)
+        lib = UserLibrary(user_id, 0, shelves, items, catalog=self._catalog, limits=self._limits)
+        return {
+            "items": [
+                {"media_item_id": str(i), "shelves": [str(r) for r in lib.refs_with(i)]}
+                for i in ids
+            ]
         }
 
     async def _library(

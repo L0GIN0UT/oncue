@@ -21,6 +21,13 @@ def validate_subject(value: str) -> None:
         )
 
 
+class TypeToggleForm(MutationForm):
+    """Переключатель типа уведомлений: ключ типа, целевое состояние и причина (в аудит)."""
+
+    type = forms.RegexField(regex=r"^[a-z][a-z0-9_]*$", max_length=64)
+    enabled = forms.BooleanField(required=False)
+
+
 class BroadcastForm(MutationForm):
     """Рассылка: тема, текст и причина (причина уходит в аудит notifications)."""
 

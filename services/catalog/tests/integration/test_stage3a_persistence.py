@@ -183,3 +183,42 @@ async def test_0004_up_and_down_with_stage2_rows(database_url: str) -> None:
         await asyncio.to_thread(run_migrations, path, database_url)
     finally:
         await engine.dispose()
+
+
+async def test_get_many_has_constant_query_count_and_matches_get(
+    container: CatalogContainer,
+) -> None:
+    from sqlalchemy import event
+
+    upsert = UpsertImportedItem(container.uow, container.normalizer, container.infra.clock)
+    for n in range(50):
+        await upsert(film(str(100000 + n)))
+    async with container.uow() as uow:
+        ids = [
+            (await uow.items.find_by_external_ref(ExternalSource.TMDB, str(100000 + n))).id  # type: ignore[union-attr]
+            for n in range(50)
+        ]
+
+    async def count_queries(batch: list[uuid.UUID]) -> tuple[int, list[object]]:
+        statements: list[str] = []
+        engine = container.infra.engine.sync_engine  # type: ignore[union-attr]
+
+        def on_execute(*args: object) -> None:
+            statements.append(str(args[2]))
+
+        event.listen(engine, "before_cursor_execute", on_execute)
+        try:
+            async with container.uow() as uow:
+                items = await uow.items.get_many(batch)
+        finally:
+            event.remove(engine, "before_cursor_execute", on_execute)
+        return len(statements), list(items)
+
+    few, _ = await count_queries(ids[:2])
+    many, loaded = await count_queries(ids)
+    assert few >= 6
+    assert many == few  # число запросов не зависит от размера пачки
+    assert len(loaded) == 50
+    async with container.uow() as uow:
+        for item in loaded:
+            assert item == await uow.items.get(item.id)  # type: ignore[operator]

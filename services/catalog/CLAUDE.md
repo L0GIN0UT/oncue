@@ -18,6 +18,7 @@
 - Импорт сопоставляет единицы по внешним id (`tmdb` → … → `seed`); `seed` (ключ строки файла) в события не публикуется.
 - Индексатор пишет в OpenSearch актуальную строку БД с её `version` (`version_type=external`): повторы и старые события отсекает индекс; строка БД старше события → `DependencyUnavailableError(catalog.index_lag)` (ретрай).
 - Без `GV_OPENSEARCH__URL` или при его отказе поиск идёт по pg_trgm (`TrgmSearch`) — штатная деградация.
+- `GET /v1/items?ids=` (повторяющийся параметр) — публичные карточки пачкой: дубли схлопываются, неизвестные и заблокированные пропускаются, порядок не гарантирован; предел `GV_CATALOG__ITEMS_BATCH_MAX` (50, больше — 422 `catalog.batch_too_large`). Для итога матча в bff; одиночная карточка остаётся.
 - Кэш автокомплита инвалидируется «поколением» (`INCR`), блокировка сбрасывает его сразу после коммита.
 - Admin-мутации: `gv_service.IdempotencyKey`/`Reason`; ключ и ответ — `gv_db.idempotency` (`idempotency_keys`, та же транзакция), `admin_actions` — только аудит; импорт идемпотентен по `import_jobs (actor_id, idempotency_key)`.
 - Импорт: реестр `Mapping[ImportSource, ImportEntrySource]` (файл, TMDB, музыка) собирает `container.import_sources`; нет в реестре — `catalog.source_disabled`. `RunImport` не оставляет `running`: `AppError` → `failed` с её кодом, прочее → `catalog.import_crashed` и проброс.

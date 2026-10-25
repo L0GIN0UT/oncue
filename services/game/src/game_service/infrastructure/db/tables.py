@@ -92,6 +92,13 @@ catalog_items = Table(
     Index("ix_catalog_items_genres", "genres", postgresql_using="gin"),
     Index("ix_catalog_items_domain_kind", "domain", "kind"),
     Index("ix_catalog_items_person_ids", "person_ids", postgresql_using="gin"),
+    # Поиск ``title ILIKE '%…%'`` админки (миграция 0007; расширение pg_trgm — на уровне БД).
+    Index(
+        "ix_catalog_items_title_trgm",
+        "title",
+        postgresql_using="gin",
+        postgresql_ops={"title": "gin_trgm_ops"},
+    ),
 )
 
 clue_assets = Table(

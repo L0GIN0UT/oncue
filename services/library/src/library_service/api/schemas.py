@@ -106,6 +106,12 @@ class SaveResult(BaseModel):
     )
 
 
+class ItemShelvesBatchOut(BaseModel):
+    """Полки пачки единиц: по записи на каждую запрошенную (пустой список — нигде не лежит)."""
+
+    items: list[ItemShelvesOut]
+
+
 class ItemShelvesOut(BaseModel):
     """На каких полках пользователя лежит единица (для кнопки «Сохранить»)."""
 
