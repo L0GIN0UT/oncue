@@ -191,7 +191,7 @@ async function waitForActiveEvent(page: Page, what: string): Promise<void> {
   await expect
     .poll(
       async () => {
-        const res = await page.request.get("/api/bff/v1/pages/shell");
+        const res = await page.request.get("/api/web/v1/pages/shell");
         if (!res.ok()) return false; // 429/5xx — ждём следующего опроса
         return ((await res.json()) as { event: unknown }).event !== null;
       },

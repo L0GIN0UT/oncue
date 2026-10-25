@@ -223,7 +223,7 @@ async function tryCreateRoom(player: Player): Promise<string> {
 
 /** Виды действующих санкций игрока по JSON оболочки bff (чтение social, без нагрузки на match). */
 async function shellSanctionKinds(player: Player): Promise<string[]> {
-  const res = await player.page.request.get("/api/bff/v1/pages/shell");
+  const res = await player.page.request.get("/api/web/v1/pages/shell");
   if (!res.ok()) return []; // 429/5xx — считаем «не знаем» и ждём следующего опроса
   const body = (await res.json()) as {
     sanctions?: { data?: { items?: { kind: string }[] } | null } | null;
