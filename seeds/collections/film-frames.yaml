@@ -6,7 +6,7 @@ title: "Кино · кадры: синтетика и классика"
 description: "Угадайте фильм по кадру: от размытого фрагмента до чёткой картинки."
 domain: film
 default_mode_key: film.collection.frame
-tags: [classic, scifi]
+tags: [classic, scifi, new_year]
 cover: cinema
 visibility: public
 featured_rank: 1

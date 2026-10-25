@@ -14,7 +14,13 @@ from uuid import UUID
 
 import httpx
 import pytest
-from notifications_service.application.ports import EmailMessage, PermanentEmailError, Recipient
+from notifications_service.application.ports import (
+    DIRECTORY_UNAVAILABLE,
+    EmailMessage,
+    PermanentEmailError,
+    Recipient,
+    UserPage,
+)
 from notifications_service.infrastructure.container import (
     Adapters,
     NotificationsContainer,
@@ -27,6 +33,7 @@ from pydantic import SecretStr
 from sqlalchemy import func, select
 from sqlalchemy.sql.expression import TableClause
 
+from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
 from gv_messaging import EventEnvelope, EventProcessor, Inbox, Outcome
 from gv_messaging.ports import TaskQueue
@@ -91,6 +98,28 @@ class FakeDirectory:
 
 
 @dataclass
+class FakeUserDirectory:
+    """Список активных пользователей identity: постранично по курсору.
+
+    ``fail_calls`` - номера вызовов (с 1), на которых справочник недоступен; ``fail_code`` -
+    код ошибки (по умолчанию повторяемая).
+    """
+
+    users: list[UUID] = field(default_factory=list)
+    fail_calls: set[int] = field(default_factory=set)
+    fail_code: str = DIRECTORY_UNAVAILABLE
+    calls: list[tuple[UUID | None, int]] = field(default_factory=list)
+
+    async def active_after(self, after: UUID | None, limit: int) -> UserPage:
+        self.calls.append((after, limit))
+        if len(self.calls) in self.fail_calls:
+            raise DependencyUnavailableError("identity недоступен", code=self.fail_code)
+        ordered = sorted(u for u in self.users if after is None or u > after)[:limit]
+        more = len(ordered) == limit
+        return UserPage(ids=ordered, next_cursor=ordered[-1] if more else None)
+
+
+@dataclass
 class ForwardingTasks(InMemoryTaskQueue):
     """Очередь в памяти, которая при необходимости пересылает задачи в настоящий брокер."""
 
@@ -118,6 +147,8 @@ class NotificationsService:
         realtime: FakeRealtime,
         email: FakeEmail,
         directory: FakeDirectory,
+        users: FakeUserDirectory,
+        sleeps: list[float],
         tasks: ForwardingTasks,
     ) -> None:
         self.client = client
@@ -130,6 +161,8 @@ class NotificationsService:
         self.realtime = realtime
         self.email = email
         self.directory = directory
+        self.users = users
+        self.sleeps = sleeps
         self.tasks = tasks
 
     # ------------------------------------------------------------------ запросы
@@ -198,9 +231,22 @@ async def notifications(
     )
     runtime = await Infrastructure.open(settings, TABLES, clock=fake_clock)
     realtime, email, directory = FakeRealtime(), FakeEmail(), FakeDirectory()
+    users, sleeps = FakeUserDirectory(), []
     tasks = ForwardingTasks()
+
+    async def record_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
     container = container_for(
-        runtime, Adapters(realtime=realtime, email=email, directory=directory, tasks=tasks)
+        runtime,
+        Adapters(
+            realtime=realtime,
+            email=email,
+            directory=directory,
+            users=users,
+            tasks=tasks,
+            sleep=record_sleep,
+        ),
     )
     assert runtime.sessions is not None
     await _clear_limiter(runtime)
@@ -233,6 +279,8 @@ async def notifications(
                 realtime=realtime,
                 email=email,
                 directory=directory,
+                users=users,
+                sleeps=sleeps,
                 tasks=tasks,
             )
     finally:

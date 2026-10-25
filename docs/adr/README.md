@@ -69,3 +69,7 @@
 | [0063](0063-match-shared-command-reader.md) | match: общий читатель команд комнат, фоновый отзыв Centrifugo, закрытие пустого лобби, алерты (черновик; уточняет 0034, 0052, 0059) |
 | [0065](0065-admin-keeps-django-inbox.md) | Admin оставляет собственный inbox на Django ORM (черновик) |
 | [0066](0066-notification-type-switches-and-email-lib.md) | Admin-выключатели типов уведомлений и общая библиотека `libs/email` (черновик; уточняет 0047, 0041) |
+| [0067](0067-event-find-collection-tags.md) | Теги сборника в событиях collections/game и фильтр находки `collection_tags` (черновик; уточняет 0055, 0028) |
+| [0068](0068-win-trading-signals.md) | Сигналы win-trading для модератора: повторы пар и серии сдач, пороги в конфиге social, без автосанкций (черновик; уточняет 0038, 0052) |
+| [0069](0069-event-audience-and-tails-5c.md) | Полная аудитория `event_started` из identity, экран блокировки и хвосты 5c (черновик; уточняет 0054, 0047, 0052) |
+| [0070](0070-lobby-clue-answer-overrides.md) | Переопределения `clue` и `answer.format` лобби в `round-plans`: допустимость из `lobby.overridable`, проверка ядром, пул под переопределённую загадку (черновик; уточняет 0033, 0034) |

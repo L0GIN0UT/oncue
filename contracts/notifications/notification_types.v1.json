@@ -28,8 +28,9 @@
         "additionalProperties": false,
         "properties": {
           "audience": {
-            "description": "Массовая доставка: вместо `recipient` - аудитория, каждому игроку которой событие порождает уведомление пачками (ADR 0054). Ровно одно из `recipient` и `audience`. `known_users` - игроки, о которых знает notifications",
+            "description": "Массовая доставка: вместо `recipient` - аудитория, каждому игроку которой событие порождает уведомление пачками (ADR 0054, 0069). Ровно одно из `recipient` и `audience`. `known_users` - игроки, о которых знает notifications; `active_users` - все активные пользователи (постранично из identity)",
             "enum": [
+              "active_users",
               "known_users"
             ],
             "type": "string"

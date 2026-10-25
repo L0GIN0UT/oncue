@@ -90,9 +90,8 @@ def room_view(room: Room, now_ms: int) -> Json:
         options = {
             "rounds": list(o.rounds) if o.rounds else None,
             "level_window_s": list(o.level_window_s) if o.level_window_s else None,
-            # Хвост 4a: загадку и формат план game пока не принимает (не предлагаем).
-            "answer_format": None,
-            "clue_type": None,
+            "answer_format": list(o.answer_format) if o.answer_format else None,
+            "clue_type": list(o.clue_type) if o.clue_type else None,
             "players_max": list(o.players_max) if o.players_max else None,
             "visibility": list(o.visibility) if o.visibility else None,
             "max_collections": t.max_collections if t.uses_collection else None,

@@ -26,7 +26,12 @@ import { rateOpponent } from "./api";
 import { matchErrorKey } from "./errors";
 
 /** `can_report` — решение bff (не сам игрок, матч не соло); у мест из канала его нет. */
-type Placement = SummaryDelta["placements"][number] & { nickname: string; can_report?: boolean };
+type Placement = SummaryDelta["placements"][number] & {
+  nickname: string;
+  can_report?: boolean;
+  /** Решение bff по social (ADR 0069): звать в друзья можно; без него кнопки нет. */
+  can_add_friend?: boolean;
+};
 
 type Props = {
   matchId: string;
@@ -83,7 +88,12 @@ export function MatchSummaryView({ matchId, myId, fallback, actions }: Props) {
         )}
       {summary && <Rounds summary={summary} items={items} domain={domain} />}
       {summary && myId && placements.some((p) => p.user_id === myId) && (
-        <RateOpponents matchId={matchId} myId={myId} players={placements} />
+        <RateOpponents
+          matchId={matchId}
+          myId={myId}
+          players={placements}
+          appearances={appearances}
+        />
       )}
     </div>
   );
@@ -235,10 +245,12 @@ function RateOpponents({
   matchId,
   myId,
   players,
+  appearances,
 }: {
   matchId: string;
   myId: string;
   players: Placement[];
+  appearances: Map<string, AppearanceLike>;
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
@@ -288,7 +300,9 @@ function RateOpponents({
                   <ThumbsUp aria-hidden />
                   {t("match.rate.praise")}
                 </Button>
-                {p.can_report && <AddFriendButton userId={p.user_id} testId="rate-add-friend" />}
+                {p.can_add_friend && (
+                  <AddFriendButton userId={p.user_id} testId="rate-add-friend" />
+                )}
                 {p.can_report && (
                   <ReportButton
                     kind="player"
@@ -297,6 +311,15 @@ function RateOpponents({
                     label={t("match.rate.report")}
                     ariaLabel={t("social.report.playerLabel", { name: p.nickname })}
                     testId="rate-report"
+                  />
+                )}
+                {p.can_report && appearances.get(p.user_id)?.custom_avatar_asset_id && (
+                  <ReportButton
+                    kind="avatar"
+                    targetId={appearances.get(p.user_id)!.custom_avatar_asset_id!}
+                    label={t("social.report.avatar")}
+                    ariaLabel={t("social.report.avatarLabel", { name: p.nickname })}
+                    testId="rate-report-avatar"
                   />
                 )}
               </>

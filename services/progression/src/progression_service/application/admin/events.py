@@ -30,6 +30,7 @@ from progression_service.domain.events_season import (
     STORED_LIVE,
     Definition,
     EventBodyChangedError,
+    EventDefinitionChangedError,
     EventDefinitionInvalidError,
     EventDefinitionLockedError,
     EventKeyTakenError,
@@ -181,15 +182,33 @@ class EventAdminCommands:
         response, _ = await _run(self._factory, fingerprint, ctx, perform, status_code=201)
         return response
 
-    async def update(self, key: str, body: Json, *, ctx: AdminContext) -> Json:
+    async def update(
+        self,
+        key: str,
+        body: Json,
+        *,
+        ctx: AdminContext,
+        expected_body_sha256: str | None = None,
+    ) -> Json:
         """Заменить определение (пока нет запуска ``published/active``).
+
+        Args:
+            key: Ключ события.
+            body: Новое определение.
+            ctx: Контекст админ-действия.
+            expected_body_sha256: ``body_sha256``, который видел админ; не совпал с текущим -
+                409 (правка другого админа не затирается). ``None`` - без проверки.
 
         Raises:
             EventNotFoundError: нет события (404).
             EventDefinitionLockedError: есть опубликованный запуск (409).
+            EventDefinitionChangedError: определение изменили после просмотра (409).
             EventDefinitionInvalidError: определение нарушает правила (422).
         """
-        fingerprint = request_fingerprint("event.update", key, {"body": body, "reason": ctx.reason})
+        payload: Json = {"body": body, "reason": ctx.reason}
+        if expected_body_sha256 is not None:
+            payload["expected"] = expected_body_sha256
+        fingerprint = request_fingerprint("event.update", key, payload)
 
         async def perform(uow: AdminUnitOfWork) -> Json:
             event = await uow.events.get_event(key, for_update=True)
@@ -198,6 +217,8 @@ class EventAdminCommands:
             now = self._clock.now()
             if await uow.events.has_locking_run(event.id, now):
                 raise EventDefinitionLockedError
+            if expected_body_sha256 is not None and event.body_sha256 != expected_body_sha256:
+                raise EventDefinitionChangedError
             await _check_definition(uow, key, parse_definition(body))
             updated = replace(event, body=body, body_sha256=canonical_sha256(body), updated_at=now)
             await uow.events.save_event(updated)

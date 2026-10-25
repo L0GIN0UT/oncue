@@ -412,17 +412,19 @@ async def test_start_failure_after_202_is_visible_in_lobby(app_factory: Any) -> 
     assert changed["room"]["start_error"] is None
 
 
-async def test_clue_and_format_overrides_not_supported_yet(svc: MatchApp) -> None:
+async def test_clue_and_format_overrides_outside_template_options_are_refused(
+    svc: MatchApp,
+) -> None:
     a = svc.user()
     room = await svc.create(a, "film.lobby.collection", collection_ids=[str(uuid7())])
     assert room["options"]["clue_type"] is None and room["options"]["answer_format"] is None
-    for field, value in (("clue_type", "frame_progressive"), ("answer_format", "classic")):
+    for field, value in (("clue_type", "poster_masked"), ("answer_format", "pick")):
         response = await svc.post(a, room["code"], "settings", settings={field: value})
         problem = assert_problem(response, 422, "match.setting_not_allowed")
-        assert problem["details"] == {"field": field, "reason": "not_supported_yet"}
+        assert problem["details"] == {"field": field}
     created = await svc.client.post(
         "/v1/rooms",
-        json={"mode_key": "music.duel.classic", "settings": {"answer_format": "classic"}},
+        json={"mode_key": "music.duel.classic", "settings": {"answer_format": "pick"}},
         headers={**svc.user().headers, "Idempotency-Key": "idem-override-1"},
     )
     assert_problem(created, 422, "match.setting_not_allowed")

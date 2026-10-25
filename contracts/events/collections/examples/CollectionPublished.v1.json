@@ -44,6 +44,10 @@
     "kind": "ugc",
     "published_at": "2026-10-16T12:00:00Z",
     "status": "published",
+    "tags": [
+      "horror"
+    ],
+    "title": "Кино · кадры",
     "version": 3,
     "visibility": "public"
   },

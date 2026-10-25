@@ -31,6 +31,7 @@ from game_service.domain.errors import (
     CollectionNotSupportedError,
     ModeNotFoundError,
     ModeNotOnlineError,
+    OverrideInvalidError,
     TooManyCollectionsError,
 )
 from game_service.domain.modes import ConfigVersion
@@ -42,6 +43,7 @@ from gv_game_kernel import (
     PoolTooSmallError,
     RoundDraw,
     answer_normalizer,
+    apply_lobby_overrides,
 )
 
 log = structlog.get_logger(__name__)
@@ -59,6 +61,8 @@ class RoundPlanQuery:
         rounds: Сколько раундов разыграть.
         collection_ids: Сборники лобби (источник ``collection``).
         exclude_ids: Память сыгранного лобби: единицы избегаются по правилу источника.
+        clue_type: Переопределение загадки лобби (ADR 0070) или ``None``.
+        answer_format: Переопределение формата ответа лобби или ``None``.
     """
 
     mode_key: str
@@ -67,6 +71,8 @@ class RoundPlanQuery:
     rounds: int
     collection_ids: Sequence[UUID] = ()
     exclude_ids: Sequence[UUID] = ()
+    clue_type: str | None = None
+    answer_format: str | None = None
 
 
 def mode_body_json(version: ConfigVersion) -> Json:
@@ -130,6 +136,7 @@ class RoundPlans:
             raise ModeNotOnlineError(
                 "план матча — только для онлайн-режима", details={"mode_key": rules.key}
             )
+        rules = self._with_overrides(version, rules, query)
         collection_ids = list(dict.fromkeys(query.collection_ids))
         self._check_collection_shape(rules, collection_ids)
         async with self._uow() as uow:
@@ -153,6 +160,28 @@ class RoundPlans:
                 {"id": str(c.collection_id), "version": c.content_version} for c in collections
             ],
         }
+
+    # ------------------------------------------------------------------ переопределения
+    def _with_overrides(
+        self, version: ConfigVersion, rules: ModeRules, query: RoundPlanQuery
+    ) -> ModeRules:
+        """Правила эффективного конфига лобби (ADR 0070).
+
+        Разрешённость — по ``session.lobby.overridable`` шаблона (ядро), совместимость
+        сочетания — тот же валидатор, что у публикации конфига.
+        """
+        if query.clue_type is None and query.answer_format is None:
+            return rules
+        body = apply_lobby_overrides(
+            version.body, clue_type=query.clue_type, answer_format=query.answer_format
+        )
+        check = self._catalog.factory.check(body, version=version.version)
+        if check.rules is None:
+            raise OverrideInvalidError(
+                "сочетание переопределений недопустимо для режима",
+                details={"mode_key": rules.key, "errors": check.errors},
+            )
+        return check.rules
 
     # ------------------------------------------------------------------ сборники
     @staticmethod

@@ -78,6 +78,8 @@ class MetricUpdate:
         slot: Слот надетого предмета (``item_equipped``).
         item_key: Ключ надетого предмета (``item_equipped``).
         collection_id: Сборник сессии строкой UUID (``collection_played``).
+        collection_tags: Теги сыгранного сборника (``collection_played``, ADR 0067); пусто - у
+            сборника их нет или событие старого формата.
     """
 
     metric: str
@@ -87,6 +89,7 @@ class MetricUpdate:
     slot: str | None = None
     item_key: str | None = None
     collection_id: str | None = None
+    collection_tags: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not is_known(self.metric):

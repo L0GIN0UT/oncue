@@ -149,3 +149,30 @@ async def test_broken_payload_goes_to_dead_letters(social: SocialService) -> Non
     broken = broken.model_copy(update={"payload": {"collection_id": "not-a-uuid"}})
     await social.deliver(broken)
     assert [d["reason"] for d in social.dead_letters.letters] == ["permanent"]
+
+
+async def test_collection_title_comes_from_event_and_survives_old_events(
+    social: SocialService,
+) -> None:
+    """ADR 0067: название берётся из события; событие старого формата его не затирает."""
+    cid = uuid7()
+    author = str(uuid7())
+    await social.deliver(
+        social.event(
+            "collections.CollectionPublished",
+            collection_id=str(cid),
+            author_id=author,
+            version=1,
+            title="Саундтреки 90-х",
+        )
+    )
+    (row,) = await social.rows(t.collections_proj, t.collections_proj.c.id == cid)
+    assert row.title == "Саундтреки 90-х"
+
+    old = social.event(
+        "collections.CollectionUpdated", collection_id=str(cid), author_id=author, version=2
+    )
+    payload = {k: v for k, v in old.payload.items() if k != "title"}
+    await social.deliver(old.model_copy(update={"payload": payload}))
+    (row,) = await social.rows(t.collections_proj, t.collections_proj.c.id == cid)
+    assert (row.title, row.version) == ("Саундтреки 90-х", 2)

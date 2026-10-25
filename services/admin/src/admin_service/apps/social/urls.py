@@ -14,6 +14,7 @@ urlpatterns = [
     path("cases/<uuid:case_id>/claim/", views.case_claim, name="claim"),
     path("cases/<uuid:case_id>/escalate/", views.case_escalate, name="escalate"),
     path("cases/<uuid:case_id>/resolve/", views.case_resolve, name="resolve"),
+    path("win-trading/", views.win_trading, name="win_trading"),
     path("players/", views.player_search, name="players"),
     path("players/<uuid:user_id>/", views.player, name="player"),
     path("players/<uuid:user_id>/sanctions/", views.sanction_grant, name="grant"),

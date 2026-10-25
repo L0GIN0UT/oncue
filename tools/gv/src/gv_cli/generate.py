@@ -37,7 +37,7 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
     # Этап 5b: progression передаёт файл аватарки в media-pipeline (S3); notifications берёт
     # подтверждённые адреса получателей рассылки у identity.
     "progression": {"media_pipeline": ["ugc.image"]},
-    "notifications": {"identity": ["users.emails.read"]},
+    "notifications": {"identity": ["users.emails.read", "users.active.list"]},
 }
 """Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
 

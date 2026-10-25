@@ -953,6 +953,42 @@
         "title": "LevelOut",
         "type": "object"
       },
+      "LobbyOverrides": {
+        "additionalProperties": false,
+        "description": "Переопределения хозяина лобби (ADR 0070): только то, что режим разрешил в\n`session.lobby.overridable`; сочетание проверяет валидатор ядра.",
+        "properties": {
+          "answer_format": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Формат ответа из `lobby.overridable.answer_format`",
+            "title": "Answer Format"
+          },
+          "clue_type": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Тип загадки из `lobby.overridable.clue`",
+            "title": "Clue Type"
+          }
+        },
+        "title": "LobbyOverrides",
+        "type": "object"
+      },
       "ModeConfigBody": {
         "description": "Опубликованная версия конфига режима: тело — по ``contracts/modes/mode_config.v1.json``.",
         "properties": {
@@ -2555,6 +2591,17 @@
             "pattern": "^(music|film)\\.[a-z0-9_]+\\.[a-z0-9_]+$",
             "title": "Mode Key",
             "type": "string"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LobbyOverrides"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Переопределения лобби (`clue_type`, `answer_format`): план строится по эффективному конфигу, пул должен быть играбелен под переопределённую загадку"
           },
           "rounds": {
             "maximum": 50.0,
@@ -5448,7 +5495,7 @@
     },
     "/internal/v1/round-plans": {
       "post": {
-        "description": "Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), 422 `game.collection_not_supported` (сборники у режима без source `collection`). `exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — пока хватает остальных единиц).",
+        "description": "Розыгрыш через `ModeEngine.draw_rounds` с `exclude_ids` и `collection_ids` (D5): детерминирован по `seed`, только играбельные единицы (ассеты всех уровней готовы). Ошибки: 404 `game.mode_not_found` (нет опубликованной версии), 422 `game.mode_not_online` (у шаблона `session.kind = solo`), 404 `game.collection_not_found` (нет, скрыт или удалён), 422 `game.collection_required`, 422 `game.collection_domain_mismatch`, 422 `game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), 422 `game.collection_not_supported` (сборники у режима без source `collection`). `exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — пока хватает остальных единиц). `overrides` (`clue_type`, `answer_format`) — переопределения лобби по `session.lobby.overridable`: 422 `game.override_not_allowed` (`details.field`), 422 `game.override_invalid` (`details.errors` валидатора ядра); пул проверяется под переопределённую загадку.",
         "operationId": "create_round_plan_internal_v1_round_plans_post",
         "requestBody": {
           "content": {

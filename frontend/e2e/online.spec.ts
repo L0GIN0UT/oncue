@@ -131,6 +131,11 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await expect(page.getByTestId("summary-round-0")).toContainText("Группа крови");
   await expect(page.getByTestId("summary-round-0").getByTestId("save-button")).toBeVisible();
 
+  // Кнопки действий над соперником: друзья (решение social через bff), жалоба на игрока и аватарку.
+  await expect(page.getByTestId("rate-rival").getByTestId("rate-add-friend")).toBeVisible();
+  await expect(page.getByTestId("rate-rival").getByTestId("rate-report")).toBeVisible();
+  await expect(page.getByTestId("rate-rival").getByTestId("rate-report-avatar")).toBeVisible();
+
   // Оценка соперника: похвала уходит один раз.
   await page.getByTestId("rate-rival").getByTestId("rate-praise").click();
   await expect(page.getByTestId("rate-rival")).toContainText("похвала отправлена");
@@ -156,6 +161,10 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await card.click();
   await expect(page).toHaveURL(/\/match\//);
   await expect(page.getByTestId("summary-headline")).toHaveText("Соперник сдался");
+
+  // История в хабе: жалоба на игрока матча (bff отдаёт participants, ADR 0069).
+  await page.goto("/online");
+  await expect(page.getByTestId("history-report-rival").first()).toBeVisible();
 });
 
 test("лобби на 4: вход по коду, настройки хоста сбрасывают готовность, статусы, чат и отказ чата", async ({

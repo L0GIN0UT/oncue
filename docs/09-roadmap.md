@@ -95,7 +95,7 @@
 ### Хвосты 4a
 | Пункт | Где | Когда |
 |---|---|---|
-| Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` game: старт отказывает с `not_supported_yet` | match, game | После решения по плану раундов |
+| Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` game: старт отказывает с `not_supported_yet` | match, game | После решения по плану раундов | ✅ закрыто в [PR #46](https://github.com/L0GIN0UT/oncue/pull/46) (остаток — в бэклоге) |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` (конфиги режимов) | Решение по геймдизайну |
 | Блокирующий `XREAD` на комнату: ~300 соединений Redis на инстанс | match | Нагрузка этапа 7 | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Окно отзыва connection-токена Centrifugo — до 10 мин (отзыв сессии не рвёт соединение) | identity, match | Принятый риск; пересмотреть на этапе 7 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
@@ -143,7 +143,7 @@
 | Нет теста тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | 5b | ✅ закрыто в [PR #45](https://github.com/L0GIN0UT/oncue/pull/45) |
 | Нестабильные под нагрузкой тесты: `GameScreen.modes`, `CollectionEditor` (автосохранение) — таймаут `waitFor` поднят ([PR #36](https://github.com/L0GIN0UT/oncue/pull/36)); `party.spec` — открыт | frontend, e2e | 5b |
 | Windows-окружение (на `main` тоже): 3 integration-теста ffmpeg `test_media_adapters` (код 4294967283) и 2 errors в `unit/test_use_cases::test_upload_validation` (идентификаторы параметров), `admin test_runtime` (`/health/live`) | media_pipeline, admin | Не чинить в 5b; зелёные в CI/Linux |
-| Win-trading: детектор ([ADR 0038](adr/0038-matchmaking-queues.md)) | rating, match | 5c |
+| Win-trading: детектор ([ADR 0038](adr/0038-matchmaking-queues.md)) | rating, match | 5c | ✅ закрыто в [PR #46](https://github.com/L0GIN0UT/oncue/pull/46) (остаток — в бэклоге) |
 | Ручная проверка владельцем: ledger progression, identity, match, rating | — | Открыта |
 
 ### Подэтап 5b — экономика и уведомления — выполнен и влит (PR #29)

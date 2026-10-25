@@ -1,0 +1,87 @@
+<form method="post" data-testid="finds-form">
+  {% csrf_token %}
+  <input type="hidden" name="mode" value="form">
+  <input type="hidden" name="base" value="{{ base_json }}">
+  {% if expected_sha %}<input type="hidden" name="expected_sha" value="{{ expected_sha }}">{% endif %}
+  <input type="hidden" name="find_count" value="{{ rows|length }}">
+  <button type="submit" name="op" value="save" hidden></button>
+  {% if key_form %}{{ key_form.key.errors }}<p>{{ key_form.key.label_tag }} {{ key_form.key }}</p>{% endif %}
+  {% if errors.finds %}<ul class="errorlist"><li>{{ errors.finds }}</li></ul>{% endif %}
+
+  <fieldset>
+    <legend>Событие</legend>
+    {% if errors.h_title %}<ul class="errorlist"><li>{{ errors.h_title }}</li></ul>{% endif %}
+    <p><label>Название <input type="text" name="h_title" value="{{ header.title }}" maxlength="120" size="60"></label></p>
+    {% if errors.h_description %}<ul class="errorlist"><li>{{ errors.h_description }}</li></ul>{% endif %}
+    <p><label>Описание<br><textarea name="h_description" rows="3" cols="80">{{ header.description }}</textarea></label></p>
+    {% if errors.h_theme_key %}<ul class="errorlist"><li>{{ errors.h_theme_key }}</li></ul>{% endif %}
+    <p><label>Тема (<code>theme_key</code>) <input type="text" name="h_theme_key" value="{{ header.theme_key }}" maxlength="32"></label></p>
+    {% if errors.h_reward_item_key %}<ul class="errorlist"><li>{{ errors.h_reward_item_key }}</li></ul>{% endif %}
+    <p><label>Награда за все находки: ключ предмета <input type="text" name="h_reward_item_key" value="{{ header.reward_item_key }}" maxlength="64"></label> (пусто - только награды находок)</p>
+  </fieldset>
+
+  <h3>Находки</h3>
+  <p>Порядок - порядок номеров; финальная находка при сохранении ставится последней. Точка на карте: нажмите «Точка на карте» у находки и кликните по превью выше (доли изображения, %).</p>
+  {% for r in rows %}
+  <fieldset data-testid="find-{{ r.i }}">
+    <legend>Находка {{ r.n }}</legend>
+    <input type="hidden" name="f{{ r.i }}_src" value="{{ r.v.src }}">
+    <p>
+      <button type="submit" name="op" value="up:{{ r.i }}"{% if forloop.first %} disabled{% endif %}>Выше</button>
+      <button type="submit" name="op" value="down:{{ r.i }}"{% if forloop.last %} disabled{% endif %}>Ниже</button>
+      <button type="submit" name="op" value="del:{{ r.i }}">Удалить</button>
+      <label><input type="radio" name="final_index" value="{{ r.i }}"{% if r.v.final %} checked{% endif %}> финальная (открывается после остальных)</label>
+    </p>
+    {% if r.err.key %}<ul class="errorlist"><li>{{ r.err.key }}</li></ul>{% endif %}
+    <p><label>Ключ <input type="text" name="f{{ r.i }}_key" value="{{ r.v.key }}" maxlength="64"></label></p>
+    {% if r.err.title %}<ul class="errorlist"><li>{{ r.err.title }}</li></ul>{% endif %}
+    <p><label>Название <input type="text" name="f{{ r.i }}_title" value="{{ r.v.title }}" maxlength="120" size="50"></label></p>
+    {% if r.err.diary_before %}<ul class="errorlist"><li>{{ r.err.diary_before }}</li></ul>{% endif %}
+    <p><label>Дневник до<br><textarea name="f{{ r.i }}_diary_before" rows="2" cols="80">{{ r.v.diary_before }}</textarea></label></p>
+    {% if r.err.diary_after %}<ul class="errorlist"><li>{{ r.err.diary_after }}</li></ul>{% endif %}
+    <p><label>Дневник после<br><textarea name="f{{ r.i }}_diary_after" rows="2" cols="80">{{ r.v.diary_after }}</textarea></label></p>
+    {% if r.err.x_pct %}<ul class="errorlist"><li>{{ r.err.x_pct }}</li></ul>{% endif %}
+    {% if r.err.y_pct %}<ul class="errorlist"><li>{{ r.err.y_pct }}</li></ul>{% endif %}
+    <p>x, % <input type="text" name="f{{ r.i }}_x_pct" value="{{ r.v.x_pct }}" size="6" data-pick-x="{{ r.i }}">
+       y, % <input type="text" name="f{{ r.i }}_y_pct" value="{{ r.v.y_pct }}" size="6" data-pick-y="{{ r.i }}">
+       <button type="button" data-pick-row="{{ r.i }}">Точка на карте</button></p>
+    {% if r.err.xp %}<ul class="errorlist"><li>{{ r.err.xp }}</li></ul>{% endif %}
+    {% if r.err.verses %}<ul class="errorlist"><li>{{ r.err.verses }}</li></ul>{% endif %}
+    <p>Награда: XP <input type="text" name="f{{ r.i }}_xp" value="{{ r.v.xp }}" size="6"> Версы <input type="text" name="f{{ r.i }}_verses" value="{{ r.v.verses }}" size="6">
+       Кнопка «играть» ведёт в
+       <select name="f{{ r.i }}_play_page"><option value="">- нет -</option>{% for o in enums.play_pages %}<option value="{{ o }}"{% if o == r.v.play_page %} selected{% endif %}>{{ o }}</option>{% endfor %}</select></p>
+
+    <p>Триггер
+      <select name="f{{ r.i }}_trigger_type">
+        <option value="ui_spot"{% if r.v.trigger_type == "ui_spot" %} selected{% endif %}>ui_spot - спрятан на странице</option>
+        <option value="server"{% if r.v.trigger_type == "server" %} selected{% endif %}>server - по метрике</option>
+      </select></p>
+    {% if r.err.trigger_type %}<ul class="errorlist"><li>{{ r.err.trigger_type }}</li></ul>{% endif %}
+    {% if r.err.page_key %}<ul class="errorlist"><li>{{ r.err.page_key }}</li></ul>{% endif %}
+    <p>ui_spot: страница
+      <select name="f{{ r.i }}_page_key"><option value="">-</option>{% for o in enums.spot_pages %}<option value="{{ o }}"{% if o == r.v.page_key %} selected{% endif %}>{{ o }}</option>{% endfor %}</select></p>
+    {% if r.err.metric %}<ul class="errorlist"><li>{{ r.err.metric }}</li></ul>{% endif %}
+    {% if r.err.target %}<ul class="errorlist"><li>{{ r.err.target }}</li></ul>{% endif %}
+    {% if r.err.period %}<ul class="errorlist"><li>{{ r.err.period }}</li></ul>{% endif %}
+    <p>server: метрика
+      <select name="f{{ r.i }}_metric"><option value="">-</option>{% for o in enums.metrics %}<option value="{{ o }}"{% if o == r.v.metric %} selected{% endif %}>{{ o }}</option>{% endfor %}</select>
+      цель <input type="text" name="f{{ r.i }}_target" value="{{ r.v.target }}" size="6">
+      период <select name="f{{ r.i }}_period"><option value="">-</option>{% for o in enums.periods %}<option value="{{ o }}"{% if o == r.v.period %} selected{% endif %}>{{ o }}</option>{% endfor %}</select>
+      домен <select name="f{{ r.i }}_domain"><option value="">любой</option>{% for o in enums.domains %}<option value="{{ o }}"{% if o == r.v.domain %} selected{% endif %}>{{ o }}</option>{% endfor %}</select></p>
+    {% if r.err.place_max %}<ul class="errorlist"><li>{{ r.err.place_max }}</li></ul>{% endif %}
+    <p>weekly_top_place: место не ниже <input type="text" name="f{{ r.i }}_place_max" value="{{ r.v.place_max }}" size="4"></p>
+    {% if r.err.slot %}<ul class="errorlist"><li>{{ r.err.slot }}</li></ul>{% endif %}
+    <p>item_equipped (одно из): слот <input type="text" name="f{{ r.i }}_slot" value="{{ r.v.slot }}" size="16"> или ключ предмета <input type="text" name="f{{ r.i }}_item_key" value="{{ r.v.item_key }}" size="24"></p>
+    {% if r.err.collection_keys %}<ul class="errorlist"><li>{{ r.err.collection_keys }}</li></ul>{% endif %}
+    {% if r.err.collection_tags %}<ul class="errorlist"><li>{{ r.err.collection_tags }}</li></ul>{% endif %}
+    <p>collection_played: id сборников (UUID, по одному в строке)<br><textarea name="f{{ r.i }}_collection_keys" rows="2" cols="50">{{ r.v.collection_keys }}</textarea>
+       теги сборника<br><textarea name="f{{ r.i }}_collection_tags" rows="2" cols="30">{{ r.v.collection_tags }}</textarea></p>
+  </fieldset>
+  {% endfor %}
+  {% if can_add %}<p><button type="submit" name="op" value="add">Добавить находку</button></p>{% endif %}
+
+  {{ meta.idempotency_key }}
+  {{ meta.reason.errors }}<p><label>Причина<br><textarea name="reason" rows="2" cols="60" maxlength="500">{{ meta.reason.value|default_if_none:"" }}</textarea></label></p>
+  <button type="submit" name="op" value="save">Сохранить</button>
+  <button type="submit" name="op" value="to_yaml">Расширенный режим (YAML)</button>
+</form>

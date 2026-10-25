@@ -118,7 +118,9 @@ def register_event_admin_routes(router: APIRouter, services: AdminServices) -> N
         summary="Изменить определение",
         description=(
             "Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` "
-            "(есть запуск `published/active`), 422 `progression.event_definition_invalid`."
+            "(есть запуск `published/active`), 409 `progression.event_definition_changed` "
+            "(задан `expected_body_sha256`, а определение уже другое), "
+            "422 `progression.event_definition_invalid`."
         ),
         responses=problem_responses(401, 403, 404, 409, 422),
     )
@@ -132,6 +134,7 @@ def register_event_admin_routes(router: APIRouter, services: AdminServices) -> N
         result = await services.events.update(
             event_key, body.body.model_dump(mode="json", exclude_unset=True),
             ctx=_ctx(principal, body.reason, key),
+            expected_body_sha256=body.expected_body_sha256,
         )  # fmt: skip
         response.headers["Cache-Control"] = NO_STORE
         return AdminEvent.model_validate(result)

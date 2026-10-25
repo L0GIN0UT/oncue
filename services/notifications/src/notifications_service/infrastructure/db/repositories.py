@@ -6,6 +6,7 @@ UoW работает в одном из двух режимов: своя сес
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Self
@@ -168,6 +169,16 @@ class SqlPreferences:
         p = t.notification_preferences
         rows = (await self._s.execute(select(p).where(p.c.user_id == user_id))).all()
         return {r.type: TypePreference(in_app=r.in_app, email=r.email) for r in rows}
+
+    async def for_users(
+        self, user_ids: Collection[UUID], type_key: str
+    ) -> dict[UUID, TypePreference]:
+        if not user_ids:
+            return {}
+        p = t.notification_preferences
+        stmt = select(p).where(p.c.user_id.in_(list(user_ids)), p.c.type == type_key)
+        rows = (await self._s.execute(stmt)).all()
+        return {r.user_id: TypePreference(in_app=r.in_app, email=r.email) for r in rows}
 
     async def save(self, user_id: UUID, type_key: str, pref: TypePreference, now: datetime) -> None:
         p = t.notification_preferences
@@ -434,6 +445,64 @@ class SqlAudit:
         )
 
 
+class SqlUserData:
+    """Данные игрока для удаления аккаунта."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def erase(self, user_id: UUID) -> int:
+        total = 0
+        for table in (
+            t.notifications,
+            t.notification_preferences,
+            t.email_subscriptions,
+            t.devices,
+            t.broadcast_deliveries,
+        ):
+            result = await self._s.execute(delete(table).where(table.c.user_id == user_id))
+            total += int(getattr(result, "rowcount", 0) or 0)
+        return total
+
+
+ERASE_LOCK_KEY = 0x6E6F74_65726173
+"""Ключ advisory lock «запись пачки / удаление игрока» (общий для notifications)."""
+
+
+class SqlErasedUsers:
+    """Tombstone удалённых игроков.
+
+    Пачка берёт общую advisory-блокировку до чтения tombstone, удаление - эксклюзивную до записи:
+    удаление ждёт коммита идущих пачек, а пачка, стартовавшая позже, уже видит tombstone.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def mark(self, user_id: UUID, at: datetime) -> None:
+        await self._s.execute(select(func.pg_advisory_xact_lock(ERASE_LOCK_KEY)))
+        stmt = (
+            pg_insert(t.erased_users)
+            .values(user_id=user_id, erased_at=at)
+            .on_conflict_do_nothing(index_elements=["user_id"])
+        )
+        await self._s.execute(stmt)
+
+    async def among(self, user_ids: list[UUID]) -> set[UUID]:
+        await self._s.execute(select(func.pg_advisory_xact_lock_shared(ERASE_LOCK_KEY)))
+        if not user_ids:
+            return set()
+        e = t.erased_users
+        rows = await self._s.execute(select(e.c.user_id).where(e.c.user_id.in_(user_ids)))
+        return {row[0] for row in rows.all()}
+
+    async def purge_before(self, cutoff: datetime) -> int:
+        result = await self._s.execute(
+            delete(t.erased_users).where(t.erased_users.c.erased_at < cutoff)
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
+
+
 class SqlUnitOfWork:
     """Транзакция use-case: своя сессия (``sessions``) или SAVEPOINT в чужой (``session``)."""
 
@@ -445,6 +514,8 @@ class SqlUnitOfWork:
     devices: SqlDevices
     broadcasts: SqlBroadcasts
     audit: SqlAudit
+    user_data: SqlUserData
+    erased_users: SqlErasedUsers
     idempotency: SqlIdempotencyStore
 
     def __init__(
@@ -487,6 +558,8 @@ class SqlUnitOfWork:
         self.devices = SqlDevices(s)
         self.broadcasts = SqlBroadcasts(s)
         self.audit = SqlAudit(s)
+        self.user_data = SqlUserData(s)
+        self.erased_users = SqlErasedUsers(s)
         self.idempotency = SqlIdempotencyStore(s, t.idempotency_keys, self._clock)
         return self
 

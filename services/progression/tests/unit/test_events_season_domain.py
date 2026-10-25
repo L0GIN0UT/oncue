@@ -303,3 +303,51 @@ def test_event_item_cannot_be_sold_or_unlocked_by_level() -> None:
         shop.validate_item_fields(level_required=2, price=None, event_key="winter", **kwargs)
     with pytest.raises(ItemUnlockRequiredError):
         shop.validate_item_fields(level_required=None, price=None, **kwargs)
+
+
+def _played(*tags: str, cid: str | None = COLL_A) -> MetricUpdate:
+    return MetricUpdate(metrics.COLLECTION_PLAYED, 1, collection_id=cid, collection_tags=tags)
+
+
+def test_collection_tags_accept_any_matching_tag() -> None:
+    t = trigger_of("collection_played", collection_tags=["new_year", "family"])
+    assert t.accepts(_played("rock", "family"))
+    assert t.accepts(_played("new_year"))
+    assert not t.accepts(_played("rock"))
+
+
+def test_collection_tags_reject_event_without_tags() -> None:
+    """Событие старого формата (без тегов) не проходит фильтр по тегу."""
+    t = trigger_of("collection_played", collection_tags=["new_year"])
+    assert not t.accepts(_played())
+    assert not t.accepts(MetricUpdate(metrics.COLLECTION_PLAYED, 1))
+
+
+def test_empty_collection_tags_is_no_filter() -> None:
+    for params in ({}, {"collection_tags": []}):
+        t = trigger_of("collection_played", **params)
+        assert t.accepts(_played())
+        assert t.accepts(_played("rock"))
+
+
+def test_keys_and_tags_must_both_pass() -> None:
+    """ADR 0067: заданные collection_keys и collection_tags сочетаются как «и»."""
+    t = trigger_of("collection_played", collection_keys=[COLL_A], collection_tags=["new_year"])
+    assert t.accepts(_played("new_year", cid=COLL_A))
+    assert not t.accepts(_played("new_year", cid=COLL_B))
+    assert not t.accepts(_played("rock", cid=COLL_A))
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
+        server("rounds_played", 1, collection_tags=["new_year"]),
+        server("collection_played", 1, collection_tags=["new_year", "new_year"]),
+        server("collection_played", 1, collection_tags=["Bad Tag"]),
+        server("collection_played", 1, collection_tags=[""]),
+    ],
+)
+def test_invalid_collection_tags_are_reported(trigger: dict[str, Any]) -> None:
+    raw = body(find("a", 1, trigger), find("z", 2, SPOT, final=True))
+    errors = definition_errors(parse_definition(raw), slot_keys=None)
+    assert any("collection_tags" in e["path"] for e in errors)

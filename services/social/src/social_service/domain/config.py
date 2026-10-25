@@ -73,6 +73,32 @@ class SanctionsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PairRepeatConfig:
+    """Повторные пары рейтинговых матчей (ADR 0068)."""
+
+    window_s: int = 604800
+    min_matches: int = 5
+    strong_streak: int = 3
+
+
+@dataclass(frozen=True, slots=True)
+class ForfeitSeriesConfig:
+    """Серии сдач (ADR 0068)."""
+
+    window_s: int = 604800
+    streak_min: int = 3
+    window_min: int = 5
+
+
+@dataclass(frozen=True, slots=True)
+class WinTradingConfig:
+    """Пороги сигналов win-trading. Секция необязательна: нет в теле - умолчания (ADR 0068)."""
+
+    pair_repeat: PairRepeatConfig = PairRepeatConfig()
+    forfeit_series: ForfeitSeriesConfig = ForfeitSeriesConfig()
+
+
+@dataclass(frozen=True, slots=True)
 class SocialConfig:
     """Действующая версия конфига social."""
 
@@ -82,11 +108,13 @@ class SocialConfig:
     presence: PresenceConfig
     reports: ReportsConfig
     sanctions: SanctionsConfig
+    win_trading: WinTradingConfig = WinTradingConfig()
 
     @classmethod
     def from_body(cls, version: int, body: Mapping[str, Any]) -> SocialConfig:
         """Собрать модель из проверенного по схеме тела версии."""
         reports = body["reports"]
+        wt = body.get("win_trading", {})
         return cls(
             version=version,
             comments=CommentsConfig(**body["comments"]),
@@ -106,4 +134,8 @@ class SocialConfig:
                 threshold_per_day=reports["threshold_per_day"],
             ),
             sanctions=SanctionsConfig(**body["sanctions"]),
+            win_trading=WinTradingConfig(
+                pair_repeat=PairRepeatConfig(**wt.get("pair_repeat", {})),
+                forfeit_series=ForfeitSeriesConfig(**wt.get("forfeit_series", {})),
+            ),
         )

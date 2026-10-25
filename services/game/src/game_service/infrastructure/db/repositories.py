@@ -841,6 +841,7 @@ def _to_collection(row: RowMapping) -> CollectionProj:
         visibility=row["visibility"],
         author_id=row["author_id"],
         updated_at=row["updated_at"],
+        tags=tuple(row["tags"] or ()),
     )
 
 
@@ -868,6 +869,7 @@ class SqlCollectionRepository:
             "visibility": proj.visibility,
             "author_id": proj.author_id,
             "updated_at": proj.updated_at,
+            "tags": list(proj.tags),
         }
         await self._s.execute(
             pg_insert(collection_proj)
@@ -1145,7 +1147,11 @@ def session_state_json(s: GameSession) -> dict[str, Any]:
         "round_max": s.round_max,
     }
     if s.collection_id is not None:
-        state["collection"] = {"id": str(s.collection_id), "version": s.collection_version}
+        state["collection"] = {
+            "id": str(s.collection_id),
+            "version": s.collection_version,
+            "tags": list(s.collection_tags),
+        }
     return state
 
 
@@ -1159,6 +1165,7 @@ class SessionState:
     round_max: int | None
     collection_id: UUID | None = None
     collection_version: int | None = None
+    collection_tags: tuple[str, ...] = ()
 
 
 def session_state_of(raw: dict[str, Any]) -> SessionState:
@@ -1179,6 +1186,7 @@ def session_state_of(raw: dict[str, Any]) -> SessionState:
         round_max=raw.get("round_max"),
         collection_id=UUID(collection["id"]) if collection else None,
         collection_version=int(collection["version"]) if collection else None,
+        collection_tags=tuple(collection.get("tags") or ()) if collection else (),
     )
 
 
@@ -1226,6 +1234,7 @@ class SqlSessionRepository:
             round_max=state.round_max,
             collection_id=state.collection_id,
             collection_version=state.collection_version,
+            collection_tags=state.collection_tags,
         )
 
     async def get(self, session_id: UUID, *, for_update: bool = False) -> GameSession | None:

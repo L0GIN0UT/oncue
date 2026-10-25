@@ -121,6 +121,7 @@ class SocialContainer:
             limiter=self.limiter,
             presence=self.presence,
             presence_burst=self.settings.social.presence_burst,
+            relations_per_minute=self.settings.social.relations_per_minute,
             sanctions=self.sanctions() if self.infra.sessions is not None else None,
         )
 

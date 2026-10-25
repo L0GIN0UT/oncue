@@ -22,8 +22,11 @@ from bff_web_service.application.dto import (
     LadderCard,
     MatchBlocks,
     MatchPage,
+    MatchParticipant,
     MatchResult,
     Mode,
+    MyMatch,
+    MyMatches,
     OnlineBlocks,
     OnlineModeCard,
     OnlinePage,
@@ -93,9 +96,11 @@ class GetOnlinePage:
         matches_limit: int,
         weekly_limit: int,
         social: SocialClient | None = None,
+        match_players_limit: int = 0,
     ) -> None:
         self._match, self._game, self._rating = match, game, rating
         self._social = social
+        self._players_limit = match_players_limit
         self._concurrency = concurrency
         self._rooms_limit, self._matches_limit = rooms_limit, matches_limit
         self._weekly_limit = weekly_limit
@@ -130,11 +135,16 @@ class GetOnlinePage:
         if any(_is_guest(v) for v in personal):
             return AUTH_REQUIRED
         modes_block = block_of(modes, "online.modes")
+        my_matches = block_of(matches, "online.my_matches")
+        if my_matches.data is not None and self._players_limit > 0:
+            my_matches = Block.ok(
+                await self._with_participants(limiter, token, viewer.user_id, my_matches.data)
+            )
         return OnlinePage(
             status=OnlineStatus.OK,
             blocks=OnlineBlocks(
                 open_rooms=block_of(rooms, "online.open_rooms"),
-                my_matches=block_of(matches, "online.my_matches"),
+                my_matches=my_matches,
                 modes=Block.ok(online_mode_cards(modes_block.data))
                 if modes_block.data is not None
                 else Block.unavailable(),
@@ -145,6 +155,33 @@ class GetOnlinePage:
                 friends=friends,
             ),
         )
+
+    async def _with_participants(
+        self, limiter: Limiter, token: str, viewer_id: UUID | None, matches: MyMatches
+    ) -> MyMatches:
+        """Игроки последних матчей для жалобы из истории (ADR 0069).
+
+        Итог каждого матча — отдельный вызов match (пределом ``match_players_limit`` и общим
+        ``Limiter``); сбой одного матча оставляет у его карточки пустой список, хаб цел.
+        """
+        head = matches.items[: self._players_limit]
+        fetched = await asyncio.gather(
+            *(limiter.attempt(self._match.match(token, m.match_id)) for m in head)
+        )
+        enriched: list[MyMatch] = []
+        for card, value in zip(head, fetched, strict=True):
+            if isinstance(value, MatchResult):
+                flagged = with_report_flags(value, viewer_id)
+                participants = [
+                    MatchParticipant(p.user_id, p.nickname, p.can_report)
+                    for p in flagged.players
+                    if p.can_report
+                ]
+            else:
+                block_of(value, "online.match_players")  # причина уходит в лог
+                participants = []
+            enriched.append(replace(card, participants=participants))
+        return replace(matches, items=[*enriched, *matches.items[len(head) :]])
 
     async def _friends(self, limiter: Limiter, token: str) -> Block[FriendsCard] | None:
         """Друзья и число входящих заявок (social); ``None`` — клиент не подключён.
@@ -247,7 +284,11 @@ class GetMatchPage:
         items_deadline_s: float,
         appearance_batch_size: int = 12,
         items_batch_size: int = 50,
+        social: SocialClient | None = None,
+        relations_batch_size: int = 12,
     ) -> None:
+        self._social = social
+        self._relations_batch = relations_batch_size
         self._match, self._catalog, self._library = match, catalog, library
         self._progression = progression
         self._concurrency, self._deadline_s = concurrency, items_deadline_s
@@ -283,6 +324,7 @@ class GetMatchPage:
             log.warning("bff.block_unavailable", block="match", reason=exc.code)
             return _match_unavailable()
         result = with_report_flags(result, viewer.user_id)
+        result = await self._with_friend_flags(limiter, token, result)
         ids = _round_item_ids(result)
         # Общий предел обоих блоков: до 50 единиц идут волнами по concurrency, и без него
         # страница ждала бы «волны × timeout_s». Блок, не успевший к сроку, гаснет сам.
@@ -294,6 +336,34 @@ class GetMatchPage:
         )
         return MatchPage(
             MatchBlocks(match=Block.ok(result), items=items, library=shelves, appearance=appearance)
+        )
+
+    async def _with_friend_flags(
+        self, limiter: Limiter, token: str, result: MatchResult
+    ) -> MatchResult:
+        """``can_add_friend``: social ``can_send_request`` по игрокам с жалобой, пачками.
+
+        Вызывается только для участника несоло-матча (``can_report``): остальным кнопка не
+        нужна. Любой сбой social оставляет ``False`` (кнопка скрыта), страница цела.
+        """
+        if self._social is None:
+            return result
+        ids = [p.user_id for p in result.players if p.can_report]
+        if not ids:
+            return result
+        batches = _chunks(ids, self._relations_batch)
+        fetched = await asyncio.gather(
+            *(limiter.attempt(self._social.relations(token, b)) for b in batches)
+        )
+        addable: set[UUID] = set()
+        for value in fetched:
+            if isinstance(value, dict):
+                addable.update(u for u, r in value.items() if r.can_send_request)
+            else:
+                block_of(value, "match.friends")  # причина уходит в лог
+        return replace(
+            result,
+            players=[replace(p, can_add_friend=p.user_id in addable) for p in result.players],
         )
 
     async def _appearance(

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -28,6 +29,8 @@ UI_SPOT = "ui_spot"
 PERIOD_DAY = "day"
 PERIOD_EVENT = "event"
 EVENT_PERIOD_KEY = "event"
+_TAG_RE = re.compile(r"[a-z][a-z0-9_]{0,31}")
+"""Ключ тега сборника (как `TagKey` в collections, ADR 0067)."""
 """Ключ периода прогресса находки с периодом ``event`` (у ``day`` - ISO-дата суток)."""
 REWARD_REASON = "event"
 """Причина проводок ledger и отметок событий (``reason``)."""
@@ -105,6 +108,15 @@ class EventDefinitionLockedError(ConflictError):
 
     def __init__(self) -> None:
         super().__init__("есть опубликованный запуск: определение не меняется")
+
+
+class EventDefinitionChangedError(ConflictError):
+    """Правка определения основана на устаревшей версии (хеш не совпал) - 409."""
+
+    default_code = "progression.event_definition_changed"
+
+    def __init__(self) -> None:
+        super().__init__("определение изменили, откройте заново")
 
 
 class EventBodyChangedError(ConflictError):
@@ -221,6 +233,7 @@ class Trigger:
     item_key: str | None = None
     domain: str | None = None
     collection_keys: tuple[str, ...] = ()
+    collection_tags: tuple[str, ...] = ()
 
     def accepts(self, update: MetricUpdate) -> bool:
         """Двигает ли изменение метрики эту находку (метрика, домен, параметры)."""
@@ -232,9 +245,17 @@ class Trigger:
             return False
         if self.slot is not None and update.slot != self.slot:
             return False
-        if self.collection_keys and update.collection_id not in self.collection_keys:
+        if not self._accepts_collection(update):
             return False
         return self.item_key is None or update.item_key == self.item_key
+
+    def _accepts_collection(self, update: MetricUpdate) -> bool:
+        """Фильтры сборника; заданные `collection_keys` и `collection_tags` - «и» (ADR 0067)."""
+        if self.collection_keys and update.collection_id not in self.collection_keys:
+            return False
+        return not self.collection_tags or bool(
+            set(self.collection_tags) & set(update.collection_tags)
+        )
 
     def advance(self, progress: int, update: MetricUpdate) -> int:
         """Новый прогресс, не выше цели."""
@@ -302,6 +323,7 @@ def _trigger(raw: Mapping[str, Any]) -> Trigger:
         item_key=params.get("item_key"),
         domain=params.get("domain"),
         collection_keys=tuple(str(k).lower() for k in params.get("collection_keys") or ()),
+        collection_tags=tuple(str(k) for k in params.get("collection_tags") or ()),
     )
 
 
@@ -387,6 +409,16 @@ def _trigger_errors(
         )
     if len(set(t.collection_keys)) != len(t.collection_keys):
         errors.append({"path": f"{where}.params.collection_keys", "reason": "повторы"})
+    if t.collection_tags and t.metric != metrics.COLLECTION_PLAYED:
+        errors.append(
+            {"path": f"{where}.params.collection_tags", "reason": "только collection_played"}
+        )
+    if len(set(t.collection_tags)) != len(t.collection_tags):
+        errors.append({"path": f"{where}.params.collection_tags", "reason": "повторы"})
+    if any(_TAG_RE.fullmatch(tag) is None for tag in t.collection_tags):
+        errors.append(
+            {"path": f"{where}.params.collection_tags", "reason": "ключ тега: [a-z][a-z0-9_]{0,31}"}
+        )
     if t.metric == metrics.ITEM_EQUIPPED and t.target != 1:
         errors.append({"path": f"{where}.target", "reason": "надеть предмет - цель 1"})
     if t.slot is not None and (slot_keys is None or t.slot not in slot_keys):

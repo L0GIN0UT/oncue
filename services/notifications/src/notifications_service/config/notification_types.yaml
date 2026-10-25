@@ -211,11 +211,12 @@ types:
         title: Событие пройдено
         body: "Вы нашли всё в событии «{title}», награда начислена."
 
-  # Рассылка в приложении: нет recipient, получатели - аудитория known_users, пачками (задача
-  # RabbitMQ), идемпотентно по (user_id, dedup_key) = (игрок, run_id).
+  # Рассылка в приложении: нет recipient, получатели - аудитория active_users (все активные
+  # пользователи, постранично из identity, ADR 0069), пачками (задача RabbitMQ), идемпотентно
+  # по (user_id, dedup_key) = (игрок, run_id).
   - key: event_started
     source_event: progression.EventRunStarted
-    audience: known_users
+    audience: active_users
     dedup_key: "event_started:{payload.run_id}"
     user_mutable: true
     channels: {in_app: true, email: false, push: false}

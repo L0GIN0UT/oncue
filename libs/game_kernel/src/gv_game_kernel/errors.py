@@ -28,6 +28,7 @@ ROUNDS_NOT_ALLOWED = "game.rounds_not_allowed"
 MODE_NOT_SOLO = "game.mode_not_solo"
 MODE_NOT_ONLINE = "game.mode_not_online"
 TOO_MANY_COLLECTIONS = "game.too_many_collections"
+OVERRIDE_NOT_ALLOWED = "game.override_not_allowed"
 
 
 class ConfigError(InvalidInputError):
@@ -46,6 +47,15 @@ class ConfigError(InvalidInputError):
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, code=code, details=details)
+
+
+class OverrideNotAllowedError(InvalidInputError):
+    """Хозяин лобби просит значение, которого нет в ``session.lobby.overridable`` (422).
+
+    ``details["field"]`` — ``clue`` | ``answer_format``.
+    """
+
+    default_code = OVERRIDE_NOT_ALLOWED
 
 
 class RuleViolation(DomainError):  # noqa: N818 — имя из плана этапа 2 (§2.3)

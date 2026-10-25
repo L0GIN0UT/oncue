@@ -11,7 +11,7 @@ from gv_messaging.ports import TaskHandler
 from gv_service import Infrastructure, ServiceDefinition, main
 from notifications_service.api import build_api_routers
 from notifications_service.api.services import ApiServices
-from notifications_service.infrastructure import messaging
+from notifications_service.infrastructure import jobs, messaging
 from notifications_service.infrastructure.container import container_for
 from notifications_service.infrastructure.db.tables import TABLES
 from notifications_service.settings import Settings
@@ -52,6 +52,7 @@ DEFINITION = ServiceDefinition(
     consumer_topics=messaging.CONSUMED_TOPICS,
     build_routers=build_routers,
     build_task_handlers=build_task_handlers,
+    build_periodic_jobs=jobs.build_jobs,
 )
 
 

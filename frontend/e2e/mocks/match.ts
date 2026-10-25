@@ -854,6 +854,14 @@ export class MatchWorld {
       });
   }
 
+  /** Другие игроки матча для карточки истории хаба (bff, ADR 0069). */
+  participantsOf(matchId: string, userId: string) {
+    const r = this.results.get(matchId);
+    return (r?.players ?? [])
+      .filter((p) => p.user_id !== userId)
+      .map((p) => ({ user_id: p.user_id, nickname: p.nickname, can_report: true }));
+  }
+
   openRooms(): S["OpenRoomCard"][] {
     return [...this.rooms.values()]
       .filter(

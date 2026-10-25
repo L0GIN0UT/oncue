@@ -15,7 +15,7 @@ from typing import Any
 from notifications_service.domain.errors import ConfigError
 
 PAYLOAD_ROOT = "payload"
-AUDIENCES = frozenset({"known_users"})
+AUDIENCES = frozenset({"known_users", "active_users"})
 """Допустимые аудитории массовой доставки (тип без ``recipient``, ADR 0054)."""
 PLACEHOLDER = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 DEDUP_PLACEHOLDER = re.compile(r"\{([^{}]*)\}")

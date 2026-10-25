@@ -248,3 +248,55 @@ def _json(request: httpx.Request) -> Any:
     import json
 
     return json.loads(request.content)
+
+
+async def test_game_plan_sends_overrides_only_when_chosen_and_maps_refusals() -> None:
+    client = GameClient(GAME, Tokens(), timeout_s=1, breaker=CircuitBreaker(5, 60))
+    chosen = RoundPlanRequest(
+        mode_key="film.lobby.collection",
+        version=1,
+        seed="a" * 32,
+        rounds=1,
+        clue_type="poster_masked",
+        answer_format="pick",
+    )
+    try:
+        with stub_service(GAME, service="game") as game:
+            route = game.route("POST", "/internal/v1/round-plans")
+            route.mock(side_effect=lambda r: httpx.Response(200, json=_plan_body(_json(r))))
+            await client.create_round_plan(REQUEST)
+            assert "overrides" not in _json(route.calls.last.request)
+            await client.create_round_plan(chosen)
+            assert _json(route.calls.last.request)["overrides"] == {
+                "clue_type": "poster_masked",
+                "answer_format": "pick",
+            }
+
+            route.mock(
+                return_value=httpx.Response(
+                    422, json={"code": "game.override_not_allowed", "details": {"field": "clue"}}
+                )
+            )
+            with pytest.raises(Exception) as denied:
+                await client.create_round_plan(chosen)
+            assert denied.value.code == "match.setting_not_allowed"  # type: ignore[attr-defined]
+            assert denied.value.details == {  # type: ignore[attr-defined]
+                "field": "clue_type",
+                "reason": "not_allowed",
+            }
+
+            errors = [{"path": "session.contest.type", "code": "config.answer_format_unsupported"}]
+            route.mock(
+                return_value=httpx.Response(
+                    422, json={"code": "game.override_invalid", "details": {"errors": errors}}
+                )
+            )
+            with pytest.raises(Exception) as invalid:
+                await client.create_round_plan(chosen)
+            assert invalid.value.details == {  # type: ignore[attr-defined]
+                "field": "overrides",
+                "reason": "incompatible",
+                "errors": errors,
+            }
+    finally:
+        await client.aclose()

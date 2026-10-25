@@ -109,6 +109,12 @@ class PresenceRateLimitedError(RateLimitedError):
     default_code = "social.presence_rate_limited"
 
 
+class RelationsRateLimitedError(RateLimitedError):
+    """Пакетный запрос отношений шлют слишком часто."""
+
+    default_code = "social.relations_rate_limited"
+
+
 class LimiterUnavailableError(DependencyUnavailableError):
     """Лимитер (Redis) недоступен: операция закрыта (fail-closed)."""
 
@@ -221,6 +227,8 @@ class Relation:
     is_friend: bool = False
     can_send_request: bool = False
     blocked_by_me: bool = False
+    nickname: str | None = None
+    """Ник - только при ``profile_visible`` (иначе пусто, чтобы не раскрывать скрытого)."""
 
 
 def relation_of(

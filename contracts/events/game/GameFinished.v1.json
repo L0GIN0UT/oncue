@@ -21,6 +21,16 @@
       ],
       "description": "Сборник, по которому шла сессия (source collection); нет или null — не сборник"
     },
+    "collection_tags": {
+      "description": "Ключи тегов сборника на старте сессии (ADR 0067). Необязательно: старые события без поля; пусто - сессия не по сборнику или у сборника нет тегов",
+      "items": {
+        "maxLength": 32,
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
     "collection_version": {
       "anyOf": [
         {

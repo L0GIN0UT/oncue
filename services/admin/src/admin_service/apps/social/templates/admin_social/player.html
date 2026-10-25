@@ -15,6 +15,21 @@
   <tr><th>Похвал</th><td>{{ counters.praises }}</td></tr>
 </table>
 
+<h3>Win-trading</h3>
+<p>Сигналы детектора (ADR 0068) — повод посмотреть, не вердикт; автоматических санкций нет.</p>
+<table>
+  <thead><tr><th>Сигнал</th><th>Соперник</th><th>Число</th><th>Подряд</th><th>Серьёзность</th><th>Окно, с</th><th>Период</th></tr></thead>
+  {% for s in win_trading %}
+  <tr>
+    <td>{{ s.kind }}</td><td>{% if s.other_user_id %}<code>{{ s.other_user_id }}</code>{% else %}—{% endif %}</td>
+    <td>{{ s.count }}</td><td>{{ s.streak }}</td><td>{{ s.severity }}</td><td>{{ s.window_s }}</td>
+    <td>{{ s.first_at }} — {{ s.last_at }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="7">Сигналов нет</td></tr>
+  {% endfor %}
+</table>
+<p><a href="{% url 'social:win_trading' %}?user_id={{ user_id }}">Все сигналы игрока</a></p>
+
 <h3>Санкции</h3>
 <table>
   <thead><tr><th>Вид</th><th>С</th><th>До</th><th>Причина</th><th>Действует</th><th></th></tr></thead>

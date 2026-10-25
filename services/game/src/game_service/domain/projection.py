@@ -193,6 +193,7 @@ class CollectionProj:
         status: ``published`` | ``hidden`` | ``deleted``.
         visibility: ``public`` | ``unlisted`` (``None`` — как у ``domain``).
         author_id: Автор (``None`` — кураторский или автор удалён).
+        tags: Теги сборника (ADR 0067; пусто - событие без тегов или надгробие).
         updated_at: Момент события.
     """
 
@@ -204,6 +205,7 @@ class CollectionProj:
     visibility: str | None
     author_id: UUID | None
     updated_at: datetime
+    tags: tuple[str, ...] = ()
 
     @property
     def is_playable(self) -> bool:

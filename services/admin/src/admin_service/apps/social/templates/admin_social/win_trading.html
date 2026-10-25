@@ -1,0 +1,22 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% include "admin/gv_messages.html" %}
+{% include "admin_social/_nav.html" %}
+<p>Сигналы детектора win-trading (ADR 0068): повод посмотреть, не вердикт. Друзья тоже играют друг с другом; автоматических санкций нет.</p>
+<form method="get">{{ filter_form.as_p }}<input type="submit" value="Показать"></form>
+{% if error %}<ul class="messagelist"><li class="error">{{ error }}</li></ul>{% endif %}
+<table>
+  <thead><tr><th>Сигнал</th><th>Игрок</th><th>Соперник</th><th>Число</th><th>Подряд</th><th>Серьёзность</th><th>Окно, ч</th><th>Период</th></tr></thead>
+  {% for s in rows %}
+  <tr>
+    <td>{{ s.kind }}</td>
+    <td>{% if s.user_url %}<a href="{{ s.user_url }}"><code>{{ s.user_id }}</code></a>{% endif %}</td>
+    <td>{% if s.other_url %}<a href="{{ s.other_url }}"><code>{{ s.other_user_id }}</code></a>{% else %}—{% endif %}</td>
+    <td>{{ s.count }}</td><td>{{ s.streak }}</td><td>{{ s.severity }}</td><td>{{ s.window_h }}</td>
+    <td>{{ s.first_at }} — {{ s.last_at }}</td>
+  </tr>
+  {% empty %}<tr><td colspan="8">Сигналов нет</td></tr>
+  {% endfor %}
+</table>
+{% if next_cursor %}<p><a href="?{% if query %}{{ query }}&amp;{% endif %}cursor={{ next_cursor|urlencode:"" }}">Дальше →</a></p>{% endif %}
+{% endblock %}

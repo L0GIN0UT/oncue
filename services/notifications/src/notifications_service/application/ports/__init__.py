@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
@@ -119,6 +119,12 @@ class PreferenceRepository(Protocol):
 
     async def all(self, user_id: UUID) -> dict[str, TypePreference]:
         """Явно сохранённые настройки игрока по ключам типов."""
+        ...
+
+    async def for_users(
+        self, user_ids: Collection[UUID], type_key: str
+    ) -> dict[UUID, TypePreference]:
+        """Настройки одного типа у набора игроков - одним запросом (нет записи - нет ключа)."""
         ...
 
     async def save(self, user_id: UUID, type_key: str, pref: TypePreference, now: datetime) -> None:
@@ -240,8 +246,41 @@ class AuditRepository(Protocol):
         ...
 
 
+class UserDataRepository(Protocol):
+    """Все данные одного игрока (право на удаление, ``identity.UserDeleted``)."""
+
+    async def erase(self, user_id: UUID) -> int:
+        """Удалить уведомления, настройки, согласие, устройства и факты доставки рассылок.
+
+        Returns:
+            Сколько строк удалено (повтор и неизвестный игрок - 0).
+        """
+        ...
+
+
+class ErasedUserRepository(Protocol):
+    """Tombstone удалённых игроков (ADR 0069)."""
+
+    async def mark(self, user_id: UUID, at: datetime) -> None:
+        """Запомнить удаление. Ждёт записывающие пачки (эксклюзивная блокировка до конца
+        транзакции), поэтому после коммита ни одна пачка не запишет игроку уведомление."""
+        ...
+
+    async def among(self, user_ids: list[UUID]) -> set[UUID]:
+        """Какие из ``user_ids`` удалены. Берёт общую блокировку до конца транзакции: удаление
+        игрока не завершится, пока пачка не закоммитится."""
+        ...
+
+    async def purge_before(self, cutoff: datetime) -> int:
+        """Удалить tombstone старше ``cutoff``; вернуть число строк."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """Транзакция use-case: без явного ``commit`` изменения откатываются."""
+
+    @property
+    def erased_users(self) -> ErasedUserRepository: ...
 
     # Свойства (только чтение): реализация хранит конкретные репозитории, протокол их не меняет.
     @property
@@ -267,6 +306,9 @@ class UnitOfWork(Protocol):
 
     @property
     def audit(self) -> AuditRepository: ...
+
+    @property
+    def user_data(self) -> UserDataRepository: ...
 
     @property
     def idempotency(self) -> IdempotencyStore: ...
@@ -323,6 +365,25 @@ class EmailDirectory(Protocol):
 
     async def resolve(self, user_ids: list[UUID]) -> list[Recipient]:
         """Адреса для игроков; без адреса или с неподтверждённым - пропускаются."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class UserPage:
+    """Страница активных пользователей: id по возрастанию и курсор следующей (``None`` - конец)."""
+
+    ids: list[UUID]
+    next_cursor: UUID | None
+
+
+class UserDirectory(Protocol):
+    """Активные пользователи (аудитория ``active_users``). Принадлежат identity, e-mail нет.
+
+    Ошибки - ``DependencyUnavailableError`` с теми же кодами, что у ``EmailDirectory``.
+    """
+
+    async def active_after(self, after: UUID | None, limit: int) -> UserPage:
+        """Следующая страница после курсора ``after`` (``None`` - с начала)."""
         ...
 
 

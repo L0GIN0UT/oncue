@@ -336,6 +336,10 @@ class SocialClient(Protocol):
         """Отношение зрителя к игроку (``/v1/players/{id}/relation``)."""
         ...
 
+    async def relations(self, token: str, user_ids: list[UUID]) -> dict[UUID, PlayerRelation]:
+        """Отношение зрителя к нескольким игрокам одним вызовом (``/v1/players/relations``)."""
+        ...
+
     async def friends(self, token: str) -> list[FriendCard]:
         """Друзья владельца со статусом (``/v1/me/friends``)."""
         ...

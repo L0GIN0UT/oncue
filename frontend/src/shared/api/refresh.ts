@@ -7,6 +7,7 @@
  * (identity перевыдаёт `gv_csrf` при каждом refresh).
  */
 import { CSRF_HEADER, csrfToken } from "../lib/cookies";
+import { reportIfBanned } from "./banned";
 
 export const REFRESH_PATH = "/api/identity/v1/auth/refresh";
 const LOCK_NAME = "gv-auth-refresh";
@@ -50,6 +51,8 @@ export function refreshSession(
         credentials: "same-origin",
         headers: current ? { [CSRF_HEADER]: current } : {},
       });
+      // 403 `auth.account_banned`: аккаунт заблокирован при открытой сессии (ADR 0052).
+      if (!res.ok) await reportIfBanned(res);
       return res.ok;
     } catch {
       return false;

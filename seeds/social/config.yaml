@@ -41,3 +41,12 @@ reports:
 sanctions:
   max_duration_s: 31536000
   min_duration_s: 3600
+win_trading:
+  forfeit_series:
+    streak_min: 3
+    window_min: 5
+    window_s: 604800
+  pair_repeat:
+    min_matches: 5
+    strong_streak: 3
+    window_s: 604800

@@ -364,6 +364,8 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
     // ---------------------------------------------------------------- bff-web
     http.get("*/api/web/v1/session", ({ request }) => {
       const subject = subjectOf(request);
+      if (subject?.startsWith("user.") && world.scenario.social?.sessionBanned)
+        return problem(401, "auth.token_expired");
       if (!subject) return HttpResponse.json({ subject: null });
       if (subject.startsWith("guest."))
         return HttpResponse.json({ subject: { kind: "guest", display_name: null } });
@@ -448,6 +450,8 @@ export function createHandlers(world: MockWorld, matchWorld?: MatchWorld): HttpH
 
     http.post("*/api/identity/v1/auth/refresh", ({ request }) => {
       const subject = refreshSubjectOf(request, world);
+      if (subject?.startsWith("user.") && world.scenario.social?.sessionBanned)
+        return problem(403, "auth.account_banned");
       if (!subject) return problem(401, "auth.refresh_invalid");
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       world.refreshCalls += 1;

@@ -62,8 +62,26 @@ class DeletedFriendship:
     user_b: UUID
 
 
+@dataclass(frozen=True, slots=True)
+class RelationFacts:
+    """Факты зрителя об одном игроке для ``relation_of`` (читаются пакетом)."""
+
+    nickname: str | None
+    privacy: Privacy
+    is_friend: bool
+    viewer_blocked_target: bool
+    target_blocked_viewer: bool
+    outgoing_pending: bool
+
+
 class FriendsRepository(Protocol):
     """Данные друзей, блокировок, приватности и проекций (одна транзакция)."""
+
+    async def relation_facts(
+        self, viewer: UUID, targets: Sequence[UUID]
+    ) -> dict[UUID, RelationFacts]:
+        """Факты зрителя о каждом игроке пакетом (число запросов не зависит от размера пачки)."""
+        ...
 
     # --- блокировки порядка (гонки)
     async def lock_users(self, *user_ids: UUID) -> None:

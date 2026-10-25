@@ -2,7 +2,7 @@
   "$id": "urn:guessverse:contracts:events:collections:CollectionPublished:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Сборник опубликован впервые или опубликована новая версия состава из черновика (ADR 0028). aggregate_id — collection_id. Несёт полный снимок: потребитель (game, media-pipeline) заменяет проекцию целиком. Без названия и описания (UGC-текст живёт только в collections).",
+  "description": "Сборник опубликован впервые или опубликована новая версия состава из черновика (ADR 0028). aggregate_id — collection_id. Несёт полный снимок: потребитель (game, media-pipeline) заменяет проекцию целиком. Без описания (UGC-текст живёт в collections); название и теги - необязательные поля (ADR 0067).",
   "properties": {
     "author_id": {
       "anyOf": [
@@ -95,6 +95,21 @@
         "published",
         "hidden"
       ],
+      "type": "string"
+    },
+    "tags": {
+      "description": "Ключи тегов сборника (словарь meta collections). Необязательно: старые события без поля; нет поля - теги неизвестны (ADR 0067)",
+      "items": {
+        "maxLength": 32,
+        "pattern": "^[a-z][a-z0-9_]{0,31}$",
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "title": {
+      "description": "Название сборника (нормализованное, обрезано до 120). Необязательно: старые события без поля (ADR 0067)",
+      "maxLength": 120,
       "type": "string"
     },
     "version": {

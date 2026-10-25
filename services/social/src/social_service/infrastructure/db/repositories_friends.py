@@ -17,6 +17,7 @@ from social_service.application.ports.friends import (
     DeletedFriendship,
     FriendRow,
     PendingView,
+    RelationFacts,
     RequestRow,
 )
 from social_service.domain.friends import Privacy, ordered_pair
@@ -48,6 +49,78 @@ class SqlFriendsRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
+
+    async def relation_facts(
+        self, viewer: UUID, targets: Sequence[UUID]
+    ) -> dict[UUID, RelationFacts]:
+        ids = list(dict.fromkeys(targets))
+        if not ids:
+            return {}
+        s = self._s
+        nicknames = {
+            r.user_id: r.nickname
+            for r in await s.execute(
+                select(users_proj.c.user_id, users_proj.c.nickname).where(
+                    users_proj.c.user_id.in_(ids)
+                )
+            )
+        }
+        p = privacy_settings.c
+        privacies = {
+            r.user_id: Privacy(r.profile_public, r.stats_public, r.friend_requests)
+            for r in await s.execute(
+                select(p.user_id, p.profile_public, p.stats_public, p.friend_requests).where(
+                    p.user_id.in_(ids)
+                )
+            )
+        }
+        f = friendships.c
+        friends: set[UUID] = set()
+        for r in await s.execute(
+            select(f.user_a, f.user_b).where(
+                or_(
+                    (f.user_a == viewer) & f.user_b.in_(ids),
+                    (f.user_b == viewer) & f.user_a.in_(ids),
+                )
+            )
+        ):
+            friends.add(r.user_b if r.user_a == viewer else r.user_a)
+        b = blocks.c
+        viewer_blocked: set[UUID] = set()
+        blocked_viewer: set[UUID] = set()
+        for r in await s.execute(
+            select(b.blocker_id, b.blocked_id).where(
+                or_(
+                    (b.blocker_id == viewer) & b.blocked_id.in_(ids),
+                    (b.blocked_id == viewer) & b.blocker_id.in_(ids),
+                )
+            )
+        ):
+            if r.blocker_id == viewer:
+                viewer_blocked.add(r.blocked_id)
+            else:
+                blocked_viewer.add(r.blocker_id)
+        q = friend_requests.c
+        pending = set(
+            (
+                await s.scalars(
+                    select(q.to_user_id).where(
+                        q.from_user_id == viewer, q.to_user_id.in_(ids), q.status == "pending"
+                    )
+                )
+            ).all()
+        )
+        return {
+            target: RelationFacts(
+                nickname=nicknames.get(target),
+                privacy=privacies.get(target, Privacy()),
+                is_friend=target in friends,
+                viewer_blocked_target=target in viewer_blocked,
+                target_blocked_viewer=target in blocked_viewer,
+                outgoing_pending=target in pending,
+            )
+            for target in ids
+        }
 
     # --- блокировки порядка
     async def _advisory(self, key: str) -> None:

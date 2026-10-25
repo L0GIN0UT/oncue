@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from uuid import UUID
 
 import structlog
@@ -25,7 +27,12 @@ from gv_service import (
     ServiceAuthNotConfiguredError,
     build_service_token_provider,
 )
-from notifications_service.application.audience import FanOutAudience, RecordRunFinished
+from notifications_service.application.audience import (
+    EraseUser,
+    FanOutAudience,
+    PurgeErasedUsers,
+    RecordRunFinished,
+)
 from notifications_service.application.broadcasts import (
     BroadcastQueries,
     CreateBroadcast,
@@ -43,6 +50,7 @@ from notifications_service.application.ports import (
     PushSender,
     RealtimePublisher,
     UnitOfWorkFactory,
+    UserDirectory,
 )
 from notifications_service.application.type_flags import NotificationTypeAdmin
 from notifications_service.application.type_switch import TypeSwitch
@@ -53,8 +61,10 @@ from notifications_service.infrastructure.db.repositories import SqlUnitOfWork
 from notifications_service.infrastructure.email import (
     GvEmailSender,
     HttpEmailDirectory,
+    HttpUserDirectory,
     NullPushSender,
     UnconfiguredEmailDirectory,
+    UnconfiguredUserDirectory,
     smtp_transport,
 )
 from notifications_service.infrastructure.limiter import RedisAttemptLimiter
@@ -86,6 +96,8 @@ class Adapters:
     directory: EmailDirectory | None = None
     push: PushSender | None = None
     tasks: TaskQueue | None = None
+    users: UserDirectory | None = None
+    sleep: Callable[[float], Awaitable[None]] | None = None
 
 
 class NotificationsContainer:
@@ -111,6 +123,8 @@ class NotificationsContainer:
         self.dispatcher = PostCommitDispatcher(self.realtime)
         self.email: EmailSender = adapters.email or self._build_email()
         self.directory: EmailDirectory = adapters.directory or self._build_directory()
+        self.users: UserDirectory = adapters.users or self._build_user_directory()
+        self.sleep: Callable[[float], Awaitable[None]] = adapters.sleep or asyncio.sleep
         self.push: PushSender = adapters.push or NullPushSender()
         self.tasks: TaskQueue = adapters.tasks or self._build_tasks()
 
@@ -157,6 +171,18 @@ class NotificationsContainer:
             log.warning("notifications.service_auth_not_configured", audience=IDENTITY_AUDIENCE)
             return UnconfiguredEmailDirectory()
         directory = HttpEmailDirectory(
+            self._cfg.identity_url, tokens, timeout_s=self._cfg.identity_timeout_s
+        )
+        self.infra.add_closer(directory.aclose)
+        return directory
+
+    def _build_user_directory(self) -> UserDirectory:
+        """Активные пользователи из identity; без ``GV_SERVICE_AUTH__*`` - заглушка."""
+        try:
+            tokens = build_service_token_provider(self.infra, IDENTITY_AUDIENCE)
+        except ServiceAuthNotConfiguredError:
+            return UnconfiguredUserDirectory()
+        directory = HttpUserDirectory(
             self._cfg.identity_url, tokens, timeout_s=self._cfg.identity_timeout_s
         )
         self.infra.add_closer(directory.aclose)
@@ -226,6 +252,19 @@ class NotificationsContainer:
         """Запись завершения запуска (в транзакции consumer - с ``session``)."""
         return RecordRunFinished(self.uow_factory(session))
 
+    def erase_user(self, session: AsyncSession | None = None) -> EraseUser:
+        """Удаление данных игрока (в транзакции consumer - с ``session``)."""
+        return EraseUser(self.uow_factory(session), self.infra.clock)
+
+    @property
+    def purge_erased(self) -> PurgeErasedUsers:
+        """Очистка tombstone удалённых игроков по сроку."""
+        return PurgeErasedUsers(
+            self.uow_factory(),
+            self.infra.clock,
+            timedelta(days=self._cfg.erased_retention_days),
+        )
+
     @property
     def fan_out(self) -> FanOutAudience:
         """Массовая доставка in-app по аудитории типа."""
@@ -237,6 +276,11 @@ class NotificationsContainer:
             self.dispatcher,
             switch=self.type_switch,
             batch_size=self._cfg.fanout_batch_size,
+            users=self.users,
+            pause_s=self._cfg.fanout_batch_pause_s,
+            page_retries=self._cfg.fanout_page_retries,
+            retry_pause_s=self._cfg.fanout_retry_pause_s,
+            sleep=self.sleep,
         )
 
     @property

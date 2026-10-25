@@ -540,6 +540,7 @@ async def test_relation_is_identical_for_hidden_unknown_and_blocking(
         "is_friend": False,
         "can_send_request": False,
         "blocked_by_me": False,
+        "nickname": None,
     }
     assert await relation(uuid7()) == empty
     assert await relation(hidden) == empty
@@ -550,6 +551,7 @@ async def test_relation_is_identical_for_hidden_unknown_and_blocking(
         "profile_visible": True,
         "stats_visible": True,
         "can_send_request": True,
+        "nickname": "Bobby",
     }
     await social.befriend(alice, bobby)
     assert (await relation(bobby))["is_friend"] is True

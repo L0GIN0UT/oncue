@@ -107,8 +107,9 @@ class RoomSettings(BaseModel):
 class SettingsOptions(BaseModel):
     """Что хост может выбрать (``session.lobby.overridable`` шаблона, D12); ``null`` — нельзя.
 
-    ``answer_format`` и ``clue_type`` в 4a всегда ``null``: план game их пока не принимает
-    (выбор — 422 ``match.setting_not_allowed``, ``details.reason = not_supported_yet``).
+    ``answer_format`` и ``clue_type`` — разрешённые шаблоном варианты (ADR 0070): game строит
+    план под выбранные; несовместимое сочетание — 422 ``match.setting_not_allowed``
+    (``details.reason = incompatible``) при старте.
     """
 
     rounds: list[int] | None = None

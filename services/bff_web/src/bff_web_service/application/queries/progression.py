@@ -214,9 +214,15 @@ class GetPlayerPage:
         progress: Block[PublicProgress] = (
             Block.unavailable() if result is None else block_of(result, "player.progress")
         )
+        nickname = (
+            relation.nickname
+            if isinstance(relation, PlayerRelation) and relation.profile_visible
+            else None
+        )
         return PlayerPage(
             blocks=PlayerBlocks(progress=progress, appearance=appearance, social=social_block),
             restricted=restricted,
+            nickname=nickname,
         )
 
 

@@ -121,6 +121,25 @@ class PlayerRelation(BaseModel):
     is_friend: bool
     can_send_request: bool
     blocked_by_me: bool
+    nickname: str | None = Field(
+        default=None,
+        description=(
+            "Ник игрока - только если профиль виден зрителю; для скрытого, заблокировавшего "
+            "и неизвестного игрока `null` (ответы неразличимы)"
+        ),
+    )
+
+
+class PlayerRelationItem(PlayerRelation):
+    """Отношение к одному игроку пакета."""
+
+    user_id: UUID
+
+
+class PlayerRelations(BaseModel):
+    """Пакетный ответ `relations`: по элементу на каждого запрошенного игрока (без дублей)."""
+
+    items: list[PlayerRelationItem]
 
 
 class RoomInviteCreate(_Request):
@@ -389,6 +408,37 @@ class BehaviourCounters(BaseModel):
     matches_total: int = Field(ge=0)
 
 
+WinTradingKind = Literal["pair_repeat", "forfeit_series", "forfeit_window"]
+WinTradingSeverity = Literal["medium", "high"]
+
+
+class WinTradingSignal(BaseModel):
+    """Сигнал win-trading (только модератору; не вердикт, автосанкций нет)."""
+
+    kind: WinTradingKind = Field(
+        description="`pair_repeat` - повторы пары; `forfeit_series` - сдачи подряд против одного "
+        "соперника; `forfeit_window` - сдачи за окно"
+    )
+    user_id: UUID = Field(description="Игрок (у пары - с меньшим идентификатором)")
+    other_user_id: UUID | None = Field(description="Соперник; для `forfeit_window` нет")
+    count: int = Field(ge=1, description="Матчей пары или сдач в окне")
+    streak: int = Field(
+        ge=0, description="Побед одного игрока подряд (пара) или сдач подряд (серия)"
+    )
+    severity: WinTradingSeverity
+    window_s: int = Field(ge=1, description="Окно конфига, секунды")
+    first_at: datetime
+    last_at: datetime
+    details: dict[str, JsonValue] = Field(description="`wins` по игрокам / число соперников")
+
+
+class WinTradingPage(BaseModel):
+    """Страница очереди сигналов (курсор), свежие первыми."""
+
+    items: list[WinTradingSignal]
+    next_cursor: Cursor | None
+
+
 class UserModeration(BaseModel):
     """Карточка игрока для модератора."""
 
@@ -397,3 +447,6 @@ class UserModeration(BaseModel):
     counters: BehaviourCounters
     sanctions: list[SanctionView]
     cases: list[CaseSummary]
+    win_trading: list[WinTradingSignal] = Field(
+        default_factory=list, description="Сигналы win-trading с участием игрока"
+    )

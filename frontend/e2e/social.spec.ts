@@ -242,6 +242,23 @@ test("вход заблокированного аккаунта: сообщен
   await expect(page.getByText("Аккаунт заблокирован.")).toBeVisible();
 });
 
+test("аккаунт забанили при открытой сессии: экран блокировки без причины и выход", async ({
+  page,
+  scenario,
+  expectAccessible,
+}) => {
+  await login(page);
+  await scenario({ social: { sessionBanned: true } });
+  await page.reload(); // сессия не принята (access истёк), refresh -> 403 auth.account_banned
+  await expect(page).toHaveURL(/\/banned$/);
+  await expect(page.getByRole("heading", { name: "Аккаунт заблокирован" })).toBeVisible();
+  await expect(page.getByText(/причин/i)).toHaveCount(0);
+  await expectAccessible(page);
+  await page.getByTestId("banned-logout").click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByTestId("user-name")).toHaveCount(0);
+});
+
 test("присутствие: после входа уходит сигнал на social", async ({ page }) => {
   const beat = page.waitForRequest(
     (r) => r.method() === "POST" && r.url().endsWith("/api/social/v1/me/presence"),

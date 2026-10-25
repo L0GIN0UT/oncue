@@ -80,3 +80,23 @@ class MapForm(MutationForm):
                 f"Файл {upload.size} байт больше допустимых {self.limit_bytes} байт"
             )
         return upload
+
+
+class FindsMetaForm(forms.Form):
+    """Служебные поля режима формой: причина (для сохранения) и ключ идемпотентности."""
+
+    reason = forms.CharField(required=False, max_length=500, strip=True)
+    idempotency_key = forms.UUIDField(widget=forms.HiddenInput)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            from gv_core.ids import uuid7
+
+            self.initial.setdefault("idempotency_key", str(uuid7()))
+
+    def require_reason(self) -> bool:
+        if len(self.cleaned_data.get("reason") or "") < 3:  # noqa: PLR2004 - как MutationForm
+            self.add_error("reason", "укажите причину (от 3 символов)")
+            return False
+        return True

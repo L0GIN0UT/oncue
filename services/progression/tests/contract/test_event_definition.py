@@ -121,3 +121,32 @@ def test_no_final_find_is_rejected() -> None:
     assert list(VALIDATOR.iter_errors(data)) != []
     with pytest.raises(ValidationError):
         EventDefinition.model_validate(data)
+
+
+def _tags(d: dict[str, Any], metric: str, tags: Any) -> None:
+    d["finds"][1]["trigger"].update(metric=metric, params={"collection_tags": tags})
+
+
+@pytest.mark.parametrize("tags", [["new_year"], ["new_year", "family"], []])
+def test_collection_tags_accepted_for_collection_played(tags: list[str]) -> None:
+    data = mutated(lambda d: _tags(d, "collection_played", tags))
+    assert list(VALIDATOR.iter_errors(data)) == []
+    EventDefinition.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("metric", "tags"),
+    [
+        ("rounds_played", ["new_year"]),
+        ("collection_played", ["Bad"]),
+        ("collection_played", [""]),
+        ("collection_played", ["a", "a"]),
+        ("collection_played", [f"t{i}" for i in range(21)]),
+        ("collection_played", ["x" * 33]),
+    ],
+)
+def test_collection_tags_rejected(metric: str, tags: list[str]) -> None:
+    data = mutated(lambda d: _tags(d, metric, tags))
+    assert list(VALIDATOR.iter_errors(data)) != []
+    with pytest.raises(ValidationError):
+        EventDefinition.model_validate(data)

@@ -236,7 +236,9 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     }
     # Этап 5b: progression -> media_pipeline (аватарки), notifications -> identity (адреса).
     assert clients["progression"]["audiences"] == {"media_pipeline": ["ugc.image"]}
-    assert clients["notifications"]["audiences"] == {"identity": ["users.emails.read"]}
+    assert clients["notifications"]["audiences"] == {
+        "identity": ["users.emails.read", "users.active.list"]
+    }
     secrets_seen = set()
     for client_id, client in clients.items():
         secret = values[service_secret_env(client_id)]

@@ -175,6 +175,13 @@ class PlayerAppearance(BaseModel):
     custom_avatar_url: str | None = Field(
         description="Одобренная своя аватарка; null - аватар из слота"
     )
+    custom_avatar_asset_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Ассет одобренной аватарки: объект жалобы `avatar` в social; "
+            "null - аватарки нет (необязательное поле, ADR 0069)"
+        ),
+    )
 
 
 class PlayersAppearance(BaseModel):

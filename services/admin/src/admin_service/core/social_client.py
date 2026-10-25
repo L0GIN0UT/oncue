@@ -88,8 +88,29 @@ class SocialAdminClient:
 
     # ------------------------------------------------------------------ игрок и санкции
     def user_moderation(self, user_id: UUID) -> Any:
-        """Карточка игрока: счётчики порядочности, санкции, кейсы."""
+        """Карточка игрока: счётчики порядочности, санкции, кейсы, сигналы win-trading."""
         return self._client.get(f"/admin/v1/users/{user_id}/moderation")
+
+    def win_trading_signals(
+        self,
+        *,
+        kind: str | None = None,
+        severity: str | None = None,
+        user_id: UUID | None = None,
+        cursor: str | None = None,
+        limit: int = 30,
+    ) -> Any:
+        """Сигналы win-trading (свежие первыми) -> ``{items, next_cursor}``; только показ."""
+        return self._client.get(
+            "/admin/v1/win-trading/signals",
+            params={
+                "kind": kind,
+                "severity": severity,
+                "user_id": str(user_id) if user_id else None,
+                "cursor": cursor,
+                "limit": limit,
+            },
+        )
 
     def grant_sanction(
         self,

@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { useFormatter, useTranslations } from "next-intl";
 import { Users } from "lucide-react";
-import type { MatchModeRef, MyMatchCard, OpenRoomCard } from "@/shared/api/types";
+import type {
+  MatchModeRef,
+  MatchParticipantCard,
+  MyMatchCard,
+  OpenRoomCard,
+} from "@/shared/api/types";
 import { buttonVariants } from "@/shared/ui/button";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
+import { ReportButton } from "@/features/reports/ReportDialog";
 
 export function useModeTitle() {
   const t = useTranslations();
@@ -64,7 +70,10 @@ export function OpenRoomList({ rooms }: { rooms: OpenRoomCard[] }) {
   );
 }
 
-export function MyMatchList({ matches }: { matches: MyMatchCard[] }) {
+/** Карточка истории: у ответа bff есть `participants`, у прямого ответа match (`/me`) - нет. */
+type HistoryCard = MyMatchCard & { participants?: MatchParticipantCard[] };
+
+export function MyMatchList({ matches }: { matches: HistoryCard[] }) {
   const t = useTranslations();
   const format = useFormatter();
   const title = useModeTitle();
@@ -108,6 +117,31 @@ export function MyMatchList({ matches }: { matches: MyMatchCard[] }) {
               {t("online.myMatches.score", { score: m.score })}
             </span>
           </Link>
+          {m.participants && m.participants.length > 0 && (
+            <ul
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pb-3"
+              aria-label={t("online.myMatches.participants")}
+              data-testid={`history-players-${m.match_id}`}
+            >
+              {m.participants.map((p) => (
+                <li key={p.user_id} className="flex items-center gap-1 text-sm">
+                  <span dir="auto" className="text-ink-muted">
+                    {p.nickname}
+                  </span>
+                  {p.can_report && (
+                    <ReportButton
+                      kind="player"
+                      targetId={p.user_id}
+                      contextMatchId={m.match_id}
+                      label={t("match.rate.report")}
+                      ariaLabel={t("social.report.playerLabel", { name: p.nickname })}
+                      testId={`history-report-${p.nickname}`}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </li>
       ))}
     </ul>

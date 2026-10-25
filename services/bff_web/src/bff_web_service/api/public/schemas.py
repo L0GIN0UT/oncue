@@ -267,6 +267,13 @@ class AppearanceCard(BaseModel):
     custom_avatar_url: str | None = Field(
         default=None, description="Одобренная своя аватарка; null — аватар из слота"
     )
+    custom_avatar_asset_id: UUID | None = Field(
+        default=None,
+        description=(
+            "Ассет одобренной аватарки: объект жалобы `avatar` (ADR 0069); null — аватарки нет "
+            "или источник не отдал"
+        ),
+    )
 
 
 class PlayerAppearanceCard(BaseModel):
@@ -532,6 +539,13 @@ class PlayerPage(BaseModel):
     """``GET /v1/pages/players/{user_id}``: только пользователь с аккаунтом, `private, no-store`."""
 
     blocks: PlayerBlocks
+    nickname: str | None = Field(
+        default=None,
+        description=(
+            "Ник игрока из social (ADR 0069); null — профиль скрыт, свой профиль или social "
+            "недоступен: фронт показывает нейтральное «Игрок»"
+        ),
+    )
     restricted: bool = Field(
         default=False,
         description=(
@@ -980,6 +994,14 @@ class OpenRoomsList(BaseModel):
     next_cursor: str | None = None
 
 
+class MatchParticipantCard(BaseModel):
+    """Другой игрок матча в карточке истории (для жалобы)."""
+
+    user_id: UUID
+    nickname: str
+    can_report: bool
+
+
 class MyMatchCard(BaseModel):
     """Матч в «Моих матчах» (``match /v1/me/matches``)."""
 
@@ -992,6 +1014,13 @@ class MyMatchCard(BaseModel):
     score: int = Field(ge=0)
     outcome: DuelOutcome | None = Field(description="Только у дуэли")
     my_finish: PlayerFinish
+    participants: list[MatchParticipantCard] = Field(
+        default_factory=list,
+        description=(
+            "ADR 0069: другие игроки матча для жалобы из истории; пусто — игроки не получены "
+            "(источник недоступен, лимит `online_match_players_limit` исчерпан)"
+        ),
+    )
 
 
 class MyMatchesList(BaseModel):
@@ -1200,6 +1229,13 @@ class MatchPlayerCard(BaseModel):
     can_report: bool = Field(
         default=False,
         description="5c: показывать кнопку жалобы (не сам игрок, матч не соло); решает bff",
+    )
+    can_add_friend: bool = Field(
+        default=False,
+        description=(
+            "ADR 0069: можно позвать в друзья (social `can_send_request` по участникам пачкой); "
+            "social недоступен — false"
+        ),
     )
 
 

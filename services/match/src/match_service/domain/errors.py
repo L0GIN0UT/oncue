@@ -144,3 +144,20 @@ _STATUS_OF: tuple[tuple[type[AppError], int], ...] = (
     (DomainError, 422),
     (RateLimitedError, _RATE_LIMITED_STATUS),
 )
+
+
+_OVERRIDE_FIELDS = {"clue": "clue_type"}
+
+
+def override_details(game_code: str, raw: dict[str, Any] | None) -> dict[str, Any]:
+    """Подробности отказа game по переопределениям лобби (ADR 0070) в терминах настроек match.
+
+    ``game.override_not_allowed`` — значения нет в разрешённых шаблоном (``field`` —
+    настройка комнаты); ``game.override_invalid`` — сочетание не прошло валидатор ядра
+    (``errors`` — ``[{path, code}]``, без данных контента).
+    """
+    raw = raw or {}
+    if game_code == "game.override_not_allowed":
+        field = str(raw.get("field", ""))
+        return {"field": _OVERRIDE_FIELDS.get(field, field), "reason": "not_allowed"}
+    return {"field": "overrides", "reason": "incompatible", "errors": raw.get("errors", [])}

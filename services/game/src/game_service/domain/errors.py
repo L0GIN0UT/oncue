@@ -224,6 +224,15 @@ class ModeNotOnlineError(InvalidInputError):
     default_code = "game.mode_not_online"
 
 
+class OverrideInvalidError(InvalidInputError):
+    """Переопределённый конфиг лобби не проходит валидатор ядра (422).
+
+    ``details["errors"]`` — ``[{path, code}]`` того же вида, что у проверки конфига.
+    """
+
+    default_code = "game.override_invalid"
+
+
 class TooManyCollectionsError(InvalidInputError):
     """Сборников больше ``source.collection.params.max_collections`` (422).
 

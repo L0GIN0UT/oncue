@@ -4,6 +4,19 @@
       "AppearanceCard": {
         "description": "Оформление профиля: по одному предмету на слот (ник и аватар берёт фронт из блока игрока).",
         "properties": {
+          "custom_avatar_asset_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ассет одобренной аватарки: объект жалобы `avatar` (ADR 0069); null — аватарки нет или источник не отдал",
+            "title": "Custom Avatar Asset Id"
+          },
           "custom_avatar_url": {
             "anyOf": [
               {
@@ -3459,9 +3472,40 @@
         "title": "MatchPage",
         "type": "object"
       },
+      "MatchParticipantCard": {
+        "description": "Другой игрок матча в карточке истории (для жалобы).",
+        "properties": {
+          "can_report": {
+            "title": "Can Report",
+            "type": "boolean"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname",
+          "can_report"
+        ],
+        "title": "MatchParticipantCard",
+        "type": "object"
+      },
       "MatchPlayerCard": {
         "description": "Игрок в итоге матча: место с ничьими (1, 1, 3), ``outcome`` — только у дуэли.",
         "properties": {
+          "can_add_friend": {
+            "default": false,
+            "description": "ADR 0069: можно позвать в друзья (social `can_send_request` по участникам пачкой); social недоступен — false",
+            "title": "Can Add Friend",
+            "type": "boolean"
+          },
           "can_report": {
             "default": false,
             "description": "5c: показывать кнопку жалобы (не сам игрок, матч не соло); решает bff",
@@ -3835,6 +3879,14 @@
             ],
             "description": "Только у дуэли",
             "title": "Outcome"
+          },
+          "participants": {
+            "description": "ADR 0069: другие игроки матча для жалобы из истории; пусто — игроки не получены (источник недоступен, лимит `online_match_players_limit` исчерпан)",
+            "items": {
+              "$ref": "#/components/schemas/MatchParticipantCard"
+            },
+            "title": "Participants",
+            "type": "array"
           },
           "place": {
             "minimum": 1.0,
@@ -4377,6 +4429,18 @@
         "properties": {
           "blocks": {
             "$ref": "#/components/schemas/PlayerBlocks"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ник игрока из social (ADR 0069); null — профиль скрыт, свой профиль или social недоступен: фронт показывает нейтральное «Игрок»",
+            "title": "Nickname"
           },
           "restricted": {
             "default": false,

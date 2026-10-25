@@ -120,6 +120,11 @@ export const PLAYERS: PublicProgressCard[] = [
   },
 ];
 
+export const PLAYER_NICKNAMES: Record<string, string> = {
+  "00000000-0000-4000-8000-000000000902": "Мастер",
+};
+export const PLAYER_AVATAR_ASSET = "00000000-0000-4000-8000-000000000a02";
+
 export const SECTORS: WheelSectorCard[] = [
   { key: "verses_5", title: "5 Версов", chance: 0.3, prize: { kind: "verses", amount: 5 } },
   {
@@ -262,6 +267,8 @@ export function createProgressionHandlers(world: MockWorld): HttpHandler[] {
             status: "ok" as const,
             data: {
               custom_avatar_url: null,
+              // Чужая одобренная аватарка: объект жалобы `avatar` (ADR 0069).
+              custom_avatar_asset_id: restricted ? null : PLAYER_AVATAR_ASSET,
               slots: [{ slot: "title", item: itemByKey("champion") }],
             },
           };
@@ -269,6 +276,8 @@ export function createProgressionHandlers(world: MockWorld): HttpHandler[] {
         {
           blocks: { progress, appearance, social: playerSocialBlock(world, playerId) },
           restricted,
+          // Ник даёт social только при видимом профиле (ADR 0069).
+          nickname: restricted ? null : (PLAYER_NICKNAMES[playerId] ?? null),
         } satisfies PlayerPage,
         {
           headers: NO_STORE,

@@ -58,6 +58,7 @@ class SoloFinished:
     rounds_played: int
     correct_answers: int
     collection_id: UUID | None = None
+    collection_tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,13 +135,14 @@ class ProgressTracker:
             MetricUpdate(metrics.ROUNDS_PLAYED, game.rounds_played, game.domain),
             MetricUpdate(metrics.CORRECT_ANSWERS, game.correct_answers, game.domain),
         ]
-        if game.collection_id is not None:  # фильтра по тегу нет: GameFinished тегов не несёт
+        if game.collection_id is not None:  # теги - необязательное поле события (ADR 0067)
             updates.append(
                 MetricUpdate(
                     metrics.COLLECTION_PLAYED,
                     1,
                     game.domain,
                     collection_id=str(game.collection_id),
+                    collection_tags=game.collection_tags,
                 )
             )
         return await self.record(

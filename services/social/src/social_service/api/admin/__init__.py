@@ -20,6 +20,7 @@ from social_service.api.admin.cases import register_case_routes
 from social_service.api.admin.config import register_config_routes
 from social_service.api.admin.sanctions import build_sanctions_router
 from social_service.api.admin.services import AdminServices
+from social_service.api.admin.win_trading import register_win_trading_routes
 from social_service.application.sanctions import SanctionService
 
 
@@ -28,5 +29,6 @@ def build_admin_router(services: AdminServices, sanctions: SanctionService) -> A
     router = APIRouter(prefix="/admin/v1", tags=["social-admin"])
     register_case_routes(router, services)
     register_config_routes(router, services)
-    router.include_router(build_sanctions_router(sanctions))
+    router.include_router(build_sanctions_router(sanctions, services.win_trading))
+    register_win_trading_routes(router, services)
     return router

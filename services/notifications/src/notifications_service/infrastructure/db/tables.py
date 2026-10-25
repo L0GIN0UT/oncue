@@ -9,7 +9,8 @@
 * ``finished_event_runs`` - завершённые запуски событий progression (``EventRunFinished``): по ним
   воркер массовой доставки прекращает рассылку (ADR 0054);
 * ``notification_type_flags`` - решение админа о включённости типа (нет строки - включён, ADR 0066);
-* ``admin_actions`` / ``idempotency_keys`` - аудит и ключи идемпотентности admin-мутаций.
+* ``erased_users`` - tombstone удалённых игроков (``identity.UserDeleted``), чистится по сроку;
+* ``admin_actions`` /``idempotency_keys`` - аудит и ключи идемпотентности admin-мутаций.
 """
 
 from __future__ import annotations
@@ -153,6 +154,14 @@ notification_type_flags = Table(
     Column("enabled", Boolean, nullable=False),
     Column("changed_by", Uuid(as_uuid=True), nullable=False),
     Column("changed_at", DateTime(timezone=True), nullable=False),
+)
+
+# Tombstone удалённых игроков: пачка массовой доставки не пишет им уведомления (ADR 0069).
+erased_users = Table(
+    "erased_users",
+    _md,
+    Column("user_id", Uuid(as_uuid=True), primary_key=True),
+    Column("erased_at", DateTime(timezone=True), nullable=False, index=True),
 )
 
 admin_actions = Table(

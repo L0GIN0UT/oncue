@@ -346,6 +346,11 @@ export interface components {
          */
         AppearanceCard: {
             /**
+             * Custom Avatar Asset Id
+             * @description Ассет одобренной аватарки: объект жалобы `avatar` (ADR 0069); null — аватарки нет или источник не отдал
+             */
+            custom_avatar_asset_id?: string | null;
+            /**
              * Custom Avatar Url
              * @description Одобренная своя аватарка; null — аватар из слота
              */
@@ -1702,10 +1707,31 @@ export interface components {
             blocks: components["schemas"]["MatchBlocks"];
         };
         /**
+         * MatchParticipantCard
+         * @description Другой игрок матча в карточке истории (для жалобы).
+         */
+        MatchParticipantCard: {
+            /** Can Report */
+            can_report: boolean;
+            /** Nickname */
+            nickname: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * MatchPlayerCard
          * @description Игрок в итоге матча: место с ничьими (1, 1, 3), ``outcome`` — только у дуэли.
          */
         MatchPlayerCard: {
+            /**
+             * Can Add Friend
+             * @description ADR 0069: можно позвать в друзья (social `can_send_request` по участникам пачкой); social недоступен — false
+             * @default false
+             */
+            can_add_friend: boolean;
             /**
              * Can Report
              * @description 5c: показывать кнопку жалобы (не сам игрок, матч не соло); решает bff
@@ -1886,6 +1912,11 @@ export interface components {
              * @description Только у дуэли
              */
             outcome: ("win" | "loss" | "draw") | null;
+            /**
+             * Participants
+             * @description ADR 0069: другие игроки матча для жалобы из истории; пусто — игроки не получены (источник недоступен, лимит `online_match_players_limit` исчерпан)
+             */
+            participants?: components["schemas"]["MatchParticipantCard"][];
             /** Place */
             place: number;
             /** Players */
@@ -2120,6 +2151,11 @@ export interface components {
          */
         PlayerPage: {
             blocks: components["schemas"]["PlayerBlocks"];
+            /**
+             * Nickname
+             * @description Ник игрока из social (ADR 0069); null — профиль скрыт, свой профиль или social недоступен: фронт показывает нейтральное «Игрок»
+             */
+            nickname?: string | null;
             /**
              * Restricted
              * @description 5c: профиль скрыт, игрок заблокировал зрителя или неизвестен — показаны только ник, аватар и оформление, `progress` = `unavailable`; ответы неразличимы (нет перечисления)

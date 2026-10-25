@@ -517,3 +517,33 @@ async def test_claim_of_not_yet_started_event_is_404(progression: Service) -> No
     assert_problem(await progression.claim(user, KEY, "leaf"), 404, "progression.event_not_found")
     page_response = await progression.get(f"/v1/events/{KEY}", user)
     assert_problem(page_response, 404, "progression.event_not_found")
+
+
+async def test_collection_tags_count_only_tagged_collections(progression: Service) -> None:
+    """ADR 0067: находка с collection_tags засчитывает сессию по сборнику с таким тегом."""
+    ev = progression.ev
+    await start_event(
+        progression,
+        ev.find("coll", 1, ev.trigger("collection_played", collection_tags=["new_year"])),
+        ev.find("fin", 2, final=True),
+    )
+    user = uuid7()
+    cases = [
+        ["rock"],  # другой тег
+        [],  # у сборника нет тегов
+        None,  # событие старого формата: поля нет вовсе
+    ]
+    for tags in cases:
+        event = progression.game_finished(user, [10])
+        event.payload["collection_id"] = str(uuid7())
+        if tags is None:
+            event.payload.pop("collection_tags", None)
+        else:
+            event.payload["collection_tags"] = tags
+        await deliver(progression, event)
+        assert finds_by_key(await page(progression, user))["coll"]["state"] == "open"
+    tagged = progression.game_finished(user, [10])
+    tagged.payload["collection_id"] = str(uuid7())
+    tagged.payload["collection_tags"] = ["rock", "new_year"]
+    await deliver(progression, tagged)
+    assert finds_by_key(await page(progression, user))["coll"]["state"] == "found"

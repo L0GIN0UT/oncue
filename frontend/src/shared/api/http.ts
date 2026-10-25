@@ -5,6 +5,7 @@
  * {@link NetworkError}, чтобы вызывающий мог повторить ход с тем же `Idempotency-Key`.
  */
 import { CSRF_HEADER, csrfToken } from "../lib/cookies";
+import { reportIfBanned, problemCodeOf } from "./banned";
 import { NetworkError } from "./errors";
 import { refreshSession } from "./refresh";
 
@@ -44,21 +45,15 @@ async function send(request: Request): Promise<Response> {
   }
 }
 
-async function problemCode(res: Response): Promise<string | null> {
-  try {
-    const body: unknown = await res.clone().json();
-    return body && typeof body === "object" && "code" in body ? String(body.code) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function apiFetch(request: Request): Promise<Response> {
   const retry = request.clone();
   const csrfAtRequest = csrfToken();
   const res = await send(request);
-  if (res.status !== 401 || request.url.includes("/api/identity/v1/auth/")) return res;
-  if (!shouldRefresh(await problemCode(res), csrfAtRequest)) return res;
+  const isAuthEndpoint = request.url.includes("/api/identity/v1/auth/");
+  // Вход и регистрация сами показывают «Аккаунт заблокирован» в форме; остальное - экран блокировки.
+  if (res.status === 403 && !isAuthEndpoint) await reportIfBanned(res);
+  if (res.status !== 401 || isAuthEndpoint) return res;
+  if (!shouldRefresh(await problemCodeOf(res), csrfAtRequest)) return res;
   const ok = await refreshSession(csrfAtRequest);
   return ok ? send(retry) : res;
 }

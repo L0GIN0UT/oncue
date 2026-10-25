@@ -99,3 +99,7 @@ tags:
     title_key: collections.tags.soundtrack
     domains: [music]
     search: [саундтреки, ost, soundtrack]
+  - key: new_year
+    title_key: collections.tags.new_year
+    domains: [music, film]
+    search: [новый год, новогодние, зима, new year]

@@ -249,6 +249,7 @@ def _social_defaults(social: ServiceStub) -> None:
         200, json={"incoming": [], "outgoing": []}
     )
     social.route("GET", "/v1/me/sanctions").respond(200, json={"items": []})
+    social.route("GET", "/v1/players/relations").respond(200, json={"items": []})
     social.route("GET", f"/v1/collections/{COLLECTION_ID}/comments").respond(
         200, json={"items": [], "total": 0, "next_cursor": None}
     )
@@ -304,6 +305,7 @@ async def bff(
             "breaker_failures": 3,
         },
         page_cache={"key_prefix": prefix},
+        pages={"relations_batch_size": 3},
     )
     runtime = await Infrastructure.open(settings, DEFINITION.tables)
     try:
@@ -1099,6 +1101,10 @@ def _online_routes(bff: Bff) -> tuple[respx.Route, respx.Route, respx.Route]:
         200, json=SAMPLES["my_matches"]
     )
     modes = bff.stubs.game.route("GET", "/v1/modes").respond(200, json=SAMPLES["online_modes"])
+    # 5c, ADR 0069: игроки карточки истории - из итога матча (тесты 4b их не проверяют).
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json=SAMPLES["match_result"]
+    )
     _rating_routes(bff)
     return rooms, matches, modes
 
@@ -1146,7 +1152,11 @@ async def test_online_page_for_user_all_blocks(bff: Bff) -> None:
     assert room["mode"]["ranked"] is False  # поле по умолчанию match
     assert room["settings"]["collection_ids"] == ["0192a3b4-c5d6-7e8f-9a0b-000000000c01"]
     assert blocks["open_rooms"]["data"]["next_cursor"] == "c2Vjb25k"
-    assert blocks["my_matches"] == {"status": "ok", "data": SAMPLES["my_matches"]}
+    cards = [{**m, "participants": []} for m in SAMPLES["my_matches"]["items"]]
+    assert blocks["my_matches"] == {
+        "status": "ok",
+        "data": {**SAMPLES["my_matches"], "items": cards},
+    }
     online_modes = blocks["modes"]["data"]
     assert [m["key"] for m in online_modes] == ["film.duel.frame", "film.lobby.collection"]
     assert online_modes[0]["online"] == {
@@ -1379,7 +1389,7 @@ async def test_match_page_result_items_and_library_flags(bff: Bff) -> None:
     blocks = response.json()["blocks"]
     expected = SAMPLES["match_result"]
     # 5c: `can_report` добавляет bff (в 0a - всегда false, решение в потоке F5).
-    players = [{**p, "can_report": False} for p in expected["players"]]
+    players = [{**p, "can_report": False, "can_add_friend": False} for p in expected["players"]]
     assert blocks["match"] == {"status": "ok", "data": {**expected, "players": players}}
     # Раунды 0 и 2 — одна единица: карточка и флаг по ней — по одному разу.
     assert [i["title"] for i in blocks["items"]["data"]] == ["Брат", "Брат 2"]
@@ -3247,3 +3257,191 @@ async def test_match_page_does_not_call_social(bff: Bff) -> None:
     friends, requests = _friends_routes(bff)
     await _report_flags(bff, bff.issuer.issue(user_id=PLAYER_1))
     assert friends.call_count == 0 and requests.call_count == 0
+
+
+# ----------------------------------------------------------------------------- 5c, хвосты 0069
+RELATIONS_PATH = "/v1/players/relations"
+
+
+def _relations_route(bff: Bff, *, can_send: set[UUID], visible: bool = True) -> respx.Route:
+    """``GET /v1/players/relations``: по каждому id, звать в друзья можно ``can_send``."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("user_ids")
+        items = [
+            {
+                **RELATION_OPEN,
+                "user_id": i,
+                "profile_visible": visible,
+                "can_send_request": UUID(i) in can_send,
+                "nickname": "nick",
+            }
+            for i in ids
+        ]
+        return httpx.Response(200, json={"items": items})
+
+    return bff.stubs.social.route("GET", RELATIONS_PATH).mock(side_effect=answer)
+
+
+async def _players(bff: Bff, token: str) -> dict[str, dict[str, Any]]:
+    response = await bff.client.get(f"/v1/pages/match/{MATCH_ID}", headers=bff.bearer(token))
+    assert response.status_code == 200, response.text
+    return {p["user_id"]: p for p in response.json()["blocks"]["match"]["data"]["players"]}
+
+
+async def test_player_page_carries_nickname_from_social(bff: Bff) -> None:
+    _player_routes(bff)
+    _relation(bff, nickname="Trinity")
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    assert response.json()["nickname"] == "Trinity"
+
+
+async def test_player_page_nickname_is_null_when_hidden_or_social_down(bff: Bff) -> None:
+    _player_routes(bff)
+    _relation(bff, profile_visible=False, stats_visible=False, nickname=None)
+    hidden = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    assert hidden.json()["nickname"] is None
+    _relation(bff).respond(503)
+    down = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    assert down.json()["nickname"] is None and down.status_code == 200
+
+
+async def test_player_page_nickname_is_null_for_own_profile(bff: Bff) -> None:
+    _player_routes(bff)
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue(user_id=PLAYER_ID))
+    )
+    assert response.json()["nickname"] is None
+
+
+async def test_appearance_passes_avatar_asset_id_when_present(bff: Bff) -> None:
+    asset = "0192a3b4-c5d6-7e8f-9a0b-000000000aa1"
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("user_ids")
+        players = [
+            {
+                "user_id": i,
+                "appearance": PROG_APPEARANCE,
+                "custom_avatar_url": "/media/avatars/p.webp",
+                **({"custom_avatar_asset_id": asset} if n == 0 else {}),
+            }
+            for n, i in enumerate(ids)
+        ]
+        return httpx.Response(200, json={"players": players})
+
+    bff.stubs.progression.route("GET", "/v1/appearance").mock(side_effect=answer)
+    bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(200, json=PLAYER)
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    data = response.json()["blocks"]["appearance"]["data"]
+    assert data["custom_avatar_asset_id"] == asset
+
+
+async def test_appearance_without_asset_id_is_null(bff: Bff) -> None:
+    _appearance_route(bff)  # старый progression: поля нет в ответе
+    bff.stubs.progression.route("GET", f"/v1/users/{PLAYER_ID}/progress").respond(200, json=PLAYER)
+    response = await bff.client.get(
+        f"/v1/pages/players/{PLAYER_ID}", headers=bff.bearer(bff.issuer.issue())
+    )
+    assert response.json()["blocks"]["appearance"]["data"]["custom_avatar_asset_id"] is None
+
+
+async def test_match_page_can_add_friend_comes_from_social_in_one_batch(bff: Bff) -> None:
+    _match_routes(bff)
+    relations = _relations_route(bff, can_send={PLAYER_2})
+    players = await _players(bff, bff.issuer.issue(user_id=PLAYER_1))
+    assert players[str(PLAYER_2)]["can_add_friend"] is True
+    assert players[str(PLAYER_1)]["can_add_friend"] is False
+    assert relations.call_count == 1
+    asked = relations.calls.last.request.url.params.get_list("user_ids")
+    assert asked == [str(PLAYER_2)]  # только чужие игроки, одним вызовом
+
+
+async def test_match_page_can_add_friend_false_for_friend_or_closed_requests(bff: Bff) -> None:
+    _match_routes(bff)
+    _relations_route(bff, can_send=set())
+    players = await _players(bff, bff.issuer.issue(user_id=PLAYER_1))
+    assert players[str(PLAYER_2)]["can_add_friend"] is False
+    assert players[str(PLAYER_2)]["can_report"] is True
+
+
+@pytest.mark.parametrize("failure", ["timeout", "503", "401"])
+async def test_match_page_social_failure_only_hides_add_friend(bff: Bff, failure: str) -> None:
+    _match_routes(bff)
+    route = _relations_route(bff, can_send={PLAYER_2})
+    if failure == "timeout":
+        route.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "503":
+        route.mock(return_value=httpx.Response(503))
+    else:
+        route.mock(
+            return_value=httpx.Response(
+                401, json={"code": "auth.unauthenticated", "title": "x", "status": 401}
+            )
+        )
+    players = await _players(bff, bff.issuer.issue(user_id=PLAYER_1))
+    assert players[str(PLAYER_2)]["can_add_friend"] is False
+    assert players[str(PLAYER_2)]["can_report"] is True
+
+
+async def test_match_page_non_participant_and_solo_do_not_call_social(bff: Bff) -> None:
+    _match_routes(bff)
+    relations = _relations_route(bff, can_send={PLAYER_1, PLAYER_2})
+    await _players(bff, bff.issuer.issue())  # зритель не участник
+    result = SAMPLES["match_result"]
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json={**result, "players": result["players"][:1]}
+    )
+    await _players(bff, bff.issuer.issue(user_id=PLAYER_1))  # соло
+    assert relations.call_count == 0
+
+
+async def test_match_page_relations_are_chunked_by_setting(bff: Bff) -> None:
+    template = SAMPLES["match_result"]
+    players = [
+        {**template["players"][0], "user_id": str(UUID(int=n)), "nickname": f"p{n}", "slot": n}
+        for n in range(1, 8)
+    ]
+    _match_routes(bff)
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json={**template, "players": players}
+    )
+    relations = _relations_route(bff, can_send={UUID(int=n) for n in range(2, 8)})
+    flags = await _players(bff, bff.issuer.issue(user_id=UUID(int=1)))
+    assert all(flags[str(UUID(int=n))]["can_add_friend"] for n in range(2, 8))
+    sizes = [len(c.request.url.params.get_list("user_ids")) for c in relations.calls]
+    assert sorted(sizes) == [3, 3]  # relations_batch_size = 3 в фикстуре
+
+
+async def test_my_matches_card_lists_other_players_with_report_flag(bff: Bff) -> None:
+    _online_routes(bff)
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(
+        200, json=SAMPLES["match_result"]
+    )
+    response = await bff.client.get(
+        "/v1/pages/online", headers=bff.bearer(bff.issuer.issue(user_id=PLAYER_1))
+    )
+    [card] = response.json()["blocks"]["my_matches"]["data"]["items"]
+    assert card["participants"] == [
+        {"user_id": str(PLAYER_2), "nickname": "trinity", "can_report": True}
+    ]
+
+
+async def test_my_matches_participants_degrade_to_empty(bff: Bff) -> None:
+    _online_routes(bff)
+    bff.stubs.match.route("GET", f"/v1/matches/{MATCH_ID}").respond(503)
+    response = await bff.client.get(
+        "/v1/pages/online", headers=bff.bearer(bff.issuer.issue(user_id=PLAYER_1))
+    )
+    body = response.json()
+    assert body["status"] == "ok"
+    [card] = body["blocks"]["my_matches"]["data"]["items"]
+    assert card["participants"] == []
