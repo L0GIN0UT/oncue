@@ -182,17 +182,29 @@ const noticesOf = async (page: Page): Promise<Notice[]> =>
   (await json<{ items: Notice[] }>(await api(page, "notifications").get("/notifications?limit=50")))
     .items;
 
-/** Найти спрятанный элемент на странице: баннер bff кэшируется ≤ 30 с, поэтому перезагружаем. */
-async function clickSpot(page: Page, path: string, findKey: string): Promise<void> {
+/**
+ * Дождаться активного события в оболочке: баннер bff кэшируется ≤ 30 с. Опрашиваем JSON
+ * `/pages/shell` (редко, без перезагрузки страницы: каждая загрузка тянет realtime-токен и упирается
+ * в лимит identity), страницу открываем один раз после этого.
+ */
+async function waitForActiveEvent(page: Page, what: string): Promise<void> {
   await expect
     .poll(
       async () => {
-        await page.goto(path);
-        return page.getByTestId("event-spot").count();
+        const res = await page.request.get("/api/web/v1/pages/shell");
+        if (!res.ok()) return false; // 429/5xx — ждём следующего опроса
+        return ((await res.json()) as { event: unknown }).event !== null;
       },
-      { timeout: DELIVERY_TIMEOUT_MS, message: `элемент события на ${path}` },
+      { timeout: DELIVERY_TIMEOUT_MS, intervals: [3_000], message: what },
     )
-    .toBeGreaterThan(0);
+    .toBe(true);
+}
+
+/** Найти спрятанный элемент на странице: событие ждём по JSON оболочки, страницу грузим один раз. */
+async function clickSpot(page: Page, path: string, findKey: string): Promise<void> {
+  await waitForActiveEvent(page, `активное событие перед ${path}`);
+  await page.goto(path);
+  await expect(page.getByTestId("event-spot")).toBeVisible({ timeout: 30_000 });
   const spot = page.getByTestId("event-spot");
   await expect(spot).toHaveAttribute("data-find", findKey);
   const [res] = await Promise.all([
@@ -210,15 +222,9 @@ async function clickSpot(page: Page, path: string, findKey: string): Promise<voi
 // ----------------------------------------------------------------------------- сценарий
 test("активное событие: баннер на главной, страница события, тема winter", async () => {
   const { page } = player;
-  await expect
-    .poll(
-      async () => {
-        await page.goto("/");
-        return page.getByTestId("home-event").count();
-      },
-      { timeout: DELIVERY_TIMEOUT_MS, message: "баннер активного события на главной" },
-    )
-    .toBeGreaterThan(0);
+  await waitForActiveEvent(page, "баннер активного события на главной");
+  await page.goto("/");
+  await expect(page.getByTestId("home-event")).toBeVisible({ timeout: 30_000 });
   await page.goto(`/events/${EVENT_KEY}`);
   await expect(page.getByTestId("event-page")).toBeVisible();
   await expect(page.getByTestId("event-progress")).toHaveText("Найдено 0 из 3");

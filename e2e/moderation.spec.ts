@@ -221,6 +221,41 @@ async function tryCreateRoom(player: Player): Promise<string> {
   return ((await res.json()) as { code: string }).code;
 }
 
+/** Виды действующих санкций игрока по JSON оболочки bff (чтение social, без нагрузки на match). */
+async function shellSanctionKinds(player: Player): Promise<string[]> {
+  const res = await player.page.request.get("/api/web/v1/pages/shell");
+  if (!res.ok()) return []; // 429/5xx — считаем «не знаем» и ждём следующего опроса
+  const body = (await res.json()) as {
+    sanctions?: { data?: { items?: { kind: string }[] } | null } | null;
+  };
+  return (body.sanctions?.data?.items ?? []).map((i) => i.kind);
+}
+
+/** Дождаться, пока оболочка покажет (или перестанет показывать) санкцию `kind`. */
+async function waitShellSanction(player: Player, kind: string, present: boolean): Promise<void> {
+  await expect
+    .poll(async () => (await shellSanctionKinds(player)).includes(kind), {
+      timeout: PROJECTION_TIMEOUT_MS,
+      intervals: [3_000],
+      message: `оболочка ${present ? "показывает" : "не показывает"} санкцию ${kind}`,
+    })
+    .toBe(present);
+}
+
+/**
+ * Создать комнату после ожидания по чтению: обычно хватает одной попытки. Проекция санкций в match
+ * может отстать от social, поэтому устаревший ответ `stale` повторяем (не больше трёх попыток,
+ * пауза 10 с) — иначе комнаты создаются в цикле и упираются в `match.rate_limited`.
+ */
+async function createRoomOutcome(player: Player, stale: string): Promise<string> {
+  let outcome = await tryCreateRoom(player);
+  for (let attempt = 1; attempt < 3 && outcome === stale; attempt++) {
+    await player.page.waitForTimeout(10_000);
+    outcome = await tryCreateRoom(player);
+  }
+  return outcome;
+}
+
 // ----------------------------------------------------------------------------- сценарии
 test("жалобы B, C, D на комментарий A открывают кейс; «удалить контент» убирает комментарий", async () => {
   const text = `Рекламный комментарий ${RUN}`;
@@ -276,22 +311,19 @@ test("санкция online: баннер, отказ создать комна�
     await expect(entry).toBeVisible();
     await expect(entry.getByTestId("sanction-term")).toBeVisible();
 
-    // Проекция санкций в match обновляется асинхронно (<= 20 с обычно, запас — минута).
-    await expect
-      .poll(() => tryCreateRoom(a), {
-        timeout: PROJECTION_TIMEOUT_MS,
-        message: "match отказывает в комнате: match.online_banned",
-      })
-      .toBe("match.online_banned");
+    // Проекция санкций в match догоняет social асинхронно: ждём чтением оболочки, затем один раз
+    // создаём комнату (устаревший ответ «created» перепроверяется редко, см. createRoomOutcome).
+    await waitShellSanction(a, "online", true);
+    expect(await createRoomOutcome(a, "created"), "match отказывает в комнате").toBe(
+      "match.online_banned",
+    );
 
     await revoke(sanctionId, `e2e: снятие ${RUN}`);
     revoked = true;
-    await expect
-      .poll(() => tryCreateRoom(a), {
-        timeout: PROJECTION_TIMEOUT_MS,
-        message: "после снятия санкции комната создаётся",
-      })
-      .toBe("created");
+    await waitShellSanction(a, "online", false);
+    expect(await createRoomOutcome(a, "match.online_banned"), "после снятия комната создаётся").toBe(
+      "created",
+    );
 
     await a.page.goto("/sanctions");
     await expect(a.page.getByTestId("sanctions-empty")).toBeVisible();
