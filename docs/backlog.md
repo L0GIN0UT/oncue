@@ -22,9 +22,9 @@
 | Зеркало образов под своим контролем | `infra/` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Этап 7 |
 | Подтвердить правку эталона `libs/text` (союз «&») | `libs/text`, `libs/game_kernel` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Решение владельца |
 | Ссылка финального кадра ревила живёт 60 с | game, frontend | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | По желанию |
-| Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` | match, game | [хвосты 4a](09-roadmap.md#хвосты-4a) | После решения по плану раундов |
+| Лобби: `clue`/`answer.format` в `overridable` сидовых шаблонов не включены, нет выбора в UI лобби и текста `incompatible`; варианты `clue` различаются только по типу — [ADR 0070](adr/0070-lobby-clue-answer-overrides.md) | match, game, frontend | PR D | Контентное решение владельца |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` | [хвосты 4a](09-roadmap.md#хвосты-4a) | Геймдизайн |
-| Win-trading: детектор | rating, match | [хвосты 4b](09-roadmap.md), ADR 0038 | После 5c (в 5c только счётчики) |
+| Win-trading: нет ретенции `win_trading_matches`; не ловятся кольца из 3+ аккаунтов и нарочный проигрыш без сдачи; сигнал не вердикт — [ADR 0068](adr/0068-win-trading-signals.md) | social | PR D | По данным |
 | Допущения сидов: K Эло 40/20, пороги званий, фильтры `similar` | `seeds/rating`, `seeds/game` | [хвосты 4b](09-roadmap.md) | Подтверждение владельцем |
 | Срыв отсчёта без штрафа: сталкинг очереди | match | [хвосты 4b](09-roadmap.md) | По данным |
 | Centrifugo OSS не отзывает выданные токены: враждебный клиент переподключается/переподписывается старым токеном до `token_ttl_s` (≤ 10 мин) после бана/кика; закрывает только connect/subscribe proxy | match, identity, `infra/centrifugo` | [ADR 0059](adr/0059-realtime-disconnect.md) | Этап 7 |
@@ -39,20 +39,11 @@
 | GET карточки UGC-изображения по id в admin-API | media_pipeline, admin | 5b | По желанию |
 | Число получателей в подтверждении рассылки (`GET /admin/v1/broadcasts/audience`) | notifications, admin | 5b | По желанию |
 | Своя аватарка в `me/appearance`: убрать дубль `PlayerAppearance.custom_avatar_url` одним изменением контракта | progression, bff | 5b | По желанию |
-| Название сборника в `collections.CollectionPublished/Updated` (необязательное `title` ≤120): нужно social для `CommentPosted.collection_title` (сейчас пустая строка, текст уведомления без названия) | collections, social | 5c |
-| Ник в `/pages/players/{id}`: `PlayerBadge` показывает «Игрок» | bff, progression, frontend | 5b | 5c (F5), если ник даёт social/identity |
-| Жалоба на аватарку чужого игрока: в `PlayerAppearance` (progression) нужен необязательный `asset_id` одобренного ассета, bff пробросит в `AvatarCard`, фронтенд подключит `ReportButton kind="avatar"` | progression, bff, frontend | 5c |
-| Кнопка жалобы в истории матчей: у карточки матча нет списка игроков (жалоба доступна в итоге матча) | bff, frontend | 5c |
-| Страница для уже открытой сессии забаненного `account` (сейчас только отказ на входе) | frontend, identity | 5c |
-| Точный флаг «можно добавить в друзья» в итоге матча (сейчас кнопка при `can_report`) | bff | 5c |
 | Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |
 | Цвет аватарки: 16-битные и CMYK | media_pipeline | 5b | По желанию |
 | Окна лимитов social (`lookup_window_s`, `invite_window_s`) в коде, не в конфиге — перенести новой версией схемы конфига | social | 5c | По желанию |
 | Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
-| Теги сборника в `game.GameFinished`: `collection_played` фильтруется только списком `collection_keys` (id сборников) в находке; фильтра по тегу нет | game, progression | 5d | По решению владельца |
-| Полная аудитория `event_started`: identity отдаёт список пользователей (сейчас — игроки, известные notifications); настройки пачки одним запросом; `UserDeleted` в notifications | identity, notifications | 5d | До релиза |
 | `EXCLUDE USING gist` по `tstzrange` запусков событий (сейчас только advisory-lock и проверка в транзакции) | progression | 5d | По желанию |
-| Редактор находок формой в админке (сейчас YAML/JSON с превью точек); файл карты «Нового года» в сидах | admin, seeds | 5d | По желанию |
 | Лаг идентичности: решение о доступе по claim токена (≤ 15 мин) и проекциям разных сервисов расходится на время доставки событий | identity, match, social | ADR 0052 | Принятый риск |
 
 ## 2. Продуктовые идеи владельца
@@ -79,3 +70,4 @@
 - Шум фронта (presence с каждой вкладки, `unread-count` рядом с shell), `ranked.spec` «очередь», общий `adminContext` в e2e, таймаут `waitFor` в `GameScreen.modes`/`CollectionEditor` — [PR #36](https://github.com/L0GIN0UT/oncue/pull/36).
 - Группа B (безопасность): разделение ролей Postgres для журналов (ADR 0060), disconnect Centrifugo для бана `ACCOUNT` и кика из комнаты (ADR 0059), иерархия модераторов (ADR 0058), `p/*` в S3 без анонимного чтения (ADR 0061), preflight секретов Centrifugo, тег Centrifugo и trivy по CRITICAL с digest-пиннингом (ADR 0057), `no-store` в admin progression (тест-страж), env лимитов сервисных токенов — [PR #38](https://github.com/L0GIN0UT/oncue/pull/38).
 - Группа C (ops): инкрементальная сверка и ретенция progression (ADR 0062), общий `XREAD` и фоновый отзыв realtime, закрытие пустого лобби, алерты match (ADR 0063), trigram-индекс game, лимит тела аватарки на gateway, тест тай-брейка сезона на Redis, переключатели типов уведомлений и `libs/email` (ADR 0066), пакетные ручки catalog/library для итога матча, решение по inbox Django (ADR 0065) — [PR #45](https://github.com/L0GIN0UT/oncue/pull/45).
+- Группа D (product): теги сборника в находках (ADR 0067), `title` сборника для комментариев, детектор win-trading без автосанкций (ADR 0068), полная аудитория `event_started` и хвосты 5c — экран бана, ник, жалоба на аватарку, игроки в истории матчей, `can_add_friend` (ADR 0069), форма редактора находок, переопределения лобби в `round-plans` (ADR 0070); `party_speed` не менялся, предложение — в handoff — [PR #46](https://github.com/L0GIN0UT/oncue/pull/46).
