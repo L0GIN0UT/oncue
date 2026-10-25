@@ -197,3 +197,135 @@ async def test_content_is_decided_by_signature_not_by_extension() -> None:
     assert (await ENCODER.encode(_save(_photo(), "PNG"), PURPOSE)).width > 0
     with pytest.raises(InvalidUgcImageError):
         await ENCODER.encode(SVG, PURPOSE)
+
+
+# ---------------------------------------------------------------- глубина и цветовые модели
+def _png16(width: int, height: int, color_type: int, pixel: tuple[int, ...]) -> bytes:
+    """PNG с 16 битами на канал (Pillow такие RGB не пишет): однотонная заливка."""
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+        )
+
+    row = b"\x00" + b"".join(struct.pack(">H", v) for v in pixel) * width
+    header = struct.pack(">IIBBBBB", width, height, 16, color_type, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(row * height))
+        + chunk(b"IEND", b"")
+    )
+
+
+async def _center_rgb(data: bytes) -> tuple[int, int, int]:
+    result = await ENCODER.encode(data, PURPOSE)
+    out = Image.open(io.BytesIO(result.data))
+    assert out.mode == "RGB"
+    side = PURPOSE.output_side_px
+    return out.convert("RGB").getpixel((side // 2, side // 2))  # type: ignore[return-value]
+
+
+def _near(actual: tuple[int, int, int], expected: tuple[int, int, int], tol: int = 12) -> bool:
+    return all(abs(a - e) <= tol for a, e in zip(actual, expected, strict=True))
+
+
+@pytest.mark.parametrize(("value", "expected"), [(0, 0), (32768, 128), (65535, 255)])
+async def test_16_bit_gray_is_scaled_to_8_bit_not_clipped(value: int, expected: int) -> None:
+    source = _save(Image.new("I;16", (300, 200), value), "PNG")
+    assert Image.open(io.BytesIO(source)).mode == "I;16"
+    assert _near(await _center_rgb(source), (expected,) * 3)
+
+
+async def test_16_bit_gray_gradient_stays_monotonic() -> None:
+    gradient = Image.new("I;16", (256, 256))
+    gradient.putdata([x * 257 for _ in range(256) for x in range(256)])
+    result = await ENCODER.encode(_save(gradient, "PNG"), PURPOSE)
+    out = Image.open(io.BytesIO(result.data)).convert("L")
+    row = [out.getpixel((x, PURPOSE.output_side_px // 2)) for x in range(0, out.width, 8)]
+    assert row == sorted(row)
+    assert row[0] < 20 and row[-1] > 235
+    assert 100 < row[len(row) // 2] < 156  # середина шкалы - середина, а не белый
+
+
+async def test_16_bit_rgb_png_keeps_colors() -> None:
+    source = _png16(300, 200, 2, (65535, 32768, 0))
+    assert _near(await _center_rgb(source), (255, 128, 0))
+
+
+@pytest.mark.parametrize(
+    ("cmyk", "rgb"),
+    [
+        ((0, 0, 0, 0), (255, 255, 255)),  # бумага
+        ((255, 0, 0, 0), (0, 255, 255)),  # cyan
+        ((0, 255, 255, 0), (255, 0, 0)),  # красный
+        ((0, 0, 0, 255), (0, 0, 0)),  # чёрный K
+        ((0, 0, 0, 128), (127, 127, 127)),  # серый K
+    ],
+)
+async def test_cmyk_jpeg_converts_to_rgb_with_right_colors(
+    cmyk: tuple[int, int, int, int], rgb: tuple[int, int, int]
+) -> None:
+    source = _save(Image.new("CMYK", (300, 200), cmyk), "JPEG", quality=95)
+    assert Image.open(io.BytesIO(source)).mode == "CMYK"
+    assert _near(await _center_rgb(source), rgb, tol=20)
+
+
+async def test_cmyk_jpeg_keeps_exif_orientation_and_strips_metadata() -> None:
+    exif = Image.Exif()
+    exif[0x010F] = "SecretMaker"
+    exif[0x0112] = 6
+    image = Image.new("CMYK", (300, 150), (0, 255, 255, 0))
+    source = _save(image, "JPEG", exif=exif.tobytes())
+    result = await ENCODER.encode(source, PURPOSE)
+    assert b"SecretMaker" not in result.data
+    assert (result.width, result.height) == (PURPOSE.output_side_px,) * 2
+
+
+async def test_embedded_srgb_profile_is_applied_and_not_copied() -> None:
+    from PIL import ImageCms
+
+    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    source = _save(_photo(color=(200, 30, 30)), "JPEG", icc_profile=profile, quality=95)
+    assert Image.open(io.BytesIO(source)).info.get("icc_profile")
+    result = await ENCODER.encode(source, PURPOSE)
+    out = Image.open(io.BytesIO(result.data))
+    assert "icc_profile" not in out.info
+    assert _near(out.convert("RGB").getpixel((50, 50)), (200, 30, 30))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("mode", ["RGB", "CMYK"])
+async def test_broken_icc_profile_falls_back_to_plain_conversion(mode: str) -> None:
+    color = (200, 30, 30) if mode == "RGB" else (0, 200, 200, 0)
+    source = _save(Image.new(mode, (300, 200), color), "JPEG", icc_profile=b"not-a-profile" * 20)
+    result = await ENCODER.encode(source, PURPOSE)
+    assert Image.open(io.BytesIO(result.data)).format == "WEBP"
+
+
+async def test_oversized_icc_profile_is_ignored_without_cms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Профиль сверх лимита не доходит до LittleCMS: простая смена режима, результат - sRGB."""
+    from media_pipeline_service.infrastructure import ugc_images
+
+    def _boom(*_a: object, **_k: object) -> None:
+        raise AssertionError("ImageCms не должен вызываться")
+
+    monkeypatch.setattr(ugc_images.ImageCms, "ImageCmsProfile", _boom)
+    monkeypatch.setattr(ugc_images.ImageCms, "profileToProfile", _boom)
+    source = _save(_photo(color=(10, 200, 30)), "PNG", icc_profile=b"\x00" * 4096)
+    encoder = PillowUgcEncoder(webp_quality=80, icc_max_bytes=1024)
+    result = await encoder.encode(source, PURPOSE)
+    out = Image.open(io.BytesIO(result.data)).convert("RGB")
+    assert out.mode == "RGB" and "icc_profile" not in out.info
+    r, g, b = out.getpixel((out.width // 2, out.height // 2))
+    assert abs(r - 10) < 8 and abs(g - 200) < 8 and abs(b - 30) < 8
+
+
+async def test_icc_profile_within_limit_still_goes_through_cms() -> None:
+    """Профиль в пределах лимита обрабатывается как раньше (битый - без ошибки)."""
+    source = _save(_photo(), "PNG", icc_profile=b"\x00" * 64)
+    result = await PillowUgcEncoder(icc_max_bytes=1024).encode(source, PURPOSE)
+    assert Image.open(io.BytesIO(result.data)).format == "WEBP"

@@ -159,8 +159,12 @@ class SubscriptionRepository(Protocol):
         """Отозвать согласие (нет записи или уже отозвано - ничего не меняет)."""
         ...
 
-    async def count_subscribed(self) -> int:
-        """Сколько игроков дали согласие."""
+    async def count_subscribed(self, *, timeout_ms: int | None = None) -> int:
+        """Сколько игроков дали согласие.
+
+        Raises:
+            DependencyUnavailableError: запрос не уложился в ``timeout_ms``.
+        """
         ...
 
     async def undelivered_after(

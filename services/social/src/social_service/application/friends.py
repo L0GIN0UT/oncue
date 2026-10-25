@@ -64,8 +64,6 @@ from social_service.domain.friends import (
     relation_of,
 )
 
-LOOKUP_WINDOW_S = 3600
-INVITE_WINDOW_S = 60
 RELATIONS_WINDOW_S = 60
 DAY = timedelta(days=1)
 CODE_ATTEMPTS = 8
@@ -579,7 +577,7 @@ class FriendsService:
                     or await repo.blocked(friend, user)
                 ):
                     raise InviteForbiddenError("приглашать можно только друзей")
-                window = await self._limiter.hit(f"invite:{user}", INVITE_WINDOW_S)
+                window = await self._limiter.hit(f"invite:{user}", cfg.friends.invite_window_s)
                 if window.count > cfg.friends.invites_per_minute:
                     raise InvitesRateLimitedError(
                         "слишком много приглашений", details={"retry_after": window.resets_in_s}
@@ -614,7 +612,7 @@ class FriendsService:
         if client_ip is not None:
             keys.append(f"lookup:ip:{client_ip}")
         for key in keys:
-            window = await self._limiter.hit(key, LOOKUP_WINDOW_S)
+            window = await self._limiter.hit(key, cfg.friends.lookup_window_s)
             if window.count > limit:
                 raise LookupRateLimitedError(
                     "слишком много попыток найти игрока",

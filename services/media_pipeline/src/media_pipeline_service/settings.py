@@ -75,6 +75,8 @@ class MediaSettings(BaseModel):
     ugc_purposes_path: Path | None = None
     # Сколько картинок UGC декодируется одновременно (остальные ждут): защита от DoS потоком заявок.
     ugc_encode_concurrency: int = Field(default=2, ge=1, le=32)
+    # Встроенный ICC-профиль больше лимита не разбирается LittleCMS (игнорируется).
+    ugc_icc_max_bytes: int = Field(default=1_048_576, ge=1_024, le=16_777_216)
     # Код причины из ugc_purposes.yaml для снятия аватарки решением модерации social (5c).
     ugc_social_removal_reason: str = Field(default="inappropriate", min_length=1, max_length=64)
     # Задача relay ``media.ugc.purge``: гарантированное удаление объектов снятых/отклонённых/

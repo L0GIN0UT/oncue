@@ -73,3 +73,4 @@
 | [0068](0068-win-trading-signals.md) | Сигналы win-trading для модератора: повторы пар и серии сдач, пороги в конфиге social, без автосанкций (черновик; уточняет 0038, 0052) |
 | [0069](0069-event-audience-and-tails-5c.md) | Полная аудитория `event_started` из identity, экран блокировки и хвосты 5c (черновик; уточняет 0054, 0047, 0052) |
 | [0070](0070-lobby-clue-answer-overrides.md) | Переопределения `clue` и `answer.format` лобби в `round-plans`: допустимость из `lobby.overridable`, проверка ядром, пул под переопределённую загадку (черновик; уточняет 0033, 0034) |
+| [0071](0071-event-runs-exclusion-and-own-avatar-source.md) | `EXCLUDE USING gist` по периодам запусков событий и адрес своей аватарки в `me/appearance` вместо `current_url` (черновик; уточняет 0054, 0048, 0060) |

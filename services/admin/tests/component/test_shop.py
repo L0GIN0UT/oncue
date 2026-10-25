@@ -11,7 +11,6 @@ import logging
 import uuid
 from typing import Any
 
-import httpx
 import pytest
 import structlog
 from admin_service.audit.models import AuditEntry
@@ -79,6 +78,10 @@ def _stub_items(progression: Any, *rows: dict[str, Any]) -> Any:
     return progression.route("GET", ITEMS).respond(
         200, json={"items": list(rows) or [_item()], "next_cursor": None}
     )
+
+
+def _stub_item(progression: Any, **patch: Any) -> Any:
+    return progression.route("GET", f"{ITEMS}/{ITEM}").respond(200, json=_item(**patch))
 
 
 def _pack(**patch: Any) -> dict[str, Any]:
@@ -248,7 +251,7 @@ def test_post_does_not_fetch_config_service_validates_slot(
     response = client.post("/shop/items/new/", _item_form(key="a_b", slot="unknown"))
     assert response.status_code == 400
     assert "Слот не описан" in response.content.decode()
-    _stub_items(progression)
+    _stub_item(progression)
     progression.route("PUT", f"{ITEMS}/{ITEM}").respond(200, json=_item())
     client.post(f"/shop/items/{ITEM}/", _item_form())
     assert config.call_count == 0  # конфиг нужен только для показа формы
@@ -293,7 +296,7 @@ def test_create_item_service_errors_show_message_and_audit(  # noqa: PLR0917
 def test_edit_item_key_is_immutable(client: Any, login: Any, progression: Any) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     page = client.get(f"/shop/items/{ITEM}/").content.decode()
     assert "Золотая рамка" in page
     route = progression.route("PUT", f"{ITEMS}/{ITEM}").respond(200, json=_item(price=200))
@@ -315,7 +318,7 @@ def test_edit_same_form_resubmitted_keeps_idempotency_key(
 ) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     route = progression.route("PUT", f"{ITEMS}/{ITEM}").respond(200, json=_item())
     page = client.get(f"/shop/items/{ITEM}/").content.decode()
     shown = set(page.split('name="idempotency_key" value="')[1:])
@@ -329,10 +332,12 @@ def test_edit_same_form_resubmitted_keeps_idempotency_key(
     assert sent == {key}
 
 
-def test_edit_unknown_item_is_404(client: Any, login: Any, progression: Any) -> None:
+def test_edit_unknown_item_is_404(client: Any, login: Any, progression: Any, problem: Any) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression, _item(id=str(uuid.uuid4())))
+    progression.route("GET", f"{ITEMS}/{ITEM}").respond(
+        404, json=problem(404, "progression.item_not_found")
+    )
     assert client.get(f"/shop/items/{ITEM}/").status_code == 404
 
 
@@ -348,7 +353,7 @@ def test_media_upload_sends_multipart_and_audits_without_content(
 ) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     updated = _item(asset_url="https://cdn.test/a.webp", poster_url="https://cdn.test/p.webp")
     route = progression.route("PUT", f"{ITEMS}/{ITEM}/media").respond(200, json=updated)
     key = _key()
@@ -370,7 +375,7 @@ def test_media_over_config_limit_is_rejected_before_service_call(
 ) -> None:
     login()
     _stub_config(progression)  # static_max_bytes = 1000
-    _stub_items(progression)
+    _stub_item(progression)
     route = progression.route("PUT", f"{ITEMS}/{ITEM}/media").respond(200, json=_item())
     response = client.post(
         f"/shop/items/{ITEM}/media/",
@@ -385,7 +390,7 @@ def test_media_over_config_limit_is_rejected_before_service_call(
 def test_animated_item_uses_animated_limit(client: Any, login: Any, progression: Any) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression, _item(media_kind="animated"))
+    _stub_item(progression, media_kind="animated")
     route = progression.route("PUT", f"{ITEMS}/{ITEM}/media").respond(200, json=_item())
     response = client.post(
         f"/shop/items/{ITEM}/media/",
@@ -401,7 +406,7 @@ def test_media_hard_ceiling_applies_without_config(
     login()
     settings.GV_SHOP_MEDIA_MAX_BYTES = 500
     progression.route("GET", "/admin/v1/configs").respond(403, json=problem(403, "auth.forbidden"))
-    _stub_items(progression)
+    _stub_item(progression)
     route = progression.route("PUT", f"{ITEMS}/{ITEM}/media").respond(200, json=_item())
     response = client.post(
         f"/shop/items/{ITEM}/media/",
@@ -417,7 +422,7 @@ def test_stream_over_hard_limit_is_cut_by_upload_handler(
     login()
     settings.GV_SHOP_MEDIA_MAX_BYTES = 1024
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     route = progression.route("PUT", f"{ITEMS}/{ITEM}/media").respond(200, json=_item())
     big = _upload(200_000)
     response = client.post(
@@ -433,7 +438,7 @@ def test_media_413_from_service_is_message(
 ) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     progression.route("PUT", f"{ITEMS}/{ITEM}/media").respond(
         413, json=problem(413, "progression.item_media_too_large")
     )
@@ -452,13 +457,11 @@ def test_item_page_shows_asset_and_poster_preview(
 ) -> None:
     login()
     _stub_config(progression)
-    _stub_items(
+    _stub_item(
         progression,
-        _item(
-            media_kind="animated",
-            asset_url="https://cdn.test/a.webp",
-            poster_url="https://cdn.test/p.webp",
-        ),
+        media_kind="animated",
+        asset_url="https://cdn.test/a.webp",
+        poster_url="https://cdn.test/p.webp",
     )
     page = client.get(f"/shop/items/{ITEM}/").content.decode()
     assert 'src="https://cdn.test/a.webp"' in page
@@ -472,7 +475,7 @@ def test_service_429_and_503_are_messages_not_500(  # noqa: PLR0917
 ) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     code = "rate.limited" if status == 429 else "dependency.unavailable"
     progression.route("PUT", f"{ITEMS}/{ITEM}").respond_off_contract(
         status, json=problem(status, code)
@@ -742,7 +745,9 @@ def test_item_card_distinguishes_service_errors_from_not_found(
 ) -> None:
     login()
     _stub_config(progression)
-    route = progression.route("GET", ITEMS).respond(403, json=problem(403, "auth.forbidden"))
+    route = progression.route("GET", f"{ITEMS}/{ITEM}").respond(
+        403, json=problem(403, "auth.forbidden")
+    )
     forbidden = client.get(f"/shop/items/{ITEM}/")
     assert forbidden.status_code == 403
     assert "Недостаточно прав" in forbidden.content.decode()
@@ -752,30 +757,14 @@ def test_item_card_distinguishes_service_errors_from_not_found(
     assert "временно недоступен" in down.content.decode()
 
 
-def test_item_search_stops_at_page_with_item(client: Any, login: Any, progression: Any) -> None:
+def test_item_card_is_one_get_by_id_without_listing(
+    client: Any, login: Any, progression: Any
+) -> None:
     login()
     _stub_config(progression)
-    route = progression.route("GET", ITEMS).respond(
-        200, json={"items": [_item()], "next_cursor": "more"}
-    )
+    route = _stub_item(progression)
     assert client.get(f"/shop/items/{ITEM}/").status_code == 200
-    assert route.call_count == 1
-
-
-def test_item_search_walks_pages_until_found(client: Any, login: Any, progression: Any) -> None:
-    login()
-    _stub_config(progression)
-    route = progression.route("GET", ITEMS)
-    pages = iter(
-        [
-            {"items": [_item(id=str(uuid.uuid4()))], "next_cursor": "p2"},
-            {"items": [_item()], "next_cursor": "p3"},
-            {"items": [], "next_cursor": None},
-        ]
-    )
-    route.mock(side_effect=lambda _: httpx.Response(200, json=next(pages)))
-    assert client.get(f"/shop/items/{ITEM}/").status_code == 200
-    assert route.call_count == 2
+    assert route.call_count == 1  # не листаем список предметов
 
 
 def test_pack_form_reports_items_load_failure(
@@ -846,7 +835,7 @@ def test_pack_edit_distinguishes_service_error_from_not_found(
 def test_media_form_ids_do_not_clash(client: Any, login: Any, progression: Any) -> None:
     login()
     _stub_config(progression)
-    _stub_items(progression)
+    _stub_item(progression)
     page = client.get(f"/shop/items/{ITEM}/").content.decode()
     assert page.count('id="id_reason"') == 1
     assert page.count('id="id_media_reason"') == 1

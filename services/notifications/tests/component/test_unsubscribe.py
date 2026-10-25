@@ -292,3 +292,51 @@ async def test_one_click_shares_the_ip_limit(notifications: Service) -> None:
     assert statuses == [422, 422, 422, 429]
     # общий счётчик с обычной ручкой
     assert (await svc.client.post("/v1/unsubscribe", json={"token": "x" * 43})).status_code == 429
+
+
+# ---------------------------------------- форма на основной ручке (RFC 8058)
+async def test_one_click_accepts_content_type_with_charset(notifications: Service) -> None:
+    svc, user = notifications, uuid7()
+    await subscribe(svc, user)
+    token = await issue(svc, user)
+    headers = {"content-type": "application/x-www-form-urlencoded; charset=UTF-8"}
+    response = await svc.client.post(
+        f"{ONE_CLICK}?token={token}", content=ONE_CLICK_BODY, headers=headers
+    )
+    assert response.status_code == 204
+    assert await is_subscribed(svc, user) is False
+
+
+async def test_main_endpoint_accepts_one_click_form_with_token_in_query(
+    notifications: Service,
+) -> None:
+    """Почтовик может прислать форму и на `/v1/unsubscribe`: токен в query, как в ссылке."""
+    svc, user = notifications, uuid7()
+    await subscribe(svc, user)
+    token = await issue(svc, user)
+    response = await svc.client.post(
+        f"/v1/unsubscribe?token={token}", content=ONE_CLICK_BODY, headers=FORM
+    )
+    assert response.status_code == 204
+    assert await is_subscribed(svc, user) is False
+
+
+async def test_main_endpoint_json_still_works(notifications: Service) -> None:
+    svc, user = notifications, uuid7()
+    await subscribe(svc, user)
+    token = await issue(svc, user)
+    response = await svc.client.post("/v1/unsubscribe", json={"token": token})
+    assert response.status_code == 204
+    assert await is_subscribed(svc, user) is False
+
+
+@pytest.mark.parametrize("body", ["List-Unsubscribe=No", "", "other=1"])
+async def test_main_endpoint_form_with_bad_body_is_invalid(
+    notifications: Service, body: str
+) -> None:
+    svc, user = notifications, uuid7()
+    await subscribe(svc, user)
+    token = await issue(svc, user)
+    response = await svc.client.post(f"/v1/unsubscribe?token={token}", content=body, headers=FORM)
+    assert_problem(response, 422, INVALID)
+    assert await is_subscribed(svc, user) is True

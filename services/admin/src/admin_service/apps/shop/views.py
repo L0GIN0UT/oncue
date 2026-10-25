@@ -34,7 +34,7 @@ ITEMS_LOAD_FAILED = "Не удалось загрузить список пре�
 
 ITEMS = "progression.items.manage"
 PROMO = "progression.promo.manage"
-_SCAN_PAGES = 20  # предметов у админки сотни: поиск записи по id листает не больше 20×100
+_SCAN_PAGES = 20  # выбор предметов в паках и промокодах листает не больше 20×100
 _PAGE = 100
 _ITEM_FIELDS = (
     "slot",
@@ -145,17 +145,14 @@ def _scan_items(
 def _find_item(
     request: HttpRequest, item_id: UUID
 ) -> tuple[dict[str, Any] | None, ServiceError | None]:
-    """Предмет по id: GET по id у admin-API нет — листаем до первой страницы с ним.
+    """Предмет по id: ``GET /admin/v1/items/{id}``.
 
     ``(None, None)`` — предмета нет (404); ``(None, ошибка)`` — сервис не ответил.
     """
-    for page, error in _item_pages(request):
-        if error is not None:
-            return None, error
-        for row in page:
-            if row.get("id") == str(item_id):
-                return row, None
-    return None, None
+    data, error = read(request, PROGRESSION, _client(lambda c: c.item(item_id)))
+    if error is not None:
+        return None, (None if error.status == 404 else error)  # noqa: PLR2004
+    return as_dict(data), None
 
 
 def _item_choices(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:

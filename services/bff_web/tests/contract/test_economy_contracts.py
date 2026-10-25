@@ -92,7 +92,11 @@ SAMPLES: dict[tuple[str, str], Any] = {
             }
         ]
     },
-    ("progression", "/v1/me/appearance"): APPEARANCE,
+    ("progression", "/v1/me/appearance"): {
+        **APPEARANCE,
+        "custom_avatar_url": "/ugc/u/a.webp",
+        "custom_avatar_asset_id": str(UUID(int=8)),
+    },
     ("progression", "/v1/me/avatar"): {
         "entitled": False,
         "current_url": None,

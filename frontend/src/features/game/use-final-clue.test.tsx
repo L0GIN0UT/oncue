@@ -63,6 +63,28 @@ describe("useFinalClue", () => {
     expect(world.finalClueCalls).toBe(1);
   });
 
+  it("срок берётся из expires_at, а не из константы: TTL 300 с — до конца срока без final-clue", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { s, clue } = finishedRound();
+    const longLived = { ...clue, expires_at: new Date(Date.now() + 300_000).toISOString() };
+    const { result } = renderHook(() => useFinalClue(s.id, 0, longLived), {
+      wrapper: TestProviders,
+    });
+    await waitFor(() => expect(result.current.objectUrl).toMatch(/^blob:/));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200_000); // давно за 60 с, но ссылка ещё жива
+    });
+    expect(world.finalClueCalls).toBe(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(101_000);
+    });
+    await waitFor(() => expect(world.finalClueCalls).toBe(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000); // дальше не опрашивает
+    });
+    expect(world.finalClueCalls).toBe(1);
+  });
+
   it("final-clue отказал (раунд не засчитан) и Blob нет — failed", async () => {
     world.scenario.staleRevealLinks = true;
     const { s, clue } = finishedRound();

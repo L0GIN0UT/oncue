@@ -9,11 +9,11 @@ from uuid import UUID
 
 import pytest
 from bff_web_service.application.dto import (
+    AppearanceCard,
     AppearanceSlotCard,
     AvatarCard,
     BadgeRef,
     InventoryCard,
-    MyAvatar,
     PackCard,
     PlayerAppearanceCard,
     ProgressCard,
@@ -92,19 +92,17 @@ class FakeProgression:
         assert self.public is not None
         return self.public
 
-    async def my_appearance(self, token: str) -> list[AppearanceSlotCard]:
-        return await self._do("my_appearance", [AppearanceSlotCard("frame")])  # type: ignore[return-value]  # фейк
+    async def my_appearance(self, token: str) -> AppearanceCard:
+        return await self._do(
+            "my_appearance", AppearanceCard([AppearanceSlotCard("frame")], "/a/me.webp")
+        )  # type: ignore[return-value]  # фейк
 
     async def inventory(self, token: str) -> InventoryCard:
         return await self._do("inventory", InventoryCard([]))  # type: ignore[return-value]  # фейк
 
-    async def my_avatar(self, token: str) -> MyAvatar:
+    async def my_avatar(self, token: str) -> AvatarCard:
         return await self._do(
-            "my_avatar",
-            MyAvatar(
-                AvatarCard(entitled=True, request=None, max_bytes=1024, formats=["webp"]),
-                "/a/me.webp",
-            ),
+            "my_avatar", AvatarCard(entitled=True, request=None, max_bytes=1024, formats=["webp"])
         )  # type: ignore[return-value]  # фейк
 
     async def players_appearance(
@@ -232,12 +230,20 @@ async def test_player_appearance_404_does_not_become_screen_404() -> None:
     assert page.blocks.appearance is not None and not page.blocks.appearance.is_ok
 
 
-async def test_profile_appearance_needs_avatar_url_and_hides_independently() -> None:
+async def test_profile_appearance_and_avatar_hide_independently() -> None:
+    """Адрес своей аватарки приходит с `/me/appearance`: сбой `/me/avatar` его не гасит."""
     fake = FakeProgression(fail={"my_avatar": UpstreamUnavailableError("progression", "t")})
     blocks = (await GetProfilePage(fake, concurrency=5)(USER)).blocks  # type: ignore[arg-type]
     assert blocks.progress.is_ok and blocks.inventory is not None and blocks.inventory.is_ok
     assert blocks.avatar is not None and not blocks.avatar.is_ok
-    assert blocks.appearance is not None and not blocks.appearance.is_ok  # без адреса аватара
+    assert blocks.appearance is not None and blocks.appearance.is_ok
+    assert blocks.appearance.data is not None
+    assert blocks.appearance.data.custom_avatar_url == "/a/me.webp"
+
+    down = FakeProgression(fail={"my_appearance": UpstreamUnavailableError("progression", "t")})
+    blocks = (await GetProfilePage(down, concurrency=5)(USER)).blocks  # type: ignore[arg-type]
+    assert blocks.appearance is not None and not blocks.appearance.is_ok
+    assert blocks.avatar is not None and blocks.avatar.is_ok
 
     ok = (await GetProfilePage(FakeProgression(), concurrency=5)(USER)).blocks  # type: ignore[arg-type]
     assert ok.appearance is not None and ok.appearance.data is not None

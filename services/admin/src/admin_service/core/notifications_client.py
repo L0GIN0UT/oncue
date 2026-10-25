@@ -21,6 +21,10 @@ class NotificationsAdminClient:
         """Рассылки → ``{items, next_cursor}``."""
         return self._client.get(_BROADCASTS, params={"cursor": cursor, "limit": limit})
 
+    def broadcast_audience(self) -> Any:
+        """Сколько игроков получит рассылка сейчас → ``{recipients}``."""
+        return self._client.get(f"{_BROADCASTS}/audience")
+
     def create_broadcast(
         self, *, subject: str, body: str, reason: str, idempotency_key: str
     ) -> Any:

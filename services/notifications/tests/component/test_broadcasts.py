@@ -399,3 +399,38 @@ async def test_retry_after_transient_failure_skips_already_handled_users(
     assert svc.directory.emails[good] in {m.to for m in svc.email.sent}
     [row] = await svc.rows(broadcasts)
     assert (row.status, row.delivered, row.failed) == ("sent", 2, 1)
+
+
+# ------------------------------------------------------------------ аудитория для подтверждения
+AUDIENCE = "/admin/v1/broadcasts/audience"
+
+
+async def test_audience_requires_the_broadcast_permission(notifications: Service) -> None:
+    svc = notifications
+    assert_problem(await svc.client.get(AUDIENCE), 401, "auth.unauthenticated")
+    for perms in ((), ("admin.access",), (PERM,)):
+        response = await svc.client.get(AUDIENCE, headers=svc.auth(perms=perms))
+        assert_problem(response, 403, "auth.forbidden")
+
+
+async def test_audience_counts_exactly_the_consenting_and_matches_snapshot(
+    notifications: Service,
+) -> None:
+    svc = notifications
+    empty = await svc.client.get(AUDIENCE, headers=svc.admin())
+    assert empty.status_code == 200
+    assert empty.json() == {"recipients": 0}
+    assert empty.headers["cache-control"] == "no-store"
+    first, _second = await subscriber(svc), await subscriber(svc)
+    await svc.client.put(  # без согласия: в подсчёт не входит
+        "/v1/email-subscription", json={"subscribed": False}, headers=svc.auth(uuid7())
+    )
+    leaver = await subscriber(svc)
+    await svc.client.put(
+        "/v1/email-subscription", json={"subscribed": False}, headers=svc.auth(leaver)
+    )
+    shown = (await svc.client.get(AUDIENCE, headers=svc.admin())).json()
+    assert shown == {"recipients": 2}
+    assert first
+    created = (await create(svc)).json()
+    assert created["recipients"] == shown["recipients"]

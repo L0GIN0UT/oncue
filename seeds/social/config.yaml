@@ -8,6 +8,8 @@ comments:
 friends:
   code_attempts_per_hour: 30
   invites_per_minute: 10
+  invite_window_s: 60
+  lookup_window_s: 3600
   max_friends: 200
   requests_per_day: 20
 presence:

@@ -855,7 +855,7 @@ class MediaHarness:
             UgcObjectPurger,
             UgcUseCases,
         )
-        from media_pipeline_service.application.queries.ugc import ListUgcQueue
+        from media_pipeline_service.application.queries.ugc import GetUgcImage, ListUgcQueue
         from media_pipeline_service.infrastructure.config import load_ugc_catalog
 
         self.ugc_catalog = load_ugc_catalog()
@@ -877,6 +877,7 @@ class MediaHarness:
             ),
             preview=PreviewUgcImage(uow, self.clock, self.storage),
             queue=ListUgcQueue(uow),
+            card=GetUgcImage(uow),
             purger=purger,
             orphans=SweepOrphanUgcObjects(
                 uow, self.storage, self.clock, ttl=timedelta(hours=24), page_size=2

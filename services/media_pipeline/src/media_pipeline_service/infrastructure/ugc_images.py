@@ -8,6 +8,9 @@
   «бомба» (маленький файл - огромная картинка) не доходит до ``load``;
 * ``verify`` + повторное открытие, ``DecompressionBomb*`` и усечённые файлы - отказ;
 * ровно один кадр (анимированные WebP/APNG отвергаются);
+* цвет приводится к 8-битному sRGB RGB: 16-битные кадры масштабируются (``v / 257``, без
+  обрезки), CMYK и кадры со встроенным ICC-профилем конвертируются через профиль (битый
+  профиль - простая конвертация режима);
 * результат пересобирается из пикселей: центр-кроп до квадрата, ресайз, WebP - EXIF, XMP,
   ICC и комментарии не переносятся;
 * клиенту детали декодера не раскрываются: любой отказ - ``ugc.invalid_image``.
@@ -21,7 +24,7 @@ import io
 import warnings
 
 import structlog
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageCms, UnidentifiedImageError
 from PIL import ImageOps as PilImageOps
 
 from media_pipeline_service.application.ports import EncodedImage
@@ -46,6 +49,41 @@ _DECODE_ERRORS = (
 )
 
 
+_SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+_DEEP_GRAY = {"I;16", "I;16L", "I;16B", "I;16N", "I"}
+_ICC_ERRORS = (ImageCms.PyCMSError, OSError, ValueError, TypeError)
+
+
+def _to_8_bit(image: Image.Image) -> Image.Image:
+    """16-битный серый -> 8-битный ``L`` линейным масштабом (65535 -> 255), без обрезки."""
+    if image.mode not in _DEEP_GRAY:
+        return image
+    wide = image if image.mode == "I" else image.convert("I")
+    return wide.point(lambda v: v * (1 / 257)).convert("L")
+
+
+def _to_srgb(image: Image.Image, icc: bytes | None, icc_max_bytes: int) -> Image.Image:
+    """8-битный кадр -> sRGB: через встроенный ICC-профиль, иначе простая смена режима.
+
+    Профиль применяется только к ``RGB``/``CMYK``; битый или чужой профиль не причина отказа.
+    Профиль больше ``icc_max_bytes`` игнорируется до разбора LittleCMS (поверхность атаки).
+    """
+    if icc and len(icc) > icc_max_bytes:
+        log.info("ugc.icc_ignored", reason="too_large")
+        icc = None
+    if icc and image.mode in {"RGB", "CMYK"}:
+        try:
+            source = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            converted = ImageCms.profileToProfile(
+                image, source, _SRGB, outputMode="RGB", renderingIntent=ImageCms.Intent.PERCEPTUAL
+            )
+            if converted is not None:
+                return converted
+        except _ICC_ERRORS as exc:
+            log.info("ugc.icc_ignored", reason=type(exc).__name__)
+    return image.convert("RGB")
+
+
 def _invalid(reason: str) -> InvalidUgcImageError:
     """Единая ошибка клиенту; причина - только в лог."""
     log.info("ugc.image_rejected", reason=reason)
@@ -55,10 +93,13 @@ def _invalid(reason: str) -> InvalidUgcImageError:
 class PillowUgcEncoder:
     """Реализация порта ``UgcImageEncoder``; тяжёлая работа - в пуле потоков."""
 
-    def __init__(self, *, webp_quality: int = 80, concurrency: int = 2) -> None:
+    def __init__(
+        self, *, webp_quality: int = 80, concurrency: int = 2, icc_max_bytes: int = 1_048_576
+    ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency должен быть положительным")
         self._quality = webp_quality
+        self._icc_max_bytes = icc_max_bytes
         # Декодирование картинки - CPU и память: одновременно не больше ``concurrency`` файлов,
         # остальные ждут (поток заявок не кладёт процесс).
         self._slots = asyncio.Semaphore(concurrency)
@@ -100,11 +141,18 @@ class PillowUgcEncoder:
     def _encode_sync(self, data: bytes, purpose: UgcPurpose) -> EncodedImage:
         image = self._open(data, purpose)
         try:
+            icc = image.info.get("icc_profile")
             image = PilImageOps.exif_transpose(image)
+            image = _to_8_bit(image)
             has_alpha = image.mode in {"RGBA", "LA", "PA"} or (
                 image.mode == "P" and "transparency" in image.info
             )
-            image = image.convert("RGBA" if has_alpha else "RGB")
+            if has_alpha:
+                image = image.convert("RGBA")
+            else:
+                image = _to_srgb(
+                    image, icc if isinstance(icc, bytes) else None, self._icc_max_bytes
+                )
             side = min(image.size)
             left, top = (image.width - side) // 2, (image.height - side) // 2
             image = image.crop((left, top, left + side, top + side))

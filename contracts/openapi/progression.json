@@ -2433,6 +2433,50 @@
         "title": "MainReward",
         "type": "object"
       },
+      "MyAppearance": {
+        "description": "Моё оформление: слоты и своя аватарка (единый источник адреса для профиля).",
+        "properties": {
+          "custom_avatar_asset_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ассет одобренной аватарки (объект жалобы `avatar`); null - аватарки нет",
+            "title": "Custom Avatar Asset Id"
+          },
+          "custom_avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Одобренная своя аватарка; null - аватар из слота",
+            "title": "Custom Avatar Url"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/AppearanceSlot"
+            },
+            "title": "Slots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slots",
+          "custom_avatar_url",
+          "custom_avatar_asset_id"
+        ],
+        "title": "MyAppearance",
+        "type": "object"
+      },
       "MyAvatar": {
         "description": "Своя аватарка: право, действующий аватар, последняя заявка.",
         "properties": {
@@ -2445,7 +2489,8 @@
                 "type": "null"
               }
             ],
-            "description": "Одобренная аватарка; null - используется предмет слота",
+            "deprecated": true,
+            "description": "Устарело (уберём через один релиз): адрес своей аватарки лежит в `GET /v1/me/appearance` (`custom_avatar_url`) - тот же источник, что у `GET /v1/appearance`. Одобренная аватарка; null - используется предмет слота",
             "title": "Current Url"
           },
           "entitled": {
@@ -6097,6 +6142,95 @@
       }
     },
     "/admin/v1/items/{item_id}": {
+      "get": {
+        "description": "Права как у списка; нет предмета - 404 `progression.item_not_found`.",
+        "operationId": "item_admin_v1_items__item_id__get",
+        "parameters": [
+          {
+            "description": "Идентификатор",
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор",
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Предмет по id",
+        "tags": [
+          "progression-admin"
+        ]
+      },
       "put": {
         "description": "Цена и условия действуют для новых покупок; владельцы не затрагиваются. Активировать без картинки нельзя - 422 `progression.item_media_missing`.",
         "operationId": "update_item_admin_v1_items__item_id__put",
@@ -7907,14 +8041,14 @@
     },
     "/v1/me/appearance": {
       "get": {
-        "description": "По одному предмету на слот; пустой слот - `item = null`.",
+        "description": "По одному предмету на слот; пустой слот - `item = null`. Своя аватарка (`custom_avatar_url`) - единый источник адреса для профиля.",
         "operationId": "my_appearance_v1_me_appearance_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Appearance"
+                  "$ref": "#/components/schemas/MyAppearance"
                 }
               }
             },

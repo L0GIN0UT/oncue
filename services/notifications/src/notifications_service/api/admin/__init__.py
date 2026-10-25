@@ -22,6 +22,7 @@ from gv_auth import Principal, require_perm
 from gv_service import IdempotencyKey, problem_responses
 from notifications_service.api.schemas import (
     Broadcast,
+    BroadcastAudience,
     BroadcastPage,
     BroadcastRequest,
     Cursor,
@@ -62,6 +63,22 @@ def build_admin_router(services: ApiServices) -> APIRouter:
             items=[Broadcast.model_validate(broadcast_json(row)) for row in page.items],
             next_cursor=page.next_cursor,
         )
+
+    @router.get(
+        "/broadcasts/audience",
+        response_model=BroadcastAudience,
+        summary="Сколько получателей у рассылки",
+        description=(
+            "Для экрана подтверждения: число игроков с согласием, которым уйдёт рассылка "
+            "(то же, что попадёт в `recipients` при создании). Запрос ограничен по времени: "
+            "превышение - 503."
+        ),
+        responses=problem_responses(401, 403, 503),
+    )
+    async def broadcast_audience(principal: Sender, response: Response) -> BroadcastAudience:
+        recipients = await services.broadcast_queries.audience()
+        response.headers["Cache-Control"] = NO_STORE
+        return BroadcastAudience(recipients=recipients)
 
     @router.post(
         "/broadcasts",

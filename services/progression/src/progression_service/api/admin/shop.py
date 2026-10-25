@@ -117,6 +117,18 @@ def register_shop_admin_routes(router: APIRouter, services: AdminServices) -> No
         response.headers["Cache-Control"] = NO_STORE
         return AdminItemPage.model_validate(page)
 
+    @router.get(
+        "/items/{item_id}",
+        response_model=AdminItem,
+        summary="Предмет по id",
+        description="Права как у списка; нет предмета - 404 `progression.item_not_found`.",
+        responses=problem_responses(401, 403, 404),
+    )
+    async def item(item_id: IdPath, principal: ItemsManager, response: Response) -> AdminItem:
+        result = await services.item_queries.get(item_id)
+        response.headers["Cache-Control"] = NO_STORE
+        return AdminItem.model_validate(result)
+
     @router.post(
         "/items",
         response_model=AdminItem,

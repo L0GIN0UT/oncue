@@ -111,6 +111,10 @@ class ProgressionAdminClient:
             },
         )
 
+    def item(self, item_id: UUID) -> Any:
+        """Предмет по id → карточка предмета (404 — ``ServiceError``)."""
+        return self._client.get(f"/admin/v1/items/{item_id}")
+
     def create_item(self, body: dict[str, Any], *, idempotency_key: str) -> Any:
         """Создать предмет (тело — ``CreateItemRequest`` вместе с ``reason``)."""
         return self._client.post("/admin/v1/items", idempotency_key=idempotency_key, json=body)

@@ -175,6 +175,7 @@ def _admin_calls(asset: str) -> list[tuple[str, str, dict[str, Any]]]:
     return [
         ("GET", "/admin/v1/ugc-images/settings", {}),
         ("GET", "/admin/v1/ugc-images", {}),
+        ("GET", f"/admin/v1/ugc-images/{asset}", {}),
         ("GET", f"/admin/v1/ugc-images/{asset}/preview", {}),
         ("POST", f"/admin/v1/ugc-images/{asset}/approve", {"json": REASON}),
         (
@@ -342,6 +343,41 @@ async def test_reject_and_takedown_rules(ugc_client: Client) -> None:
     )
     assert_problem(
         await client.get(f"/admin/v1/ugc-images/{UNKNOWN}/preview", headers=mod),
+        404,
+        "ugc.not_found",
+    )
+
+
+async def test_card_returns_image_in_any_status_without_storage_keys(ugc_client: Client) -> None:
+    client, issuer, _ = ugc_client
+    first = (await _ingest(client, _service(issuer), key="idem-cardcardcard")).json()
+    mod = _moderator(issuer)
+    card = await client.get(f"/admin/v1/ugc-images/{first['asset_id']}", headers=mod)
+    assert card.status_code == 200
+    assert card.headers["Cache-Control"] == "no-store"
+    body = card.json()
+    assert body == (await client.get("/admin/v1/ugc-images", headers=mod)).json()["items"][0]
+    assert (body["status"], body["reason_code"], body["decided_at"]) == ("pending", None, None)
+    assert "key" not in str(body).lower()
+
+    decision = {"reason_code": "other", **REASON}
+    rejected = await client.post(
+        f"/admin/v1/ugc-images/{first['asset_id']}/reject",
+        json=decision,
+        headers={**mod, "Idempotency-Key": "idem-cardreject1"},
+    )
+    assert rejected.status_code == 200
+    after = (await client.get(f"/admin/v1/ugc-images/{first['asset_id']}", headers=mod)).json()
+    assert after == rejected.json()
+    assert (after["status"], after["reason_code"]) == ("rejected", "other")
+    assert after["moderator_id"] is not None
+    assert after["version"] >= 1
+
+
+async def test_card_of_unknown_asset_is_404(ugc_client: Client) -> None:
+    client, issuer, _ = ugc_client
+    assert_problem(
+        await client.get(f"/admin/v1/ugc-images/{UNKNOWN}", headers=_moderator(issuer)),
         404,
         "ugc.not_found",
     )

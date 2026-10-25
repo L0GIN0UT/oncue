@@ -66,7 +66,6 @@ from bff_web_service.application.dto import (
     Me,
     Mode,
     ModeStart,
-    MyAvatar,
     MyMatch,
     MyMatches,
     OnlineChat,
@@ -1580,13 +1579,14 @@ class HttpProgressionClient:
             ]
         )
 
-    async def my_appearance(self, token: str) -> list[AppearanceSlotCard]:
-        """``GET /v1/me/appearance``."""
+    async def my_appearance(self, token: str) -> AppearanceCard:
+        """``GET /v1/me/appearance``: слоты и своя аватарка (единый источник адреса)."""
         body = await self._http.get("/v1/me/appearance", token=token)
-        return _parse(self._http.service, _APPEARANCE, body).dto()
+        a = _parse(self._http.service, _MY_APPEARANCE, body)
+        return AppearanceCard(a.dto(), a.custom_avatar_url, a.custom_avatar_asset_id)
 
-    async def my_avatar(self, token: str) -> MyAvatar:
-        """``GET /v1/me/avatar``."""
+    async def my_avatar(self, token: str) -> AvatarCard:
+        """``GET /v1/me/avatar``: право, заявка, лимиты (``current_url`` устарел - не читаем)."""
         body = await self._http.get("/v1/me/avatar", token=token)
         a = _parse(self._http.service, _AVATAR, body)
         request = (
@@ -1594,8 +1594,7 @@ class HttpProgressionClient:
             if a.request
             else None
         )
-        card = AvatarCard(a.entitled, request, a.limits.max_bytes, list(a.limits.formats))
-        return MyAvatar(card, a.current_url)
+        return AvatarCard(a.entitled, request, a.limits.max_bytes, list(a.limits.formats))
 
     async def players_appearance(
         self, token: str, user_ids: list[UUID]
@@ -1689,6 +1688,11 @@ class _AppearanceIn(_In):
         return [AppearanceSlotCard(s.slot, s.item.dto() if s.item else None) for s in self.slots]
 
 
+class _MyAppearanceIn(_AppearanceIn):
+    custom_avatar_url: str | None
+    custom_avatar_asset_id: UUID | None
+
+
 class _PlayerAppearanceIn(_In):
     user_id: UUID
     appearance: _AppearanceIn
@@ -1713,7 +1717,6 @@ class _AvatarLimitsIn(_In):
 
 class _AvatarIn(_In):
     entitled: bool
-    current_url: str | None
     request: _AvatarRequestIn | None
     limits: _AvatarLimitsIn
 
@@ -1721,7 +1724,7 @@ class _AvatarIn(_In):
 _SHOP_CATALOG = TypeAdapter(_ShopCatalogIn)
 _PACKS = TypeAdapter(_PacksIn)
 _INVENTORY = TypeAdapter(_InventoryIn)
-_APPEARANCE = TypeAdapter(_AppearanceIn)
+_MY_APPEARANCE = TypeAdapter(_MyAppearanceIn)
 _PLAYERS_APPEARANCE = TypeAdapter(_PlayersAppearanceIn)
 _AVATAR = TypeAdapter(_AvatarIn)
 

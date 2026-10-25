@@ -298,7 +298,9 @@ class NotificationsContainer:
     @property
     def broadcast_queries(self) -> BroadcastQueries:
         """Список рассылок."""
-        return BroadcastQueries(self.uow_factory())
+        return BroadcastQueries(
+            self.uow_factory(), audience_timeout_ms=self._cfg.audience_timeout_ms
+        )
 
     @property
     def send_broadcast(self) -> SendBroadcast:

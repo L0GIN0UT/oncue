@@ -365,6 +365,10 @@ async def test_approval_sets_current_url_and_public_appearance(
     assert public["custom_avatar_url"] == f"/ugc/{key}"
     # id одобренного ассета нужен фронту для жалобы на чужую аватарку (ADR 0069)
     assert public["custom_avatar_asset_id"] == str(asset)
+    # свой адрес лежит и в `/me/appearance` (единый источник для профиля), `current_url` - устарел
+    mine = (await progression.get("/v1/me/appearance", user)).json()
+    assert mine["custom_avatar_url"] == f"/ugc/{key}"
+    assert mine["custom_avatar_asset_id"] == str(asset)
 
 
 async def test_appearance_without_custom_avatar_has_null_url(progression: Service) -> None:
@@ -372,6 +376,18 @@ async def test_appearance_without_custom_avatar_has_null_url(progression: Servic
     public = (await progression.get(f"/v1/appearance?user_ids={user}", uuid7())).json()
     assert public["players"][0]["custom_avatar_url"] is None
     assert public["players"][0]["custom_avatar_asset_id"] is None
+
+
+async def test_my_appearance_without_custom_avatar_has_nulls(progression: Service) -> None:
+    user = await buyer(progression)
+    mine = (await progression.get("/v1/me/appearance", user)).json()
+    assert mine["custom_avatar_url"] is None
+    assert mine["custom_avatar_asset_id"] is None
+
+
+async def test_current_url_is_marked_deprecated_in_openapi(progression: Service) -> None:
+    schema = (await progression.client.get("/openapi.json")).json()["components"]["schemas"]
+    assert schema["MyAvatar"]["properties"]["current_url"]["deprecated"] is True
 
 
 async def test_duplicate_event_has_one_effect(progression: Service, media: FakeMedia) -> None:

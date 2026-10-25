@@ -1917,6 +1917,102 @@
         ]
       }
     },
+    "/admin/v1/ugc-images/{asset_id}": {
+      "get": {
+        "description": "Ассет в любом статусе: поля как у элемента очереди, включая решение, причину и версию. Ключей и адресов S3 нет. Нет ассета - 404 `ugc.not_found`.",
+        "operationId": "card_admin_v1_ugc_images__asset_id__get",
+        "parameters": [
+          {
+            "description": "Идентификатор UGC-ассета",
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор UGC-ассета",
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UgcImage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Карточка UGC-изображения",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/v1/ugc-images/{asset_id}/approve": {
       "post": {
         "description": "Только из `pending` (иначе 409 `ugc.not_pending`). В одной транзакции: статус, аудит и outbox `AssetModerated`; объект копируется в публичный `u/<hex>.webp`, `p/` удаляется после коммита.",

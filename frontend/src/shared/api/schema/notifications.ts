@@ -23,6 +23,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/broadcasts/audience": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Сколько получателей у рассылки
+         * @description Для экрана подтверждения: число игроков с согласием, которым уйдёт рассылка (то же, что попадёт в `recipients` при создании). Запрос ограничен по времени: превышение - 503.
+         */
+        get: operations["broadcast_audience_admin_v1_broadcasts_audience_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/notification-types": {
         parameters: {
             query?: never;
@@ -266,7 +286,7 @@ export interface paths {
         put?: never;
         /**
          * Отписаться по ссылке из письма
-         * @description Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`.
+         * @description Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`. Тело - JSON `{token}` или форма RFC 8058 `List-Unsubscribe=One-Click` (`application/x-www-form-urlencoded`, до 1 КБ) с токеном в query.
          */
         post: operations["unsubscribe_v1_unsubscribe_post"];
         delete?: never;
@@ -331,6 +351,17 @@ export interface components {
             status: "queued" | "sending" | "sent" | "failed";
             /** Subject */
             subject: string;
+        };
+        /**
+         * BroadcastAudience
+         * @description Число получателей рассылки (для экрана подтверждения).
+         */
+        BroadcastAudience: {
+            /**
+             * Recipients
+             * @description Сколько игроков с согласием получат письмо
+             */
+            recipients: number;
         };
         /**
          * BroadcastPage
@@ -616,17 +647,6 @@ export interface components {
             /** Count */
             count: number;
         };
-        /**
-         * UnsubscribeRequest
-         * @description Отписка по токену из письма (страница отписки).
-         */
-        UnsubscribeRequest: {
-            /**
-             * Token
-             * @description Непрозрачный токен из ссылки в письме
-             */
-            token: string;
-        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -759,6 +779,56 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    broadcast_audience_admin_v1_broadcasts_audience_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BroadcastAudience"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1422,14 +1492,26 @@ export interface operations {
     };
     unsubscribe_v1_unsubscribe_post: {
         parameters: {
-            query?: never;
+            query?: {
+                token?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UnsubscribeRequest"];
+                "application/json": {
+                    /**
+                     * Token
+                     * @description Непрозрачный токен из ссылки в письме
+                     */
+                    token: string;
+                };
+                "application/x-www-form-urlencoded": {
+                    /** @enum {string} */
+                    "List-Unsubscribe": "One-Click";
+                };
             };
         };
         responses: {

@@ -18,7 +18,8 @@ from uuid import UUID
 
 from bff_web_service.application.dto import (
     ActiveEvent,
-    AppearanceSlotCard,
+    AppearanceCard,
+    AvatarCard,
     BadgeCard,
     CatalogQuery,
     CollectionDetail,
@@ -38,7 +39,6 @@ from bff_web_service.application.dto import (
     MatchResult,
     Me,
     Mode,
-    MyAvatar,
     MyMatches,
     OpenRooms,
     PackCard,
@@ -287,12 +287,12 @@ class ProgressionClient(Protocol):
         """Инвентарь (``/v1/me/inventory``)."""
         ...
 
-    async def my_appearance(self, token: str) -> list[AppearanceSlotCard]:
-        """Слоты оформления субъекта (``/v1/me/appearance``)."""
+    async def my_appearance(self, token: str) -> AppearanceCard:
+        """Оформление субъекта: слоты и своя аватарка (``/v1/me/appearance``)."""
         ...
 
-    async def my_avatar(self, token: str) -> MyAvatar:
-        """Своя аватарка: право, заявка, лимиты, действующий адрес (``/v1/me/avatar``)."""
+    async def my_avatar(self, token: str) -> AvatarCard:
+        """Своя аватарка: право, заявка, лимиты (``/v1/me/avatar``; адрес - в оформлении)."""
         ...
 
     async def players_appearance(

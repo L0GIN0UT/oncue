@@ -313,7 +313,7 @@ class ClueMeta(BaseModel):
 
 
 class ClueOut(BaseModel):
-    """Короткоживущая ссылка на ассет уровня (TTL 60 с)."""
+    """Короткоживущая ссылка на ассет уровня (срок - `expires_at`; TTL задаёт media-pipeline)."""
 
     level: int
     kind: ClueKind

@@ -71,7 +71,7 @@ from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.application.queries.sources import ListSources
-from media_pipeline_service.application.queries.ugc import ListUgcQueue
+from media_pipeline_service.application.queries.ugc import GetUgcImage, ListUgcQueue
 from media_pipeline_service.application.sources import SourceIngestor
 from media_pipeline_service.domain.links import LinkPolicy
 from media_pipeline_service.domain.profiles import AssetProfileCatalog
@@ -147,7 +147,9 @@ class MediaAdapters:
             ),
             images=PillowImageProcessor(max_pixels=m.max_image_pixels, webp_quality=m.webp_quality),
             ugc_encoder=PillowUgcEncoder(
-                webp_quality=m.webp_quality, concurrency=m.ugc_encode_concurrency
+                webp_quality=m.webp_quality,
+                concurrency=m.ugc_encode_concurrency,
+                icc_max_bytes=m.ugc_icc_max_bytes,
             ),
             signer=signer,
             limiter=(
@@ -413,6 +415,7 @@ class MediaContainer:
             ),
             preview=PreviewUgcImage(self.uow_factory(), self.clock, a.storage),
             queue=ListUgcQueue(self.uow_factory()),
+            card=GetUgcImage(self.uow_factory()),
             purger=purger,
             orphans=SweepOrphanUgcObjects(
                 self.uow_factory(),

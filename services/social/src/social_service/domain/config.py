@@ -1,8 +1,9 @@
 """Конфиг social: модель тела версии (ADR 0053).
 
 Тело проверяется по ``contracts/social/social_config.v1.json`` в infrastructure; здесь только
-неизменяемая модель и разбор уже проверенного словаря. Значений по умолчанию нет: конфиг
-приходит из БД (версия действует без деплоя).
+неизменяемая модель и разбор уже проверенного словаря. Значений по умолчанию нет (кроме
+необязательных окон друзей и секции win_trading): конфиг приходит из БД (версия
+действует без деплоя).
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ class FriendsConfig:
     invites_per_minute: int
     max_friends: int
     requests_per_day: int
+    lookup_window_s: int = 3600
+    invite_window_s: int = 60
 
 
 @dataclass(frozen=True, slots=True)

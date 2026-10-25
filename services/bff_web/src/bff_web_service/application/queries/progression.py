@@ -17,7 +17,6 @@ from bff_web_service.application.dto import (
     BellCard,
     EventArchiveCard,
     HomeProgressCard,
-    MyAvatar,
     PlayerBlocks,
     PlayerPage,
     PlayerRelation,
@@ -103,13 +102,6 @@ class GetProfilePage:
         progress, wallet, quests, badges, wheel = core
         slots, inventory, avatar, events = cosmetics
         _raise_auth_failure(progress, wallet, quests, badges, wheel, slots, inventory, avatar)
-        # Оформление = слоты + адрес своей аватарки; без одной из частей показать его
-        # нельзя (иначе фронт нарисует не тот аватар) - блок гаснет целиком.
-        if isinstance(slots, list) and isinstance(avatar, MyAvatar):
-            appearance = Block.ok(AppearanceCard(slots, avatar.current_url))
-        else:
-            block_of(avatar if isinstance(slots, list) else slots, "profile.appearance")  # в лог
-            appearance = Block.unavailable()
         return ProfilePage(
             blocks=ProfileBlocks(
                 progress=block_of(progress, "profile.progress"),
@@ -117,11 +109,9 @@ class GetProfilePage:
                 quests=block_of(quests, "profile.quests"),
                 badges=block_of(badges, "profile.badges"),
                 wheel=block_of(wheel, "profile.wheel"),
-                appearance=appearance,
+                appearance=block_of(slots, "profile.appearance"),
                 inventory=block_of(inventory, "profile.inventory"),
-                avatar=Block.ok(avatar.card)
-                if isinstance(avatar, MyAvatar)
-                else block_of(avatar, "profile.avatar"),
+                avatar=block_of(avatar, "profile.avatar"),
                 # Архив - дополнение: сбой источника даёт пустой список, не падение профиля.
                 events=_archive(events),
             )

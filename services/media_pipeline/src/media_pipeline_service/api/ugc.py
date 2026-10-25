@@ -261,6 +261,20 @@ def register_ugc_admin_routes(router: APIRouter, ugc: UgcUseCases) -> None:
         )
 
     @router.get(
+        "/ugc-images/{asset_id}",
+        response_model=UgcImage,
+        summary="Карточка UGC-изображения",
+        description=(
+            "Ассет в любом статусе: поля как у элемента очереди, включая решение, причину и "
+            "версию. Ключей и адресов S3 нет. Нет ассета - 404 `ugc.not_found`."
+        ),
+        responses=problem_responses(401, 403, 404, 422),
+        dependencies=[Depends(_no_store)],
+    )
+    async def card(asset_id: AssetIdPath, principal: Moderator) -> UgcImage:  # noqa: ARG001
+        return UgcImage.of(await ugc.card.execute(asset_id))
+
+    @router.get(
         "/ugc-images/{asset_id}/preview",
         response_class=Response,
         summary="Содержимое pending-изображения",
