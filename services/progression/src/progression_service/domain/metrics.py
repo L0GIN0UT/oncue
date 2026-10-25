@@ -77,6 +77,7 @@ class MetricUpdate:
         place: Место в топе недели (``weekly_top_place``).
         slot: Слот надетого предмета (``item_equipped``).
         item_key: Ключ надетого предмета (``item_equipped``).
+        collection_id: Сборник сессии строкой UUID (``collection_played``).
     """
 
     metric: str
@@ -85,6 +86,7 @@ class MetricUpdate:
     place: int | None = None
     slot: str | None = None
     item_key: str | None = None
+    collection_id: str | None = None
 
     def __post_init__(self) -> None:
         if not is_known(self.metric):

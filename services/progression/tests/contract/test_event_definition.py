@@ -17,7 +17,7 @@ pytestmark = pytest.mark.contract
 ROOT = Path(__file__).resolve().parents[4] / "contracts" / "progression"
 SCHEMA = json.loads((ROOT / "event_definition.v1.json").read_text(encoding="utf-8"))
 EXAMPLE = json.loads((ROOT / "examples" / "event_definition.v1.json").read_text(encoding="utf-8"))
-VALIDATOR = Draft202012Validator(SCHEMA)
+VALIDATOR = Draft202012Validator(SCHEMA, format_checker=Draft202012Validator.FORMAT_CHECKER)
 
 
 def mutated(change: Any) -> dict[str, Any]:
@@ -50,10 +50,40 @@ def _one_find(d: dict[str, Any]) -> None:
     d["finds"] = d["finds"][:1]
 
 
+COLL = "0190a000-0000-7000-8000-00000000000a"
+
+
+def _keys(d: dict[str, Any], metric: str, keys: Any) -> None:
+    d["finds"][1]["trigger"].update(metric=metric, params={"collection_keys": keys})
+
+
+def _keys_other_metric(d: dict[str, Any]) -> None:
+    _keys(d, "rounds_played", [COLL])
+
+
+def _keys_not_uuid(d: dict[str, Any]) -> None:
+    _keys(d, "collection_played", ["not-a-uuid"])
+
+
+def _keys_duplicates(d: dict[str, Any]) -> None:
+    _keys(d, "collection_played", [COLL, COLL])
+
+
+def _keys_too_many(d: dict[str, Any]) -> None:
+    _keys(d, "collection_played", [f"0190a000-0000-7000-8000-{i:012d}" for i in range(21)])
+
+
+@pytest.mark.parametrize("keys", [[COLL], []])
+def test_collection_keys_accepted_for_collection_played(keys: list[str]) -> None:
+    data = mutated(lambda d: _keys(d, "collection_played", keys))
+    assert list(VALIDATOR.iter_errors(data)) == []
+    EventDefinition.model_validate(data)
+
+
 def test_example_is_valid_and_covers_variants() -> None:
     assert list(VALIDATOR.iter_errors(EXAMPLE)) == []
     finds = EXAMPLE["finds"]
-    assert len(finds) == 3
+    assert len(finds) == 4
     assert sum(f["final"] for f in finds) == 1
     assert {f["trigger"]["type"] for f in finds} == {"server", "ui_spot"}
 
@@ -66,7 +96,18 @@ def test_pydantic_body_accepts_example_and_round_trips() -> None:
 
 @pytest.mark.parametrize(
     "change",
-    [_second_final, _unknown_metric, _bad_page, _x_over, _extra_field, _one_find],
+    [
+        _second_final,
+        _unknown_metric,
+        _bad_page,
+        _x_over,
+        _extra_field,
+        _one_find,
+        _keys_other_metric,
+        _keys_not_uuid,
+        _keys_duplicates,
+        _keys_too_many,
+    ],
 )
 def test_schema_and_model_reject_the_same_invalid_bodies(change: Any) -> None:
     data = mutated(change)
@@ -76,7 +117,7 @@ def test_schema_and_model_reject_the_same_invalid_bodies(change: Any) -> None:
 
 
 def test_no_final_find_is_rejected() -> None:
-    data = mutated(lambda d: d["finds"][2].update(final=False))
+    data = mutated(lambda d: d["finds"][3].update(final=False))
     assert list(VALIDATOR.iter_errors(data)) != []
     with pytest.raises(ValidationError):
         EventDefinition.model_validate(data)

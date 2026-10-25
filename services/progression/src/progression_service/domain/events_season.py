@@ -220,6 +220,7 @@ class Trigger:
     slot: str | None = None
     item_key: str | None = None
     domain: str | None = None
+    collection_keys: tuple[str, ...] = ()
 
     def accepts(self, update: MetricUpdate) -> bool:
         """Двигает ли изменение метрики эту находку (метрика, домен, параметры)."""
@@ -230,6 +231,8 @@ class Trigger:
         if self.place_max is not None and (update.place is None or update.place > self.place_max):
             return False
         if self.slot is not None and update.slot != self.slot:
+            return False
+        if self.collection_keys and update.collection_id not in self.collection_keys:
             return False
         return self.item_key is None or update.item_key == self.item_key
 
@@ -298,6 +301,7 @@ def _trigger(raw: Mapping[str, Any]) -> Trigger:
         slot=params.get("slot"),
         item_key=params.get("item_key"),
         domain=params.get("domain"),
+        collection_keys=tuple(str(k).lower() for k in params.get("collection_keys") or ()),
     )
 
 
@@ -377,6 +381,12 @@ def _trigger_errors(
         errors.append({"path": f"{where}.params.place_max", "reason": "только weekly_top_place"})
     if (t.slot or t.item_key) and t.metric != metrics.ITEM_EQUIPPED:
         errors.append({"path": f"{where}.params", "reason": "slot/item_key только item_equipped"})
+    if t.collection_keys and t.metric != metrics.COLLECTION_PLAYED:
+        errors.append(
+            {"path": f"{where}.params.collection_keys", "reason": "только collection_played"}
+        )
+    if len(set(t.collection_keys)) != len(t.collection_keys):
+        errors.append({"path": f"{where}.params.collection_keys", "reason": "повторы"})
     if t.metric == metrics.ITEM_EQUIPPED and t.target != 1:
         errors.append({"path": f"{where}.target", "reason": "надеть предмет - цель 1"})
     if t.slot is not None and (slot_keys is None or t.slot not in slot_keys):

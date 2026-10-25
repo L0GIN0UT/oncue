@@ -2619,6 +2619,8 @@ export interface components {
          * @description Параметры метрики.
          */
         TriggerParams: {
+            /** Collection Keys */
+            collection_keys?: string[] | null;
             /** Domain */
             domain?: ("music" | "film") | null;
             /** Item Key */

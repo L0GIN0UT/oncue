@@ -29,6 +29,9 @@ from progression_service.domain.metrics import MetricUpdate
 
 pytestmark = pytest.mark.unit
 
+COLL_A = "0190a000-0000-7000-8000-00000000000a"
+COLL_B = "0190a000-0000-7000-8000-00000000000b"
+
 T0 = datetime(2026, 11, 1, tzinfo=UTC)
 T1 = T0 + timedelta(days=7)
 
@@ -118,6 +121,8 @@ def test_exactly_one_final_is_required() -> None:
         (server("item_equipped", 1, slot="unknown"), "slot"),
         (server("rounds_played", 1, place_max=3), "place_max"),
         (server("rounds_played", 1, slot="frame"), "params"),
+        (server("rounds_played", 1, collection_keys=[COLL_A]), "collection_keys"),
+        (server("collection_played", 1, collection_keys=[COLL_A, COLL_A]), "collection_keys"),
     ],
 )
 def test_trigger_parameter_rules(trigger: dict[str, Any], path_part: str) -> None:
@@ -187,6 +192,20 @@ def test_item_equipped_matches_slot_or_item() -> None:
     by_item = trigger_of("item_equipped", item_key="k")
     assert by_item.accepts(MetricUpdate(metrics.ITEM_EQUIPPED, 1, slot="s", item_key="k"))
     assert not by_item.accepts(MetricUpdate(metrics.ITEM_EQUIPPED, 1, slot="s", item_key="o"))
+
+
+def test_collection_played_without_keys_accepts_any_collection() -> None:
+    for params in ({}, {"collection_keys": []}):
+        t = trigger_of("collection_played", **params)
+        assert t.accepts(MetricUpdate(metrics.COLLECTION_PLAYED, 1, collection_id=COLL_B))
+        assert t.accepts(MetricUpdate(metrics.COLLECTION_PLAYED, 1))
+
+
+def test_collection_played_with_keys_accepts_only_listed() -> None:
+    t = trigger_of("collection_played", collection_keys=[COLL_A])
+    assert t.accepts(MetricUpdate(metrics.COLLECTION_PLAYED, 1, collection_id=COLL_A))
+    assert not t.accepts(MetricUpdate(metrics.COLLECTION_PLAYED, 1, collection_id=COLL_B))
+    assert not t.accepts(MetricUpdate(metrics.COLLECTION_PLAYED, 1))
 
 
 def test_ui_spot_never_accepts_metrics() -> None:
