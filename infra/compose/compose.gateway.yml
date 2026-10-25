@@ -14,7 +14,7 @@ name: guessverse
 
 services:
   gateway:
-    image: nginx:1.28-alpine
+    image: nginx:1.29-alpine
     restart: unless-stopped
     networks: [backend]
     ports:
