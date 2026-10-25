@@ -308,6 +308,25 @@ async def test_collection_played_needs_collection_id(progression: Service) -> No
     assert finds_by_key(await page(progression, user))["coll"]["state"] == "found"
 
 
+async def test_collection_keys_count_only_listed_collections(progression: Service) -> None:
+    ev = progression.ev
+    wanted, other = uuid7(), uuid7()
+    await start_event(
+        progression,
+        ev.find("coll", 1, ev.trigger("collection_played", collection_keys=[str(wanted)])),
+        ev.find("fin", 2, final=True),
+    )
+    user = uuid7()
+    foreign = progression.game_finished(user, [10])
+    foreign.payload["collection_id"] = str(other)
+    await deliver(progression, foreign)
+    assert finds_by_key(await page(progression, user))["coll"]["state"] == "open"
+    listed = progression.game_finished(user, [10])
+    listed.payload["collection_id"] = str(wanted)
+    await deliver(progression, listed)
+    assert finds_by_key(await page(progression, user))["coll"]["state"] == "found"
+
+
 async def test_wheel_spin_streak_needs_consecutive_days(progression: Service) -> None:
     ev = progression.ev
     await start_event(

@@ -135,7 +135,14 @@ class ProgressTracker:
             MetricUpdate(metrics.CORRECT_ANSWERS, game.correct_answers, game.domain),
         ]
         if game.collection_id is not None:  # фильтра по тегу нет: GameFinished тегов не несёт
-            updates.append(MetricUpdate(metrics.COLLECTION_PLAYED, 1, game.domain))
+            updates.append(
+                MetricUpdate(
+                    metrics.COLLECTION_PLAYED,
+                    1,
+                    game.domain,
+                    collection_id=str(game.collection_id),
+                )
+            )
         return await self.record(
             f"game:{game.session_id}", game.user_id, game.finished_at, _fixed(updates)
         )

@@ -91,6 +91,39 @@ async def test_unknown_slot_in_item_equipped_trigger_is_422(progression: Service
     )
 
 
+_COLL = "0190a000-0000-7000-8000-00000000000a"
+
+
+@pytest.mark.parametrize(
+    ("metric", "keys"),
+    [
+        ("rounds_played", [_COLL]),
+        ("collection_played", ["not-a-uuid"]),
+        ("collection_played", [_COLL, _COLL]),
+    ],
+)
+async def test_bad_collection_keys_are_422(
+    progression: Service, metric: str, keys: list[str]
+) -> None:
+    await progression.publish_config()
+    ev = progression.ev
+    body = ev.body(
+        ev.find("a", 1, ev.trigger(metric, 1, collection_keys=keys)),
+        ev.find("fin", 2, final=True),
+    )
+    assert (await progression.create_event("autumn", body)).status_code == 422
+
+
+async def test_collection_keys_accepted_for_collection_played(progression: Service) -> None:
+    await progression.publish_config()
+    ev = progression.ev
+    body = ev.body(
+        ev.find("a", 1, ev.trigger("collection_played", 1, collection_keys=[_COLL])),
+        ev.find("fin", 2, final=True),
+    )
+    assert (await progression.create_event("autumn", body)).status_code == 201
+
+
 async def test_reward_item_must_be_active_item_of_this_event(progression: Service) -> None:
     await progression.publish_config()
     await progression.add_item("plain_frame", price=10)

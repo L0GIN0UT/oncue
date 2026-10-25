@@ -30,8 +30,27 @@
       "trigger": {"type": "server", "metric": "duel_win", "target": 3, "period": "event"}
     },
     {
-      "key": "golden_grove",
+      "key": "shelf_trail",
       "number": 3,
+      "title": "След полки",
+      "diary_before": "След ведёт к избранным сборникам.",
+      "diary_after": "Сборник сыгран, след найден.",
+      "x_pct": 30,
+      "y_pct": 75,
+      "reward": {"xp": 80, "verses": 15},
+      "final": false,
+      "play_page": "collections",
+      "trigger": {
+        "type": "server",
+        "metric": "collection_played",
+        "target": 2,
+        "period": "event",
+        "params": {"collection_keys": ["0190a000-0000-7000-8000-00000000000a"]}
+      }
+    },
+    {
+      "key": "golden_grove",
+      "number": 4,
       "title": "Золотая роща",
       "diary_before": "Роща откроется, когда будут найдены все следы.",
       "diary_after": "Роща открыта, экспедиция завершена.",

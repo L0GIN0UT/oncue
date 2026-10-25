@@ -53,6 +53,14 @@ class TriggerParams(_Strict):
     slot: SlotKey | None = None
     item_key: ItemKey | None = None
     domain: Literal["music", "film"] | None = None
+    collection_keys: list[UUID] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def _unique_keys(self) -> TriggerParams:
+        keys = self.collection_keys
+        if keys is not None and len(set(keys)) != len(keys):
+            raise ValueError("collection_keys: повторы")
+        return self
 
 
 class ServerTrigger(_Strict):
@@ -63,6 +71,13 @@ class ServerTrigger(_Strict):
     target: int = Field(ge=1, le=10_000)
     period: Literal["day", "event"]
     params: TriggerParams | None = None
+
+    @model_validator(mode="after")
+    def _collection_keys_only_collection_played(self) -> ServerTrigger:
+        has = self.params is not None and self.params.collection_keys is not None
+        if has and self.metric != "collection_played":
+            raise ValueError("collection_keys - только у collection_played")
+        return self
 
 
 class UiSpotTrigger(_Strict):

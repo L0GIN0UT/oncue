@@ -3773,6 +3773,22 @@
         "additionalProperties": false,
         "description": "Параметры метрики.",
         "properties": {
+          "collection_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Keys"
+          },
           "domain": {
             "anyOf": [
               {
