@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -33,6 +34,8 @@ CONSUMED_TOPICS: tuple[str, ...] = (
     "media_pipeline.ugc_image.v1",
     "social.social.v1",
 )
+
+RUN_FINISHED_EVENT = "progression.EventRunFinished"
 
 NOTIFICATIONS_CREATED = Counter("gv_notifications_created_total", "Созданные уведомления", ["type"])
 
@@ -59,8 +62,20 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:
                 task_id=f"{type_key}:{envelope.event_id}",
             )
 
+    async def run_finished(envelope: EventEnvelope, session: AsyncSession) -> None:
+        # Остановка массовой рассылки: запоминаем завершённый запуск (идемпотентно по run_id).
+        payload = envelope.payload
+        try:
+            run_id = UUID(str(payload["run_id"]))
+            reason = str(payload["reason"])
+            at = datetime.fromisoformat(str(payload["at"]))
+        except (KeyError, ValueError) as exc:
+            raise PermanentError(f"EventRunFinished не соответствует контракту: {exc}") from exc
+        await container.run_finished(session).execute(run_id, reason, at)
+
     for event_type in sorted(container.catalog.source_events):
         registry.register(event_type, handle)
+    registry.register(RUN_FINISHED_EVENT, run_finished)
     return registry
 
 

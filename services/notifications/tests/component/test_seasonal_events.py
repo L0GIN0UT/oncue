@@ -7,6 +7,8 @@ from uuid import UUID
 
 import pytest
 from notifications_service.application.audience import FANOUT_TASK
+from notifications_service.infrastructure.db.repositories import SqlNotifications
+from notifications_service.infrastructure.db.tables import finished_event_runs
 from notifications_service.infrastructure.db.tables import notifications as notifications_table
 from notifications_service.infrastructure.messaging import build_task_handlers
 
@@ -101,3 +103,68 @@ async def test_event_started_skips_players_who_muted_it(notifications: Service) 
     await _run_fanout(svc)
     started = await svc.rows(notifications_table, notifications_table.c.type == "event_started")
     assert [r.user_id for r in started] == [other]
+
+
+# ---------------------------------------------------------------- остановка рассылки (ADR 0054)
+OTHER_RUN = "0192a3b4-c5d6-7e8f-9a0b-0000000e0099"
+
+
+async def _finish(svc: Service, reason: str, run_id: str | None = None) -> Any:
+    extra = {"run_id": run_id} if run_id else {}
+    return await svc.deliver(svc.event("progression.EventRunFinished", reason=reason, **extra))
+
+
+async def _fan_out_stopped_after_first_batch(svc: Service, reason: str) -> None:
+    """Первая пачка из 2 игроков доставлена, затем приходит EventRunFinished, вторая выходит."""
+    svc.container._cfg.fanout_batch_size = 2
+    for _ in range(5):
+        await svc.notify(uuid7(), new_level=2)
+    await svc.deliver(svc.event("progression.EventRunStarted"))
+
+    original = SqlNotifications.known_users_after
+    calls = 0
+
+    async def after_first_read(self: Any, after: Any, limit: int) -> Any:
+        nonlocal calls
+        users = await original(self, after, limit)
+        calls += 1
+        if calls == 1:
+            await _finish(svc, reason)
+        return users
+
+    SqlNotifications.known_users_after = after_first_read  # type: ignore[method-assign]
+    try:
+        await _run_fanout(svc)
+    finally:
+        SqlNotifications.known_users_after = original  # type: ignore[method-assign]
+    assert calls == 1, "вторая пачка должна выйти до чтения аудитории"
+
+
+@pytest.mark.parametrize("reason", ["stopped", "ended"])
+async def test_finished_run_stops_fanout_but_keeps_delivered(
+    notifications: Service, reason: str
+) -> None:
+    svc = notifications
+    await _fan_out_stopped_after_first_batch(svc, reason)
+    started = await svc.rows(notifications_table, notifications_table.c.type == "event_started")
+    assert len(started) == 2
+
+
+async def test_repeated_run_finished_is_idempotent(notifications: Service) -> None:
+    svc = notifications
+    await _finish(svc, "stopped")
+    await _finish(svc, "ended")
+    [row] = await svc.rows(finished_event_runs)
+    assert row.reason == "stopped"
+
+
+async def test_other_run_fanout_is_not_affected(notifications: Service) -> None:
+    svc = notifications
+    users = [uuid7() for _ in range(3)]
+    for user in users:
+        await svc.notify(user, new_level=2)
+    await _finish(svc, "stopped")  # запуск из примера
+    await svc.deliver(svc.event("progression.EventRunStarted", run_id=OTHER_RUN))
+    await _run_fanout(svc)
+    started = await svc.rows(notifications_table, notifications_table.c.type == "event_started")
+    assert sorted(r.user_id for r in started) == sorted(users)

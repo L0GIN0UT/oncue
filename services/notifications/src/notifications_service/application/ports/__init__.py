@@ -104,6 +104,18 @@ class NotificationRepository(Protocol):
         ...
 
 
+class FinishedRunRepository(Protocol):
+    """Завершённые запуски событий progression."""
+
+    async def mark(self, run_id: UUID, reason: str, at: datetime) -> None:
+        """Запомнить завершение (идемпотентно по ``run_id``)."""
+        ...
+
+    async def is_finished(self, run_id: UUID) -> bool:
+        """Запуск уже завершён."""
+        ...
+
+
 class PreferenceRepository(Protocol):
     """Настройки по типам."""
 
@@ -227,6 +239,9 @@ class UnitOfWork(Protocol):
 
     @property
     def preferences(self) -> PreferenceRepository: ...
+
+    @property
+    def finished_runs(self) -> FinishedRunRepository: ...
 
     @property
     def subscriptions(self) -> SubscriptionRepository: ...

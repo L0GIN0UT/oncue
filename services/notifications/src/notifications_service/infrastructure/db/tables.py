@@ -6,6 +6,8 @@
 * ``email_subscriptions`` - согласие на информационную рассылку (по умолчанию нет);
 * ``devices`` - устройства для Push (токен хранится хешем, в лог не попадает);
 * ``broadcasts`` / ``broadcast_deliveries`` - рассылки администрации и факты отправки;
+* ``finished_event_runs`` - завершённые запуски событий progression (``EventRunFinished``): по ним
+  воркер массовой доставки прекращает рассылку (ADR 0054);
 * ``admin_actions`` / ``idempotency_keys`` - аудит и ключи идемпотентности admin-мутаций.
 """
 
@@ -109,6 +111,15 @@ broadcasts = Table(
         "recipients >= 0 AND delivered >= 0 AND failed >= 0", name="counts_non_negative"
     ),
     Index("ix_broadcasts_created", text("created_at DESC"), text("id DESC")),
+)
+
+finished_event_runs = Table(
+    "finished_event_runs",
+    _md,
+    Column("run_id", Uuid(as_uuid=True), primary_key=True),
+    Column("reason", String(16), nullable=False),
+    Column("finished_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("reason IN ('ended', 'stopped')", name="reason_known"),
 )
 
 broadcast_deliveries = Table(
