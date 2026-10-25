@@ -42,7 +42,7 @@
 | Presence и join/leave в Centrifugo `room` выключены: при включении скрыть наблюдателей | `infra/centrifugo` | [хвосты 4b](09-roadmap.md) | При включении |
 | `Cache-Control: no-store` в admin-ручках progression: проверить на успешных ответах | progression | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Тест тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
-| Нестабильные тесты: `GameScreen.modes`, `CollectionEditor` (автосохранение), `party.spec` | frontend, e2e | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
+| Нестабильный `party.spec` (в `e2e/online.spec.ts`; `GameScreen.modes` и `CollectionEditor` — таймаут `waitFor` поднят, PR #36): причина не найдена, не воспроизводится | e2e | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Windows: ffmpeg-тесты `media_pipeline`, `admin test_runtime` (зелёные в CI) | media_pipeline, admin | [хвосты 5a](09-roadmap.md#хвосты-5a) | Не чинить |
 | Разделение ролей Postgres для журналов progression (REVOKE) | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
 | Инкрементальная сверка журнала progression и партиционирование | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
@@ -60,7 +60,6 @@
 | Кнопка жалобы в истории матчей: у карточки матча нет списка игроков (жалоба доступна в итоге матча) | bff, frontend | 5c |
 | Страница для уже открытой сессии забаненного `account` (сейчас только отказ на входе) | frontend, identity | 5c |
 | Точный флаг «можно добавить в друзья» в итоге матча (сейчас кнопка при `can_report`) | bff | 5c |
-| Общий `adminContext` в e2e (`e2e/collections.spec.ts` дублирует `e2e/admin.ts`) | e2e | 5b | По желанию |
 | Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |
 | Анонимное чтение `p/*` в S3 (принятый риск): перейти на presigned-ссылки gateway | media_pipeline | 5b | Этап 7 |
 | Цвет аватарки: 16-битные и CMYK | media_pipeline | 5b | По желанию |
@@ -68,8 +67,6 @@
 | Disconnect Centrifugo для забаненного (ACCOUNT): открытое соединение живёт до `exp` connection-токена; нужен server API `disconnect` в identity | identity | [ADR 0052](adr/0052-sanctions-and-enforcement.md) | После 5c |
 | Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
 | Иерархия модераторов: сейчас модератор с `social.sanctions.manage` может санкционировать admin; запрет санкций выше своей роли | social, identity | ADR 0052 (решение владельца) | По решению владельца |
-| Фронт шумит: presence с каждой вкладки, `unread-count` и shell отдельными запросами (e2e упёрлись в лимиты gateway по IP, PR #30); свести в `/pages/shell` и один presence на браузер (лидер через `BroadcastChannel`) | frontend, bff | CI e2e, PR #30 | До релиза |
-| `e2e/ranked.spec.ts` «очередь: второй игрок находит матч» нестабилен на CI (`queue-found` не появляется за 10 с, проходит на retry): сделать heartbeat в моке детерминированным или поднять `TICK_WAIT` | e2e | CI, PR #30 | Низкий |
 | Теги сборника в `game.GameFinished`: `collection_played` фильтруется только списком `collection_keys` (id сборников) в находке; фильтра по тегу нет | game, progression | 5d | По решению владельца |
 | Полная аудитория `event_started`: identity отдаёт список пользователей (сейчас — игроки, известные notifications); настройки пачки одним запросом; `UserDeleted` в notifications | identity, notifications | 5d | До релиза |
 | `EXCLUDE USING gist` по `tstzrange` запусков событий (сейчас только advisory-lock и проверка в транзакции) | progression | 5d | По желанию |
@@ -93,3 +90,8 @@
 - **4b:** identity, match, rating; допущения сидов (K Эло 40/20, пороги званий, фильтры `similar`).
 - **5a:** ledger progression — роли Postgres, миграции `0002`–`0004`, начисления и потолки, конфиг и публикация, ручная выдача и сторно, награды сезона и недели; живая проверка `e2e/progression.spec.ts`, `/profile`, колесо, админка «Прогрессия»; смена пароля сид-админа локального стенда.
 - **5b:** живой стек (`shop`, `notifications`, `progression` e2e); ledger (траты Версов, миграции `0005`–`0007`); промокоды (HMAC, потолки эмиссии); загрузка файлов (аватарка, предметы, `/ugc/`, `/media/p/`, `/cosmetics/`); identity `POST /internal/v1/users/emails`; отписка без входа; рассылка (письма только подписавшимся); тема (смена в рантайме).
+
+## Закрыто (проход по техдолгу)
+
+- `gv dev seed` не идемпотентен на засеянном стенде (409 `idempotency.key_reused`) — [PR #35](https://github.com/L0GIN0UT/oncue/pull/35).
+- Шум фронта (presence с каждой вкладки, `unread-count` рядом с shell), `ranked.spec` «очередь», общий `adminContext` в e2e, таймаут `waitFor` в `GameScreen.modes`/`CollectionEditor` — [PR #36](https://github.com/L0GIN0UT/oncue/pull/36).

@@ -1,8 +1,12 @@
 /** Общая настройка vitest: matchers jest-dom, очистка DOM и клиентов API между тестами. */
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
 import { resetApiClients } from "@/shared/api/client";
+
+// Дефолтный 1 с у `waitFor`/`findBy*` рвётся под нагрузкой CI (много воркеров): тесты
+// `GameScreen.modes`, `CollectionEditor` падали без ошибки в логике. Ассерты прежние.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();

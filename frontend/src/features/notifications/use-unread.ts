@@ -3,7 +3,8 @@
  * Число непрочитанных для колокольчика (ADR 0047). Источники, от главного к страховке:
  * 1. realtime — событие `notification.created` личного канала `personal:#<user_id>` увеличивает
  *    счётчик сразу и добавляет уведомление в открытый список;
- * 2. старт — блок `bell` из bff `/v1/pages/shell` (показывается, пока не ответил счётчик);
+ * 2. старт — блок `bell` из bff `/v1/pages/shell` служит начальным значением счётчика: отдельного
+ *    запроса `unread-count` на старте нет (если блок погас — счётчик запрашивается сам);
  * 3. страховка — опрос `unread-count` раз в 60 с. react-query не опрашивает в фоновой вкладке
  *    (`refetchIntervalInBackground: false`), а при возврате на вкладку счётчик освежается.
  * Запись в БД первична: потерянное сообщение канала догоняет опрос.
@@ -49,7 +50,9 @@ export function useUnreadCount(): number {
     queryFn: fetchUnreadCount,
     // Сначала shell: его число показывается, пока не пришёл точный счётчик.
     enabled: user && (shell.isFetched || shell.isError),
-    placeholderData: bell,
+    // Число из shell свежо в пределах периода опроса: первый запрос счётчика — через него.
+    ...(bell === undefined ? {} : { initialData: bell, initialDataUpdatedAt: shell.dataUpdatedAt }),
+    staleTime: UNREAD_POLL_MS,
     refetchInterval: UNREAD_POLL_MS,
     refetchIntervalInBackground: false,
     retry: false,

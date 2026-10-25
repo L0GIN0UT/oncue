@@ -69,3 +69,96 @@ describe("startPresence", () => {
     stop();
   });
 });
+
+/** Замки одного браузера: эксклюзивный, очередь по порядку запросов, abort снимает ожидание. */
+function fakeLocks() {
+  const queue: Array<{ cb: () => Promise<void>; signal: AbortSignal; done: () => void }> = [];
+  let held = false;
+  const pump = () => {
+    if (held) return;
+    const next = queue.shift();
+    if (!next) return;
+    if (next.signal.aborted) return pump();
+    held = true;
+    void next.cb().then(() => {
+      held = false;
+      next.done();
+      pump();
+    });
+  };
+  return {
+    request(_name: string, options: { signal: AbortSignal }, cb: () => Promise<void>) {
+      return new Promise<void>((resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("abort")));
+        queue.push({ cb, signal: options.signal, done: resolve });
+        pump();
+      });
+    },
+  };
+}
+
+describe("startPresence: одна вкладка на браузер", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("две видимые вкладки — сигналы только от держателя замка", async () => {
+    const locks = fakeLocks();
+    const a = vi.fn(() => Promise.resolve());
+    const b = vi.fn(() => Promise.resolve());
+    const stopA = startPresence(a, 30_000, fakeDoc().doc, locks);
+    const stopB = startPresence(b, 30_000, fakeDoc().doc, locks);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(a).toHaveBeenCalledTimes(4);
+    expect(b).not.toHaveBeenCalled();
+    stopA();
+    stopB();
+  });
+
+  it("когда держатель скрыт, замок переходит видимой вкладке", async () => {
+    const locks = fakeLocks();
+    const a = vi.fn(() => Promise.resolve());
+    const b = vi.fn(() => Promise.resolve());
+    const pageA = fakeDoc();
+    const stopA = startPresence(a, 30_000, pageA.doc, locks);
+    const stopB = startPresence(b, 30_000, fakeDoc().doc, locks);
+    await vi.advanceTimersByTimeAsync(0);
+    pageA.set("hidden");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(2);
+    stopA();
+    stopB();
+  });
+
+  it("закрытие вкладки в очереди не оставляет сигналов", async () => {
+    const locks = fakeLocks();
+    const a = vi.fn(() => Promise.resolve());
+    const b = vi.fn(() => Promise.resolve());
+    const stopA = startPresence(a, 30_000, fakeDoc().doc, locks);
+    const stopB = startPresence(b, 30_000, fakeDoc().doc, locks);
+    stopB();
+    stopA();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(b).not.toHaveBeenCalled();
+    expect(a).toHaveBeenCalledTimes(1);
+  });
+
+  it("stop сразу после выдачи замка: таймера и удержания нет", async () => {
+    // Замок выдаётся асинхронно: коллбэк выполняется уже после stop().
+    let grant: (() => Promise<void>) | null = null;
+    let released = false;
+    const locks = {
+      request(_n: string, _o: { signal: AbortSignal }, cb: () => Promise<void>) {
+        grant = () => cb().then(() => void (released = true));
+        return new Promise<void>(() => undefined);
+      },
+    };
+    const send = vi.fn(() => Promise.resolve());
+    const stop = startPresence(send, 30_000, fakeDoc().doc, locks);
+    stop();
+    await grant!();
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(send).not.toHaveBeenCalled();
+    expect(released).toBe(true);
+  });
+});
