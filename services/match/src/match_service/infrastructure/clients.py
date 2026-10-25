@@ -30,6 +30,7 @@ from match_service.domain.errors import (
     MatchInvalidError,
     MatchNotFoundError,
     MatchUnavailableError,
+    override_details,
 )
 from match_service.domain.model import (
     AnswerKey,
@@ -60,7 +61,19 @@ _GAME_ERRORS: dict[str, tuple[type[AppError], str]] = {
     "game.collection_domain_mismatch": (MatchInvalidError, errors.COLLECTION_NOT_FOUND),
     "game.too_many_collections": (MatchInvalidError, errors.TOO_MANY_COLLECTIONS),
     "game.pool_too_small": (MatchInvalidError, errors.POOL_TOO_SMALL),
+    "game.override_not_allowed": (MatchInvalidError, errors.SETTING_NOT_ALLOWED),
+    "game.override_invalid": (MatchInvalidError, errors.SETTING_NOT_ALLOWED),
 }
+
+
+def _overrides(request: RoundPlanRequest) -> dict[str, Any]:  # Any: JSON тела запроса
+    """Поле `overrides` запроса плана — только если хозяин что-то переопределил."""
+    chosen = {
+        k: v
+        for k, v in (("clue_type", request.clue_type), ("answer_format", request.answer_format))
+        if v is not None
+    }
+    return {"overrides": chosen} if chosen else {}
 
 
 class TokenProvider(Protocol):
@@ -171,6 +184,7 @@ class GameClient(_Client):
                 "rounds": request.rounds,
                 "collection_ids": [str(c) for c in request.collection_ids],
                 "exclude_ids": [str(x) for x in request.exclude_ids],
+                **_overrides(request),
             },
         )
         if response.status_code != httpx.codes.OK:
@@ -192,7 +206,8 @@ class GameClient(_Client):
             log.warning("match.plan_rejected", status=response.status_code, code=code)
             return self._unavailable()
         cls, match_code = mapped
-        details = body.get("details") if isinstance(body.get("details"), dict) else None
+        raw = body.get("details") if isinstance(body.get("details"), dict) else None
+        details = override_details(code, raw) if code.startswith("game.override_") else raw
         return cls("план матча не получен", code=match_code, details=details)
 
     async def body(self, key: str, version: int) -> dict[str, Any] | None:  # Any: ModeConfig

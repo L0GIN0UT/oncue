@@ -62,7 +62,10 @@ def test_registry_listens_exactly_to_catalog_events() -> None:
     infra = Infrastructure(settings=DEFINITION.settings_cls(), tables=DEFINITION.tables)
     assert DEFINITION.build_event_handlers is not None
     registry = DEFINITION.build_event_handlers(infra)
-    assert registry.event_types == load_catalog().source_events | {"progression.EventRunFinished"}
+    assert registry.event_types == load_catalog().source_events | {
+        "progression.EventRunFinished",
+        "identity.UserDeleted",
+    }
 
 
 def test_event_run_finished_example_is_consumable() -> None:
@@ -73,6 +76,13 @@ def test_event_run_finished_example_is_consumable() -> None:
     assert payload["reason"] in {"ended", "stopped"}
     started = dict(load_example("progression.EventRunStarted").payload)
     assert payload["run_id"] == started["run_id"]
+
+
+def test_user_deleted_example_is_consumable() -> None:
+    """Контракт identity.UserDeleted: пример валиден, топик потребляется."""
+    payload = dict(load_example("identity.UserDeleted").payload)
+    assert validation_errors("identity.UserDeleted", payload) == []
+    assert load_event_schema("identity.UserDeleted")["x-topic"] in CONSUMED_TOPICS
 
 
 @pytest.mark.parametrize(
@@ -132,7 +142,7 @@ def test_event_run_started_example_selects_audience_type() -> None:
     payload = dict(load_example("progression.EventRunStarted").payload)
     assert validation_errors("progression.EventRunStarted", payload) == []
     [notification_type] = catalog.for_event("progression.EventRunStarted")
-    assert notification_type.audience == "known_users"
+    assert notification_type.audience == "active_users"
     user = uuid7()
     result = map_event(notification_type, payload, locale="ru", default_locale="ru", user_id=user)
     assert result.user_id == user

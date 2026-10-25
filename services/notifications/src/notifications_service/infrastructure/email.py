@@ -20,6 +20,7 @@ from notifications_service.application.ports import (
     DIRECTORY_UNCONFIGURED,
     EmailMessage,
     Recipient,
+    UserPage,
 )
 from notifications_service.settings import SmtpSettings
 
@@ -166,6 +167,97 @@ class HttpEmailDirectory:
         except (KeyError, TypeError, ValueError):
             # Ответ может содержать адреса: исключение и лог без деталей.
             log.warning("notifications.email_directory_unparsable")
+            raise DependencyUnavailableError(
+                "ответ identity не разобран", code=DIRECTORY_UNAVAILABLE
+            ) from None
+
+
+class UnconfiguredUserDirectory:
+    """Списка пользователей нет: сервисная аутентификация не настроена (нет токенов identity)."""
+
+    async def active_after(self, after: UUID | None, limit: int) -> UserPage:  # noqa: ARG002 — порт
+        """Всегда окончательный отказ (настройка, повтор бесполезен)."""
+        raise DependencyUnavailableError(
+            "список пользователей не настроен", code=DIRECTORY_UNCONFIGURED
+        )
+
+
+class HttpUserDirectory:
+    """Активные пользователи через internal API identity (ADR 0069).
+
+    ``GET /internal/v1/users/active?after=&limit=`` (scope ``users.active.list``): только
+    идентификаторы. Сбой сети, 5xx и 429 - повторяемая ошибка (``DIRECTORY_UNAVAILABLE``);
+    прочие 4xx - окончательная (``DIRECTORY_FORBIDDEN``); после 401 токен сбрасывается и вызов
+    повторяется один раз. Тело ответа об ошибке не читается.
+    """
+
+    PATH = "/internal/v1/users/active"
+
+    def __init__(
+        self,
+        base_url: str,
+        tokens: TokenProvider,
+        *,
+        timeout_s: float,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._tokens = tokens
+        self._http = client or httpx.AsyncClient(base_url=base_url, timeout=timeout_s)
+
+    async def aclose(self) -> None:
+        """Закрыть HTTP-клиент."""
+        await self._http.aclose()
+
+    async def _get(self, after: UUID | None, limit: int) -> httpx.Response:
+        token = await self._tokens.token()
+        params: dict[str, str | int] = {"limit": limit}
+        if after is not None:
+            params["after"] = str(after)
+        try:
+            return await self._http.get(
+                self.PATH, params=params, headers={"Authorization": f"Bearer {token}"}
+            )
+        except httpx.HTTPError as exc:
+            log.warning("notifications.user_directory_network", error=type(exc).__name__)
+            raise DependencyUnavailableError(
+                "identity недоступен", code=DIRECTORY_UNAVAILABLE
+            ) from None
+
+    async def active_after(self, after: UUID | None, limit: int) -> UserPage:
+        """Страница активных пользователей после курсора ``after``.
+
+        Raises:
+            DependencyUnavailableError: ``DIRECTORY_UNAVAILABLE`` (повторить) или
+                ``DIRECTORY_FORBIDDEN`` (настройка, повтор бесполезен).
+        """
+        response = await self._get(after, limit)
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            self._tokens.invalidate()
+            response = await self._get(after, limit)
+            if response.status_code == httpx.codes.UNAUTHORIZED:
+                self._tokens.invalidate()
+        status = response.status_code
+        if status != httpx.codes.OK:
+            log.warning("notifications.user_directory_rejected", status=status)
+            if status >= httpx.codes.INTERNAL_SERVER_ERROR or (
+                status == httpx.codes.TOO_MANY_REQUESTS
+            ):
+                raise DependencyUnavailableError(
+                    "identity временно недоступен", code=DIRECTORY_UNAVAILABLE
+                )
+            raise DependencyUnavailableError(
+                "identity отклонил запрос списка: проверьте клиента и scope users.active.list",
+                code=DIRECTORY_FORBIDDEN,
+            )
+        try:
+            body = response.json()
+            cursor = body["next_cursor"]
+            return UserPage(
+                ids=[UUID(str(i)) for i in body["items"]],
+                next_cursor=UUID(str(cursor)) if cursor is not None else None,
+            )
+        except (KeyError, TypeError, ValueError):
+            log.warning("notifications.user_directory_unparsable")
             raise DependencyUnavailableError(
                 "ответ identity не разобран", code=DIRECTORY_UNAVAILABLE
             ) from None

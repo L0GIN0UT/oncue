@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -201,3 +202,18 @@ async def test_scoped_sets_stay_out_of_catalog_pools(
         assert IDS[3] not in left
         assert IDS[4] in await repo.ready_assets(IDS, CLUE, HASH, scope=OTHER)
         await session.rollback()
+
+
+async def test_collection_tags_roundtrip_through_projection(
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    """ADR 0067: теги проекции сохраняются и читаются (по умолчанию - пусто)."""
+    async with sessions() as session, session.begin():
+        repo = SqlCollectionRepository(session)
+        cid = uuid7()
+        await repo.save(_proj(cid), [])
+        plain = await repo.get(cid)
+        await repo.save(replace(_proj(cid), tags=("new_year", "horror")), [])
+        got = await repo.get(cid)
+    assert plain is not None and plain.tags == ()
+    assert got is not None and got.tags == ("new_year", "horror")

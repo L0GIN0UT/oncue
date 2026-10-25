@@ -91,7 +91,7 @@
         "target": {"type": "integer", "minimum": 1, "maximum": 10000},
         "period": {"description": "`day` — прогресс сбрасывается каждые сутки, `event` — копится за запуск", "enum": ["day", "event"]},
         "params": {
-          "description": "Параметры метрики: `place_max` (weekly_top_place), `slot`/`item_key` (item_equipped), `collection_keys` (collection_played), `domain` (метрики с доменом)",
+          "description": "Параметры метрики: `place_max` (weekly_top_place), `slot`/`item_key` (item_equipped), `collection_keys`/`collection_tags` (collection_played; заданные оба - «и»), `domain` (метрики с доменом)",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -105,13 +105,20 @@
               "maxItems": 20,
               "uniqueItems": true,
               "items": {"type": "string", "format": "uuid"}
+            },
+            "collection_tags": {
+              "description": "Только collection_played: ключи тегов сборника (как в collections, ADR 0067); засчитывается сборник хотя бы с одним из тегов; пусто или нет - без фильтра. Вместе с collection_keys - «и»",
+              "type": "array",
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": {"type": "string", "maxLength": 32, "pattern": "^[a-z][a-z0-9_]{0,31}$"}
             }
           }
         }
       },
       "if": {
         "required": ["params"],
-        "properties": {"params": {"required": ["collection_keys"]}}
+        "properties": {"params": {"anyOf": [{"required": ["collection_keys"]}, {"required": ["collection_tags"]}]}}
       },
       "then": {"properties": {"metric": {"const": "collection_played"}}}
     },

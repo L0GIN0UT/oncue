@@ -231,7 +231,7 @@ export interface paths {
         };
         /**
          * Игрок для модератора
-         * @description Счётчики порядочности, история санкций, кейсы. Автосанкций нет.
+         * @description Счётчики порядочности, история санкций, кейсы, сигналы win-trading. Автосанкций нет.
          */
         get: operations["user_moderation_admin_v1_users__user_id__moderation_get"];
         put?: never;
@@ -256,6 +256,26 @@ export interface paths {
          * @description `ranked | chat | online | account`, со сроком или бессрочно. Публикует `UserSanctionsChanged` (полное активное состояние, `version`). Повтор того же вида заменяет прежнюю санкцию (она закрывается как `replaced`). Ошибки: 403 `social.self_sanction_forbidden`, 403 `social.account_sanction_forbidden`, 403 `social.sanction_target_outranks` (права игрока шире ваших), 422 `social.sanction_duration_invalid`, 404 `social.player_not_found`.
          */
         post: operations["grant_admin_v1_users__user_id__sanctions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/win-trading/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Подозрительные пары и серии сдач
+         * @description Сигналы детектора win-trading (ADR 0068): повторы пары, сдачи подряд и за окно, с числами и окном конфига. Свежие первыми; фильтры по виду, серьёзности и игроку. Сигнал - повод посмотреть, не вердикт: друзья тоже играют друг с другом.
+         */
+        get: operations["signals_admin_v1_win_trading_signals_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -619,6 +639,26 @@ export interface paths {
          * @description Для bff: показывать ли профиль и статистику, можно ли звать в друзья. Скрытый профиль, блокировка и неизвестный игрок дают одинаковый ответ (все `false`).
          */
         get: operations["relation_v1_players__user_id__relation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/players/relations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Видимость нескольких игроков для зрителя
+         * @description Пакетный `relation` для bff (итог матча: можно ли звать в друзья): до 50 игроков за вызов, дубли схлопываются, порядок как в запросе. Скрытый профиль, блокировка и неизвестный игрок дают одинаковый ответ. Лимит на пользователя (`GV_SOCIAL__RELATIONS_PER_MINUTE`): 429 + `Retry-After`.
+         */
+        get: operations["relations_v1_players_relations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1117,10 +1157,49 @@ export interface components {
             can_send_request: boolean;
             /** Is Friend */
             is_friend: boolean;
+            /**
+             * Nickname
+             * @description Ник игрока - только если профиль виден зрителю; для скрытого, заблокировавшего и неизвестного игрока `null` (ответы неразличимы)
+             */
+            nickname?: string | null;
             /** Profile Visible */
             profile_visible: boolean;
             /** Stats Visible */
             stats_visible: boolean;
+        };
+        /**
+         * PlayerRelationItem
+         * @description Отношение к одному игроку пакета.
+         */
+        PlayerRelationItem: {
+            /** Blocked By Me */
+            blocked_by_me: boolean;
+            /** Can Send Request */
+            can_send_request: boolean;
+            /** Is Friend */
+            is_friend: boolean;
+            /**
+             * Nickname
+             * @description Ник игрока - только если профиль виден зрителю; для скрытого, заблокировавшего и неизвестного игрока `null` (ответы неразличимы)
+             */
+            nickname?: string | null;
+            /** Profile Visible */
+            profile_visible: boolean;
+            /** Stats Visible */
+            stats_visible: boolean;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * PlayerRelations
+         * @description Пакетный ответ `relations`: по элементу на каждого запрошенного игрока (без дублей).
+         */
+        PlayerRelations: {
+            /** Items */
+            items: components["schemas"]["PlayerRelationItem"][];
         };
         /**
          * PrivacySettings
@@ -1427,6 +1506,11 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+            /**
+             * Win Trading
+             * @description Сигналы win-trading с участием игрока
+             */
+            win_trading?: components["schemas"]["WinTradingSignal"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -1440,6 +1524,76 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WinTradingPage
+         * @description Страница очереди сигналов (курсор), свежие первыми.
+         */
+        WinTradingPage: {
+            /** Items */
+            items: components["schemas"]["WinTradingSignal"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * WinTradingSignal
+         * @description Сигнал win-trading (только модератору; не вердикт, автосанкций нет).
+         */
+        WinTradingSignal: {
+            /**
+             * Count
+             * @description Матчей пары или сдач в окне
+             */
+            count: number;
+            /**
+             * Details
+             * @description `wins` по игрокам / число соперников
+             */
+            details: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * First At
+             * Format: date-time
+             */
+            first_at: string;
+            /**
+             * Kind
+             * @description `pair_repeat` - повторы пары; `forfeit_series` - сдачи подряд против одного соперника; `forfeit_window` - сдачи за окно
+             * @enum {string}
+             */
+            kind: "pair_repeat" | "forfeit_series" | "forfeit_window";
+            /**
+             * Last At
+             * Format: date-time
+             */
+            last_at: string;
+            /**
+             * Other User Id
+             * @description Соперник; для `forfeit_window` нет
+             */
+            other_user_id: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "medium" | "high";
+            /**
+             * Streak
+             * @description Побед одного игрока подряд (пара) или сдач подряд (серия)
+             */
+            streak: number;
+            /**
+             * User Id
+             * Format: uuid
+             * @description Игрок (у пары - с меньшим идентификатором)
+             */
+            user_id: string;
+            /**
+             * Window S
+             * @description Окно конфига, секунды
+             */
+            window_s: number;
         };
     };
     responses: never;
@@ -2335,6 +2489,63 @@ export interface operations {
             };
             /** @description Конфликт состояния */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    signals_admin_v1_win_trading_signals_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                kind?: ("pair_repeat" | "forfeit_series" | "forfeit_window") | null;
+                limit?: number;
+                severity?: ("medium" | "high") | null;
+                /** @description Игрок на любой стороне */
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WinTradingPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3684,6 +3895,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    relations_v1_players_relations_get: {
+        parameters: {
+            query: {
+                user_ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerRelations"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

@@ -740,7 +740,16 @@ class OpenRooms:
     next_cursor: str | None = None
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True)
+class MatchParticipant:
+    """Другой игрок матча в карточке истории (``can_report`` решает bff, как в итоге)."""
+
+    user_id: UUID
+    nickname: str
+    can_report: bool
+
+
+@dataclass(frozen=True, slots=True)
 class MyMatch:
     """Матч в «Моих матчах» (``match GET /v1/me/matches``)."""
 
@@ -753,6 +762,8 @@ class MyMatch:
     score: int
     outcome: DuelOutcome | None
     my_finish: PlayerFinish
+    participants: list[MatchParticipant] = field(default_factory=list)
+    """ADR 0069: другие игроки матча для жалобы из истории; пусто - не удалось получить."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -776,6 +787,8 @@ class MatchPlayer:
     finish: PlayerFinish
     can_report: bool = False
     """5c: показывать кнопку жалобы; решает bff по данным матча, источник поле не отдаёт."""
+    can_add_friend: bool = False
+    """ADR 0069: можно звать в друзья (``can_send_request`` из social); сбой social - ``False``."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -1168,6 +1181,8 @@ class PlayerPage:
 
     blocks: PlayerBlocks
     restricted: bool = False
+    nickname: str | None = None
+    """Ник из social (ADR 0069); ``None`` - профиль скрыт, свой профиль или social недоступен."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1235,6 +1250,8 @@ class AppearanceCard:
 
     slots: list[AppearanceSlotCard]
     custom_avatar_url: str | None = None
+    custom_avatar_asset_id: UUID | None = None
+    """Ассет одобренной аватарки (объект жалобы ``avatar``); ``None`` - нет или старый источник."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1492,6 +1509,8 @@ class PlayerRelation:
     is_friend: bool
     can_send_request: bool
     blocked_by_me: bool
+    nickname: str | None = None
+    """Ник - только при видимом профиле (ADR 0069)."""
 
 
 @dataclass(frozen=True, slots=True)

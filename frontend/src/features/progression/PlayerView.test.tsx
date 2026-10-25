@@ -33,6 +33,28 @@ describe("PlayerView", () => {
     expect(screen.queryByTestId("player-title")).toBeNull();
   });
 
+  it("ник из social вместо «Игрок» (ADR 0069)", async () => {
+    signInAsUser();
+    renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
+    expect(await screen.findByTestId("player-nickname")).toHaveTextContent("Мастер");
+  });
+
+  it("закрытый профиль: ника нет, остаётся «Игрок»", async () => {
+    signInAsUser();
+    world.scenario.social = { restrictedPlayer: PLAYER.user_id };
+    renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
+    expect(await screen.findByTestId("player-restricted")).toBeInTheDocument();
+    expect(screen.getByTestId("player-nickname")).toHaveTextContent("Игрок");
+    expect(screen.queryByTestId("report-avatar")).toBeNull();
+  });
+
+  it("чужая аватарка: кнопка жалобы на аватарку открывает диалог", async () => {
+    signInAsUser();
+    renderWithProviders(<PlayerView userId={PLAYER.user_id} />);
+    const button = await screen.findByTestId("report-avatar");
+    expect(button).toHaveAccessibleName("Пожаловаться на аватарку игрока: Мастер");
+  });
+
   it("нет такого игрока — понятное сообщение", async () => {
     signInAsUser();
     renderWithProviders(<PlayerView userId="00000000-0000-4000-8000-0000000009ff" />);

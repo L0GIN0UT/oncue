@@ -491,7 +491,15 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
             ...ratingBlocks(mw),
             friends: friendsBlock(world),
             open_rooms: { status: "ok", data: { items: mw.openRooms(), next_cursor: null } },
-            my_matches: { status: "ok", data: { items: mw.myMatches(userId), next_cursor: null } },
+            my_matches: {
+              status: "ok",
+              data: {
+                items: mw
+                  .myMatches(userId)
+                  .map((m) => ({ ...m, participants: mw.participantsOf(m.match_id, userId) })),
+                next_cursor: null,
+              },
+            },
             modes: {
               status: "ok",
               data: ONLINE_MODES.map((d) => ({
@@ -536,8 +544,27 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
               status: "ok",
               data: {
                 ...r,
-                players: r.players.map((p) => ({ ...p, can_report: p.user_id !== userId })),
+                players: r.players.map((p) => ({
+                  ...p,
+                  can_report: p.user_id !== userId,
+                  // Решение bff по social (can_send_request); мок: звать можно любого чужого.
+                  can_add_friend: p.user_id !== userId,
+                })),
               },
+            },
+            // Чужая одобренная аватарка (мок: без картинки, только объект жалобы).
+            appearance: {
+              status: "ok",
+              data: r.players
+                .filter((p) => p.user_id !== userId)
+                .map((p) => ({
+                  user_id: p.user_id,
+                  appearance: {
+                    slots: [],
+                    custom_avatar_url: null,
+                    custom_avatar_asset_id: `00000000-0000-4000-8000-0000000a${p.slot}001`,
+                  },
+                })),
             },
             items: { status: "ok", data: r.rounds.map((x) => mw.itemCard(x.media_item_id)) },
             library: { status: "ok", data: [] },

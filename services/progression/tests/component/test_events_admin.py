@@ -448,3 +448,57 @@ async def test_run_cannot_start_in_the_past(progression: Service) -> None:
         },
     )
     assert fine.status_code == 201
+
+
+async def _put_definition(progression: Service, body: dict[str, Any], **extra: Any) -> Any:
+    return await progression.client.put(
+        "/admin/v1/events/autumn",
+        headers=progression.admin(progression.ev.MANAGE),
+        json={"body": body, **REASON, **extra},
+    )
+
+
+async def test_update_with_stale_expected_hash_is_409_and_keeps_other_admins_edit(
+    progression: Service,
+) -> None:
+    await progression.publish_config()
+    created = (await progression.create_event("autumn", body_of(progression))).json()
+    seen = created["body_sha256"]
+    ev = progression.ev
+    other_admin_body = ev.body(ev.find("moss", 1), ev.find("fin", 2, final=True))
+    first = await _put_definition(progression, other_admin_body, expected_body_sha256=seen)
+    assert first.status_code == 200, first.text
+
+    stale = await _put_definition(progression, body_of(progression), expected_body_sha256=seen)
+
+    assert_problem(stale, 409, "progression.event_definition_changed")
+    current = (
+        await progression.client.get(
+            "/admin/v1/events/autumn", headers=progression.admin(ev.MANAGE)
+        )
+    ).json()
+    assert current["body_sha256"] == first.json()["body_sha256"]  # правка первого не затёрта
+
+
+async def test_update_with_matching_expected_hash_succeeds(progression: Service) -> None:
+    await progression.publish_config()
+    created = (await progression.create_event("autumn", body_of(progression))).json()
+    ev = progression.ev
+    body = ev.body(ev.find("moss", 1), ev.find("fin", 2, final=True))
+    response = await _put_definition(progression, body, expected_body_sha256=created["body_sha256"])
+    assert response.status_code == 200, response.text
+
+
+async def test_update_without_expected_hash_keeps_previous_behaviour(progression: Service) -> None:
+    await progression.publish_config()
+    await progression.create_event("autumn", body_of(progression))
+    ev = progression.ev
+    body = ev.body(ev.find("moss", 1), ev.find("fin", 2, final=True))
+    assert (await _put_definition(progression, body)).status_code == 200
+
+
+async def test_update_rejects_malformed_expected_hash(progression: Service) -> None:
+    await progression.publish_config()
+    await progression.create_event("autumn", body_of(progression))
+    response = await _put_definition(progression, body_of(progression), expected_body_sha256="x")
+    assert response.status_code == 422

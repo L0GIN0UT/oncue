@@ -14,7 +14,7 @@ from notifications_service.application.ports import UnitOfWork, UnitOfWorkFactor
 from notifications_service.application.type_switch import TypeSwitch
 from notifications_service.domain.catalog import NotificationType, TypeCatalog
 from notifications_service.domain.mapping import map_event, matches_filter
-from notifications_service.domain.notification import Candidate, Notification
+from notifications_service.domain.notification import Candidate, Notification, TypePreference
 
 log = structlog.get_logger(__name__)
 
@@ -25,15 +25,23 @@ async def store_candidate(
     candidate: Candidate,
     now: datetime,
     new_id: UUID,
+    *,
+    preferences: Mapping[UUID, TypePreference] | None = None,
 ) -> Notification | None:
     """Сохранить уведомление с учётом настроек игрока.
+
+    ``preferences`` - заранее прочитанные настройки пачки игроков для этого типа (одним
+    запросом); без них настройки читаются по игроку.
 
     Returns:
         Созданное уведомление; ``None`` - игрок отключил тип или такая запись уже есть.
     """
     in_app = notification_type.channels.in_app
     if notification_type.user_mutable:
-        pref = (await uow.preferences.all(candidate.user_id)).get(notification_type.key)
+        if preferences is not None:
+            pref = preferences.get(candidate.user_id)
+        else:
+            pref = (await uow.preferences.all(candidate.user_id)).get(notification_type.key)
         if pref is not None:
             in_app = pref.in_app
     if not in_app:

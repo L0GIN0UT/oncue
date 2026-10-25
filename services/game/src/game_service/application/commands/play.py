@@ -424,6 +424,7 @@ class PlayService:
             progressive=rules.is_progressive,
             collection_id=collection.collection_id if collection else None,
             collection_version=collection.content_version if collection else None,
+            collection_tags=collection.tags if collection else (),
         )
         await self._settle(uow, session, rules, now)
         if not await uow.sessions.add(session):

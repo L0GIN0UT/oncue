@@ -165,6 +165,14 @@ class SqlUserRepository:
         )
         return [(row.id, str(row.email)) for row in await self._s.execute(stmt)]
 
+    async def active_ids_after(self, after: UUID | None, limit: int) -> list[UUID]:
+        """Keyset-страница активных пользователей (только ``id``)."""
+        stmt = select(users.c.id).where(users.c.status == UserStatus.ACTIVE.value)
+        if after is not None:
+            stmt = stmt.where(users.c.id > after)
+        stmt = stmt.order_by(users.c.id).limit(limit)
+        return list((await self._s.scalars(stmt)).all())
+
     async def _one(self, condition: Any) -> User | None:
         row = (await self._s.execute(select(users).where(condition))).first()
         if row is None:

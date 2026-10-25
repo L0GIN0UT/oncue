@@ -51,7 +51,10 @@ def build_internal_router(c: ApiServices) -> APIRouter:
             "`game.too_many_collections`, 422 `game.pool_too_small` (`details.available`), "
             "422 `game.collection_not_supported` (сборники у режима без source `collection`). "
             "`exclude_ids` избегаются по правилу источника (`random` — строго, `collection` — "
-            "пока хватает остальных единиц)."
+            "пока хватает остальных единиц). `overrides` (`clue_type`, `answer_format`) — "
+            "переопределения лобби по `session.lobby.overridable`: 422 "
+            "`game.override_not_allowed` (`details.field`), 422 `game.override_invalid` "
+            "(`details.errors` валидатора ядра); пул проверяется под переопределённую загадку."
         ),
         responses=problem_responses(401, 403, 404, 422, 501, 503),
     )
@@ -64,6 +67,8 @@ def build_internal_router(c: ApiServices) -> APIRouter:
                 rounds=body.rounds,
                 collection_ids=body.collection_ids,
                 exclude_ids=body.exclude_ids,
+                clue_type=body.overrides.clue_type if body.overrides else None,
+                answer_format=body.overrides.answer_format if body.overrides else None,
             ),
             caller=caller.client_id,
         )

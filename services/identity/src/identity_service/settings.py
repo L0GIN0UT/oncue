@@ -204,6 +204,15 @@ class UsersEmailsLimitSettings(BaseModel):
     """Запрошенных идентификаторов на ``client_id`` в час (по адресам)."""
 
 
+class UsersActiveSettings(BaseModel):
+    """Список активных пользователей ``GET /internal/v1/users/active``: ``GV_USERS_ACTIVE__*``."""
+
+    max_page: int = Field(default=1000, ge=1, le=5000)
+    """Предел пачки: больший ``limit`` запроса усекается."""
+    per_client: int = Field(default=120, ge=1)
+    window_s: int = Field(default=60, ge=1, le=3600)
+
+
 class RealtimeTokenLimitSettings(BaseModel):
     """Лимит выдачи connection-токенов Centrifugo: ``GV_REALTIME_TOKEN_LIMIT__*``.
 
@@ -274,6 +283,7 @@ class Settings(ServiceSettings):
     guest: GuestSettings = GuestSettings()
     realtime_token_limit: RealtimeTokenLimitSettings = RealtimeTokenLimitSettings()
     users_emails_limit: UsersEmailsLimitSettings = UsersEmailsLimitSettings()
+    users_active: UsersActiveSettings = UsersActiveSettings()
     """Лимит ``POST /v1/realtime/token``; секрет и TTL — в ``GV_REALTIME__*`` (gv_service)."""
     bootstrap_admin: BootstrapAdminSettings = BootstrapAdminSettings()
     """``GV_BOOTSTRAP_ADMIN__*`` — bootstrap-админ автосидинга (только local/ci); пусто — выкл."""

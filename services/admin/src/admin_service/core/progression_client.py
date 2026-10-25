@@ -192,13 +192,22 @@ class ProgressionAdminClient:
         )
 
     def update_event(
-        self, event_key: str, *, body: dict[str, Any], reason: str, idempotency_key: str
+        self,
+        event_key: str,
+        *,
+        body: dict[str, Any],
+        reason: str,
+        idempotency_key: str,
+        expected_body_sha256: str | None = None,
     ) -> Any:
-        """Заменить определение (409, если есть запуск ``published/active``)."""
+        """Заменить определение (409, если есть запуск `published/active` или хеш не совпал)."""
+        payload: dict[str, Any] = {"body": body, "reason": reason}
+        if expected_body_sha256 is not None:
+            payload["expected_body_sha256"] = expected_body_sha256
         return self._client.put(
             f"/admin/v1/events/{quote(event_key, safe='')}",
             idempotency_key=idempotency_key,
-            json={"body": body, "reason": reason},
+            json=payload,
         )
 
     def upload_event_map(

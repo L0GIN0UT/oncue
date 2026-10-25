@@ -93,6 +93,7 @@ async def test_hide_and_unhide_publish_updates_once(svc: Any) -> None:
     assert out["hidden"]["actor_id"] == str(moderator.user_id)
     events = await svc.events("collections.CollectionUpdated", cid)
     assert [e.payload["status"] for e in events] == ["hidden"]
+    assert events[0].payload["title"] == "Кино · кадры" and events[0].payload["tags"] == []
     assert_event_matches_schema(events[0])
 
     mine = (await svc.client.get("/v1/me/collections", headers=author.headers)).json()["items"]

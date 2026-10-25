@@ -39,14 +39,14 @@ body:
     - key: gift_collection
       number: 3
       title: Подарок из сборника
-      diary_before: Под ёлкой лежит сборник. Сыграйте в любой сборник, чтобы развернуть подарок.
+      diary_before: Под ёлкой лежит сборник. Сыграйте в новогодний сборник, чтобы развернуть подарок.
       diary_after: Подарок развёрнут - в сборнике нашлась блестящая игрушка.
       x_pct: 52
       y_pct: 58
       reward: {xp: 50, verses: 10}
       final: false
       play_page: collections
-      trigger: {type: server, metric: collection_played, target: 1, period: event}
+      trigger: {type: server, metric: collection_played, target: 1, period: event, params: {collection_tags: [new_year]}}
     - key: frosty_frame
       number: 4
       title: Морозная рамка

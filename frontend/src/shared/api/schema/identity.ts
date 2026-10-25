@@ -168,6 +168,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/users/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Активные пользователи постранично (аудитория уведомлений)
+         * @description Сервисный токен со scope `users.active.list`. Только идентификаторы активных (не удалённых) пользователей по возрастанию; `limit` усекается до настройки `GV_USERS_ACTIVE__MAX_PAGE`. 429 - лимит вызовов на `client_id`.
+         */
+        get: operations["active_users_internal_v1_users_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/users/emails": {
         parameters: {
             query?: never;
@@ -573,6 +593,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActiveUsersResponse
+         * @description Страница активных пользователей: только идентификаторы по возрастанию.
+         */
+        ActiveUsersResponse: {
+            /** Items */
+            items: string[];
+            /**
+             * Next Cursor
+             * @description Значение `after` следующего запроса; `null` - последняя страница.
+             */
+            next_cursor: string | null;
+        };
         /**
          * AdminRefreshRequest
          * @description Обновление или отзыв admin-сессии.
@@ -1591,6 +1624,80 @@ export interface operations {
             };
             /** @description Слишком много запросов */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    active_users_internal_v1_users_active_get: {
+        parameters: {
+            query?: {
+                /** @description Курсор: `next_cursor` прошлой страницы. */
+                after?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveUsersResponse"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

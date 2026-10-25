@@ -68,6 +68,7 @@ from identity_service.application.queries import (
     ListLinkedAccounts,
     ListUsers,
 )
+from identity_service.application.queries.active_users import ActiveUsersLimit, ListActiveUsers
 from identity_service.application.queries.user_emails import ListVerifiedEmails, UserEmailsLimit
 from identity_service.application.security import hash_secret
 from identity_service.application.sessions import IssuedSession, SessionIssuer
@@ -183,6 +184,10 @@ class Users:
             for uid in user_ids
             if (u := self.d.users.get(uid)) is not None and u.is_active and u.email_verified
         ]
+
+    async def active_ids_after(self, after: UUID | None, limit: int) -> list[UUID]:
+        ids = sorted(u.id for u in self.d.users.values() if u.is_active)
+        return [i for i in ids if after is None or i > after][:limit]
 
 
 class Creds:
@@ -545,6 +550,9 @@ class World:
                 SERVICE_CLIENTS, self.tokens, self.limiter, SERVICE_TOKEN_CONFIG
             ),
             list_verified_emails=ListVerifiedEmails(uow, self.strict_limiter, UserEmailsLimit()),
+            list_active_users=ListActiveUsers(
+                uow, self.strict_limiter, ActiveUsersLimit(max_page=2, per_client=3, window_s=60)
+            ),
         )
 
     async def make_user(

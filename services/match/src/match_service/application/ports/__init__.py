@@ -172,6 +172,8 @@ class RoundPlanRequest:
     rounds: int
     collection_ids: tuple[UUID, ...] = ()
     exclude_ids: tuple[UUID, ...] = ()
+    clue_type: str | None = None
+    answer_format: str | None = None
 
 
 class RoundPlanPort(Protocol):

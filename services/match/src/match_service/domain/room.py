@@ -57,11 +57,6 @@ class SettingsChange:
     collection_ids: tuple[UUID, ...] | None = None
 
 
-NOT_SUPPORTED_YET = frozenset({"answer_format", "clue_type"})
-"""Переопределения, которых пока нет в плане game (``RoundPlanRequest`` без загадки и
-формата): хвост 4a — 422 ``match.setting_not_allowed`` с ``reason = not_supported_yet``."""
-
-
 def _not_allowed(name: str) -> MatchInvalidError:
     return MatchInvalidError(
         "значение настройки не разрешено шаблоном",
@@ -81,13 +76,6 @@ def apply_settings(
     """
     options = template.options
     values: dict[str, Any] = {}  # Any: значения разных типов полей RoomSettings
-    for name in sorted(NOT_SUPPORTED_YET):
-        if getattr(change, name) is not None:
-            raise MatchInvalidError(
-                "переопределение пока не поддерживается",
-                code=errors.SETTING_NOT_ALLOWED,
-                details={"field": name, "reason": "not_supported_yet"},
-            )
     for name in ("rounds", "level_window_s", "players_max"):
         value = getattr(change, name)
         if value is None:
@@ -96,6 +84,16 @@ def apply_settings(
         if not allowed or value not in allowed:
             raise _not_allowed(name)
         values[name] = value
+    # Формат ответа и загадка: разрешено только из списка шаблона (ADR 0070); совместимость
+    # сочетания проверяет game ядром при старте (план), match её не дублирует.
+    for name in ("answer_format", "clue_type"):
+        chosen = getattr(change, name)
+        if chosen is None:
+            continue
+        listed = getattr(options, name) if options is not None else None
+        if chosen != getattr(base, name) and (not listed or chosen not in listed):
+            raise _not_allowed(name)
+        values[name] = chosen
     if change.visibility is not None:
         allowed_vis = options.visibility if options is not None else None
         if change.visibility != base.visibility and (

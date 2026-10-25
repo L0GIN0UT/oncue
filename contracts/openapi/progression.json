@@ -2769,6 +2769,19 @@
           "appearance": {
             "$ref": "#/components/schemas/Appearance"
           },
+          "custom_avatar_asset_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ассет одобренной аватарки: объект жалобы `avatar` в social; null - аватарки нет (необязательное поле, ADR 0069)",
+            "title": "Custom Avatar Asset Id"
+          },
           "custom_avatar_url": {
             "anyOf": [
               {
@@ -3789,6 +3802,22 @@
             ],
             "title": "Collection Keys"
           },
+          "collection_tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Tags"
+          },
           "domain": {
             "anyOf": [
               {
@@ -3882,6 +3911,19 @@
         "properties": {
           "body": {
             "$ref": "#/components/schemas/EventDefinition"
+          },
+          "expected_body_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`body_sha256`, который видел админ; текущий хеш другой - 409 `progression.event_definition_changed`. Не задан - без проверки",
+            "title": "Expected Body Sha256"
           },
           "reason": {
             "maxLength": 500,
@@ -4992,7 +5034,7 @@
         ]
       },
       "put": {
-        "description": "Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` (есть запуск `published/active`), 422 `progression.event_definition_invalid`.",
+        "description": "Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` (есть запуск `published/active`), 409 `progression.event_definition_changed` (задан `expected_body_sha256`, а определение уже другое), 422 `progression.event_definition_invalid`.",
         "operationId": "update_event_admin_v1_events__event_key__put",
         "parameters": [
           {

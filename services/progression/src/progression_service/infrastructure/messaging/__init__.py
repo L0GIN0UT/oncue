@@ -100,6 +100,8 @@ class _GameFinished(_Payload):
     day: date | None
     finished_at: AwareDatetime
     collection_id: UUID | None = None  # сессия по сборнику (метрика collection_played)
+    # ADR 0067: необязательно (события старого формата), ключи тегов как в collections.
+    collection_tags: list[str] = Field(default_factory=list, max_length=20)
     rounds: list[_Round] = Field(min_length=1, max_length=200)
 
 
@@ -271,6 +273,7 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:  # noqa
                 rounds_played=len(played),
                 correct_answers=sum(1 for r in played if r.outcome == _CORRECT),
                 collection_id=p.collection_id,
+                collection_tags=tuple(dict.fromkeys(p.collection_tags)),
             ),
             session,
         )

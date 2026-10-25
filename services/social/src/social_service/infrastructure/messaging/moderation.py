@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from gv_messaging import EventEnvelope, EventHandlerRegistry
 from gv_messaging.ports import PermanentError
 from gv_service import Infrastructure
 from social_service.application.projections import ProjectionService
+from social_service.application.win_trading import WinTradingService
 from social_service.infrastructure.discussion_container import container_for
 
 MODERATION_TOPICS: tuple[str, ...] = (
@@ -26,6 +28,13 @@ MODERATION_TOPICS: tuple[str, ...] = (
     "identity.user.v1",
     "media_pipeline.ugc_image.v1",
 )
+
+# Дополнительное действие в той же транзакции после проекции (детектор win-trading, ADR 0068).
+type _After = Callable[[WinTradingService, Mapping[str, Any]], Awaitable[None]]
+_AFTER: dict[str, _After] = {
+    "match.MatchFinished": lambda s, payload: s.record(payload),
+    "identity.UserDeleted": lambda s, payload: s.forget_user(UUID(payload["user_id"])),
+}
 
 type Handler = Callable[[EventEnvelope, AsyncSession], Awaitable[None]]
 type _Apply = Callable[[ProjectionService], Callable[[Mapping[str, Any]], Awaitable[None]]]
@@ -68,6 +77,14 @@ def register_moderation_handlers(
                 raise PermanentError(
                     f"{envelope.event_type}: payload не соответствует контракту"
                 ) from exc
+            extra = _AFTER.get(envelope.event_type)
+            if extra is not None:
+                try:
+                    await extra(container.win_trading(session), envelope.payload)
+                except (KeyError, ValueError, TypeError) as exc:
+                    raise PermanentError(
+                        f"{envelope.event_type}: payload не соответствует контракту"
+                    ) from exc
 
         after = chained.get(event_type)
 

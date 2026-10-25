@@ -185,7 +185,10 @@ async def test_publish_emits_valid_event_and_replay_returns_same(svc: Any) -> No
     assert event.payload["version"] == 1 and event.payload["content_version"] == 1
     assert event.payload["items"][0]["custom"] == {"emoji": "🚢🧊💔🌊🎻🥶"}
     assert "custom" not in event.payload["items"][1]
-    assert "title" not in event.payload
+    # ADR 0067: название и теги - необязательные поля снимка (UGC-текст нормализован).
+    assert event.payload["title"] == "Кино · кадры"
+    assert event.payload["tags"] == ["horror"]
+    assert "description" not in event.payload
 
     # Черновика больше нет: GET отдаёт тело версии с revision 0 поверх content_version 1.
     view = (await svc.client.get(f"/v1/collections/{cid}/draft", headers=author.headers)).json()

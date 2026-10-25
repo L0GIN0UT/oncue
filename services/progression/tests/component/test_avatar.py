@@ -363,12 +363,15 @@ async def test_approval_sets_current_url_and_public_appearance(
         0
     ]
     assert public["custom_avatar_url"] == f"/ugc/{key}"
+    # id одобренного ассета нужен фронту для жалобы на чужую аватарку (ADR 0069)
+    assert public["custom_avatar_asset_id"] == str(asset)
 
 
 async def test_appearance_without_custom_avatar_has_null_url(progression: Service) -> None:
     user = await buyer(progression)
     public = (await progression.get(f"/v1/appearance?user_ids={user}", uuid7())).json()
     assert public["players"][0]["custom_avatar_url"] is None
+    assert public["players"][0]["custom_avatar_asset_id"] is None
 
 
 async def test_duplicate_event_has_one_effect(progression: Service, media: FakeMedia) -> None:
@@ -429,6 +432,7 @@ async def test_takedown_of_current_avatar_returns_slot_item(
     assert await progression.rows("user_avatars", user) == []
     public = (await progression.get(f"/v1/appearance?user_ids={user}", uuid7())).json()
     assert public["players"][0]["custom_avatar_url"] is None
+    assert public["players"][0]["custom_avatar_asset_id"] is None
 
 
 async def test_newer_approval_replaces_older_and_older_one_cannot_come_back(

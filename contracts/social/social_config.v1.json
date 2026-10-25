@@ -173,6 +173,49 @@
     "version": {
       "const": 1,
       "type": "integer"
+    },
+    "win_trading": {
+      "additionalProperties": false,
+      "description": "Пороги сигналов win-trading для модератора (ADR 0068); секция необязательна - нет её, действуют умолчания. Автосанкций нет.",
+      "properties": {
+        "forfeit_series": {
+          "additionalProperties": false,
+          "properties": {
+            "streak_min": {
+              "$ref": "#/$defs/PositiveInt",
+              "description": "Сдач подряд против одного соперника, с которых показываем серию"
+            },
+            "window_min": {
+              "$ref": "#/$defs/PositiveInt",
+              "description": "Сдач за окно (любые соперники), с которых показываем игрока"
+            },
+            "window_s": {
+              "$ref": "#/$defs/PositiveInt",
+              "description": "Окно, секунды"
+            }
+          },
+          "type": "object"
+        },
+        "pair_repeat": {
+          "additionalProperties": false,
+          "properties": {
+            "min_matches": {
+              "$ref": "#/$defs/PositiveInt",
+              "description": "Рейтинговых матчей пары за окно (в обе стороны), с которых показываем пару"
+            },
+            "strong_streak": {
+              "$ref": "#/$defs/PositiveInt",
+              "description": "Подряд побед одного игрока над другим: пара помечается высокой"
+            },
+            "window_s": {
+              "$ref": "#/$defs/PositiveInt",
+              "description": "Окно, секунды"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
   },
   "required": [

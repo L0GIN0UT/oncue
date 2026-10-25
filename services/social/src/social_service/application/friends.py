@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -26,10 +26,12 @@ from social_service.application.ports.friends import (
     AttemptLimiter,
     BlockRow,
     FriendRow,
+    FriendsRepository,
     FriendsUnitOfWork,
     FriendsUowFactory,
     PendingView,
     PresenceStore,
+    RelationFacts,
     RequestRow,
 )
 from social_service.application.ports.sanctions import SanctionReader
@@ -51,6 +53,7 @@ from social_service.domain.friends import (
     Privacy,
     ProfileNotReadyError,
     Relation,
+    RelationsRateLimitedError,
     RequestAction,
     RequestFacts,
     RequestNotPendingError,
@@ -63,6 +66,7 @@ from social_service.domain.friends import (
 
 LOOKUP_WINDOW_S = 3600
 INVITE_WINDOW_S = 60
+RELATIONS_WINDOW_S = 60
 DAY = timedelta(days=1)
 CODE_ATTEMPTS = 8
 """Сколько раз пробуем новый код при столкновении (алфавит 32^8 - столкновения редки)."""
@@ -130,6 +134,7 @@ class FriendsService:
         limiter: AttemptLimiter,
         presence: PresenceStore,
         presence_burst: int,
+        relations_per_minute: int = 60,
         sanctions: SanctionReader | None = None,
     ) -> None:
         self._sanctions = sanctions
@@ -140,6 +145,7 @@ class FriendsService:
         self._limiter = limiter
         self._presence = presence
         self._presence_burst = presence_burst
+        self._relations_per_minute = relations_per_minute
 
     # ------------------------------------------------------------------ заявки
     async def send_request(
@@ -477,17 +483,45 @@ class FriendsService:
     async def relation(self, viewer: UUID, target: UUID) -> Relation:
         """Что ``viewer`` видит у ``target`` (для скрытого/заблокировавшего/неизвестного - одно)."""
         async with self._uow() as uow:
-            repo = uow.repo
-            return relation_of(
-                viewer=viewer,
-                target=target,
-                target_exists=await repo.nickname(target) is not None,
-                privacy=await repo.privacy(target),
-                is_friend=await repo.are_friends(viewer, target),
-                viewer_blocked_target=await repo.blocked(viewer, target),
-                target_blocked_viewer=await repo.blocked(target, viewer),
-                outgoing_pending=await repo.pending_from_to(viewer, target) is not None,
+            return await self._relation(uow.repo, viewer, target)
+
+    async def relations(self, viewer: UUID, targets: list[UUID]) -> list[tuple[UUID, Relation]]:
+        """``relation`` для набора игроков (порядок запроса, дубли схлопнуты).
+
+        Факты читаются пакетом (``IN``): число запросов к БД не зависит от размера пачки.
+
+        Raises:
+            RelationsRateLimitedError: больше ``relations_per_minute`` вызовов в минуту.
+            LimiterUnavailableError: лимитер недоступен (fail-closed).
+        """
+        window = await self._limiter.hit(f"relations:{viewer}", RELATIONS_WINDOW_S)
+        if window.count > self._relations_per_minute:
+            raise RelationsRateLimitedError(
+                "слишком частые запросы отношений", details={"retry_after": window.resets_in_s}
             )
+        unique = list(dict.fromkeys(targets))
+        async with self._uow() as uow:
+            facts = await uow.repo.relation_facts(viewer, unique)
+        return [(target, self._relation_from(viewer, target, facts[target])) for target in unique]
+
+    @staticmethod
+    async def _relation(repo: FriendsRepository, viewer: UUID, target: UUID) -> Relation:
+        facts = (await repo.relation_facts(viewer, [target]))[target]
+        return FriendsService._relation_from(viewer, target, facts)
+
+    @staticmethod
+    def _relation_from(viewer: UUID, target: UUID, facts: RelationFacts) -> Relation:
+        value = relation_of(
+            viewer=viewer,
+            target=target,
+            target_exists=facts.nickname is not None,
+            privacy=facts.privacy,
+            is_friend=facts.is_friend,
+            viewer_blocked_target=facts.viewer_blocked_target,
+            target_blocked_viewer=facts.target_blocked_viewer,
+            outgoing_pending=facts.outgoing_pending,
+        )
+        return replace(value, nickname=facts.nickname) if value.profile_visible else value
 
     # ------------------------------------------------------------------ присутствие
     async def heartbeat(self, user: UUID) -> None:

@@ -29,9 +29,11 @@ from social_service.api.schemas import (
     SanctionRevoke,
     SanctionView,
     UserModeration,
+    WinTradingSignal,
 )
 from social_service.application.ports.sanctions import GrantRequest, SanctionRecord
 from social_service.application.sanctions import SanctionService
+from social_service.application.win_trading import WinTradingService
 from social_service.domain.sanctions import is_active
 
 Sanctioner = Annotated[Principal, Depends(require_perm("admin.access", "social.sanctions.manage"))]
@@ -63,7 +65,9 @@ def _now(request: Request) -> datetime:
     return request.app.state.infra.clock.now()  # type: ignore[no-any-return]  # app.state нетипизирован
 
 
-def build_sanctions_router(service: SanctionService) -> APIRouter:
+def build_sanctions_router(
+    service: SanctionService, win_trading: WinTradingService | None = None
+) -> APIRouter:
     """Ручки санкций; подключается в `/admin/v1` одной строкой."""
     router = APIRouter()  # префикс и тег задаёт родительский роутер /admin/v1
 
@@ -71,7 +75,9 @@ def build_sanctions_router(service: SanctionService) -> APIRouter:
         "/users/{user_id}/moderation",
         response_model=UserModeration,
         summary="Игрок для модератора",
-        description="Счётчики порядочности, история санкций, кейсы. Автосанкций нет.",
+        description=(
+            "Счётчики порядочности, история санкций, кейсы, сигналы win-trading. Автосанкций нет."
+        ),
         responses=problem_responses(401, 403, 404),
     )
     async def user_moderation(
@@ -79,12 +85,14 @@ def build_sanctions_router(service: SanctionService) -> APIRouter:
     ) -> UserModeration:
         card, history, now = await service.moderation_card(user_id)
         response.headers["Cache-Control"] = NO_STORE
+        signals = await win_trading.for_user(user_id) if win_trading is not None else []
         return UserModeration(
             user_id=user_id,
             nickname=card.nickname,
             counters=BehaviourCounters(**{f: card.counters.get(f, 0) for f in _COUNTER_FIELDS}),
             sanctions=[sanction_view(r, now) for r in history],
             cases=[CaseSummary.model_validate(c, from_attributes=True) for c in card.cases],
+            win_trading=[WinTradingSignal.model_validate(s) for s in signals],
         )
 
     @router.post(

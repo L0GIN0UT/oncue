@@ -153,6 +153,10 @@ class UserRepository(Protocol):
         """Одним запросом: (id, e-mail) активных пользователей с подтверждённым адресом."""
         ...
 
+    async def active_ids_after(self, after: UUID | None, limit: int) -> list[UUID]:
+        """Идентификаторы активных пользователей по возрастанию, строго после ``after``."""
+        ...
+
 
 class CredentialRepository(Protocol):
     """Хэши паролей."""

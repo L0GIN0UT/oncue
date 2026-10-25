@@ -45,6 +45,9 @@ class NotificationsSettings(BaseModel):
         email_backend: ``log`` (только local/ci), ``smtp``.
         identity_url: База identity для internal-ручки адресов (DNS compose/Kubernetes).
         identity_timeout_s: Таймаут вызова identity.
+        fanout_batch_pause_s: Пауза между пачками массовой доставки.
+        fanout_page_retries: Повторов чтения страницы identity в задаче до отказа задачи.
+        fanout_retry_pause_s: Пауза перед таким повтором.
         smtp: SMTP-сервер.
     """
 
@@ -57,6 +60,16 @@ class NotificationsSettings(BaseModel):
     broadcast_batch_size: int = Field(default=100, ge=1, le=1000)
     fanout_batch_size: int = Field(default=200, ge=1, le=2000)
     """Игроков в одной пачке массовой доставки (``audience``)."""
+    fanout_batch_pause_s: float = Field(default=0.2, ge=0, le=60)
+    """Пауза между пачками массовой доставки (секунды): не нагружать базу и realtime."""
+    fanout_page_retries: int = Field(default=3, ge=0, le=20)
+    """Повторов чтения страницы пользователей identity внутри задачи; дальше - повтор очередью."""
+    fanout_retry_pause_s: float = Field(default=2.0, ge=0, le=300)
+    """Пауза перед повтором чтения страницы identity (секунды)."""
+    erased_retention_days: int = Field(default=30, ge=1, le=3650)
+    """Срок хранения tombstone удалённых игроков (дни); должен превышать самую долгую рассылку."""
+    erased_purge_interval_s: float = Field(default=3600.0, gt=0, le=86_400)
+    """Пауза между запусками очистки tombstone (секунды)."""
     type_flags_cache_ttl_s: float = Field(default=15.0, ge=0, le=3600)
     """Кэш выключателей типов в процессе (секунды); 0 - без кэша. Другой процесс увидит
     решение админа не позже чем через TTL."""

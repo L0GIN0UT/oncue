@@ -33,6 +33,7 @@ class PlayerView:
     user_id: UUID
     slots: list[SlotView]
     custom_avatar_key: str | None = None  # u/<hex>.webp действующей своей аватарки
+    custom_avatar_asset_id: UUID | None = None  # ассет той же аватарки (объект жалобы)
 
 
 async def _views(
@@ -132,6 +133,7 @@ class AppearanceService:
                     u,
                     await _views(uow, slots, worn.get(u, {})),
                     avatars[u].public_key if u in avatars else None,
+                    avatars[u].asset_id if u in avatars else None,
                 )
                 for u in known
             ]

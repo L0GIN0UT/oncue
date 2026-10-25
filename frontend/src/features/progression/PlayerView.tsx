@@ -12,6 +12,8 @@ import { blockData } from "@/shared/api/blocks";
 import { useViewer } from "@/features/auth/session";
 import { PlayerBadge, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
 import { PlayerActions } from "@/features/friends/PlayerActions";
+import { ReportButton } from "@/features/reports/ReportDialog";
+import { useMyUserId } from "@/features/auth/use-my-user-id";
 import { fetchPlayerPage, playerQueryKey } from "./api";
 import { gateOf, ProfileGate } from "./ProfileView";
 
@@ -19,6 +21,7 @@ export function PlayerView({ userId }: { userId: string }) {
   const t = useTranslations();
   const f = useFormatter();
   const viewer = useViewer();
+  const myId = useMyUserId();
   const page = useQuery({
     queryKey: playerQueryKey(userId),
     queryFn: () => fetchPlayerPage(userId),
@@ -47,6 +50,9 @@ export function PlayerView({ userId }: { userId: string }) {
   // Оформление необязательно: `null` или недоступный блок — игрок без рамки, титула и фона.
   const appearance = blockData(page.data?.blocks.appearance);
   const social = blockData(page.data?.blocks.social);
+  // Ник из social (ADR 0069); нет ника (скрытый профиль, свой профиль, social недоступен) - «Игрок».
+  const nickname = page.data?.nickname ?? t("nav.player");
+  const avatarAsset = userId === myId ? null : (appearance?.custom_avatar_asset_id ?? null);
   // 5c: профиль закрыт, игрок заблокировал зрителя или неизвестен — ответы неразличимы.
   if (page.data?.restricted) {
     return (
@@ -56,7 +62,7 @@ export function PlayerView({ userId }: { userId: string }) {
           appearance={appearance}
           className="rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
         >
-          <PlayerBadge nickname={t("nav.player")} appearance={appearance} size="lg" />
+          <PlayerBadge nickname={nickname} appearance={appearance} size="lg" />
         </ProfileBackdrop>
         <p className="max-w-[60ch] text-ink-muted">{t("social.player.restricted")}</p>
         {social?.blocked_by_me && <PlayerActions userId={userId} social={social} />}
@@ -81,8 +87,19 @@ export function PlayerView({ userId }: { userId: string }) {
             appearance={appearance}
             className="rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
           >
-            <PlayerBadge nickname={t("nav.player")} appearance={appearance} size="lg" />
+            <PlayerBadge nickname={nickname} appearance={appearance} size="lg" />
           </ProfileBackdrop>
+          {avatarAsset && (
+            <div>
+              <ReportButton
+                kind="avatar"
+                targetId={avatarAsset}
+                label={t("social.report.avatar")}
+                ariaLabel={t("social.report.avatarLabel", { name: nickname })}
+                testId="report-avatar"
+              />
+            </div>
+          )}
           <p className="font-display text-4xl font-bold" data-testid="player-level">
             {t("progression.level.value", { level: data.level })}
           </p>

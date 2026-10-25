@@ -926,6 +926,18 @@
             "title": "Is Friend",
             "type": "boolean"
           },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ник игрока - только если профиль виден зрителю; для скрытого, заблокировавшего и неизвестного игрока `null` (ответы неразличимы)",
+            "title": "Nickname"
+          },
           "profile_visible": {
             "title": "Profile Visible",
             "type": "boolean"
@@ -943,6 +955,75 @@
           "blocked_by_me"
         ],
         "title": "PlayerRelation",
+        "type": "object"
+      },
+      "PlayerRelationItem": {
+        "description": "Отношение к одному игроку пакета.",
+        "properties": {
+          "blocked_by_me": {
+            "title": "Blocked By Me",
+            "type": "boolean"
+          },
+          "can_send_request": {
+            "title": "Can Send Request",
+            "type": "boolean"
+          },
+          "is_friend": {
+            "title": "Is Friend",
+            "type": "boolean"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ник игрока - только если профиль виден зрителю; для скрытого, заблокировавшего и неизвестного игрока `null` (ответы неразличимы)",
+            "title": "Nickname"
+          },
+          "profile_visible": {
+            "title": "Profile Visible",
+            "type": "boolean"
+          },
+          "stats_visible": {
+            "title": "Stats Visible",
+            "type": "boolean"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_visible",
+          "stats_visible",
+          "is_friend",
+          "can_send_request",
+          "blocked_by_me",
+          "user_id"
+        ],
+        "title": "PlayerRelationItem",
+        "type": "object"
+      },
+      "PlayerRelations": {
+        "description": "Пакетный ответ `relations`: по элементу на каждого запрошенного игрока (без дублей).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlayerRelationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PlayerRelations",
         "type": "object"
       },
       "PrivacySettings": {
@@ -1577,6 +1658,14 @@
             "format": "uuid",
             "title": "User Id",
             "type": "string"
+          },
+          "win_trading": {
+            "description": "Сигналы win-trading с участием игрока",
+            "items": {
+              "$ref": "#/components/schemas/WinTradingSignal"
+            },
+            "title": "Win Trading",
+            "type": "array"
           }
         },
         "required": [
@@ -1627,6 +1716,128 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WinTradingPage": {
+        "description": "Страница очереди сигналов (курсор), свежие первыми.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WinTradingSignal"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "WinTradingPage",
+        "type": "object"
+      },
+      "WinTradingSignal": {
+        "description": "Сигнал win-trading (только модератору; не вердикт, автосанкций нет).",
+        "properties": {
+          "count": {
+            "description": "Матчей пары или сдач в окне",
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "details": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "description": "`wins` по игрокам / число соперников",
+            "title": "Details",
+            "type": "object"
+          },
+          "first_at": {
+            "format": "date-time",
+            "title": "First At",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`pair_repeat` - повторы пары; `forfeit_series` - сдачи подряд против одного соперника; `forfeit_window` - сдачи за окно",
+            "enum": [
+              "pair_repeat",
+              "forfeit_series",
+              "forfeit_window"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_at": {
+            "format": "date-time",
+            "title": "Last At",
+            "type": "string"
+          },
+          "other_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Соперник; для `forfeit_window` нет",
+            "title": "Other User Id"
+          },
+          "severity": {
+            "enum": [
+              "medium",
+              "high"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "streak": {
+            "description": "Побед одного игрока подряд (пара) или сдач подряд (серия)",
+            "minimum": 0.0,
+            "title": "Streak",
+            "type": "integer"
+          },
+          "user_id": {
+            "description": "Игрок (у пары - с меньшим идентификатором)",
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "window_s": {
+            "description": "Окно конфига, секунды",
+            "minimum": 1.0,
+            "title": "Window S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "user_id",
+          "other_user_id",
+          "count",
+          "streak",
+          "severity",
+          "window_s",
+          "first_at",
+          "last_at",
+          "details"
+        ],
+        "title": "WinTradingSignal",
         "type": "object"
       }
     }
@@ -2952,7 +3163,7 @@
     },
     "/admin/v1/users/{user_id}/moderation": {
       "get": {
-        "description": "Счётчики порядочности, история санкций, кейсы. Автосанкций нет.",
+        "description": "Счётчики порядочности, история санкций, кейсы, сигналы win-trading. Автосанкций нет.",
         "operationId": "user_moderation_admin_v1_users__user_id__moderation_get",
         "parameters": [
           {
@@ -3175,6 +3386,164 @@
           }
         },
         "summary": "Выдать санкцию",
+        "tags": [
+          "social-admin"
+        ]
+      }
+    },
+    "/admin/v1/win-trading/signals": {
+      "get": {
+        "description": "Сигналы детектора win-trading (ADR 0068): повторы пары, сдачи подряд и за окно, с числами и окном конфига. Свежие первыми; фильтры по виду, серьёзности и игроку. Сигнал - повод посмотреть, не вердикт: друзья тоже играют друг с другом.",
+        "operationId": "signals_admin_v1_win_trading_signals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pair_repeat",
+                    "forfeit_series",
+                    "forfeit_window"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "medium",
+                    "high"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "description": "Игрок на любой стороне",
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Игрок на любой стороне",
+              "title": "User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WinTradingPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Подозрительные пары и серии сдач",
         "tags": [
           "social-admin"
         ]
@@ -5080,6 +5449,120 @@
           }
         },
         "summary": "Сведения о сервисе",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/players/relations": {
+      "get": {
+        "description": "Пакетный `relation` для bff (итог матча: можно ли звать в друзья): до 50 игроков за вызов, дубли схлопываются, порядок как в запросе. Скрытый профиль, блокировка и неизвестный игрок дают одинаковый ответ. Лимит на пользователя (`GV_SOCIAL__RELATIONS_PER_MINUTE`): 429 + `Retry-After`.",
+        "operationId": "relations_v1_players_relations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "title": "User Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerRelations"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Видимость нескольких игроков для зрителя",
         "tags": [
           "social"
         ]

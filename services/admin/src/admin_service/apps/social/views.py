@@ -32,6 +32,7 @@ from admin_service.apps.social.forms import (
     PlayerSearchForm,
     ResolveForm,
     RevokeSanctionForm,
+    WinTradingFilterForm,
     parse_uuid,
 )
 from admin_service.core.payload import as_dict, as_list
@@ -116,6 +117,63 @@ def cases(request: HttpRequest) -> HttpResponse:
             "query": query.urlencode(),
         },
     )
+
+
+@require_GET
+@require_perm(MODERATE)
+def win_trading(request: HttpRequest) -> HttpResponse:
+    """Подозрительные пары и серии сдач (ADR 0068): только показ, санкций отсюда нет."""
+    form = WinTradingFilterForm(request.GET or None)
+    valid = form.is_valid() if request.GET else True
+    filters = form.cleaned_data if request.GET and valid else {}
+    cursor = request.GET.get("cursor") or None
+    data, error = read(
+        request,
+        SOCIAL,
+        _client(
+            lambda c: c.win_trading_signals(
+                kind=filters.get("kind") or None,
+                severity=filters.get("severity") or None,
+                user_id=filters.get("user_id") or None,
+                cursor=cursor,
+            )
+        ),
+    )
+    rows = []
+    for row in as_list(as_dict(data).get("items")):
+        user = parse_uuid(str(row.get("user_id")))
+        other = parse_uuid(str(row.get("other_user_id")))
+        rows.append(
+            {
+                **row,
+                "user_url": reverse("social:player", kwargs={"user_id": user}) if user else None,
+                "other_url": reverse("social:player", kwargs={"user_id": other}) if other else None,
+                "window_h": int(row.get("window_s") or 0) // 3600,
+            }
+        )
+    audit_read(
+        request,
+        action="social.view_win_trading",
+        service=SOCIAL,
+        target_type="win_trading",
+        target_id="queue",
+    )
+    query = request.GET.copy()
+    query.pop("cursor", None)
+    response = render(
+        request,
+        "admin_social/win_trading.html",
+        {
+            "title": "Win-trading: сигналы",
+            "filter_form": form,
+            "error": error.message if error else None,
+            "rows": rows,
+            "next_cursor": as_dict(data).get("next_cursor"),
+            "query": query.urlencode(),
+        },
+    )
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 def _case_context(
@@ -298,6 +356,7 @@ def _player_context(request: HttpRequest, user_id: UUID, **forms_: Any) -> dict[
         "player": player,
         "counters": as_dict(player.get("counters")),
         "sanctions": sanctions,
+        "win_trading": as_list(player.get("win_trading")),
         "player_cases": [
             {**c, "admin_url": reverse("social:case", kwargs={"case_id": c["id"]})}
             for c in as_list(player.get("cases"))

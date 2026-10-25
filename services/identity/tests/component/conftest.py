@@ -57,7 +57,7 @@ SERVICE_CLIENTS = (
     {
         "client_id": "notifications",
         "secret_sha256": sha256_hex(NOTIFICATIONS_SECRET),
-        "audiences": {"identity": ["users.emails.read"]},
+        "audiences": {"identity": ["users.emails.read", "users.active.list"]},
     },
 )
 

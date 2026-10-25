@@ -1,8 +1,9 @@
 """Доменные события collections (контракты ``contracts/events/collections/*.v1.json``).
 
 Поля совпадают со схемами один в один (``additionalProperties: false``). UGC-текст
-(название, описание) в события не попадает: он живёт только в collections. Все события
-топика ``collections.collection.v1`` несут монотонную ``version`` агрегата (ADR 0028).
+(описание) в события не попадает; название (≤ 120) и теги - необязательные поля снимка
+(ADR 0067). Все события топика ``collections.collection.v1`` несут монотонную ``version``
+агрегата (ADR 0028).
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from uuid import UUID
 from gv_core.domain import DomainEvent
 
 COLLECTION_AGGREGATE = "collection"
+EVENT_TITLE_MAX = 120
+"""Предел `title` в схеме событий (ADR 0067); название длиннее обрезается."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,6 +53,8 @@ class _Snapshot(DomainEvent):
     default_mode_key: str
     items: tuple[EventItem, ...]
     published_at: datetime
+    title: str = ""
+    tags: tuple[str, ...] = ()
 
     def payload(self) -> dict[str, Any]:
         """Payload по схеме: ``custom`` у единицы без своих загадок отсутствует."""

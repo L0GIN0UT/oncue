@@ -206,7 +206,7 @@
       "user_mutable": true
     },
     {
-      "audience": "known_users",
+      "audience": "active_users",
       "channels": {"email": false, "in_app": true, "push": false},
       "data": {"event_key": "payload.event_key"},
       "dedup_key": "event_started:{payload.run_id}",

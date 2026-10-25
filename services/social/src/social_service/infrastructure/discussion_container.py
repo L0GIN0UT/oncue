@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
@@ -28,9 +28,14 @@ from social_service.application.ports.discussion import (
 from social_service.application.ports.sanctions import SanctionGranter, SanctionReader
 from social_service.application.projections import ProjectionService
 from social_service.application.reports import ReportService
+from social_service.application.win_trading import WinTradingService
 from social_service.infrastructure.config_provider import config_provider_for
 from social_service.infrastructure.container import container_for as social_container_for
 from social_service.infrastructure.db.repositories_moderation import SqlDiscussionUnitOfWork
+from social_service.infrastructure.db.repositories_win_trading import (
+    store_in_session,
+    store_with_own_transaction,
+)
 from social_service.infrastructure.limiter import RedisRateLimiter
 
 
@@ -110,6 +115,23 @@ class DiscussionContainer:
     def reports(self, session: AsyncSession | None = None) -> ReportService:
         """Жалобы (в транзакции consumer - с ``session``)."""
         return ReportService(self.uow_factory(session), self.config, self.infra.clock, self.new_id)
+
+    def win_trading(self, session: AsyncSession | None = None) -> WinTradingService:
+        """Детектор win-trading: в транзакции consumer (``session``) или со своей (ручки)."""
+        if session is not None:
+            return WinTradingService(store_in_session(session), self.config, self.infra.clock)
+        infra = self.infra
+
+        def sessions() -> async_sessionmaker[AsyncSession]:
+            # Сессии берутся при обращении: экспорт OpenAPI собирает сервис без БД.
+            if infra.sessions is None:
+                raise DependencyUnavailableError("база данных не настроена (GV_DATABASE_URL)")
+            return infra.sessions
+            raise DependencyUnavailableError("база данных не настроена (GV_DATABASE_URL)")
+
+        return WinTradingService(
+            store_with_own_transaction(sessions), self.config, self.infra.clock
+        )
 
     def projections(self, session: AsyncSession) -> ProjectionService:
         """Применение событий в транзакции consumer."""

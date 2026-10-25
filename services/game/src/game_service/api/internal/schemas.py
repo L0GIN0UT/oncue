@@ -20,7 +20,24 @@ MAX_PLAN_COLLECTIONS = 10
 """Потолок сборников в схеме; рабочий предел — ``source.collection.max_collections``."""
 MAX_EXCLUDE_IDS = 5000
 """Память сыгранного лобби (``exclude_ids``), D12."""
+PluginKey = Annotated[
+    str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$", max_length=64)
+]
 Seed = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.:-]{8,128}$")]
+
+
+class LobbyOverrides(BaseModel):
+    """Переопределения хозяина лобби (ADR 0070): только то, что режим разрешил в
+    `session.lobby.overridable`; сочетание проверяет валидатор ядра."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    clue_type: PluginKey | None = Field(
+        default=None, description="Тип загадки из `lobby.overridable.clue`"
+    )
+    answer_format: PluginKey | None = Field(
+        default=None, description="Формат ответа из `lobby.overridable.answer_format`"
+    )
 
 
 class RoundPlanRequest(BaseModel):
@@ -44,6 +61,13 @@ class RoundPlanRequest(BaseModel):
         default_factory=list,
         max_length=MAX_EXCLUDE_IDS,
         description="Единицы, которые не должны выпасть (память лобби)",
+    )
+    overrides: LobbyOverrides | None = Field(
+        default=None,
+        description=(
+            "Переопределения лобби (`clue_type`, `answer_format`): план строится по "
+            "эффективному конфигу, пул должен быть играбелен под переопределённую загадку"
+        ),
     )
 
 

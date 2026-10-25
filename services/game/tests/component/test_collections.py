@@ -103,12 +103,14 @@ async def publish(
     version: int = 1,
     content_version: int = 1,
     event: str = "collections.CollectionPublished",
+    tags: list[str] | None = None,
 ) -> UUID:
-    """Событие сборника (снимок состава) в consumer game."""
+    """Событие сборника (снимок состава) в consumer game; ``tags=None`` - как в примере."""
     cid = cid or uuid7()
     base = load_example(event)
     payload = {
         **base.payload,
+        **({} if tags is None else {"tags": tags}),
         "collection_id": str(cid),
         "version": version,
         "content_version": content_version,
@@ -504,3 +506,56 @@ async def test_admin_theme_subjects_search(game: Any) -> None:
         422,
         "game.subjects_not_supported",
     )
+
+
+async def test_finished_event_carries_collection_tags_from_projection(game: Any) -> None:
+    """ADR 0067: теги сборника фиксируются на старте и уходят в GameFinished."""
+    await bootstrap(game)
+    cid = await publish(game, await films(game, 6), tags=["new_year", "horror"])
+    token = game.issuer.issue(user_id=uuid7())
+    snap = (await start(game, token, FRAME, collection_id=str(cid))).json()
+    # Правка тегов после старта сессию не меняет: теги - снимок старта.
+    await publish(
+        game,
+        await films(game, 6),
+        cid=cid,
+        version=2,
+        event="collections.CollectionUpdated",
+        tags=["comedy"],
+    )
+    snap = await finish(game, token, snap)
+    finished = assert_published(
+        await game.outbox(), "game.GameFinished", {"session_id": snap["id"]}
+    )
+    assert_event_matches_schema(finished)
+    assert finished.payload["collection_tags"] == ["new_year", "horror"]
+
+
+async def test_event_without_tags_gives_empty_collection_tags(game: Any) -> None:
+    await bootstrap(game)
+    films_ = await films(game, 6)
+    cid = await publish(game, films_)
+    base = load_example("collections.CollectionPublished")
+    payload = {k: v for k, v in base.payload.items() if k != "tags"}
+    payload["items"] = [{"media_item_id": str(i), "position": p} for p, i in enumerate(films_)]
+    old = base.model_copy(
+        update={
+            "aggregate_id": str(cid),
+            "event_id": uuid7(),
+            "payload": {
+                **payload,
+                "collection_id": str(cid),
+                "version": 5,
+                "default_mode_key": "film.collection.frame",
+                "domain": "film",
+            },
+        }
+    )
+    assert await game.deliver(old) is Outcome.PROCESSED
+    token = game.issuer.issue(user_id=uuid7())
+    snap = (await start(game, token, FRAME, collection_id=str(cid))).json()
+    snap = await finish(game, token, snap)
+    finished = assert_published(
+        await game.outbox(), "game.GameFinished", {"session_id": snap["id"]}
+    )
+    assert finished.payload["collection_tags"] == []

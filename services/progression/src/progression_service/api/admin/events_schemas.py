@@ -19,6 +19,8 @@ from progression_service.api.public.events_schemas import EventKey, RunStatus, T
 Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
 SlotKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=32)]
 ItemKey = Annotated[str, StringConstraints(max_length=64)]
+TagKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
+"""Ключ тега сборника - как `TagKey` в collections (ADR 0067)."""
 Metric = Literal[
     "rounds_played",
     "correct_answers",
@@ -54,12 +56,16 @@ class TriggerParams(_Strict):
     item_key: ItemKey | None = None
     domain: Literal["music", "film"] | None = None
     collection_keys: list[UUID] | None = Field(default=None, max_length=20)
+    collection_tags: list[TagKey] | None = Field(default=None, max_length=20)
 
     @model_validator(mode="after")
     def _unique_keys(self) -> TriggerParams:
         keys = self.collection_keys
         if keys is not None and len(set(keys)) != len(keys):
             raise ValueError("collection_keys: повторы")
+        tags = self.collection_tags
+        if tags is not None and len(set(tags)) != len(tags):
+            raise ValueError("collection_tags: повторы")
         return self
 
 
@@ -73,10 +79,11 @@ class ServerTrigger(_Strict):
     params: TriggerParams | None = None
 
     @model_validator(mode="after")
-    def _collection_keys_only_collection_played(self) -> ServerTrigger:
-        has = self.params is not None and self.params.collection_keys is not None
+    def _collection_filters_only_collection_played(self) -> ServerTrigger:
+        p = self.params
+        has = p is not None and (p.collection_keys is not None or p.collection_tags is not None)
         if has and self.metric != "collection_played":
-            raise ValueError("collection_keys - только у collection_played")
+            raise ValueError("collection_keys/collection_tags - только у collection_played")
         return self
 
 
@@ -144,6 +151,14 @@ class UpdateEventRequest(_Strict):
     """Заменить определение (есть запуск `published/active` - 409)."""
 
     body: EventDefinition
+    expected_body_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "`body_sha256`, который видел админ; текущий хеш другой - 409 "
+            "`progression.event_definition_changed`. Не задан - без проверки"
+        ),
+    )
     reason: Reason
 
 

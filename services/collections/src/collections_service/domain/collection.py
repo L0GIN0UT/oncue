@@ -28,6 +28,7 @@ from collections_service.domain.errors import (
     VersionConflictError,
 )
 from collections_service.domain.events import (
+    EVENT_TITLE_MAX,
     CollectionDeleted,
     CollectionLiked,
     CollectionPublished,
@@ -410,6 +411,8 @@ class Collection(AggregateRoot[UUID]):
                     for position, item in enumerate(s.current.items)
                 ),
                 published_at=s.published_at or now,
+                title=s.current.title[:EVENT_TITLE_MAX],
+                tags=s.current.tags,
             )
         )
 

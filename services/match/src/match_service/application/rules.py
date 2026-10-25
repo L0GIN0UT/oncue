@@ -10,7 +10,6 @@ match не ветвится по виду матча: всё, что отлич�
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -31,11 +30,13 @@ from gv_game_kernel import (
     ModeEngine,
     OnlineSessionSpec,
     OptionSpec,
+    OverrideNotAllowedError,
     PersonRef,
     PlayerRoundView,
     PluginRegistry,
     RoundDraw,
     RoundOutcome,
+    apply_lobby_overrides,
     parse_mode_config,
 )
 from gv_game_kernel.outcome import Placement
@@ -236,19 +237,28 @@ def effective_body(
     не пишется: его задаёт план (``rounds`` запроса), а параметры источника (например,
     ``round_options`` сборника) проверяются по шаблону.
     """
-    result: dict[str, Any] = copy.deepcopy(dict(body))  # Any: тело ModeConfig
+    try:
+        # Загадка и формат — общий помощник ядра: то же правило допустимости, что в game.
+        result = apply_lobby_overrides(
+            body,
+            clue_type=settings.clue_type if settings.clue_type != template.clue_type else None,
+            answer_format=(
+                settings.answer_format if settings.answer_format != template.answer_format else None
+            ),
+        )
+    except OverrideNotAllowedError as exc:
+        field = (
+            "clue_type"
+            if (exc.details or {}).get("field") == "clue"
+            else (exc.details or {}).get("field")
+        )
+        raise MatchInvalidError(
+            "значение настройки не разрешено шаблоном",
+            code=errors.SETTING_NOT_ALLOWED,
+            details={"field": field},
+        ) from exc
     session = result["session"]
     session["players"] = {**session["players"], "max": settings.players_max}
-    if settings.answer_format != template.answer_format:
-        result["answer"]["format"] = settings.answer_format
-    if settings.clue_type != template.clue_type:
-        options = ((session.get("lobby") or {}).get("overridable") or {}).get("clue") or []
-        chosen = next((c for c in options if c.get("type") == settings.clue_type), None)
-        if chosen is None:
-            raise MatchInvalidError(
-                "загадка недоступна", code=errors.SETTING_NOT_ALLOWED, details={"field": "clue"}
-            )
-        result["clue"] = copy.deepcopy(chosen)
     if settings.level_window_s is not None:
         session["level_windows_s"] = [settings.level_window_s] * len(session["level_windows_s"])
     return result

@@ -37,6 +37,7 @@ def routers(infra: Infrastructure) -> list[APIRouter]:
             config_commands=lambda: social.config_commands,
             config_queries=lambda: social.config_queries,
             config_changed=social.invalidate_config,
+            win_trading=discussion.win_trading(),
         ),
         social.sanctions(),
     )

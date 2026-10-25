@@ -246,6 +246,7 @@ class GameSession(AggregateRoot[UUID]):
         collection_id: Сборник сессии (source ``collection``, ADR 0028) или ``None``.
         collection_version: ``content_version`` сборника на старте: сессия доигрывается на
             этом составе, даже если сборник правят или скрывают.
+        collection_tags: Теги сборника на старте (ADR 0067) - в ``GameFinished.collection_tags``.
     """
 
     def __init__(
@@ -273,12 +274,14 @@ class GameSession(AggregateRoot[UUID]):
         round_max: int | None = None,
         collection_id: UUID | None = None,
         collection_version: int | None = None,
+        collection_tags: tuple[str, ...] = (),
     ) -> None:
         super().__init__(id, version)
         if (collection_id is None) != (collection_version is None):
             raise ValueError("сборник сессии задаётся вместе с версией состава")
         self.collection_id = collection_id
         self.collection_version = collection_version
+        self.collection_tags = collection_tags
         self.player = player
         self.mode_key = mode_key
         self.mode_version = mode_version
@@ -322,6 +325,7 @@ class GameSession(AggregateRoot[UUID]):
         progressive: bool = False,
         collection_id: UUID | None = None,
         collection_version: int | None = None,
+        collection_tags: tuple[str, ...] = (),
     ) -> GameSession:
         """Новая сессия с разыгранным планом; первый раунд выдаёт ``materialize_next``.
 
@@ -351,6 +355,7 @@ class GameSession(AggregateRoot[UUID]):
             round_max=round_max,
             collection_id=collection_id,
             collection_version=collection_version,
+            collection_tags=collection_tags,
         )
 
     # ------------------------------------------------------------------ чтение
@@ -613,6 +618,7 @@ class GameSession(AggregateRoot[UUID]):
                 rounds=summaries,
                 collection_id=self.collection_id,
                 collection_version=self.collection_version,
+                collection_tags=self.collection_tags,
             )
         )
         if day is not None and user_id is not None:

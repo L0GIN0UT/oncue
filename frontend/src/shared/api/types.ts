@@ -125,6 +125,8 @@ export type ChatOptions = M["ChatOptions"];
 export type MatchModeRef = M["ModeRef"];
 export type OpenRoomCard = M["OpenRoomCard"];
 export type MyMatchCard = M["MyMatchCard"];
+/** Игрок матча в карточке истории хаба (bff, ADR 0069). */
+export type MatchParticipantCard = B["MatchParticipantCard"];
 export type MyMatchesPage = M["MyMatchesPage"];
 export type MatchResult = M["MatchResult"];
 export type MatchResultPlayer = M["ResultPlayer"];

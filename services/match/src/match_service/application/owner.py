@@ -61,6 +61,7 @@ from match_service.domain.errors import (
     MatchInvalidError,
     MatchNotFoundError,
     MatchUnavailableError,
+    override_details,
     status_of,
 )
 from match_service.domain.events import match_started
@@ -100,6 +101,8 @@ _PLAN_ERRORS: dict[str, tuple[type[AppError], str]] = {
     "game.collection_not_supported": (MatchInvalidError, errors.SETTING_NOT_ALLOWED),
     "game.too_many_collections": (MatchInvalidError, errors.TOO_MANY_COLLECTIONS),
     "game.pool_too_small": (MatchInvalidError, errors.POOL_TOO_SMALL),
+    "game.override_not_allowed": (MatchInvalidError, errors.SETTING_NOT_ALLOWED),
+    "game.override_invalid": (MatchInvalidError, errors.SETTING_NOT_ALLOWED),
     "game.assets_unavailable": (MatchUnavailableError, errors.CONTENT_UNAVAILABLE),
 }
 
@@ -114,9 +117,16 @@ def plan_error(error: AppError) -> AppError:
         return MatchUnavailableError("онлайн временно недоступен", code=errors.GAME_UNAVAILABLE)
     cls, code = mapped
     details = dict(error.details) if error.details else None
-    if code == errors.SETTING_NOT_ALLOWED:
+    if error.code.startswith("game.override_"):
+        details = override_details(error.code, details)
+    elif code == errors.SETTING_NOT_ALLOWED:
         details = {"field": "collection_ids"}
     return cls("план матча не получен", code=code, details=details)
+
+
+def _changed(value: str, template: str) -> str | None:
+    """Переопределение хозяина (отличие от шаблона) или ``None`` — как есть."""
+    return value if value != template else None
 
 
 def _contest(match: MatchState) -> ContestRoundState:
@@ -844,6 +854,9 @@ class RoomOwner:
             rounds=room.settings.rounds,
             collection_ids=tuple(room.settings.collection_ids),
             exclude_ids=tuple(room.memory),
+            # Переопределения хозяина (ADR 0070): game строит план под них же.
+            clue_type=_changed(room.settings.clue_type, room.template.clue_type),
+            answer_format=_changed(room.settings.answer_format, room.template.answer_format),
         )
         try:
             plan = await self._plans.create_round_plan(request)

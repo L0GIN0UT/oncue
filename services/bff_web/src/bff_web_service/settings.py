@@ -97,6 +97,10 @@ class PagesSettings(BaseModel):
         online_rooms_limit: Открытых лобби в блоке хаба онлайна (дальше — курсор match).
         online_matches_limit: Последних матчей в блоке «Мои матчи» хаба онлайна.
         online_weekly_limit: Строк топа недели на ladder в хабе онлайна.
+        online_match_players_limit: Скольким последним матчам хаба добавлять список игроков
+            (по вызову `match /v1/matches/{id}` на матч; 0 — не добавлять, ADR 0069).
+        relations_batch_size: Игроков в одном вызове `social /v1/players/relations` (предел
+            источника — 50) для флага «можно добавить в друзья» итога матча.
         match_items_deadline_s: Общий предел на блоки ``items`` (catalog) и ``library``
             итога матча: до 50 единиц идут волнами по ``max_concurrency``, и без общего
             предела страница ждала бы ``волны × timeout_s``. Не успел — блок ``unavailable``.
@@ -125,6 +129,8 @@ class PagesSettings(BaseModel):
     online_rooms_limit: int = Field(default=20, ge=1, le=50)
     online_matches_limit: int = Field(default=10, ge=1, le=50)
     online_weekly_limit: int = Field(default=5, ge=1, le=50)
+    online_match_players_limit: int = Field(default=5, ge=0, le=50)
+    relations_batch_size: int = Field(default=12, ge=1, le=50)
     match_items_deadline_s: float = Field(default=2.0, gt=0, le=30)
     match_items_batch_size: int = Field(default=50, ge=1, le=50)
     home_progress_deadline_s: float = Field(default=1.5, gt=0, le=30)

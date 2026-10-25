@@ -161,6 +161,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             rooms_limit=pages.online_rooms_limit,
             matches_limit=pages.online_matches_limit,
             weekly_limit=pages.online_weekly_limit,
+            match_players_limit=pages.online_match_players_limit,
         ),
         get_leaderboards=GetLeaderboardsPage(rating, concurrency=up.max_concurrency),
         get_match=GetMatchPage(
@@ -172,6 +173,8 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             items_deadline_s=pages.match_items_deadline_s,
             items_batch_size=pages.match_items_batch_size,
             appearance_batch_size=pages.appearance_batch_size,
+            social=social,
+            relations_batch_size=pages.relations_batch_size,
         ),
         http_cache=settings.http_cache,
     )

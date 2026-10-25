@@ -45,6 +45,7 @@ class GameFinished(DomainEvent):
 
     ``collection_id``/``collection_version`` — у сессии по сборнику (этап 3b, D9: «пройден»
     и сложность считает collections), иначе ``None``.
+    ``collection_tags`` - теги сборника на старте (ADR 0067), пусто - нет тегов или не сборник.
     """
 
     aggregate_type: ClassVar[str] = SESSION_AGGREGATE
@@ -66,6 +67,7 @@ class GameFinished(DomainEvent):
     rounds: tuple[RoundSummary, ...]
     collection_id: UUID | None = None
     collection_version: int | None = None
+    collection_tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

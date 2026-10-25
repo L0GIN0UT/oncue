@@ -157,7 +157,7 @@ export interface paths {
         get: operations["get_event_admin_v1_events__event_key__get"];
         /**
          * Изменить определение
-         * @description Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` (есть запуск `published/active`), 422 `progression.event_definition_invalid`.
+         * @description Ошибки: 404 `progression.event_not_found`, 409 `progression.event_definition_locked` (есть запуск `published/active`), 409 `progression.event_definition_changed` (задан `expected_body_sha256`, а определение уже другое), 422 `progression.event_definition_invalid`.
          */
         put: operations["update_event_admin_v1_events__event_key__put"];
         post?: never;
@@ -2150,6 +2150,11 @@ export interface components {
         PlayerAppearance: {
             appearance: components["schemas"]["Appearance"];
             /**
+             * Custom Avatar Asset Id
+             * @description Ассет одобренной аватарки: объект жалобы `avatar` в social; null - аватарки нет (необязательное поле, ADR 0069)
+             */
+            custom_avatar_asset_id?: string | null;
+            /**
              * Custom Avatar Url
              * @description Одобренная своя аватарка; null - аватар из слота
              */
@@ -2621,6 +2626,8 @@ export interface components {
         TriggerParams: {
             /** Collection Keys */
             collection_keys?: string[] | null;
+            /** Collection Tags */
+            collection_tags?: string[] | null;
             /** Domain */
             domain?: ("music" | "film") | null;
             /** Item Key */
@@ -2652,6 +2659,11 @@ export interface components {
          */
         UpdateEventRequest: {
             body: components["schemas"]["EventDefinition"];
+            /**
+             * Expected Body Sha256
+             * @description `body_sha256`, который видел админ; текущий хеш другой - 409 `progression.event_definition_changed`. Не задан - без проверки
+             */
+            expected_body_sha256?: string | null;
             /** Reason */
             reason: string;
         };

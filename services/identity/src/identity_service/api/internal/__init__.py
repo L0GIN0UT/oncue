@@ -10,7 +10,7 @@ admin хранит их в своей серверной сессии. Ручк�
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
 
 from gv_auth import ServicePrincipal
@@ -80,6 +80,12 @@ USERS_EMAILS_READ_SCOPE = "users.emails.read"
 
 MAX_EMAIL_LOOKUP_IDS = 500
 
+USERS_ACTIVE_LIST_SCOPE = "users.active.list"
+"""Область сервисного токена для ``GET /users/active`` (клиент notifications, ADR 0069)."""
+
+ACTIVE_PAGE_DEFAULT = 1000
+"""Верхняя граница параметра ``limit`` в схеме; реальный предел пачки - настройка сервиса."""
+
 
 class UserEmailsRequest(BaseModel):
     """Набор пользователей; дубли id схлопываются."""
@@ -100,6 +106,15 @@ class UserEmailsResponse(BaseModel):
     """Только подходящие пользователи; причины пропуска не различаются, порядок любой."""
 
     items: list[UserEmailItem]
+
+
+class ActiveUsersResponse(BaseModel):
+    """Страница активных пользователей: только идентификаторы по возрастанию."""
+
+    items: list[UUID]
+    next_cursor: UUID | None = Field(
+        description="Значение `after` следующего запроса; `null` - последняя страница."
+    )
 
 
 def _response(issued: IssuedSession) -> AdminSessionResponse:
@@ -181,6 +196,34 @@ def build_internal_router(deps: ApiDeps) -> APIRouter:
         )
         response.headers["Cache-Control"] = "no-store"
         return UserEmailsResponse(items=[UserEmailItem(user_id=i, email=e) for i, e in found])
+
+    @router.get(
+        "/users/active",
+        response_model=ActiveUsersResponse,
+        summary="Активные пользователи постранично (аудитория уведомлений)",
+        description=(
+            "Сервисный токен со scope `users.active.list`. Только идентификаторы активных "
+            "(не удалённых) пользователей по возрастанию; `limit` усекается до настройки "
+            "`GV_USERS_ACTIVE__MAX_PAGE`. 429 - лимит вызовов на `client_id`."
+        ),
+        responses=problem_responses(401, 403, 422, 429, 503),
+    )
+    async def active_users(
+        response: Response,
+        principal: Annotated[
+            ServicePrincipal,
+            Depends(deps.service_auth.require_service(USERS_ACTIVE_LIST_SCOPE)),
+        ],
+        after: Annotated[
+            UUID | None, Query(description="Курсор: `next_cursor` прошлой страницы.")
+        ] = None,
+        limit: Annotated[int, Query(ge=1, le=ACTIVE_PAGE_DEFAULT * 5)] = ACTIVE_PAGE_DEFAULT,
+    ) -> ActiveUsersResponse:
+        page = await uc.list_active_users.execute(
+            principal.client_id, principal.token_id, after=after, limit=limit
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return ActiveUsersResponse(items=page.ids, next_cursor=page.next_cursor)
 
     @router.post(
         "/service-tokens",

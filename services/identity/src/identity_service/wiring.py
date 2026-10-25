@@ -79,6 +79,7 @@ from identity_service.application.queries import (
     ListLinkedAccounts,
     ListUsers,
 )
+from identity_service.application.queries.active_users import ActiveUsersLimit, ListActiveUsers
 from identity_service.application.queries.user_emails import ListVerifiedEmails, UserEmailsLimit
 from identity_service.application.sessions import SessionIssuer
 from identity_service.domain import (
@@ -542,6 +543,15 @@ def build_api_deps(infra: Infrastructure) -> ApiDeps:
                 per_client=settings.users_emails_limit.per_client,
                 window_s=settings.users_emails_limit.window_s,
                 ids_per_hour=settings.users_emails_limit.ids_per_hour,
+            ),
+        ),
+        list_active_users=ListActiveUsers(
+            uow,
+            strict_limiter,
+            ActiveUsersLimit(
+                max_page=settings.users_active.max_page,
+                per_client=settings.users_active.per_client,
+                window_s=settings.users_active.window_s,
             ),
         ),
         guest=GuestUseCases(

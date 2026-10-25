@@ -49,6 +49,11 @@ export type SocialScenario = {
   onlineBanned?: boolean;
   /** Вход закрыт `auth.account_banned`. */
   accountBanned?: boolean;
+  /**
+   * Аккаунт забанили при уже открытой сессии: access истёк (401 `auth.token_expired`),
+   * а refresh отвечает 403 `auth.account_banned`.
+   */
+  sessionBanned?: boolean;
   /** Жалоба отвечает 429. */
   reportRateLimited?: boolean;
 };

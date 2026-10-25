@@ -196,6 +196,7 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
                     custom_avatar_url=(
                         services.ugc_url(p.custom_avatar_key) if p.custom_avatar_key else None
                     ),
+                    custom_avatar_asset_id=p.custom_avatar_asset_id,
                 )
                 for p in players
             ]

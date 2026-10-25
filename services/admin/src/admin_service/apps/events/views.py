@@ -13,6 +13,7 @@ admin-API (``core.progression_client``). Права: ``progression.events.manage
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 from uuid import UUID
@@ -22,8 +23,10 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from admin_service.apps.events import finds_form
 from admin_service.apps.events.forms import (
     EventKeyForm,
+    FindsMetaForm,
     MapForm,
     PublishRunForm,
     RunForm,
@@ -38,6 +41,7 @@ from admin_service.core.permissions import has_perm, require_perm
 from admin_service.core.progression_client import PROGRESSION, ProgressionAdminClient
 from admin_service.core.service_client import ServiceClient, ServiceError
 from admin_service.core.views import mutate, read, service_error_response
+from gv_core.ids import uuid7
 
 HTTP_NOT_FOUND = 404
 MANAGE = "progression.events.manage"
@@ -45,6 +49,9 @@ PUBLISH = "progression.events.publish"
 _INVALID_STATUSES = (400, 422)
 _RUN_FIELDS = ("id", "seq", "status", "starts_at", "ends_at")
 _DEFINITION_FIELDS = ("key", "body_sha256")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+DEFINITION_CHANGED = "progression.event_definition_changed"
+DEFINITION_CHANGED_MESSAGE = "Определение изменили, откройте заново: ваши правки не сохранены."
 
 # Заготовка редактора нового события: поля и их порядок по event_definition.v1; значения —
 # подсказка автору, проверку выполняет progression.
@@ -94,9 +101,20 @@ def _capturing(
             return call(ProgressionAdminClient(client))
         except ServiceError as exc:
             sink.append(exc)
+            if exc.code == DEFINITION_CHANGED:
+                # Свой понятный текст: что делать администратору, не зависит от тела ответа.
+                raise ServiceError(
+                    exc.service, exc.status, exc.code, DEFINITION_CHANGED_MESSAGE
+                ) from exc
             raise
 
     return run
+
+
+def _expected_sha(source: Any) -> str | None:
+    """Хеш определения, который админ видел при открытии формы (скрытое поле); битый — ``None``."""
+    raw = str(source.get("expected_sha") or "")
+    return raw if _SHA256.fullmatch(raw) else None
 
 
 def _event(request: HttpRequest, event_key: str) -> dict[str, Any]:
@@ -242,7 +260,12 @@ def _render_editor(request: HttpRequest, *, status: int = 200, **context: Any) -
     return render(
         request,
         "admin_events/edit.html",
-        {"title": "Событие: определение", **context},
+        {
+            "title": "Событие: определение",
+            "mode": "yaml",
+            "expected_sha": _expected_sha(request.POST),
+            **context,
+        },
         status=status,
     )
 
@@ -270,13 +293,26 @@ def _editor_response(
 
 @require_http_methods(["GET", "POST"])
 @require_perm(MANAGE)
-def event_new(request: HttpRequest) -> HttpResponse:
+def event_new(request: HttpRequest) -> HttpResponse:  # noqa: PLR0911 - режимы формы и YAML
     """Создание события: ключ (неизменяем) и определение. Запусков нет до явного создания."""
     if request.method == "GET":
+        if request.GET.get("mode") != "yaml":
+            return _form_page(
+                request,
+                base=_NEW_EVENT,
+                meta=FindsMetaForm(),
+                key_form=EventKeyForm(),
+                event_key=None,
+                map_url=None,
+            )
         form = EditorForm(initial={"fmt": "yaml", "text": config_text.dump(_NEW_EVENT, "yaml")})
         return _render_editor(
             request, form=form, key_form=EventKeyForm(), points=_preview(_NEW_EVENT)
         )
+    if request.POST.get("mode") == "form":
+        return _form_post(request, event_key=None, event=None)
+    if request.POST.get("op") == "to_form":
+        return _yaml_to_form(request, event_key=None, event=None)
     key_form, form = EventKeyForm(request.POST), EditorForm(request.POST)
     if not (key_form.is_valid() and form.is_valid()) or form.body is None:
         return _render_editor(request, status=400, form=form, key_form=key_form, points=[])
@@ -307,19 +343,40 @@ def event_new(request: HttpRequest) -> HttpResponse:
 
 @require_http_methods(["GET", "POST"])
 @require_perm(MANAGE)
-def event_edit(request: HttpRequest, event_key: str) -> HttpResponse:
+def event_edit(request: HttpRequest, event_key: str) -> HttpResponse:  # noqa: PLR0911 - режимы формы и YAML
     """Правка определения; 409 ``event_definition_locked``, пока есть опубликованный запуск."""
     try:
         event = _event(request, event_key)
     except ServiceError as exc:
         return _fail(request, exc)
+    map_url = event.get("map_url")
     if request.method == "GET":
-        fmt: config_text.Format = "json" if request.GET.get("fmt") == "json" else "yaml"
         body = as_dict(event.get("body"))
+        if request.GET.get("mode") != "yaml" and request.GET.get("fmt") is None:
+            return _form_page(
+                request,
+                base=body,
+                meta=FindsMetaForm(),
+                key_form=None,
+                event_key=event_key,
+                map_url=map_url,
+                expected_sha=event.get("body_sha256"),
+            )
+        fmt: config_text.Format = "json" if request.GET.get("fmt") == "json" else "yaml"
         form = EditorForm(initial={"fmt": fmt, "text": config_text.dump(body, fmt)})
         return _render_editor(
-            request, form=form, key_form=None, event_key=event_key, points=_preview(body)
+            request,
+            form=form,
+            key_form=None,
+            event_key=event_key,
+            points=_preview(body),
+            map_url=map_url,
+            expected_sha=event.get("body_sha256"),
         )
+    if request.POST.get("mode") == "form":
+        return _form_post(request, event_key=event_key, event=event)
+    if request.POST.get("op") == "to_form":
+        return _yaml_to_form(request, event_key=event_key, event=event)
     form = EditorForm(request.POST)
     if not form.is_valid() or form.body is None or not form.require_reason():
         return _render_editor(
@@ -328,6 +385,7 @@ def event_edit(request: HttpRequest, event_key: str) -> HttpResponse:
     body = form.body
     reason, idem = form.cleaned_data["reason"], str(form.cleaned_data["idempotency_key"])
     errors: list[ServiceError] = []
+    expected = _expected_sha(request.POST)
     ok, _ = mutate(
         request,
         service=PROGRESSION,
@@ -339,7 +397,13 @@ def event_edit(request: HttpRequest, event_key: str) -> HttpResponse:
         before={"body_sha256": event.get("body_sha256")},
         audit_fields=_DEFINITION_FIELDS,
         call=_capturing(
-            lambda c: c.update_event(event_key, body=body, reason=reason, idempotency_key=idem),
+            lambda c: c.update_event(
+                event_key,
+                body=body,
+                reason=reason,
+                idempotency_key=idem,
+                expected_body_sha256=expected,
+            ),
             errors,
         ),
         success="Определение сохранено",
@@ -347,6 +411,228 @@ def event_edit(request: HttpRequest, event_key: str) -> HttpResponse:
     if ok:
         return redirect("events:card", event_key=event_key)
     return _editor_response(request, form, errors, key_form=None, event_key=event_key)
+
+
+# ---------------------------------------------------------------------------- редактор формой
+
+
+def _parse_base(raw: object) -> dict[str, Any]:
+    """Исходное тело, с которым открыта форма (скрытое поле): из него берутся поля вне формы."""
+    text = str(raw or "")
+    if not text or len(text.encode("utf-8")) > int(settings.GV_MODE_CONFIG_MAX_BYTES):
+        return {}
+    try:
+        return config_text.parse(text, "json")
+    except config_text.ConfigTextError:
+        return {}
+
+
+def _clamp(raw: str) -> float | None:
+    value = finds_form.pct_value(raw)
+    return None if value is None else min(max(value, 0.0), 100.0)
+
+
+def _form_page(
+    request: HttpRequest,
+    *,
+    base: dict[str, Any],
+    meta: FindsMetaForm,
+    key_form: EventKeyForm | None,
+    event_key: str | None,
+    map_url: str | None,
+    header: dict[str, str] | None = None,
+    rows: list[finds_form.Row] | None = None,
+    errors: dict[str, str] | None = None,
+    server_rows: list[dict[str, Any]] | None = None,
+    status: int = 200,
+    expected_sha: str | None = None,
+) -> HttpResponse:
+    header = header if header is not None else finds_form.header_from_body(base)
+    rows = rows if rows is not None else finds_form.rows_from_body(base)
+    errors = errors or {}
+    shown = [
+        {
+            "i": i,
+            "n": i + 1,
+            "v": row,
+            "err": {k.split("_", 1)[1]: m for k, m in errors.items() if k.startswith(f"f{i}_")},
+        }
+        for i, row in enumerate(rows)
+    ]
+    points = [
+        {
+            "number": i + 1,
+            "title": r["title"],
+            "final": bool(r.get("final")),
+            "x": _clamp(r["x_pct"]),
+            "y": _clamp(r["y_pct"]),
+            "index": i,
+        }
+        for i, r in enumerate(rows)
+        if _clamp(r["x_pct"]) is not None and _clamp(r["y_pct"]) is not None
+    ]
+    return render(
+        request,
+        "admin_events/edit.html",
+        {
+            "title": "Событие: определение",
+            "mode": "form",
+            "meta": meta,
+            "key_form": key_form,
+            "event_key": event_key,
+            "map_url": map_url,
+            "base_json": config_text.dump(base, "json"),
+            "expected_sha": expected_sha or _expected_sha(request.POST),
+            "header": header,
+            "rows": shown,
+            "errors": errors,
+            "field_errors": server_rows,
+            "points": points,
+            "pick": True,
+            "can_add": len(rows) < finds_form.MAX_FINDS,
+            "enums": {
+                "metrics": finds_form.METRICS,
+                "periods": finds_form.PERIODS,
+                "play_pages": finds_form.PLAY_PAGES,
+                "spot_pages": finds_form.SPOT_PAGES,
+                "domains": finds_form.DOMAINS,
+            },
+        },
+        status=status,
+    )
+
+
+def _yaml_to_form(
+    request: HttpRequest, *, event_key: str | None, event: dict[str, Any] | None
+) -> HttpResponse:
+    """«Редактор формой» из YAML: тело разбирается тем же парсером, что и при сохранении."""
+    form = EditorForm(request.POST)
+    key_form = EventKeyForm(request.POST) if event_key is None else None
+    if not form.is_valid() or form.body is None:
+        return _render_editor(
+            request, status=400, form=form, key_form=key_form, event_key=event_key, points=[]
+        )
+    meta = FindsMetaForm(
+        initial={
+            "reason": form.cleaned_data.get("reason") or "",
+            "idempotency_key": str(form.cleaned_data["idempotency_key"]),
+        }
+    )
+    return _form_page(
+        request,
+        base=form.body,
+        meta=meta,
+        key_form=EventKeyForm(initial={"key": request.POST.get("key", "")}) if key_form else None,
+        event_key=event_key,
+        map_url=(event or {}).get("map_url"),
+    )
+
+
+def _form_post(
+    request: HttpRequest, *, event_key: str | None, event: dict[str, Any] | None
+) -> HttpResponse:
+    """POST редактора формой: операции над списком, переключение в YAML и сохранение."""
+    post = request.POST
+    key_form = EventKeyForm(post) if event_key is None else None
+    meta = FindsMetaForm(post)
+    base = _parse_base(post.get("base"))
+    header, rows = finds_form.parse_post(post)
+    map_url = (event or {}).get("map_url")
+    op = post.get("op", "save")
+    page: dict[str, Any] = {
+        "base": base,
+        "meta": meta,
+        "key_form": key_form,
+        "event_key": event_key,
+        "map_url": map_url,
+        "header": header,
+    }
+    if op == "to_yaml":
+        body = finds_form.build_body(base, header, rows)
+        form = EditorForm(
+            initial={
+                "fmt": "yaml",
+                "text": config_text.dump(body, "yaml"),
+                "reason": post.get("reason", ""),
+                "idempotency_key": post.get("idempotency_key") or str(uuid7()),
+            }
+        )
+        return _render_editor(
+            request,
+            form=form,
+            key_form=EventKeyForm(initial={"key": post.get("key", "")}) if key_form else None,
+            event_key=event_key,
+            points=_preview(body),
+            map_url=map_url,
+        )
+    if op != "save":
+        return _form_page(request, rows=finds_form.apply_op(rows, op), **page)
+    errors = finds_form.validate(header, rows)
+    meta_ok = meta.is_valid() and meta.require_reason()
+    if key_form is not None and not key_form.is_valid():
+        meta_ok = False
+    if errors or not meta_ok:
+        return _form_page(request, rows=rows, errors=errors, status=400, **page)
+    body = finds_form.build_body(base, header, rows)
+    reason, idem = meta.cleaned_data["reason"], str(meta.cleaned_data["idempotency_key"])
+    failures: list[ServiceError] = []
+    expected = _expected_sha(post)
+    if key_form is None:
+        assert event_key is not None  # noqa: S101 - ключ из URL
+        key = event_key
+        ok, _ = mutate(
+            request,
+            service=PROGRESSION,
+            action="events.update",
+            target_type="event",
+            target_id=key,
+            reason=reason,
+            idempotency_key=idem,
+            before={"body_sha256": (event or {}).get("body_sha256")},
+            audit_fields=_DEFINITION_FIELDS,
+            call=_capturing(
+                lambda c: c.update_event(
+                    key,
+                    body=body,
+                    reason=reason,
+                    idempotency_key=idem,
+                    expected_body_sha256=expected,
+                ),
+                failures,
+            ),
+            success="Определение сохранено",
+        )
+    else:
+        key = key_form.cleaned_data["key"]
+        ok, _ = mutate(
+            request,
+            service=PROGRESSION,
+            action="events.create",
+            target_type="event",
+            target_id=key,
+            reason=reason,
+            idempotency_key=idem,
+            audit_fields=_DEFINITION_FIELDS,
+            call=_capturing(
+                lambda c: c.create_event(key=key, body=body, reason=reason, idempotency_key=idem),
+                failures,
+            ),
+            success="Событие создано",
+        )
+    if ok:
+        return redirect("events:card", event_key=key)
+    server_rows: list[dict[str, Any]] = []
+    if failures and failures[0].status in _INVALID_STATUSES:
+        # Номера строк относятся к тексту, которого в форме нет, - показываем только путь.
+        order = finds_form.sent_order(rows)
+        for row in error_rows("", details=failures[0].details, errors=failures[0].errors):
+            server_rows.append({**row, "line": None})
+            field = finds_form.server_field(str(row["path"]), order)
+            if field and field not in errors:
+                errors[field] = str(row["message"])
+    return _form_page(
+        request, rows=rows, errors=errors, server_rows=server_rows, status=400, **page
+    )
 
 
 # ---------------------------------------------------------------------------- карта

@@ -121,7 +121,7 @@ class _CollectionItem(_Payload):
 
 
 class _CollectionPayload(_Payload):
-    # Название, теги, обложка и прочее UGC game не нужны (и не хранятся, D6).
+    # Название, обложка и прочее UGC game не нужны (и не хранятся, D6); теги - ADR 0067.
     collection_id: UUID
     version: int = Field(ge=1)
     content_version: int = Field(ge=1)
@@ -129,6 +129,8 @@ class _CollectionPayload(_Payload):
     status: Literal["published", "hidden"]
     visibility: Literal["public", "unlisted"]
     author_id: UUID | None = None
+    # ADR 0067: необязательно (старые события без тегов); название game по-прежнему не хранит.
+    tags: list[str] = Field(default_factory=list, max_length=20)
     items: list[_CollectionItem] = Field(max_length=MAX_COLLECTION_ITEMS)
 
 
@@ -181,6 +183,7 @@ def _collection_snapshot(p: _CollectionPayload, at: datetime) -> CollectionSnaps
             visibility=p.visibility,
             author_id=p.author_id,
             updated_at=at,
+            tags=tuple(dict.fromkeys(p.tags)),
         ),
         items=tuple(
             CollectionItem(

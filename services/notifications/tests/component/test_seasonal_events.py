@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import notifications_service
 import pytest
 from notifications_service.application.audience import FANOUT_TASK
-from notifications_service.infrastructure.db.repositories import SqlNotifications
+from notifications_service.application.ports import DIRECTORY_FORBIDDEN
+from notifications_service.infrastructure.config import load_catalog
+from notifications_service.infrastructure.db.repositories import SqlPreferences
 from notifications_service.infrastructure.db.tables import finished_event_runs
 from notifications_service.infrastructure.db.tables import notifications as notifications_table
 from notifications_service.infrastructure.messaging import build_task_handlers
+from prometheus_client import REGISTRY
 
+from gv_core.errors import DependencyUnavailableError
 from gv_core.ids import uuid7
+from gv_messaging.ports import PermanentError
 from gv_testkit import assert_realtime_message_matches_schema
 
 pytestmark = pytest.mark.component
@@ -75,17 +82,23 @@ async def _run_fanout(svc: Service) -> None:
     await svc.container.dispatcher.drain()
 
 
-async def test_event_started_fans_out_in_batches_idempotently(notifications: Service) -> None:
+async def test_event_started_reaches_all_active_users_in_batches_idempotently(
+    notifications: Service,
+) -> None:
     svc = notifications
     svc.container._cfg.fanout_batch_size = 2
+    svc.container._cfg.fanout_batch_pause_s = 0.5
     users: list[UUID] = [uuid7() for _ in range(5)]
-    for user in users:
-        await svc.notify(user, new_level=2)
+    svc.users.users = users  # notifications никого из них не знает
+    known = users[0]
+    await svc.notify(known, new_level=2)
     svc.realtime.published.clear()
 
     await svc.deliver(svc.event("progression.EventRunStarted"))
     assert [t["task_type"] for t in svc.tasks.tasks] == [FANOUT_TASK]
     await _run_fanout(svc)
+    assert svc.sleeps == [0.5, 0.5]  # пауза между тремя пачками (2 + 2 + 1), не после последней
+    assert [limit for _, limit in svc.users.calls] == [2, 2, 2]
     await _run_fanout(svc)  # повтор задачи - без дублей
 
     started = await svc.rows(notifications_table, notifications_table.c.type == "event_started")
@@ -94,15 +107,118 @@ async def test_event_started_fans_out_in_batches_idempotently(notifications: Ser
     assert len(svc.realtime.published) == len(users)
 
 
+async def test_repeated_event_with_new_event_id_does_not_duplicate(notifications: Service) -> None:
+    svc = notifications
+    svc.users.users = [uuid7() for _ in range(3)]
+    for _ in range(2):  # тот же запуск, разные event_id (повторная публикация outbox)
+        await svc.deliver(svc.event("progression.EventRunStarted"))
+    await _run_fanout(svc)
+    assert await svc.count(notifications_table) == 3
+
+
 async def test_event_started_skips_players_who_muted_it(notifications: Service) -> None:
     svc = notifications
     muted, other = uuid7(), uuid7()
-    await svc.notify(other, new_level=2)
+    svc.users.users = [muted, other]
     await _mute(svc, muted, "event_started")
     await svc.deliver(svc.event("progression.EventRunStarted"))
     await _run_fanout(svc)
     started = await svc.rows(notifications_table, notifications_table.c.type == "event_started")
     assert [r.user_id for r in started] == [other]
+
+
+async def test_preferences_are_read_once_per_batch(
+    notifications: Service, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svc = notifications
+    svc.container._cfg.fanout_batch_size = 2
+    svc.users.users = [uuid7() for _ in range(5)]
+    original = SqlPreferences.for_users
+    batches: list[int] = []
+
+    async def counting(self: Any, user_ids: Any, type_key: str) -> Any:
+        batches.append(len(user_ids))
+        return await original(self, user_ids, type_key)
+
+    async def forbidden(self: Any, user_id: UUID) -> Any:
+        raise AssertionError("настройки читаются по одному игроку")
+
+    monkeypatch.setattr(SqlPreferences, "for_users", counting)
+    monkeypatch.setattr(SqlPreferences, "all", forbidden)
+    await svc.deliver(svc.event("progression.EventRunStarted"))
+    await _run_fanout(svc)
+    assert batches == [2, 2, 1]
+    assert await svc.count(notifications_table) == 5
+
+
+def _pages(result: str) -> float:
+    return REGISTRY.get_sample_value("gv_notifications_fanout_pages_total", {"result": result}) or 0
+
+
+async def test_identity_failure_on_a_page_is_retried_without_losing_the_event(
+    notifications: Service,
+) -> None:
+    svc = notifications
+    svc.container._cfg.fanout_batch_size = 2
+    svc.container._cfg.fanout_retry_pause_s = 1.5
+    svc.users.users = [uuid7() for _ in range(5)]
+    svc.users.fail_calls = {2}  # вторая страница один раз недоступна
+    retries = _pages("retry")
+    await svc.deliver(svc.event("progression.EventRunStarted"))
+    await _run_fanout(svc)
+    assert await svc.count(notifications_table) == 5
+    assert 1.5 in svc.sleeps
+    assert _pages("retry") == retries + 1
+
+
+async def test_persistent_identity_failure_leaves_task_for_queue_retry(
+    notifications: Service,
+) -> None:
+    svc = notifications
+    svc.container._cfg.fanout_batch_size = 2
+    svc.container._cfg.fanout_page_retries = 1
+    svc.users.users = [uuid7() for _ in range(5)]
+    svc.users.fail_calls = {2, 3}  # исходная попытка и единственный повтор
+    failed = _pages("failed")
+    await svc.deliver(svc.event("progression.EventRunStarted"))
+    with pytest.raises(DependencyUnavailableError):
+        await _run_fanout(svc)
+    assert await svc.count(notifications_table) == 2  # первая пачка доставлена и остаётся
+    assert _pages("failed") == failed + 1
+
+    svc.users.fail_calls = set()
+    await _run_fanout(svc)  # повтор задачи очередью: добирает остальных, без дублей
+    assert await svc.count(notifications_table) == 5
+
+
+async def test_identity_forbidden_goes_straight_to_dlq(notifications: Service) -> None:
+    svc = notifications
+    svc.users.users = [uuid7()]
+    svc.users.fail_calls = {1}
+    svc.users.fail_code = DIRECTORY_FORBIDDEN
+    await svc.deliver(svc.event("progression.EventRunStarted"))
+    with pytest.raises(PermanentError):
+        await _run_fanout(svc)
+
+
+async def test_known_users_audience_still_works_without_identity(
+    notifications: Service, tmp_path: Path
+) -> None:
+    svc = notifications
+    source = (
+        Path(notifications_service.__file__).parent / "config" / "notification_types.yaml"
+    ).read_text("utf-8")
+    custom = tmp_path / "types.yaml"
+    custom.write_text(source.replace("audience: active_users", "audience: known_users"), "utf-8")
+    svc.container.catalog = load_catalog(custom)
+    known = uuid7()
+    svc.users.users = [uuid7()]
+    await svc.notify(known, new_level=2)
+    await svc.deliver(svc.event("progression.EventRunStarted"))
+    await _run_fanout(svc)
+    started = await svc.rows(notifications_table, notifications_table.c.type == "event_started")
+    assert [r.user_id for r in started] == [known]
+    assert svc.users.calls == []
 
 
 # ---------------------------------------------------------------- остановка рассылки (ADR 0054)
@@ -117,27 +233,23 @@ async def _finish(svc: Service, reason: str, run_id: str | None = None) -> Any:
 async def _fan_out_stopped_after_first_batch(svc: Service, reason: str) -> None:
     """Первая пачка из 2 игроков доставлена, затем приходит EventRunFinished, вторая выходит."""
     svc.container._cfg.fanout_batch_size = 2
-    for _ in range(5):
-        await svc.notify(uuid7(), new_level=2)
+    svc.users.users = [uuid7() for _ in range(5)]
     await svc.deliver(svc.event("progression.EventRunStarted"))
 
-    original = SqlNotifications.known_users_after
+    original = svc.users.active_after
     calls = 0
 
-    async def after_first_read(self: Any, after: Any, limit: int) -> Any:
+    async def after_first_read(after: Any, limit: int) -> Any:
         nonlocal calls
-        users = await original(self, after, limit)
+        page = await original(after, limit)
         calls += 1
         if calls == 1:
             await _finish(svc, reason)
-        return users
+        return page
 
-    SqlNotifications.known_users_after = after_first_read  # type: ignore[method-assign]
-    try:
-        await _run_fanout(svc)
-    finally:
-        SqlNotifications.known_users_after = original  # type: ignore[method-assign]
-    assert calls == 1, "вторая пачка должна выйти до чтения аудитории"
+    svc.users.active_after = after_first_read  # type: ignore[method-assign]
+    await _run_fanout(svc)
+    assert calls == 1, "после завершения запуска вторая страница не запрашивается"
 
 
 @pytest.mark.parametrize("reason", ["stopped", "ended"])
@@ -161,8 +273,7 @@ async def test_repeated_run_finished_is_idempotent(notifications: Service) -> No
 async def test_other_run_fanout_is_not_affected(notifications: Service) -> None:
     svc = notifications
     users = [uuid7() for _ in range(3)]
-    for user in users:
-        await svc.notify(user, new_level=2)
+    svc.users.users = users
     await _finish(svc, "stopped")  # запуск из примера
     await svc.deliver(svc.event("progression.EventRunStarted", run_id=OTHER_RUN))
     await _run_fanout(svc)

@@ -23,6 +23,8 @@ export type CosmeticLike = Pick<
 
 export type AppearanceLike = {
   custom_avatar_url?: string | null;
+  /** Ассет одобренной аватарки: объект жалобы `avatar` (ADR 0069). */
+  custom_avatar_asset_id?: string | null;
   slots: { slot: string; item?: CosmeticLike | null }[];
 };
 
@@ -35,6 +37,11 @@ export function itemOf(appearance: AppearanceLike | null | undefined, role: Slot
 export function toAppearanceLike(p: {
   appearance: { slots: AppearanceSlotCard[] };
   custom_avatar_url: string | null;
+  custom_avatar_asset_id?: string | null;
 }): AppearanceLike {
-  return { custom_avatar_url: p.custom_avatar_url, slots: p.appearance.slots };
+  return {
+    custom_avatar_url: p.custom_avatar_url,
+    custom_avatar_asset_id: p.custom_avatar_asset_id ?? null,
+    slots: p.appearance.slots,
+  };
 }

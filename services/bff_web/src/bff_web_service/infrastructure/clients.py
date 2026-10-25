@@ -1607,7 +1607,10 @@ class HttpProgressionClient:
         if not {p.user_id for p in players} <= set(user_ids):
             raise UpstreamUnavailableError(self._http.service, "contract_violation")
         return [
-            PlayerAppearanceCard(p.user_id, AppearanceCard(p.appearance.dto(), p.custom_avatar_url))
+            PlayerAppearanceCard(
+                p.user_id,
+                AppearanceCard(p.appearance.dto(), p.custom_avatar_url, p.custom_avatar_asset_id),
+            )
             for p in players
         ]
 
@@ -1690,6 +1693,7 @@ class _PlayerAppearanceIn(_In):
     user_id: UUID
     appearance: _AppearanceIn
     custom_avatar_url: str | None
+    custom_avatar_asset_id: UUID | None = None
 
 
 class _PlayersAppearanceIn(_In):
@@ -1866,6 +1870,25 @@ class _RelationIn(_In):
     is_friend: bool
     can_send_request: bool
     blocked_by_me: bool
+    nickname: str | None = None
+
+    def dto(self) -> PlayerRelation:
+        return PlayerRelation(
+            self.profile_visible,
+            self.stats_visible,
+            self.is_friend,
+            self.can_send_request,
+            self.blocked_by_me,
+            self.nickname,
+        )
+
+
+class _RelationItemIn(_RelationIn):
+    user_id: UUID
+
+
+class _RelationsIn(_In):
+    items: list[_RelationItemIn]
 
 
 class _FriendIn(_In):
@@ -1910,6 +1933,7 @@ class _SanctionListIn(_In):
 
 
 _RELATION = TypeAdapter(_RelationIn)
+_RELATIONS = TypeAdapter(_RelationsIn)
 _FRIENDS = TypeAdapter(_FriendListIn)
 _REQUESTS = TypeAdapter(_RequestsIn)
 _COMMENTS = TypeAdapter(_CommentPageIn)
@@ -1925,10 +1949,16 @@ class HttpSocialClient:
     async def relation(self, token: str, user_id: UUID) -> PlayerRelation:
         """``GET /v1/players/{id}/relation``."""
         body = await self._http.get(f"/v1/players/{user_id}/relation", token=token)
-        r = _parse(self._http.service, _RELATION, body)
-        return PlayerRelation(
-            r.profile_visible, r.stats_visible, r.is_friend, r.can_send_request, r.blocked_by_me
-        )
+        return _parse(self._http.service, _RELATION, body).dto()
+
+    async def relations(self, token: str, user_ids: list[UUID]) -> dict[UUID, PlayerRelation]:
+        """``GET /v1/players/relations?user_ids=...`` (повторяющийся параметр)."""
+        query = urlencode([("user_ids", str(i)) for i in user_ids])
+        body = await self._http.get(f"/v1/players/relations?{query}", token=token)
+        items = _parse(self._http.service, _RELATIONS, body).items
+        if not {i.user_id for i in items} <= set(user_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return {i.user_id: i.dto() for i in items}
 
     async def friends(self, token: str) -> list[FriendCard]:
         """``GET /v1/me/friends``."""

@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Request, Response
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
 from gv_auth import Principal, Sanction, require_user
 from gv_service import IdempotencyKey, problem_responses
@@ -28,6 +28,8 @@ from social_service.api.schemas import (
     FriendRequestView,
     FriendView,
     PlayerRelation,
+    PlayerRelationItem,
+    PlayerRelations,
     PrivacySettings,
     RoomInviteCreate,
     RoomInviteResult,
@@ -39,6 +41,8 @@ User = Annotated[Principal, Depends(require_user)]
 UserIdPath = Annotated[UUID, Path(description="Идентификатор игрока")]
 RequestIdPath = Annotated[UUID, Path(description="Идентификатор заявки")]
 PRIVATE = "private, no-store"
+MAX_RELATIONS_BATCH = 50
+"""Предел пакета `players/relations` (bff режет запросы по `GV_PAGES__RELATIONS_BATCH_SIZE`)."""
 
 type ServiceFactory = Callable[[], FriendsService]
 
@@ -319,6 +323,41 @@ def register_friend_routes(router: APIRouter, factory: ServiceFactory) -> None:
         return RoomInviteResult(invite_id=outcome.invite_id, repeated=outcome.repeated)
 
     @router.get(
+        "/players/relations",
+        response_model=PlayerRelations,
+        summary="Видимость нескольких игроков для зрителя",
+        description=(
+            "Пакетный `relation` для bff (итог матча: можно ли звать в друзья): до "
+            f"{MAX_RELATIONS_BATCH} игроков за вызов, дубли схлопываются, порядок как в запросе. "
+            "Скрытый профиль, блокировка и неизвестный игрок дают одинаковый ответ. "
+            "Лимит на пользователя (`GV_SOCIAL__RELATIONS_PER_MINUTE`): 429 + `Retry-After`."
+        ),
+        responses=problem_responses(401, 403, 422, 429, 503),
+    )
+    async def relations(
+        user: User,
+        svc: Svc,
+        response: Response,
+        user_ids: Annotated[list[UUID], Query(min_length=1, max_length=MAX_RELATIONS_BATCH)],
+    ) -> PlayerRelations:
+        _private(response)
+        values = await svc.relations(user.user_id, user_ids)
+        return PlayerRelations(
+            items=[
+                PlayerRelationItem(
+                    user_id=target,
+                    profile_visible=v.profile_visible,
+                    stats_visible=v.stats_visible,
+                    is_friend=v.is_friend,
+                    can_send_request=v.can_send_request,
+                    blocked_by_me=v.blocked_by_me,
+                    nickname=v.nickname,
+                )
+                for target, v in values
+            ]
+        )
+
+    @router.get(
         "/players/{user_id}/relation",
         response_model=PlayerRelation,
         summary="Видимость игрока для зрителя",
@@ -339,4 +378,5 @@ def register_friend_routes(router: APIRouter, factory: ServiceFactory) -> None:
             is_friend=value.is_friend,
             can_send_request=value.can_send_request,
             blocked_by_me=value.blocked_by_me,
+            nickname=value.nickname,
         )

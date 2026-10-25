@@ -30,6 +30,8 @@ class SocialSettings(BaseModel):
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
     # Heartbeat присутствия: не больше стольких вызовов за окно `presence.heartbeat_s` конфига.
     presence_burst: int = Field(default=3, ge=1, le=100)
+    # Пакетные `players/relations`: вызовов на пользователя за `RELATIONS_WINDOW_S` (60 с).
+    relations_per_minute: int = Field(default=60, ge=1, le=10_000)
 
 
 class Settings(ServiceSettings):

@@ -46,6 +46,23 @@ class CaseFilterForm(forms.Form):
     mine = forms.BooleanField(label="Только мои", required=False)
 
 
+WIN_TRADING_KINDS = [
+    ("", "все"),
+    ("pair_repeat", "повторы пары"),
+    ("forfeit_series", "сдачи подряд против одного"),
+    ("forfeit_window", "сдачи за окно"),
+]
+SEVERITIES = [("", "любая"), ("high", "высокая"), ("medium", "средняя")]
+
+
+class WinTradingFilterForm(forms.Form):
+    """Фильтры очереди сигналов win-trading."""
+
+    kind = forms.ChoiceField(label="Сигнал", choices=WIN_TRADING_KINDS, required=False)
+    severity = forms.ChoiceField(label="Серьёзность", choices=SEVERITIES, required=False)
+    user_id = forms.UUIDField(label="Игрок (ID)", required=False)
+
+
 class ClaimForm(MutationForm):
     """Взять кейс: причина фиксирована (аудит), версия кейса - из карточки."""
 

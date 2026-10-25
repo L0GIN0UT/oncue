@@ -33,15 +33,19 @@ class ProjectionService:
     async def collection_snapshot(self, payload: Mapping[str, Any]) -> None:
         """``CollectionPublished`` / ``CollectionUpdated``: полный снимок агрегата."""
         raw_author = payload.get("author_id")
-        ref = CollectionRef(
-            id=UUID(payload["collection_id"]),
-            author_id=UUID(raw_author) if raw_author else None,
-            # Названия в событиях collections пока нет; поле появится - подхватим без правок.
-            title=str(payload.get("title") or "")[:TITLE_MAX],
-            published=payload["status"] == "published",
-            version=int(payload["version"]),
-        )
+        collection_id = UUID(payload["collection_id"])
         async with self._uow() as uow:
+            title = payload.get("title")
+            if title is None:  # событие старого формата (ADR 0067): известное название не затираем
+                known = await uow.collections.get(collection_id)
+                title = known.title if known else ""
+            ref = CollectionRef(
+                id=collection_id,
+                author_id=UUID(raw_author) if raw_author else None,
+                title=str(title)[:TITLE_MAX],
+                published=payload["status"] == "published",
+                version=int(payload["version"]),
+            )
             await uow.collections.apply(ref)
             await uow.commit()
 

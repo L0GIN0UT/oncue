@@ -24,6 +24,7 @@ from gv_game_kernel.errors import (
     MODE_NOT_ONLINE,
     MODE_NOT_SOLO,
     OPTION_UNKNOWN,
+    OVERRIDE_NOT_ALLOWED,
     POOL_TOO_SMALL,
     PRESET_NOT_FOUND,
     ROUND_FINISHED,
@@ -41,6 +42,7 @@ from gv_game_kernel.errors import (
     ModeNotOnlineError,
     ModeNotSoloError,
     OptionNotFoundError,
+    OverrideNotAllowedError,
     PoolTooSmallError,
     PresetNotFoundError,
     RoundFinishedError,
@@ -52,6 +54,7 @@ from gv_game_kernel.errors import (
     TooManySubjectsError,
 )
 from gv_game_kernel.outcome import DuelOutcome, MatchOutcome, Placement
+from gv_game_kernel.overrides import apply_lobby_overrides
 from gv_game_kernel.params import canonical_json, params_hash
 from gv_game_kernel.plugins import (
     AnswerFormat,
@@ -149,6 +152,7 @@ __all__ = [
     "MODE_NOT_SOLO",
     "ONLINE_SESSIONS",
     "OPTION_UNKNOWN",
+    "OVERRIDE_NOT_ALLOWED",
     "POOL_TOO_SMALL",
     "PRESET_NOT_FOUND",
     "ROUNDS_NOT_ALLOWED",
@@ -211,6 +215,7 @@ __all__ = [
     "OptionNotFoundError",
     "OptionSpec",
     "OptionView",
+    "OverrideNotAllowedError",
     "ParamIssue",
     "PartialRule",
     "PeriodSource",
@@ -254,6 +259,7 @@ __all__ = [
     "TooManySubjectsError",
     "answer_normalizer",
     "apply_guess",
+    "apply_lobby_overrides",
     "apply_skip",
     "canonical_json",
     "close_round",

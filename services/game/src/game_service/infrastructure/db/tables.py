@@ -147,6 +147,7 @@ collection_proj = Table(
     Column("visibility", String(16), nullable=True),
     Column("author_id", Uuid, nullable=True),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("tags", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     CheckConstraint("version >= 1", name="version_positive"),
     CheckConstraint("content_version >= 0", name="content_version_non_negative"),
     CheckConstraint("domain IN ('music', 'film')", name="domain_valid"),
