@@ -27,6 +27,7 @@ from progression_service.api.public.shop_schemas import (
     InventoryEntry,
     ItemView,
     Key,
+    MyAppearance,
     MyInventory,
     PackCatalog,
     PackView,
@@ -204,15 +205,24 @@ def register_shop_routes(router: APIRouter, services: ShopServices) -> None:
 
     @router.get(
         "/me/appearance",
-        response_model=Appearance,
+        response_model=MyAppearance,
         summary="Моё оформление",
-        description="По одному предмету на слот; пустой слот - `item = null`.",
+        description=(
+            "По одному предмету на слот; пустой слот - `item = null`. Своя аватарка "
+            "(`custom_avatar_url`) - единый источник адреса для профиля."
+        ),
         responses=_READ,
     )
-    async def my_appearance(user: User, response: Response) -> Appearance:
-        slots = await services.appearance.mine(user.user_id)
+    async def my_appearance(user: User, response: Response) -> MyAppearance:
+        mine = await services.appearance.mine(user.user_id)
         response.headers["Cache-Control"] = PRIVATE
-        return appearance(slots)
+        return MyAppearance(
+            slots=appearance(mine.slots).slots,
+            custom_avatar_url=(
+                services.ugc_url(mine.custom_avatar_key) if mine.custom_avatar_key else None
+            ),
+            custom_avatar_asset_id=mine.custom_avatar_asset_id,
+        )
 
     @router.put(
         "/me/appearance/{slot}",

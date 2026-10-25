@@ -168,6 +168,12 @@ class Broadcast(BaseModel):
     created_by: UUID
 
 
+class BroadcastAudience(BaseModel):
+    """Число получателей рассылки (для экрана подтверждения)."""
+
+    recipients: int = Field(ge=0, description="Сколько игроков с согласием получат письмо")
+
+
 class BroadcastPage(BaseModel):
     """Страница рассылок (курсор)."""
 

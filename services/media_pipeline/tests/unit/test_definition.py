@@ -20,6 +20,7 @@ def test_ugc_defaults_limit_decoding_and_cleanup() -> None:
     m = Settings().media
     assert m.ugc_encode_concurrency == 2
     assert m.ugc_orphan_ttl_h == 24
+    assert m.ugc_icc_max_bytes == 1_048_576
 
 
 def test_generation_concurrency_is_limited_by_default() -> None:

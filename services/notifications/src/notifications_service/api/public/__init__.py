@@ -17,7 +17,8 @@ from urllib.parse import parse_qs
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, ValidationError
 
 from gv_auth import Principal, require_user
 from gv_service import IdempotencyKey, Infrastructure, problem_responses
@@ -76,6 +77,40 @@ async def _is_one_click_body(request: Request) -> bool:
     except UnicodeDecodeError:
         return False
     return form.get("List-Unsubscribe") == ["One-Click"]
+
+
+FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
+
+
+async def _unsubscribe_token(request: Request, token: Annotated[str, Query()] = "") -> str:
+    """Токен отписки: JSON ``{"token": ...}`` или форма RFC 8058 (токен в query, как в ссылке).
+
+    Форма без ``List-Unsubscribe=One-Click`` даёт пустой токен: ответ тот же, что у негодного.
+    """
+    media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if media_type == FORM_CONTENT_TYPE:
+        return token if await _is_one_click_body(request) else ""
+    try:
+        return UnsubscribeRequest.model_validate_json(await request.body()).token
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
+
+
+_UNSUBSCRIBE_BODY: dict[str, object] = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {"schema": UnsubscribeRequest.model_json_schema()},
+            FORM_CONTENT_TYPE: {
+                "schema": {
+                    "type": "object",
+                    "properties": {"List-Unsubscribe": {"type": "string", "enum": ["One-Click"]}},
+                    "required": ["List-Unsubscribe"],
+                }
+            },
+        },
+    }
+}
 
 
 def _item(n: Notification) -> NotificationItem:
@@ -231,12 +266,17 @@ def build_public_router(infra: Infrastructure, services: ApiServices) -> APIRout
             "Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным "
             "сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. "
             "Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного "
-            "токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`."
+            "токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`. Тело - "
+            "JSON `{token}` или форма RFC 8058 `List-Unsubscribe=One-Click` "
+            "(`application/x-www-form-urlencoded`, до 1 КБ) с токеном в query."
         ),
         responses=problem_responses(422, 429, 503),
+        openapi_extra=_UNSUBSCRIBE_BODY,
     )
-    async def unsubscribe(body: UnsubscribeRequest, request: Request, response: Response) -> None:
-        await services.unsubscribe.execute(body.token, client_ip=_client_ip(request))
+    async def unsubscribe(
+        token: Annotated[str, Depends(_unsubscribe_token)], request: Request, response: Response
+    ) -> None:
+        await services.unsubscribe.execute(token, client_ip=_client_ip(request))
         response.headers["Cache-Control"] = PRIVATE
 
     @router.post(

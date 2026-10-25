@@ -142,8 +142,18 @@ class CreateBroadcast:
 class BroadcastQueries:
     """Чтение рассылок для админки."""
 
-    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+    def __init__(self, uow_factory: UnitOfWorkFactory, *, audience_timeout_ms: int = 3000) -> None:
         self._uow = uow_factory
+        self._audience_timeout_ms = audience_timeout_ms
+
+    async def audience(self) -> int:
+        """Сколько получателей получит рассылка сейчас (те же, что попадут в снимок при создании).
+
+        Рассылка не делится на типы и сегменты: уходит всем с согласием (``subscribed``).
+        Запрос ограничен по времени; превышение - ``DependencyUnavailableError`` (503).
+        """
+        async with self._uow() as uow:
+            return await uow.subscriptions.count_subscribed(timeout_ms=self._audience_timeout_ms)
 
     async def page(self, *, cursor: str | None, limit: int) -> BroadcastPageResult:
         """Новые первыми."""

@@ -41,6 +41,7 @@ class NotificationsSettings(BaseModel):
         unsubscribe_window_s: Окно лимита попыток.
         limiter_retry_after_s: ``Retry-After`` при недоступном Redis (fail-closed).
         broadcast_batch_size: Получателей рассылки в одной порции.
+        audience_timeout_ms: Лимит времени подсчёта аудитории рассылки (мс).
         unsubscribe_footer: Подпись письма рассылки со ссылкой отписки (плейсхолдер ``{link}``).
         email_backend: ``log`` (только local/ci), ``smtp``.
         identity_url: База identity для internal-ручки адресов (DNS compose/Kubernetes).
@@ -58,6 +59,7 @@ class NotificationsSettings(BaseModel):
     unsubscribe_window_s: int = Field(default=600, ge=1, le=86_400)
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
     broadcast_batch_size: int = Field(default=100, ge=1, le=1000)
+    audience_timeout_ms: int = Field(default=3000, ge=100, le=30000)
     fanout_batch_size: int = Field(default=200, ge=1, le=2000)
     """Игроков в одной пачке массовой доставки (``audience``)."""
     fanout_batch_pause_s: float = Field(default=0.2, ge=0, le=60)

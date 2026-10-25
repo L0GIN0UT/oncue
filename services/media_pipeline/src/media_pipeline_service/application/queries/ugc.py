@@ -10,6 +10,7 @@ from uuid import UUID
 from gv_core.errors import InvalidInputError
 from media_pipeline_service.application.ports import UnitOfWorkFactory
 from media_pipeline_service.application.ugc import UgcImageView, UgcPage
+from media_pipeline_service.domain.errors import UgcNotFoundError
 from media_pipeline_service.domain.ugc import UgcStatus
 
 
@@ -31,6 +32,25 @@ def decode_cursor(cursor: str) -> tuple[datetime, UUID]:
         return datetime.fromisoformat(stamp), UUID(ident)
     except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
         raise InvalidInputError("некорректный курсор", code="ugc.cursor_invalid") from exc
+
+
+class GetUgcImage:
+    """Карточка UGC-изображения по id в любом статусе (без блокировок и ключей S3)."""
+
+    def __init__(self, uow: UnitOfWorkFactory) -> None:
+        self._uow = uow
+
+    async def execute(self, asset_id: UUID) -> UgcImageView:
+        """Прочитать карточку.
+
+        Raises:
+            UgcNotFoundError: ``ugc.not_found`` - такого ассета нет.
+        """
+        async with self._uow() as uow:
+            image = await uow.ugc.get(asset_id)
+        if image is None:
+            raise UgcNotFoundError("изображение не найдено")
+        return UgcImageView.of(image)
 
 
 class ListUgcQueue:

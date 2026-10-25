@@ -2,7 +2,8 @@
 
 Отправка - в два шага: форма проверяется и показывается страница подтверждения (сервис не
 вызывается), и только ``POST send/`` ставит рассылку в очередь с ``Idempotency-Key`` формы.
-Число получателей API до отправки не отдаёт: оно появляется в списке после постановки.
+Число получателей на экране подтверждения - из ``GET /broadcasts/audience`` (только чтение);
+недоступность сервиса подсчёта отправку не блокирует.
 """
 
 from __future__ import annotations
@@ -49,6 +50,28 @@ def broadcast_list(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _confirm_page(
+    request: HttpRequest, form: BroadcastForm, *, status: int = 200, with_audience: bool = True
+) -> HttpResponse:
+    """Экран подтверждения; число получателей запрашиваем только на первом показе."""
+    recipients, unavailable = None, False
+    if with_audience:
+        data, error = read(request, NOTIFICATIONS, _client(lambda c: c.broadcast_audience()))
+        recipients = as_dict(data).get("recipients") if error is None else None
+        unavailable = recipients is None
+    return render(
+        request,
+        "admin_notifications/confirm.html",
+        {
+            "title": "Подтвердите рассылку",
+            "form": form,
+            "recipients": recipients,
+            "audience_unavailable": unavailable,
+        },
+        status=status,
+    )
+
+
 @require_http_methods(["GET", "POST"])
 @require_perm(SEND)
 def broadcast_new(request: HttpRequest) -> HttpResponse:
@@ -56,11 +79,7 @@ def broadcast_new(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         form = BroadcastForm(request.POST)
         if form.is_valid():
-            return render(
-                request,
-                "admin_notifications/confirm.html",
-                {"title": "Подтвердите рассылку", "form": form},
-            )
+            return _confirm_page(request, form)
         return render(
             request,
             "admin_notifications/new.html",
@@ -109,12 +128,7 @@ def broadcast_send(request: HttpRequest) -> HttpResponse:
     )
     if ok:
         return redirect("broadcasts:list")
-    return render(
-        request,
-        "admin_notifications/confirm.html",
-        {"title": "Подтвердите рассылку", "form": form},
-        status=400,
-    )
+    return _confirm_page(request, form, status=400, with_audience=False)
 
 
 @require_GET

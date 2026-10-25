@@ -89,3 +89,16 @@ async def test_unconfigured_directory_signals_dependency_unavailable() -> None:
 
 async def test_null_push_sender_does_nothing() -> None:
     assert await NullPushSender().send(uuid7(), "t", "b") is None
+
+
+def test_query_canceled_is_recognised_by_sqlstate() -> None:
+    from notifications_service.infrastructure.db.repositories import is_query_canceled
+    from sqlalchemy.exc import DBAPIError
+
+    class OrigError(Exception):
+        sqlstate = "57014"
+
+    canceled = DBAPIError("select 1", None, OrigError())
+    other = DBAPIError("select 1", None, ValueError("x"))
+    assert is_query_canceled(canceled) is True
+    assert is_query_canceled(other) is False

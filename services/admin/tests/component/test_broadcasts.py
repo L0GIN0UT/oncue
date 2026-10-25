@@ -86,11 +86,13 @@ def test_first_step_shows_confirmation_without_service_call(
 ) -> None:
     login()
     route = notifications.route("POST", BROADCASTS).respond(202, json=_broadcast())
+    notifications.route("GET", f"{BROADCASTS}/audience").respond(200, json={"recipients": 1234})
     key = _key()
     response = client.post("/broadcasts/new/", _form(idempotency_key=key))
     page = response.content.decode()
     assert response.status_code == 200
     assert "Вы отправляете рассылку" in page
+    assert "1234" in page  # число получателей из сервиса
     assert "Подтвердить и отправить" in page
     assert f'value="{key}"' in page  # тот же ключ уйдёт на втором шаге
     assert route.call_count == 0
@@ -122,6 +124,18 @@ def test_confirmed_send_calls_service_with_stable_key_and_audits(
     )
     assert entry.before == {"subject": "Обновление", "body_length": len(data["body"])}
     assert entry.after == {"id": entry.after["id"], "status": "queued", "recipients": 120}  # type: ignore[index]
+
+
+def test_confirmation_survives_audience_error_without_blocking_send(
+    client: Any, login: Any, notifications: Any, problem: Any
+) -> None:
+    login()
+    notifications.route("GET", f"{BROADCASTS}/audience").respond(
+        503, json=problem(503, "dependency.unavailable")
+    )
+    page = client.post("/broadcasts/new/", _form()).content.decode()
+    assert "Подтвердить и отправить" in page
+    assert "Число получателей сейчас недоступно" in page
 
 
 @pytest.mark.parametrize("url", ["/broadcasts/new/", "/broadcasts/send/"])

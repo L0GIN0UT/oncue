@@ -24,12 +24,15 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
 
 from gv_core.clock import Clock
+from gv_core.errors import DependencyUnavailableError
 from gv_db.idempotency import SqlIdempotencyStore
 from notifications_service.application.ports import AdminAction, Broadcast
 from notifications_service.domain.notification import (
@@ -219,6 +222,11 @@ class SqlTypeFlags:
         await self._s.execute(stmt.on_conflict_do_update(index_elements=[f.c.type], set_=values))
 
 
+def is_query_canceled(exc: DBAPIError) -> bool:
+    """Запрос снят серверным таймаутом (SQLSTATE 57014)."""
+    return getattr(exc.orig, "sqlstate", None) == "57014"
+
+
 class SqlSubscriptions:
     """Согласие на рассылку."""
 
@@ -249,10 +257,19 @@ class SqlSubscriptions:
             .values(subscribed=False, changed_at=now)
         )
 
-    async def count_subscribed(self) -> int:
+    async def count_subscribed(self, *, timeout_ms: int | None = None) -> int:
         e = t.email_subscriptions
         stmt = select(func.count()).select_from(e).where(e.c.subscribed.is_(True))
-        return int(await self._s.scalar(stmt) or 0)
+        try:
+            if timeout_ms is not None:  # действует до конца транзакции (is_local)
+                await self._s.execute(
+                    select(func.set_config("statement_timeout", str(timeout_ms), true()))
+                )
+            return int(await self._s.scalar(stmt) or 0)
+        except DBAPIError as exc:
+            if is_query_canceled(exc):
+                raise DependencyUnavailableError("подсчёт аудитории не уложился в лимит") from exc
+            raise
 
     async def undelivered_after(
         self, broadcast_id: UUID, after: UUID | None, limit: int

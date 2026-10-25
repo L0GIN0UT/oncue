@@ -295,7 +295,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Предмет по id
+         * @description Права как у списка; нет предмета - 404 `progression.item_not_found`.
+         */
+        get: operations["item_admin_v1_items__item_id__get"];
         /**
          * Изменить предмет
          * @description Цена и условия действуют для новых покупок; владельцы не затрагиваются. Активировать без картинки нельзя - 422 `progression.item_media_missing`.
@@ -579,7 +583,7 @@ export interface paths {
         };
         /**
          * Моё оформление
-         * @description По одному предмету на слот; пустой слот - `item = null`.
+         * @description По одному предмету на слот; пустой слот - `item = null`. Своя аватарка (`custom_avatar_url`) - единый источник адреса для профиля.
          */
         get: operations["my_appearance_v1_me_appearance_get"];
         put?: never;
@@ -1983,13 +1987,32 @@ export interface components {
             item_key: string | null;
         };
         /**
+         * MyAppearance
+         * @description Моё оформление: слоты и своя аватарка (единый источник адреса для профиля).
+         */
+        MyAppearance: {
+            /**
+             * Custom Avatar Asset Id
+             * @description Ассет одобренной аватарки (объект жалобы `avatar`); null - аватарки нет
+             */
+            custom_avatar_asset_id: string | null;
+            /**
+             * Custom Avatar Url
+             * @description Одобренная своя аватарка; null - аватар из слота
+             */
+            custom_avatar_url: string | null;
+            /** Slots */
+            slots: components["schemas"]["AppearanceSlot"][];
+        };
+        /**
          * MyAvatar
          * @description Своя аватарка: право, действующий аватар, последняя заявка.
          */
         MyAvatar: {
             /**
              * Current Url
-             * @description Одобренная аватарка; null - используется предмет слота
+             * @deprecated
+             * @description Устарело (уберём через один релиз): адрес своей аватарки лежит в `GET /v1/me/appearance` (`custom_avatar_url`) - тот же источник, что у `GET /v1/appearance`. Одобренная аватарка; null - используется предмет слота
              */
             current_url: string | null;
             /**
@@ -3903,6 +3926,68 @@ export interface operations {
             };
         };
     };
+    item_admin_v1_items__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Идентификатор */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminItem"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_item_admin_v1_items__item_id__put: {
         parameters: {
             query?: never;
@@ -5009,7 +5094,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Appearance"];
+                    "application/json": components["schemas"]["MyAppearance"];
                 };
             };
             /** @description Не аутентифицирован */

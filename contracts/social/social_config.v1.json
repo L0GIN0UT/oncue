@@ -43,8 +43,20 @@
           "$ref": "#/$defs/PositiveInt",
           "description": "Попыток поиска по коду/нику в час на игрока и на IP (fail-closed)"
         },
+        "invite_window_s": {
+          "description": "Окно лимита приглашений, секунды (10..3600); необязательно, по умолчанию 60",
+          "maximum": 3600,
+          "minimum": 10,
+          "type": "integer"
+        },
         "invites_per_minute": {
           "$ref": "#/$defs/PositiveInt"
+        },
+        "lookup_window_s": {
+          "description": "Окно лимита поиска по коду/нику, секунды (600..86400); необязательно, по умолчанию 3600",
+          "maximum": 86400,
+          "minimum": 600,
+          "type": "integer"
         },
         "max_friends": {
           "$ref": "#/$defs/PositiveInt"

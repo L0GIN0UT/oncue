@@ -99,6 +99,10 @@ class MediaAdminClient:
             params={"status": status, "purpose": purpose, "cursor": cursor, "limit": limit},
         )
 
+    def ugc_image(self, asset_id: UUID) -> Any:
+        """Карточка UGC-изображения по id → поля элемента очереди (``media.ugc.moderate``)."""
+        return self._client.get(f"/admin/v1/ugc-images/{asset_id}")
+
     def ugc_settings(self) -> Any:
         """Настройки модерации → ``{purposes, reasons[{code, title}]}``."""
         return self._client.get("/admin/v1/ugc-images/settings")

@@ -21,7 +21,6 @@
 | Живой прогон CI: `nginx -t`, integration OpenSearch (проверено CI #18) и демонстрация §0 этапа 1 на compose | весь стек | [хвосты 1](09-roadmap.md#хвосты-этапа-1) | До релиза |
 | Зеркало образов под своим контролем | `infra/` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Этап 7 |
 | Подтвердить правку эталона `libs/text` (союз «&») | `libs/text`, `libs/game_kernel` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Решение владельца |
-| Ссылка финального кадра ревила живёт 60 с | game, frontend | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | По желанию |
 | Лобби: `clue`/`answer.format` в `overridable` сидовых шаблонов не включены, нет выбора в UI лобби и текста `incompatible`; варианты `clue` различаются только по типу — [ADR 0070](adr/0070-lobby-clue-answer-overrides.md) | match, game, frontend | PR D | Контентное решение владельца |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` | [хвосты 4a](09-roadmap.md#хвосты-4a) | Геймдизайн |
 | Win-trading: нет ретенции `win_trading_matches`; не ловятся кольца из 3+ аккаунтов и нарочный проигрыш без сдачи; сигнал не вердикт — [ADR 0068](adr/0068-win-trading-signals.md) | social | PR D | По данным |
@@ -35,15 +34,8 @@
 | Нестабильный `party.spec` (в `e2e/online.spec.ts`; `GameScreen.modes` и `CollectionEditor` — таймаут `waitFor` поднят, PR #36): причина не найдена, не воспроизводится | e2e | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Windows: ffmpeg-тесты `media_pipeline`, `admin test_runtime` (зелёные в CI) | media_pipeline, admin | [хвосты 5a](09-roadmap.md#хвосты-5a) | Не чинить |
 | Партиционирование журналов progression по месяцам: отложено, конфликт с `UNIQUE(op_id)`; путь миграции и пороги — [ADR 0062](adr/0062-progression-ledger-partitioning.md) | progression | ADR 0062 | По порогу объёма |
-| GET предмета по id в admin-API (админка листает до 20 страниц) | progression, admin | 5b | По желанию |
-| GET карточки UGC-изображения по id в admin-API | media_pipeline, admin | 5b | По желанию |
-| Число получателей в подтверждении рассылки (`GET /admin/v1/broadcasts/audience`) | notifications, admin | 5b | По желанию |
-| Своя аватарка в `me/appearance`: убрать дубль `PlayerAppearance.custom_avatar_url` одним изменением контракта | progression, bff | 5b | По желанию |
-| Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |
-| Цвет аватарки: 16-битные и CMYK | media_pipeline | 5b | По желанию |
-| Окна лимитов social (`lookup_window_s`, `invite_window_s`) в коде, не в конфиге — перенести новой версией схемы конфига | social | 5c | По желанию |
+| `GET /me/avatar.current_url` помечен deprecated: удалить через релиз (адрес своей аватарки — в `/me/appearance`) | progression, bff | [ADR 0071](adr/0071-event-runs-exclusion-and-own-avatar-source.md) | Через релиз |
 | Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
-| `EXCLUDE USING gist` по `tstzrange` запусков событий (сейчас только advisory-lock и проверка в транзакции) | progression | 5d | По желанию |
 | Лаг идентичности: решение о доступе по claim токена (≤ 15 мин) и проекциям разных сервисов расходится на время доставки событий | identity, match, social | ADR 0052 | Принятый риск |
 
 ## 2. Продуктовые идеи владельца
@@ -71,3 +63,4 @@
 - Группа B (безопасность): разделение ролей Postgres для журналов (ADR 0060), disconnect Centrifugo для бана `ACCOUNT` и кика из комнаты (ADR 0059), иерархия модераторов (ADR 0058), `p/*` в S3 без анонимного чтения (ADR 0061), preflight секретов Centrifugo, тег Centrifugo и trivy по CRITICAL с digest-пиннингом (ADR 0057), `no-store` в admin progression (тест-страж), env лимитов сервисных токенов — [PR #38](https://github.com/L0GIN0UT/oncue/pull/38).
 - Группа C (ops): инкрементальная сверка и ретенция progression (ADR 0062), общий `XREAD` и фоновый отзыв realtime, закрытие пустого лобби, алерты match (ADR 0063), trigram-индекс game, лимит тела аватарки на gateway, тест тай-брейка сезона на Redis, переключатели типов уведомлений и `libs/email` (ADR 0066), пакетные ручки catalog/library для итога матча, решение по inbox Django (ADR 0065) — [PR #45](https://github.com/L0GIN0UT/oncue/pull/45).
 - Группа D (product): теги сборника в находках (ADR 0067), `title` сборника для комментариев, детектор win-trading без автосанкций (ADR 0068), полная аудитория `event_started` и хвосты 5c — экран бана, ник, жалоба на аватарку, игроки в истории матчей, `can_add_friend` (ADR 0069), форма редактора находок, переопределения лобби в `round-plans` (ADR 0070); `party_speed` не менялся, предложение — в handoff — [PR #46](https://github.com/L0GIN0UT/oncue/pull/46).
+- Группа E (minor): карточки предмета и UGC по id в admin-API, число получателей рассылки, RFC 8058 для отписки, цвет аватарки (16-бит, CMYK, ICC), окна лимитов social в конфиге, источник адреса своей аватарки, срок ссылки ревила (настраиваем, закреплено тестом), `EXCLUDE USING gist` по запускам событий (ADR 0071) — [PR #47](https://github.com/L0GIN0UT/oncue/pull/47).

@@ -774,7 +774,7 @@ export interface components {
         };
         /**
          * ClueOut
-         * @description Короткоживущая ссылка на ассет уровня (TTL 60 с).
+         * @description Короткоживущая ссылка на ассет уровня (срок - `expires_at`; TTL задаёт media-pipeline).
          */
         ClueOut: {
             /**

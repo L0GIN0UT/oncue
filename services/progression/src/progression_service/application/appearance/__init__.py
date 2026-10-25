@@ -52,12 +52,19 @@ class AppearanceService:
         self._uow = uow
         self._clock = clock
 
-    async def mine(self, user_id: UUID) -> list[SlotView]:
-        """Слоты игрока в порядке конфига."""
+    async def mine(self, user_id: UUID) -> PlayerView:
+        """Слоты игрока в порядке конфига и его действующая своя аватарка."""
         async with self._uow() as uow:
             cfg = await shop_config(uow)
             slots = [s.key for s in cfg.slots] if cfg else []
-            return await _views(uow, slots, await uow.equipped.mine(user_id))
+            views = await _views(uow, slots, await uow.equipped.mine(user_id))
+            avatar = await uow.avatars.current(user_id)
+        return PlayerView(
+            user_id,
+            views,
+            avatar.public_key if avatar else None,
+            avatar.asset_id if avatar else None,
+        )
 
     async def equip(self, user_id: UUID, slot: str, item_id: UUID | None) -> list[SlotView]:
         """Надеть предмет в слот или снять (``item_id = None``).

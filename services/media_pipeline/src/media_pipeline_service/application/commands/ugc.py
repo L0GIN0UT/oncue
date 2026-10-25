@@ -24,7 +24,7 @@ from media_pipeline_service.application.ports import (
     UgcImageEncoder,
     UnitOfWorkFactory,
 )
-from media_pipeline_service.application.queries.ugc import ListUgcQueue
+from media_pipeline_service.application.queries.ugc import GetUgcImage, ListUgcQueue
 from media_pipeline_service.application.sources import delete_quietly
 from media_pipeline_service.application.ugc import UgcImageView, UgcPreview
 from media_pipeline_service.domain.errors import (
@@ -510,5 +510,6 @@ class UgcUseCases:
     moderate: ModerateUgcImage
     preview: PreviewUgcImage
     queue: ListUgcQueue
+    card: GetUgcImage
     purger: UgcObjectPurger
     orphans: SweepOrphanUgcObjects

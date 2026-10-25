@@ -1299,14 +1299,6 @@ class AvatarCard:
 
 
 @dataclass(frozen=True, slots=True)
-class MyAvatar:
-    """Ответ progression ``/v1/me/avatar``: карточка экрана и действующий адрес аватарки."""
-
-    card: AvatarCard
-    current_url: str | None
-
-
-@dataclass(frozen=True, slots=True)
 class ShopEntryCard:
     """Предмет витрины с состоянием для игрока."""
 

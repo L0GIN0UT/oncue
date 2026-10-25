@@ -359,7 +359,7 @@ class ItemCommands:
 
 
 class ItemQueries:
-    """Список предметов."""
+    """Список и карточка предмета."""
 
     def __init__(self, factory: AdminUowFactory, commands: ItemCommands) -> None:
         self._factory = factory
@@ -379,6 +379,19 @@ class ItemQueries:
             "items": [self._commands.item_json(i, owners.get(i.id, 0)) for i in rows],
             "next_cursor": encode_cursor(rows[-1].created_at, rows[-1].id) if more else None,
         }
+
+    async def get(self, item_id: UUID) -> Json:
+        """Предмет по id.
+
+        Raises:
+            ItemNotFoundError: нет предмета (404).
+        """
+        async with self._factory() as uow:
+            item = await uow.items.get(item_id)
+            if item is None:
+                raise shop.ItemNotFoundError
+            owners = await uow.items.owners([item.id])
+        return self._commands.item_json(item, owners.get(item.id, 0))
 
 
 def _fields_dict(fields: ItemFields, reason: str) -> dict[str, Any]:

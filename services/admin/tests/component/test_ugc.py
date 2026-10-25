@@ -62,6 +62,7 @@ def _stub(media: Any, *rows: dict[str, Any], next_cursor: str | None = None) -> 
     media.route("GET", f"{BASE}/{ASSET}/preview").respond(
         200, content=WEBP, headers={"Content-Type": "image/webp", "Cache-Control": "no-store"}
     )
+    media.route("GET", f"{BASE}/{ASSET}").respond(200, json=rows[0] if rows else _image())
     return media.route("GET", BASE).respond(
         200, json={"items": list(rows) or [_image()], "next_cursor": next_cursor}
     )
@@ -201,10 +202,19 @@ def test_preview_proxy_service_down_is_503_and_wrong_type_is_refused(
     assert not AuditEntry.objects.exists()
 
 
-def test_card_of_missing_image_is_404(client: Any, login: Any, media: Any) -> None:
+def test_card_of_missing_image_is_404(client: Any, login: Any, media: Any, problem: Any) -> None:
     login()
-    _stub(media, _image(asset_id=str(uuid.uuid4())))
+    _stub(media)
+    media.route("GET", f"{BASE}/{ASSET}").respond(404, json=problem(404, "ugc.not_found"))
     assert client.get(f"/ugc/{ASSET}/").status_code == 404
+
+
+def test_card_is_read_by_id_without_scanning_the_queue(client: Any, login: Any, media: Any) -> None:
+    login()
+    queue = _stub(media)
+    assert client.get(f"/ugc/{ASSET}/").status_code == 200
+    assert media.route("GET", f"{BASE}/{ASSET}").call_count == 1
+    assert queue.call_count == 0
 
 
 def test_card_pending_has_approve_and_reject_with_reasons(
@@ -368,7 +378,7 @@ def test_card_distinguishes_service_errors_from_not_found(
 ) -> None:
     login()
     media.route("GET", f"{BASE}/settings").respond(200, json=SETTINGS)
-    route = media.route("GET", BASE).respond(403, json=problem(403, "auth.forbidden"))
+    route = media.route("GET", f"{BASE}/{ASSET}").respond(403, json=problem(403, "auth.forbidden"))
     assert client.get(f"/ugc/{ASSET}/").status_code == 403
     route.respond_off_contract(503, json=problem(503, "dependency.unavailable"))
     assert client.get(f"/ugc/{ASSET}/").status_code == 503

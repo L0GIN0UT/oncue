@@ -52,6 +52,7 @@ PROMO_BODY = {
 }
 ADMIN_CASES: list[tuple[str, str, dict[str, Any], str]] = [
     ("GET", "/admin/v1/items", {}, ITEMS),
+    ("GET", f"/admin/v1/items/{ID}", {}, ITEMS),
     ("POST", "/admin/v1/items", {"json": ITEM_BODY}, ITEMS),
     ("PUT", f"/admin/v1/items/{ID}", {"json": ITEM_BODY}, ITEMS),
     (
@@ -236,6 +237,25 @@ async def test_create_item_is_inactive_audited_and_cache_free(progression: Servi
         "item.create",
         REASON["reason"],
     )
+
+
+async def test_get_item_by_id_matches_the_created_card_and_is_cache_free(
+    progression: Service,
+) -> None:
+    await progression.publish_config()
+    created = await create_item(progression)
+
+    response = await call(progression, "GET", f"/admin/v1/items/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == created
+
+
+async def test_get_unknown_item_is_404_with_service_code(progression: Service) -> None:
+    response = await call(progression, "GET", f"/admin/v1/items/{uuid7()}")
+
+    assert_problem(response, 404, "progression.item_not_found")
 
 
 @pytest.mark.parametrize(

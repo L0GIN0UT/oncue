@@ -32,9 +32,8 @@ from admin_service.core.views import (
     service_error_response,
 )
 
+_NOT_FOUND = 404
 MODERATE = "media.ugc.moderate"
-_SCAN_PAGES = 20
-_PAGE = 100
 _DECISION_FIELDS = ("status", "reason_code", "version")
 
 
@@ -60,32 +59,17 @@ def _reasons(settings_data: dict[str, Any]) -> list[tuple[str, str]]:
     ]
 
 
-def _page(request: HttpRequest, status: str, cursor: str | None) -> tuple[Any, ServiceError | None]:
-    def call(client: MediaAdminClient) -> Any:
-        return client.ugc_images(status=status, cursor=cursor, limit=_PAGE)
-
-    return read(request, MEDIA, _client(call))
-
-
 def _find(
-    request: HttpRequest, asset_id: UUID, status: str
+    request: HttpRequest, asset_id: UUID
 ) -> tuple[dict[str, Any] | None, ServiceError | None]:
-    """Строка очереди по id: GET по id у admin-API нет - листаем до первой страницы с ней.
+    """Карточка по id: ``GET /admin/v1/ugc-images/{id}`` (без поиска по страницам очереди).
 
-    ``(None, None)`` - в этом статусе строки нет (404); ``(None, ошибка)`` - сервис не ответил.
+    ``(None, None)`` - ассета нет (404); ``(None, ошибка)`` - сервис не ответил.
     """
-    cursor: str | None = None
-    for _ in range(_SCAN_PAGES):
-        data, error = _page(request, status, cursor)
-        if error is not None:
-            return None, error
-        for row in as_list(as_dict(data).get("items")):
-            if row.get("asset_id") == str(asset_id):
-                return row, None
-        cursor = as_dict(data).get("next_cursor")
-        if not cursor:
-            break
-    return None, None
+    data, error = read(request, MEDIA, _client(lambda c: c.ugc_image(asset_id)))
+    if error is not None:
+        return (None, None) if error.status == _NOT_FOUND else (None, error)
+    return as_dict(data), None
 
 
 @require_GET
@@ -136,11 +120,11 @@ def _card_page(
     status_code: int = 200,
 ) -> HttpResponse:
     status = _status(request)
-    row, find_error = _find(request, asset_id, status)
+    row, find_error = _find(request, asset_id)
     if find_error is not None:
         return service_error_response(request, find_error)
     if row is None:
-        raise Http404("Изображение не найдено в этом статусе (возможно, уже обработано)")
+        raise Http404("Изображение не найдено")
     settings_data, settings_error = _settings(request)
     suffix = "?" + urlencode({"status": status})
     context = {
@@ -200,12 +184,12 @@ def card(request: HttpRequest, asset_id: UUID) -> HttpResponse:
 
 
 def _status_before(request: HttpRequest, asset_id: UUID) -> str | None:
-    """Статус «до» для аудита - из реальной строки очереди, а не из ``?status=`` запроса.
+    """Статус «до» для аудита - из карточки сервиса, а не из ``?status=`` запроса.
 
     Не нашли строку (уже обработана, сервис не ответил) - ``None``: решение всё равно уходит
     в сервис, он ответит 409 ``ugc.not_pending``, и отказ попадёт в аудит.
     """
-    row, _ = _find(request, asset_id, _status(request))
+    row, _ = _find(request, asset_id)
     status = (row or {}).get("status")
     return status if isinstance(status, str) else None
 

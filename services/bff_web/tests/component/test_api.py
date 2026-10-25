@@ -1912,7 +1912,9 @@ PROG_APPEARANCE = {
     "slots": [
         {"slot": "frame", "item": cosmetic(1, "frame")},
         {"slot": "title", "item": None},
-    ]
+    ],
+    "custom_avatar_url": "/media/avatars/me.webp",
+    "custom_avatar_asset_id": str(UUID(int=77)),
 }
 PROG_INVENTORY = {
     "items": [
@@ -1927,7 +1929,7 @@ PROG_INVENTORY = {
 }
 PROG_AVATAR = {
     "entitled": True,
-    "current_url": "/media/avatars/me.webp",
+    "current_url": "/media/avatars/deprecated.webp",  # устарело: bff его не читает
     "request": {
         "asset_id": str(UUID(int=77)),
         "status": "approved",
@@ -2000,7 +2002,9 @@ async def test_profile_page_all_blocks_ok(bff: Bff) -> None:
     ]
     assert wheel["today"] is None
     appearance = blocks["appearance"]["data"]
-    assert appearance["custom_avatar_url"] == "/media/avatars/me.webp"  # из /v1/me/avatar
+    assert appearance["custom_avatar_url"] == "/media/avatars/me.webp"  # из /v1/me/appearance
+    assert appearance["custom_avatar_asset_id"] == str(UUID(int=77))
+    assert "deprecated" not in str(blocks["avatar"])
     assert [(s["slot"], s["item"] and s["item"]["key"]) for s in appearance["slots"]] == [
         ("frame", "item_1"),
         ("title", None),
@@ -2077,8 +2081,8 @@ async def test_profile_page_each_block_degrades_independently(
     assert response.status_code == 200
     assert response.headers["cache-control"] == PRIVATE
     blocks = response.json()["blocks"]
-    # Оформление собирается из слотов и адреса своей аватарки: падение аватара гасит оба блока.
-    dead = {block, "appearance"} if block == "avatar" else {block}
+    # Адрес своей аватарки приходит с `/me/appearance`: блоки оформления и аватара независимы.
+    dead = {block}
     assert blocks.pop("events") == []
     for name, value in blocks.items():
         assert value == UNAVAILABLE if name in dead else value["status"] == "ok", name

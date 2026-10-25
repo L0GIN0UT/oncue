@@ -99,6 +99,17 @@ class Appearance(BaseModel):
     slots: list[AppearanceSlot]
 
 
+class MyAppearance(Appearance):
+    """Моё оформление: слоты и своя аватарка (единый источник адреса для профиля)."""
+
+    custom_avatar_url: str | None = Field(
+        description="Одобренная своя аватарка; null - аватар из слота"
+    )
+    custom_avatar_asset_id: UUID | None = Field(
+        description="Ассет одобренной аватарки (объект жалобы `avatar`); null - аватарки нет"
+    )
+
+
 class EquipRequest(_Request):
     """Надеть предмет в слот или снять (`item_id = null`)."""
 
@@ -149,7 +160,12 @@ class MyAvatar(BaseModel):
 
     entitled: bool = Field(description="Куплен товар «своя аватарка»")
     current_url: str | None = Field(
-        description="Одобренная аватарка; null - используется предмет слота"
+        deprecated=True,
+        description=(
+            "Устарело (уберём через один релиз): адрес своей аватарки лежит в "
+            "`GET /v1/me/appearance` (`custom_avatar_url`) - тот же источник, что у "
+            "`GET /v1/appearance`. Одобренная аватарка; null - используется предмет слота"
+        ),
     )
     request: AvatarRequestView | None = Field(description="Последняя заявка; null - не подавалась")
     limits: AvatarLimits

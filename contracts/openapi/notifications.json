@@ -51,6 +51,22 @@
         "title": "Broadcast",
         "type": "object"
       },
+      "BroadcastAudience": {
+        "description": "Число получателей рассылки (для экрана подтверждения).",
+        "properties": {
+          "recipients": {
+            "description": "Сколько игроков с согласием получат письмо",
+            "minimum": 0.0,
+            "title": "Recipients",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recipients"
+        ],
+        "title": "BroadcastAudience",
+        "type": "object"
+      },
       "BroadcastPage": {
         "description": "Страница рассылок (курсор).",
         "properties": {
@@ -628,22 +644,6 @@
         "title": "UnreadCount",
         "type": "object"
       },
-      "UnsubscribeRequest": {
-        "additionalProperties": false,
-        "description": "Отписка по токену из письма (страница отписки).",
-        "properties": {
-          "token": {
-            "description": "Непрозрачный токен из ссылки в письме",
-            "title": "Token",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token"
-        ],
-        "title": "UnsubscribeRequest",
-        "type": "object"
-      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -895,6 +895,73 @@
           }
         },
         "summary": "Поставить рассылку",
+        "tags": [
+          "notifications-admin"
+        ]
+      }
+    },
+    "/admin/v1/broadcasts/audience": {
+      "get": {
+        "description": "Для экрана подтверждения: число игроков с согласием, которым уйдёт рассылка (то же, что попадёт в `recipients` при создании). Запрос ограничен по времени: превышение - 503.",
+        "operationId": "broadcast_audience_admin_v1_broadcasts_audience_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastAudience"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Сколько получателей у рассылки",
         "tags": [
           "notifications-admin"
         ]
@@ -1873,13 +1940,54 @@
     },
     "/v1/unsubscribe": {
       "post": {
-        "description": "Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`.",
+        "description": "Единственная ручка без входа. Токен - непрозрачный, персональный, с ограниченным сроком; неизвестный, истёкший и повреждённый токен дают один и тот же ответ. Лимит попыток по IP (Redis, fail-closed): 429 с `Retry-After`. Повтор годного токена - 204. Негодный токен - 422 `notifications.unsubscribe_invalid`. Тело - JSON `{token}` или форма RFC 8058 `List-Unsubscribe=One-Click` (`application/x-www-form-urlencoded`, до 1 КБ) с токеном в query.",
         "operationId": "unsubscribe_v1_unsubscribe_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UnsubscribeRequest"
+                "additionalProperties": false,
+                "description": "Отписка по токену из письма (страница отписки).",
+                "properties": {
+                  "token": {
+                    "description": "Непрозрачный токен из ссылки в письме",
+                    "title": "Token",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "title": "UnsubscribeRequest",
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "List-Unsubscribe": {
+                    "enum": [
+                      "One-Click"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "List-Unsubscribe"
+                ],
+                "type": "object"
               }
             }
           },
