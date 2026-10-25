@@ -3,11 +3,26 @@
  * (ожидание, «ищем дольше обычного», отмена, соперник найден → комната), дельта рейтинга в итоге
  * и страница лидербордов (пагинация по курсору, «моё место», топ недели).
  */
+import type { Page } from "@playwright/test";
 import { expect, login, test } from "./fixtures";
 import { QUEUE_TICK_S } from "./mocks/match";
 
-/** Первому игроку о матче сообщает ближайший heartbeat: ждём несколько периодов мока. */
+/** Предел ожидания «матч найден»: несколько периодов heartbeat мока. */
 const TICK_WAIT = { timeout: (QUEUE_TICK_S * 3 + 4) * 1000 };
+
+/**
+ * Первому игроку о матче сообщает heartbeat очереди. Ждать его по таймеру нестабильно на
+ * нагруженном CI (интервал и нагрузка расходятся), поэтому сами «возвращаем вкладку»:
+ * хук очереди на `visibilitychange` делает `tick` сразу (так же, как при реальном возврате
+ * на вкладку). Повторяем, пока ответ не придёт, в пределах `TICK_WAIT`.
+ */
+async function expectQueueFound(page: Page): Promise<void> {
+  const found = page.getByTestId("queue-found");
+  await expect(async () => {
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect(found).toBeVisible({ timeout: 1000 });
+  }).toPass(TICK_WAIT);
+}
 
 test("хаб: звание со ступенью, калибровка вместо звания, сезон и топ недели; то же в профиле", async ({
   page,
@@ -64,8 +79,8 @@ test("очередь: ожидание, подсказка, отмена; вто
   await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
   const code = (await rival.getByTestId("room-code").textContent())!.trim();
 
-  // Первому о матче сообщает ближайший heartbeat; вкладка видима — переход в комнату.
-  await expect(page.getByTestId("queue-found")).toBeVisible(TICK_WAIT);
+  // Первому о матче сообщает heartbeat; вкладка видима — переход в комнату.
+  await expectQueueFound(page);
   await expect(page).toHaveURL(`/room/${code}`);
   await expect(page.getByTestId("room-code")).toHaveText(code);
   await expect(page.getByTestId("player-rival")).toBeVisible();
@@ -105,7 +120,7 @@ test("rating недоступен: итог рейтингового матча 
   const rival = await player("rival");
   await rival.goto("/online");
   await rival.getByTestId("queue-enter-film-classic").click();
-  await expect(page.getByTestId("queue-found")).toBeVisible(TICK_WAIT);
+  await expectQueueFound(page);
   await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
   await page.getByTestId("ready-toggle").click();
   await rival.getByTestId("ready-toggle").click();

@@ -70,7 +70,8 @@ describe("NotificationBell", () => {
     renderWithProviders(<NotificationBell />);
     await screen.findByTestId("notification-count");
     await waitFor(() => expect(channels[0]?.handlers).toBeTruthy());
-    await waitFor(() => expect(reads).toBeGreaterThanOrEqual(1));
+    // Старт — число из shell: отдельного запроса unread-count нет.
+    expect(reads).toBe(0);
     const count = () => screen.getByTestId("notification-count");
 
     world.notifications.push();
@@ -123,8 +124,13 @@ describe("NotificationBell", () => {
     installChannel();
     signInAsUser();
     server.use(
-      http.get("*/api/notifications/v1/notifications/unread-count", () =>
-        HttpResponse.json({ count: 250 }),
+      http.get("*/api/web/v1/pages/shell", () =>
+        HttpResponse.json({
+          theme: { key: "default" },
+          bell: { status: "ok", data: { unread: 250 } },
+          sanctions: null,
+          event: null,
+        }),
       ),
     );
     renderWithProviders(<NotificationBell />);
@@ -143,12 +149,14 @@ describe("NotificationBell", () => {
     );
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderWithProviders(<NotificationBell />);
-    await waitFor(() => expect(calls).toBe(1));
+    await screen.findByTestId("notification-count");
+    // Старт — из shell, запроса счётчика нет; первый опрос — через период.
+    expect(calls).toBe(0);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
-    await waitFor(() => expect(calls).toBe(2));
+    await waitFor(() => expect(calls).toBe(1));
 
     // Вкладка скрыта: опрос стоит.
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
@@ -156,14 +164,14 @@ describe("NotificationBell", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(180_000);
     });
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
 
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
-    await waitFor(() => expect(calls).toBeGreaterThanOrEqual(3));
+    await waitFor(() => expect(calls).toBeGreaterThanOrEqual(2));
   });
 
   it("сбой shell и счётчика не ломает шапку: колокольчик без числа", async () => {

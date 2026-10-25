@@ -26,15 +26,14 @@
 import { randomUUID } from "node:crypto";
 import {
   expect,
-  request as playwrightRequest,
   test,
-  type APIRequestContext,
   type APIResponse,
   type Browser,
   type BrowserContext,
   type Locator,
   type Page,
 } from "@playwright/test";
+import { ADMIN, HAS_ADMIN, adminContext } from "./admin";
 import { loginViaUi, registerViaUi } from "./auth";
 
 test.skip(process.env.E2E_SEEDED !== "1", "стек не засеян: нужен шаг засева (E2E_SEEDED=1)");
@@ -173,38 +172,6 @@ async function saveTo(page: Page, scope: Locator, ref: string, itemId: string) {
   ]);
   expect(res.status(), await res.text()).toBe(200);
   return (await res.json()) as { changed: boolean; shelves: string[]; removed_from: string[] };
-}
-
-// ----------------------------------------------------------------------------- админ
-const ADMIN = {
-  login: process.env.GV_BOOTSTRAP_ADMIN__LOGIN,
-  password: process.env.GV_BOOTSTRAP_ADMIN__PASSWORD,
-  secret: process.env.GV_SERVICE_SECRET_ADMIN,
-  identity: process.env.GV_SEED__IDENTITY_URL ?? "http://127.0.0.1:8100",
-  media: process.env.GV_SEED__MEDIA_URL ?? "http://127.0.0.1:8102",
-  collections: process.env.GV_SEED__COLLECTIONS_URL ?? "http://127.0.0.1:8106",
-};
-const HAS_ADMIN = Boolean(ADMIN.login && ADMIN.password && ADMIN.secret);
-
-/** admin-токен как у `gv dev seed`: сервисный токен клиента `admin` → вход в админку. */
-async function adminContext(baseURL: string): Promise<APIRequestContext> {
-  const identity = await playwrightRequest.newContext({ baseURL: ADMIN.identity });
-  try {
-    const svc = await json<{ access_token: string }>(
-      await identity.post("/internal/v1/service-tokens", {
-        data: { client_id: "admin", client_secret: ADMIN.secret, audience: "identity" },
-      }),
-    );
-    const session = await json<{ access_token: string }>(
-      await identity.post("/internal/v1/admin-sessions", {
-        headers: { Authorization: `Bearer ${svc.access_token}` },
-        data: { login: ADMIN.login, password: ADMIN.password },
-      }),
-    );
-    return playwrightRequest.newContext({ baseURL, extraHTTPHeaders: { Authorization: `Bearer ${session.access_token}` } });
-  } finally {
-    await identity.dispose();
-  }
 }
 
 // ----------------------------------------------------------------------------- состояние сценария

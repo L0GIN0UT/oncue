@@ -1,7 +1,7 @@
 /**
- * Админ-контекст для сквозных спеков 5b (`shop.spec.ts`, `notifications.spec.ts`): токен как у
+ * Админ-контекст для сквозных спеков (`collections`, `shop`, `notifications`, `events`, `moderation`): токен как у
  * `gv dev seed` (сервисный токен клиента `admin` -> вход в админку) и прямые адреса admin-API
- * сервисов. Адреса и переменные те же, что у `gv dev seed` и `collections.spec.ts`
+ * сервисов. Адреса и переменные те же, что у `gv dev seed`
  * (GV_SEED__*_URL, GV_BOOTSTRAP_ADMIN__*, GV_SERVICE_SECRET_ADMIN).
  */
 import { randomUUID } from "node:crypto";
@@ -22,6 +22,7 @@ export const ADMIN = {
   media: process.env.GV_SEED__MEDIA_URL ?? "http://127.0.0.1:8102",
   progression: process.env.GV_SEED__PROGRESSION_URL ?? "http://127.0.0.1:8109",
   social: process.env.GV_SEED__SOCIAL_URL ?? "http://127.0.0.1:8111",
+  collections: process.env.GV_SEED__COLLECTIONS_URL ?? "http://127.0.0.1:8106",
 };
 export const HAS_ADMIN = Boolean(ADMIN.login && ADMIN.password && ADMIN.secret);
 export const NO_ADMIN_REASON =
