@@ -58,7 +58,7 @@ services:
         limits: {memory: 3G}
 
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.10-alpine
     restart: unless-stopped
     networks: [backend]
     logging: *logging
