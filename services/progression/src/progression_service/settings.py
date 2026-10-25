@@ -32,6 +32,9 @@ class ProgressionSettings(BaseModel):
     bootstrap_config_dir: Path | None = None
     bootstrap_interval_s: float = Field(default=60.0, gt=0)
     # Магазин 5b (ADR 0045, 0046): бакет косметики и публичный префикс gateway для картинок.
+    # Рантайм-роль Postgres (ADR 0060): job migrate выдаёт ей права при каждом запуске и падает,
+    # если роли нет. None — одна роль на всё (локальная БД без разделения).
+    runtime_role: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{2,62}$")
     cosmetics_bucket: str = Field(default="gv-cosmetics", pattern=r"^[a-z0-9][a-z0-9.-]{2,62}$")
     cosmetics_base_url: str = Field(default="/cosmetics/", pattern=r"^(https?://[^/]+)?/[^?#]*/$")
     # Ключ HMAC хешей промокодов (ADR 0048). Вне local/ci обязателен: без него сервис не стартует.

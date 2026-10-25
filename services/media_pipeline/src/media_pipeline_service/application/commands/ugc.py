@@ -15,6 +15,7 @@ from gv_core.clock import Clock
 from gv_core.errors import ConflictError
 from gv_core.ids import uuid7
 from gv_db.idempotency import request_fingerprint, run_idempotent
+from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import (
     AdminAction,
     ObjectStorage,
@@ -22,7 +23,6 @@ from media_pipeline_service.application.ports import (
     TokenSource,
     UgcImageEncoder,
     UnitOfWorkFactory,
-    UrlSigner,
 )
 from media_pipeline_service.application.queries.ugc import ListUgcQueue
 from media_pipeline_service.application.sources import delete_quietly
@@ -35,6 +35,7 @@ from media_pipeline_service.domain.errors import (
 )
 from media_pipeline_service.domain.ugc import (
     PENDING_PREFIX,
+    UGC_CONTENT_TYPE,
     UgcCatalog,
     UgcImage,
     UgcStatus,
@@ -455,54 +456,49 @@ class ModerateUgcImage:
 
 
 class PreviewUgcImage:
-    """Короткая ссылка модератору: ``pending`` - подписанная ``/media/p/…``, ``approved`` -
-    публичный адрес. Выдача пишется в аудит; у отклонённого объекта нет (404)."""
+    """Содержимое ``pending``-изображения для модератора (ADR 0061, уточняет 0048).
 
-    def __init__(
-        self,
-        uow: UnitOfWorkFactory,
-        clock: Clock,
-        signer: UrlSigner,
-        *,
-        ttl_s: int,
-        public_base_url: str,
-    ) -> None:
+    Байты читаются из S3 по ключам сервиса и отдаются потоком через API: ключ объекта и адрес
+    хранилища наружу не попадают, анонимного чтения ``p/*`` в хранилище нет. Выдача пишется
+    в аудит. Не ``pending`` (одобрено, отклонено, заменено) - 409 ``ugc.not_pending``.
+    """
+
+    def __init__(self, uow: UnitOfWorkFactory, clock: Clock, storage: ObjectStorage) -> None:
         self._uow = uow
         self._clock = clock
-        self._signer = signer
-        self._ttl = timedelta(seconds=ttl_s)
-        self._public_base = public_base_url
+        self._storage = storage
 
     async def execute(self, asset_id: UUID, *, moderator_id: UUID) -> UgcPreview:
-        """Выдать ссылку.
+        """Прочитать объект заявки.
 
         Raises:
-            UgcNotFoundError: ассета нет или он отклонён.
+            UgcNotFoundError: ассета нет или объект в хранилище отсутствует.
+            UgcNotPendingError: ассет уже не ``pending``.
         """
         async with self._uow() as uow:
             image = await uow.ugc.get(asset_id)
             if image is None:
                 raise UgcNotFoundError("изображение не найдено")
-            now = self._clock.now()
-            expires_at = now + self._ttl
-            if image.status is UgcStatus.PENDING and image.pending_key:
-                url = self._signer.sign(image.pending_key, expires_at)
-            elif image.status is UgcStatus.APPROVED and image.public_key:
-                url = f"{self._public_base}{image.public_key}"
-            else:
-                raise UgcNotFoundError("у изображения нет объекта")
+            if image.status is not UgcStatus.PENDING or not image.pending_key:
+                raise UgcNotPendingError("предпросмотр доступен только для pending")
+            try:
+                data = await self._storage.get(
+                    StorageArea.ASSETS, image.pending_key, max_bytes=image.size_bytes
+                )
+            except GenerationError as exc:
+                raise UgcNotFoundError("объект изображения не найден") from exc
             await uow.audit.record(
                 AdminAction(
                     actor_id=moderator_id,
                     action="ugc.preview",
                     target_id=asset_id,
                     reason="просмотр модератором",
-                    at=now,
+                    at=self._clock.now(),
                     details={"status": image.status.value},
                 )
             )
             await uow.commit()
-        return UgcPreview(url=url, expires_at=expires_at)
+        return UgcPreview(data=data, content_type=UGC_CONTENT_TYPE)
 
 
 @dataclass(frozen=True, slots=True)

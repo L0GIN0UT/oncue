@@ -2,16 +2,17 @@
 #   docker build -f infra/docker/web.Dockerfile frontend
 # Типы API (src/shared/api/schema) закоммичены и сверяются в CI (`pnpm gen:api:check`),
 # поэтому контракты в контекст не нужны.
+# Базовый образ закреплён по digest, обновляет Dependabot (docker, /infra/docker).
 ARG NODE_VERSION=24-alpine
 
-FROM node:${NODE_VERSION} AS deps
+FROM node:${NODE_VERSION}@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS deps
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
-FROM node:${NODE_VERSION} AS build
+FROM node:${NODE_VERSION}@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS build
 WORKDIR /app
 RUN corepack enable
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -19,7 +20,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
 
-FROM node:${NODE_VERSION} AS runtime
+FROM node:${NODE_VERSION}@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

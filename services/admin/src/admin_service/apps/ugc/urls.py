@@ -11,6 +11,7 @@ app_name = "ugc"
 urlpatterns = [
     path("", views.queue, name="queue"),
     path("<uuid:asset_id>/", views.card, name="card"),
+    path("<uuid:asset_id>/preview/", views.preview, name="preview"),
     path("<uuid:asset_id>/approve/", views.approve, name="approve"),
     path("<uuid:asset_id>/reject/", views.reject, name="reject"),
 ]

@@ -33,3 +33,4 @@
 - `collection_played` у находки: необязательный `params.collection_keys` (uuid сборников, только эта метрика) — фильтр уровня находки в `Trigger.accepts` по `MetricUpdate.collection_id`, как `slot`/`item_key`; пусто — любой сборник.
 - Claim `ui_spot`: лимит `GV_PROGRESSION__EVENT_CLAIM_LIMIT` (`N/окно_с`, Redis, fail-closed), повтор идемпотентен. «Требуется ручная проверка владельцем» (ledger).
 - Нет синхронных вызовов game/match/rating; места сезона — из `rating.SeasonStandingsFinalized`, топ недели — топ-100 (решение владельца).
+- Роли Postgres (ADR 0060, миграция `0009`): рантайм ходит ролью `progression_app` (`app_role` в реестре), миграции — владельцем `progression`; на `xp_ledger`/`currency_ledger`/`admin_actions` у рантайма только `SELECT/INSERT`. Новая append-only таблица отзывает `UPDATE/DELETE/TRUNCATE` у `progression_app` в своей миграции. Старый том БД: создать роль вручную. «Требуется ручная проверка владельцем».

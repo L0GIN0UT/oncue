@@ -3,11 +3,13 @@
 #   docker build -f infra/docker/python-service.Dockerfile --build-arg SERVICE=game -t guessverse/game .
 # Процессы одного образа: api | relay | consumer | worker | all | migrate (аргумент CMD).
 
+# Базовые образы закреплены по digest (воспроизводимая сборка и осмысленный скан trivy);
+# тег остаётся для чтения, digest обновляет Dependabot (docker, /infra/docker).
 ARG PYTHON_VERSION=3.13
 
 # ------------------------------------------------------------------ сборка зависимостей
-FROM python:${PYTHON_VERSION}-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+FROM python:${PYTHON_VERSION}-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962 AS builder
+COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:77280f2f771df71f90786c314fe1bbc1e023feac652969bbf139c280babf2eb7 /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -31,7 +33,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
  && test -x /app/.venv/bin/service-entry
 
 # ------------------------------------------------------------------ рантайм
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962 AS runtime
 
 # Системные пакеты сервиса из реестра (поле apt, например ffmpeg для media-pipeline).
 ARG APT_PACKAGES=""

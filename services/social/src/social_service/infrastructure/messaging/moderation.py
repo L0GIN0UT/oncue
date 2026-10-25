@@ -36,6 +36,7 @@ _HANDLERS: dict[str, _Apply] = {
     "collections.CollectionDeleted": lambda s: s.collection_deleted,
     "match.MatchFinished": lambda s: s.match_finished,
     "match.PlayerRated": lambda s: s.player_rated,
+    "identity.UserRolesChanged": lambda s: s.roles_changed,
     "identity.UserDeleted": lambda s: s.user_deleted,
     "media_pipeline.AssetModerated": lambda s: s.asset_moderated,
 }

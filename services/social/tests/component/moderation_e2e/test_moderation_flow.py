@@ -12,7 +12,8 @@ from social_service.infrastructure.db import tables_sanctions as s
 from gv_auth import Sanction
 from gv_core.errors import ForbiddenError
 from gv_core.ids import uuid7
-from gv_testkit import assert_problem
+from gv_messaging import Outcome
+from gv_testkit import assert_problem, load_example
 
 if TYPE_CHECKING:
     from conftest import Real
@@ -261,3 +262,46 @@ async def test_chat_sanction_mutes_comments_until_revoked(real: Real) -> None:
     )
     assert revoked.status_code == 200, revoked.text
     assert (await post()).status_code == 201
+
+
+async def _roles_changed(real: Real, user: UUID, perms: tuple[str, ...], version: int) -> None:
+    base = load_example("identity.UserRolesChanged")
+    payload = {**base.payload, "user_id": str(user), "perms": sorted(perms), "version": version}
+    outcome = await real.deliver(base.model_copy(update={"payload": payload, "event_id": uuid7()}))
+    assert outcome is Outcome.PROCESSED
+
+
+async def test_moderator_cannot_sanction_admin_but_admin_can(real: Real) -> None:
+    admin_target = uuid7()
+    await real.add_nickname(admin_target)
+    await _roles_changed(real, admin_target, (*SENIOR, "admin.users.manage"), 1)
+
+    async def grant(actor_perms: tuple[str, ...]) -> Any:
+        return await real.client.post(
+            f"/admin/v1/users/{admin_target}/sanctions",
+            json={"kind": "chat", "duration_s": 3600, "reason": "нарушение"},
+            headers={**real.auth(uuid7(), actor_perms), **real.key()},
+        )
+
+    assert_problem(await grant(MANAGE), 403, "social.sanction_target_outranks")
+    assert not await real.rows(s.sanctions)
+    assert not await real.outbox("social.UserSanctionsChanged")
+
+    ok = await grant((*SENIOR, "admin.users.manage"))
+    assert ok.status_code == 201, ok.text
+
+    # Права понижены новым снимком - модератор снова может; старое событие не откатывает.
+    await _roles_changed(real, admin_target, (), 2)
+    await _roles_changed(real, admin_target, (*SENIOR, "admin.users.manage"), 1)
+    assert (await grant(MANAGE)).status_code == 201
+
+
+async def test_case_resolution_against_admin_is_refused(real: Real) -> None:
+    flow = Flow(real)
+    await flow.open_and_claim()
+    await _roles_changed(real, flow.offender, (*SENIOR, "admin.users.manage"), 1)
+    denied = await flow.act("resolve", flow.sanction_body(), flow.mod(MANAGE))
+    assert_problem(denied, 403, "social.sanction_target_outranks")
+    (case,) = await real.rows(m.moderation_cases)
+    assert case.status == "in_work"
+    assert not await real.rows(s.sanctions)

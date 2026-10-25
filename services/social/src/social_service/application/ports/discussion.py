@@ -14,7 +14,12 @@ from gv_db.idempotency import IdempotencyStore
 from social_service.domain.discussion import CollectionRef, Comment
 
 if TYPE_CHECKING:
-    from social_service.application.ports.cases import AuditLog, AvatarProjection, CaseRepository
+    from social_service.application.ports.cases import (
+        AuditLog,
+        AvatarProjection,
+        CaseRepository,
+        StaffPermsProjection,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +191,9 @@ class DiscussionUnitOfWork(Protocol):
 
     @property
     def avatars(self) -> AvatarProjection: ...
+
+    @property
+    def staff_perms(self) -> StaffPermsProjection: ...
 
     @property
     def audit(self) -> AuditLog: ...

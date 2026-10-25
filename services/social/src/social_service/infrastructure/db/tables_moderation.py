@@ -10,6 +10,7 @@
 * ``match_participants_proj`` - участники матчей (для проверки «общий матч» при жалобе);
 * ``behaviour_counters`` - счётчики порядочности (без автосанкций);
 * ``avatar_proj`` - владельцы UGC-аватарок из ``media_pipeline.AssetModerated`` (для жалоб);
+* ``staff_perms_proj`` - эффективные права из ``identity.UserRolesChanged`` (иерархия, ADR 0058);
 * ``moderation_audit`` - аудит ручных действий (кейсы, конфиг): кто, что, над чем, причина;
 * ``comment_idempotency_keys`` - ключи идемпотентности публикации комментариев.
 """
@@ -32,7 +33,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from gv_db.idempotency import idempotency_table
 from social_service.infrastructure.db.tables import TABLES
@@ -163,6 +164,14 @@ avatar_proj = Table(
     Column("status", String(16), nullable=False),
     Column("version", Integer, nullable=False),
     CheckConstraint("status IN ('approved', 'rejected')", name="status_known"),
+)
+
+staff_perms_proj = Table(
+    "staff_perms_proj",
+    _md,
+    Column("user_id", Uuid(as_uuid=True), primary_key=True),
+    Column("perms", ARRAY(Text), nullable=False),
+    Column("version", Integer, nullable=False),
 )
 
 moderation_audit = Table(

@@ -18,6 +18,18 @@ SQL
     -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm' -c 'CREATE EXTENSION IF NOT EXISTS citext'
 }
 
+# Рантайм-роль сервиса с журналами (ADR 0060): права на таблицы выдаёт миграция сервиса
+# (она выполняется владельцем схемы), здесь — только роль и доступ к базе.
+create_app_role() {
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres     -v owner="$1" -v name="$1_app" -v password="$2" <<'SQL'
+CREATE ROLE :"name" LOGIN PASSWORD :'password';
+GRANT CONNECT ON DATABASE :"owner" TO :"name";
+SQL
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$1" -v name="$1_app" <<'SQL'
+GRANT USAGE ON SCHEMA public TO :"name";
+SQL
+}
+
 create_service_db identity "${PG_PASSWORD_IDENTITY:?задайте PG_PASSWORD_IDENTITY}"
 create_service_db catalog "${PG_PASSWORD_CATALOG:?задайте PG_PASSWORD_CATALOG}"
 create_service_db media_pipeline "${PG_PASSWORD_MEDIA_PIPELINE:?задайте PG_PASSWORD_MEDIA_PIPELINE}"
@@ -28,6 +40,7 @@ create_service_db collections "${PG_PASSWORD_COLLECTIONS:?задайте PG_PASS
 create_service_db library "${PG_PASSWORD_LIBRARY:?задайте PG_PASSWORD_LIBRARY}"
 create_service_db integrations "${PG_PASSWORD_INTEGRATIONS:?задайте PG_PASSWORD_INTEGRATIONS}"
 create_service_db progression "${PG_PASSWORD_PROGRESSION:?задайте PG_PASSWORD_PROGRESSION}"
+create_app_role progression "${PG_PASSWORD_PROGRESSION_APP:?задайте PG_PASSWORD_PROGRESSION_APP}"
 create_service_db payments "${PG_PASSWORD_PAYMENTS:?задайте PG_PASSWORD_PAYMENTS}"
 create_service_db social "${PG_PASSWORD_SOCIAL:?задайте PG_PASSWORD_SOCIAL}"
 create_service_db notifications "${PG_PASSWORD_NOTIFICATIONS:?задайте PG_PASSWORD_NOTIFICATIONS}"

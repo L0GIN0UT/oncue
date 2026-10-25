@@ -92,6 +92,18 @@ class AvatarProjection(Protocol):
         ...
 
 
+class StaffPermsProjection(Protocol):
+    """Эффективные права пользователей из ``identity.UserRolesChanged`` (иерархия модераторов)."""
+
+    async def apply(self, user_id: UUID, perms: frozenset[str], version: int) -> None:
+        """Сохранить снимок, если ``version`` новее сохранённой."""
+        ...
+
+    async def delete(self, user_id: UUID) -> None:
+        """Удалить запись (аккаунт удалён)."""
+        ...
+
+
 class AuditLog(Protocol):
     """Аудит ручных действий модераторов и конфига."""
 

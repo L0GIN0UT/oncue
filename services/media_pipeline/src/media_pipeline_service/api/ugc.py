@@ -87,13 +87,6 @@ class UgcImagePage(BaseModel):
     next_cursor: Cursor | None
 
 
-class UgcImagePreview(BaseModel):
-    """Короткая ссылка для просмотра модератором (в том числе `pending`)."""
-
-    url: str
-    expires_at: datetime
-
-
 class UgcLimits(BaseModel):
     """Лимиты назначения (из конфига media-pipeline)."""
 
@@ -269,19 +262,34 @@ def register_ugc_admin_routes(router: APIRouter, ugc: UgcUseCases) -> None:
 
     @router.get(
         "/ugc-images/{asset_id}/preview",
-        response_model=UgcImagePreview,
-        summary="Ссылка для просмотра",
+        response_class=Response,
+        summary="Содержимое pending-изображения",
         description=(
-            "Короткая подписанная ссылка на `pending`-объект (`/media/p/...`, секрет тот же, "
-            "что у ассетов), у одобренного - публичный адрес; выдача пишется в аудит. "
-            "У отклонённого объекта нет (404 `ugc.not_found`). Просроченная ссылка не работает."
+            "Только для `pending` (ADR 0061): тело `image/webp` читается из хранилища по "
+            "ключам сервиса, ссылок и адресов S3 в ответе нет. Заголовки: `Cache-Control: "
+            "no-store`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`. "
+            "Выдача пишется в аудит. Не `pending` - 409 `ugc.not_pending`, нет ассета или "
+            "объекта - 404 `ugc.not_found`."
         ),
-        responses=problem_responses(401, 403, 404),
-        dependencies=[Depends(_no_store)],
+        responses={
+            **problem_responses(401, 403, 404, 409),
+            200: {
+                "description": "Изображение WebP",
+                "content": {"image/webp": {"schema": {"type": "string", "format": "binary"}}},
+            },
+        },
     )
-    async def preview(asset_id: AssetIdPath, principal: Moderator) -> UgcImagePreview:
+    async def preview(asset_id: AssetIdPath, principal: Moderator) -> Response:
         result = await ugc.preview.execute(asset_id, moderator_id=principal.user_id)
-        return UgcImagePreview(url=result.url, expires_at=result.expires_at)
+        return Response(
+            content=result.data,
+            media_type=result.content_type,
+            headers={
+                "Cache-Control": _NO_STORE,
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+            },
+        )
 
     @router.post(
         "/ugc-images/{asset_id}/approve",

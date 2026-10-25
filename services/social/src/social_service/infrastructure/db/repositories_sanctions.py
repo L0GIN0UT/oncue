@@ -146,6 +146,11 @@ class SqlSanctionsRepository:
         found = await self._s.scalar(select(u.c.user_id).where(u.c.user_id == user_id))
         return found is not None
 
+    async def target_perms(self, user_id: UUID) -> frozenset[str]:
+        p = m.staff_perms_proj
+        perms = await self._s.scalar(select(p.c.perms).where(p.c.user_id == user_id))
+        return frozenset(perms or ())
+
     async def user_card(self, user_id: UUID, case_limit: int) -> UserCardData:
         u = tables_friends.users_proj
         nickname = await self._s.scalar(select(u.c.nickname).where(u.c.user_id == user_id))

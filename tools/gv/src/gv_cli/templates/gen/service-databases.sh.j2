@@ -18,7 +18,22 @@ SQL
     -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm' -c 'CREATE EXTENSION IF NOT EXISTS citext'
 }
 
+# Рантайм-роль сервиса с журналами (ADR 0060): права на таблицы выдаёт миграция сервиса
+# (она выполняется владельцем схемы), здесь — только роль и доступ к базе.
+create_app_role() {
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres     -v owner="$1" -v name="$1_app" -v password="$2" <<'SQL'
+CREATE ROLE :"name" LOGIN PASSWORD :'password';
+GRANT CONNECT ON DATABASE :"owner" TO :"name";
+SQL
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$1" -v name="$1_app" <<'SQL'
+GRANT USAGE ON SCHEMA public TO :"name";
+SQL
+}
+
 {% for s in services if s.database %}
 create_service_db {{ s.name }} "${ {{- s.db_password_env }}:?задайте {{ s.db_password_env }}}"
+{% if s.app_role %}
+create_app_role {{ s.name }} "${ {{- s.db_app_password_env }}:?задайте {{ s.db_app_password_env }}}"
+{% endif %}
 {% endfor %}
 create_service_db unleash "${PG_PASSWORD_UNLEASH:?задайте PG_PASSWORD_UNLEASH}"

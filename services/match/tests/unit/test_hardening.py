@@ -304,6 +304,17 @@ async def test_a9_kick_leave_remove_revoke_channel_subscription() -> None:
     assert all(s.user_id != d for s in room.seats)
 
 
+async def test_kick_disconnects_target_with_reconnect_and_survives_failure() -> None:
+    h = Harness()
+    room, host = await h.room("film.lobby.collection", collection_ids=(uuid7(),))
+    b, c = await h.join(room, 2)
+    await h.ok(room, host, "kick", user_id=str(b))
+    assert h.subscriptions.disconnects == [(b, True, "kicked")]
+    h.subscriptions.fail_disconnect = True  # сбой disconnect не роняет владельца
+    await h.ok(room, host, "kick", user_id=str(c))
+    assert all(s.user_id != c for s in room.seats)
+
+
 # ----------------------------------------------------------------------------- B1
 async def test_b1_snapshot_keeps_speed_timing_for_scoring() -> None:
     h = Harness()

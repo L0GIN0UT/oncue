@@ -21,6 +21,8 @@
 #   s3           — объектное хранилище (S3 API): GV_S3__* и бакеты в job migrate
 #   realtime     — публикует в Centrifugo / выдаёт его токены: GV_REALTIME__API_URL и API_KEY
 #                  (+ секрет токенов: identity — connection, match — subscription; D9 этапа 4)
+#   app_role     — рантайм ходит в БД отдельной ролью <имя>_app (без права менять журналы и
+#                  отключать их триггеры); миграции — владельцем <имя> (ADR 0060)
 #   memory_mb    — лимит памяти контейнера
 #   framework    — fastapi (по умолчанию) | django (admin)
 #   apt          — системные пакеты образа (например ffmpeg), ставятся при сборке
@@ -118,6 +120,7 @@ redis = true
 kafka = true
 rabbitmq = false
 s3 = true
+app_role = true
 memory_mb = 256
 
 [services.payments]

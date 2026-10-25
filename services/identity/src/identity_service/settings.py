@@ -278,6 +278,9 @@ class Settings(ServiceSettings):
     bootstrap_admin: BootstrapAdminSettings = BootstrapAdminSettings()
     """``GV_BOOTSTRAP_ADMIN__*`` — bootstrap-админ автосидинга (только local/ci); пусто — выкл."""
     bootstrap_admin_emails: tuple[str, ...] = ()
+    reannounce_staff_perms: bool = False
+    """``GV_REANNOUNCE_STAFF_PERMS=true`` — команда ``migrate`` повторно публикует права всех
+    сотрудников (бэкфилл проекций social/admin при выкладке, ADR 0058); после выкладки снять."""
     redis_key_prefix: str = ""
     """Пространство имён ключей Redis (тесты и несколько стендов на одном Redis).
     Для denylist ``sid`` сервисы-потребители должны использовать тот же префикс."""

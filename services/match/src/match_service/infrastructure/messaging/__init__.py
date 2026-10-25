@@ -144,6 +144,7 @@ class _SanctionsChanged(_Payload):
     mask: int = Field(ge=0, le=0xFFFF)
     next_expiry_at: AwareDatetime | None
     active: list[_ActiveSanction]
+    account_banned: bool = False
 
 
 def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
@@ -252,9 +253,17 @@ def build_event_handlers(container: MatchContainer) -> EventHandlerRegistry:  # 
         if not await SqlSanctions.apply(session, snapshot, now):
             return  # дубль или устаревшая версия: проекция не меняется, игрока не трогаем
         live = snapshot.mask_at(now)
-        if live & (ONLINE_BAN | RANKED_BAN) and container.infra.redis is not None:
+        banned = bool(live & (ONLINE_BAN | RANKED_BAN)) or p.account_banned
+        if banned and container.infra.redis is not None:
             await container.ranked_queue.remove(p.user_id)  # идемпотентно
-        if live & ONLINE_BAN:
+        if p.account_banned:
+            # Бан аккаунта (ADR 0059): ключ server API есть у match, не у identity. Повтор
+            # безопасен: дубль/старая версия отсечены выше, disconnect идемпотентен.
+            await container.subscriptions.disconnect(
+                p.user_id, reconnect=False, reason="account_banned"
+            )
+            log.info("match.account_banned_disconnected")
+        if live & ONLINE_BAN or p.account_banned:
             # Игрок покидает комнату/лобби через владельца (как кик), подписка отзывается.
             await notify_room(p.user_id, "evict", envelope, {})
             log.info("match.online_banned_evicted")

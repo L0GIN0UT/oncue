@@ -18,19 +18,20 @@ from gv_core.errors import DependencyUnavailableError
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import ObjectPage, StorageArea, StoredObject
 from media_pipeline_service.domain.links import ASSET_PREFIX
-from media_pipeline_service.domain.ugc import PENDING_PREFIX, PUBLIC_PREFIX
+from media_pipeline_service.domain.ugc import PUBLIC_PREFIX
 from media_pipeline_service.settings import S3Settings
 
 _DELETE_BATCH = 1000  # предел DeleteObjects в S3
 
 
 def assets_read_policy(bucket: str) -> str:
-    """Политика бакета ассетов: анонимное чтение ``a/*``, ``p/*``, ``u/*`` (ADR 0012, 0048).
+    """Политика бакета ассетов: анонимное чтение только ``a/*`` и ``u/*`` (ADR 0012, 0048, 0061).
 
     Хранилище доступно лишь во внутренней сети: читает его gateway, который сам проверяет
     подпись ссылки (``secure_link``) и не передаёт хранилищу query и заголовки клиента.
-    Снаружи ``a/`` и ``p/`` (UGC на модерации) доступны только по подписанной ссылке, ``u/``
-    (одобренные UGC) - публично через ``/ugc/``. Запись, удаление, листинг и любые объекты
+    Снаружи ``a/`` доступен только по подписанной ссылке, ``u/`` (одобренные UGC) - публично
+    через ``/ugc/``. ``p/*`` (UGC на модерации) анонимно НЕ читается: модератору его отдаёт
+    media-pipeline потоком по ключам сервиса. Запись, удаление, листинг и любые объекты
     вне префиксов остаются только по ключам.
     """
     return json.dumps(
@@ -44,7 +45,7 @@ def assets_read_policy(bucket: str) -> str:
                     "Action": ["s3:GetObject"],
                     "Resource": [
                         f"arn:aws:s3:::{bucket}/{prefix}*"
-                        for prefix in (ASSET_PREFIX, PENDING_PREFIX, PUBLIC_PREFIX)
+                        for prefix in (ASSET_PREFIX, PUBLIC_PREFIX)
                     ],
                 }
             ],

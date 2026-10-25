@@ -253,7 +253,7 @@ export interface paths {
         put?: never;
         /**
          * Выдать санкцию
-         * @description `ranked | chat | online | account`, со сроком или бессрочно. Публикует `UserSanctionsChanged` (полное активное состояние, `version`). Повтор того же вида заменяет прежнюю санкцию (она закрывается как `replaced`). Ошибки: 403 `social.self_sanction_forbidden`, 403 `social.account_sanction_forbidden`, 422 `social.sanction_duration_invalid`, 404 `social.player_not_found`.
+         * @description `ranked | chat | online | account`, со сроком или бессрочно. Публикует `UserSanctionsChanged` (полное активное состояние, `version`). Повтор того же вида заменяет прежнюю санкцию (она закрывается как `replaced`). Ошибки: 403 `social.self_sanction_forbidden`, 403 `social.account_sanction_forbidden`, 403 `social.sanction_target_outranks` (права игрока шире ваших), 422 `social.sanction_duration_invalid`, 404 `social.player_not_found`.
          */
         post: operations["grant_admin_v1_users__user_id__sanctions_post"];
         delete?: never;

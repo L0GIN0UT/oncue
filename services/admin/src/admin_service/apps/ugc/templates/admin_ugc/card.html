@@ -11,7 +11,8 @@
 </table>
 {% if preview_url %}
 <p><img src="{{ preview_url }}" alt="Превью" style="max-width:512px"></p>
-<p>Ссылка действует до {{ preview_expires_at }}; обновите страницу, если превью не открывается.</p>
+{% elif row.status != "pending" %}
+<p>Предпросмотр доступен только для заявок в ожидании.</p>
 {% endif %}
 {% if row.status == "pending" %}
 <h2>Одобрить</h2>

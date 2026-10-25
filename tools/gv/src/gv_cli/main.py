@@ -30,6 +30,7 @@ import typer
 
 from gv_cli import contracts, generate, hooks, scaffold, workspace
 from gv_cli.generate import service_secret_env
+from gv_cli.preflight import PreflightError, check_env, read_env_file
 from gv_cli.registry import NAME_RE, load_services, repo_root
 
 app = typer.Typer(help="CLI разработчика Guessverse", no_args_is_help=True)
@@ -222,6 +223,23 @@ def lint() -> None:
     typer.secho("Все проверки пройдены", fg="green")
 
 
+@app.command()
+def preflight(
+    env_file: Annotated[Path, typer.Option(help="Файл окружения")] = COMPOSE_DIR / ".env",
+) -> None:
+    """Проверить окружение до выкладки (секреты Centrifugo заданы и различны).
+
+    Для конвейеров выкладки и k8s: `gv dev up` вызывает ту же проверку сам. Значения секретов
+    не выводятся.
+    """
+    try:
+        check_env(env_file if env_file.is_absolute() else repo_root() / env_file, os.environ)
+    except PreflightError as exc:
+        typer.secho(f"preflight: {exc}", fg="red")
+        raise typer.Exit(1) from exc
+    typer.secho("preflight: окружение в порядке", fg="green")
+
+
 # ----------------------------------------------------------------------------- dev
 def _compose(root: Path, stack: str, args: list[str]) -> int:
     files = STACKS.get(stack)
@@ -239,6 +257,13 @@ def up(
     services: Annotated[list[str] | None, typer.Argument(help="Только эти сервисы")] = None,
 ) -> None:
     """Поднять стек (по умолчанию — только инфраструктура)."""
+    root = repo_root()
+    if stack != "observability":  # Centrifugo в наблюдаемости не участвует
+        try:
+            check_env(root / COMPOSE_DIR / ".env", os.environ)
+        except PreflightError as exc:
+            typer.secho(f"preflight: {exc}", fg="red")
+            raise typer.Exit(1) from exc
     raise typer.Exit(
         _compose(repo_root(), stack, ["up", "-d", "--build", "--wait", *(services or [])])
     )
@@ -254,6 +279,47 @@ def down(stack: Annotated[str, typer.Argument()] = "services") -> None:
 def ps(stack: Annotated[str, typer.Argument()] = "services") -> None:
     """Статус контейнеров."""
     raise typer.Exit(_compose(repo_root(), stack, ["ps"]))
+
+
+@dev.command("db-roles")
+def db_roles() -> None:
+    """Создать рантайм-роли Postgres (`<имя>_app`) на существующем томе БД (ADR 0060).
+
+    Скрипт инициализации Postgres работает только на пустом томе, поэтому стенд, поднятый до
+    разделения ролей, роли не имеет, а `migrate` сервиса с `app_role` падает. Команда
+    идемпотентна: создаёт роль или обновляет пароль из `.env`; права выдаст `migrate`.
+    """
+    root = repo_root()
+    env = {**read_env_file(root / COMPOSE_DIR / ".env"), **os.environ}
+    gexec = chr(92) + "gexec"  # метакоманда psql: выполнить результат запроса как SQL
+    sql = chr(10).join(
+        [
+            "SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'name', :'password') "  # noqa: S608 — psql-переменные :'x' экранирует сам psql, gexec — константа
+            f"WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'name') {gexec}",
+            f"SELECT format('ALTER ROLE %I PASSWORD %L', :'name', :'password') {gexec}",
+            f"SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'owner', :'name') {gexec}",
+            "",
+        ]
+    )
+    for service in (s for s in load_services(root) if s.app_role):
+        password = env.get(service.db_app_password_env, "")
+        if not password:
+            typer.secho(f"не задан {service.db_app_password_env}", fg="red")
+            raise typer.Exit(1)
+        cmd = [
+            "docker", "compose", "--env-file", ".env", "-f", "compose.infra.yml", "exec", "-T",
+            "-e", f"APP_PASSWORD={password}", "postgres", "sh", "-c",
+            'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres '
+            f'-v owner={service.name} -v name={service.db_app_user} -v password="$APP_PASSWORD"',
+        ]  # fmt: skip
+        code = subprocess.run(
+            cmd, cwd=root / COMPOSE_DIR, input=sql, text=True, check=False
+        ).returncode
+        if code != 0:
+            raise typer.Exit(code)
+        typer.secho(
+            f"роль {service.db_app_user} готова; повторите `gv dev up services`", fg="green"
+        )
 
 
 @dev.command()

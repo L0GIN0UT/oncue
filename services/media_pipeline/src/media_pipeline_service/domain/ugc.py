@@ -36,6 +36,8 @@ REPLACED_REASON = "replaced"
 
 PENDING_PREFIX = "p/"
 PUBLIC_PREFIX = "u/"
+UGC_CONTENT_TYPE = "image/webp"
+"""Тип хранимых UGC-изображений (перекодирование всегда в WebP)."""
 _KEY_RE = re.compile(r"^(?P<prefix>[pu])/[a-f0-9]{32}\.webp$")
 
 

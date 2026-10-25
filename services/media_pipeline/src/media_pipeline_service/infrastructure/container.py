@@ -411,13 +411,7 @@ class MediaContainer:
             moderate=ModerateUgcImage(
                 self.uow_factory(), self.clock, a.storage, a.tokens, self.ugc_catalog, purger
             ),
-            preview=PreviewUgcImage(
-                self.uow_factory(),
-                self.clock,
-                a.signer,
-                ttl_s=m.ugc_preview_ttl_s,
-                public_base_url=m.ugc_public_base_url,
-            ),
+            preview=PreviewUgcImage(self.uow_factory(), self.clock, a.storage),
             queue=ListUgcQueue(self.uow_factory()),
             purger=purger,
             orphans=SweepOrphanUgcObjects(

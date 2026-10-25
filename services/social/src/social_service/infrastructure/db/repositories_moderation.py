@@ -495,6 +495,27 @@ class SqlAvatars:
         await self._s.execute(stmt)
 
 
+class SqlStaffPerms:
+    """Проекция прав сотрудников (``staff_perms_proj``)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def apply(self, user_id: UUID, perms: frozenset[str], version: int) -> None:
+        p = t.staff_perms_proj
+        values = {"perms": sorted(perms), "version": version}
+        stmt = pg_insert(p).values(user_id=user_id, **values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[p.c.user_id], set_=values, where=p.c.version < version
+        )
+        await self._s.execute(stmt)
+
+    async def delete(self, user_id: UUID) -> None:
+        await self._s.execute(
+            t.staff_perms_proj.delete().where(t.staff_perms_proj.c.user_id == user_id)
+        )
+
+
 class SqlAudit:
     """Аудит ручных действий."""
 
@@ -526,6 +547,7 @@ class SqlDiscussionUnitOfWork:
     blocks: SqlBlocks
     cases: SqlCases
     avatars: SqlAvatars
+    staff_perms: SqlStaffPerms
     audit: SqlAudit
     idempotency: SqlIdempotencyStore
 
@@ -575,6 +597,7 @@ class SqlDiscussionUnitOfWork:
         self.blocks = SqlBlocks(s)
         self.cases = SqlCases(s)
         self.avatars = SqlAvatars(s)
+        self.staff_perms = SqlStaffPerms(s)
         self.audit = SqlAudit(s)
         self.idempotency = SqlIdempotencyStore(s, t.COMMENT_IDEMPOTENCY, self._clock)
         return self

@@ -21,30 +21,23 @@
 | Живой прогон CI: `nginx -t`, integration OpenSearch (проверено CI #18) и демонстрация §0 этапа 1 на compose | весь стек | [хвосты 1](09-roadmap.md#хвосты-этапа-1) | До релиза |
 | Общий подключаемый inbox для Django (у admin свой) | `libs/messaging`, admin | [хвосты 1](09-roadmap.md#хвосты-этапа-1) | Этап 5 (в 5c — решить) |
 | Зеркало образов под своим контролем | `infra/` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Этап 7 |
-| trivy: вернуть блокировку по CRITICAL и SARIF после digest-пиннинга | `.github/workflows` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Этап 7 |
 | Подтвердить правку эталона `libs/text` (союз «&») | `libs/text`, `libs/game_kernel` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | Решение владельца |
 | Журнал `link_issuance` чистится внутри `IssueAssetLink`, а не задачей | media_pipeline | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | По желанию |
 | `ILIKE` без trigram-индекса в `/admin/v1/projection/items` | game | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | При росте каталога |
 | Ссылка финального кадра ревила живёт 60 с | game, frontend | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | По желанию |
-| Обновить env окружений под новые лимиты сервисных токенов | identity, `infra/` | [хвосты 2](09-roadmap.md#хвосты-этапа-2) | При выкладке |
 | Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` | match, game | [хвосты 4a](09-roadmap.md#хвосты-4a) | После решения по плану раундов |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` | [хвосты 4a](09-roadmap.md#хвосты-4a) | Геймдизайн |
 | Блокирующий `XREAD` на комнату (~300 соединений Redis на инстанс) | match | [хвосты 4a](09-roadmap.md#хвосты-4a) | Нагрузка, этап 7 |
-| Окно отзыва connection-токена Centrifugo до 10 мин | identity, match | [хвосты 4a](09-roadmap.md#хвосты-4a) | Этап 7 |
 | Пакетные ручки catalog/library для итога матча | bff-web, catalog, library | [хвосты 4a](09-roadmap.md#хвосты-4a) | При росте раундов |
-| Тег образа Centrifugo (`v6`) не закреплён | `infra/compose` | [хвосты 4a](09-roadmap.md#хвосты-4a) | Этап 7 |
-| Исключённый игрок переподписывается на канал комнаты старым токеном | match | [хвосты 4a](09-roadmap.md#хвосты-4a) | **5c (F3)**, вместе с санкцией `ONLINE` |
-| Одинаковые HMAC-секреты Centrifugo ломают разделение D9: нет проверки при старте | `infra`, `tools/gv` | [хвосты 4a](09-roadmap.md#хвосты-4a) | Preflight до этапа 7 |
 | Win-trading: детектор | rating, match | [хвосты 4b](09-roadmap.md), ADR 0038 | После 5c (в 5c только счётчики) |
 | Допущения сидов: K Эло 40/20, пороги званий, фильтры `similar` | `seeds/rating`, `seeds/game` | [хвосты 4b](09-roadmap.md) | Подтверждение владельцем |
 | Срыв отсчёта без штрафа: сталкинг очереди | match | [хвосты 4b](09-roadmap.md) | По данным |
 | Пустое лобби висит до `room_idle_close_min` при недоступной шине | match | [хвосты 4b](09-roadmap.md) | Этап 7 |
+| Centrifugo OSS не отзывает выданные токены: враждебный клиент переподключается/переподписывается старым токеном до `token_ttl_s` (≤ 10 мин) после бана/кика; закрывает только connect/subscribe proxy | match, identity, `infra/centrifugo` | [ADR 0059](adr/0059-realtime-disconnect.md) | Этап 7 |
 | Presence и join/leave в Centrifugo `room` выключены: при включении скрыть наблюдателей | `infra/centrifugo` | [хвосты 4b](09-roadmap.md) | При включении |
-| `Cache-Control: no-store` в admin-ручках progression: проверить на успешных ответах | progression | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Тест тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Нестабильный `party.spec` (в `e2e/online.spec.ts`; `GameScreen.modes` и `CollectionEditor` — таймаут `waitFor` поднят, PR #36): причина не найдена, не воспроизводится | e2e | [хвосты 5a](09-roadmap.md#хвосты-5a) | Открыт |
 | Windows: ffmpeg-тесты `media_pipeline`, `admin test_runtime` (зелёные в CI) | media_pipeline, admin | [хвосты 5a](09-roadmap.md#хвосты-5a) | Не чинить |
-| Разделение ролей Postgres для журналов progression (REVOKE) | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
 | Инкрементальная сверка журнала progression и партиционирование | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
 | Ретенция `metric_marks` / `quest_progress` | progression | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | Этап 7 |
 | Admin-API включения и выключения типов уведомлений | notifications | [хвосты 5](09-roadmap.md#хвосты-этапа-5) | После 5b |
@@ -61,12 +54,9 @@
 | Страница для уже открытой сессии забаненного `account` (сейчас только отказ на входе) | frontend, identity | 5c |
 | Точный флаг «можно добавить в друзья» в итоге матча (сейчас кнопка при `can_report`) | bff | 5c |
 | Content-Type one-click отписки (RFC 8058: `application/x-www-form-urlencoded`) | notifications | 5b | По желанию |
-| Анонимное чтение `p/*` в S3 (принятый риск): перейти на presigned-ссылки gateway | media_pipeline | 5b | Этап 7 |
 | Цвет аватарки: 16-битные и CMYK | media_pipeline | 5b | По желанию |
 | Окна лимитов social (`lookup_window_s`, `invite_window_s`) в коде, не в конфиге — перенести новой версией схемы конфига | social | 5c | По желанию |
-| Disconnect Centrifugo для забаненного (ACCOUNT): открытое соединение живёт до `exp` connection-токена; нужен server API `disconnect` в identity | identity | [ADR 0052](adr/0052-sanctions-and-enforcement.md) | После 5c |
 | Алерт на лаг consumer `social.social.v1` в match: проекция санкций отстаёт от токена identity — санкция действует позже | match, observability | ADR 0052 | До релиза |
-| Иерархия модераторов: сейчас модератор с `social.sanctions.manage` может санкционировать admin; запрет санкций выше своей роли | social, identity | ADR 0052 (решение владельца) | По решению владельца |
 | Теги сборника в `game.GameFinished`: `collection_played` фильтруется только списком `collection_keys` (id сборников) в находке; фильтра по тегу нет | game, progression | 5d | По решению владельца |
 | Полная аудитория `event_started`: identity отдаёт список пользователей (сейчас — игроки, известные notifications); настройки пачки одним запросом; `UserDeleted` в notifications | identity, notifications | 5d | До релиза |
 | `EXCLUDE USING gist` по `tstzrange` запусков событий (сейчас только advisory-lock и проверка в транзакции) | progression | 5d | По желанию |
@@ -95,3 +85,4 @@
 
 - `gv dev seed` не идемпотентен на засеянном стенде (409 `idempotency.key_reused`) — [PR #35](https://github.com/L0GIN0UT/oncue/pull/35).
 - Шум фронта (presence с каждой вкладки, `unread-count` рядом с shell), `ranked.spec` «очередь», общий `adminContext` в e2e, таймаут `waitFor` в `GameScreen.modes`/`CollectionEditor` — [PR #36](https://github.com/L0GIN0UT/oncue/pull/36).
+- Группа B (безопасность): разделение ролей Postgres для журналов (ADR 0060), disconnect Centrifugo для бана `ACCOUNT` и кика из комнаты (ADR 0059), иерархия модераторов (ADR 0058), `p/*` в S3 без анонимного чтения (ADR 0061), preflight секретов Centrifugo, тег Centrifugo и trivy по CRITICAL с digest-пиннингом (ADR 0057), `no-store` в admin progression (тест-страж), env лимитов сервисных токенов — [PR #38](https://github.com/L0GIN0UT/oncue/pull/38).

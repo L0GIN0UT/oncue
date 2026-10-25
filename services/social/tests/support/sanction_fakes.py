@@ -23,6 +23,7 @@ class SanctionWorld:
     records: dict[UUID, SanctionRecord] = field(default_factory=dict)
     versions: dict[UUID, int] = field(default_factory=dict)
     players: set[UUID] = field(default_factory=set)
+    staff_perms: dict[UUID, frozenset[str]] = field(default_factory=dict)
     events: list[DomainEvent] = field(default_factory=list)
     idempotency: InMemoryIdempotencyStore = field(default_factory=InMemoryIdempotencyStore)
 
@@ -84,6 +85,9 @@ class FakeSanctionsRepo:
 
     async def player_exists(self, user_id: UUID) -> bool:
         return user_id in self.w.players
+
+    async def target_perms(self, user_id: UUID) -> frozenset[str]:
+        return self.w.staff_perms.get(user_id, frozenset())
 
     async def user_card(self, user_id: UUID, case_limit: int) -> UserCardData:
         return UserCardData(nickname=None, counters={}, cases=[])

@@ -61,13 +61,13 @@
 | Засев стека для e2e «дейлик»: `gv dev seed` грузит каталог, исходники медиа и ассеты, наборы дня через admin-API (admin-токен — через bootstrap-админа identity, только local/ci). В CI шаг засева поднимает `E2E_SEEDED=1`, `e2e/daily.spec.ts` раскрывается | `tools/gv`, `.github/workflows`, `seeds/`, identity | ✅ реализовано (проверка — прогон CI) |
 | Integration-тесты Kafka и OpenSearch и `nginx -t` на образе nginx 1.28 — только в CI, локально не прогонялись | `.github/workflows`, `infra/nginx`, catalog, `libs/messaging` | ✅ прогон CI #18: зелёные |
 | Зеркало образов под своим контролем: внешние реестры удаляют образы (MinIO, сентябрь 2026 — [ADR 0021](adr/0021-s3-storage-seaweedfs.md)) | `infra/` | Этап 7 |
-| Скан образов trivy: вернуть блокировку по CRITICAL и выгрузку SARIF в GitHub Security после digest-пиннинга базового образа и Dependabot на него ([ADR 0022](adr/0022-image-scan-reporting-not-gating.md)) | `.github/workflows` | Этап 7 |
+| Скан образов trivy: вернуть блокировку по CRITICAL и выгрузку SARIF в GitHub Security после digest-пиннинга базового образа и Dependabot на него ([ADR 0022](adr/0022-image-scan-reporting-not-gating.md)) | `.github/workflows` | Этап 7 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 | Ручная проверка владельцем: identity (гостевые сессии, сервисные токены), `libs/auth` | — | До слияния в `main` |
 | Подтвердить правку эталона `libs/text`: союз «&» теперь удаляется (`("&", "")`) при сверке ответов | `libs/text`, `libs/game_kernel` | До слияния в `main` |
 | Журнал `link_issuance` чистится внутри `IssueAssetLink` (не чаще раза в 10 мин), а не периодической задачей | media_pipeline | Этап 3 |
 | Поиск кандидатов по проекции game (`/admin/v1/projection/items`) — `ILIKE` без trigram-индекса | game | При росте каталога |
 | Ссылка финального кадра ревила живёт 60 с и может истечь, если ревил открыт поздно | game, frontend | Этап 3 |
-| Лимит сервисных токенов разделён: `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` из плана заменён на `FAILURES_PER_CLIENT_IP_PER_MIN` и `SUCCESS_PER_CLIENT_PER_MIN` — обновить env окружений | identity, `infra/` | При выкладке |
+| Лимит сервисных токенов разделён: `GV_SERVICE_TOKEN_LIMIT__PER_CLIENT_PER_MIN` из плана заменён на `FAILURES_PER_CLIENT_IP_PER_MIN` и `SUCCESS_PER_CLIENT_PER_MIN` — обновить env окружений | identity, `infra/` | При выкладке | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 
 ## Этап 3. Сборники и медиатека — ✅ выполнен (2026-10-22), влит в `main` (PR #16)
 Локальный прогон владельцем на compose: `up` + засев + смоук + e2e 21/21 зелёные.
@@ -98,12 +98,12 @@
 | Переопределения `clue` и `answer.format` в лобби не поддержаны `round-plans` game: старт отказывает с `not_supported_yet` | match, game | После решения по плану раундов |
 | `party_speed` на поздних уровнях даёт почти полные очки | `libs/game_kernel` (конфиги режимов) | Решение по геймдизайну |
 | Блокирующий `XREAD` на комнату: ~300 соединений Redis на инстанс | match | Нагрузка этапа 7 |
-| Окно отзыва connection-токена Centrifugo — до 10 мин (отзыв сессии не рвёт соединение) | identity, match | Принятый риск; пересмотреть на этапе 7 |
+| Окно отзыва connection-токена Centrifugo — до 10 мин (отзыв сессии не рвёт соединение) | identity, match | Принятый риск; пересмотреть на этапе 7 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 | Пакетные ручки catalog/library для итога матча (сейчас вызовы по единице) | bff-web, catalog, library | При росте числа раундов |
 | Ручная проверка владельцем: identity (realtime-токен) и match (античит) | — | До слияния в `main` |
-| Тег образа Centrifugo (`v6`) не закреплён до точной версии | `infra/compose` | Этап 7 (зеркало образов) |
-| Исключённый игрок может переподписаться на канал комнаты старым subscription-токеном (до 10 мин): видит лобби и чат, ответов нет | match | Короткий TTL подписки или канал с эпохой состава — этап 5 |
-| Одинаковые `CENTRIFUGO_TOKEN_HMAC_SECRET` и `CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET` в `.env` ломают разделение D9 — проверки при старте нет | `infra`, `tools/gv` | Preflight в `gv` до этапа 7 |
+| Тег образа Centrifugo (`v6`) не закреплён до точной версии | `infra/compose` | Этап 7 (зеркало образов) | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
+| Исключённый игрок может переподписаться на канал комнаты старым subscription-токеном (до 10 мин): видит лобби и чат, ответов нет | match | Короткий TTL подписки или канал с эпохой состава — этап 5 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
+| Одинаковые `CENTRIFUGO_TOKEN_HMAC_SECRET` и `CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET` в `.env` ломают разделение D9 — проверки при старте нет | `infra`, `tools/gv` | Preflight в `gv` до этапа 7 | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 
 ### Подэтап 4b — выполнен и влит (PR #22–#24)
 Решения владельца 2026-10-23 — в конце [плана](plans/stage-4.md#решения-владельца-по-4b-2026-10-23); ADR [0037–0040](adr/README.md); передача между сессиями — [handoff/stage-4b.md](handoff/stage-4b.md).
@@ -139,7 +139,7 @@
 ### Хвосты 5a
 | Пункт | Где | Когда |
 |---|---|---|
-| `Cache-Control: no-store` в admin-ручках progression ставится до `raise`: проверить на успешных ответах | progression | 5b |
+| `Cache-Control: no-store` в admin-ручках progression ставится до `raise`: проверить на успешных ответах | progression | 5b | ✅ закрыто в [PR #38](https://github.com/L0GIN0UT/oncue/pull/38) |
 | Нет теста тай-брейка мест сезона против живого Redis (`ZREVRANGE`) | rating, progression | 5b |
 | Нестабильные под нагрузкой тесты: `GameScreen.modes`, `CollectionEditor` (автосохранение) — таймаут `waitFor` поднят ([PR #36](https://github.com/L0GIN0UT/oncue/pull/36)); `party.spec` — открыт | frontend, e2e | 5b |
 | Windows-окружение (на `main` тоже): 3 integration-теста ffmpeg `test_media_adapters` (код 4294967283) и 2 errors в `unit/test_use_cases::test_upload_validation` (идентификаторы параметров), `admin test_runtime` (`/health/live`) | media_pipeline, admin | Не чинить в 5b; зелёные в CI/Linux |

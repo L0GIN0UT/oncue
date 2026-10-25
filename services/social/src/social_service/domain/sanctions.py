@@ -26,6 +26,7 @@ KIND_MASK: Final = SANCTION_KIND_MASK
 """Биты claim по виду санкции (``account`` - флаг, не бит); общая таблица ``gv_auth``."""
 
 SELF_SANCTION_FORBIDDEN = "social.self_sanction_forbidden"
+SANCTION_TARGET_OUTRANKS = "social.sanction_target_outranks"
 ACCOUNT_SANCTION_FORBIDDEN = "social.account_sanction_forbidden"
 DURATION_INVALID = "social.sanction_duration_invalid"
 SANCTION_NOT_FOUND = "social.sanction_not_found"
