@@ -9,11 +9,18 @@
 Выбор: порта «все пользователи» (список из identity) нет, поэтому аудитория - игроки, о которых
 знает сам notifications (есть уведомления или настройки). Игроки без единого уведомления
 получат его после первого собственного; расширение аудитории - новый адаптер, не код типов.
+
+Остановка: ``progression.EventRunFinished`` (``ended``/``stopped``) запоминается в
+``finished_event_runs``; каждая пачка в начале своей транзакции проверяет, что запуск (``run_id``
+из payload) не завершён, иначе воркер выходит (``notifications.fanout_cancelled``), уже
+доставленное остаётся. Событие, пришедшее между проверкой и записью пачки, пачку не отменит -
+пачка короткая (``batch_size``).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -40,6 +47,30 @@ class CommitPublisher(Protocol):
 
 FANOUT_TASK = "notifications.audience.fanout"
 FANOUT_CREATED = Counter("gv_notifications_fanout_total", "Уведомления массовой доставки", ["type"])
+
+
+RUN_ID_FIELD = "run_id"
+
+
+def _run_id(payload: Mapping[str, Any]) -> UUID | None:
+    raw = payload.get(RUN_ID_FIELD)
+    try:
+        return UUID(str(raw)) if raw is not None else None
+    except ValueError:
+        return None
+
+
+class RecordRunFinished:
+    """Запоминает завершение запуска события (идемпотентно по ``run_id``)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._uow = uow_factory
+
+    async def execute(self, run_id: UUID, reason: str, at: datetime) -> None:
+        """Записать завершение; повтор ничего не меняет."""
+        async with self._uow() as uow:
+            await uow.finished_runs.mark(run_id, reason, at)
+            await uow.commit()
 
 
 class FanOutAudience:
@@ -81,8 +112,12 @@ class FanOutAudience:
             raise ValueError(f"тип {type_key} не с аудиторией")
         total = 0
         cursor: UUID | None = None
+        run_id = _run_id(payload)
         while True:
             async with self._uow() as uow:
+                if run_id is not None and await uow.finished_runs.is_finished(run_id):
+                    log.info("notifications.fanout_cancelled", run_id=str(run_id), delivered=total)
+                    return total
                 users = await uow.notifications.known_users_after(cursor, self._batch)
                 if not users:
                     return total

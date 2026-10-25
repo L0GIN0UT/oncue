@@ -62,7 +62,17 @@ def test_registry_listens_exactly_to_catalog_events() -> None:
     infra = Infrastructure(settings=DEFINITION.settings_cls(), tables=DEFINITION.tables)
     assert DEFINITION.build_event_handlers is not None
     registry = DEFINITION.build_event_handlers(infra)
-    assert registry.event_types == load_catalog().source_events
+    assert registry.event_types == load_catalog().source_events | {"progression.EventRunFinished"}
+
+
+def test_event_run_finished_example_is_consumable() -> None:
+    """Контракт EventRunFinished: пример валиден, топик потребляется, run_id как у старта."""
+    payload = dict(load_example("progression.EventRunFinished").payload)
+    assert validation_errors("progression.EventRunFinished", payload) == []
+    assert load_event_schema("progression.EventRunFinished")["x-topic"] in CONSUMED_TOPICS
+    assert payload["reason"] in {"ended", "stopped"}
+    started = dict(load_example("progression.EventRunStarted").payload)
+    assert payload["run_id"] == started["run_id"]
 
 
 @pytest.mark.parametrize(
