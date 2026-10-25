@@ -72,7 +72,7 @@ services:
     deploy: {resources: {limits: {memory: 1G}}}
 
   filebeat:
-    image: docker.elastic.co/beats/filebeat:8.15.3
+    image: docker.elastic.co/beats/filebeat:9.5.5
     restart: unless-stopped
     user: root  # чтение логов контейнеров Docker
     networks: [backend]
