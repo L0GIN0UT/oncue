@@ -1,11 +1,12 @@
 "use client";
 /**
- * Каталог сборников `/collections` (D3, макет «Сборники»): поиск, чипы быстрых порядков
- * («Популярные», «Новые», «Кураторские»), остальные фильтры — за кнопкой «Фильтры». Фильтры,
- * сортировка и поиск живут в адресе (`q`, `domain`, `mode`, `difficulty`, `curated`, `sort`),
- * поиск — с паузой ввода. Без поиска и сортировки — витрины bff (рекомендуемые, популярные,
- * новые); с поиском или выбранной сортировкой — бесконечная лента collections по keyset-курсору.
- * Результат — строки, не карточки.
+ * Каталог сборников `/collections` по макету v3 (Collections): поиск, чипы домена и быстрых порядков
+ * («Популярные», «Новые», «Кураторские»), остальные фильтры — за кнопкой «Фильтры»; слева «Мои
+ * сборники» и «Сыграть компанией», справа сетка карточек. Фильтры, сортировка и поиск живут в
+ * адресе (`q`, `domain`, `mode`, `difficulty`, `curated`, `sort`), поиск — с паузой ввода. Без поиска и
+ * сортировки — витрины bff (рекомендуемые, популярные, новые); с поиском или выбранной сортировкой —
+ * бесконечная лента collections по keyset-курсору. Сборник открывается модалкой на `/collections/<id>`
+ * (`openId`): каталог остаётся под ней.
  */
 import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import Link from "next/link";
@@ -19,11 +20,16 @@ import { inputClass } from "@/shared/ui/field";
 import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
-import { HubHeader } from "@/features/hubs/HubHeader";
+import { JoinByCode } from "@/features/online/JoinByCode";
+import { ListRow } from "@/shared/ui/list-row";
+import { SectionCap } from "@/shared/ui/section-cap";
+import { useIcons } from "@/shared/ui/theme-provider";
+import { Tile } from "@/shared/ui/tile";
 import { SearchField } from "@/features/hubs/SearchField";
-import { collectionKeys, fetchCatalogPage, fetchShowcase } from "../api";
+import { collectionKeys, fetchCatalogPage, fetchMyCollections, fetchShowcase } from "../api";
 import { useCollectionModes } from "../modes";
 import { CollectionCard } from "./CollectionCard";
+import { CATALOG_RETURN_KEY, CollectionModal } from "./CollectionView";
 
 export const SEARCH_DEBOUNCE_MS = 300;
 /** Как у collections: длиннее запрос не нужен (поиск по названию, описанию, тегам). */
@@ -34,7 +40,7 @@ const SORTS: CollectionSort[] = ["popular", "new", "likes", "difficulty", "featu
 const QUICK_SORTS = ["popular", "new"] as const;
 const SHOWCASE: ("featured" | "popular" | "new")[] = ["featured", "popular", "new"];
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
-const DOMAINS: Domain[] = ["film", "music"];
+const DOMAINS: Domain[] = ["music", "film"];
 
 type Filters = CatalogQuery & { sort?: CollectionSort };
 
@@ -65,10 +71,10 @@ function toSearch(f: Filters): string {
 /** Сколько фильтров из панели включено (чипы быстрых порядков и «Кураторские» не считаются). */
 export function panelFiltersCount(f: Filters): number {
   const slowSort = f.sort && !(QUICK_SORTS as readonly string[]).includes(f.sort);
-  return [f.domain, f.difficulty, f.mode, slowSort].filter(Boolean).length;
+  return [f.difficulty, f.mode, slowSort].filter(Boolean).length;
 }
 
-export function CatalogView() {
+export function CatalogView({ openId = null }: { openId?: string | null }) {
   const t = useTranslations();
   const router = useRouter();
   const pathname = usePathname();
@@ -90,42 +96,127 @@ export function CatalogView() {
       `${pathname}${toSearch({ ...filters, q: q || undefined })}`,
     );
 
+  // Адрес каталога запоминаем: закрытие модалки сборника возвращает к тем же фильтрам.
+  const returnUrl = `/collections${toSearch(filters)}`;
+  useEffect(() => {
+    if (openId) return;
+    try {
+      sessionStorage.setItem(CATALOG_RETURN_KEY, returnUrl);
+    } catch {
+      /* хранилище недоступно (приватный режим): вернёмся в каталог без фильтров */
+    }
+  }, [openId, returnUrl]);
+
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <HubHeader
-        title={t("collections.title")}
-        aside={
-          viewer.kind === "user" ? (
-            <Link
-              href="/me/collections"
-              className="hover:text-ink"
-              data-testid="catalog-my-collections"
-            >
-              {t("nav.myCollections")}
-            </Link>
-          ) : null
-        }
-      />
+    <div className="flex flex-col gap-5 pt-2" data-testid="catalog">
+      <h1 className="sr-only">{t("collections.title")}</h1>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <SearchBox value={filters.q ?? ""} onSearch={search} />
+        <FilterBar filters={filters} onChange={update} />
+      </div>
 
-      <SearchBox value={filters.q ?? ""} onSearch={search} />
-      <FilterBar filters={filters} onChange={update} />
-
-      {listMode ? (
-        <ResultsList filters={filters} />
-      ) : (
-        <Showcase filters={filters} onAll={(sort) => update({ sort })} />
-      )}
-
-      {viewer.kind === "user" && (
-        <div className="flex justify-end pt-1.5">
-          <Button asChild>
-            <Link href="/collections/new" data-testid="catalog-create">
-              {t("collections.createOwn")}
-            </Link>
-          </Button>
+      <div className="grid items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="flex flex-col gap-5">
+          <MineTile isUser={viewer.kind === "user"} />
+          <TogetherTile />
+        </aside>
+        <div className="flex min-w-0 flex-col gap-5">
+          {listMode ? (
+            <ResultsList filters={filters} />
+          ) : (
+            <Showcase filters={filters} onAll={(sort) => update({ sort })} />
+          )}
         </div>
-      )}
+      </div>
+      {openId && <CollectionModal collectionId={openId} />}
     </div>
+  );
+}
+
+/** «Мои сборники»: первые три и «Собрать свой» — единственная янтарная кнопка каталога. */
+function MineTile({ isUser }: { isUser: boolean }) {
+  const t = useTranslations();
+  const mine = useQuery({
+    queryKey: collectionKeys.mine,
+    queryFn: () => fetchMyCollections(null),
+    enabled: isUser,
+  });
+  const items = mine.data?.items.slice(0, 3) ?? [];
+  const DomainIcon = useIcons();
+  return (
+    <Tile
+      cap={t("collections.mineCap")}
+      aside={
+        isUser && mine.data ? (
+          <Link
+            href="/me/collections"
+            className="rounded-full bg-stage-raised px-[9px] py-[3px] text-xs font-semibold text-ink-muted hover:text-ink"
+            data-testid="catalog-my-collections"
+          >
+            {mine.data.items.length}
+          </Link>
+        ) : undefined
+      }
+      data-testid="catalog-mine"
+    >
+      {isUser ? (
+        items.length === 0 ? (
+          <p className="text-sm text-ink-muted">{t("collections.mineEmpty")}</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {items.map((c) => {
+              const Glyph = DomainIcon[c.domain];
+              return (
+                <Link key={c.collection_id} href={`/collections/${c.collection_id}`}>
+                  <ListRow
+                    lead={
+                      <span className="grid size-9 place-items-center rounded-lg bg-stage text-music">
+                        <Glyph aria-hidden className="size-4" />
+                      </span>
+                    }
+                    trailing={<span className="tabular">{c.items_count}</span>}
+                    className="min-h-12 pl-1.5"
+                  >
+                    <span dir="auto">{c.title || t("collections.untitled")}</span>
+                  </ListRow>
+                </Link>
+              );
+            })}
+          </div>
+        )
+      ) : null}
+      <Link
+        href={isUser ? "/collections/new" : "/login?next=%2Fcollections%2Fnew"}
+        data-testid="catalog-create"
+        className="grid h-9 place-items-center rounded-full bg-music text-[13px] font-semibold text-night"
+      >
+        {isUser ? t("collections.createOwn") : t("collections.mineLogin")}
+      </Link>
+    </Tile>
+  );
+}
+
+/** «Сыграть компанией»: комната до шести (создание — на `/lobbies`) и вход по коду. */
+function TogetherTile() {
+  const t = useTranslations();
+  const Users = useIcons().avatar;
+  return (
+    <Tile
+      cap={t("collections.together.cap")}
+      title={<span className="text-[17px]">{t("collections.together.title")}</span>}
+      data-testid="catalog-together"
+    >
+      <Link href="/lobbies">
+        <ListRow className="hover:bg-stage-raised/70">
+          <span className="flex items-center gap-2 font-semibold">
+            <Users aria-hidden className="size-4 text-music" />
+            {t("collections.together.create")}
+          </span>
+        </ListRow>
+      </Link>
+      <JoinByCode />
+      <span className="text-xs text-ink-muted">{t("collections.together.foot")}</span>
+    </Tile>
   );
 }
 
@@ -154,6 +245,8 @@ function SearchBox({ value, onSearch }: { value: string; onSearch: (q: string) =
       onChange={(e) => setText(e.target.value)}
       placeholder={t("collections.searchPlaceholder")}
       data-testid="collection-search"
+      className="h-10 rounded-full pr-4 pl-10 text-sm"
+      wrapperClassName="w-full sm:w-[520px]"
     />
   );
 }
@@ -176,8 +269,19 @@ function FilterBar({
   const toggleSort = (sort: CollectionSort) =>
     onChange({ sort: filters.sort === sort ? undefined : sort });
   return (
-    <div className="flex flex-col gap-3" data-testid="collection-filters">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="contents" data-testid="collection-filters">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("collections.filters.domain")}>
+        {[undefined, ...DOMAINS].map((d) => (
+          <Chip
+            key={d ?? "all"}
+            selected={filters.domain === d}
+            onClick={() => onChange({ domain: d, mode: undefined })}
+          >
+            {d ? t(`domain.${d}`) : t("collections.filters.allDomains")}
+          </Chip>
+        ))}
+      </div>
+      <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {QUICK_SORTS.map((s) => (
           <Chip key={s} selected={filters.sort === s} onClick={() => toggleSort(s)}>
             {t(`collections.sort.${s}`)}
@@ -190,7 +294,6 @@ function FilterBar({
           {t("collections.filters.curatedChip")}
         </Chip>
         <Chip
-          className="ml-auto"
           selected={count > 0}
           aria-pressed={undefined}
           aria-expanded={open}
@@ -206,19 +309,8 @@ function FilterBar({
       {open && (
         <div
           id={panelId}
-          className="flex animate-rise flex-col gap-4 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-4"
+          className="flex basis-full animate-rise flex-col gap-4 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-4"
         >
-          <FilterGroup label={t("collections.filters.domain")}>
-            {[undefined, ...DOMAINS].map((d) => (
-              <Chip
-                key={d ?? "all"}
-                selected={filters.domain === d}
-                onClick={() => onChange({ domain: d, mode: undefined })}
-              >
-                {d ? t(`domain.${d}`) : t("collections.filters.all")}
-              </Chip>
-            ))}
-          </FilterGroup>
           <FilterGroup label={t("collections.filters.difficulty")}>
             {[undefined, ...DIFFICULTIES].map((d) => (
               <Chip
@@ -295,7 +387,7 @@ function SelectField({ id, label, children }: { id: string; label: string; child
 
 function CardList({ cards }: { cards: ComponentProps<typeof CollectionCard>["card"][] }) {
   return (
-    <ul className="flex flex-col gap-2.5">
+    <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => (
         <CollectionCard key={card.collection_id} card={card} />
       ))}
@@ -327,12 +419,12 @@ function Showcase({ filters, onAll }: { filters: Filters; onAll: (sort: Collecti
         <section
           key={name}
           aria-labelledby={`showcase-${name}`}
-          className="flex flex-col gap-2.5"
+          className="flex flex-col gap-3"
           data-testid={`collections-block-${name}`}
         >
-          <div className="flex items-baseline justify-between gap-4 px-0.5 pt-2">
-            <h2 id={`showcase-${name}`} className="text-sm font-medium text-ink-muted">
-              {t(`collections.blocks.${name}`)}
+          <div className="flex items-baseline justify-between gap-4 px-0.5">
+            <h2 id={`showcase-${name}`}>
+              <SectionCap>{t(`collections.blocks.${name}`)}</SectionCap>
             </h2>
             {block?.status === "ok" && block.data?.next_cursor && (
               <Button variant="quiet" size="sm" onClick={() => onAll(name)}>
