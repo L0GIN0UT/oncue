@@ -16,8 +16,8 @@ export const DEFAULT_THEME_KEY: ThemeKey = "default";
  * не умеет читать CSS-переменные. Значение должно совпадать с `--color-night` набора.
  */
 export const THEME_META: Record<ThemeKey, { themeColor: string }> = {
-  default: { themeColor: "#141414" },
-  winter: { themeColor: "#101820" },
+  default: { themeColor: "#1a1a1a" },
+  winter: { themeColor: "#161e26" },
 };
 
 const KNOWN = new Set<string>(THEME_KEYS);
