@@ -28,6 +28,7 @@ import { EventsArchive } from "@/features/events/EventsArchive";
 import { fetchProfilePage, profileQueryKey } from "./api";
 import { isMaxLevel } from "./logic";
 import { AvatarBlock } from "./AvatarBlock";
+import { ProfileLinks } from "./ProfileLinks";
 import { PromoBlock } from "./PromoBlock";
 import { WheelBlock } from "./WheelBlock";
 import { XpBar } from "./XpBar";
@@ -99,6 +100,7 @@ export function ProfileView() {
         <h1 className="font-display text-3xl font-bold">{t("progression.title")}</h1>
         <p className="max-w-[60ch] text-ink-muted">{t("progression.lead")}</p>
       </header>
+      <ProfileLinks />
       {!blocks ? (
         <p className="text-ink-muted" role="status">
           {t("common.loading")}

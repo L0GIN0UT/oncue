@@ -21,8 +21,8 @@ describe("contrastRatio", () => {
   });
 
   it("симметрична", () => {
-    expect(contrastRatio("#16112a", "#f1ecfa")).toBeCloseTo(
-      contrastRatio("#f1ecfa", "#16112a"),
+    expect(contrastRatio("#141414", "#f2f2f2")).toBeCloseTo(
+      contrastRatio("#f2f2f2", "#141414"),
       10,
     );
   });
@@ -73,16 +73,16 @@ describe("themeColor темы совпадает с --color-night", () => {
 
 describe("проверка ловит плохую тему (фикстура, не прод)", () => {
   const bad: TokenMap = {
-    night: "#16112a",
-    stage: "#201939",
-    "stage-raised": "#2a2249",
-    ink: "#3b3263",
+    night: "#141414",
+    stage: "#1c1c1c",
+    "stage-raised": "#262626",
+    ink: "#3a3a3a",
   };
 
   it("токен в oklch() помечается как ошибка темы, а не пропускается", () => {
-    const css = `[data-theme="x"] { --color-ink: oklch(0.95 0.02 300); --color-night: #16112a; --color-glow-music: rgb(1 2 3 / .1); }`;
+    const css = `[data-theme="x"] { --color-ink: oklch(0.95 0.02 300); --color-night: #141414; --color-glow-music: rgb(1 2 3 / .1); }`;
     expect(nonHexCoreTokens(css)).toEqual(["ink"]);
-    expect(nonHexCoreTokens("@theme { --color-ink: #f1ecfa; }")).toEqual([]);
+    expect(nonHexCoreTokens("@theme { --color-ink: #f2f2f2; }")).toEqual([]);
   });
 
   it("низкий контраст текста даёт нарушения", () => {

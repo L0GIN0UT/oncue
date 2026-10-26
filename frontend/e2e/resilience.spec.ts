@@ -28,7 +28,8 @@ test("блок дейликов недоступен — главная рабо
   await scenario({ dailiesUnavailable: true });
   await page.goto("/");
   await expect(page.getByText("Загадки дня сейчас не загрузились")).toBeVisible();
-  await expect(page.getByTestId("countdown")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  // Шапка и меню работают, даже когда игры дня нет.
+  await expect(page.getByTestId("menu-button")).toBeVisible();
 });
 
 test("ответ страницы несёт CSP с nonce", async ({ page }) => {
@@ -41,7 +42,9 @@ test("ответ страницы несёт CSP с nonce", async ({ page }) => 
     if (m.type() === "error" && /Content Security Policy/i.test(m.text())) errors.push(m.text());
   });
   await page.reload();
-  await expect(page.getByTestId("countdown")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  await expect(page.getByTestId("menu-button")).toBeVisible();
+  await page.getByTestId("menu-button").click();
+  await expect(page.getByRole("dialog", { name: "Разделы" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 

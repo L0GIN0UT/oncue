@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Игра: раунд</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0F0E1C}
+a{color:#B4AED2;text-decoration:none}a:hover{color:#F5F2FF}
+.h{font-family:"Unbounded",sans-serif}
+.ico{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:12px;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:transform .15s}
+.btn:active{transform:scale(.98)}
+.primary{background:#FF6B57;color:#1B0B08;box-shadow:0 8px 24px rgba(255,107,87,.25)}
+.second{background:transparent;color:#F5F2FF;box-shadow:inset 0 0 0 1.5px #343159}
+.second:hover{background:#23213F}
+.seg{height:14px;border-radius:999px;background:#23213F;position:relative;overflow:hidden;cursor:pointer;border:0;padding:0}
+.seg i{position:absolute;inset:0;border-radius:999px;background:#FFB224;transform-origin:left;transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.att{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#19182E;border:1px solid #343159;font-size:15px;animation:up .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes up{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,178,36,.5)}100%{box-shadow:0 0 0 28px rgba(255,178,36,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes bars{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+.play{width:112px;height:112px;border-radius:999px;border:0;background:#FFB224;color:#1B0B08;display:grid;place-items:center;cursor:pointer;position:relative}
+.play.live{animation:pulse 1.2s ease-out infinite}
+.disc{width:260px;height:260px;border-radius:999px;background:repeating-radial-gradient(circle at center,#1C1A33 0 2px,#23213F 2px 4px);border:1px solid #343159;display:grid;place-items:center;position:relative}
+.disc.live{animation:spin 6s linear infinite}
+.eq i{display:block;width:5px;height:22px;border-radius:3px;background:#FFB224;transform-origin:bottom;animation:bars 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:.12s}.eq i:nth-child(3){animation-delay:.24s}.eq i:nth-child(4){animation-delay:.36s}.eq i:nth-child(5){animation-delay:.48s}
+.inp{height:56px;border-radius:14px;background:#0F0E1C;border:1.5px solid #343159;color:#F5F2FF;padding:0 16px;font:inherit;font-size:17px;width:100%;box-sizing:border-box;outline:none}
+.inp:focus{border-color:#FFB224;box-shadow:0 0 0 4px rgba(255,178,36,.18)}
+.dot{width:10px;height:10px;border-radius:999px;background:#343159}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F5F2FF; max-width: 1280px; margin: 0 auto; min-height: 900px; padding: 20px 40px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+
+  <header class="row" style="flex-wrap: wrap">
+    <a href="Solo.dc.html" style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Выйти</a>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+      <span style="font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #FFB224; font-weight: 600">Музыка · дейлик · классика</span>
+      <div style="display: flex; gap: 8px; align-items: center" aria-label="Раунды: раунд 3 из 10">
+        <span class="dot" style="background: #9BEF7A"></span><span class="dot" style="background: #FFD66B"></span><span class="dot" style="background: #FF6B57; width: 14px; height: 14px"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #B4AED2"><span>Очки</span><span class="h" style="font-size: 22px; font-weight: 700; color: #F5F2FF; font-variant-numeric: tabular-nums">185</span></div>
+  </header>
+
+  <section style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 32px; flex: 1; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 24px; align-items: center; padding: 24px; border-radius: 24px; background: #19182E; border: 1px solid #343159">
+      <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; text-align: center">Раунд 3 из 10</h1>
+      <div class="disc {{liveCls}}">
+        <div style="width: 84px; height: 84px; border-radius: 999px; background: #0F0E1C; border: 1px solid #343159"></div>
+        <button class="play {{liveCls}}" type="button" onClick="{{toggle}}" aria-label="{{playLabel}}" style="position: absolute">
+          <sc-if value="{{playing}}" hint-placeholder-val="{{false}}"><span class="eq" style="display: flex; gap: 4px; align-items: flex-end; height: 24px" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></sc-if>
+          <sc-if value="{{idle}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 44px; height: 44px; margin-left: 4px"><path d="M7 5v14l12-7z"/></svg></sc-if>
+        </button>
+      </div>
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 10px">
+        <div class="row" style="font-size: 14px; color: #B4AED2"><span>Открыто <b style="color: #F5F2FF">{{openSec}} с</b> из 16</span><span>Уровень {{level}} из 6</span></div>
+        <div style="display: flex; gap: 6px" role="group" aria-label="Лента уровней">
+          <sc-for list="{{segs}}" as="s" hint-placeholder-count="6">
+            <button class="seg" type="button" style="flex: {{s.flex}}" onClick="{{s.open}}" aria-label="{{s.label}}"><i style="transform: scaleX({{s.fill}})"></i></button>
+          </sc-for>
+        </div>
+        <div style="display: flex; gap: 6px; font-size: 12px; color: #8B85AE; font-variant-numeric: tabular-nums"><span style="flex:1">1 с</span><span style="flex:1">2 с</span><span style="flex:2">4 с</span><span style="flex:3">7 с</span><span style="flex:4">11 с</span><span style="flex:5">16 с</span></div>
+      </div>
+      <div style="display: flex; gap: 10px; width: 100%">
+        <button class="btn second" type="button" onClick="{{more}}" style="flex: 1; justify-content: center"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Открыть ещё {{nextSec}} с</button>
+        <button class="btn second" type="button" onClick="{{skip}}" style="flex: 1; justify-content: center; color: #B4AED2">Пропустить раунд</button>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 18px">
+      <label for="guess" style="font-size: 14px; color: #B4AED2">Твой ответ · попытка {{attemptNo}} из 6</label>
+      <div style="display: flex; gap: 10px">
+        <input id="guess" class="inp" type="text" placeholder="Исполнитель или название" autocomplete="off">
+        <button class="btn primary" type="button" onClick="{{guess}}" style="height: 56px; padding: 0 24px">Ответить</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #8B85AE; font-weight: 600">Попытки</span>
+        <sc-for list="{{attempts}}" as="a" hint-placeholder-count="2">
+          <div class="att" style="border-color: {{a.border}}"><span>{{a.text}}</span><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: {{a.color}}">{{a.verdict}}</span></div>
+        </sc-for>
+        <sc-if value="{{noAttempts}}" hint-placeholder-val="{{false}}"><div style="padding: 20px; border-radius: 12px; border: 1px dashed #343159; color: #8B85AE; font-size: 14px; text-align: center">Пока пусто. Послушай секунду и предположи.</div></sc-if>
+      </div>
+      <div style="margin-top: auto; padding: 16px; border-radius: 16px; background: #19182E; border: 1px solid #343159; display: flex; flex-direction: column; gap: 10px">
+        <div class="row"><span style="font-size: 14px; color: #B4AED2">Подсказка за 20 Версов</span><button class="btn second" type="button" style="height: 36px; font-size: 13px; padding: 0 12px">Год выпуска</button></div>
+        <div class="row" style="font-size: 13px; color: #8B85AE"><span>Очки за ответ сейчас</span><span style="color: #FFD66B; font-weight: 600; font-variant-numeric: tabular-nums">{{scoreNow}}</span></div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { level: 1, playing: false, attempts: [] };
+  }
+  renderVals() {
+    const secs = [1, 2, 4, 7, 11, 16];
+    const flex = [1, 1, 2, 3, 4, 5];
+    const level = this.state.level;
+    const score = [100, 85, 70, 50, 30, 15][level - 1];
+    const open = (i) => this.setState({ level: Math.max(level, i + 1), playing: false });
+    const segs = secs.map((s, i) => ({
+      flex: flex[i],
+      fill: i < level ? 1 : 0,
+      label: 'Открыть ' + s + ' с',
+      open: () => open(i)
+    }));
+    const demo = [
+      { text: 'Muse — Hysteria', verdict: 'мимо', color: '#FF7A86', border: 'rgba(255,122,134,.4)' },
+      { text: 'Radiohead — Karma Police', verdict: 'исполнитель верный', color: '#FFD66B', border: 'rgba(255,214,107,.4)' },
+      { text: 'Radiohead — Creep', verdict: 'точно', color: '#9BEF7A', border: 'rgba(155,239,122,.5)' }
+    ];
+    const attempts = this.state.attempts;
+    return {
+      level,
+      openSec: secs[level - 1],
+      nextSec: level < 6 ? secs[level] - secs[level - 1] : 0,
+      playing: this.state.playing,
+      idle: !this.state.playing,
+      liveCls: this.state.playing ? 'live' : '',
+      playLabel: this.state.playing ? 'Пауза' : 'Слушать ' + secs[level - 1] + ' с',
+      attemptNo: attempts.length + 1,
+      scoreNow: score,
+      segs,
+      attempts,
+      noAttempts: attempts.length === 0,
+      toggle: () => this.setState({ playing: !this.state.playing }),
+      more: () => this.setState({ level: Math.min(6, level + 1), playing: false }),
+      skip: () => this.setState({ level: Math.min(6, level + 1), attempts: attempts.concat([{ text: 'Пропуск', verdict: 'пропуск', color: '#B4AED2', border: '#343159' }]) }),
+      guess: () => {
+        const next = demo[attempts.length % demo.length];
+        this.setState({ attempts: attempts.concat([next]), level: Math.min(6, level + 1), playing: false });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

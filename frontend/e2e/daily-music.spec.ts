@@ -6,13 +6,18 @@ test("гость проходит дейлик музыки, делится ит
   expectAccessible,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  // Главная — сегодняшняя игра: раунд виден на месте, адрес остаётся «/».
   await page.goto("/");
-  await expect(page.getByTestId("daily-music.daily.classic")).toBeVisible();
-  await expect(page.getByTestId("daily-film.daily.frame")).toBeVisible();
-  await expect(page.getByTestId("countdown")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  await expect(page.getByRole("heading", { name: "Раунд 1 из 5" })).toBeVisible();
+  await expect(page).toHaveURL("/");
+  await page.getByTestId("menu-button").click();
+  await expect(page.getByTestId("nav-today-music")).toContainText("продолжить");
+  await expect(page.getByTestId("nav-today-film")).toContainText("не сыграно");
+  await page.keyboard.press("Escape");
   await expectAccessible(page);
 
-  await page.getByTestId("daily-music.daily.classic").getByRole("link", { name: "Играть" }).click();
+  // Прямая ссылка на режим возобновляет ту же сессию.
+  await page.goto("/play/music.daily.classic");
   await expect(page).toHaveURL(/\/play\/s\//);
   await expect(page.getByRole("heading", { name: "Раунд 1 из 5" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Слушать 0,5 с" })).toBeVisible();
@@ -51,8 +56,10 @@ test("гость проходит дейлик музыки, делится ит
 
   // Повторный вход в пройденный дейлик открывает итог.
   await page.goto("/");
-  const card = page.getByTestId("daily-music.daily.classic");
-  await expect(card).toContainText("Ваш результат: 4 из 30");
+  await expect(page).toHaveURL(/\/results\//);
+  await page.getByTestId("menu-button").click();
+  await expect(page.getByTestId("nav-today-music")).toContainText("сыграно");
+  await page.keyboard.press("Escape");
   await page.goto("/play/music.daily.classic");
   await expect(page).toHaveURL(/\/results\//);
   await expect(page.getByTestId("final-score")).toContainText("4");

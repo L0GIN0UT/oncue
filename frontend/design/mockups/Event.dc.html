@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Событие: дневник</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#141414}
+a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+.h{font-family:"Unbounded",sans-serif}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid #3A3A3A;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
+.ib:hover{color:#F2F2F2;border-color:#5A5A5A}
+.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;justify-content:center;width:100%;box-sizing:border-box}
+.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
+.node{position:absolute;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:999px;border:0;cursor:pointer;display:grid;place-items:center;font:inherit;padding:0;transition:transform .15s}
+.node:hover{transform:translate(-50%,-50%) scale(1.08)}
+.node.found{background:#F2B13B;color:#141414}
+.node.next{background:#1C1C1C;color:#F2B13B;border:2px solid #F2B13B;animation:beacon 1.6s ease-out infinite}
+.node.hid{background:#1C1C1C;color:#A3A3A3;border:1.5px solid #5A5A5A}
+.node.sel{box-shadow:0 0 0 4px rgba(242,177,59,.25)}
+.num{position:absolute;right:-6px;bottom:-6px;width:22px;height:22px;border-radius:999px;background:#141414;border:1.5px solid #3A3A3A;color:#F2F2F2;font-size:11px;font-weight:600;display:grid;place-items:center}
+@keyframes beacon{0%{box-shadow:0 0 0 0 rgba(242,177,59,.5)}100%{box-shadow:0 0 0 18px rgba(242,177,59,0)}}
+.card{border:1.5px solid #3A3A3A;border-radius:14px;background:#1C1C1C;padding:18px;display:flex;flex-direction:column;gap:12px;animation:rise .2s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.cap{font-size:13px;color:#A3A3A3}
+.star{position:absolute;width:3px;height:3px;border-radius:999px;background:#F2F2F2;opacity:.7}
+@media (prefers-reduced-motion: reduce){.node.next,.card{animation:none}}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
+    <div style="flex: 1; display: flex"><a href="A-Game.dc.html" class="ib" style="width: auto; padding: 0 14px 0 8px; gap: 6px; display: inline-flex; align-items: center; font-size: 14px; border-color: transparent" aria-label="Назад к игре"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M15 6l-6 6 6 6"/></svg>Назад</a></div>
+    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</a>
+    <div style="flex: 1; display: flex; justify-content: flex-end"><a href="Profile.dc.html" aria-label="Профиль" style="width: 38px; height: 38px; border-radius: 999px; border: 1.5px solid #3A3A3A; display: grid; place-items: center; font-weight: 600; font-size: 13px">ИЛ</a></div>
+  </header>
+
+  <main style="flex: 1; max-width: 1280px; width: 100%; margin: 0 auto; padding: 6px 24px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="cap">Событие до 14 января · ещё 80 дней</span>
+        <h1 class="h" style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Дневник снегопада</h1>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 6px"><span class="h" style="font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">{{foundCount}}</span><span class="h" style="font-size: 18px; font-weight: 500; color: #A3A3A3">/ {{total}}</span></div>
+    </div>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 18px; align-items: stretch">
+      <div role="group" aria-label="Карта находок" style="flex: 999 1 560px; min-width: 0; position: relative; aspect-ratio: 16 / 10; border-radius: 20px; overflow: hidden; border: 1.5px solid #3A3A3A; background: radial-gradient(ellipse 60% 40% at 70% 20%, rgba(242,177,59,.10), transparent 60%), linear-gradient(180deg, #171A2B 0%, #1C1C1C 55%, #262626 100%)">
+        <span class="star" style="left:12%;top:14%"></span><span class="star" style="left:31%;top:9%;width:2px;height:2px"></span><span class="star" style="left:52%;top:18%"></span><span class="star" style="left:78%;top:11%;width:2px;height:2px"></span><span class="star" style="left:88%;top:30%"></span><span class="star" style="left:42%;top:27%;width:2px;height:2px"></span>
+        <span style="position: absolute; right: 12%; top: 12%; width: 56px; height: 56px; border-radius: 999px; background: #F2F2F2; opacity: .85; box-shadow: inset -14px -6px 0 0 #2A2A2A"></span>
+        <span style="position: absolute; left: -10%; right: -10%; bottom: -30%; height: 60%; border-radius: 50%; background: #202020"></span>
+        <span style="position: absolute; left: 30%; right: -20%; bottom: -36%; height: 60%; border-radius: 50%; background: #242424"></span>
+        <svg aria-hidden="true" viewBox="0 0 100 62.5" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%">
+          <path d="{{pathFound}}" fill="none" stroke="#F2B13B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+          <path d="{{pathRest}}" fill="none" stroke="#5A5A5A" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <sc-for list="{{nodes}}" as="n" hint-placeholder-count="12">
+          <button class="node {{n.cls}}" type="button" onClick="{{n.pick}}" aria-label="{{n.aria}}" aria-pressed="{{n.selected}}" style="left: {{n.x}}; top: {{n.y}}">
+            <sc-if value="{{n.isFound}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></sc-if>
+            <sc-if value="{{n.isNext}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.3.9-4.5 4.4 1 6.1L12 17l-5.5 3 1-6.1L3 9.5l6.3-.9z"/></svg></sc-if>
+            <sc-if value="{{n.isHid}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></sc-if>
+            <span class="num">{{n.n}}</span>
+          </button>
+        </sc-for>
+        <span class="cap" style="position: absolute; left: 16px; bottom: 12px; opacity: .7">Фон: место под иллюстрацию события. Тропа и число узлов берутся из данных события.</span>
+      </div>
+
+      <aside style="flex: 1 1 320px; max-width: 420px; display: flex; flex-direction: column; gap: 14px">
+        <span class="cap" style="padding: 0 2px">Задание</span>
+        <div class="card">
+          <div style="display: flex; gap: 12px; align-items: flex-start">
+            <span style="width: 44px; height: 44px; border-radius: 999px; background: {{selBg}}; color: {{selFg}}; display: grid; place-items: center; flex: none; border: 1.5px solid {{selBd}}"><span class="h" style="font-size: 14px; font-weight: 800">{{selN}}</span></span>
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+              <span class="cap">{{selStatus}}</span>
+              <span class="h" style="font-size: 17px; font-weight: 500; line-height: 1.25">{{selTitle}}</span>
+            </div>
+          </div>
+          <p style="margin: 0; padding-left: 14px; border-left: 2px solid #3A3A3A; font-style: italic; font-size: 15px; line-height: 1.55; color: #D9D9D9">{{selDiary}}</p>
+          <sc-if value="{{selHasTask}}" hint-placeholder-val="{{true}}"><span style="font-size: 14px; line-height: 1.5; color: #A3A3A3">{{selTask}}</span></sc-if>
+          <a href="A-Game.dc.html" class="btn {{selBtnCls}}">{{selBtn}}</a>
+        </div>
+        <span class="cap" style="padding: 0 2px">Награда</span>
+        <div class="card" style="animation: none">
+          <div style="display: flex; gap: 12px; align-items: center">
+            <span style="width: 56px; height: 56px; border-radius: 999px; border: 3px solid #DDE6F2; border-style: dashed; display: grid; place-items: center; flex: none; font-weight: 600; font-size: 14px">ИЛ</span>
+            <div style="display: flex; flex-direction: column; gap: 2px"><span class="h" style="font-size: 16px; font-weight: 500">Рамка «Иней»</span><span class="cap">за 6 находок · получена</span></div>
+          </div>
+          <span style="font-size: 14px; line-height: 1.5; color: #A3A3A3">Дальше: титул за 9 находок и тема «Зима» за все 12. Рамка остаётся навсегда, тема до конца сезона.</span>
+          <a href="Shop.dc.html" class="btn">Надеть в профиле</a>
+        </div>
+      </aside>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 8 }; }
+  spots() {
+    return [
+      { n: 1, x: 7, y: 84, title: 'Первая снежинка', diary: 'Снег пошёл под первый же трек. Я узнал его за секунду, и снежинка села на ладонь.', task: 'Сыграть любой дейлик.' },
+      { n: 2, x: 17, y: 66, title: 'Следы к катку', diary: 'Следы вели к катку, а с катка доносился припев. Второй раз подряд угадал с первой попытки.', task: 'Два точных ответа подряд.' },
+      { n: 3, x: 29, y: 74, title: 'Фонарь', diary: 'Под фонарём пели хором. Я подпел, не зная слов, и всё равно попал.', task: 'Дуэль, любой исход.' },
+      { n: 4, x: 38, y: 50, title: 'Горка', diary: 'С горки съехал на пластинке. Пластинка не пострадала.', task: 'Сборник с меткой события.' },
+      { n: 5, x: 50, y: 60, title: 'Окно с гирляндой', diary: 'В окне мигала гирлянда, точно в такт. Угадал по первым двум секундам.', task: 'Ответ на уровне 1 или 2.' },
+      { n: 6, x: 59, y: 42, title: 'Почта', diary: 'На почте выдали посылку без обратного адреса. Внутри рамка с инеем.', task: 'Пять дейликов за неделю.' },
+      { n: 7, x: 70, y: 56, title: 'Ёлочный базар', diary: 'На базаре каждая ёлка пахла своим десятилетием. Выбрал девяностые.', task: 'Три трека 90-х подряд.' },
+      { n: 8, x: 79, y: 34, title: 'Пластинка под ёлкой', diary: 'Под ёлкой что-то блестит. Но до неё ещё дойти.', task: 'Угадать хотя бы 5 из 10 в музыкальном дейлике или пройти сборник события.' },
+      { n: 9, x: 86, y: 52, title: '', diary: '', task: '' },
+      { n: 10, x: 74, y: 78, title: '', diary: '', task: '' },
+      { n: 11, x: 88, y: 76, title: '', diary: '', task: '' },
+      { n: 12, x: 93, y: 20, title: '', diary: '', task: '' }
+    ];
+  }
+  renderVals() {
+    const spots = this.spots();
+    const found = 7;
+    const next = found + 1;
+    const pt = (s) => (s.x) + ' ' + (s.y * 0.625);
+    const seg = (list) => list.length ? 'M ' + list.map(pt).join(' L ') : '';
+    const foundList = spots.slice(0, found);
+    const restList = spots.slice(found - 1);
+    const sel = spots.find((s) => s.n === this.state.sel) || spots[next - 1];
+    const state = (n) => n <= found ? 'found' : (n === next ? 'next' : 'hid');
+    const st = state(sel.n);
+    const nodes = spots.map((s) => {
+      const k = state(s.n);
+      return {
+        n: s.n, x: s.x + '%', y: s.y + '%', cls: k + (s.n === sel.n ? ' sel' : ''), selected: s.n === sel.n,
+        isFound: k === 'found', isNext: k === 'next', isHid: k === 'hid',
+        aria: 'Находка ' + s.n + (k === 'found' ? ', найдена: ' + s.title : (k === 'next' ? ', доступна: ' + s.title : ', скрыта')),
+        pick: () => this.setState({ sel: s.n })
+      };
+    });
+    return {
+      foundCount: found, total: spots.length, nodes,
+      pathFound: seg(foundList), pathRest: seg(restList),
+      selN: sel.n,
+      selBg: st === 'found' ? '#F2B13B' : '#1C1C1C', selFg: st === 'found' ? '#141414' : (st === 'next' ? '#F2B13B' : '#A3A3A3'), selBd: st === 'hid' ? '#5A5A5A' : '#F2B13B',
+      selStatus: st === 'found' ? 'Находка ' + sel.n + ' · найдена' : (st === 'next' ? 'Находка ' + sel.n + ' · доступна' : 'Находка ' + sel.n + ' · скрыта'),
+      selTitle: st === 'hid' ? 'Откроется после ' + (sel.n - 1) + '-й' : sel.title,
+      selDiary: st === 'hid' ? 'Страница дневника ещё не написана. Найди предыдущую, и здесь появится запись.' : sel.diary,
+      selHasTask: st !== 'hid', selTask: st === 'found' ? 'Было: ' + sel.task : 'Что сделать: ' + sel.task,
+      selBtn: st === 'found' ? 'Сыграть ещё' : (st === 'next' ? 'Сыграть дейлик' : 'К доступной находке'),
+      selBtnCls: st === 'next' ? 'go' : ''
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import { expect, test } from "@playwright/test";
 test("главная страница отдаётся через gateway", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
-  await expect(page).toHaveTitle(/OnCue/);
+  await expect(page).toHaveTitle(/Guessverse/);
 });
 
 test("публичные API сервисов отвечают через gateway", async ({ request }) => {

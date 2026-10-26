@@ -35,12 +35,12 @@ test("гость: дейлик музыки от главной до итога,
     if (/\/rounds\/\d+\/clue$/.test(url) && r.ok()) clueUrls.push(((await r.json()) as { url: string }).url);
   });
 
+  // Главная — сегодняшняя игра: раунд виден на месте, адрес остаётся «/».
   await page.goto("/");
-  await expect(page.getByTestId(`daily-${DAILY}`)).toBeVisible();
-  await expect(page.getByTestId("daily-film.daily.frame")).toBeVisible();
-  await expect(page.getByTestId("countdown")).toHaveText(/^\d{2}:\d{2}:\d{2}$/);
+  await expect(page.getByRole("heading", { name: /Раунд 1 из/ })).toBeVisible();
+  await expect(page).toHaveURL("/");
 
-  await page.getByTestId(`daily-${DAILY}`).getByRole("link", { name: /Играть|Продолжить/ }).click();
+  await page.goto(`/play/${DAILY}`);
   await expect(page).toHaveURL(/\/play\/s\//);
   const sessionId = page.url().split("/").pop()!;
   await expect(page.getByRole("button", { name: "Слушать 0,5 с" })).toBeVisible();

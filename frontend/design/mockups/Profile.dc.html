@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Профиль</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#141414}
+a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+.h{font-family:"Unbounded",sans-serif}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
+.ib:hover{border-color:#3A3A3A;color:#F2F2F2}
+.btn{font:inherit;font-weight:600;font-size:15px;height:44px;padding:0 18px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap;display:inline-flex;align-items:center;gap:8px}
+.tab{height:40px;padding:0 4px;border:0;border-bottom:2px solid transparent;background:transparent;color:#A3A3A3;font:inherit;font-size:15px;font-weight:500;cursor:pointer}
+.tab.on{color:#F2F2F2;border-bottom-color:#F2B13B}
+.stat{border:1.5px solid #3A3A3A;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.stat b{font-family:"Unbounded",sans-serif;font-size:24px;font-weight:800;letter-spacing:-.02em}
+.stat span{font-size:13px;color:#A3A3A3}
+.g{display:flex;align-items:center;gap:12px;height:56px;padding:0 16px;border:1.5px solid #3A3A3A;border-radius:14px;box-sizing:border-box;font-size:15px}
+.d{aspect-ratio:1;border-radius:8px;display:grid;place-items:center;font-size:12px;color:#A3A3A3;border:1.5px solid transparent}
+.d.p{background:#F2B13B;color:#141414;font-weight:600}
+.d.m{background:#262626}
+.d.t{border-color:#F2B13B;color:#F2F2F2;font-weight:600}
+.d.f{color:#5A5A5A}
+.wd{font-size:11px;color:#5A5A5A;text-align:center}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
+    <div style="flex: 1; display: flex"><button class="ib" type="button" aria-label="Меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</a>
+    <div style="flex: 1; display: flex; gap: 4px; align-items: center; justify-content: flex-end">
+      <button class="ib" type="button" aria-label="Уведомления, 3 новых" style="position: relative"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span style="position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:999px;background:#F2B13B"></span></button>
+      <button class="ib" type="button" aria-label="Настройки"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3.9a7 7 0 0 0-1.8-1L14.5 3h-5l-.3 2.4a7 7 0 0 0-1.8 1L5 5.6 3 9l2 1.5a7 7 0 0 0 0 2L3 14l2 3.4 2.3-.9a7 7 0 0 0 1.8 1l.3 2.5h5l.3-2.4a7 7 0 0 0 1.8-1l2.3.9 2-3.4-2-1.5c.1-.4.1-.7.1-1z"/></svg></button>
+    </div>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 6px 24px 48px; box-sizing: border-box">
+    <section style="width: 100%; max-width: 640px; display: flex; align-items: center; gap: 18px">
+      <span style="width: 72px; height: 72px; border-radius: 999px; border: 2px solid #F2B13B; display: grid; place-items: center; font-weight: 600; font-size: 20px; flex: none">ИЛ</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0">
+        <div style="display: flex; align-items: baseline; gap: 10px"><h1 class="h" style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Иван</h1><span style="font-size: 14px; color: #A3A3A3">Меломан · с марта</span></div>
+        <div style="display: flex; align-items: center; gap: 10px"><span style="font-size: 13px; color: #A3A3A3; white-space: nowrap">Уровень 14</span><div style="flex: 1; height: 8px; border-radius: 4px; background: #2A2A2A; border: 1.5px solid #3A3A3A; overflow: hidden"><div style="width: 82%; height: 100%; background: #F2B13B"></div></div><span style="font-size: 13px; color: #A3A3A3; white-space: nowrap">540 до 15</span></div>
+      </div>
+      <button class="btn" type="button">Изменить</button>
+    </section>
+
+    <div role="tablist" style="width: 100%; max-width: 640px; display: flex; gap: 22px; border-bottom: 1.5px solid #3A3A3A">
+      <button class="tab on" type="button" role="tab" aria-selected="true">Обзор</button>
+      <button class="tab" type="button" role="tab" aria-selected="false">Рейтинг</button>
+      <button class="tab" type="button" role="tab" aria-selected="false">Внешность</button>
+      <button class="tab" type="button" role="tab" aria-selected="false">Друзья · 9</button>
+      <a href="Shop.dc.html" class="tab" role="tab" style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: #F2B13B"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg>1 250</a>
+    </div>
+
+    <section style="width: 100%; max-width: 640px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+      <div class="stat"><b style="color: #F2B13B">13</b><span>дней серия</span></div>
+      <div class="stat"><b>1 480</b><span>рейтинг · Серебро II</span></div>
+      <div class="stat"><b>71%</b><span>точных ответов</span></div>
+      <div class="stat"><b>2,3 с</b><span>среднее узнавание</span></div>
+    </section>
+
+    <section style="width: 100%; max-width: 640px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start">
+      <div style="border: 1.5px solid #3A3A3A; border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <button class="ib" type="button" aria-label="Предыдущий месяц" style="width: 32px; height: 32px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <span style="font-weight: 600">Октябрь · 22 из 26</span>
+          <button class="ib" type="button" aria-label="Следующий месяц" style="width: 32px; height: 32px; opacity: .4" disabled><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px" role="img" aria-label="Октябрь: сыграно 22 дня из 26, пропущены 4, 7, 13 и 19">
+          <span class="wd">пн</span><span class="wd">вт</span><span class="wd">ср</span><span class="wd">чт</span><span class="wd">пт</span><span class="wd">сб</span><span class="wd">вс</span>
+          <span></span><span></span><span></span>
+          <span class="d p">1</span><span class="d p">2</span><span class="d p">3</span><span class="d m">4</span>
+          <span class="d p">5</span><span class="d p">6</span><span class="d m">7</span><span class="d p">8</span><span class="d p">9</span><span class="d p">10</span><span class="d p">11</span>
+          <span class="d p">12</span><span class="d m">13</span><span class="d p">14</span><span class="d p">15</span><span class="d p">16</span><span class="d p">17</span><span class="d p">18</span>
+          <span class="d m">19</span><span class="d p">20</span><span class="d p">21</span><span class="d p">22</span><span class="d p">23</span><span class="d p">24</span><span class="d p">25</span>
+          <span class="d t">26</span><span class="d f">27</span><span class="d f">28</span><span class="d f">29</span><span class="d f">30</span><span class="d f">31</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px"><span style="font-weight: 600">Последние игры</span><a href="Profile.dc.html" style="font-size: 14px; color: #A3A3A3">Все</a></div>
+        <div class="g"><span style="width: 10px; height: 10px; border-radius: 999px; background: #9BE39F"></span><span style="flex: 1">Дейлик · музыка</span><span style="font-weight: 600">740</span></div>
+        <div class="g"><span style="width: 10px; height: 10px; border-radius: 999px; background: #9BE39F"></span><span style="flex: 1">Дуэль с Алиной</span><span style="font-weight: 600; color: #9BE39F">+18</span></div>
+        <div class="g"><span style="width: 10px; height: 10px; border-radius: 999px; background: #F2A0A0"></span><span style="flex: 1">Дуэль</span><span style="font-weight: 600; color: #F2A0A0">−14</span></div>
+        <div class="g"><span style="width: 10px; height: 10px; border-radius: 999px; background: #F2B13B"></span><span style="flex: 1">Party · Пятничный рок</span><span style="font-weight: 600">2 место</span></div>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

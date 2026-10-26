@@ -56,3 +56,49 @@ describe("наборы тем на диске", () => {
     expect(THEME_KEYS).toContain(DEFAULT_THEME_KEY);
   });
 });
+
+describe("состав токенов «Ночного эфира»", () => {
+  const css = readFileSync(path.join(stylesDir, "themes", "default.css"), "utf8");
+  const names = [...css.matchAll(/--color-([\w-]+)\s*:/g)].map((m) => m[1]);
+
+  it("default задаёт все токены дизайн-системы", () => {
+    for (const token of [
+      "night",
+      "stage",
+      "stage-raised",
+      "rule",
+      "rule-strong",
+      "ink",
+      "ink-soft",
+      "ink-muted",
+      "ink-faint",
+      "ink-dim",
+      "music",
+      "exact",
+      "exact-fill",
+      "exact-line",
+      "partial",
+      "partial-fill",
+      "partial-line",
+      "miss",
+      "miss-fill",
+      "miss-line",
+      "skip",
+      "skip-fill",
+      "skip-line",
+      "glow",
+    ])
+      expect(names, token).toContain(token);
+  });
+
+  it("акцент один: музыка и кино равны янтарю", () => {
+    const value = (n: string) => new RegExp(`--color-${n}:\s*([^;]+);`).exec(css)?.[1];
+    expect(value("film")).toBe(value("music"));
+    expect(value("partial")).toBe(value("music"));
+  });
+
+  it("winter переопределяет только известные токены default", () => {
+    const winter = readFileSync(path.join(stylesDir, "themes", "winter.css"), "utf8");
+    for (const m of winter.matchAll(/--color-([\w-]+)\s*:/g)) expect(names, m[1]).toContain(m[1]);
+  });
+});

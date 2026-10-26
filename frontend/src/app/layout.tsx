@@ -7,7 +7,8 @@ import "@fontsource-variable/onest";
 import "@fontsource-variable/unbounded";
 import "./globals.css";
 import { Providers } from "@/shared/ui/providers";
-import { SiteHeader } from "@/features/auth/SiteHeader";
+import { AppHeader } from "@/features/shell/AppHeader";
+import { HeaderLeadingProvider } from "@/features/shell/header-leading";
 import { SanctionsBanner } from "@/features/sanctions/SanctionsBanner";
 import { getThemeKey } from "@/shared/api/shell";
 import { ThemeProvider } from "@/shared/ui/theme-provider";
@@ -16,7 +17,7 @@ import { THEME_META } from "@/styles/theme";
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
   return {
-    title: { default: t("meta.title"), template: `%s · OnCue` },
+    title: { default: t("meta.title"), template: `%s · Guessverse` },
     description: t("meta.description"),
   };
 }
@@ -39,18 +40,20 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <ThemeProvider themeKey={themeKey}>
               <a
                 href="#main"
-                className="sr-only rounded-md bg-ink px-3 py-2 text-night focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
+                className="sr-only rounded-[var(--radius-control)] bg-ink px-3 py-2 text-night focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
               >
                 {t("nav.skip")}
               </a>
-              <SiteHeader />
-              <SanctionsBanner />
-              <main
-                id="main"
-                className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 pb-16 sm:px-6"
-              >
-                {children}
-              </main>
+              <HeaderLeadingProvider>
+                <AppHeader />
+                <SanctionsBanner />
+                <main
+                  id="main"
+                  className="mx-auto flex w-full max-w-[640px] flex-1 flex-col px-4 pt-2 pb-16 sm:px-0"
+                >
+                  {children}
+                </main>
+              </HeaderLeadingProvider>
             </ThemeProvider>
           </Providers>
         </NextIntlClientProvider>

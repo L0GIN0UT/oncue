@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Ночной эфир v2 — стиль</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#F2B13B}a:hover{color:#FFC75F}
+.h{font-family:"Unbounded",sans-serif}
+.sw{display:flex;flex-direction:column;gap:8px}
+.sw i{display:block;height:64px;border-radius:14px}
+.sw b{font-size:14px;font-weight:600}
+.sw span{font-size:12px;color:#A3A3A3}
+.cap{font-size:13px;color:#A3A3A3}
+.row{height:52px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:16px;box-sizing:border-box;border:1.5px solid #3A3A3A;background:#1C1C1C}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.play{width:80px;height:80px;border-radius:999px;border:0;background:#F2B13B;color:#141414;display:grid;place-items:center;cursor:pointer;box-shadow:0 0 0 6px rgba(242,177,59,.12)}
+.btn{font:inherit;font-weight:600;font-size:15px;height:50px;padding:0 22px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2}
+.tick{position:absolute;top:0;bottom:0;width:2px;background:#141414}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; width: 1280px; height: 800px; box-sizing: border-box; padding: 48px 56px; background: #141414; color: #F2F2F2; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; align-content: start">
+
+  <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1.5px solid #3A3A3A; padding-bottom: 16px">
+    <span class="h" style="font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Guessverse</span>
+    <span class="cap">Тёплый графит, мягкие углы, видимые линии, один янтарный акцент.</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 22px">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <div class="sw"><i style="background: #141414; border: 1.5px solid #3A3A3A"></i><b>Эфир</b><span>#141414 · фон</span></div>
+      <div class="sw"><i style="background: #1C1C1C; border: 1.5px solid #3A3A3A"></i><b>Пульт</b><span>#1C1C1C · поверхность, линия #3A3A3A</span></div>
+      <div class="sw"><i style="background: #F2F2F2"></i><b>Текст</b><span>#F2F2F2 · подписи #A3A3A3</span></div>
+      <div class="sw"><i style="background: #F2B13B"></i><b>Янтарь</b><span>#F2B13B · акцент, тень 12%</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="cap">Заливки исходов, только в строках попыток</span>
+      <div style="display: flex; gap: 8px"><span style="flex:1;height:28px;border-radius:8px;background:#214D2A"></span><span style="flex:1;height:28px;border-radius:8px;background:#4D3B12"></span><span style="flex:1;height:28px;border-radius:8px;background:#4D2323"></span><span style="flex:1;height:28px;border-radius:8px;background:#262626"></span></div>
+      <div style="display: flex; gap: 8px; font-size: 12px; color: #A3A3A3"><span style="flex:1">угадал</span><span style="flex:1">почти</span><span style="flex:1">мимо</span><span style="flex:1">пропуск</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: baseline; gap: 14px"><span class="h" style="font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">3</span><span class="h" style="font-size: 16px; font-weight: 500; color: #A3A3A3">из 10</span><span class="h" style="font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin-left: auto">4<span style="font-size: 16px; font-weight: 500; color: #A3A3A3; margin-left: 4px">с</span></span></div>
+      <span style="font-size: 16px; line-height: 1.5">Крупные числа набраны Unbounded 800, как номер на афише. Остальной текст Onest 16 на 24, подписи 13.</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <span class="cap">Строки попыток заливаются целиком</span>
+    <div class="row" style="background: #214D2A; border-color: #2E6B3A"><span>Radiohead — Creep</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Угадал" style="color:#9BE39F"><path d="M5 12l5 5L20 7"/></svg></div>
+    <div class="row" style="background: #4D3B12; border-color: #6B5319"><span>Radiohead — Karma Police</span><span style="font-size: 13px; color: #F2B13B; font-weight: 600">исполнитель</span></div>
+    <div class="row" style="background: #4D2323; border-color: #6B3030"><span>Muse — Hysteria</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Мимо" style="color:#F2A0A0"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+    <div class="row" style="background: #262626; border-color: #3A3A3A; justify-content: center"><span style="color: #A3A3A3">Пропуск</span></div>
+    <div class="row" style="background: transparent"></div>
+    <div class="row" style="background: transparent; border-color: #F2B13B; box-shadow: 0 0 0 4px rgba(242,177,59,.14)"><span style="color: #A3A3A3">текущая попытка</span></div>
+    <span class="cap" style="margin-top: 8px">Лента с бегунком, деления по уровням</span>
+    <div style="position: relative; padding-top: 26px">
+      <span class="h" style="position: absolute; top: 0; left: 25%; transform: translateX(-50%); font-size: 13px; font-weight: 500; color: #F2B13B">4 с</span>
+      <span style="position: absolute; top: 17px; left: 25%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #F2B13B"></span>
+      <div style="position: relative; height: 14px; border-radius: 7px; background: #2A2A2A; border: 1.5px solid #3A3A3A; overflow: hidden"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 25%; background: #F2B13B"></span><span class="tick" style="left: 6.25%"></span><span class="tick" style="left: 12.5%"></span><span class="tick" style="left: 25%"></span><span class="tick" style="left: 43.75%"></span><span class="tick" style="left: 68.75%"></span></div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <span class="cap">Кнопки: граница 1.5 px, акцент только у одной</span>
+    <div style="display: flex; align-items: center; gap: 14px">
+      <button class="play" type="button" aria-label="Слушать"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:32px;height:32px;margin-left:3px"><path d="M7 5v14l12-7z"/></svg></button>
+      <button class="btn" type="button" style="background: #F2B13B; color: #141414; border-color: #F2B13B">Ответить</button>
+      <button class="btn" type="button">Пропустить</button>
+    </div>
+    <label for="a-inp" class="cap">Поле ответа и подсказки вверх от него</label>
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <div style="border: 1.5px solid #3A3A3A; border-radius: 14px; background: #1C1C1C; overflow: hidden; font-size: 15px">
+        <div style="padding: 11px 16px; background: #262626">Creep — <b>Radiohead</b></div>
+        <div style="padding: 11px 16px">Karma Police — <b>Radiohead</b></div>
+        <div style="padding: 11px 16px; color: #A3A3A3">Radio Ga Ga — <b style="color:#F2F2F2">Queen</b></div>
+      </div>
+      <input id="a-inp" type="text" value="rad" style="height: 52px; border-radius: 14px; border: 1.5px solid #F2B13B; background: #1C1C1C; color: #F2F2F2; padding: 0 16px; font: inherit; font-size: 16px; box-sizing: border-box; width: 100%; box-shadow: 0 0 0 4px rgba(242,177,59,.14)">
+    </div>
+    <span class="cap" style="margin-top: 4px">Переключатель домена и вкладки</span>
+    <div style="display: inline-flex; padding: 3px; border-radius: 999px; background: #1C1C1C; border: 1.5px solid #3A3A3A; gap: 2px; align-self: flex-start">
+      <span style="height: 36px; padding: 0 20px; border-radius: 999px; background: #F2F2F2; color: #141414; display: inline-flex; align-items: center; font-weight: 600; font-size: 14px">Музыка</span>
+      <span style="height: 36px; padding: 0 20px; border-radius: 999px; display: inline-flex; align-items: center; font-size: 14px; color: #A3A3A3">Кино</span>
+    </div>
+    <span class="cap" style="margin-top: 4px">Шапка итогов цветной полосой</span>
+    <div style="border: 1.5px solid #3A3A3A; border-radius: 14px; overflow: hidden; background: #1C1C1C">
+      <div class="h" style="padding: 12px 16px; background: #F2B13B; color: #141414; font-size: 16px; font-weight: 800; text-align: center">Угадал с третьей</div>
+      <div style="padding: 12px 16px; display: flex; justify-content: space-between; font-size: 14px"><span style="color: #A3A3A3">Это был</span><span style="font-weight: 600">Creep — Radiohead</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

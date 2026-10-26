@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Ночной эфир v2 — игра</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#141414}
+a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+.h{font-family:"Unbounded",sans-serif}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
+.ib:hover{border-color:#3A3A3A;color:#F2F2F2}
+.row{height:54px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:16px;box-sizing:border-box;border:1.5px solid #3A3A3A;background:transparent;animation:pop .25s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{0%{transform:scale(.985);opacity:.6}100%{transform:none;opacity:1}}
+@keyframes pulse{0%{box-shadow:0 0 0 6px rgba(242,177,59,.14)}100%{box-shadow:0 0 0 28px rgba(242,177,59,0)}}
+@keyframes sweep{0%{width:0}100%{width:100%}}
+@keyframes rise{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
+@keyframes modal{0%{opacity:0;transform:translateY(16px) scale(.98)}100%{opacity:1;transform:none}}
+.play{width:88px;height:88px;border-radius:999px;border:0;background:#F2B13B;color:#141414;display:grid;place-items:center;cursor:pointer;box-shadow:0 0 0 6px rgba(242,177,59,.12);transition:transform .15s}
+.play:hover{transform:scale(1.04)}
+.play.live{animation:pulse 1.1s ease-out infinite}
+.btn{font:inherit;font-weight:600;font-size:16px;height:56px;padding:0 24px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap}
+.btn:hover{border-color:#5A5A5A}
+.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
+.tick{position:absolute;top:0;bottom:0;width:2px;background:#141414}
+.ph{position:absolute;left:0;top:0;bottom:0;background:rgba(255,255,255,.35);width:0}
+.ph.live{animation:sweep linear forwards}
+.dd{position:absolute;left:0;right:0;bottom:64px;background:#1C1C1C;border:1.5px solid #3A3A3A;border-radius:14px;overflow:hidden;animation:rise .18s cubic-bezier(.2,.8,.2,1);z-index:5}
+.opt{display:flex;justify-content:space-between;width:100%;border:0;background:transparent;color:#F2F2F2;font:inherit;font-size:15px;padding:12px 16px;cursor:pointer;text-align:left}
+.opt:hover{background:#262626}
+.menu a,.menu button{display:block;width:100%;text-align:left;border:0;background:transparent;color:#F2F2F2;font:inherit;font-size:17px;font-weight:500;padding:12px 14px;border-radius:12px;cursor:pointer;box-sizing:border-box}
+.menu a:hover,.menu button:hover{background:#262626}
+.bar{height:22px;border-radius:6px;background:#2A2A2A;display:flex;align-items:center;padding:0 8px;font-size:12px;color:#A3A3A3;box-sizing:border-box;min-width:28px}
+@media (prefers-reduced-motion: reduce){.row,.play.live,.dd,.ph.live{animation:none}}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
+    <div style="flex: 1; display: flex"><button class="ib" type="button" onClick="{{openMenu}}" aria-label="Меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</a>
+    <div style="flex: 1; display: flex; gap: 4px; align-items: center; justify-content: flex-end">
+      <button class="ib" type="button" aria-label="Как играть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5"/></svg></button>
+      <button class="ib" type="button" aria-label="Прошлые дни"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+      <a href="A-Game.dc.html" aria-label="Профиль" style="width: 38px; height: 38px; border-radius: 999px; border: 1.5px solid #3A3A3A; display: grid; place-items: center; font-weight: 600; font-size: 13px; margin-left: 6px">ИЛ</a>
+    </div>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 26px; padding: 6px 24px 48px; box-sizing: border-box">
+    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 10px; padding-top: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 2px 4px">
+        <div style="display: flex; align-items: baseline; gap: 10px"><span class="h" style="font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">3</span><span class="h" style="font-size: 15px; font-weight: 500; color: #A3A3A3">раунд из 10</span></div>
+        <span style="font-size: 14px; color: #A3A3A3; display: inline-flex; align-items: center; gap: 8px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Музыка · сегодняшняя игра · серия 12 дней</span>
+      </div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+        <div class="row" style="background: {{r.bg}}; border-color: {{r.bd}}; box-shadow: {{r.sh}}; justify-content: {{r.jc}}">
+          <span style="color: {{r.fg}}">{{r.text}}</span>
+          <sc-if value="{{r.check}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Угадал" style="color:#9BE39F"><path d="M5 12l5 5L20 7"/></svg></sc-if>
+          <sc-if value="{{r.cross}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Мимо" style="color:#F2A0A0"><path d="M6 6l12 12M18 6L6 18"/></svg></sc-if>
+          <sc-if value="{{r.note}}" hint-placeholder-val="{{false}}"><span style="font-size: 13px; color: #F2B13B; font-weight: 600">исполнитель верный</span></sc-if>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="width: 100%; max-width: 640px; position: relative; padding-top: 30px">
+      <span class="h" style="position: absolute; top: 0; left: {{markerPct}}; transform: translateX(-50%); font-size: 14px; font-weight: 500; color: #F2B13B; white-space: nowrap; transition: left .4s cubic-bezier(.2,.8,.2,1)">{{openSec}} с</span>
+      <span style="position: absolute; top: 20px; left: {{markerPct}}; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #F2B13B; transition: left .4s cubic-bezier(.2,.8,.2,1)"></span>
+      <div style="position: relative; height: 16px; border-radius: 8px; background: #2A2A2A; border: 1.5px solid #3A3A3A; overflow: hidden">
+        <span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{markerPct}}; background: #F2B13B; transition: width .4s cubic-bezier(.2,.8,.2,1)"><span class="ph {{liveCls}}" style="animation-duration: {{playDur}}s"></span></span>
+        <span class="tick" style="left: 6.25%"></span><span class="tick" style="left: 12.5%"></span><span class="tick" style="left: 25%"></span><span class="tick" style="left: 43.75%"></span><span class="tick" style="left: 68.75%"></span>
+      </div>
+    </section>
+
+    <button class="play {{liveCls}}" type="button" onClick="{{togglePlay}}" aria-label="{{playLabel}}">
+      <sc-if value="{{playing}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:34px;height:34px"><path d="M8 5v14M16 5v14"/></svg></sc-if>
+      <sc-if value="{{idle}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:36px;height:36px;margin-left:4px"><path d="M7 5v14l12-7z"/></svg></sc-if>
+    </button>
+
+    <form style="width: 100%; max-width: 640px; display: flex; gap: 10px; position: relative" onSubmit="{{submit}}">
+      <label for="guess" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Твой ответ</label>
+      <sc-if value="{{showDd}}" hint-placeholder-val="{{false}}">
+        <div class="dd" role="listbox" aria-label="Подсказки">
+          <sc-for list="{{matches}}" as="m" hint-placeholder-count="3">
+            <button class="opt" type="button" onClick="{{m.pick}}" role="option" aria-selected="false"><span>{{m.title}} — <b>{{m.artist}}</b></span><span style="color: #A3A3A3; font-size: 13px">{{m.year}}</span></button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="flex: 1; position: relative; display: flex; align-items: center">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 16px; color: #A3A3A3"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="guess" type="text" placeholder="Исполнитель или название" autocomplete="off" value="{{q}}" onInput="{{onInput}}" style="width: 100%; height: 56px; border-radius: 14px; border: 1.5px solid {{inpBd}}; background: #1C1C1C; color: #F2F2F2; padding: 0 44px 0 48px; font: inherit; font-size: 16px; box-sizing: border-box; outline: none">
+        <sc-if value="{{hasQ}}" hint-placeholder-val="{{false}}"><button type="button" onClick="{{clear}}" aria-label="Очистить" style="position: absolute; right: 8px; width: 36px; height: 36px; border-radius: 999px; border: 0; background: transparent; color: #A3A3A3; cursor: pointer; display: grid; place-items: center"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M6 6l12 12M18 6L6 18"/></svg></button></sc-if>
+      </div>
+      <sc-if value="{{hasSel}}" hint-placeholder-val="{{false}}"><button class="btn go" type="submit">Ответить</button></sc-if>
+      <sc-if value="{{noSel}}" hint-placeholder-val="{{true}}"><button class="btn" type="button" onClick="{{skip}}">Пропустить</button></sc-if>
+    </form>
+  </main>
+
+  <sc-if value="{{menuOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; inset: 0; background: rgba(0,0,0,.55); z-index: 20; display: flex" >
+      <nav class="menu" aria-label="Разделы" style="width: 300px; background: #1C1C1C; border-right: 1.5px solid #3A3A3A; padding: 16px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; animation: rise .2s cubic-bezier(.2,.8,.2,1)">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 6px 14px"><span class="h" style="font-size: 20px; font-weight: 800; letter-spacing: -0.03em">Guessverse</span><button class="ib" type="button" onClick="{{closeMenu}}" aria-label="Закрыть меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        <button type="button" onClick="{{closeMenu}}" style="background: #262626; display: flex; justify-content: space-between; align-items: center"><span>Сегодня · музыка</span><span style="font-size: 13px; color: #F2B13B">раунд 3</span></button>
+        <button type="button" onClick="{{closeMenu}}" style="display: flex; justify-content: space-between; align-items: center"><span>Сегодня · кино</span><span style="font-size: 13px; color: #A3A3A3">не сыграно</span></button>
+        <button type="button" onClick="{{closeMenu}}">Соло</button>
+        <button type="button" onClick="{{closeMenu}}">Онлайн</button>
+        <button type="button" onClick="{{closeMenu}}">Сборники</button>
+        <button type="button" onClick="{{closeMenu}}">Профиль</button>
+        <div style="margin-top: 18px; padding: 14px; border-radius: 14px; border: 1.5px solid #3A3A3A; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; justify-content: space-between; font-size: 13px; color: #A3A3A3"><span>Октябрь · серия 12 дней</span><span>до конца 7:12</span></div>
+          <div style="display: flex; gap: 6px">
+            <span style="flex:1;height:30px;border-radius:8px;background:#F2B13B;color:#141414;display:grid;place-items:center;font-size:12px;font-weight:600">20</span><span style="flex:1;height:30px;border-radius:8px;background:#F2B13B;color:#141414;display:grid;place-items:center;font-size:12px;font-weight:600">21</span><span style="flex:1;height:30px;border-radius:8px;background:#F2B13B;color:#141414;display:grid;place-items:center;font-size:12px;font-weight:600">22</span><span style="flex:1;height:30px;border-radius:8px;background:#F2B13B;color:#141414;display:grid;place-items:center;font-size:12px;font-weight:600">23</span><span style="flex:1;height:30px;border-radius:8px;background:#F2B13B;color:#141414;display:grid;place-items:center;font-size:12px;font-weight:600">24</span><span style="flex:1;height:30px;border-radius:8px;background:#F2B13B;color:#141414;display:grid;place-items:center;font-size:12px;font-weight:600">25</span><span style="flex:1;height:30px;border-radius:8px;border:1.5px dashed #5A5A5A;color:#A3A3A3;display:grid;place-items:center;font-size:12px;font-weight:600">26</span>
+          </div>
+          <span style="font-size: 13px; color: #A3A3A3">Сыграй сегодня, чтобы не потерять серию.</span>
+        </div>
+      </nav>
+      <button type="button" onClick="{{closeMenu}}" aria-label="Закрыть меню" style="flex: 1; border: 0; background: transparent; cursor: pointer"></button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{done}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; inset: 0; background: rgba(0,0,0,.6); z-index: 30; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box">
+      <div role="dialog" aria-label="Итоги раунда" style="width: 100%; max-width: 440px; background: #1C1C1C; border: 1.5px solid #3A3A3A; border-radius: 20px; overflow: hidden; animation: modal .25s cubic-bezier(.2,.8,.2,1); position: relative">
+        <div class="h" style="padding: 16px; background: {{resBg}}; color: {{resFg}}; font-size: 18px; font-weight: 800; text-align: center">{{resTitle}}</div>
+        <button class="ib" type="button" onClick="{{next}}" aria-label="Закрыть" style="position: absolute; top: 6px; right: 6px; color: {{resFg}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <div style="text-align: center; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #A3A3A3">Это был</span><span class="h" style="font-size: 18px; font-weight: 500">Creep — Radiohead</span><span style="font-size: 13px; color: #A3A3A3">1992 · Pablo Honey</span></div>
+          <div style="display: flex; gap: 10px">
+            <div style="flex: 1; border: 1.5px solid #3A3A3A; border-radius: 14px; padding: 12px; text-align: center"><span style="display:block;font-size:12px;color:#A3A3A3">Ты</span><span class="h" style="font-size: 26px; font-weight: 800">{{resMine}}</span></div>
+            <div style="flex: 1; border: 1.5px solid #3A3A3A; border-radius: 14px; padding: 12px; text-align: center"><span style="display:block;font-size:12px;color:#A3A3A3">Друзья в среднем</span><span class="h" style="font-size: 26px; font-weight: 800">3,4</span></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <sc-for list="{{dist}}" as="d" hint-placeholder-count="7">
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><span style="width: 14px; color: #A3A3A3; text-align: right">{{d.label}}</span><div class="bar" style="width: {{d.w}}; background: {{d.bg}}; color: {{d.fg}}">{{d.n}}</div></div>
+            </sc-for>
+            <span style="font-size: 13px; color: #A3A3A3; text-align: center; padding-top: 4px">{{resNote}}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; border: 1.5px solid #3A3A3A; border-radius: 14px; padding: 10px 12px">
+            <button type="button" aria-label="Слушать целиком" style="width: 36px; height: 36px; border-radius: 999px; border: 0; background: #F2B13B; color: #141414; display: grid; place-items: center; cursor: pointer"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px;margin-left:2px"><path d="M7 5v14l12-7z"/></svg></button>
+            <div style="flex: 1; height: 6px; border-radius: 3px; background: #2A2A2A"><div style="width: 18%; height: 100%; border-radius: 3px; background: #F2B13B"></div></div>
+            <span style="font-size: 12px; color: #A3A3A3">0:42 / 3:58</span>
+          </div>
+          <div style="display: flex; gap: 10px">
+            <button class="btn" type="button" style="flex: 1; height: 50px">Поделиться</button>
+            <button class="btn go" type="button" onClick="{{next}}" style="flex: 1; height: 50px">Следующий раунд</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { level: 0, playing: false, q: '', selected: null, attempts: [], done: null, menuOpen: false };
+    this.timer = null;
+  }
+  componentWillUnmount() { if (this.timer) clearTimeout(this.timer); }
+  catalog() {
+    return [
+      { title: 'Creep', artist: 'Radiohead', year: 1992 },
+      { title: 'Karma Police', artist: 'Radiohead', year: 1997 },
+      { title: 'No Surprises', artist: 'Radiohead', year: 1997 },
+      { title: 'Radio Ga Ga', artist: 'Queen', year: 1984 },
+      { title: 'Hysteria', artist: 'Muse', year: 2003 },
+      { title: 'Seven Nation Army', artist: 'The White Stripes', year: 2003 },
+      { title: 'Smells Like Teen Spirit', artist: 'Nirvana', year: 1991 },
+      { title: 'Mr. Brightside', artist: 'The Killers', year: 2003 }
+    ];
+  }
+  finish(attempts, win) {
+    const s = this.state;
+    const done = (win || attempts.length >= 6) ? { win, n: attempts.length } : null;
+    const level = win ? s.level : Math.min(5, s.level + 1);
+    if (this.timer) clearTimeout(this.timer);
+    this.setState({ attempts, done, level, q: '', selected: null, playing: false });
+  }
+  renderVals() {
+    const secs = [1, 2, 4, 7, 11, 16];
+    const s = this.state;
+    const styles = {
+      exact: { bg: '#214D2A', bd: '#2E6B3A', fg: '#F2F2F2' },
+      partial: { bg: '#4D3B12', bd: '#6B5319', fg: '#F2F2F2' },
+      miss: { bg: '#4D2323', bd: '#6B3030', fg: '#F2F2F2' },
+      skip: { bg: '#262626', bd: '#3A3A3A', fg: '#A3A3A3' }
+    };
+    const rows = [];
+    for (let i = 0; i < 6; i++) {
+      const a = s.attempts[i];
+      if (a) {
+        const st = styles[a.kind];
+        rows.push({ text: a.text, bg: st.bg, bd: st.bd, fg: st.fg, sh: 'none', jc: a.kind === 'skip' ? 'center' : 'space-between', check: a.kind === 'exact', cross: a.kind === 'miss', note: a.kind === 'partial' });
+      } else if (i === s.attempts.length && !s.done) {
+        rows.push({ text: '', bg: 'transparent', bd: '#F2B13B', fg: '#A3A3A3', sh: '0 0 0 4px rgba(242,177,59,.14)', jc: 'space-between', check: false, cross: false, note: false });
+      } else {
+        rows.push({ text: '', bg: 'transparent', bd: '#3A3A3A', fg: '#A3A3A3', sh: 'none', jc: 'space-between', check: false, cross: false, note: false });
+      }
+    }
+    const q = s.q.trim().toLowerCase();
+    const matches = (!s.selected && q.length >= 2) ? this.catalog().filter((c) => (c.title + ' ' + c.artist).toLowerCase().includes(q)).slice(0, 5).map((c) => ({
+      ...c, pick: () => this.setState({ selected: c, q: c.title + ' — ' + c.artist })
+    })) : [];
+    const mineN = s.done ? (s.done.win ? s.done.n : 7) : 0;
+    const base = [12, 31, 44, 27, 15, 9, 22];
+    const dist = base.map((n, i) => ({
+      label: i === 6 ? 'X' : String(i + 1), n: String(n), w: Math.max(8, Math.round(n / 44 * 100)) + '%',
+      bg: (i + 1) === mineN ? '#F2B13B' : '#2A2A2A', fg: (i + 1) === mineN ? '#141414' : '#A3A3A3'
+    }));
+    const pct = Math.round(secs[s.level] / 16 * 1000) / 10 + '%';
+    return {
+      rows, matches, q: s.q, hasQ: s.q.length > 0, showDd: matches.length > 0,
+      hasSel: !!s.selected, noSel: !s.selected, inpBd: (s.selected || q.length >= 2) ? '#F2B13B' : '#3A3A3A',
+      openSec: secs[s.level], markerPct: pct, playing: s.playing, idle: !s.playing,
+      liveCls: s.playing ? 'live' : '', playDur: secs[s.level], playLabel: s.playing ? 'Пауза' : 'Слушать ' + secs[s.level] + ' с',
+      menuOpen: s.menuOpen, done: !!s.done,
+      resTitle: s.done ? (s.done.win ? 'Угадал с ' + s.done.n + '-й' : 'Не в этот раз') : '',
+      resBg: s.done && s.done.win ? '#F2B13B' : '#3A3A3A', resFg: s.done && s.done.win ? '#141414' : '#F2F2F2',
+      resMine: s.done ? (s.done.win ? 'с ' + s.done.n + '-й' : 'X') : '',
+      resNote: s.done ? (s.done.win ? 'Быстрее тебя сегодня 28% игроков' : 'Сегодня не угадали 14% игроков') : '',
+      dist,
+      openMenu: () => this.setState({ menuOpen: true }),
+      closeMenu: () => this.setState({ menuOpen: false }),
+      onInput: (e) => this.setState({ q: e.target.value, selected: null }),
+      clear: () => this.setState({ q: '', selected: null }),
+      togglePlay: () => {
+        if (this.timer) clearTimeout(this.timer);
+        if (s.playing) { this.setState({ playing: false }); return; }
+        this.setState({ playing: true });
+        this.timer = setTimeout(() => this.setState({ playing: false }), secs[s.level] * 1000);
+      },
+      skip: () => { if (s.done) return; this.finish(s.attempts.concat([{ text: 'Пропуск', kind: 'skip' }]), false); },
+      submit: (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (s.done) return;
+        if (!s.selected) { if (matches.length) matches[0].pick(); return; }
+        const c = s.selected;
+        const kind = (c.title === 'Creep' && c.artist === 'Radiohead') ? 'exact' : (c.artist === 'Radiohead' ? 'partial' : 'miss');
+        this.finish(s.attempts.concat([{ text: c.title + ' — ' + c.artist, kind }]), kind === 'exact');
+      },
+      next: () => { if (this.timer) clearTimeout(this.timer); this.setState({ level: 0, playing: false, q: '', selected: null, attempts: [], done: null }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

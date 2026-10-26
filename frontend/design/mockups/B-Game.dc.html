@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>B · Киноафиша — игра</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F2F2F0}
+a{color:#111111;text-decoration:none}a:hover{color:#C8102E}
+.h{font-family:"Oswald",sans-serif;text-transform:uppercase}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:square;stroke-linejoin:miter;flex:none}
+.ib{width:44px;height:44px;border:2px solid transparent;background:transparent;color:#111111;display:grid;place-items:center;cursor:pointer}
+.ib:hover{border-color:#111111}
+.slot{height:52px;border:2px solid #111111;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:16px;box-sizing:border-box}
+.play{width:88px;height:88px;border:0;background:#C8102E;color:#FFFFFF;display:grid;place-items:center;cursor:pointer;box-shadow:5px 5px 0 #111111;transition:transform .1s,box-shadow .1s}
+.play:active{transform:translate(3px,3px);box-shadow:2px 2px 0 #111111}
+.btn{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:16px;height:56px;padding:0 22px;border:2px solid #111111;cursor:pointer;background:#FFFFFF;color:#111111}
+</style>
+</helmet>
+<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #111111; min-height: 860px; display: flex; flex-direction: column; box-sizing: border-box">
+  <header style="border-bottom: 3px solid #111111">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
+      <button class="ib" type="button" aria-label="Меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <a href="B-Game.dc.html" class="h" style="font-size: 32px; font-weight: 700; line-height: 1; letter-spacing: .02em">Guessverse</a>
+      <div style="display: flex; gap: 4px; align-items: center">
+        <button class="ib" type="button" aria-label="Как играть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5"/></svg></button>
+        <button class="ib" type="button" aria-label="Прошлые дни"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
+        <a href="B-Game.dc.html" aria-label="Профиль" class="h" style="width: 36px; height: 36px; background: #111111; color: #FFFFFF; display: grid; place-items: center; font-weight: 700; font-size: 14px; margin-left: 8px">ИЛ</a>
+      </div>
+    </div>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 28px 24px 48px; box-sizing: border-box">
+    <div role="group" aria-label="Домен" style="display: inline-flex; border: 2px solid #111111">
+      <button type="button" class="btn" style="height: 40px; padding: 0 22px; border: 0; background: #111111; color: #FFFFFF; font-size: 14px">Музыка</button>
+      <button type="button" class="btn" style="height: 40px; padding: 0 22px; border: 0; background: transparent; font-weight: 500; font-size: 14px">Кино</button>
+    </div>
+
+    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h1 class="h" style="margin: 0; font-size: 34px; font-weight: 700; line-height: 1">Раунд 3 из 10</h1>
+        <span style="font-size: 14px; color: #6B6B6B">Сегодняшняя игра · серия 12</span>
+      </div>
+      <div class="slot" style="border-color: #BDBDB8"><span style="color: #6B6B6B">Muse — Hysteria</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Мимо" style="color:#BDBDB8"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+      <div class="slot" style="border-color: #C8102E"><span>Radiohead — Karma Police</span><span class="h" style="font-size: 13px; color: #C8102E; font-weight: 700">исполнитель верный</span></div>
+      <div class="slot" style="border-style: dashed; border-color: #BDBDB8; background: transparent"></div>
+      <div class="slot" style="border-style: dashed; border-color: #BDBDB8; background: transparent"></div>
+      <div class="slot" style="border-style: dashed; border-color: #BDBDB8; background: transparent"></div>
+      <div class="slot" style="border-style: dashed; border-color: #BDBDB8; background: transparent"></div>
+    </section>
+
+    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 14px; color: #6B6B6B">Открыто 4 секунды</span>
+      <div style="display: flex; gap: 3px; height: 18px; border: 2px solid #111111; padding: 2px; box-sizing: border-box; background: #FFFFFF"><span style="flex:1;background:#C8102E"></span><span style="flex:1;background:#C8102E"></span><span style="flex:2;background:#C8102E"></span><span style="flex:3;background:#E3E3DF"></span><span style="flex:4;background:#E3E3DF"></span><span style="flex:5;background:#E3E3DF"></span></div>
+      <div style="display: flex; gap: 3px; font-size: 12px; color: #6B6B6B"><span style="flex:1">1</span><span style="flex:1">2</span><span style="flex:2">4</span><span style="flex:3">7</span><span style="flex:4">11</span><span style="flex:5; text-align: right">16 с</span></div>
+    </section>
+
+    <button class="play" type="button" aria-label="Слушать 4 секунды"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:36px;height:36px;margin-left:4px"><path d="M7 5v14l12-7z"/></svg></button>
+
+    <form style="width: 100%; max-width: 640px; display: flex; gap: 10px" onSubmit="{{noop}}">
+      <label for="guess" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Твой ответ</label>
+      <div style="flex: 1; position: relative; display: flex; align-items: center">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 16px; color: #6B6B6B"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="guess" type="text" placeholder="Исполнитель или название" autocomplete="off" style="width: 100%; height: 56px; border: 2px solid #111111; background: #FFFFFF; color: #111111; padding: 0 16px 0 48px; font: inherit; font-size: 16px; box-sizing: border-box">
+      </div>
+      <button class="btn" type="button">Пропустить</button>
+    </form>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() { return { noop: (e) => { if (e && e.preventDefault) e.preventDefault(); } }; }
+}
+</script>
+</body>
+</html>

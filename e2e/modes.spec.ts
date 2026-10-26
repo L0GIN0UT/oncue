@@ -93,10 +93,6 @@ const pickOption = (page: Page) => page.locator("[data-testid^=pick-option-]:ena
 
 // ----------------------------------------------------------------------------- сценарии
 test("каталог: карточки новых режимов и недельная сетка среди «дня»", async ({ page }) => {
-  await page.goto("/");
-  // /v1/daily включает недельную сетку: карточка `daily-<mode_key>`.
-  await expect(page.getByTestId(`daily-${BRACKET}`)).toBeVisible();
-
   await page.goto("/solo");
   for (const key of [MARATHON, "music.marathon.artist", PAIR, "music.pair.popularity", DESCRIPTION, BLACKOUT, SOUNDTRACK]) {
     await expect(page.getByTestId(`mode-card-${key}`), key).toBeVisible();
@@ -105,9 +101,9 @@ test("каталог: карточки новых режимов и недель
 
 test("марафон: выбор режиссёра, три жизни, итог", async ({ page }) => {
   await page.goto("/");
-  // Гостевую сессию главная заводит асинхронно (блок дейликов): ждём карточку — значит,
+  // Гостевую сессию главная заводит асинхронно (старт сегодняшней игры): ждём раунд — значит,
   // cookie сессии уже есть и ручной запрос /subjects пройдёт аутентификацию.
-  await expect(page.getByTestId(`daily-${BRACKET}`)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Раунд 1 из/ })).toBeVisible();
   const api = await guestApi(page);
   // Персоны марафона — из проекции game: синтетический режиссёр с ≥ 5 играбельными фильмами.
   const found = await api.get(`/modes/${MARATHON}/subjects?q=${encodeURIComponent("Синтетический")}`);
@@ -180,8 +176,7 @@ test("недельная сетка: 31 выбор до чемпиона", async
     }
   });
 
-  await page.goto("/");
-  await page.getByTestId(`daily-${BRACKET}`).getByRole("link", { name: /Играть|Продолжить/ }).click();
+  await page.goto(`/play/${BRACKET}`);
   await expect(page).toHaveURL(/\/play\/s\//);
   const sessionId = sessionIdOf(page);
 

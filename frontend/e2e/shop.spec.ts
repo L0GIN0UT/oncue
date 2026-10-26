@@ -3,7 +3,7 @@
  * с подтверждением, надеть/снять, ник + аватар + рамка + титул в профиле, промокод, загрузка
  * аватарки. Против живых сервисов — `../e2e/shop.spec.ts` (шаг 0b).
  */
-import { expect, login, test } from "./fixtures";
+import { expect, login, test, openMenuItem } from "./fixtures";
 
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAH6u5tAAAAABJRU5ErkJggg==",
@@ -18,6 +18,7 @@ test("гость: магазин предлагает завести аккау�
 
 test("магазин: вкладки слотов, состояния карточек", async ({ page, expectAccessible }) => {
   await login(page);
+  await openMenuItem(page, "nav-profile");
   await page.getByTestId("nav-shop").click();
   await expect(page).toHaveURL(/\/shop$/);
   await expect(page.getByTestId("shop-balance")).toContainText("40");

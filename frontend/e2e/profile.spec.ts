@@ -3,7 +3,7 @@
  * (результат без перезагрузки, затем «уже крутили»), деградация блока и карточка на главной.
  * Против живых сервисов — `../e2e/progression.spec.ts` (шаг 0b).
  */
-import { expect, login, test } from "./fixtures";
+import { expect, login, test, openMenuItem } from "./fixtures";
 
 test("гость: профиль предлагает завести аккаунт, пункта «Профиль» в шапке нет", async ({
   page,
@@ -22,7 +22,7 @@ test("пользователь: профиль показывает уровен
   expectAccessible,
 }) => {
   await login(page);
-  await page.getByTestId("nav-profile").click();
+  await openMenuItem(page, "nav-profile");
   await expect(page).toHaveURL(/\/profile$/);
 
   await expect(page.getByTestId("level-value")).toHaveText(/Уровень 7/);
@@ -56,10 +56,6 @@ test("колесо: спин меняет состояние на «уже кр�
   await page.reload();
   await expect(page.getByTestId("wheel-spin")).toBeDisabled();
   await expect(page.getByTestId("wheel-result")).toContainText("Выпало: 5 Версов");
-
-  // Главная: колесо уже крутили.
-  await page.goto("/");
-  await expect(page.getByTestId("home-wheel")).toContainText("уже крутили");
 });
 
 test("колесо: 409 и повтор из другой вкладки", async ({ page, scenario }) => {
@@ -108,17 +104,16 @@ test("деградация: погасший блок не роняет стра
   await expect(page.getByTestId("quest-win_duel")).toBeVisible();
 });
 
-test("главная: карточка прогресса пользователя и заглушка при сбое", async ({ page, scenario }) => {
+test("меню: серия за неделю из прогресса и скрытие блока при сбое", async ({ page, scenario }) => {
   await login(page);
   await page.goto("/");
-  const card = page.getByTestId("home-progress");
-  await expect(card).toContainText("Уровень 7");
-  await expect(page.getByTestId("home-wheel")).toContainText("Колесо доступно");
-  await expect(page.getByTestId("home-quests")).toContainText("1 задание открыто");
-  await expect(card.getByRole("link", { name: "В профиль" })).toHaveAttribute("href", "/profile");
+  await page.getByTestId("menu-button").click();
+  await expect(page.getByTestId("menu-week")).toContainText("Серия:");
+  await expect(page.getByTestId("menu-week").getByRole("listitem")).toHaveCount(7);
 
   await scenario({ progressDown: ["home"] });
   await page.reload();
-  await expect(page.getByTestId("home-progress-unavailable")).toBeVisible();
-  await expect(page.getByTestId("daily-title").or(page.locator("#dailies-title"))).toBeVisible();
+  await page.getByTestId("menu-button").click();
+  await expect(page.getByTestId("nav-profile")).toBeVisible();
+  await expect(page.getByTestId("menu-week")).toHaveCount(0);
 });

@@ -15,7 +15,8 @@
     --font-display: "Unbounded Variable", "Onest Variable", ui-sans-serif, sans-serif;
 
     --radius-ticket: 1.25rem;
-    --radius-control: 0.75rem;
+    --radius-control: 0.875rem;
+    --radius-pill: 999px;
 
     --ease-reveal: cubic-bezier(0.2, 0.8, 0.2, 1);
 }

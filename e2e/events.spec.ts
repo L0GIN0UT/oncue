@@ -224,7 +224,7 @@ test("активное событие: баннер на главной, стр�
   const { page } = player;
   await waitForActiveEvent(page, "баннер активного события на главной");
   await page.goto("/");
-  await expect(page.getByTestId("home-event")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("nav-event")).toBeVisible({ timeout: 30_000 });
   await page.goto(`/events/${EVENT_KEY}`);
   await expect(page.getByTestId("event-page")).toBeVisible();
   await expect(page.getByTestId("event-progress")).toHaveText("Найдено 0 из 3");

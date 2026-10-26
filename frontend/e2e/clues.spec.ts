@@ -4,10 +4,6 @@ test("витрина /solo: карточки новых режимов, сетк
   page,
   expectAccessible,
 }) => {
-  await page.goto("/");
-  await expect(page.getByTestId("daily-film.bracket.weekly")).toBeVisible();
-  await expectAccessible(page);
-
   await page.goto("/solo");
   for (const key of [
     "film.marathon.director",
