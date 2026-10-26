@@ -1,21 +1,17 @@
 import { fetchHomePage } from "@/shared/api/server";
-import { TodayGame } from "@/features/daily/TodayGame";
+import { HomeView } from "@/features/home/HomeView";
 import { EventSpot } from "@/features/events/EventSpot";
 
 /**
- * Главная — сегодняшняя игра (дейлик), а не лендинг. Музыка по умолчанию, кино — `?domain=film`
- * из меню. SSR отдаёт каркас и публичные блоки bff, личный статус догружает клиент (D2).
+ * Главная — хаб (макет v3): дейлики, прогресс, лента дейлика и входы в разделы. Игра дейлика
+ * идёт на `/play/<mode_key>`. SSR отдаёт публичные блоки bff, личный статус догружает клиент.
  * `EventSpot` остаётся: на главной лежит находка сезонного события (`ui_spot`, page_key `home`).
  */
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ domain?: string | string[] }>;
-}) {
-  const [{ domain }, page] = await Promise.all([searchParams, fetchHomePage()]);
+export default async function HomePage() {
+  const page = await fetchHomePage();
   return (
     <>
-      <TodayGame initial={page} domain={domain === "film" ? "film" : "music"} />
+      <HomeView initial={page} />
       <EventSpot pageKey="home" />
     </>
   );

@@ -17,12 +17,12 @@ test("баннер и тема winter: тема в первом HTML, ссылк
 
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "winter");
-  await expect(page.getByTestId("nav-event")).toHaveAttribute("href", "/events/winter");
+  await expect(page.getByTestId("home-event")).toHaveAttribute("href", "/events/winter");
   // Аноним: прогресса нет.
-  await expect(page.getByTestId("nav-event")).not.toContainText("Найдено");
+  await expect(page.getByTestId("home-event")).not.toContainText("Найдено");
 
   await login(page);
-  await expect(page.getByTestId("nav-event")).toContainText("Найдено 1 из 4");
+  await expect(page.getByTestId("home-event")).toContainText("Найдено 1 из 4");
   await openMenuItem(page, "nav-solo");
   // Тема не отключается пользователем и переживает переходы.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "winter");
@@ -31,7 +31,7 @@ test("баннер и тема winter: тема в первом HTML, ссылк
 test("без события: тема default, баннера нет", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "default");
-  await expect(page.getByTestId("nav-event")).toHaveCount(0);
+  await expect(page.getByTestId("home-event")).toHaveCount(0);
   await expect(page.getByTestId("home-event")).toHaveCount(0);
 });
 
@@ -42,7 +42,8 @@ test("страница события: карта, дневник, закрыт�
 }) => {
   await scenario({ event: "active" });
   await login(page);
-  await page.getByTestId("nav-event").click();
+  await page.goto("/");
+  await page.getByTestId("home-event").click();
   await expect(page).toHaveURL(/\/events\/winter$/);
 
   await expect(page.getByTestId("event-progress")).toHaveText("Найдено 1 из 4");
@@ -99,7 +100,8 @@ test("спрятанный элемент: виден только на свое
   await spot.click();
   await expect(page.getByText("Находка открыта!")).toBeVisible();
   await expect(spot).toHaveCount(0);
-  await expect(page.getByTestId("nav-event")).toContainText("Найдено 2 из 4");
+  await page.goto("/");
+  await expect(page.getByTestId("home-event")).toContainText("Найдено 2 из 4");
 
   await page.goto("/events/winter");
   await expect(page.getByTestId("event-point-snowman")).toHaveAttribute("data-state", "found");
