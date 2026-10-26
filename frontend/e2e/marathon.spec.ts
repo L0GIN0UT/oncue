@@ -1,4 +1,5 @@
 import { expect, giveUpButton, playUntilResults, test } from "./fixtures";
+import { openSoloMode } from "./hubs";
 
 test("марафон: выбор режиссёра, три жизни, итог по сыгранным раундам", async ({
   page,
@@ -9,11 +10,8 @@ test("марафон: выбор режиссёра, три жизни, итог
     const url = new URL(r.url());
     if (url.pathname.endsWith("/subjects")) searches.push(url.searchParams.get("q") ?? "");
   });
-  await page.goto("/solo");
-  await page
-    .getByTestId("mode-card-film.marathon.director")
-    .getByRole("link", { name: "Выбрать персону" })
-    .click();
+  const mode = await openSoloMode(page, "film.marathon.director");
+  await mode.getByRole("link", { name: "Выбрать персону" }).click();
   const picker = page.getByTestId("subject-picker");
   await expect(picker).toBeVisible();
   await expect(page.getByTestId("subject-start")).toBeDisabled();

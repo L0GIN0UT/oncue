@@ -77,17 +77,11 @@ describe("messages/ru.json", () => {
       // Этап 3a: перечисления контрактов text_asset, presentation, туры сетки, варианты пары.
       ...["year", "genres", "country", "director", "cast_top3"].map((k) => `game.textField.${k}`),
       ...["not_started", "in_progress", "finished"].map((s) => `daily.statusPlain.${s}`),
-      ...["score", "streak", "bracket"].flatMap((p) => [
-        `solo.presentation.${p}`,
-        `records.best.${p}`,
-      ]),
+      ...["score", "streak", "bracket"].flatMap((p) => [`solo.sub.${p}`, `records.best.${p}`]),
       ...["score", "streak"].map((u) => `results.record.best.${u}`),
       ...["final", "semifinal", "fraction"].map((k) => `game.bracket.${k}`),
       ...["higher", "lower"].map((k) => `game.options.${k}`),
-      ...["random", "marathon", "pair"].flatMap((g) => [
-        `solo.group.${g}.title`,
-        `solo.group.${g}.text`,
-      ]),
+      ...["random", "marathon", "pair"].map((g) => `solo.group.${g}.title`),
       ...["streak", "newRecord", "champion"].map((k) => `results.shareText.${k}`),
       // Этап 3b: сборники и медиатека.
       ...["collection_not_found", "rounds_not_allowed", "pool_too_small"].flatMap((k) => [

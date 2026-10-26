@@ -8,10 +8,12 @@
 import { useEffect, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Check, Search } from "lucide-react";
 import { api, unwrap } from "@/shared/api/client";
 import type { ModeOut, SubjectOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { useIcons } from "@/shared/ui/theme-provider";
+import { HubHeader } from "@/features/hubs/HubHeader";
+import { SearchField } from "@/features/hubs/SearchField";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
 import { withSession } from "@/features/auth/session";
@@ -73,6 +75,7 @@ export function SubjectPicker({ mode, roles, max, pending, onStart }: Props) {
   const t = useTranslations();
   const dt = useDynamicT();
   const id = useId();
+  const icons = useIcons();
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<SubjectOut[]>([]);
   const q = useDebounced(text.trim(), SUBJECT_SEARCH_DEBOUNCE_MS);
@@ -89,44 +92,30 @@ export function SubjectPicker({ mode, roles, max, pending, onStart }: Props) {
   const results = found.data ?? [];
   const isSelected = (s: SubjectOut) => selected.some((x) => x.subject_id === s.subject_id);
 
+  const Check = icons.owned;
   return (
     <section
       data-domain={mode.domain}
       data-testid="subject-picker"
-      aria-labelledby={`${id}-title`}
-      className="flex max-w-2xl flex-col gap-6 pt-6 sm:pt-10"
+      aria-label={dt(mode.title_key, mode.key)}
+      className="flex flex-col gap-4 pt-4"
     >
-      <header className="flex flex-col gap-2">
-        <p className="text-sm text-[var(--accent)]">{t(`domain.${mode.domain}`)}</p>
-        <h1 id={`${id}-title`} className="font-display text-3xl font-bold">
-          {dt(mode.title_key, mode.key)}
-        </h1>
-        <p className="text-ink-muted">
-          {t("subjects.lead", { max, roles: roles.map(role).join(", ").toLowerCase() })}
-        </p>
-      </header>
+      <HubHeader title={dt(mode.title_key, mode.key)} aside={t(`domain.${mode.domain}`)} />
+      <p className="px-0.5 text-sm text-ink-muted">
+        {t("subjects.lead", { max, roles: roles.map(role).join(", ").toLowerCase() })}
+      </p>
 
-      <div className="relative">
-        <label htmlFor={`${id}-q`} className="sr-only">
-          {t("subjects.searchLabel")}
-        </label>
-        <Search
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-ink-muted"
-        />
-        <input
+      <div>
+        <SearchField
           id={`${id}-q`}
-          type="search"
+          aria-label={t("subjects.searchLabel")}
           value={text}
           maxLength={QUERY_MAX}
-          autoComplete="off"
-          spellCheck={false}
           placeholder={t("subjects.searchPlaceholder")}
           onChange={(e) => setText(e.target.value)}
           aria-controls={`${id}-list`}
           aria-busy={found.isFetching}
           data-testid="subject-search"
-          className="h-14 w-full rounded-[var(--radius-control)] bg-night pr-4 pl-12 text-lg text-ink ring-1 ring-rule outline-none ring-inset placeholder:text-ink-faint focus:ring-2 focus:ring-[var(--accent)]"
         />
       </div>
 
@@ -141,7 +130,11 @@ export function SubjectPicker({ mode, roles, max, pending, onStart }: Props) {
       ) : found.isSuccess && results.length === 0 ? (
         <p className="text-ink-muted">{t("subjects.empty")}</p>
       ) : (
-        <ul id={`${id}-list`} className="flex flex-col gap-2" aria-label={t("subjects.listLabel")}>
+        <ul
+          id={`${id}-list`}
+          className="flex flex-col gap-2.5"
+          aria-label={t("subjects.listLabel")}
+        >
           {results.map((s) => {
             const on = isSelected(s);
             return (
@@ -153,19 +146,19 @@ export function SubjectPicker({ mode, roles, max, pending, onStart }: Props) {
                   disabled={!on && selected.length >= max && max > 1}
                   data-testid={`subject-option-${s.subject_id}`}
                   className={cn(
-                    "flex w-full items-center justify-between gap-4 rounded-xl px-4 py-3 text-left ring-1 transition-colors ring-inset disabled:opacity-45",
+                    "flex min-h-[68px] w-full items-center justify-between gap-4 rounded-[var(--radius-control)] border-[1.5px] px-[18px] py-2 text-left transition-colors disabled:opacity-45",
                     on
-                      ? "bg-[var(--accent)] text-night ring-transparent"
-                      : "bg-stage ring-rule hover:bg-stage-raised",
+                      ? "border-music bg-stage-raised shadow-[0_0_0_4px_var(--color-glow)]"
+                      : "border-rule bg-stage hover:border-rule-strong",
                   )}
                 >
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">{s.name}</span>
-                    <span className={cn("text-sm", on ? "text-night/80" : "text-ink-muted")}>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate font-semibold">{s.name}</span>
+                    <span className="text-[13px] text-ink-muted">
                       {role(s.role)} · {t("subjects.items", { count: s.items })}
                     </span>
                   </span>
-                  {on && <Check aria-hidden className="size-5 shrink-0" />}
+                  {on && <Check aria-hidden className="shrink-0 text-music" />}
                 </button>
               </li>
             );
@@ -173,7 +166,7 @@ export function SubjectPicker({ mode, roles, max, pending, onStart }: Props) {
         </ul>
       )}
 
-      <div className="flex flex-wrap items-center gap-4 border-t border-dashed border-rule pt-5">
+      <div className="flex flex-wrap items-center gap-4 pt-2">
         <Button
           size="lg"
           disabled={selected.length === 0 || pending}
