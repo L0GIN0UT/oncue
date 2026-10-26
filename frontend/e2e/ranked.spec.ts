@@ -5,7 +5,7 @@
  */
 import type { Page } from "@playwright/test";
 import { expect, login, test } from "./fixtures";
-import { openHubTab, pickLadder } from "./hubs";
+import { pickLadder } from "./hubs";
 import { QUEUE_TICK_S } from "./mocks/match";
 
 /** Предел ожидания «матч найден»: несколько периодов heartbeat мока. */
@@ -42,7 +42,6 @@ test("хаб: звание со ступенью, калибровка вмес�
   const film = page.getByTestId("rating-film");
   await expect(film.getByTestId("calibration")).toHaveText("Калибровка: осталось 7 матчей");
   await expect(film.getByTestId("tier")).toHaveCount(0);
-  await openHubTab(page, "Топ недели");
   await expect(page.getByTestId("weekly-film")).toContainText("игрок1");
   await expectAccessible(page);
 

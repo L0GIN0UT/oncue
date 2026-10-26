@@ -1,5 +1,8 @@
 "use client";
-/** Списки онлайна строками: открытые лобби (вход по коду комнаты) и мои матчи (ссылка на итог). */
+/**
+ * Списки онлайна строками плиток (макеты «Онлайн» и «Лобби»): открытые лобби (вход в комнату) и
+ * мои матчи (ссылка на итог, жалоба на игрока).
+ */
 import Link from "next/link";
 import { useFormatter, useTranslations } from "next-intl";
 import type {
@@ -11,7 +14,7 @@ import type {
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
 import { Avatar } from "@/shared/ui/avatar";
-import { useIcons } from "@/shared/ui/theme-provider";
+import { ListRow } from "@/shared/ui/list-row";
 import { ReportButton } from "@/features/reports/ReportDialog";
 
 export function useModeTitle() {
@@ -21,31 +24,36 @@ export function useModeTitle() {
     dt(mode.title_key, `${t(`domain.${mode.domain}`)} · ${t(`online.kind.${mode.kind}`)}`);
 }
 
-const ROW =
-  "flex min-h-[68px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2 text-left transition-colors hover:border-rule-strong hover:bg-stage";
+const PILL =
+  "inline-flex h-[30px] items-center rounded-full border-[1.5px] border-rule bg-stage px-3 text-xs font-semibold whitespace-nowrap";
 
 export function OpenRoomList({ rooms }: { rooms: OpenRoomCard[] }) {
   const t = useTranslations();
   const title = useModeTitle();
-  const Next = useIcons().next;
   if (!rooms.length) {
     return (
-      <p className="py-2 text-ink-muted" data-testid="open-rooms-empty">
+      <p className="py-2 text-sm text-ink-muted" data-testid="open-rooms-empty">
         {t("online.lobbies.empty")}
       </p>
     );
   }
   return (
-    <ul className="flex flex-col gap-2.5">
+    <ul className="flex flex-col gap-1.5">
       {rooms.map((room) => {
         const full = room.players >= room.players_max;
         return (
           <li key={room.code} data-domain={room.mode.domain} data-testid={`open-room-${room.code}`}>
-            <Link href={`/room/${room.code}`} className={cn(ROW, full && "opacity-60")}>
-              <Avatar name={room.host_nickname} />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-semibold">{title(room.mode)}</span>
-                <span className="truncate text-[13px] text-ink-muted" dir="auto">
+            <Link
+              href={`/room/${room.code}`}
+              className={cn(
+                "flex h-[52px] items-center gap-2.5 rounded-xl bg-stage-raised px-2.5 transition-colors hover:bg-stage-raised/70",
+                full && "opacity-70",
+              )}
+            >
+              <Avatar name={room.host_nickname} size="sm" />
+              <span className="flex min-w-0 flex-1 flex-col gap-px">
+                <span className="truncate text-sm font-semibold">{title(room.mode)}</span>
+                <span className="truncate text-xs text-ink-muted" dir="auto">
                   {t("online.lobbies.sub", {
                     rounds: room.settings.rounds,
                     seconds: room.settings.level_window_s,
@@ -53,12 +61,12 @@ export function OpenRoomList({ rooms }: { rooms: OpenRoomCard[] }) {
                   })}
                 </span>
               </span>
-              <span className={cn("tabular text-sm", full ? "text-ink-muted" : "text-ink-soft")}>
-                {full
-                  ? t("online.lobbies.full")
-                  : t("online.lobbies.slots", { n: room.players, max: room.players_max })}
+              <span className="tabular w-12 text-right font-display text-[13px] font-extrabold">
+                {t("online.lobbies.slots", { n: room.players, max: room.players_max })}
               </span>
-              <Next aria-hidden size={18} className="shrink-0 text-ink-muted" />
+              <span className={cn(PILL, !full && "text-ink")}>
+                {full ? t("online.lobbies.full") : t("online.lobbies.join")}
+              </span>
             </Link>
           </li>
         );
@@ -82,45 +90,39 @@ export function MyMatchList({ matches }: { matches: HistoryCard[] }) {
     );
   }
   return (
-    <ul className="flex flex-col gap-2.5">
+    <ul className="flex flex-col gap-1.5">
       {matches.map((m) => (
         <li key={m.match_id} data-domain={m.mode.domain}>
           <Link
             href={`/match/${m.match_id}`}
-            className={ROW}
             data-testid={`my-match-${m.match_id}`}
+            className="block rounded-xl transition-opacity hover:opacity-85"
           >
-            <span
-              className="tabular grid size-10 shrink-0 place-items-center rounded-full border-[1.5px] border-rule font-display font-bold text-music"
-              aria-label={t("online.myMatches.place", { place: m.place })}
+            <ListRow
+              lead={<span aria-label={t("online.myMatches.place", { place: m.place })}>{m.place}</span>}
+              accentLead
+              trailing={<span className="tabular">{t("online.myMatches.score", { score: m.score })}</span>}
+              className="min-h-11"
             >
-              {m.place}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="truncate font-semibold">{title(m.mode)}</span>
-              <span className="truncate text-[13px] text-ink-muted">
-                {format.dateTime(new Date(m.finished_at), {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
-                {" · "}
-                {t("online.myMatches.players", { count: m.players })}
+              <span className="font-semibold">{title(m.mode)}</span>
+              <span className="text-xs text-ink-muted">
                 {" · "}
                 {m.outcome ? t(`online.outcome.${m.outcome}`) : t(`online.finish.${m.my_finish}`)}
+                {" · "}
+                {format.dateTime(new Date(m.finished_at), { dateStyle: "short" })}
+                {" · "}
+                {t("online.myMatches.players", { count: m.players })}
               </span>
-            </span>
-            <span className="tabular font-display text-lg font-semibold">
-              {t("online.myMatches.score", { score: m.score })}
-            </span>
+            </ListRow>
           </Link>
           {m.participants && m.participants.length > 0 && (
             <ul
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 px-[18px] pt-1.5"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-1"
               aria-label={t("online.myMatches.participants")}
               data-testid={`history-players-${m.match_id}`}
             >
               {m.participants.map((p) => (
-                <li key={p.user_id} className="flex items-center gap-1 text-sm">
+                <li key={p.user_id} className="flex items-center gap-1 text-[13px]">
                   <span dir="auto" className="text-ink-muted">
                     {p.nickname}
                   </span>

@@ -1,7 +1,7 @@
 "use client";
 /**
- * Блок рейтинговой дуэли в хабе онлайна (4b, ADR 0038; макет «Онлайн»): переключатель раздела
- * (ladder), рейтинг и звание раздела, одна главная кнопка «Найти соперника», ожидание с
+ * Содержимое плитки «Рейтинговая дуэль» в хабе онлайна (4b, ADR 0038; макет «Онлайн»): переключатель
+ * раздела (ladder), рейтинг и звание раздела строкой, одна главная кнопка «Найти соперника», ожидание с
  * heartbeat, отмена, подсказка «ищем дольше обычного», сигнал и переход в комнату при найденном
  * матче. Ladder-ы и форматы — из данных блока `queues`, названия — через i18n.
  *
@@ -16,7 +16,9 @@ import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Chip } from "@/shared/ui/chip";
+import { ListRow } from "@/shared/ui/list-row";
 import { Segmented } from "@/shared/ui/segmented";
+import { TierBadge, tierKeyOf } from "@/shared/ui/tier-badge";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import type { OnlineQueue, QueueFormat } from "@/shared/api/types";
 import {
@@ -86,7 +88,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
   return (
     <section
       aria-label={t("rating.queue.title")}
-      className="flex flex-col gap-3.5"
+      className="flex flex-col gap-3"
       data-testid="queue"
     >
       {queues === null ? (
@@ -98,7 +100,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
       ) : (
         <>
           {ladders.length > 1 && (
-            <div className="flex justify-center">
+            <div className="flex">
               <Segmented
                 aria-label={t("online.rating.ladders")}
                 value={ladder}
@@ -110,7 +112,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
           <div
             data-domain={ladder}
             data-testid={`queue-ladder-${ladder}`}
-            className="flex flex-col gap-4 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-5 sm:flex-row sm:items-center sm:gap-[18px]"
+            className="flex flex-col gap-3"
           >
             <RatingSummary
               ladder={ladder}
@@ -123,7 +125,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
               disabled={busy || !format}
               onClick={() => format && void enter(ladder, format)}
               data-testid={`queue-enter-${buttonKey(ladder, format ?? "")}`}
-              className="sm:px-[26px]"
+              className="w-full"
             >
               {t("online.rating.find")}
             </Button>
@@ -132,7 +134,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
             <div
               role="group"
               aria-label={t("online.rating.formats")}
-              className="flex flex-wrap items-center justify-center gap-2"
+              className="flex flex-wrap items-center gap-2"
             >
               {pools.map((q) => (
                 <Chip
@@ -148,7 +150,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
             </div>
           )}
           {pool && (
-            <p className="text-center text-[13px] text-ink-muted" data-testid="queue-hint">
+            <p className="text-center text-xs text-ink-muted" data-testid="queue-hint">
               {[
                 dt(`rating.formatHint.${pool.format}`, ""),
                 t("rating.queue.searchingCount", { count: pool.searching }),
@@ -236,7 +238,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
   );
 }
 
-/** Рейтинг раздела слева в блоке: очки крупно, звание и путь до следующего; калибровка — вместо звания. */
+/** Рейтинг раздела строкой: очки и звание-значок; калибровка — вместо звания, путь до следующего — ниже. */
 function RatingSummary({
   ladder,
   ratings,
@@ -248,11 +250,11 @@ function RatingSummary({
 }) {
   const t = useTranslations();
   const tierLabel = useTierLabel();
+  const ladderLabel = useLadderLabel();
   const rating = ratings?.find((r) => r.ladder === ladder) ?? null;
   const left = rating ? pointsToNext(rating.rating, rating.next_tier_at) : null;
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1" data-testid={`rating-${ladder}`}>
-      <span className="text-[13px] text-ink-muted">{t("rating.queue.title")}</span>
+    <div className="flex min-w-0 flex-col gap-2" data-testid={`rating-${ladder}`}>
       {ratings === null ? (
         <p className="text-ink-muted" data-testid="ratings-unavailable">
           {t("rating.unavailable")}
@@ -268,17 +270,17 @@ function RatingSummary({
         </>
       ) : (
         <>
-          <div className="flex flex-wrap items-baseline gap-x-2.5">
-            {rating.rating !== null && (
-              <span className="tabular font-display text-[32px] leading-none font-extrabold tracking-[-0.03em]">
-                {rating.rating}
+          <ListRow
+            lead={rating.rating}
+            trailing={
+              <span data-testid="tier">
+                <TierBadge tier={tierKeyOf(rating.tier.family)}>{tierLabel(rating.tier)}</TierBadge>
               </span>
-            )}
-            <span className="text-sm text-ink-muted" data-testid="tier">
-              {tierLabel(rating.tier)}
-            </span>
-          </div>
-          <p className="text-sm text-ink-muted" data-testid="next-tier">
+            }
+          >
+            {ladderLabel(ladder)}
+          </ListRow>
+          <p className="text-[13px] text-ink-muted" data-testid="next-tier">
             {left === null ? t("rating.topTier") : t("rating.toNext", { points: left })}
             {rating.place != null && <> · {t("rating.place", { place: rating.place })}</>}
           </p>

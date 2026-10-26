@@ -22,17 +22,12 @@ export async function openSoloMode(page: Page, key: string): Promise<Locator> {
   return row;
 }
 
-/** Вкладка хаба онлайна по подписи («Лобби», «Мои матчи», «По коду»…). */
-export async function openHubTab(page: Page, name: string | RegExp): Promise<void> {
-  await page.getByRole("tab", { name }).click();
-}
-
 /** Раздел рейтинга в блоке дуэли хаба: переключатель «Музыка / Кино». */
 export async function pickLadder(page: Page, ladder: "music" | "film"): Promise<void> {
   await page.getByRole("radio", { name: ladder === "film" ? "Кино" : "Музыка" }).click();
 }
 
-/** Создать комнату по режиму из хаба: раскрыть «Создать комнату для друзей» и выбрать режим. */
+/** Создать комнату по режиму из хаба: раскрыть «Создать комнату» и выбрать режим. */
 export async function createRoomFromHub(page: Page, modeKey: string): Promise<void> {
   const row = page.getByTestId(`create-room-${modeKey}`);
   if (!(await row.isVisible())) await page.getByTestId("create-room-toggle").click();
