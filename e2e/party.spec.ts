@@ -96,6 +96,10 @@ test("party на 4: статусы, закрытая вкладка и возв�
     // Участник сразу попадает в матч (без экрана входа в комнату).
     await expect(back.getByTestId("match-stage")).toBeVisible();
     await expect(back.getByTestId("room-preview")).toHaveCount(0);
+    // C всё ещё за столом: поле ответа и «Отойти» рисуются только участнику. Если grace
+    // (`disconnect_grace_s`) истёк, сервер выбил C (`left`) — падаем здесь с внятной причиной,
+    // а не позже на «нет поля ответа».
+    await expect(back.getByTestId("away-toggle")).toBeVisible();
     for (const viewer of [a, b]) {
       await expect(playerRow(viewer.page, c.nickname).getByTestId("presence-disconnected")).toHaveCount(0, {
         timeout: DISCONNECT_MS,

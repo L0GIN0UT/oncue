@@ -29,10 +29,19 @@ async function finishByGivingUp(page: Page): Promise<void> {
 test("гость: дейлик музыки от главной до итога, повторный вход ведёт на итог", async ({ page }) => {
   const snapshots: string[] = [];
   const clueUrls: string[] = [];
+  // Тело читаем в try/catch: ответ, пришедший при уходе страницы (главная → /play), Chromium
+  // уже освободил («No resource with given identifier found»). Необработанная ошибка в
+  // обработчике роняла весь тест; потерянное тело не нужно — хватает дочитанных до навигации.
   page.on("response", async (r) => {
     const url = r.url();
-    if (/\/api\/game\/v1\/sessions\/[^/]+$/.test(url) && r.request().method() === "GET") snapshots.push(await r.text());
-    if (/\/rounds\/\d+\/clue$/.test(url) && r.ok()) clueUrls.push(((await r.json()) as { url: string }).url);
+    try {
+      if (/\/api\/game\/v1\/sessions\/[^/]+$/.test(url) && r.request().method() === "GET")
+        snapshots.push(await r.text());
+      if (/\/rounds\/\d+\/clue$/.test(url) && r.ok())
+        clueUrls.push(((await r.json()) as { url: string }).url);
+    } catch {
+      // тело недоступно: страница ушла дальше
+    }
   });
 
   // Главная — сегодняшняя игра: раунд виден на месте, адрес остаётся «/».
@@ -46,6 +55,7 @@ test("гость: дейлик музыки от главной до итога,
   await expect(page.getByRole("button", { name: "Слушать 0,5 с" })).toBeVisible();
 
   // Ссылка ассета — подписанная /media/a/<ключ>.<ext> конкретного уровня.
+  await expect.poll(() => clueUrls.length).toBeGreaterThan(0);
   expect(clueUrls[0]).toMatch(/^\/media\/a\/[A-Za-z0-9_-]+\.[a-z0-9]{2,5}\?/);
   // До ревила в снимке нет ответа.
   expect(snapshots.join("")).not.toMatch(/media_item_id|"title"/);

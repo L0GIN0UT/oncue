@@ -248,7 +248,19 @@ export const answerInput = (page: Page): Locator =>
 /** Неверный ответ свободным текстом (Enter без выбранной подсказки отправляет текст). */
 export async function wrongGuess(page: Page, text: string): Promise<void> {
   const input = answerInput(page);
-  await expect(input).toBeEnabled({ timeout: LEVEL_WINDOW_MS });
+  try {
+    await expect(input).toBeEnabled({ timeout: LEVEL_WINDOW_MS });
+  } catch (e) {
+    // Поля нет — разбор по снимку: фаза, раунд и «покинул ли я матч» (без места поля нет).
+    const stage = page.getByTestId("match-stage");
+    await test
+      .info()
+      .attach("match-stage", {
+        body: `phase=${await stage.getAttribute("data-phase", { timeout: 1_000 }).catch(() => "нет match-stage")}\n${await stage.innerText({ timeout: 1_000 }).catch(() => "")}`,
+        contentType: "text/plain",
+      });
+    throw e;
+  }
   const [res] = await Promise.all([
     page.waitForResponse(
       (r) =>
