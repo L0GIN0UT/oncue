@@ -168,7 +168,11 @@ function ProfileScreen({ blocks }: { blocks: ProfilePage["blocks"] }) {
       <TabPanel idBase="profile" value="look" active={tab === "look"}>
         <div className="flex flex-col gap-4">
           {avatar ? (
-            <section aria-labelledby="avatar-title" className="flex flex-col gap-2.5">
+            <section
+              aria-labelledby="avatar-title"
+              data-testid="block-avatar"
+              className="flex flex-col gap-2.5"
+            >
               <h2 id="avatar-title" className="px-0.5 font-semibold">
                 {t("avatar.title")}
               </h2>
