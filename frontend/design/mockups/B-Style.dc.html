@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>B · Киноафиша — стиль</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#C8102E}a:hover{color:#9E0B22}
+.h{font-family:"Oswald",sans-serif;text-transform:uppercase}
+.sw{display:flex;flex-direction:column;gap:8px}
+.sw i{display:block;height:64px}
+.sw b{font-size:14px;font-weight:600}
+.sw span{font-size:12px;color:#6B6B6B}
+.cap{font-size:13px;color:#6B6B6B}
+.slot{height:48px;border:2px solid #111111;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:15px;box-sizing:border-box;background:#FFFFFF}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:square;stroke-linejoin:miter;flex:none}
+.play{width:72px;height:72px;border:0;background:#C8102E;color:#FFFFFF;display:grid;place-items:center;cursor:pointer;box-shadow:4px 4px 0 #111111}
+.btn{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:15px;height:48px;padding:0 20px;border:2px solid #111111;cursor:pointer;background:#FFFFFF;color:#111111}
+</style>
+</helmet>
+<div style="font-family: 'IBM Plex Sans', system-ui, sans-serif; width: 1280px; height: 760px; box-sizing: border-box; padding: 48px 56px; background: #F2F2F0; color: #111111; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; align-content: start">
+
+  <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; border-bottom: 3px solid #111111; padding-bottom: 12px">
+    <span class="h" style="font-size: 44px; font-weight: 700; letter-spacing: .01em; line-height: 1">Киноафиша</span>
+    <span class="cap">Бумага, чёрная краска, один красный штамп. Углы прямые, линии толстые.</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 24px">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <div class="sw"><i style="background: #F2F2F0; border: 2px solid #111111"></i><b>Бумага</b><span>#F2F2F0 · фон</span></div>
+      <div class="sw"><i style="background: #FFFFFF; border: 2px solid #111111"></i><b>Лист</b><span>#FFFFFF · поверхность</span></div>
+      <div class="sw"><i style="background: #111111"></i><b>Краска</b><span>#111111 · текст и рамки, #6B6B6B подписи</span></div>
+      <div class="sw"><i style="background: #C8102E"></i><b>Штамп</b><span>#C8102E · единственный акцент</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="cap">Исходы попытки</span>
+      <div style="display: flex; gap: 8px"><span style="flex:1;height:12px;background:#1F7A3A"></span><span style="flex:1;height:12px;background:#C8102E"></span><span style="flex:1;height:12px;background:#BDBDB8"></span></div>
+      <div style="display: flex; gap: 8px; font-size: 12px; color: #6B6B6B"><span style="flex:1">угадал</span><span style="flex:1">почти</span><span style="flex:1">мимо и пропуск</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span class="h" style="font-size: 40px; font-weight: 700; line-height: 1">Раунд 3 из 10</span>
+      <span style="font-size: 16px; line-height: 1.5">Oswald капителью для заголовков и кнопок, как на афише. IBM Plex Sans для текста, 16 на 24.</span>
+      <span class="cap">Подписи 13, серые. Разрядка только в кнопках.</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <span class="cap">Строки попыток</span>
+    <div class="slot" style="border-color: #1F7A3A; background: #E6F2E9"><span>Radiohead — Creep</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Угадал" style="color:#1F7A3A"><path d="M5 12l5 5L20 7"/></svg></div>
+    <div class="slot" style="border-color: #C8102E"><span>Radiohead — Karma Police</span><span class="h" style="font-size: 13px; color: #C8102E; font-weight: 700">исполнитель</span></div>
+    <div class="slot" style="border-color: #BDBDB8"><span style="color: #6B6B6B">Muse — Hysteria</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Мимо" style="color:#BDBDB8"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+    <div class="slot" style="border-color: #BDBDB8"><span style="color: #BDBDB8">Пропуск</span></div>
+    <div class="slot" style="border-style: dashed; border-color: #BDBDB8; background: transparent"></div>
+    <span class="cap" style="margin-top: 10px">Лента времени</span>
+    <div style="display: flex; gap: 3px; height: 14px; border: 2px solid #111111; padding: 2px; box-sizing: border-box"><span style="flex:1;background:#C8102E"></span><span style="flex:1;background:#C8102E"></span><span style="flex:2;background:#C8102E"></span><span style="flex:3;background:#E3E3DF"></span><span style="flex:4;background:#E3E3DF"></span><span style="flex:5;background:#E3E3DF"></span></div>
+    <div style="display: flex; gap: 3px; font-size: 12px; color: #6B6B6B"><span style="flex:1">1</span><span style="flex:1">2</span><span style="flex:2">4</span><span style="flex:3">7</span><span style="flex:4">11</span><span style="flex:5">16 с</span></div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <span class="cap">Кнопки и поле</span>
+    <div style="display: flex; align-items: center; gap: 16px">
+      <button class="play" type="button" aria-label="Слушать"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:30px;height:30px;margin-left:3px"><path d="M7 5v14l12-7z"/></svg></button>
+      <button class="btn" type="button" style="background: #111111; color: #FFFFFF">Ответить</button>
+      <button class="btn" type="button">Пропустить</button>
+    </div>
+    <label for="b-inp" class="cap">Поле ответа</label>
+    <input id="b-inp" type="text" placeholder="Исполнитель или название" style="height: 52px; border: 2px solid #111111; background: #FFFFFF; color: #111111; padding: 0 16px; font: inherit; font-size: 16px; box-sizing: border-box; width: 100%">
+    <span class="cap" style="margin-top: 6px">Переключатель домена</span>
+    <div style="display: inline-flex; border: 2px solid #111111; align-self: flex-start">
+      <span class="h" style="height: 36px; padding: 0 18px; background: #111111; color: #FFFFFF; display: inline-flex; align-items: center; font-weight: 700; font-size: 14px">Музыка</span>
+      <span class="h" style="height: 36px; padding: 0 18px; display: inline-flex; align-items: center; font-weight: 500; font-size: 14px">Кино</span>
+    </div>
+    <span class="cap" style="margin-top: 6px">Меню по кнопке слева, пять строк</span>
+    <div style="background: #FFFFFF; border: 2px solid #111111; display: flex; flex-direction: column; font-size: 15px">
+      <span class="h" style="padding: 9px 14px; background: #111111; color: #FFFFFF; font-weight: 700">Сегодня</span>
+      <span style="padding: 9px 14px; border-top: 1px solid #E3E3DF">Соло</span>
+      <span style="padding: 9px 14px; border-top: 1px solid #E3E3DF">Онлайн</span>
+      <span style="padding: 9px 14px; border-top: 1px solid #E3E3DF">Сборники</span>
+      <span style="padding: 9px 14px; border-top: 1px solid #E3E3DF">Профиль</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

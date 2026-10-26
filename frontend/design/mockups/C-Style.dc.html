@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>C · Игровое шоу — стиль</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#FFD449}a:hover{color:#FFE27A}
+.sw{display:flex;flex-direction:column;gap:8px}
+.sw i{display:block;height:64px;border-radius:20px}
+.sw b{font-size:14px;font-weight:700}
+.sw span{font-size:12px;color:#C9BFFF}
+.cap{font-size:13px;color:#C9BFFF}
+.slot{height:52px;border-radius:999px;background:#3A1FB8;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:16px;font-weight:500;box-sizing:border-box;box-shadow:0 4px 0 #2A1390}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.play{width:76px;height:76px;border-radius:999px;border:0;background:#FFD449;color:#2A1390;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 0 #B8931A}
+.btn{font:inherit;font-weight:700;font-size:15px;height:50px;padding:0 22px;border-radius:999px;border:0;cursor:pointer}
+</style>
+</helmet>
+<div style="font-family: 'Rubik', system-ui, sans-serif; width: 1280px; height: 760px; box-sizing: border-box; padding: 48px 56px; background: #4B2BD9; color: #FFFFFF; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; align-content: start">
+
+  <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline">
+    <span style="font-size: 44px; font-weight: 900; letter-spacing: -0.03em; line-height: 1">Игровое шоу</span>
+    <span class="cap">Фиолетовая сцена, лимонный свет, круглые толстые формы. Один шрифт, три веса.</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 24px">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+      <div class="sw"><i style="background: #4B2BD9; border: 3px solid #3A1FB8"></i><b>Сцена</b><span>#4B2BD9 · фон</span></div>
+      <div class="sw"><i style="background: #3A1FB8"></i><b>Кулиса</b><span>#3A1FB8 · поверхность, тень #2A1390</span></div>
+      <div class="sw"><i style="background: #FFFFFF"></i><b>Свет</b><span>#FFFFFF · текст, #C9BFFF подписи</span></div>
+      <div class="sw"><i style="background: #FFD449"></i><b>Лимон</b><span>#FFD449 · единственный акцент</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="cap">Исходы попытки</span>
+      <div style="display: flex; gap: 8px"><span style="flex:1;height:14px;border-radius:999px;background:#5EF2B0"></span><span style="flex:1;height:14px;border-radius:999px;background:#FFD449"></span><span style="flex:1;height:14px;border-radius:999px;background:#2A1390"></span></div>
+      <div style="display: flex; gap: 8px; font-size: 12px; color: #C9BFFF"><span style="flex:1">угадал</span><span style="flex:1">почти</span><span style="flex:1">мимо и пропуск</span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 36px; font-weight: 900; letter-spacing: -0.03em; line-height: 1">Раунд 3 из 10</span>
+      <span style="font-size: 16px; line-height: 1.5; font-weight: 500">Rubik 900 для заголовков, 700 для кнопок, 500 для текста. Одна семья, чтобы всё было круглым.</span>
+      <span class="cap">Подписи 13, сиреневые. Капса нет.</span>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <span class="cap">Строки попыток</span>
+    <div class="slot" style="background: #5EF2B0; color: #10361F; box-shadow: 0 4px 0 #2FA874"><span>Radiohead — Creep</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Угадал"><path d="M5 12l5 5L20 7"/></svg></div>
+    <div class="slot" style="box-shadow: inset 0 0 0 3px #FFD449, 0 4px 0 #2A1390"><span>Radiohead — Karma Police</span><span style="font-size: 13px; color: #FFD449; font-weight: 700">исполнитель</span></div>
+    <div class="slot"><span style="color: #C9BFFF">Muse — Hysteria</span><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="Мимо" style="color:#C9BFFF"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+    <div class="slot"><span style="color: #8F7FE6">Пропуск</span></div>
+    <div class="slot" style="background: transparent; box-shadow: inset 0 0 0 3px #3A1FB8"></div>
+    <span class="cap" style="margin-top: 8px">Лента времени</span>
+    <div style="display: flex; gap: 4px; height: 16px"><span style="flex:1;background:#FFD449;border-radius:999px"></span><span style="flex:1;background:#FFD449;border-radius:999px"></span><span style="flex:2;background:#FFD449;border-radius:999px"></span><span style="flex:3;background:#3A1FB8;border-radius:999px"></span><span style="flex:4;background:#3A1FB8;border-radius:999px"></span><span style="flex:5;background:#3A1FB8;border-radius:999px"></span></div>
+    <div style="display: flex; gap: 4px; font-size: 12px; color: #C9BFFF"><span style="flex:1">1</span><span style="flex:1">2</span><span style="flex:2">4</span><span style="flex:3">7</span><span style="flex:4">11</span><span style="flex:5">16 с</span></div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <span class="cap">Кнопки и поле</span>
+    <div style="display: flex; align-items: center; gap: 16px">
+      <button class="play" type="button" aria-label="Слушать"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:32px;height:32px;margin-left:3px"><path d="M7 5v14l12-7z"/></svg></button>
+      <button class="btn" type="button" style="background: #FFD449; color: #2A1390; box-shadow: 0 4px 0 #B8931A">Ответить</button>
+      <button class="btn" type="button" style="background: #3A1FB8; color: #FFFFFF; box-shadow: 0 4px 0 #2A1390">Пропустить</button>
+    </div>
+    <label for="c-inp" class="cap">Поле ответа</label>
+    <input id="c-inp" type="text" placeholder="Исполнитель или название" style="height: 54px; border-radius: 999px; border: 0; background: #FFFFFF; color: #2A1390; padding: 0 22px; font: inherit; font-size: 16px; font-weight: 500; box-sizing: border-box; width: 100%; box-shadow: 0 4px 0 #2A1390">
+    <span class="cap" style="margin-top: 6px">Переключатель домена</span>
+    <div style="display: inline-flex; padding: 4px; border-radius: 999px; background: #3A1FB8; gap: 2px; align-self: flex-start; box-shadow: 0 4px 0 #2A1390">
+      <span style="height: 38px; padding: 0 20px; border-radius: 999px; background: #FFD449; color: #2A1390; display: inline-flex; align-items: center; font-weight: 700; font-size: 14px">Музыка</span>
+      <span style="height: 38px; padding: 0 20px; border-radius: 999px; display: inline-flex; align-items: center; font-weight: 700; font-size: 14px; color: #C9BFFF">Кино</span>
+    </div>
+    <span class="cap" style="margin-top: 6px">Меню по кнопке слева, пять строк</span>
+    <div style="background: #3A1FB8; border-radius: 24px; padding: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 15px; font-weight: 700; box-shadow: 0 4px 0 #2A1390">
+      <span style="padding: 9px 16px; border-radius: 999px; background: #FFD449; color: #2A1390">Сегодня</span>
+      <span style="padding: 9px 16px">Соло</span>
+      <span style="padding: 9px 16px">Онлайн</span>
+      <span style="padding: 9px 16px">Сборники</span>
+      <span style="padding: 9px 16px">Профиль</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Таблица лидеров</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#141414}
+a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+.h{font-family:"Unbounded",sans-serif}
+.ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
+.ib:hover{border-color:#3A3A3A;color:#F2F2F2}
+.btn{font:inherit;font-weight:600;font-size:15px;height:44px;padding:0 18px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn:hover{border-color:#5A5A5A}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:#1C1C1C;border:1.5px solid #3A3A3A;gap:2px}
+.seg button{height:36px;padding:0 18px;border:0;border-radius:999px;background:transparent;color:#A3A3A3;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.seg button.on{background:#F2F2F2;color:#141414}
+.tab{height:40px;padding:0 4px;border:0;border-bottom:2px solid transparent;background:transparent;color:#A3A3A3;font:inherit;font-size:15px;font-weight:500;cursor:pointer}
+.tab.on{color:#F2F2F2;border-bottom-color:#F2B13B}
+.r{display:grid;grid-template-columns:44px 1fr 110px 80px 70px;align-items:center;gap:12px;height:56px;padding:0 16px;border:1.5px solid #3A3A3A;border-radius:14px;box-sizing:border-box;font-size:15px}
+.r.me{border-color:#F2B13B;background:#1C1C1C;box-shadow:0 0 0 4px rgba(242,177,59,.14)}
+.r .pl{font-family:"Unbounded",sans-serif;font-weight:800;font-size:15px;letter-spacing:-.02em}
+.r .num{text-align:right;font-variant-numeric:tabular-nums}
+.r .mut{color:#A3A3A3;font-size:14px}
+.av{width:32px;height:32px;border-radius:999px;border:1.5px solid #3A3A3A;display:grid;place-items:center;font-size:11px;font-weight:600;flex:none}
+.hd{display:grid;grid-template-columns:44px 1fr 110px 80px 70px;gap:12px;padding:0 16px;font-size:12px;color:#5A5A5A}
+.hd span:nth-child(n+4){text-align:right}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
+    <div style="flex: 1; display: flex"><button class="ib" type="button" aria-label="Меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</a>
+    <div style="flex: 1; display: flex; gap: 4px; align-items: center; justify-content: flex-end">
+      <button class="ib" type="button" aria-label="Как считается рейтинг"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5"/></svg></button>
+      <a href="Profile.dc.html" aria-label="Профиль" style="width: 38px; height: 38px; border-radius: 999px; border: 1.5px solid #3A3A3A; display: grid; place-items: center; font-weight: 600; font-size: 13px; margin-left: 6px">ИЛ</a>
+    </div>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 6px 24px 48px; box-sizing: border-box">
+    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 2px">
+        <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Лидеры</h1>
+        <span style="font-size: 14px; color: #A3A3A3">Сезон 3 · осталось 34 дня</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
+        <div class="seg" role="group" aria-label="Домен"><button type="button" class="on">Музыка</button><button type="button">Кино</button></div>
+        <div class="seg" role="group" aria-label="Формат"><button type="button" class="on">Классика</button><button type="button">Лайт</button></div>
+      </div>
+      <div role="tablist" style="display: flex; gap: 22px; border-bottom: 1.5px solid #3A3A3A">
+        <button class="tab on" type="button" role="tab" aria-selected="true">Рейтинг</button>
+        <button class="tab" type="button" role="tab" aria-selected="false">Топ недели</button>
+        <button class="tab" type="button" role="tab" aria-selected="false">Друзья</button>
+      </div>
+    </section>
+
+    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 8px">
+      <div class="r me" style="position: sticky; top: 8px; z-index: 2"><span class="pl" style="color: #F2B13B">412</span><span style="display: flex; align-items: center; gap: 10px; min-width: 0"><span class="av" style="border-color: #F2B13B">ИЛ</span><span style="font-weight: 600">Ты</span></span><span class="mut">Серебро II</span><span class="num" style="font-weight: 600">1 480</span><span class="num mut">37</span></div>
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 2px">
+        <span style="font-size: 13px; color: #A3A3A3">До Серебра I не хватает 70. Матчей за неделю: 6.</span>
+        <button class="btn" type="button" style="height: 36px; font-size: 13px; padding: 0 12px">К началу таблицы</button>
+      </div>
+      <div class="hd"><span>место</span><span>игрок</span><span>звание</span><span>рейтинг</span><span>матчи</span></div>
+      <div class="r"><span class="pl mut">409</span><span style="display: flex; align-items: center; gap: 10px; min-width: 0"><span class="av">ДМ</span><span>Дмитрий</span></span><span class="mut">Серебро II</span><span class="num">1 492</span><span class="num mut">51</span></div>
+      <div class="r"><span class="pl mut">410</span><span style="display: flex; align-items: center; gap: 10px; min-width: 0"><span class="av">КС</span><span>Ксения</span></span><span class="mut">Серебро II</span><span class="num">1 488</span><span class="num mut">29</span></div>
+      <div class="r"><span class="pl mut">411</span><span style="display: flex; align-items: center; gap: 10px; min-width: 0"><span class="av">МР</span><span>Марат <span class="mut">· друг</span></span></span><span class="mut">Серебро II</span><span class="num">1 484</span><span class="num mut">44</span></div>
+      <div class="r"><span class="pl mut">413</span><span style="display: flex; align-items: center; gap: 10px; min-width: 0"><span class="av">АБ</span><span>Артём</span></span><span class="mut">Серебро II</span><span class="num">1 477</span><span class="num mut">63</span></div>
+      <div class="r"><span class="pl mut">414</span><span style="display: flex; align-items: center; gap: 10px; min-width: 0"><span class="av">ЛВ</span><span>Лев</span></span><span class="mut">Серебро III</span><span class="num">1 471</span><span class="num mut">18</span></div>
+      <button class="btn" type="button" style="align-self: center; margin-top: 6px">Показать ещё</button>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

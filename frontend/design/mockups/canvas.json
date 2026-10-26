@@ -1,0 +1,31 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-26T06:40:00Z"},
+  "title": "Guessverse — макеты фронта",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1280, "h": 800, "title": "Стиль"},
+    "A-Game.dc.html": {"x": 0, "y": 1000, "w": 1280, "h": 900, "title": "Сегодня: игра, кликабельно", "expand": "fill", "is_interactive": true},
+    "Solo.dc.html": {"x": 1360, "y": 1000, "w": 1280, "h": 900, "title": "Соло: режимы, кликабельно", "expand": "fill", "is_interactive": true},
+    "Online.dc.html": {"x": 2720, "y": 1000, "w": 1280, "h": 900, "title": "Онлайн", "expand": "fill"},
+    "Duel.dc.html": {"x": 4080, "y": 1000, "w": 1280, "h": 900, "title": "Дуэль: раунд", "expand": "fill"},
+    "Room.dc.html": {"x": 0, "y": 2100, "w": 1280, "h": 900, "title": "Комната party", "expand": "fill"},
+    "Collections.dc.html": {"x": 1360, "y": 2100, "w": 1280, "h": 900, "title": "Сборники", "expand": "fill"},
+    "Profile.dc.html": {"x": 2720, "y": 2100, "w": 1280, "h": 900, "title": "Профиль", "expand": "fill"},
+    "Shop.dc.html": {"x": 4080, "y": 2100, "w": 1280, "h": 900, "title": "Магазин", "expand": "fill"},
+    "Event.dc.html": {"x": 0, "y": 3200, "w": 1280, "h": 900, "title": "Событие", "expand": "fill"},
+    "Login.dc.html": {"x": 1360, "y": 3200, "w": 1280, "h": 900, "title": "Вход", "expand": "fill"},
+    "Leaderboards.dc.html": {"x": 2720, "y": 3200, "w": 1280, "h": 900, "title": "Лидеры", "expand": "fill"},
+    "B-Style.dc.html": {"x": 6000, "y": 0, "w": 1280, "h": 760, "title": "Референс B — стиль"},
+    "B-Game.dc.html": {"x": 6000, "y": 1000, "w": 1280, "h": 860, "title": "Референс B — игра", "expand": "fill"}
+  },
+  "order": ["Main.dc.html", "A-Game.dc.html", "Solo.dc.html", "Online.dc.html", "Duel.dc.html", "Room.dc.html", "Collections.dc.html", "Profile.dc.html", "Shop.dc.html", "Event.dc.html", "Login.dc.html", "Leaderboards.dc.html", "B-Style.dc.html", "B-Game.dc.html"],
+  "notes": {
+    "t0": {"x": 0, "y": -280, "text": "Ночной эфир — дизайн-система", "kind": "title1", "maxW": 1280},
+    "t1": {"x": 0, "y": 720, "text": "Экраны", "kind": "title1", "maxW": 5360},
+    "tb": {"x": 6000, "y": -280, "text": "Киноафиша, референс", "kind": "title1", "maxW": 1280},
+    "n1": {"x": 1360, "y": -170, "w": 1280, "text": "Правила экранов: одна колонка 640 px, одно главное действие, вторичное во вкладках или раскрывается по клику. Шапка везде одна: меню слева, знак по центру, справа подсказка, архив и профиль. Цветов четыре, акцент один.", "size": "m"}
+  },
+  "designSystems": []
+}

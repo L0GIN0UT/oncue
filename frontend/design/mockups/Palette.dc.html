@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Палитра: три направления</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{color:inherit}
+.h{font-family:"Unbounded",sans-serif}
+.opt{border:0;font:inherit;text-align:left;cursor:pointer;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px;transition:transform .2s cubic-bezier(.2,.8,.2,1)}
+.opt:hover{transform:translateY(-2px)}
+.dots{display:flex;gap:6px}
+.dots i{width:26px;height:26px;border-radius:8px;display:block}
+.prev{border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:14px;transition:background .35s,color .35s}
+.btn{font:inherit;font-weight:600;font-size:14px;height:42px;padding:0 16px;border-radius:12px;border:0;display:inline-flex;align-items:center;gap:8px}
+.seg{height:10px;border-radius:999px;flex:1}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; width: 1280px; height: 760px; box-sizing: border-box; padding: 48px 56px; background: {{p.night}}; color: {{p.ink}}; display: flex; flex-direction: column; gap: 28px; transition: background .35s, color .35s">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: {{p.faint}}">Выбор направления · нажми на вариант</span>
+      <h1 class="h" style="margin: 0; font-size: 36px; font-weight: 800; letter-spacing: -0.02em">{{p.title}}</h1>
+      <p style="margin: 0; max-width: 64ch; font-size: 15px; line-height: 1.5; color: {{p.muted}}">{{p.desc}}</p>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+    <sc-for list="{{options}}" as="o" hint-placeholder-count="3">
+      <button class="opt" type="button" onClick="{{o.pick}}" style="background: {{o.night}}; color: {{o.ink}}; box-shadow: {{o.ring}}">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span class="h" style="font-size: 18px; font-weight: 700">{{o.name}}</span>
+          <span style="font-size: 12px; color: {{o.faint}}">{{o.tag}}</span>
+        </div>
+        <div class="dots"><i style="background: {{o.stage}}"></i><i style="background: {{o.marquee}}"></i><i style="background: {{o.music}}"></i><i style="background: {{o.film}}"></i><i style="background: {{o.exact}}"></i><i style="background: {{o.miss}}"></i></div>
+        <span style="font-size: 13px; line-height: 1.45; color: {{o.muted}}">{{o.note}}</span>
+      </button>
+    </sc-for>
+  </div>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: 1">
+    <div class="prev" style="background: {{p.stage}}; border: 1px solid {{p.rule}}">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <span style="font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 999px; background: {{p.musicSoft}}; color: {{p.music}}">Музыка · дейлик</span>
+        <span style="font-size: 13px; color: {{p.faint}}">7 ч 12 м</span>
+      </div>
+      <span class="h" style="font-size: 24px; font-weight: 700">Угадай трек</span>
+      <div style="display: flex; gap: 5px"><div class="seg" style="background: {{p.music}}"></div><div class="seg" style="background: {{p.music}}"></div><div class="seg" style="background: {{p.music}}; flex: 2"></div><div class="seg" style="background: {{p.raised}}; flex: 3"></div><div class="seg" style="background: {{p.raised}}; flex: 4"></div></div>
+      <div style="display: flex; gap: 10px; align-items: center; margin-top: auto">
+        <button class="btn" type="button" style="background: {{p.marquee}}; color: {{p.onMarquee}}">Играть</button>
+        <button class="btn" type="button" style="background: transparent; color: {{p.ink}}; box-shadow: inset 0 0 0 1.5px {{p.rule}}">Пропустить</button>
+      </div>
+    </div>
+    <div class="prev" style="background: {{p.stage}}; border: 1px solid {{p.rule}}">
+      <span style="font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 999px; background: {{p.filmSoft}}; color: {{p.film}}; align-self: flex-start">Кино · кадр</span>
+      <span class="h" style="font-size: 20px; font-weight: 700">Попытки</span>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px">
+        <div style="display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: {{p.raised}}"><span>Интерстеллар</span><span style="color: {{p.miss}}; font-weight: 600">мимо</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: {{p.raised}}"><span>Начало</span><span style="color: {{p.partial}}; font-weight: 600">режиссёр</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: {{p.exactSoft}}"><span>Престиж</span><span style="color: {{p.exact}}; font-weight: 600">точно</span></div>
+      </div>
+    </div>
+    <div class="prev" style="background: {{p.stage}}; border: 1px solid {{p.rule}}; gap: 10px">
+      <span style="font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: {{p.faint}}">Текст на сцене</span>
+      <span class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05">Раунд 3 из 10</span>
+      <span style="font-size: 15px; line-height: 1.5; color: {{p.muted}}">Основной текст и подписи. Проверка контраста: подписи не светлее 4.5:1 к поверхности.</span>
+      <div style="display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap">
+        <span style="font-size: 13px; padding: 6px 10px; border-radius: 999px; border: 1.5px solid {{p.marquee}}; color: {{p.ink}}">Все</span>
+        <span style="font-size: 13px; padding: 6px 10px; border-radius: 999px; border: 1.5px solid {{p.rule}}; color: {{p.muted}}">Музыка</span>
+        <span style="font-size: 13px; padding: 6px 10px; border-radius: 999px; border: 1.5px solid {{p.rule}}; color: {{p.muted}}">Кино</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { picked: 'a' };
+  }
+  palettes() {
+    return [
+      { id: 'a', name: 'A · Афиша', tag: 'тёмная, горячий акцент', title: 'Афиша',
+        desc: 'Глубокий индиго вместо сливового, один горячий коралловый акцент для действий. Музыка — янтарь, кино — неон-циан. Ближе всего к привычке играть вечером.',
+        note: 'Эволюция текущей темы: контраст выше, появился цвет действия.',
+        night: '#0F0E1C', stage: '#19182E', raised: '#23213F', rule: '#343159', ink: '#F5F2FF', muted: '#B4AED2', faint: '#8B85AE',
+        marquee: '#FF6B57', onMarquee: '#1B0B08', music: '#FFB224', film: '#52D3FF', exact: '#9BEF7A', partial: '#FFD66B', miss: '#FF7A86',
+        musicSoft: 'rgba(255,178,36,.16)', filmSoft: 'rgba(82,211,255,.16)', exactSoft: 'rgba(155,239,122,.16)' },
+      { id: 'b', name: 'B · Винил', tag: 'светлая, тёплая', title: 'Винил',
+        desc: 'Тёплая бумага и графит, как конверт пластинки. Акцент — мандарин, кино — глубокий бирюзовый. Дневная, спокойная, хорошо печатается и читается на солнце.',
+        note: 'Полная смена: светлая тема по умолчанию, тёмная — вторая.',
+        night: '#F7F1E6', stage: '#FFFBF4', raised: '#EFE6D6', rule: '#DCCFB9', ink: '#1E1A17', muted: '#5C534A', faint: '#6E655B',
+        marquee: '#E8552B', onMarquee: '#FFFFFF', music: '#B5700A', film: '#0E7C73', exact: '#2F8F3C', partial: '#A86F00', miss: '#C8323F',
+        musicSoft: 'rgba(181,112,10,.14)', filmSoft: 'rgba(14,124,115,.14)', exactSoft: 'rgba(47,143,60,.14)' },
+      { id: 'c', name: 'C · Неон', tag: 'чёрная, кислотная', title: 'Неон',
+        desc: 'Почти чёрный экран, кислотный лайм как цвет действия, маджента для музыки, электрик-голубой для кино. Максимум энергии, под стримы и киберспорт.',
+        note: 'Самая резкая: нужны аккуратные свечения, иначе устаёт глаз.',
+        night: '#09090D', stage: '#131319', raised: '#1D1D26', rule: '#2C2C3A', ink: '#F4F4F8', muted: '#B2B2C4', faint: '#8E8EA3',
+        marquee: '#C8F55A', onMarquee: '#0F1400', music: '#FF4FA3', film: '#4FA3FF', exact: '#7CF5B0', partial: '#FFD95A', miss: '#FF6B7A',
+        musicSoft: 'rgba(255,79,163,.16)', filmSoft: 'rgba(79,163,255,.16)', exactSoft: 'rgba(124,245,176,.16)' }
+    ];
+  }
+  renderVals() {
+    const list = this.palettes();
+    const p = list.find((x) => x.id === this.state.picked) || list[0];
+    const options = list.map((o) => ({
+      ...o,
+      ring: o.id === p.id ? ('0 0 0 2px ' + o.marquee + ', 0 12px 32px rgba(0,0,0,.25)') : ('inset 0 0 0 1px ' + o.rule),
+      pick: () => this.setState({ picked: o.id })
+    }));
+    return { p, options };
+  }
+}
+</script>
+</body>
+</html>

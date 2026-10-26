@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Итоги</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0F0E1C}
+a{color:#F5F2FF;text-decoration:none}a:hover{color:#FFFFFF}
+.h{font-family:"Unbounded",sans-serif}
+.ico{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:12px;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.primary{background:#FF6B57;color:#1B0B08;box-shadow:0 8px 24px rgba(255,107,87,.25)}
+.second{background:transparent;color:#F5F2FF;box-shadow:inset 0 0 0 1.5px #343159}
+.card{background:#19182E;border:1px solid #343159;border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.cell{width:40px;height:40px;border-radius:10px;display:grid;place-items:center}
+.r{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:14px;background:#19182E;border:1px solid #343159;animation:up .5s cubic-bezier(.2,.8,.2,1) both}
+.cov{width:48px;height:48px;border-radius:10px;flex:none;background:linear-gradient(135deg,#23213F,#343159)}
+@keyframes up{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:none}}
+@keyframes count{0%{opacity:0;transform:scale(.8)}100%{opacity:1;transform:none}}
+.num{animation:count .7s cubic-bezier(.2,.8,.2,1) both}
+.d1{animation-delay:.1s}.d2{animation-delay:.18s}.d3{animation-delay:.26s}.d4{animation-delay:.34s}.d5{animation-delay:.42s}
+</style>
+</helmet>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F5F2FF; max-width: 1280px; margin: 0 auto; min-height: 900px; padding: 32px 40px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+
+  <header style="display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+    <span style="font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #FFB224; font-weight: 600">Музыка · дейлик · 26 октября</span>
+    <h1 class="h" style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.02em">Отличный слух</h1>
+    <div class="num" style="display: flex; align-items: baseline; gap: 10px"><span class="h" style="font-size: 96px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: #FFB224">740</span><span style="font-size: 18px; color: #B4AED2">очков · 7 из 10 точно</span></div>
+    <div style="display: flex; gap: 6px; margin-top: 6px" role="img" aria-label="Исходы раундов: точно, точно, почти, точно, мимо, точно, точно, пропуск, точно, точно">
+      <span class="cell" style="background: #9BEF7A"></span><span class="cell" style="background: #9BEF7A"></span><span class="cell" style="background: #FFD66B; border-radius: 999px"></span><span class="cell" style="background: #9BEF7A"></span><span class="cell" style="background: #FF7A86; transform: rotate(45deg) scale(.8)"></span><span class="cell" style="background: #9BEF7A"></span><span class="cell" style="background: #9BEF7A"></span><span class="cell" style="background: #343159"></span><span class="cell" style="background: #9BEF7A"></span><span class="cell" style="background: #9BEF7A"></span>
+    </div>
+    <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; justify-content: center">
+      <button class="btn primary" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7h16v-7M12 3v12M8 7l4-4 4 4"/></svg>Поделиться</button>
+      <a href="Solo.dc.html" class="btn second">Случайный режим</a>
+      <a href="Home.dc.html" class="btn second" style="color: #B4AED2">На главную</a>
+    </div>
+  </header>
+
+  <section style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: #8B85AE; font-weight: 600; padding: 0 4px 6px">Раунды</span>
+      <div class="r d1"><span class="cov" style="background: linear-gradient(135deg,#FFB224,#8a5d10)"></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><b>Creep</b><span style="color: #B4AED2; font-size: 14px">Radiohead · 1992</span></span><span style="font-size: 13px; color: #8B85AE">1 с</span><span style="color: #9BEF7A; font-weight: 600; width: 72px; text-align: right">+100</span></div>
+      <div class="r d2"><span class="cov" style="background: linear-gradient(135deg,#52D3FF,#1f6f66)"></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><b>Hysteria</b><span style="color: #B4AED2; font-size: 14px">Muse · 2003</span></span><span style="font-size: 13px; color: #8B85AE">2 с</span><span style="color: #9BEF7A; font-weight: 600; width: 72px; text-align: right">+85</span></div>
+      <div class="r d3"><span class="cov" style="background: linear-gradient(135deg,#FFD66B,#B5700A)"></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><b>Smells Like Teen Spirit</b><span style="color: #B4AED2; font-size: 14px">Nirvana · 1991 · назвал группу</span></span><span style="font-size: 13px; color: #8B85AE">7 с</span><span style="color: #FFD66B; font-weight: 600; width: 72px; text-align: right">+25</span></div>
+      <div class="r d4"><span class="cov" style="background: linear-gradient(135deg,#FF7A86,#7a2a33)"></span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><b>Seven Nation Army</b><span style="color: #B4AED2; font-size: 14px">The White Stripes · 2003</span></span><span style="font-size: 13px; color: #8B85AE">16 с</span><span style="color: #FF7A86; font-weight: 600; width: 72px; text-align: right">0</span></div>
+      <div class="r d5" style="border-style: dashed; justify-content: center; color: #8B85AE; font-size: 14px">Ещё 6 раундов</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <div class="card" style="gap: 14px">
+        <span class="h" style="font-size: 17px; font-weight: 700">Награды</span>
+        <div class="row"><span style="color: #B4AED2">Опыт</span><span style="font-weight: 600; color: #FFB224">+120 XP</span></div>
+        <div style="height: 8px; border-radius: 999px; background: #23213F; overflow: hidden"><div style="width: 82%; height: 100%; background: #FFB224"></div></div>
+        <div class="row" style="font-size: 13px; color: #8B85AE"><span>Уровень 14</span><span>до 15 осталось 540</span></div>
+        <div class="row" style="padding-top: 6px; border-top: 1px solid #343159"><span style="color: #B4AED2">Версы</span><span style="font-weight: 600; color: #FFD66B">+15</span></div>
+        <div class="row"><span style="color: #B4AED2">Серия</span><span style="font-weight: 600; color: #FF6B57">13 дней</span></div>
+      </div>
+      <div class="card">
+        <div class="row"><span class="h" style="font-size: 17px; font-weight: 700">Среди друзей</span><span style="font-size: 13px; color: #8B85AE">сегодня</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px">
+          <div class="row" style="padding: 8px 10px; border-radius: 10px; background: #23213F"><span>1 · Алина</span><span style="font-variant-numeric: tabular-nums">880</span></div>
+          <div class="row" style="padding: 8px 10px; border-radius: 10px; background: rgba(255,107,87,.14); border: 1px solid rgba(255,107,87,.4)"><span>2 · Ты</span><span style="font-variant-numeric: tabular-nums">740</span></div>
+          <div class="row" style="padding: 8px 10px; border-radius: 10px; background: #23213F"><span>3 · Марат</span><span style="font-variant-numeric: tabular-nums">610</span></div>
+        </div>
+        <a href="Online.dc.html" class="btn second" style="justify-content: center; height: 40px; font-size: 14px">Вызвать Алину на дуэль</a>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
