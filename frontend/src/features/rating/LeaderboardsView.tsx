@@ -1,14 +1,14 @@
 "use client";
 /**
- * Лидеры `/leaderboards`: переключатель раздела (музыка / кино), вкладки «Рейтинг» и «Топ недели»,
- * таблица с пагинацией по курсору, липкая строка «Ты» (`around=me`, только вошедшему). Данные —
- * bff `/pages/leaderboards`, блоки гаснут независимо. Страница публичная: гость видит таблицы
- * без своего места.
+ * Лидеры `/leaderboards` по макету v3 (Leaderboard): переключатель раздела (музыка / кино) и сезон,
+ * слева плитки «Ты» и «Друзья в таблице», справа вкладки «Рейтинг» и «Топ недели» с таблицей по
+ * курсору. Данные — bff `/pages/leaderboards`, блоки гаснут независимо. Страница публичная: гость
+ * видит таблицы без своего места.
  *
  * При смене раздела прошлая таблица остаётся на экране под индикатором обновления, переключатель
  * не пропадает; ошибки показываются рядом с таблицей и различаются по причине.
  */
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   keepPreviousData,
   useInfiniteQuery,
@@ -20,8 +20,11 @@ import { blockData } from "@/shared/api/blocks";
 import type { LadderCard, LeaderboardCard, LeaderboardEntry } from "@/shared/api/types";
 import { Avatar } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
+import { ListRow } from "@/shared/ui/list-row";
+import { PillTabs, type PillTab } from "@/shared/ui/pill-tabs";
 import { Segmented } from "@/shared/ui/segmented";
-import { TabPanel, Tabs, type TabItem } from "@/shared/ui/tabs";
+import { TierBadge, tierKeyOf } from "@/shared/ui/tier-badge";
+import { Tile } from "@/shared/ui/tile";
 import { cn } from "@/shared/lib/cn";
 import { useViewer } from "@/features/auth/session";
 import { useMyUserId } from "@/features/auth/use-my-user-id";
@@ -45,8 +48,8 @@ const ERROR_TEXT = {
 type TabId = "rating" | "weekly";
 
 /** Колонки таблицы: место, игрок, звание, рейтинг, матчи. */
-const GRID = "grid grid-cols-[44px_minmax(0,1fr)_110px_80px_70px] items-center gap-3";
-const ROW = "min-h-14 rounded-[var(--radius-control)] border-[1.5px] px-4 text-[15px]";
+const GRID = "grid grid-cols-[34px_minmax(0,1fr)_110px_72px_56px] items-center gap-3";
+const ROW = "min-h-11 rounded-xl border-[1.5px] px-2.5 text-[15px]";
 
 export function LeaderboardsView() {
   const t = useTranslations();
@@ -55,6 +58,7 @@ export function LeaderboardsView() {
   const viewer = useViewer();
   const isUser = viewer.kind === "user";
   const myId = useMyUserId();
+  const panelId = useId();
   const [tab, setTab] = useState<TabId>("rating");
   const [picked, setPicked] = useState<string | null>(null);
   const [around, setAround] = useState(false);
@@ -100,124 +104,159 @@ export function LeaderboardsView() {
     else choose(null);
   };
   const caption = `${t("rating.board.leaderboard")}${active ? ` · ${ladderLabel(active)}` : ""}`;
-  const tabs: TabItem<TabId>[] = [
+  const tabs: PillTab<TabId>[] = [
     { value: "rating", label: t("rating.board.tabRating") },
     { value: "weekly", label: t("rating.board.weekly") },
   ];
+  const friendRows = rows.filter((r) => friendIds.has(r.user_id));
 
   return (
-    <div className="flex flex-col gap-4 pt-2">
-      <header className="flex flex-col gap-3.5">
-        <div className="flex items-end justify-between gap-3 px-0.5">
-          <h1 className="font-display text-[28px] leading-none font-extrabold">
-            {t("rating.board.title")}
-          </h1>
-          {season && <SeasonLine season={season} />}
-        </div>
-        {ladders && (
+    <div className="flex flex-col gap-5 pt-2" data-testid="leaderboards">
+      <h1 className="sr-only">{t("rating.board.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {ladders ? (
           <Segmented
             aria-label={t("rating.board.ladders")}
             value={active ?? ""}
             options={ladders.map((l) => ({ value: l.key, label: ladderLabel(l.key) }))}
             onChange={choose}
-            className="self-start"
           />
+        ) : (
+          !query.isPending && (
+            <p className="text-ink-muted">{t("rating.board.ladderUnavailable")}</p>
+          )
         )}
-        {!ladders && !query.isPending && (
-          <p className="text-ink-muted">{t("rating.board.ladderUnavailable")}</p>
-        )}
-        <Tabs
-          tabs={tabs}
-          value={tab}
-          onChange={setTab}
-          idBase="board"
-          aria-label={t("rating.board.tabs")}
-        />
-      </header>
+        {season && <SeasonLine season={season} />}
+      </div>
 
-      <TabPanel idBase="board" value="rating" active={tab === "rating"}>
-        <section
-          aria-labelledby="board-table"
-          className="flex flex-col gap-2"
-          data-domain={ladders?.find((l) => l.key === active)?.domain}
-        >
-          <h2 id="board-table" className="sr-only">
-            {caption}
-          </h2>
-          {me && <MyPlace entry={me} />}
-          <div className="flex items-center justify-between gap-3 px-0.5 py-1">
-            {isUser ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="ml-auto"
+      <section className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="flex flex-col gap-5">
+          {me ? (
+            <MyPlace entry={me} ladder={active ? ladderLabel(active) : null} />
+          ) : (
+            <Tile cap={t("rating.board.me")} data-testid="my-place-empty">
+              <p className="text-sm text-ink-muted">
+                {isUser ? t("rating.board.noPlace") : t("rating.board.loginToSee")}
+              </p>
+            </Tile>
+          )}
+          {isUser && (
+            <Tile cap={t("rating.board.friendsCap")} data-testid="board-friends">
+              {friendRows.length === 0 ? (
+                <p className="text-sm text-ink-muted">{t("rating.board.noFriends")}</p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {friendRows.slice(0, 5).map((r) => (
+                    <ListRow key={r.user_id} lead={`#${r.place}`} trailing={r.rating}>
+                      <span dir="auto" className="font-semibold">
+                        {r.nickname}
+                      </span>
+                    </ListRow>
+                  ))}
+                </div>
+              )}
+            </Tile>
+          )}
+        </div>
+
+        <Tile
+          cap={caption}
+          aside={
+            isUser && tab === "rating" ? (
+              <button
+                type="button"
                 aria-pressed={around}
                 onClick={() => setAround((v) => !v)}
                 data-testid="around-me"
+                className="h-8 rounded-full border-[1.5px] border-rule px-3 text-xs font-semibold hover:border-rule-strong"
               >
                 {around ? t("rating.board.top") : t("rating.board.around")}
-              </Button>
+              </button>
+            ) : undefined
+          }
+        >
+          <PillTabs
+            tabs={tabs}
+            value={tab}
+            onChange={setTab}
+            panelId={panelId}
+            aria-label={t("rating.board.tabs")}
+          />
+          <div id={panelId} role="tabpanel" className="flex flex-col gap-2">
+            {tab === "rating" ? (
+              <section
+                aria-labelledby="board-table"
+                className="flex flex-col gap-2"
+                data-domain={ladders?.find((l) => l.key === active)?.domain}
+              >
+                <h2 id="board-table" className="sr-only">
+                  {caption}
+                </h2>
+                {!isUser && (
+                  <p className="text-[13px] text-ink-muted">{t("rating.board.loginToSee")}</p>
+                )}
+                {query.isPending && !query.data ? (
+                  <p className="text-ink-muted" role="status">
+                    {t("common.loading")}
+                  </p>
+                ) : errorKind && !query.data ? (
+                  <BoardError kind={errorKind} onRecover={recover} />
+                ) : boards.length === 0 ? (
+                  <p className="text-ink-muted" data-testid="board-unavailable">
+                    {t("rating.unavailable")}
+                  </p>
+                ) : (
+                  <div className="relative flex flex-col gap-3" aria-busy={query.isPlaceholderData}>
+                    {query.isPlaceholderData && (
+                      <p
+                        role="status"
+                        className="absolute inset-x-0 top-0 z-10 mx-auto w-fit rounded-full border-[1.5px] border-rule bg-stage-raised px-4 py-1 text-sm"
+                        data-testid="board-updating"
+                      >
+                        {t("rating.board.updating")}
+                      </p>
+                    )}
+                    <div
+                      className={cn("flex flex-col gap-3", query.isPlaceholderData && "opacity-50")}
+                    >
+                      {rows.length === 0 ? (
+                        <p className="text-ink-muted">{t("rating.board.empty")}</p>
+                      ) : (
+                        <BoardTable
+                          rows={rows}
+                          myId={myId}
+                          friendIds={friendIds}
+                          caption={caption}
+                        />
+                      )}
+                      {errorKind && <BoardError kind={errorKind} onRecover={recover} />}
+                      {query.hasNextPage && !errorKind && (
+                        <Button
+                          variant="secondary"
+                          className="self-center"
+                          disabled={query.isFetchingNextPage}
+                          onClick={() => void query.fetchNextPage()}
+                          data-testid="board-more"
+                        >
+                          {t("rating.board.more")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+            ) : !query.data ? (
+              <p className="text-ink-muted" role="status">
+                {t("common.loading")}
+              </p>
+            ) : weekly === null ? (
+              <p className="text-ink-muted">{t("rating.board.weeklyUnavailable")}</p>
             ) : (
-              <p className="text-[13px] text-ink-muted">{t("rating.board.loginToSee")}</p>
+              <WeeklyTopTable top={weekly} heading="h2" />
             )}
           </div>
-
-          {query.isPending && !query.data ? (
-            <p className="text-ink-muted" role="status">
-              {t("common.loading")}
-            </p>
-          ) : errorKind && !query.data ? (
-            <BoardError kind={errorKind} onRecover={recover} />
-          ) : boards.length === 0 ? (
-            <p className="text-ink-muted" data-testid="board-unavailable">
-              {t("rating.unavailable")}
-            </p>
-          ) : (
-            <div className="relative flex flex-col gap-3" aria-busy={query.isPlaceholderData}>
-              {query.isPlaceholderData && (
-                <p
-                  role="status"
-                  className="absolute inset-x-0 top-0 z-10 mx-auto w-fit rounded-full border-[1.5px] border-rule bg-stage-raised px-4 py-1 text-sm"
-                  data-testid="board-updating"
-                >
-                  {t("rating.board.updating")}
-                </p>
-              )}
-              <div className={cn("flex flex-col gap-3", query.isPlaceholderData && "opacity-50")}>
-                {rows.length === 0 ? (
-                  <p className="text-ink-muted">{t("rating.board.empty")}</p>
-                ) : (
-                  <BoardTable rows={rows} myId={myId} friendIds={friendIds} caption={caption} />
-                )}
-                {errorKind && <BoardError kind={errorKind} onRecover={recover} />}
-                {query.hasNextPage && !errorKind && (
-                  <Button
-                    variant="secondary"
-                    className="self-center"
-                    disabled={query.isFetchingNextPage}
-                    onClick={() => void query.fetchNextPage()}
-                    data-testid="board-more"
-                  >
-                    {t("rating.board.more")}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-      </TabPanel>
-
-      <TabPanel idBase="board" value="weekly" active={tab === "weekly"}>
-        {!query.data ? (
-          <p className="text-ink-muted" role="status">
-            {t("common.loading")}
-          </p>
-        ) : weekly === null ? (
-          <p className="text-ink-muted">{t("rating.board.weeklyUnavailable")}</p>
-        ) : (
-          <WeeklyTopTable top={weekly} heading="h2" />
-        )}
-      </TabPanel>
+        </Tile>
+      </section>
     </div>
   );
 }
@@ -242,28 +281,41 @@ function BoardError({
   );
 }
 
-/** Липкая строка «Ты»: моё место, звание, рейтинг и матчи; остаётся видимой при прокрутке. */
-function MyPlace({ entry }: { entry: LeaderboardEntry }) {
+/** Плитка «Ты»: моё место, звание, рейтинг и матчи выбранного раздела. */
+function MyPlace({ entry, ladder }: { entry: LeaderboardEntry; ladder: string | null }) {
   const t = useTranslations();
   const tierLabel = useTierLabel();
   return (
-    <div
-      className={cn(
-        GRID,
-        ROW,
-        "sticky top-2 z-[2] border-music bg-stage shadow-[0_0_0_4px_var(--color-glow)]",
-      )}
+    <Tile
+      cap={t("rating.board.me")}
+      aside={
+        ladder && (
+          <span className="rounded-full bg-stage-raised px-[9px] py-[3px] text-xs font-semibold text-ink-muted">
+            {ladder}
+          </span>
+        )
+      }
       data-testid="my-place"
     >
-      <span className="tabular font-display font-extrabold text-music">{entry.place}</span>
-      <span className="flex min-w-0 items-center gap-2.5 font-semibold">
-        <Avatar name={entry.nickname} size="sm" className="border-music" />
-        {t("rating.board.me")}
-      </span>
-      <span className="truncate text-sm text-ink-muted">{tierLabel(entry.tier)}</span>
-      <span className="tabular text-right font-semibold">{entry.rating}</span>
-      <span className="tabular text-right text-sm text-ink-muted">{entry.matches_played}</span>
-    </div>
+      <div className="flex items-center gap-3">
+        <Avatar name={entry.nickname} className="size-[52px] border-[3px] border-music" />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span dir="auto" className="truncate text-base font-semibold">
+            {entry.nickname}
+          </span>
+          <span className="text-xs text-ink-muted">
+            {t("rating.board.place", { place: entry.place })}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="tabular font-display text-[28px] font-extrabold tracking-[-0.03em]">
+          {entry.rating}
+        </span>
+        <TierBadge tier={tierKeyOf(entry.tier.family)}>{tierLabel(entry.tier)}</TierBadge>
+      </div>
+      <ListRow trailing={entry.matches_played}>{t("rating.board.colMatches")}</ListRow>
+    </Tile>
   );
 }
 
@@ -285,10 +337,10 @@ function BoardTable({
       <div
         role="table"
         aria-label={caption}
-        className="flex min-w-[34rem] flex-col gap-2"
+        className="flex min-w-[34rem] flex-col gap-1.5"
         data-testid="board"
       >
-        <div role="row" className={cn(GRID, "px-4 text-xs text-ink-faint")}>
+        <div role="row" className={cn(GRID, "px-2.5 text-xs text-ink-faint")}>
           <span role="columnheader">{t("rating.board.colPlace")}</span>
           <span role="columnheader">{t("rating.board.colPlayer")}</span>
           <span role="columnheader">{t("rating.board.colTier")}</span>
@@ -307,31 +359,39 @@ function BoardTable({
               role="row"
               data-testid={`board-row-${r.place}`}
               aria-current={mine ? "true" : undefined}
-              className={cn(GRID, ROW, mine ? "border-music bg-stage" : "border-rule")}
+              className={cn(
+                GRID,
+                ROW,
+                "bg-stage-raised",
+                mine ? "border-music" : "border-transparent",
+              )}
             >
               <span
                 role="cell"
                 className={cn(
                   "tabular font-display font-extrabold",
-                  mine ? "text-music" : "text-ink-muted",
+                  mine || r.place <= 3 ? "text-music" : "text-ink-muted",
                 )}
               >
                 {r.place}
               </span>
               <span role="cell" className="flex min-w-0 items-center gap-2.5" dir="auto">
                 <Avatar name={r.nickname} size="sm" className={mine ? "border-music" : undefined} />
-                <span className="truncate">
+                <span className="truncate font-semibold">
                   {r.nickname}
                   {mine && <span className="text-ink-muted"> ({t("rating.board.you")})</span>}
                   {!mine && friendIds.has(r.user_id) && (
-                    <span className="text-ink-muted"> · {t("rating.board.friend")}</span>
+                    <span className="font-normal text-ink-muted">
+                      {" "}
+                      · {t("rating.board.friend")}
+                    </span>
                   )}
                 </span>
               </span>
-              <span role="cell" className="truncate text-sm text-ink-muted">
-                {tierLabel(r.tier)}
+              <span role="cell">
+                <TierBadge tier={tierKeyOf(r.tier.family)}>{tierLabel(r.tier)}</TierBadge>
               </span>
-              <span role="cell" className="tabular text-right">
+              <span role="cell" className="tabular text-right font-display text-sm font-extrabold">
                 {r.rating}
               </span>
               <span role="cell" className="tabular text-right text-sm text-ink-muted">
