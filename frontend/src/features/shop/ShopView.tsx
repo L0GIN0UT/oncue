@@ -10,7 +10,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { blockData } from "@/shared/api/blocks";
 import { isApiError } from "@/shared/api/errors";
 import type { ShopCatalogCard, ShopEntryCard, ShopPage } from "@/shared/api/types";
@@ -112,6 +112,7 @@ export function ShopView() {
 
 function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
   const t = useTranslations();
+  const f = useFormatter();
   const client = useQueryClient();
   const slotLabel = useSlotTabLabel();
   const verses = useVerses();
@@ -149,6 +150,11 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
           state: e.equipped ? ("equipped" as const) : ("owned" as const),
         }));
   const current = tiles.find((x) => x.entry.item.id === selectedId) ?? tiles[0] ?? null;
+
+  const expiresAt =
+    current && profile.inventory
+      ? (profile.inventory.find((e) => e.item.id === current.entry.item.id)?.expires_at ?? null)
+      : null;
 
   const open = (entry: ShopEntryCard) => {
     // Пока идёт покупка, новый показ подтверждения не открываем.
@@ -317,6 +323,13 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
                     : t("shop.inventory.equip")}
                 </Button>
               )}
+              {expiresAt && (
+                <p className="text-xs text-ink-muted">
+                  {t("shop.inventory.expires", {
+                    date: f.dateTime(new Date(expiresAt), { dateStyle: "long" }),
+                  })}
+                </p>
+              )}
               <div aria-live="polite" data-testid="equip-feedback">
                 {equip.error && (
                   <p role="alert" className="text-sm text-miss">
@@ -340,7 +353,7 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
       >
         {confirm && (
           <>
-            <h2 dir="auto" className="font-display text-lg font-semibold">
+            <h2 dir="auto" className="font-semibold">
               {t("shop.confirm.title", { title: confirm.entry.item.title })}
             </h2>
             <p className="text-ink-muted">

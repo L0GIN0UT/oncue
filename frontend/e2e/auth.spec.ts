@@ -24,7 +24,7 @@ test("вход с неверным паролем показывает ошиб�
   page,
 }) => {
   await page.goto("/login?next=https://evil.example/");
-  await page.getByLabel("E-mail или ник").fill("player");
+  await page.getByLabel("Почта или ник").fill("player");
   await page.getByLabel("Пароль").fill("wrong-password");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByText("Неверный логин или пароль.")).toBeVisible();

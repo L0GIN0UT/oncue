@@ -87,10 +87,12 @@ export function NotificationsView() {
   const unauthorized = isApiError(list.error) && list.error.status === 401;
 
   return (
-    <div className="flex flex-col gap-6 pt-6 sm:pt-10">
+    <div className="flex flex-col gap-5 pt-2">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-2">
-          <h1 className="font-display text-[28px] leading-none font-extrabold">{t("notifications.title")}</h1>
+          <h1 className="font-display text-[28px] leading-none font-extrabold">
+            {t("notifications.title")}
+          </h1>
           <p className="max-w-[60ch] text-ink-muted">{t("notifications.lead")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -136,7 +138,7 @@ export function NotificationsView() {
       ) : items.length === 0 ? (
         <p className="text-ink-muted">{t("notifications.empty")}</p>
       ) : (
-        <ul className="flex flex-col gap-3" aria-label={t("notifications.list")}>
+        <ul className="flex flex-col gap-2.5" aria-label={t("notifications.list")}>
           {items.map((n) => (
             <Row key={n.id} item={n} onRead={() => void read(n.id)} />
           ))}
@@ -168,12 +170,18 @@ function Row({ item, onRead }: { item: NotificationItem; onRead: () => void }) {
       data-read={isRead}
       data-type={item.type}
       className={cn(
-        "flex flex-col gap-2 rounded-[var(--radius-control)] p-4 border-[1.5px] border-rule sm:flex-row sm:items-start sm:justify-between",
-        isRead ? "bg-night" : "bg-stage",
+        "flex flex-col gap-2 rounded-[var(--radius-control)] border-[1.5px] border-rule px-4 py-3 sm:flex-row sm:items-start sm:justify-between",
+        isRead ? "bg-transparent" : "bg-stage",
       )}
     >
       <div className="flex min-w-0 flex-col gap-0.5">
         <h2 dir="auto" className={cn("break-words", isRead ? "font-normal" : "font-semibold")}>
+          {!isRead && (
+            <span
+              aria-hidden
+              className="mr-2 inline-block size-2 rounded-full bg-music align-middle"
+            />
+          )}
           {item.title}
         </h2>
         <p dir="auto" className="text-sm break-words text-ink-muted">

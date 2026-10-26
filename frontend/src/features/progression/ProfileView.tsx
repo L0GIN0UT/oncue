@@ -237,7 +237,7 @@ function ProfileHeader({
             )}
           </div>
           {progress && (
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:flex-nowrap">
               <span
                 className="text-[13px] whitespace-nowrap text-ink-muted"
                 data-testid="level-value"
@@ -246,7 +246,7 @@ function ProfileHeader({
                 {isMaxLevel(progress) &&
                   ` · ${t("progression.level.max", { max: progress.max_level })}`}
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">
                 <XpBar
                   xpInLevel={progress.xp_in_level}
                   xpToNext={progress.xp_to_next}

@@ -23,9 +23,11 @@ export function SanctionsView() {
     return <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />;
 
   return (
-    <div className="flex flex-col gap-6 pt-6 sm:pt-10">
+    <div className="flex flex-col gap-6 pt-2">
       <header className="flex flex-col gap-2">
-        <h1 className="font-display text-[28px] leading-none font-extrabold">{t("social.sanctions.title")}</h1>
+        <h1 className="font-display text-[28px] leading-none font-extrabold">
+          {t("social.sanctions.title")}
+        </h1>
         <p className="max-w-[60ch] text-ink-muted">{t("social.sanctions.lead")}</p>
       </header>
       {query.isPending ? (
@@ -46,11 +48,9 @@ export function SanctionsView() {
             <li
               key={`${s.kind}-${s.started_at}`}
               data-testid={`sanction-${s.kind}`}
-              className="flex flex-col gap-1 rounded-[var(--radius-control)] bg-stage p-4 border-[1.5px] border-rule"
+              className="flex flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-4"
             >
-              <h2 className="font-display text-lg font-semibold">
-                {t(`social.sanctions.kind.${s.kind}`)}
-              </h2>
+              <h2 className="font-semibold">{t(`social.sanctions.kind.${s.kind}`)}</h2>
               <p className="text-sm text-ink-muted">{t(`social.sanctions.kindHint.${s.kind}`)}</p>
               <p className="text-sm" data-testid="sanction-term">
                 {s.expires_at

@@ -164,7 +164,7 @@ function CommentForm({
           onChange={(e) => setText(e.target.value)}
           rows={3}
           data-testid="comment-text"
-          className="rounded-[var(--radius-control)] bg-stage p-3 font-normal text-ink border-[1.5px] border-rule outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)]"
+          className="rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-3 font-normal text-ink outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)]"
         />
       </label>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -217,7 +217,7 @@ function CommentRow({
     <li
       data-testid="comment"
       data-mine={mine}
-      className="flex flex-col gap-2 rounded-[var(--radius-control)] bg-stage p-4 border-[1.5px] border-rule"
+      className="flex flex-col gap-2 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-4"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span dir="auto" className="font-medium">
@@ -239,7 +239,7 @@ function CommentRow({
             rows={3}
             aria-label={t("social.comments.editLabel")}
             data-testid="comment-edit-text"
-            className="rounded-[var(--radius-control)] bg-stage p-3 text-ink border-[1.5px] border-rule outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)]"
+            className="rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-3 text-ink outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)]"
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button type="submit" size="sm" disabled={action.busy || !draft.trim()}>

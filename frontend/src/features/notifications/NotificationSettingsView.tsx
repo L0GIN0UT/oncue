@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl";
 import type { EmailSubscription, NotificationSettings, TypeSetting } from "@/shared/api/types";
 import { useViewer } from "@/features/auth/session";
 import { ProfileGate } from "@/features/progression/ProfileView";
+import { Switch } from "./Switch";
 import {
   emailQueryKey,
   fetchEmailSubscription,
@@ -81,9 +82,11 @@ export function NotificationSettingsView() {
   };
 
   return (
-    <div className="flex flex-col gap-8 pt-6 sm:pt-10">
+    <div className="flex flex-col gap-6 pt-2">
       <header className="flex flex-col gap-2">
-        <h1 className="font-display text-[28px] leading-none font-extrabold">{t("notifications.settings.title")}</h1>
+        <h1 className="font-display text-[28px] leading-none font-extrabold">
+          {t("notifications.settings.title")}
+        </h1>
         <p className="max-w-[60ch] text-ink-muted">{t("notifications.settings.lead")}</p>
         <Link href="/notifications" className="text-sm underline underline-offset-4">
           {t("notifications.back")}
@@ -117,31 +120,28 @@ export function NotificationSettingsView() {
               <li
                 key={row.type}
                 data-testid={`notification-type-${row.type}`}
-                className="flex flex-col gap-2 rounded-[var(--radius-control)] bg-stage p-4 border-[1.5px] border-rule"
+                className="flex flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-3"
               >
                 <span dir="auto" className="font-medium">
                   {row.title}
                 </span>
-                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                  {(["in_app", "email"] as const).map((channel) => (
-                    <label key={channel} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
+                <div className="grid gap-x-6 sm:grid-cols-2">
+                  {(["in_app", "email"] as const).map((channel) => {
+                    const channelLabel =
+                      channel === "in_app"
+                        ? t("notifications.settings.inApp")
+                        : t("notifications.settings.email");
+                    return (
+                      <Switch
+                        key={channel}
+                        label={channelLabel}
                         checked={row[channel]}
                         disabled={!row.user_mutable}
                         onChange={(e) => void toggle(row, channel, e.target.checked)}
-                        aria-label={`${row.title} — ${
-                          channel === "in_app"
-                            ? t("notifications.settings.inApp")
-                            : t("notifications.settings.email")
-                        }`}
-                        className="size-5 accent-[var(--color-music)]"
+                        aria-label={`${row.title} — ${channelLabel}`}
                       />
-                      {channel === "in_app"
-                        ? t("notifications.settings.inApp")
-                        : t("notifications.settings.email")}
-                    </label>
-                  ))}
+                    );
+                  })}
                 </div>
                 {!row.user_mutable && (
                   <p className="text-xs text-ink-faint">{t("notifications.settings.locked")}</p>
@@ -167,16 +167,13 @@ export function NotificationSettingsView() {
           </p>
         ) : (
           <>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={email.data.subscribed}
-                onChange={(e) => void setConsent(e.target.checked)}
-                className="size-5 accent-[var(--color-music)]"
-                data-testid="email-consent"
-              />
-              {t("notifications.settings.emailConsent")}
-            </label>
+            <Switch
+              label={t("notifications.settings.emailConsent")}
+              checked={email.data.subscribed}
+              onChange={(e) => void setConsent(e.target.checked)}
+              data-testid="email-consent"
+              className="rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 text-base"
+            />
             <p className="text-sm text-ink-muted" data-testid="email-consent-state">
               {email.data.subscribed
                 ? t("notifications.settings.emailOn")

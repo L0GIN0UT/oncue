@@ -146,7 +146,7 @@ function ReportDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid="report-dialog"
-        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto rounded-[var(--radius-ticket)] bg-stage p-6 border-[1.5px] border-rule"
+        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage p-6"
       >
         <h2 id={titleId} className="font-semibold">
           {t(`social.report.title.${kind}`)}
@@ -187,7 +187,7 @@ function ReportDialog({
               onChange={(e) => setText(e.target.value)}
               rows={3}
               data-testid="report-text"
-              className="rounded-[var(--radius-control)] bg-stage p-3 font-normal text-ink border-[1.5px] border-rule outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)]"
+              className="rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-3 font-normal text-ink outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)]"
             />
             <span className="tabular self-end text-xs font-normal text-ink-faint">
               {text.length}/{REPORT_TEXT_MAX_LENGTH}

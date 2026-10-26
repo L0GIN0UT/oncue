@@ -57,7 +57,7 @@ export function Avatar({
       ) : (
         <span
           aria-hidden
-          className="grid size-full place-items-center rounded-full bg-stage-raised font-display font-semibold text-ink-muted border-[1.5px] border-rule"
+          className="grid size-full place-items-center rounded-full border-[1.5px] border-rule bg-stage-raised font-display font-semibold text-ink-muted"
         >
           {Array.from(nickname.trim())[0]?.toUpperCase() ?? "?"}
         </span>

@@ -27,6 +27,8 @@ test("магазин: вкладки слотов, состояния карто
   await page.getByTestId("shop-tab-frame").click();
   await expect(page.getByTestId("shop-item-gold_frame")).toHaveAttribute("data-state", "available");
   await expect(page.getByTestId("shop-item-neon_frame")).toHaveAttribute("data-state", "locked");
+  await page.getByTestId("shop-item-neon_frame").click();
+  await expect(page.getByTestId("shop-locked")).toContainText("Откроется на уровне");
   await expect(page.getByTestId("shop-buy-neon_frame")).toHaveCount(0);
   await expectAccessible(page);
 });
@@ -42,6 +44,7 @@ test("покупка: подтверждение, баланс и состоян
   await expect(page.getByTestId("shop-balance")).toContainText("20");
   await expect(page.getByTestId("shop-status")).toContainText("Куплено: Лис");
 
+  await page.getByTestId("shop-item-owl").click();
   await page.getByTestId("shop-buy-owl").click();
   await page.getByTestId("shop-confirm").click();
   await expect(page.getByTestId("shop-error")).toContainText("Не хватает Версов");
@@ -60,16 +63,17 @@ test("оформление: надеть предмет — виден в кар
 
   await page.getByTestId("shop-tab-inventory").click();
   await expect(page.getByTestId("inventory-item-fox")).toBeVisible();
-  await page.getByTestId("shop-tab-appearance").click();
-  await page.getByTestId("equip-avatar").selectOption({ label: "Лис" });
+  await page.getByTestId("equip-item-fox").click();
+  await expect(page.getByTestId("inventory-item-fox")).toHaveAttribute("data-equipped", "true");
   await expectAccessible(page);
 
   await page.goto("/profile");
   await expect(page.getByTestId("player-badge").locator('img[src*="fox"]')).toBeVisible();
 
   await page.goto("/shop");
-  await page.getByTestId("shop-tab-appearance").click();
-  await page.getByTestId("equip-avatar").selectOption({ label: "Пусто" });
+  await page.getByTestId("shop-tab-inventory").click();
+  await page.getByTestId("equip-item-fox").click();
+  await expect(page.getByTestId("inventory-item-fox")).toHaveAttribute("data-equipped", "false");
   await page.goto("/profile");
   await expect(page.getByTestId("player-badge")).toBeVisible();
   await expect(page.getByTestId("player-badge").locator("img")).toHaveCount(0);
@@ -81,11 +85,11 @@ test("промокод: награда Версами, неверный код �
   expectAccessible,
 }) => {
   await login(page);
-  await page.goto("/profile");
+  await page.goto("/shop");
   await page.getByTestId("promo-input").fill("welcome");
   await page.getByTestId("promo-submit").click();
   await expect(page.getByTestId("promo-result")).toContainText("25 Версов");
-  await expect(page.getByTestId("wallet-total")).toContainText("65");
+  await expect(page.getByTestId("shop-balance")).toContainText("65");
 
   await page.getByTestId("promo-input").fill("nonsense");
   await page.getByTestId("promo-submit").click();
@@ -106,18 +110,21 @@ test("своя аватарка: без права — в магазин; куп
 }) => {
   await login(page);
   await page.goto("/profile");
+  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "none");
   await expect(page.getByTestId("avatar-upload")).toHaveCount(0);
 
+  await page.goto("/shop");
   await page.getByTestId("promo-input").fill("welcome");
   await page.getByTestId("promo-submit").click();
   await expect(page.getByTestId("promo-result")).toBeVisible();
-  await page.goto("/shop");
+  await page.getByTestId("shop-item-custom_avatar").click();
   await page.getByTestId("shop-buy-custom_avatar").click();
   await page.getByTestId("shop-confirm").click();
   await expect(page.getByTestId("shop-item-custom_avatar")).toHaveAttribute("data-state", "owned");
 
   await page.goto("/profile");
+  await page.getByRole("tab", { name: "Внешность" }).click();
   await page
     .getByTestId("avatar-upload")
     .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: PNG });
@@ -125,6 +132,7 @@ test("своя аватарка: без права — в магазин; куп
   await page.getByRole("button", { name: "Отправить на проверку" }).click();
   await expect(page.getByTestId("avatar-sent")).toBeVisible();
   await page.reload();
+  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "pending");
   await expectAccessible(page);
 });
@@ -136,6 +144,7 @@ test("своя аватарка: слишком большой файл откл
   await scenario({ avatarRequest: "rejected" });
   await login(page);
   await page.goto("/profile");
+  await page.getByRole("tab", { name: "Внешность" }).click();
   const status = page.getByTestId("avatar-status");
   await expect(status).toHaveAttribute("data-status", "rejected");
   await expect(status).toContainText("Неприемлемое содержание");
@@ -153,6 +162,7 @@ test("блоки 5b недоступны — профиль цел", async ({ pa
   await login(page);
   await page.goto("/profile");
   await expect(page.getByTestId("level-value")).toBeVisible();
+  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("block-avatar-unavailable")).toBeVisible();
   await expect(page.getByTestId("player-badge")).toBeVisible();
 });

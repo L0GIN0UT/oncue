@@ -57,10 +57,13 @@ export function ItemTile({
         selected
           ? "border-music bg-stage shadow-[0_0_0_4px_var(--color-glow)]"
           : "border-rule hover:border-rule-strong hover:bg-stage",
-        state === "locked" && "opacity-60",
       )}
     >
-      <CosmeticImage item={item} decorative className="size-11 rounded-full object-cover" />
+      <CosmeticImage
+        item={item}
+        decorative
+        className={cn("size-11 rounded-full object-cover", state === "locked" && "opacity-50")}
+      />
       <span aria-hidden className="tabular max-w-full truncate px-1 text-xs text-ink-muted">
         {caption}
       </span>

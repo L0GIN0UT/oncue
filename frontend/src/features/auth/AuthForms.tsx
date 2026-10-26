@@ -9,6 +9,7 @@ import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
 import { Button } from "@/shared/ui/button";
 import { Field } from "@/shared/ui/field";
+import { PasswordField } from "./PasswordField";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import type { ConsentRequirement } from "./consents";
 import { CodeStep, type Challenge } from "./CodeStep";
@@ -128,40 +129,44 @@ export function LoginForm({ next }: { next: string | null }) {
         required
         maxLength={254}
       />
-      <Field
+      <PasswordField
         label={t("auth.password")}
         name="password"
-        type="password"
         autoComplete="current-password"
         required
         maxLength={256}
+        aside={
+          <Link
+            href="/forgot-password"
+            className="text-sm text-music hover:text-ink"
+            data-testid="forgot-link"
+          >
+            {t("auth.forgot")}
+          </Link>
+        }
       />
       {error && (
         <p role="alert" className="text-miss">
           {error}
         </p>
       )}
-      <Button type="submit" size="lg" disabled={busy}>
+      <Button type="submit" size="lg" disabled={busy} className="mt-1.5">
         {t("auth.signIn")}
       </Button>
-      <p>
-        <Link
-          href="/forgot-password"
-          className="text-ink-muted underline underline-offset-4 hover:text-ink"
-          data-testid="forgot-link"
-        >
-          {t("auth.forgot")}
+      <div
+        aria-hidden
+        className="flex items-center gap-3 text-[13px] text-ink-dim before:h-[1.5px] before:flex-1 before:bg-rule after:h-[1.5px] after:flex-1 after:bg-rule"
+      >
+        {t("auth.or")}
+      </div>
+      <Button asChild variant="secondary" size="lg">
+        <Link href={withNext("/register", next)} data-testid="to-register">
+          {t("auth.createAccount")}
         </Link>
-      </p>
-      <p className="text-ink-muted">
-        {t("auth.noAccount")}{" "}
-        <Link
-          href={withNext("/register", next)}
-          className="font-medium text-ink underline underline-offset-4"
-        >
-          {t("auth.signUp")}
-        </Link>
-      </p>
+      </Button>
+      <Link href="/" className="mt-1 text-center text-sm text-ink-muted hover:text-ink">
+        {t("auth.playWithout")}
+      </Link>
     </form>
   );
 }
@@ -245,10 +250,9 @@ export function RegisterForm({
         required
         maxLength={254}
       />
-      <Field
+      <PasswordField
         label={t("auth.password")}
         name="password"
-        type="password"
         autoComplete="new-password"
         required
         maxLength={256}
@@ -275,11 +279,11 @@ export function RegisterForm({
       <Button type="submit" size="lg" disabled={busy}>
         {t("auth.signUp")}
       </Button>
-      <p className="text-ink-muted">
+      <p className="text-center text-sm text-ink-muted">
         {t("auth.haveAccount")}{" "}
         <Link
           href={withNext("/login", next)}
-          className="font-medium text-ink underline underline-offset-4"
+          className="text-music underline underline-offset-4 hover:text-ink"
         >
           {t("auth.signIn")}
         </Link>

@@ -63,7 +63,7 @@ export function CosmeticImage({ item, className, decorative = false, allowBlob =
         {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": item.title })}
         data-placeholder="true"
         className={cn(
-          "block rounded-[var(--radius-control)] bg-stage-raised border-[1.5px] border-rule",
+          "block rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage-raised",
           className,
         )}
       />

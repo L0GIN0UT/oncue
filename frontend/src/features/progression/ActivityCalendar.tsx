@@ -11,7 +11,7 @@ const CELL: Record<DayState, string> = {
   played: "bg-music font-semibold text-night",
   today: "border-music font-semibold text-ink",
   missed: "bg-stage-raised text-ink-muted",
-  future: "text-ink-dim",
+  future: "text-ink-faint",
 };
 
 // 1 января 2024 — понедельник: подписи дней недели берём у Intl, а не из словаря.
@@ -43,7 +43,7 @@ export function ActivityCalendar({
         className="grid grid-cols-7 gap-1"
       >
         {Array.from({ length: 7 }, (_, i) => (
-          <span key={i} className="text-center text-[11px] text-ink-dim" aria-hidden>
+          <span key={i} className="text-center text-[11px] text-ink-faint" aria-hidden>
             {f.dateTime(new Date(MONDAY.getTime() + i * 86_400_000), { weekday: "short" })}
           </span>
         ))}
