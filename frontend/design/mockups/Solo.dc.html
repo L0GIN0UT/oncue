@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Соло: режимы</title>
+<title>Соло</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -10,109 +10,129 @@
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#141414}
-a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+body{margin:0;background:#1A1A1A}
+a{color:#F2F2F2;text-decoration:none}
 .h{font-family:"Unbounded",sans-serif}
 .ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
-.ib:hover{border-color:#3A3A3A;color:#F2F2F2}
-.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap}
-.btn:hover{border-color:#5A5A5A}
-.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
-.tab{height:36px;padding:0 16px;border-radius:999px;border:1.5px solid #3A3A3A;background:transparent;color:#A3A3A3;font:inherit;font-size:14px;font-weight:500;cursor:pointer}
-.tab.on{background:#F2F2F2;color:#141414;border-color:#F2F2F2}
-.mode{width:100%;border:1.5px solid #3A3A3A;border-radius:14px;background:transparent;color:#F2F2F2;font:inherit;text-align:left;cursor:pointer;display:flex;align-items:center;gap:14px;padding:0 18px;height:60px;box-sizing:border-box}
-.mode:hover{border-color:#5A5A5A;background:#1C1C1C}
-.mode.on{border-color:#F2B13B;background:#1C1C1C;box-shadow:0 0 0 4px rgba(242,177,59,.14);border-bottom-left-radius:0;border-bottom-right-radius:0}
-.panel{border:1.5px solid #F2B13B;border-top:0;border-radius:0 0 14px 14px;background:#1C1C1C;padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;animation:rise .2s cubic-bezier(.2,.8,.2,1)}
-@keyframes rise{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:none}}
-.chip{height:34px;padding:0 14px;border-radius:999px;border:1.5px solid #3A3A3A;background:transparent;color:#A3A3A3;font:inherit;font-size:14px;cursor:pointer}
-.chip.on{border-color:#F2B13B;color:#F2F2F2}
-@media (prefers-reduced-motion: reduce){.panel{animation:none}}
+.nav{font-family:"Unbounded",sans-serif;font-size:18px;font-weight:800;letter-spacing:-.02em;color:#6A6A6A;padding:8px 10px;border-radius:10px;white-space:nowrap}
+.nav:hover{color:#D9D9D9}.nav.on{color:#F2B13B}
+.ib{width:40px;height:40px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#ABABAB;display:grid;place-items:center;cursor:pointer;flex:none}
+.pillbtn{height:40px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap;line-height:1;flex:none;box-sizing:border-box}
+.tile{position:relative;overflow:hidden;background:#242424;border:1.5px solid #474747;border-radius:20px;padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0;transition:border-color .15s,transform .15s}
+a.tile:hover{border-color:#6A6A6A;transform:translateY(-2px)}
+.cap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6A6A6A;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.t{font-family:"Unbounded",sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.s{font-size:13px;color:#ABABAB;line-height:1.45}
+.play{width:44px;height:44px;border-radius:999px;background:#F2B13B;color:#1A1A1A;display:grid;place-items:center;flex:none}
+.bar{height:6px;border-radius:3px;background:#2E2E2E;overflow:hidden}
+.tier{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A;white-space:nowrap}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lr{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:12px;background:#2E2E2E;font-size:13px}
+.lr b{font-family:"Unbounded",sans-serif;font-size:15px;font-weight:800;min-width:34px}
+.cv{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1;background:#2E2E2E}
+.cv img{width:100%;height:100%;object-fit:cover;display:block}
+.seg{display:inline-flex;border:1.5px solid #474747;border-radius:999px;background:#242424;padding:3px;gap:2px}
+.seg span{height:32px;padding:0 16px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:#ABABAB}
+.seg span.on{background:#F2F2F2;color:#1A1A1A}
+.fc{height:32px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#ABABAB;font-size:13px;font-weight:600;display:inline-flex;align-items:center}
+.fc.on{color:#F2B13B;background:#2E2E2E}
+.btn{height:30px;padding:0 12px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;font-size:12px;font-weight:600;display:inline-flex;align-items:center;white-space:nowrap;flex:none;box-sizing:border-box}
+.amber{background:#F2B13B;border-color:#F2B13B;color:#1A1A1A}
+.ic{width:34px;height:34px;border-radius:10px;background:#2E2E2E;color:#F2B13B;display:grid;place-items:center;flex:none}
+.ic svg{width:18px;height:18px}
+.mc{padding:12px 14px;gap:8px;border-radius:16px}
+.mc .nm2{font-size:14px;font-weight:600;line-height:1.2}
+.mc .ds{font-size:12px;color:#ABABAB;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc .rc{font-size:11px;color:#6A6A6A}
+.mc .rc.g{color:#9BE39F}
 </style>
 </helmet>
-<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
-  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
-    <div style="flex: 1; display: flex"><button class="ib" type="button" aria-label="Меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
-    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</a>
-    <div style="flex: 1; display: flex; gap: 4px; align-items: center; justify-content: flex-end">
-      <button class="ib" type="button" aria-label="Как играть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5"/></svg></button>
-      <button class="ib" type="button" aria-label="Прошлые дни"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
-      <a href="Profile.dc.html" aria-label="Профиль" style="width: 38px; height: 38px; border-radius: 999px; border: 1.5px solid #3A3A3A; display: grid; place-items: center; font-weight: 600; font-size: 13px; margin-left: 6px">ИЛ</a>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; max-width: 1280px; margin: 0 auto; min-height: 900px; padding: 0 24px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+
+  <header style="padding: 14px 0 0; display: flex; align-items: center; gap: 24px">
+    <a href="Home.dc.html" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0"><span style="width: 36px; height: 36px; border-radius: 10px; background: #F2B13B; display: grid; place-items: center; color: #1A1A1A; flex: none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span><span class="h" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap">Guessverse</span></a>
+    <nav aria-label="Разделы" style="display: flex; align-items: center; gap: 8px"><a href="Home.dc.html" class="nav">Главная</a><span style="color: #474747">/</span><a href="Solo.dc.html" class="nav on">Соло</a><span style="color: #474747">/</span><a href="Online.dc.html" class="nav">Онлайн</a><span style="color: #474747">/</span><a href="Collections.dc.html" class="nav">Сборники</a></nav>
+    <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0">
+      <button class="ib" type="button" aria-label="Уведомления, 3 новых" style="position: relative"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span style="position:absolute;top:6px;right:6px;min-width:16px;height:16px;border-radius:999px;background:#F2B13B;color:#1A1A1A;font-size:10px;font-weight:700;display:grid;place-items:center">3</span></button>
+      <a href="Shop.dc.html" class="pillbtn" aria-label="1 250 Версов, магазин"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;color:#F2B13B"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg><span>1 250</span></a>
+      <a href="Leaderboard.dc.html" class="ib" aria-label="Лидеры"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0zM6 6H4v2a3 3 0 0 0 3 3M18 6h2v2a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg></a>
+      <a href="Profile.dc.html" class="pillbtn" style="padding-left: 4px"><span style="width: 30px; height: 30px; border-radius: 999px; border: 2px solid #F2B13B; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none">ИЛ</span><span>L0GIN0UT</span></a>
     </div>
   </header>
 
-  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 6px 24px 48px; box-sizing: border-box">
-    <div role="group" aria-label="Домен" style="display: inline-flex; padding: 3px; border-radius: 999px; background: #1C1C1C; border: 1.5px solid #3A3A3A; gap: 2px">
-      <button type="button" class="btn" style="height: 38px; padding: 0 22px; border: 0; border-radius: 999px; background: #F2F2F2; color: #141414; font-size: 14px">Музыка</button>
-      <button type="button" class="btn" style="height: 38px; padding: 0 22px; border: 0; border-radius: 999px; background: transparent; color: #A3A3A3; font-size: 14px">Кино</button>
+  <section style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+    <div class="seg"><span class="on"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Музыка</span><span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 5v4M12 5v4M17 5v4"/></svg>Кино</span></div>
+    <div style="display: flex; gap: 8px"><span class="fc on">Все</span><span class="fc">Быстрые</span><span class="fc">Марафоны</span><span class="fc">Пары</span></div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+    <div class="tile" style="border-color: #F2B13B; box-shadow: 0 0 0 4px rgba(242,177,59,.12)">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" style="position: absolute; right: -10px; top: -14px; width: 110px; height: 110px; color: #2A2A2A"><path d="M9 18V6l10-2v12a3 3 0 1 1-2-2.8V7.2l-6 1.2V18a3 3 0 1 1-2-2.8z"/></svg>
+      <div class="row" style="position: relative"><span class="cap" style="color: #F2B13B">Ежедневный · музыка</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">через 7:12</span></div>
+      <a href="Game.dc.html" style="position: relative; display: flex; flex-direction: column; gap: 6px"><span class="t">Угадай по отрывку</span><span class="s">5 треков, от 1 до 16 секунд. Один набор для всех.</span></a>
+      <div style="display: flex; align-items: center; gap: 10px; position: relative"><span style="display: flex; gap: 3px; flex: 1"><span style="flex:1;height:6px;border-radius:3px;background:#9BE39F"></span><span style="flex:1;height:6px;border-radius:3px;background:#9BE39F"></span><span style="flex:1;height:6px;border-radius:3px;background:#F2B13B"></span><span style="flex:1;height:6px;border-radius:3px;background:#9BE39F"></span><span style="flex:1;height:6px;border-radius:3px;background:#F2A0A0"></span><span style="flex:1;height:6px;border-radius:3px;background:#9BE39F"></span><span style="flex:1;height:6px;border-radius:3px;background:#2E2E2E"></span></span><span style="font-size: 11px; color: #6A6A6A">последние 7 дней</span></div>
+      <div style="display: flex; align-items: center; gap: 10px; position: relative"><a href="Results.dc.html" class="lr" style="flex: 1; min-width: 0"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;color:#ABABAB"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span style="flex: 1">Архив · 29 прошлых дней</span></a><a href="Game.dc.html" class="play" aria-label="Играть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;margin-left:2px"><path d="M7 5v14l12-7z"/></svg></a></div>
     </div>
 
-    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 14px">
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 2px">
-        <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Соло</h1>
-        <span style="font-size: 14px; color: #A3A3A3">Без очереди и таймера</span>
+    <div class="tile">
+      <div class="row"><span class="cap">Сетка недели · кино</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">6 д 05:41</span></div>
+      <div style="display: flex; gap: 14px; align-items: flex-start">
+        <div style="width: 76px; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; flex: none; background: #2E2E2E"><img src="/_blob/ec695be17639de90d600f2cc385c1d47" alt="Постер" style="width: 100%; height: 100%; object-fit: cover; display: block"></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0"><span class="t">32 фильма нулевых на вылет</span><span class="s">Пары по кругу, проигравший выбывает.</span><span class="chip" style="background: rgba(242,177,59,.14); color: #F2B13B; align-self: flex-start">ты в 1/8</span></div>
       </div>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap">
-        <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4"><button class="tab {{t.cls}}" type="button" onClick="{{t.pick}}">{{t.label}}</button></sc-for>
+      <a href="Game.dc.html" class="chip" style="background: #F2B13B; color: #1A1A1A; height: 34px; justify-content: center; font-size: 13px; margin-top: auto">Следующая пара</a>
+    </div>
+
+    <a href="CollectionDetail.dc.html" class="tile">
+      <div class="row"><span class="cap">Сборник недели</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">♪ музыка</span></div>
+      <div style="display: flex; gap: 14px; align-items: flex-start">
+        <div class="cv" style="width: 96px; flex: none"><img src="/_blob/8ca9147773a2f83697fb9e440bf55761" alt=""></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0"><span class="t">Зимние хиты</span><span class="s">16 треков · 740 ♥</span><span class="s" style="font-size: 12px; color: #6A6A6A">собрал nikita</span></div>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 10px">
-        <sc-for list="{{modes}}" as="m" hint-placeholder-count="4">
-          <div>
-            <button class="mode {{m.cls}}" type="button" onClick="{{m.pick}}" aria-expanded="{{m.open}}">
-              <span style="width: 40px; height: 40px; border-radius: 12px; background: #262626; display: grid; place-items: center; color: #F2B13B; flex: none"><span class="h" style="font-size: 13px; font-weight: 800">{{m.mark}}</span></span>
-              <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0"><span style="font-size: 16px; font-weight: 600">{{m.title}}</span><span style="font-size: 13px; color: #A3A3A3">{{m.sub}}</span></span>
-              <span style="font-size: 13px; color: #A3A3A3; white-space: nowrap">{{m.best}}</span>
-              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #A3A3A3; width: 18px; height: 18px; transform: rotate({{m.rot}})"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <sc-if value="{{m.open}}" hint-placeholder-val="{{false}}">
-              <div class="panel">
-                <span style="font-size: 15px; line-height: 1.5; color: #D9D9D9">{{m.desc}}</span>
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
-                  <div style="display: flex; gap: 8px; align-items: center"><span style="font-size: 13px; color: #A3A3A3">Раундов</span><button class="chip" type="button">5</button><button class="chip on" type="button">10</button><button class="chip" type="button">20</button></div>
-                  <a href="A-Game.dc.html" class="btn go" style="display: inline-flex; align-items: center; gap: 8px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M7 5v14l12-7z"/></svg>Играть</a>
-                </div>
-              </div>
-            </sc-if>
-          </div>
-        </sc-for>
+      <span class="chip" style="background: #F2F2F2; color: #1A1A1A; height: 34px; justify-content: center; font-size: 13px; margin-top: auto">Играть</span>
+    </a>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <span class="cap">Режимы</span>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">По отрывку</span><span class="ds">Фрагмент от 1 до 16 секунд</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">♪</span></div><span class="rc g">рекорд 8 из 10</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h12M9 7l-5 5 5 5M20 5v14"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Реверс</span><span class="ds">Трек играет задом наперёд</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">♪</span></div><span class="rc g">рекорд 6 из 10</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01M8 15c1 1.3 2.4 2 4 2s3-.7 4-2"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Эмодзи</span><span class="ds">Название спрятано в символах</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">♪</span></div><span class="rc">ещё не играл</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 18V10l5-1v7"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Саундтрек</span><span class="ds">Мелодия из фильма или сериала</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">▣</span></div><span class="rc g">рекорд 7 из 10</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 5l18 14"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Блэкаут</span><span class="ds">Экран чёрный, звук остался</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">▣</span></div><span class="rc">ещё не играл</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 10h14M5 14h9M5 18h6"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Описание</span><span class="ds">Сюжет без названий и имён</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">▣</span></div><span class="rc g">рекорд 5 из 10</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="5" height="10" rx="1"/><rect x="10" y="7" width="5" height="10" rx="1"/><rect x="17" y="7" width="4" height="10" rx="1"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Кадры по порядку</span><span class="ds">Расставь кадры по ходу фильма</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">▣</span></div><span class="rc g">рекорд 8 из 10</span></a>
+      <a href="Game.dc.html" class="tile mc"><div style="display:flex;gap:10px;align-items:center"><span class="ic"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="nm2">Что популярнее</span><span class="ds">Два варианта, один вернее</span></div><span class="chip" style="background:#2E2E2E;color:#ABABAB;align-self:flex-start;padding:0 7px">▣</span></div><span class="rc">ещё не играл</span></a>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px">
+    <div class="tile">
+      <div class="row"><span class="cap">Марафон</span><span class="chip" style="background: #2E2E2E; color: #F2A0A0">3 жизни</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div class="lr"><b style="color: #F2B13B">23</b><span style="flex: 1">Один исполнитель · рекорд Radiohead</span><span class="chip" style="background:#242424;color:#ABABAB">♪</span></div>
+        <div class="lr"><b style="color: #F2B13B">9</b><span style="flex: 1">Один режиссёр · рекорд Нолан</span><span class="chip" style="background:#242424;color:#ABABAB">▣</span></div>
+        <div class="lr" style="justify-content: space-between"><span class="s">Ошибся трижды, и забег окончен</span><a href="Game.dc.html" class="btn amber">Выбрать</a></div>
       </div>
-    </section>
-  </main>
+    </div>
+    <div class="tile">
+      <div class="row"><span class="cap">Пары</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">▣ кино</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <a href="Game.dc.html" class="lr"><b style="color: #F2B13B">11</b><span style="flex: 1">Что популярнее · серия</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;color:#6A6A6A"><path d="M9 6l6 6-6 6"/></svg></a>
+        <a href="Game.dc.html" class="lr"><b style="color: #F2B13B">4</b><span style="flex: 1">Что выше в рейтинге · серия</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;color:#6A6A6A"><path d="M9 6l6 6-6 6"/></svg></a>
+      </div>
+      <span class="s" style="font-size: 12px">Серия обрывается на первой ошибке, лучшая хранится в профиле</span>
+    </div>
+  </section>
+
+  <footer style="display: flex; justify-content: space-between; font-size: 12px; color: #6A6A6A; margin-top: auto"><span>Guessverse · квиз по музыке и кино</span><span>Частые вопросы · О сервисе · Конфиденциальность · Соглашение · Правообладателям · 18+</span></footer>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
 class Component extends DCLogic {
-  constructor(props) { super(props); this.state = { tab: 'quick', open: 'classic' }; }
-  renderVals() {
-    const tabsDef = [['quick', 'Быстрые'], ['marathon', 'Марафоны'], ['pair', 'Пары'], ['collection', 'По сборнику']];
-    const all = {
-      quick: [
-        { id: 'classic', mark: '1с', title: 'По отрывку', sub: '1, 2, 4, 7, 11, 16 секунд', best: 'рекорд 8 из 10', desc: 'Как в сегодняшней игре, но треков сколько захочешь. С каждой попыткой отрывок длиннее.' },
-        { id: 'reverse', mark: '←', title: 'Задом наперёд', sub: 'отрывок в обратную сторону', best: 'рекорд 5 из 10', desc: 'Тот же отрывок, но перевёрнутый. Мелодия узнаваема, а мозг сопротивляется.' },
-        { id: 'emoji', mark: '☺', title: 'Название картинками', sub: 'три пиктограммы вместо звука', best: 'ещё не играл', desc: 'Три знака описывают название. Подсказка за попытку открывает исполнителя.' },
-        { id: 'random', mark: '?', title: 'Случайный режим', sub: 'сервер выбирает сам', best: '', desc: 'Один из режимов на выбор сервера. Хорош, когда не знаешь, чего хочется.' }
-      ],
-      marathon: [
-        { id: 'artist', mark: '∞', title: 'Один исполнитель', sub: 'до первой ошибки', best: 'рекорд 23', desc: 'Выбери артиста и угадывай его треки, пока не ошибёшься.' },
-        { id: 'director', mark: '∞', title: 'Один режиссёр', sub: 'до первой ошибки · кино', best: 'рекорд 9', desc: 'Все фильмы одного режиссёра по кадрам.' }
-      ],
-      pair: [
-        { id: 'pop', mark: 'vs', title: 'Что популярнее', sub: 'два трека, один вопрос', best: 'серия 11', desc: 'Выбери тот, что слушают чаще. Серия правильных ответов растёт.' },
-        { id: 'rating', mark: 'vs', title: 'Что выше в рейтинге', sub: 'два фильма · кино', best: 'серия 4', desc: 'Выбери фильм с оценкой выше.' }
-      ],
-      collection: [
-        { id: 'own', mark: '▦', title: 'Свой сборник', sub: '3 сборника', best: '', desc: 'Сыграй подборку, которую собрал сам, или поделись ссылкой.' },
-        { id: 'catalog', mark: '▦', title: 'Из каталога', sub: '1 240 подборок игроков', best: '', desc: 'Открыть каталог сборников с поиском и фильтрами.' }
-      ]
-    };
-    const tabs = tabsDef.map(([id, label]) => ({ label, cls: id === this.state.tab ? 'on' : '', pick: () => this.setState({ tab: id, open: all[id][0].id }) }));
-    const modes = all[this.state.tab].map((m) => {
-      const open = m.id === this.state.open;
-      return { ...m, open, cls: open ? 'on' : '', rot: open ? '180deg' : '0deg', pick: () => this.setState({ open: open ? null : m.id }) };
-    });
-    return { tabs, modes };
-  }
+  renderVals() { return {}; }
 }
 </script>
 </body>

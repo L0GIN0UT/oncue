@@ -10,46 +10,52 @@
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#141414}
-a{color:#F2B13B;text-decoration:none}a:hover{color:#FFC75F}
+body{margin:0;background:#1A1A1A}
+a{color:#F2F2F2;text-decoration:none}
 .h{font-family:"Unbounded",sans-serif}
 .ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.inp{width:100%;height:56px;border-radius:14px;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;padding:0 16px;font:inherit;font-size:16px;box-sizing:border-box;outline:none}
-.inp:focus{border-color:#F2B13B;box-shadow:0 0 0 4px rgba(242,177,59,.14)}
-.btn{font:inherit;font-weight:600;font-size:16px;height:56px;padding:0 24px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;display:inline-flex;align-items:center;gap:10px;justify-content:center;width:100%;box-sizing:border-box}
-.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
-.lbl{font-size:14px;color:#A3A3A3}
+.nav{font-family:"Unbounded",sans-serif;font-size:18px;font-weight:800;letter-spacing:-.02em;color:#6A6A6A;padding:8px 10px;border-radius:10px;white-space:nowrap}
+.nav:hover{color:#D9D9D9}.nav.on{color:#F2B13B}
+.ib{width:40px;height:40px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#ABABAB;display:grid;place-items:center;cursor:pointer;flex:none;padding:0;box-sizing:border-box}
+.pillbtn{height:40px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap;line-height:1;flex:none;box-sizing:border-box}
+.tile{position:relative;overflow:hidden;background:#242424;border:1.5px solid #474747;border-radius:20px;padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0;transition:border-color .15s,transform .15s}
+a.tile:hover{border-color:#6A6A6A;transform:translateY(-2px)}
+.cap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6A6A6A;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.t{font-family:"Unbounded",sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.s{font-size:13px;color:#ABABAB;line-height:1.45}
+.bar{height:6px;border-radius:3px;background:#2E2E2E;overflow:hidden}
+.badge{min-width:24px;height:18px;border-radius:999px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;gap:3px}
+.tier{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A;white-space:nowrap}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lr{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:12px;background:#2E2E2E;font-size:13px}
+.lr b{font-family:"Unbounded",sans-serif;font-size:15px;font-weight:800;min-width:34px}
+.seg{display:inline-flex;border:1.5px solid #474747;border-radius:999px;background:#242424;padding:2px;gap:2px}
+.seg span{height:24px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;font-size:12px;font-weight:600;color:#ABABAB;white-space:nowrap}
+.seg span.on{background:#F2F2F2;color:#1A1A1A}
+.btn{height:30px;padding:0 12px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none;box-sizing:border-box}
+.av2{width:28px;height:28px;border-radius:999px;border:1.5px solid #474747;display:grid;place-items:center;font-size:10px;font-weight:600;flex:none;background:#242424;box-sizing:border-box}
+.fld{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:12px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;font-size:14px;min-width:0}
+.fld.ph{color:#6A6A6A}
+.cv{position:relative;border-radius:10px;overflow:hidden;background:#2E2E2E;flex:none}
+.cv img{width:100%;height:100%;object-fit:cover;display:block}
 </style>
 </helmet>
-<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
-  <header style="display: flex; align-items: center; justify-content: center; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
-    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em; color: #F2F2F2">Guessverse</a>
-  </header>
-
-  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 6px 24px 80px; box-sizing: border-box">
-    <div style="width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 8px; text-align: center">
-      <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1">С возвращением</h1>
-      <span style="font-size: 15px; color: #A3A3A3">Сегодняшнюю игру можно сыграть и без входа. Со входом считаются серия, рейтинг и Версы.</span>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; max-width: 1280px; margin: 0 auto; min-height: 900px; padding: 0 24px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 0">
+  <header style="padding: 14px 0 0; display: flex; align-items: center; justify-content: center"><a href="Home.dc.html" style="display: flex; align-items: center; gap: 10px; min-width: 0; justify-content: center"><span style="width: 36px; height: 36px; border-radius: 10px; background: #F2B13B; display: grid; place-items: center; color: #1A1A1A; flex: none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span><span class="h" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap">Guessverse</span></a></header>
+  <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding-bottom: 40px">
+    <div class="tile" style="width: 440px; padding: 28px 30px; gap: 14px">
+      <span class="t" style="font-size: 26px">С возвращением</span>
+      <span class="s">Сегодняшнюю игру можно сыграть без входа. Со входом считаются серия, рейтинг и Версы</span>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span class="cap">Почта или ник</span><div class="fld" style="height: 44px"><span style="flex:1;color:#6A6A6A">name@example.com</span></div></div>
+      <div style="display: flex; flex-direction: column; gap: 6px"><span class="cap">Пароль</span><div class="fld" style="height: 44px"><span style="flex:1;color:#6A6A6A;letter-spacing:.2em">••••••••</span><span style="color:#ABABAB;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span></div></div>
+      <a href="Login.dc.html" class="s" style="align-self: flex-end; color: #D9D9D9; font-size: 12px">Забыл пароль</a>
+      <a href="Home.dc.html" class="chip" style="background: #F2B13B; color: #1A1A1A; height: 44px; justify-content: center; font-size: 15px">Войти</a>
+      <div style="display: flex; align-items: center; gap: 12px; color: #6A6A6A; font-size: 12px"><span style="flex:1;height:1.5px;background:#474747"></span>или<span style="flex:1;height:1.5px;background:#474747"></span></div>
+      <a href="Login.dc.html" class="btn" style="height: 44px; font-size: 14px">Создать аккаунт</a>
+      <a href="Game.dc.html" class="s" style="text-align: center; color: #D9D9D9">Играть без входа</a>
     </div>
-
-    <form style="width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 14px">
-      <div style="display: flex; flex-direction: column; gap: 6px">
-        <label for="login" class="lbl">Почта или ник</label>
-        <input id="login" class="inp" type="text" autocomplete="username">
-      </div>
-      <div style="display: flex; flex-direction: column; gap: 6px">
-        <div style="display: flex; justify-content: space-between"><label for="pass" class="lbl">Пароль</label><a href="Login.dc.html" style="font-size: 14px">Забыл пароль</a></div>
-        <div style="position: relative; display: flex; align-items: center">
-          <input id="pass" class="inp" type="password" autocomplete="current-password" style="padding-right: 52px">
-          <button type="button" aria-label="Показать пароль" style="position: absolute; right: 8px; width: 40px; height: 40px; border-radius: 999px; border: 0; background: transparent; color: #A3A3A3; cursor: pointer; display: grid; place-items: center"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        </div>
-      </div>
-      <button class="btn go" type="submit" style="margin-top: 6px">Войти</button>
-      <div style="display: flex; align-items: center; gap: 12px; color: #5A5A5A; font-size: 13px"><span style="flex: 1; height: 1.5px; background: #3A3A3A"></span>или<span style="flex: 1; height: 1.5px; background: #3A3A3A"></span></div>
-      <a href="Login.dc.html" class="btn">Создать аккаунт</a>
-      <a href="A-Game.dc.html" style="text-align: center; font-size: 14px; color: #A3A3A3; margin-top: 4px">Играть без входа</a>
-    </form>
-  </main>
+  </div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>

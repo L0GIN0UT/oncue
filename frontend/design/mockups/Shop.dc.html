@@ -10,67 +10,90 @@
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#141414}
-a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+body{margin:0;background:#1A1A1A}
+a{color:#F2F2F2;text-decoration:none}
 .h{font-family:"Unbounded",sans-serif}
 .ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
-.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;justify-content:center}
-.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
-.chip{height:34px;padding:0 14px;border-radius:999px;border:1.5px solid #3A3A3A;background:transparent;color:#A3A3A3;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center}
-.chip.on{border-color:#F2F2F2;color:#141414;background:#F2F2F2}
-.item{aspect-ratio:1;border:1.5px solid #3A3A3A;border-radius:14px;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:#F2F2F2;font:inherit;padding:0}
-.item:hover{border-color:#5A5A5A;background:#1C1C1C}
-.item.on{border-color:#F2B13B;background:#1C1C1C;box-shadow:0 0 0 4px rgba(242,177,59,.14)}
-.item.lock{opacity:.5}
-.ring{width:44px;height:44px;border-radius:999px;border:3px solid #A3A3A3}
-.item span{font-size:12px;color:#A3A3A3}
+.nav{font-family:"Unbounded",sans-serif;font-size:18px;font-weight:800;letter-spacing:-.02em;color:#6A6A6A;padding:8px 10px;border-radius:10px;white-space:nowrap}
+.nav:hover{color:#D9D9D9}.nav.on{color:#F2B13B}
+.ib{width:40px;height:40px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#ABABAB;display:grid;place-items:center;cursor:pointer;flex:none;padding:0;box-sizing:border-box}
+.pillbtn{height:40px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap;line-height:1;flex:none;box-sizing:border-box}
+.tile{position:relative;overflow:hidden;background:#242424;border:1.5px solid #474747;border-radius:20px;padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0;transition:border-color .15s,transform .15s}
+a.tile:hover{border-color:#6A6A6A;transform:translateY(-2px)}
+.cap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6A6A6A;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.t{font-family:"Unbounded",sans-serif;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.s{font-size:13px;color:#ABABAB;line-height:1.45}
+.bar{height:6px;border-radius:3px;background:#2E2E2E;overflow:hidden}
+.badge{min-width:24px;height:18px;border-radius:999px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;gap:3px}
+.tier{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A;white-space:nowrap}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lr{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:12px;background:#2E2E2E;font-size:13px}
+.lr b{font-family:"Unbounded",sans-serif;font-size:15px;font-weight:800;min-width:34px}
+.seg{display:inline-flex;border:1.5px solid #474747;border-radius:999px;background:#242424;padding:2px;gap:2px}
+.seg span{height:24px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;font-size:12px;font-weight:600;color:#ABABAB;white-space:nowrap}
+.seg span.on{background:#F2F2F2;color:#1A1A1A}
+.btn{height:30px;padding:0 12px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;font-size:12px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none;box-sizing:border-box}
+.av2{width:28px;height:28px;border-radius:999px;border:1.5px solid #474747;display:grid;place-items:center;font-size:10px;font-weight:600;flex:none;background:#242424;box-sizing:border-box}
+.fld{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:12px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;font-size:14px;min-width:0}
+.fld.ph{color:#6A6A6A}
+.cv{position:relative;border-radius:10px;overflow:hidden;background:#2E2E2E;flex:none}
+.cv img{width:100%;height:100%;object-fit:cover;display:block}
 </style>
 </helmet>
-<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
-  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
-    <div style="flex: 1; display: flex"><a href="Profile.dc.html" class="ib" style="width: auto; padding: 0 14px 0 8px; gap: 6px; display: inline-flex; align-items: center; font-size: 14px" aria-label="Назад в профиль"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M15 6l-6 6 6 6"/></svg>Профиль</a></div>
-    <span class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</span>
-    <div style="flex: 1; display: flex; justify-content: flex-end"><span style="display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid #3A3A3A; font-size: 15px; font-weight: 600; color: #F2B13B"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg>1 250</span></div>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; max-width: 1280px; margin: 0 auto; min-height: 900px; padding: 0 24px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+  <header style="padding: 14px 0 0; display: flex; align-items: center; gap: 24px">
+    <a href="Home.dc.html" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0"><span style="width: 36px; height: 36px; border-radius: 10px; background: #F2B13B; display: grid; place-items: center; color: #1A1A1A; flex: none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span><span class="h" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap">Guessverse</span></a>
+    <nav aria-label="Разделы" style="display: flex; align-items: center; gap: 8px"><a href="Home.dc.html" class="nav">Главная</a><span style="color: #474747">/</span><a href="Solo.dc.html" class="nav">Соло</a><span style="color: #474747">/</span><a href="Online.dc.html" class="nav">Онлайн</a><span style="color: #474747">/</span><a href="Collections.dc.html" class="nav">Сборники</a></nav>
+    <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0">
+      <button class="ib" type="button" aria-label="Уведомления, 3 новых" style="position: relative"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span style="position:absolute;top:6px;right:6px;min-width:16px;height:16px;border-radius:999px;background:#F2B13B;color:#1A1A1A;font-size:10px;font-weight:700;display:grid;place-items:center">3</span></button>
+      <a href="Shop.dc.html" class="pillbtn" aria-label="1 250 Версов, магазин"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;color:#F2B13B"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg><span>1 250</span></a>
+      <a href="Leaderboard.dc.html" class="ib" aria-label="Лидеры"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0zM6 6H4v2a3 3 0 0 0 3 3M18 6h2v2a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg></a>
+      <a href="Profile.dc.html" class="pillbtn" style="padding-left: 4px"><span style="width: 30px; height: 30px; border-radius: 999px; border: 2px solid #F2B13B; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none">ИЛ</span><span>L0GIN0UT</span></a>
+    </div>
   </header>
-
-  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 6px 24px 48px; box-sizing: border-box">
-    <section style="width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 14px">
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 2px">
-        <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Магазин</h1>
-        <span style="font-size: 14px; color: #A3A3A3">Версы зарабатываются в игре, купить их нельзя</span>
+  <div style="display: flex; align-items: center; gap: 14px">
+    <h1 class="t" style="margin: 0; font-size: 28px">Магазин</h1>
+    <span style="flex:1"></span>
+    <span class="s" style="font-size: 12px">зарабатываются в игре, купить нельзя</span>
+    <span class="pillbtn"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span><span>1 250 Версов</span></span>
+  </div>
+  <div><span class="seg" style="padding:3px"><span class="on">Рамки</span><span>Титулы</span><span>Темы</span><span>Аватары</span><span>Мои<span class="badge" style="background:#2E2E2E;color:#F2B13B;margin-left:6px;height:16px">6</span></span></span></div>
+  <section style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; align-items: stretch">
+    <div class="tile">
+      <div class="row"><span class="cap">Рамки аватара · 10</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">куплено 1 · надета 1</span></div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #F2F2F2;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px dashed #DDE6F2;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Иней</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>150</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #F2B13B;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px solid #F2B13B;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Янтарь</span><span class="chip" style="background:rgba(242,177,59,.14);color:#F2B13B;height:20px;font-size:11px">надета</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px solid #8FD3FF;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Неон</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>300</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:6px double #C9CCD6;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Двойная</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>400</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px dotted #F2A0A0;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Пунктир</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>250</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px solid #B5703A;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Бронза</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>200</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;background:conic-gradient(#F2B13B,#9BE39F,#8FD3FF,#F2A0A0,#F2B13B);display:grid;place-items:center;flex:none"><span style="width:50px;height:50px;border-radius:999px;background:#242424;display:grid;place-items:center;font-size:12px;font-weight:600">ИЛ</span></span></div><span style="font-size:13px;font-weight:600">Радуга</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>600</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:4px solid #9AA4AE;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Сталь</span><span style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600"><span style="color:#F2B13B;display:flex"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:13px;height:13px"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg></span>350</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:.5;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px solid #8FD3FF;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Алмаз</span><span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#ABABAB;font-weight:600"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>уровень 15</span></div>
+        <div style="height:150px;border-radius:14px;background:#2E2E2E;border:1.5px solid #474747;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:.5;"><div style="display:flex;align-items:center;justify-content:center;height:60px"><span style="width:56px;height:56px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px dashed #DDE6F2;">ИЛ</span></div><span style="font-size:13px;font-weight:600">Снегопад</span><span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#ABABAB;font-weight:600"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>событие</span></div>
       </div>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap">
-        <button class="chip on" type="button">Рамки</button><button class="chip" type="button">Титулы</button><button class="chip" type="button">Темы</button><button class="chip" type="button">Звуки</button><button class="chip" type="button" style="margin-left: auto">Мои · 6</button>
+      <div class="row" style="margin-top: auto"><span class="s" style="font-size: 12px">Версы даёт игра: раунды, дейлики, задания недели, события</span><span class="seg"><span class="on">1</span><span>2</span></span></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 20px">
+      <div class="tile">
+        <div class="row"><span class="cap">Примерка</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">Иней · 150</span></div>
+        <div style="display: flex; align-items: center; gap: 14px"><span style="width:72px;height:72px;border-radius:999px;display:grid;place-items:center;font-size:12px;font-weight:600;box-sizing:border-box;flex:none;background:#242424;border:3px dashed #DDE6F2;">ИЛ</span><div style="display: flex; flex-direction: column; gap: 5px; min-width: 0"><span style="font-weight: 600; font-size: 16px">L0GIN0UT</span><span class="chip" style="background: #2E2E2E; color: #F2B13B; align-self: flex-start">Меломан</span></div></div>
+        <div style="display: flex; gap: 8px"><a href="Shop.dc.html" class="chip" style="background: #F2B13B; color: #1A1A1A; height: 38px; flex: 1; justify-content: center; font-size: 14px">Надеть</a><a href="Shop.dc.html" class="btn" style="height: 38px; flex: 1; font-size: 14px">Снять</a></div>
       </div>
-    </section>
-
-    <section style="width: 100%; max-width: 760px; display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 14px; align-items: stretch">
-      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-content: start">
-        <button class="item on" type="button" aria-label="Рамка Латунь, надета"><span class="ring" style="border-color: #F2B13B"></span><span>надета</span></button>
-        <button class="item" type="button" aria-label="Рамка Иней, 120 Версов"><span class="ring" style="border-color: #DDE6F2; border-style: dashed"></span><span>120</span></button>
-        <button class="item" type="button" aria-label="Рамка Плёнка, 200 Версов"><span class="ring" style="border-color: #A3A3A3; border-style: double; border-width: 5px"></span><span>200</span></button>
-        <button class="item" type="button" aria-label="Рамка Винил, 200 Версов"><span class="ring" style="border-color: #2A2A2A; box-shadow: 0 0 0 3px #5A5A5A"></span><span>200</span></button>
-        <button class="item" type="button" aria-label="Рамка Эфир, 350 Версов"><span class="ring" style="border-color: #F2F2F2"></span><span>350</span></button>
-        <button class="item lock" type="button" aria-label="Рамка Неон, откроется на 15 уровне"><span class="ring" style="border-color: #F2B13B; box-shadow: 0 0 12px rgba(242,177,59,.6)"></span><span>уровень 15</span></button>
-        <button class="item lock" type="button" aria-label="Рамка Золото, награда сезона"><span class="ring" style="border-color: #F2B13B; border-width: 5px"></span><span>сезон</span></button>
-        <button class="item" type="button" aria-label="Рамка Событие, 9 находок"><span class="ring" style="border-color: #9BE39F"></span><span>событие</span></button>
-        <button class="item" type="button" aria-label="Рамка Кадр, 260 Версов"><span class="ring" style="border-color: #A3A3A3; border-radius: 10px"></span><span>260</span></button>
-        <button class="item" type="button" aria-label="Рамка Тонарм, 300 Версов"><span class="ring" style="border-color: #A3A3A3; border-top-color: #F2B13B"></span><span>300</span></button>
+      <div class="tile">
+        <div class="row"><span class="cap">Промокод</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><div class="fld ph" style="flex: 1">Введи промокод</div><a href="Shop.dc.html" class="btn" style="height: 40px">Применить</a></div>
       </div>
-      <aside style="border: 1.5px solid #3A3A3A; border-radius: 14px; background: #1C1C1C; padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
-        <span style="width: 84px; height: 84px; border-radius: 999px; border: 3px solid #F2B13B; display: grid; place-items: center; font-weight: 600; font-size: 22px">ИЛ</span>
-        <span class="h" style="font-size: 16px; font-weight: 500">Латунь</span>
-        <span style="font-size: 13px; color: #A3A3A3; line-height: 1.5">Рамка аватарки. Видна в дуэлях, лобби и таблицах.</span>
-        <button class="btn" type="button" style="width: 100%; height: 44px; margin-top: auto">Снять</button>
-      </aside>
-    </section>
-
-    <section style="width: 100%; max-width: 760px; border: 1.5px solid #3A3A3A; border-radius: 14px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; box-sizing: border-box">
-      <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Промокод</span><span style="font-size: 13px; color: #A3A3A3">Из розыгрышей и от друзей</span></span>
-      <div style="display: flex; gap: 8px"><input type="text" placeholder="КОД" aria-label="Промокод" style="width: 140px; height: 44px; border-radius: 12px; border: 1.5px solid #3A3A3A; background: #141414; color: #F2F2F2; padding: 0 14px; font: inherit; font-size: 15px; letter-spacing: .1em; box-sizing: border-box"><button class="btn" type="button" style="height: 44px">Применить</button></div>
-    </section>
-  </main>
+      <div class="tile">
+        <div class="row"><span class="cap">Награды сезона</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">сезон 3</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><div class="row" style="font-size: 13px"><span style="font-weight: 600">Топ-100 недели</span><span style="color: #ABABAB">63 место</span></div><div class="bar"><div style="width: 63%; height: 100%; background: #F2B13B"></div></div></div>
+        <div style="display: flex; flex-direction: column; gap: 6px"><div class="row" style="font-size: 13px"><span style="font-weight: 600">Сезон 3</span><span style="color: #ABABAB">45 %</span></div><div class="bar"><div style="width: 45%; height: 100%; background: #C9CCD6"></div></div></div>
+      </div>
+    </div>
+  </section>
+  <footer style="display: flex; justify-content: space-between; font-size: 12px; color: #6A6A6A; margin-top: auto"><span>Guessverse · квиз по музыке и кино</span><span>Частые вопросы · О сервисе · Конфиденциальность · Соглашение · Правообладателям · 18+</span></footer>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>

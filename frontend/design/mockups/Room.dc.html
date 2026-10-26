@@ -10,59 +10,135 @@
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#141414}
-a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+body{margin:0;background:#1A1A1A}
 .h{font-family:"Unbounded",sans-serif}
 .ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
-.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;justify-content:center}
-.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
-.seat{height:60px;border:1.5px solid #3A3A3A;border-radius:14px;display:flex;align-items:center;gap:12px;padding:0 16px;box-sizing:border-box}
-.av{width:36px;height:36px;border-radius:999px;border:1.5px solid #3A3A3A;display:grid;place-items:center;font-size:12px;font-weight:600;flex:none}
-.set{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1.5px solid #2A2A2A;font-size:15px}
-.chip{height:34px;padding:0 14px;border-radius:999px;border:1.5px solid #3A3A3A;background:transparent;color:#A3A3A3;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;box-sizing:border-box}
-.chip.on{border-color:#F2B13B;color:#F2F2F2}
+.nav{font-family:"Unbounded",sans-serif;font-size:18px;font-weight:800;letter-spacing:-.02em;color:#6A6A6A;padding:8px 10px;border-radius:10px;text-decoration:none}
+.nav:hover{color:#D9D9D9}
+.nav.on{color:#F2B13B}
+.ib{width:40px;height:40px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#ABABAB;display:grid;place-items:center;cursor:pointer;text-decoration:none;padding:0}
+.ib:hover{color:#F2F2F2;border-color:#6A6A6A}
+.pillbtn{height:40px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;text-decoration:none}
+.card{background:#242424;border:1.5px solid #474747;border-radius:20px;padding:24px;box-sizing:border-box}
+.cap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6A6A6A;font-weight:600}
+.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:14px;cursor:pointer;border:1.5px solid #474747;background:#2E2E2E;color:#F2F2F2;display:inline-flex;align-items:center;gap:8px;justify-content:center;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:#6A6A6A}
+.btn.go{background:#F2B13B;border-color:#F2B13B;color:#1A1A1A}
+.btn.line{background:transparent}
+a{color:#F2F2F2;text-decoration:none}
+.seat{border:1.5px solid #474747;border-radius:14px;background:#2E2E2E;padding:14px 12px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:132px;box-sizing:border-box;justify-content:center}
+.seat.empty{background:transparent;border-style:dashed;color:#6A6A6A}
+.ava{width:48px;height:48px;border-radius:999px;border:1.5px solid #474747;background:#242424;display:grid;place-items:center;font-size:14px;font-weight:600}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1.5px solid #474747;font-size:15px}
+.srow:first-of-type{border-top:0}
+.srow .k{color:#ABABAB}
+.chips{display:inline-flex;gap:8px}
+.chips input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.chips label{height:34px;min-width:48px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#D9D9D9;display:inline-grid;place-items:center;font-size:14px;font-weight:600;cursor:pointer;box-sizing:border-box}
+.chips label:hover{border-color:#6A6A6A}
+.chips input:checked + label{background:#F2B13B;border-color:#F2B13B;color:#1A1A1A}
+.chips input:focus-visible + label{outline:2px solid #F2F2F2;outline-offset:2px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.wait{animation:blink 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.wait{animation:none}}
+.tile{position:relative;overflow:hidden;background:#242424;border:1.5px solid #474747;border-radius:20px;padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0}
+.lr{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:12px;background:#2E2E2E;font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.tier{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A;white-space:nowrap}
+.pillbtn{white-space:nowrap;line-height:1;flex:none;box-sizing:border-box}
+.ib{flex:none;box-sizing:border-box}
 </style>
 </helmet>
 <div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
-  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
-    <div style="flex: 1; display: flex"><a href="Online.dc.html" class="ib" style="width: auto; padding: 0 14px 0 8px; gap: 6px; display: inline-flex; align-items: center; font-size: 14px" aria-label="Выйти из комнаты"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M15 6l-6 6 6 6"/></svg>Выйти</a></div>
-    <span class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</span>
-    <div style="flex: 1; display: flex; justify-content: flex-end"><button class="btn" type="button" style="height: 38px; font-size: 14px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>Код PR7K</button></div>
-  </header>
 
-  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 6px 24px 48px; box-sizing: border-box">
-    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 6px; padding: 0 2px">
-      <span style="font-size: 14px; color: #A3A3A3">Комната Никиты</span>
-      <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1">Пятничный рок</h1>
-      <span style="font-size: 15px; color: #A3A3A3">Все слышат один отрывок, очки за скорость. Начнём, когда хост нажмёт старт.</span>
-    </section>
-
-    <section style="width: 100%; max-width: 640px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-      <div class="seat" style="border-color: #F2B13B"><span class="av" style="border-color: #F2B13B">НГ</span><span style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Никита</span><span style="font-size: 12px; color: #A3A3A3">хост</span></span><span style="font-size: 13px; color: #9BE39F">готов</span></div>
-      <div class="seat"><span class="av">ИЛ</span><span style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Ты</span><span style="font-size: 12px; color: #A3A3A3">уровень 14</span></span><span style="font-size: 13px; color: #A3A3A3">не готов</span></div>
-      <div class="seat"><span class="av">АК</span><span style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Алина</span><span style="font-size: 12px; color: #A3A3A3">уровень 21</span></span><span style="font-size: 13px; color: #9BE39F">готова</span></div>
-      <div class="seat"><span class="av">МР</span><span style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 600">Марат</span><span style="font-size: 12px; color: #A3A3A3">уровень 9</span></span><span style="font-size: 13px; color: #9BE39F">готов</span></div>
-      <div class="seat" style="border-style: dashed; justify-content: center; color: #A3A3A3; font-size: 14px">свободно</div>
-      <div class="seat" style="border-style: dashed; justify-content: center; color: #A3A3A3; font-size: 14px">свободно</div>
-    </section>
-
-    <section style="width: 100%; max-width: 640px; border: 1.5px solid #3A3A3A; border-radius: 14px; background: #1C1C1C; padding: 4px 18px; display: flex; flex-direction: column">
-      <div class="set"><span>Режим</span><span style="color: #A3A3A3">Музыка · по отрывку</span></div>
-      <div class="set" style="padding: 10px 0"><span>Раундов</span><span style="display: flex; gap: 6px; align-items: center"><span class="chip">5</span><span class="chip on">10</span><span class="chip">20</span></span></div>
-      <div class="set"><span>Сложность</span><span style="color: #A3A3A3">средняя</span></div>
-      <div class="set" style="border: 0"><span>Время на ответ</span><span style="color: #A3A3A3">30 с</span></div>
-    </section>
-
-    <div style="width: 100%; max-width: 640px; display: flex; gap: 10px">
-      <button class="btn go" type="button" style="flex: 1; height: 56px; font-size: 16px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M5 12l5 5L20 7"/></svg>Я готов</button>
-      <button class="btn" type="button" style="height: 56px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M4 12v7h16v-7M12 3v12M8 7l4-4 4 4"/></svg>Пригласить</button>
+<div style="max-width: 1280px; width: 100%; margin: 0 auto; padding: 0 24px; box-sizing: border-box">
+<header style="padding: 14px 0 0; display: flex; align-items: center; gap: 24px">
+    <a href="Home.dc.html" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0"><span style="width: 36px; height: 36px; border-radius: 10px; background: #F2B13B; display: grid; place-items: center; color: #1A1A1A; flex: none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span><span class="h" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap">Guessverse</span></a>
+    <nav aria-label="Разделы" style="display: flex; align-items: center; gap: 8px"><a href="Home.dc.html" class="nav">Главная</a><span style="color: #474747">/</span><a href="Solo.dc.html" class="nav">Соло</a><span style="color: #474747">/</span><a href="Online.dc.html" class="nav on">Онлайн</a><span style="color: #474747">/</span><a href="Collections.dc.html" class="nav">Сборники</a></nav>
+    <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0">
+      <button class="ib" type="button" aria-label="Уведомления, 3 новых" style="position: relative"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span style="position:absolute;top:6px;right:6px;min-width:16px;height:16px;border-radius:999px;background:#F2B13B;color:#1A1A1A;font-size:10px;font-weight:700;display:grid;place-items:center">3</span></button>
+      <a href="Shop.dc.html" class="pillbtn" aria-label="1 250 Версов, магазин"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;color:#F2B13B"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg><span>1 250</span></a>
+      <a href="Leaderboard.dc.html" class="ib" aria-label="Лидеры"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0zM6 6H4v2a3 3 0 0 0 3 3M18 6h2v2a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg></a>
+      <a href="Profile.dc.html" class="pillbtn" style="padding-left: 4px"><span style="width: 30px; height: 30px; border-radius: 999px; border: 2px solid #F2B13B; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none">ИЛ</span><span>L0GIN0UT</span></a>
     </div>
-    <span style="font-size: 13px; color: #A3A3A3">Настройки меняет только хост. Старт появится у Никиты, когда все будут готовы.</span>
-  </main>
+  </header>
+</div>
+
+<main style="flex: 1; padding: 16px 24px 40px; box-sizing: border-box; display: flex; justify-content: center">
+  <section class="tile" aria-label="Комната" style="padding: 24px; width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 24px; align-self: flex-start">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span class="cap">Комната party</span>
+      <h1 class="h" style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.15">Пятничный рок</h1>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 15px; color: #ABABAB">
+        <span>Комната Никиты · код <b class="h" style="color: #F2F2F2; font-weight: 500; letter-spacing: .06em">PR7K</b></span>
+        <button class="btn line" type="button" aria-label="Скопировать код комнаты" style="height: 34px; padding: 0 12px; font-size: 13px; border-radius: 999px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><rect x="9" y="9" width="11" height="11" rx="3"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>Скопировать</button>
+      </div>
+    </div>
+
+    <div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px"><span class="cap">Игроки</span><span style="font-size: 13px; color: #ABABAB">4 из 6</span></div>
+      <ul style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px">
+        <li class="seat">
+          <span class="ava" style="border-color: #F2B13B">НИ</span>
+          <span style="font-size: 15px; font-weight: 600">Никита</span>
+          <span style="font-size: 12px; color: #ABABAB">уровень 22 · хост</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9BE39F">готов</span>
+        </li>
+        <li class="seat">
+          <span class="ava">АЛ</span>
+          <span style="font-size: 15px; font-weight: 600">Алина</span>
+          <span style="font-size: 12px; color: #ABABAB">уровень 31</span>
+          <span style="font-size: 13px; font-weight: 600; color: #9BE39F">готов</span>
+        </li>
+        <li class="seat">
+          <span class="ava">МА</span>
+          <span style="font-size: 15px; font-weight: 600">Марат</span>
+          <span style="font-size: 12px; color: #ABABAB">уровень 17</span>
+          <span style="font-size: 13px; font-weight: 600; color: #ABABAB">не готов</span>
+        </li>
+        <li class="seat">
+          <span class="ava">ИЛ</span>
+          <span style="font-size: 15px; font-weight: 600">L0GIN0UT <span style="color: #ABABAB; font-weight: 500">(ты)</span></span>
+          <span style="font-size: 12px; color: #ABABAB">уровень 14</span>
+          <span style="font-size: 13px; font-weight: 600; color: #ABABAB">не готов</span>
+        </li>
+        <li class="seat empty"><span class="ava" style="border-style: dashed; background: transparent; color: #6A6A6A"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span style="font-size: 14px">свободно</span></li>
+        <li class="seat empty"><span class="ava" style="border-style: dashed; background: transparent; color: #6A6A6A"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span style="font-size: 14px">свободно</span></li>
+      </ul>
+    </div>
+
+    <div>
+      <span class="cap">Настройки</span>
+      <div style="margin-top: 6px">
+        <div class="srow"><span class="k">Режим</span><span style="font-weight: 600">Музыка · по отрывку</span></div>
+        <div class="srow"><span class="k">Сборник</span><a href="Collections.dc.html" style="font-weight: 600; color: #F2B13B; display: inline-flex; align-items: center; gap: 6px">Брит-рок 90-х<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px"><path d="M7 17L17 7M9 7h8v8"/></svg></a></div>
+        <div class="srow">
+          <span class="k" id="rounds-k">Раундов</span>
+          <div class="chips" role="radiogroup" aria-labelledby="rounds-k">
+            <input type="radio" name="rounds" id="r5" value="5"><label for="r5">5</label>
+            <input type="radio" name="rounds" id="r10" value="10" checked><label for="r10">10</label>
+            <input type="radio" name="rounds" id="r20" value="20"><label for="r20">20</label>
+          </div>
+        </div>
+        <div class="srow"><span class="k">Время на ответ</span><span style="font-weight: 600">30 с</span></div>
+        <div class="srow"><span class="k">Сложность</span><span style="font-weight: 600">средняя</span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; gap: 12px">
+        <button class="btn go" type="button" style="flex: 1; height: 52px; font-size: 16px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M5 12l5 5L20 7"/></svg>Я готов</button>
+        <button class="btn line" type="button" style="height: 52px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><circle cx="10" cy="8" r="3.5"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/></svg>Пригласить</button>
+      </div>
+      <p class="wait" style="margin: 0; text-align: center; font-size: 13px; color: #ABABAB">Настройки меняет хост. Старт появится у Никиты, когда все будут готовы</p>
+    </div>
+  </section>
+</main>
+
+<footer style="max-width: 1280px; width: 100%; margin: 0 auto; padding: 20px 24px 28px; box-sizing: border-box; font-size: 13px; color: #6A6A6A; text-align: center">Частые вопросы · О сервисе · Конфиденциальность · Соглашение · Правообладателям · 18+</footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
 class Component extends DCLogic {
   renderVals() { return {}; }
 }
