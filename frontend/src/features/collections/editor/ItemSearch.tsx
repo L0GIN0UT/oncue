@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import type { Domain, Suggestion } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { SearchField } from "@/features/hubs/SearchField";
 import { useAutocomplete } from "@/features/game/use-autocomplete";
 import { itemLiteKey, type ItemLite } from "./ItemList";
 
@@ -35,33 +36,28 @@ export function ItemSearch({ domain, added, full, onAdd }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <label htmlFor={id} className="text-sm font-medium">
-        {t("collections.editor.search")}
-      </label>
-      <input
+      <SearchField
         id={id}
-        type="search"
+        aria-label={t("collections.editor.search")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t(`collections.editor.searchPlaceholder.${domain}`)}
-        autoComplete="off"
         data-testid="editor-item-search"
-        className="h-12 rounded-[var(--radius-control)] bg-night px-4 text-ink ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-[var(--accent)]"
       />
       {query.trim() && (
-        <ul className="flex flex-col gap-1" aria-live="polite" aria-busy={loading}>
+        <ul className="flex flex-col gap-2.5" aria-live="polite" aria-busy={loading}>
           {items.map((s) => {
             const isAdded = added.has(s.id);
             return (
               <li
                 key={s.id}
-                className="flex items-center justify-between gap-3 rounded-lg bg-stage px-3 py-2 ring-1 ring-rule"
+                className="flex min-h-[60px] items-center justify-between gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2"
               >
                 <span className="min-w-0">
-                  <span dir="auto" className="block truncate font-medium">
+                  <span dir="auto" className="block truncate font-semibold">
                     {s.title}
                   </span>
-                  <span dir="auto" className="block truncate text-sm text-ink-muted">
+                  <span dir="auto" className="block truncate text-[13px] text-ink-muted">
                     {[s.year, s.subtitle].filter(Boolean).join(", ")}
                   </span>
                 </span>

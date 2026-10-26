@@ -1,21 +1,26 @@
 "use client";
 /**
- * Каталог сборников `/collections` (D3). Фильтры, сортировка и поиск живут в адресе (`q`,
- * `domain`, `mode`, `difficulty`, `curated`, `sort`), поиск — с паузой ввода. Без поиска и
- * сортировки — витрины bff (рекомендуемые, популярные, новые); с поиском или выбранной
- * сортировкой — бесконечная лента collections по keyset-курсору.
+ * Каталог сборников `/collections` (D3, макет «Сборники»): поиск, чипы быстрых порядков
+ * («Популярные», «Новые», «Кураторские»), остальные фильтры — за кнопкой «Фильтры». Фильтры,
+ * сортировка и поиск живут в адресе (`q`, `domain`, `mode`, `difficulty`, `curated`, `sort`),
+ * поиск — с паузой ввода. Без поиска и сортировки — витрины bff (рекомендуемые, популярные,
+ * новые); с поиском или выбранной сортировкой — бесконечная лента collections по keyset-курсору.
+ * Результат — строки, не карточки.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Plus, Search } from "lucide-react";
 import type { CatalogQuery, CollectionSort, Domain } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { Chip } from "@/shared/ui/chip";
+import { inputClass } from "@/shared/ui/field";
 import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
+import { HubHeader } from "@/features/hubs/HubHeader";
+import { SearchField } from "@/features/hubs/SearchField";
 import { collectionKeys, fetchCatalogPage, fetchShowcase } from "../api";
 import { useCollectionModes } from "../modes";
 import { CollectionCard } from "./CollectionCard";
@@ -25,6 +30,8 @@ export const SEARCH_DEBOUNCE_MS = 300;
 const MAX_QUERY = 100;
 
 const SORTS: CollectionSort[] = ["popular", "new", "likes", "difficulty", "featured"];
+/** Порядки с собственным чипом; остальные выбираются в панели фильтров. */
+const QUICK_SORTS = ["popular", "new"] as const;
 const SHOWCASE: ("featured" | "popular" | "new")[] = ["featured", "popular", "new"];
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 const DOMAINS: Domain[] = ["film", "music"];
@@ -55,6 +62,12 @@ function toSearch(f: Filters): string {
   return s ? `?${s}` : "";
 }
 
+/** Сколько фильтров из панели включено (чипы быстрых порядков и «Кураторские» не считаются). */
+export function panelFiltersCount(f: Filters): number {
+  const slowSort = f.sort && !(QUICK_SORTS as readonly string[]).includes(f.sort);
+  return [f.domain, f.difficulty, f.mode, slowSort].filter(Boolean).length;
+}
+
 export function CatalogView() {
   const t = useTranslations();
   const router = useRouter();
@@ -78,21 +91,21 @@ export function CatalogView() {
     );
 
   return (
-    <div className="flex flex-col gap-8 pt-6 sm:pt-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <h1 className="font-display text-3xl font-bold sm:text-4xl">{t("collections.title")}</h1>
-          <p className="max-w-[60ch] text-ink-muted">{t("collections.lead")}</p>
-        </div>
-        {viewer.kind === "user" && (
-          <Button asChild>
-            <Link href="/collections/new">
-              <Plus aria-hidden />
-              {t("collections.create")}
+    <div className="flex flex-col gap-4 pt-4">
+      <HubHeader
+        title={t("collections.title")}
+        aside={
+          viewer.kind === "user" ? (
+            <Link
+              href="/me/collections"
+              className="hover:text-ink"
+              data-testid="catalog-my-collections"
+            >
+              {t("nav.myCollections")}
             </Link>
-          </Button>
-        )}
-      </header>
+          ) : null
+        }
+      />
 
       <SearchBox value={filters.q ?? ""} onSearch={search} />
       <FilterBar filters={filters} onChange={update} />
@@ -102,13 +115,22 @@ export function CatalogView() {
       ) : (
         <Showcase filters={filters} onAll={(sort) => update({ sort })} />
       )}
+
+      {viewer.kind === "user" && (
+        <div className="flex justify-end pt-1.5">
+          <Button asChild>
+            <Link href="/collections/new" data-testid="catalog-create">
+              {t("collections.createOwn")}
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 function SearchBox({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
   const t = useTranslations();
-  const id = useId();
   const [text, setText] = useState(value);
   const last = useRef(value);
   const onSearchRef = useRef(onSearch);
@@ -125,25 +147,14 @@ function SearchBox({ value, onSearch }: { value: string; onSearch: (q: string) =
     return () => clearTimeout(timer);
   }, [text]);
   return (
-    <div className="relative">
-      <label htmlFor={id} className="sr-only">
-        {t("collections.search")}
-      </label>
-      <Search
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-ink-muted"
-      />
-      <input
-        id={id}
-        type="search"
-        value={text}
-        maxLength={MAX_QUERY}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={t("collections.searchPlaceholder")}
-        data-testid="collection-search"
-        className="h-12 w-full rounded-[var(--radius-control)] bg-night pr-4 pl-12 text-ink ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-music"
-      />
-    </div>
+    <SearchField
+      aria-label={t("collections.search")}
+      value={text}
+      maxLength={MAX_QUERY}
+      onChange={(e) => setText(e.target.value)}
+      placeholder={t("collections.searchPlaceholder")}
+      data-testid="collection-search"
+    />
   );
 }
 
@@ -156,108 +167,139 @@ function FilterBar({
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const modes = useCollectionModes(filters.domain, filters.mode);
+  const panelId = useId();
   const sortId = useId();
-  const difficultyId = useId();
   const modeId = useId();
+  const [open, setOpen] = useState(false);
+  const modes = useCollectionModes(filters.domain, filters.mode);
+  const count = panelFiltersCount(filters);
+  const toggleSort = (sort: CollectionSort) =>
+    onChange({ sort: filters.sort === sort ? undefined : sort });
   return (
-    <div className="flex flex-wrap items-end gap-4" data-testid="collection-filters">
-      <div
-        role="group"
-        aria-label={t("collections.filters.domain")}
-        className="flex gap-1 rounded-[var(--radius-control)] bg-stage p-1 ring-1 ring-rule"
-      >
-        {[undefined, ...DOMAINS].map((d) => (
-          <button
-            key={d ?? "all"}
-            type="button"
-            aria-pressed={filters.domain === d}
-            onClick={() => onChange({ domain: d, mode: undefined })}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm",
-              filters.domain === d
-                ? "bg-stage-raised text-ink ring-1 ring-rule"
-                : "text-ink-muted hover:text-ink",
-            )}
-          >
-            {d ? t(`domain.${d}`) : t("collections.filters.all")}
-          </button>
+    <div className="flex flex-col gap-3" data-testid="collection-filters">
+      <div className="flex flex-wrap items-center gap-2">
+        {QUICK_SORTS.map((s) => (
+          <Chip key={s} selected={filters.sort === s} onClick={() => toggleSort(s)}>
+            {t(`collections.sort.${s}`)}
+          </Chip>
         ))}
+        <Chip
+          selected={filters.curated === true}
+          onClick={() => onChange({ curated: filters.curated ? undefined : true })}
+        >
+          {t("collections.filters.curatedChip")}
+        </Chip>
+        <Chip
+          className="ml-auto"
+          selected={count > 0}
+          aria-pressed={undefined}
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((v) => !v)}
+          data-testid="collection-filters-toggle"
+        >
+          {count > 0
+            ? t("collections.filters.openCount", { count })
+            : t("collections.filters.open")}
+        </Chip>
       </div>
-      <Select id={sortId} label={t("collections.filters.sort")}>
-        <select
-          id={sortId}
-          value={filters.sort ?? ""}
-          onChange={(e) =>
-            onChange({ sort: (e.target.value || undefined) as CollectionSort | undefined })
-          }
-          className={selectClass}
-          data-testid="collection-sort"
+      {open && (
+        <div
+          id={panelId}
+          className="flex animate-rise flex-col gap-4 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-4"
         >
-          <option value="">{t("collections.sort.showcase")}</option>
-          {SORTS.map((s) => (
-            <option key={s} value={s}>
-              {t(`collections.sort.${s}`)}
-            </option>
-          ))}
-        </select>
-      </Select>
-      <Select id={difficultyId} label={t("collections.filters.difficulty")}>
-        <select
-          id={difficultyId}
-          value={filters.difficulty ?? ""}
-          onChange={(e) =>
-            onChange({ difficulty: (e.target.value || undefined) as Filters["difficulty"] })
-          }
-          className={selectClass}
-        >
-          <option value="">{t("collections.filters.any")}</option>
-          {DIFFICULTIES.map((d) => (
-            <option key={d} value={d}>
-              {t(`collections.difficulty.${d}`)}
-            </option>
-          ))}
-        </select>
-      </Select>
-      <Select id={modeId} label={t("collections.filters.mode")}>
-        <select
-          id={modeId}
-          value={filters.mode ?? ""}
-          onChange={(e) => onChange({ mode: e.target.value || undefined })}
-          className={selectClass}
-        >
-          <option value="">{t("collections.filters.any")}</option>
-          {modes.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.titleKey ? dt(m.titleKey, m.key) : m.key}
-            </option>
-          ))}
-        </select>
-      </Select>
-      <label className="flex h-10 items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={filters.curated === true}
-          onChange={(e) => onChange({ curated: e.target.checked ? true : undefined })}
-          className="size-4 accent-[var(--color-music)]"
-        />
-        {t("collections.filters.curated")}
-      </label>
+          <FilterGroup label={t("collections.filters.domain")}>
+            {[undefined, ...DOMAINS].map((d) => (
+              <Chip
+                key={d ?? "all"}
+                selected={filters.domain === d}
+                onClick={() => onChange({ domain: d, mode: undefined })}
+              >
+                {d ? t(`domain.${d}`) : t("collections.filters.all")}
+              </Chip>
+            ))}
+          </FilterGroup>
+          <FilterGroup label={t("collections.filters.difficulty")}>
+            {[undefined, ...DIFFICULTIES].map((d) => (
+              <Chip
+                key={d ?? "any"}
+                selected={filters.difficulty === d}
+                onClick={() => onChange({ difficulty: d })}
+              >
+                {d ? t(`collections.difficulty.${d}`) : t("collections.filters.any")}
+              </Chip>
+            ))}
+          </FilterGroup>
+          <div className="flex flex-wrap gap-3">
+            <SelectField id={sortId} label={t("collections.filters.sort")}>
+              <select
+                id={sortId}
+                value={filters.sort ?? ""}
+                onChange={(e) =>
+                  onChange({ sort: (e.target.value || undefined) as CollectionSort | undefined })
+                }
+                className={selectClass}
+                data-testid="collection-sort"
+              >
+                <option value="">{t("collections.sort.showcase")}</option>
+                {SORTS.map((s) => (
+                  <option key={s} value={s}>
+                    {t(`collections.sort.${s}`)}
+                  </option>
+                ))}
+              </select>
+            </SelectField>
+            <SelectField id={modeId} label={t("collections.filters.mode")}>
+              <select
+                id={modeId}
+                value={filters.mode ?? ""}
+                onChange={(e) => onChange({ mode: e.target.value || undefined })}
+                className={selectClass}
+              >
+                <option value="">{t("collections.filters.any")}</option>
+                {modes.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.titleKey ? dt(m.titleKey, m.key) : m.key}
+                  </option>
+                ))}
+              </select>
+            </SelectField>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-const selectClass =
-  "h-10 rounded-[var(--radius-control)] bg-night px-3 text-sm text-ink ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-music";
+const selectClass = cn(inputClass, "h-11 min-w-44 px-3 text-sm");
 
-function Select({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div role="group" aria-label={label} className="flex flex-col gap-2">
+      <span className="text-xs text-ink-muted">{label}</span>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+function SelectField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-xs text-ink-muted">
         {label}
       </label>
       {children}
     </div>
+  );
+}
+
+function CardList({ cards }: { cards: ComponentProps<typeof CollectionCard>["card"][] }) {
+  return (
+    <ul className="flex flex-col gap-2.5">
+      {cards.map((card) => (
+        <CollectionCard key={card.collection_id} card={card} />
+      ))}
+    </ul>
   );
 }
 
@@ -285,11 +327,11 @@ function Showcase({ filters, onAll }: { filters: Filters; onAll: (sort: Collecti
         <section
           key={name}
           aria-labelledby={`showcase-${name}`}
-          className="flex flex-col gap-4"
+          className="flex flex-col gap-2.5"
           data-testid={`collections-block-${name}`}
         >
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id={`showcase-${name}`} className="font-display text-xl font-bold">
+          <div className="flex items-baseline justify-between gap-4 px-0.5 pt-2">
+            <h2 id={`showcase-${name}`} className="text-sm font-medium text-ink-muted">
               {t(`collections.blocks.${name}`)}
             </h2>
             {block?.status === "ok" && block.data?.next_cursor && (
@@ -301,11 +343,7 @@ function Showcase({ filters, onAll }: { filters: Filters; onAll: (sort: Collecti
           {block?.status !== "ok" ? (
             <p className="text-ink-muted">{t("collections.unavailable")}</p>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {block.data?.items.map((card) => (
-                <CollectionCard key={card.collection_id} card={card} />
-              ))}
-            </ul>
+            <CardList cards={block.data?.items ?? []} />
           )}
         </section>
       ))}
@@ -345,23 +383,19 @@ function ResultsList({ filters }: { filters: Filters }) {
   return (
     <section
       aria-label={t("collections.results")}
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-2.5"
       data-testid="collections-results"
     >
       {cards.length === 0 ? (
         <p className="text-ink-muted">{t("collections.nothingFound")}</p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((card) => (
-            <CollectionCard key={card.collection_id} card={card} />
-          ))}
-        </ul>
+        <CardList cards={cards} />
       )}
       <div ref={sentinel} />
       {hasNextPage && (
         <Button
           variant="secondary"
-          className="self-center"
+          className="self-start"
           disabled={isFetchingNextPage}
           onClick={() => void fetchNextPage()}
           data-testid="collections-more"

@@ -34,13 +34,13 @@ export function ConflictScreen({ mine, theirs, busy, onKeepMine, onTakeTheirs }:
       aria-labelledby="draft-conflict-title"
       aria-describedby="draft-conflict-text"
       data-testid="draft-conflict"
-      className="flex flex-col gap-5 rounded-[var(--radius-ticket)] bg-stage p-5 ring-2 ring-partial sm:p-7"
+      className="flex flex-col gap-4 rounded-[var(--radius-ticket)] border-[1.5px] border-partial-line bg-stage p-5"
     >
       <h2
         id="draft-conflict-title"
         ref={heading}
         tabIndex={-1}
-        className="font-display text-xl font-bold outline-none"
+        className="font-display text-lg font-bold outline-none"
       >
         {t("collections.conflict.title")}
       </h2>
@@ -82,7 +82,7 @@ export function ConflictScreen({ mine, theirs, busy, onKeepMine, onTakeTheirs }:
 function Version({ label, title, count }: { label: string; title: string; count: number }) {
   const t = useTranslations();
   return (
-    <div className="flex flex-col gap-1 rounded-xl bg-night p-4 ring-1 ring-rule">
+    <div className="flex flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-night p-4">
       <p className="text-sm text-ink-muted" dir="auto">
         {label}
       </p>

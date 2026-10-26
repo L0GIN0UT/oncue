@@ -67,7 +67,7 @@ export function ItemList({ items, limits, playable, errors, onMove, onRemove, on
 
   return (
     <>
-      <ol className="flex flex-col gap-2" data-testid="editor-items">
+      <ol className="flex flex-col gap-2.5" data-testid="editor-items">
         {items.map((item, index) => (
           <ItemRow
             key={item.media_item_id}
@@ -149,25 +149,25 @@ function ItemRow(p: RowProps) {
       }}
       data-testid={`editor-item-${p.item.media_item_id}`}
       className={cn(
-        "grid grid-cols-[auto_auto_1fr_auto] items-start gap-3 rounded-xl bg-stage px-3 py-3 ring-1 ring-rule",
+        "grid grid-cols-[auto_auto_1fr_auto] items-start gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-3 py-3",
         p.dragging && "opacity-50",
-        p.errors.length > 0 && "ring-miss",
+        p.errors.length > 0 && "border-miss-line",
       )}
     >
       <button
         type="button"
         data-handle-index={p.index}
         onKeyDown={onHandleKey}
-        className="mt-1 cursor-grab text-ink-muted hover:text-ink"
+        className="grid size-11 cursor-grab place-items-center text-ink-muted hover:text-ink"
         aria-label={t("collections.editor.handle", { title, position: p.index + 1 })}
         aria-describedby="editor-handle-help"
       >
         <GripVertical aria-hidden className="size-5" />
       </button>
-      <span className="tabular mt-1 w-6 text-right text-ink-muted">{p.index + 1}</span>
+      <span className="tabular mt-3 w-6 text-right text-ink-muted">{p.index + 1}</span>
       <div className="flex min-w-0 flex-col gap-2">
         <p className="min-w-0">
-          <span dir="auto" className="block truncate font-medium">
+          <span dir="auto" className="block truncate font-semibold">
             {title}
           </span>
           <span className="text-sm text-ink-muted">
@@ -194,7 +194,7 @@ function ItemRow(p: RowProps) {
             onChange={(e) => p.onEmoji(e.target.value.trim() || null)}
             aria-invalid={check !== "ok" || p.errors.length > 0 ? true : undefined}
             inputMode="text"
-            className="h-10 rounded-lg bg-night px-3 text-lg ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-[var(--accent)] aria-[invalid=true]:ring-miss"
+            className="h-11 rounded-[10px] border-[1.5px] border-rule bg-night px-3 text-lg outline-none focus:border-music focus:shadow-[0_0_0_4px_var(--color-glow)] aria-[invalid=true]:border-miss"
             data-testid={`editor-emoji-${p.item.media_item_id}`}
           />
           {check !== "ok" && (
@@ -245,7 +245,7 @@ function IconButton({
       type="button"
       aria-label={label}
       title={label}
-      className="grid size-8 place-items-center rounded-lg text-ink-muted hover:bg-stage-raised hover:text-ink disabled:opacity-30"
+      className="grid size-11 place-items-center rounded-full text-ink-muted hover:bg-stage-raised hover:text-ink disabled:opacity-30"
       {...props}
     >
       {children}

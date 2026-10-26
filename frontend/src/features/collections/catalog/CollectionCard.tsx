@@ -1,10 +1,14 @@
 "use client";
-/** Карточка сборника в каталоге: обложка-пресет, название (UGC, `dir="auto"`), автор, счётчики. */
+/**
+ * Строка сборника в каталоге (макет «Сборники», 68 px): обложка-пресет, название (UGC,
+ * `dir="auto"`), «N треков · сложность · автор», лайки и стрелка. Вся строка — ссылка.
+ */
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Heart, Layers, Play } from "lucide-react";
+import { Heart } from "lucide-react";
 import type { CollectionCard as Card, CollectionCardOut } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
+import { useIcons } from "@/shared/ui/theme-provider";
 import { useCollectionsMeta } from "../api";
 import { Cover } from "../Cover";
 
@@ -33,49 +37,35 @@ export function useTagTitle(): (key: string) => string {
 
 export function CollectionCard({ card }: Props) {
   const t = useTranslations();
-  const tagTitle = useTagTitle();
   const authorName = useAuthorName();
+  const Next = useIcons().next;
+  const meta = [
+    t(`collections.row.items.${card.domain}`, { count: card.items_count }),
+    card.difficulty ? t(`collections.difficulty.${card.difficulty}`) : null,
+    card.kind === "curated" ? t("collections.row.curated") : authorName(card.author),
+  ].filter(Boolean);
   return (
     <li data-domain={card.domain}>
       <Link
         href={`/collections/${card.collection_id}`}
         data-testid={`collection-card-${card.collection_id}`}
-        className="group flex h-full flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage p-3 ring-1 ring-rule transition-colors hover:bg-stage-raised"
+        className="flex min-h-[68px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2 transition-colors hover:border-rule-strong hover:bg-stage"
       >
-        <Cover preset={card.cover?.preset} />
-        <div className="flex flex-1 flex-col gap-1 px-1">
-          <p className="text-xs text-[var(--accent)]">
-            {t(`domain.${card.domain}`)}
-            {card.kind === "curated" ? ` · ${t("collections.curated")}` : ""}
-            {card.difficulty ? ` · ${t(`collections.difficulty.${card.difficulty}`)}` : ""}
-          </p>
-          <h3 dir="auto" className="line-clamp-2 font-display text-lg leading-snug font-bold">
+        <Cover preset={card.cover?.preset} size="sm" />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span dir="auto" className="truncate font-semibold">
             {card.title}
-          </h3>
-          <p dir="auto" className="truncate text-sm text-ink-muted">
-            {authorName(card.author)}
-          </p>
-          {card.tags.length > 0 && (
-            <p className="truncate text-xs text-ink-faint">{card.tags.map(tagTitle).join(" · ")}</p>
-          )}
-          <p className="tabular mt-auto flex gap-4 pt-2 text-sm text-ink-muted">
-            <span className="flex items-center gap-1">
-              <Layers aria-hidden className="size-4" />
-              <span className="sr-only">{t("collections.stats.items")}</span>
-              {card.items_count}
-            </span>
-            <span className="flex items-center gap-1">
-              <Heart aria-hidden className="size-4" />
-              <span className="sr-only">{t("collections.stats.likes")}</span>
-              {card.likes_count}
-            </span>
-            <span className="flex items-center gap-1">
-              <Play aria-hidden className="size-4" />
-              <span className="sr-only">{t("collections.stats.plays")}</span>
-              {card.plays_count}
-            </span>
-          </p>
-        </div>
+          </span>
+          <span dir="auto" className="truncate text-[13px] text-ink-muted">
+            {meta.join(" · ")}
+          </span>
+        </span>
+        <span className="tabular flex items-center gap-1 text-[13px] text-ink-muted">
+          <Heart aria-hidden className="size-4" />
+          <span className="sr-only">{t("collections.stats.likes")}</span>
+          {card.likes_count}
+        </span>
+        <Next aria-hidden size={18} className="shrink-0 text-ink-muted" />
       </Link>
     </li>
   );

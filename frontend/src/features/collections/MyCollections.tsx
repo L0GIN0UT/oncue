@@ -7,12 +7,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { MyCollection } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
-import { cn } from "@/shared/lib/cn";
+import { TabPanel, Tabs } from "@/shared/ui/tabs";
 import { useToast } from "@/shared/ui/toast";
 import { useViewer } from "@/features/auth/session";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { collectionKeys, deleteCollection, fetchMyCollections } from "./api";
 import { apiErrorText } from "./errors";
 import { UsersOnly } from "./editor/CollectionEditor";
@@ -42,37 +43,28 @@ export function MyCollections() {
   const shown = tab === "drafts" ? drafts : published;
 
   return (
-    <div className="flex flex-col gap-8 pt-6 sm:pt-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="font-display text-3xl font-bold">{t("collections.mine.title")}</h1>
-        <Button asChild>
-          <Link href="/collections/new">
-            <Plus aria-hidden />
-            {t("collections.create")}
+    <div className="flex flex-col gap-4 pt-4">
+      <HubHeader
+        title={t("collections.mine.title")}
+        aside={
+          <Link href="/collections" className="hover:text-ink">
+            {t("collections.title")}
           </Link>
-        </Button>
-      </header>
-      <div role="tablist" aria-label={t("collections.mine.title")} className="flex gap-2">
-        {(["published", "drafts"] as const).map((k) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            aria-selected={tab === k}
-            onClick={() => setTab(k)}
-            data-testid={`my-collections-tab-${k}`}
-            className={cn(
-              "rounded-full px-4 py-2 text-sm ring-1 ring-rule",
-              tab === k ? "bg-stage-raised text-ink" : "text-ink-muted",
-            )}
-          >
-            {t(`collections.mine.${k}`, {
-              count: k === "drafts" ? drafts.length : published.length,
-            })}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel">
+        }
+      />
+      <Tabs
+        aria-label={t("collections.mine.title")}
+        idBase="my-collections"
+        value={tab}
+        onChange={setTab}
+        tabs={(["published", "drafts"] as const).map((k) => ({
+          value: k,
+          label: t(`collections.mine.${k}`, {
+            count: k === "drafts" ? drafts.length : published.length,
+          }),
+        }))}
+      />
+      <TabPanel idBase="my-collections" value={tab} active>
         {list.isPending ? (
           <p className="text-ink-muted" role="status">
             {t("common.loading")}
@@ -82,7 +74,7 @@ export function MyCollections() {
         ) : shown.length === 0 ? (
           <p className="text-ink-muted">{t(`collections.mine.empty.${tab}`)}</p>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-2.5">
             {shown.map((c) => (
               <MyCollectionRow key={c.collection_id} item={c} />
             ))}
@@ -98,6 +90,11 @@ export function MyCollections() {
             {t("collections.more")}
           </Button>
         )}
+      </TabPanel>
+      <div className="flex justify-end pt-1.5">
+        <Button asChild>
+          <Link href="/collections/new">{t("collections.createOwn")}</Link>
+        </Button>
       </div>
     </div>
   );
@@ -126,34 +123,34 @@ function MyCollectionRow({ item }: { item: MyCollection }) {
     <li
       data-testid={`my-collection-${item.collection_id}`}
       data-domain={item.domain}
-      className="flex flex-col gap-3 rounded-xl bg-stage px-4 py-4 ring-1 ring-rule sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <p className="text-xs text-[var(--accent)]">
+        <p className="text-[13px] text-ink-muted">
           {t(`domain.${item.domain}`)} · {t(`collections.status.${item.status}`)}
           {item.has_draft && item.status !== "draft" ? ` · ${t("collections.mine.hasDraft")}` : ""}
         </p>
         {item.status === "draft" ? (
-          <p dir="auto" className="truncate font-medium">
+          <p dir="auto" className="truncate font-semibold">
             {item.title || t("collections.untitled")}
           </p>
         ) : (
           <Link
             href={`/collections/${item.collection_id}`}
             dir="auto"
-            className="truncate font-medium hover:underline"
+            className="truncate font-semibold hover:underline"
           >
             {item.title || t("collections.untitled")}
           </Link>
         )}
-        <p className="tabular text-sm text-ink-muted">
+        <p className="tabular text-[13px] text-ink-muted">
           {t("collections.itemsCount", { count: item.items_count })} ·{" "}
           {t("collections.mine.likes", { count: item.likes_count })} ·{" "}
           {format.dateTime(new Date(item.updated_at), { day: "numeric", month: "short" })}
         </p>
         {item.hidden_by_moderator && (
           <p
-            className="self-start rounded-full bg-miss/15 px-3 py-1 text-xs text-miss ring-1 ring-miss"
+            className="self-start rounded-full border-[1.5px] border-miss-line bg-miss-fill px-3 py-1 text-xs"
             data-testid="my-collection-hidden"
           >
             {t("collections.hiddenByModerator")}

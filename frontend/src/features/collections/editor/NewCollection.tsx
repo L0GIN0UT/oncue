@@ -10,7 +10,9 @@ import { useTranslations } from "next-intl";
 import type { Domain } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
+import { inputClass } from "@/shared/ui/field";
 import { useViewer } from "@/features/auth/session";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { createCollection, useCollectionsMeta } from "../api";
 import { apiErrorText } from "../errors";
 import { UsersOnly } from "./CollectionEditor";
@@ -50,12 +52,12 @@ export function NewCollection() {
   return (
     <form
       onSubmit={(e) => void submit(e)}
-      className="flex max-w-xl flex-col gap-6 pt-6 sm:pt-10"
+      className="flex flex-col gap-5 pt-4"
       data-testid="collection-new"
       noValidate
     >
-      <h1 className="font-display text-3xl font-bold">{t("collections.new.title")}</h1>
-      <p className="text-ink-muted">{t("collections.new.lead")}</p>
+      <HubHeader title={t("collections.new.title")} />
+      <p className="px-0.5 text-sm text-ink-muted">{t("collections.new.lead")}</p>
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-medium">{t("collections.new.domain")}</legend>
         <div className="flex gap-2">
@@ -64,8 +66,8 @@ export function NewCollection() {
               key={d}
               data-domain={d}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] px-4 py-3 ring-1 ring-rule",
-                domain === d && "ring-2 ring-[var(--accent)]",
+                "flex min-h-[52px] cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border-[1.5px] border-rule px-4 py-3",
+                domain === d && "border-music shadow-[0_0_0_4px_var(--color-glow)]",
               )}
             >
               <input
@@ -94,7 +96,7 @@ export function NewCollection() {
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${titleId}-error` : undefined}
           data-testid="new-title"
-          className="h-12 rounded-[var(--radius-control)] bg-night px-4 text-ink ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-music aria-[invalid=true]:ring-miss"
+          className={inputClass}
         />
         {error && (
           <p id={`${titleId}-error`} className="text-sm text-miss" role="alert">

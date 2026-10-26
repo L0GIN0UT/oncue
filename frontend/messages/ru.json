@@ -696,7 +696,9 @@
       "difficulty": "Сложность",
       "any": "Любая",
       "mode": "Режим",
-      "curated": "Только от редакции"
+      "curatedChip": "Кураторские",
+      "open": "Фильтры",
+      "openCount": "Фильтры · {count}"
     },
     "sort": {
       "showcase": "Витрина",
@@ -876,6 +878,14 @@
       "electronic": "Электроника",
       "soundtrack": "Саундтреки",
       "new_year": "Новый год"
+    },
+    "createOwn": "Собрать свой",
+    "row": {
+      "items": {
+        "music": "{count, plural, one {# трек} few {# трека} many {# треков} other {# трека}}",
+        "film": "{count, plural, one {# фильм} few {# фильма} many {# фильмов} other {# фильма}}"
+      },
+      "curated": "кураторский"
     }
   },
   "online": {

@@ -3,9 +3,10 @@
  * Страница сборника `/collections/{id}` (D3, D6, D7): карточка, режимы game «N из M» и число
  * раундов из `round_options`, старт игры, лайк и избранное (оптимистично, откат при ошибке),
  * отметка «пройден» и состав — только если сервер его прислал (`items`). Гостю и анониму лайк и
- * избранное — ссылки на регистрацию.
+ * избранное — ссылки на регистрацию. Макета нет: строки, чипы и плитки по правилам системы,
+ * главное действие — «Играть».
  */
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,8 @@ import type {
   RoundOption,
 } from "@/shared/api/types";
 import { Button, buttonVariants } from "@/shared/ui/button";
+import { Chip } from "@/shared/ui/chip";
+import { StatTile } from "@/shared/ui/stat-tile";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
@@ -48,8 +51,8 @@ export function CollectionView({ collectionId }: { collectionId: string }) {
   if (page.isError) {
     const missing = isApiError(page.error) && page.error.status === 404;
     return (
-      <div className="flex flex-col items-start gap-4 pt-12">
-        <h1 className="font-display text-2xl font-bold">
+      <div className="flex flex-col items-start gap-4 pt-8">
+        <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
           {t(missing ? "collections.notFound" : "collections.unavailable")}
         </h1>
         <Button asChild variant="secondary">
@@ -77,69 +80,77 @@ function CollectionBody({
   const me = page.me ?? null;
   const items = detail.items ?? null;
   return (
-    <article data-domain={detail.domain} className="flex flex-col gap-10 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <Cover preset={detail.cover?.preset} size="lg" />
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <p className="text-sm text-[var(--accent)]">
+    <article data-domain={detail.domain} className="flex flex-col gap-5 pt-4">
+      <header className="flex items-center gap-4">
+        <Cover preset={detail.cover?.preset} size="sm" className="size-16 text-3xl" />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <p className="text-[13px] text-ink-muted">
             {t(`domain.${detail.domain}`)}
             {detail.kind === "curated" ? ` · ${t("collections.curated")}` : ""}
             {detail.featured ? ` · ${t("collections.featured")}` : ""}
           </p>
           <h1
             dir="auto"
-            className="font-display text-3xl leading-tight font-bold text-balance sm:text-4xl"
+            className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em] text-balance"
           >
             {detail.title}
           </h1>
-          <p className="text-ink-muted">
-            {t("collections.by")}{" "}
-            <span dir="auto" className="text-ink" data-testid="collection-author">
-              {authorName(detail.author)}
-            </span>
-          </p>
-          {detail.description && (
-            <p dir="auto" className="max-w-[65ch] whitespace-pre-line text-ink-muted">
-              {detail.description}
-            </p>
-          )}
-          <dl className="tabular flex flex-wrap gap-x-6 gap-y-2 text-sm">
-            <Stat label={t("collections.stats.items")}>
-              <span data-testid="collection-items-count">{detail.items_count}</span>
-            </Stat>
-            <Stat label={t("collections.stats.likes")}>
-              <span data-testid="collection-likes-count">{detail.likes_count}</span>
-            </Stat>
-            <Stat label={t("collections.stats.plays")}>{detail.plays_count}</Stat>
-            <Stat label={t("collections.stats.difficulty")}>
+        </div>
+      </header>
+      <p className="px-0.5 text-ink-muted">
+        {t("collections.by")}{" "}
+        <span dir="auto" className="text-ink" data-testid="collection-author">
+          {authorName(detail.author)}
+        </span>
+      </p>
+      {detail.description && (
+        <p dir="auto" className="px-0.5 whitespace-pre-line text-ink-soft">
+          {detail.description}
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <StatTile
+          label={t("collections.stats.items")}
+          value={<span data-testid="collection-items-count">{detail.items_count}</span>}
+        />
+        <StatTile
+          label={t("collections.stats.likes")}
+          value={<span data-testid="collection-likes-count">{detail.likes_count}</span>}
+        />
+        <StatTile label={t("collections.stats.plays")} value={detail.plays_count} />
+        <StatTile
+          label={t("collections.stats.difficulty")}
+          value={
+            <span className="text-base">
               {detail.difficulty
                 ? t(`collections.difficulty.${detail.difficulty}`)
                 : t("collections.difficulty.unknown")}
-            </Stat>
-          </dl>
-          {detail.tags.length > 0 && (
-            <ul className="flex flex-wrap gap-2" aria-label={t("collections.tagsLabel")}>
-              {detail.tags.map((k) => (
-                <li
-                  key={k}
-                  className="rounded-full px-3 py-1 text-xs text-ink-muted ring-1 ring-rule"
-                >
-                  {tagTitle(k)}
-                </li>
-              ))}
-            </ul>
-          )}
-          {detail.status === "hidden" && (
-            <p
-              className="rounded-xl bg-miss/15 px-4 py-2 text-sm text-miss ring-1 ring-miss"
-              role="note"
+            </span>
+          }
+        />
+      </div>
+      {detail.tags.length > 0 && (
+        <ul className="flex flex-wrap gap-2" aria-label={t("collections.tagsLabel")}>
+          {detail.tags.map((k) => (
+            <li
+              key={k}
+              className="inline-flex h-[34px] items-center rounded-full border-[1.5px] border-rule px-3.5 text-sm text-ink-muted"
             >
-              {t("collections.hiddenByModerator")}
-            </p>
-          )}
-          <Reactions collectionId={detail.collection_id} me={me} />
-        </div>
-      </header>
+              {tagTitle(k)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {detail.status === "hidden" && (
+        <p
+          className="rounded-[var(--radius-control)] border-[1.5px] border-miss-line bg-miss-fill px-4 py-3 text-sm"
+          role="note"
+        >
+          {t("collections.hiddenByModerator")}
+        </p>
+      )}
+      <Reactions collectionId={detail.collection_id} me={me} />
 
       <ModesBlock page={page} detail={detail} />
       <PlayWithFriends collectionId={detail.collection_id} domain={detail.domain} />
@@ -158,29 +169,34 @@ function CollectionBody({
       {items && (
         <section
           aria-labelledby="collection-items-title"
-          className="flex flex-col gap-4"
+          className="flex flex-col gap-2.5"
           data-testid="collection-items"
         >
-          <h2 id="collection-items-title" className="font-display text-xl font-bold">
+          <h2
+            id="collection-items-title"
+            className="px-0.5 pt-2 text-sm font-medium text-ink-muted"
+          >
             {t("collections.items")}
           </h2>
-          <ol className="flex flex-col gap-2">
+          <ol className="flex flex-col gap-2.5">
             {items.map((item) => (
               <li
                 key={item.media_item_id}
                 data-testid={`collection-entry-${item.media_item_id}`}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
+                className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2"
               >
-                <span className="flex min-w-0 items-baseline gap-3">
+                <span className="flex min-w-0 items-center gap-3.5">
                   <span className="tabular w-6 text-right text-ink-muted">{item.position + 1}</span>
-                  <span className="min-w-0">
-                    <span dir="auto" className="block truncate font-medium">
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span dir="auto" className="truncate font-semibold">
                       {item.title}
                     </span>
-                    <span className="text-sm text-ink-muted">
+                    <span className="text-[13px] text-ink-muted">
                       {[item.year, item.custom?.emoji].filter(Boolean).join(" · ")}
                       {!item.available && (
-                        <span className="ml-2 text-miss">{t("collections.itemUnavailable")}</span>
+                        <span className="ml-2 text-ink-soft">
+                          {t("collections.itemUnavailable")}
+                        </span>
                       )}
                     </span>
                   </span>
@@ -199,15 +215,6 @@ function CollectionBody({
   );
 }
 
-function Stat({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex gap-2">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-medium">{children}</dd>
-    </div>
-  );
-}
-
 type PageData = CollectionPageOut;
 
 /** Лайк и избранное: оптимистично в кэше страницы, ответ сервера уточняет, ошибка — откат. */
@@ -221,7 +228,7 @@ function Reactions({ collectionId, me }: { collectionId: string; me: CollectionP
   // `me` bff отдаёт только пользователю (гостю и анониму — null, D7).
   if (!me) {
     return (
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2.5">
         <Link
           href="/register"
           className={cn(buttonVariants({ variant: "secondary" }))}
@@ -285,7 +292,7 @@ function Reactions({ collectionId, me }: { collectionId: string; me: CollectionP
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2.5">
       <Button
         variant="secondary"
         aria-pressed={me.liked}
@@ -293,7 +300,7 @@ function Reactions({ collectionId, me }: { collectionId: string; me: CollectionP
         title={me.is_author ? t("collections.ownLike") : undefined}
         onClick={() => void toggleLike()}
         data-testid="collection-like"
-        className={cn(me.liked && "text-miss")}
+        className={cn(me.liked && "border-music text-music")}
       >
         <Heart aria-hidden className={cn(me.liked && "fill-current")} />
         {me.liked ? t("collections.liked") : t("collections.like")}
@@ -304,17 +311,17 @@ function Reactions({ collectionId, me }: { collectionId: string; me: CollectionP
         disabled={pending === "favorite"}
         onClick={() => void toggleFavorite()}
         data-testid="collection-favorite"
-        className={cn(me.favorite && "text-partial")}
+        className={cn(me.favorite && "border-music text-music")}
       >
         <Star aria-hidden className={cn(me.favorite && "fill-current")} />
         {me.favorite ? t("collections.favorited") : t("collections.favorite")}
       </Button>
       {me.completed && (
         <span
-          className="flex items-center gap-2 text-sm text-exact"
+          className="flex items-center gap-2 text-sm text-ink-soft"
           data-testid="collection-completed"
         >
-          <CheckCircle2 aria-hidden className="size-4" />
+          <CheckCircle2 aria-hidden className="size-4 text-exact" />
           {t("collections.completed")}
         </span>
       )}
@@ -373,9 +380,9 @@ function ModesBlock({ page, detail }: { page: CollectionPageOut; detail: Collect
   return (
     <section
       aria-labelledby="collection-modes-title"
-      className="flex flex-col gap-5 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule sm:p-7"
+      className="flex flex-col gap-3.5 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage p-5"
     >
-      <h2 id="collection-modes-title" className="font-display text-xl font-bold">
+      <h2 id="collection-modes-title" className="font-display text-lg font-bold">
         {t("collections.play.title")}
       </h2>
       {block.status !== "ok" ? (
@@ -389,7 +396,7 @@ function ModesBlock({ page, detail }: { page: CollectionPageOut; detail: Collect
           <div
             role="group"
             aria-label={t("collections.play.mode")}
-            className="grid gap-2 sm:grid-cols-2"
+            className="flex flex-col gap-2.5"
           >
             {modes.map((m) => (
               <button
@@ -403,14 +410,14 @@ function ModesBlock({ page, detail }: { page: CollectionPageOut; detail: Collect
                 }}
                 data-testid={`collection-mode-${m.mode_key}`}
                 className={cn(
-                  "flex flex-col items-start gap-1 rounded-xl px-4 py-3 text-left ring-1 ring-rule disabled:opacity-45",
+                  "flex min-h-[60px] w-full items-center justify-between gap-3 rounded-[var(--radius-control)] border-[1.5px] px-[18px] py-2 text-left transition-colors disabled:opacity-45",
                   mode?.mode_key === m.mode_key
-                    ? "bg-stage-raised ring-2 ring-[var(--accent)]"
-                    : "hover:bg-stage-raised",
+                    ? "border-music bg-stage-raised shadow-[0_0_0_4px_var(--color-glow)]"
+                    : "border-rule hover:border-rule-strong",
                 )}
               >
-                <span className="font-medium">{dt(m.title_key, m.mode_key)}</span>
-                <span className="tabular text-sm text-ink-muted">
+                <span className="font-semibold">{dt(m.title_key, m.mode_key)}</span>
+                <span className="tabular text-[13px] text-ink-muted">
                   {t("collections.play.playable", { playable: m.playable, total: m.total })}
                 </span>
               </button>
@@ -420,25 +427,20 @@ function ModesBlock({ page, detail }: { page: CollectionPageOut; detail: Collect
             <div
               role="group"
               aria-label={t("collections.play.rounds")}
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap items-center gap-2"
             >
+              <span className="text-[13px] text-ink-muted">{t("collections.play.rounds")}</span>
               {options.map((o) => (
-                <button
+                <Chip
                   key={String(o)}
-                  type="button"
-                  aria-pressed={round === o}
+                  selected={round === o}
                   disabled={!fits(o, mode)}
                   onClick={() => setRounds(o)}
                   data-testid={`collection-rounds-${o}`}
-                  className={cn(
-                    "tabular min-w-14 rounded-full px-4 py-2 text-sm ring-1 ring-rule disabled:opacity-40",
-                    round === o
-                      ? "bg-[var(--accent)] font-semibold text-night ring-transparent"
-                      : "text-ink",
-                  )}
+                  className="tabular min-w-14 justify-center disabled:opacity-40"
                 >
                   {o === "all" ? t("collections.play.all", { count: mode.playable }) : o}
-                </button>
+                </Chip>
               ))}
             </div>
           )}

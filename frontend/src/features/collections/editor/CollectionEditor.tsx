@@ -12,10 +12,13 @@ import { useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type { DraftOut, MetaLimits, TagOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { Chip } from "@/shared/ui/chip";
+import { inputClass } from "@/shared/ui/field";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { collectionKeys, fetchDraft, fetchPlayability, useCollectionsMeta } from "../api";
 import { coverGradient } from "../Cover";
 import { apiErrorText, errorText, fieldOf } from "../errors";
@@ -45,8 +48,8 @@ export function CollectionEditorPage({ collectionId }: { collectionId: string })
   if (draft.error) {
     const missing = isApiError(draft.error) && draft.error.status === 404;
     return (
-      <div className="flex flex-col items-start gap-4 pt-12" role="alert">
-        <h1 className="font-display text-2xl font-bold">
+      <div className="flex flex-col items-start gap-4 pt-8" role="alert">
+        <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
           {t(missing ? "collections.notFound" : "collections.editor.loadFailed")}
         </h1>
         <Button asChild variant="secondary">
@@ -67,8 +70,10 @@ export function CollectionEditorPage({ collectionId }: { collectionId: string })
 export function UsersOnly() {
   const t = useTranslations();
   return (
-    <div className="flex max-w-xl flex-col items-start gap-4 pt-12">
-      <h1 className="font-display text-2xl font-bold">{t("collections.usersOnly.title")}</h1>
+    <div className="flex flex-col items-start gap-4 pt-8">
+      <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
+        {t("collections.usersOnly.title")}
+      </h1>
       <p className="text-ink-muted">{t("collections.usersOnly.text")}</p>
       <div className="flex gap-3">
         <Button asChild>
@@ -183,19 +188,22 @@ export function CollectionEditor({
             : t("collections.editor.status.published");
 
   return (
-    <div data-domain={state.domain} className="flex flex-col gap-8 pt-6 sm:pt-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className="text-[var(--accent)]">{t(`domain.${state.domain}`)}</p>
-          <h1 className="font-display text-3xl font-bold">{t("collections.editor.title")}</h1>
-        </div>
-        <p className="text-sm text-ink-muted" role="status" data-testid="editor-save-status">
-          {saveStatus}
-        </p>
-      </header>
+    <div data-domain={state.domain} className="flex flex-col gap-5 pt-4">
+      <HubHeader
+        title={t("collections.editor.title")}
+        aside={
+          <span role="status" data-testid="editor-save-status">
+            {saveStatus}
+          </span>
+        }
+      />
+      <p className="px-0.5 text-[13px] text-ink-muted">{t(`domain.${state.domain}`)}</p>
 
       {state.status === "hidden" && (
-        <p className="rounded-xl bg-miss/15 px-4 py-3 text-miss ring-1 ring-miss" role="alert">
+        <p
+          className="rounded-[var(--radius-control)] border-[1.5px] border-miss-line bg-miss-fill px-4 py-3"
+          role="alert"
+        >
           {t("collections.hiddenByModerator")}
         </p>
       )}
@@ -222,7 +230,7 @@ export function CollectionEditor({
       {state.errors.length > 0 && (
         <div
           role="alert"
-          className="flex flex-col gap-1 rounded-xl bg-miss/10 px-4 py-3 ring-1 ring-miss"
+          className="flex flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-miss-line bg-miss-fill px-4 py-3"
           data-testid="editor-errors"
         >
           <p className="font-medium">{t("collections.editor.publishInvalid")}</p>
@@ -236,8 +244,8 @@ export function CollectionEditor({
         </div>
       )}
 
-      <fieldset disabled={Boolean(state.conflict)} className="flex flex-col gap-8">
-        <section className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_16rem]">
+      <fieldset disabled={Boolean(state.conflict)} className="flex flex-col gap-6">
+        <section className="flex flex-col gap-5">
           <div className="flex flex-col gap-5">
             <TextField
               id={titleId}
@@ -318,7 +326,7 @@ export function CollectionEditor({
 
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-sm font-medium">{t("collections.editor.cover")}</legend>
-            <div className="grid grid-cols-4 gap-2" data-testid="editor-covers">
+            <div className="grid grid-cols-6 gap-2" data-testid="editor-covers">
               {(meta.data?.cover_presets ?? []).map((p) => {
                 const on = body.cover?.preset === p.id;
                 return (
@@ -331,8 +339,8 @@ export function CollectionEditor({
                       dispatch({ type: "edit", patch: { cover: on ? null : { preset: p.id } } })
                     }
                     className={cn(
-                      "grid aspect-square place-items-center rounded-lg text-xl ring-1 ring-rule",
-                      on && "ring-2 ring-ink",
+                      "grid aspect-square place-items-center rounded-[10px] border-[1.5px] border-rule text-xl",
+                      on && "border-music shadow-[0_0_0_4px_var(--color-glow)]",
                     )}
                     style={{ background: coverGradient(p) }}
                   >
@@ -353,19 +361,15 @@ export function CollectionEditor({
             {tags.map((tag) => {
               const on = selectedTags.includes(tag.key);
               return (
-                <button
+                <Chip
                   key={tag.key}
-                  type="button"
-                  aria-pressed={on}
+                  selected={on}
                   disabled={!on && selectedTags.length >= tagsMax}
                   onClick={() => toggleTag(tag)}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-sm ring-1 ring-rule disabled:opacity-40",
-                    on ? "bg-[var(--accent)] text-night ring-transparent" : "text-ink-muted",
-                  )}
+                  className="disabled:opacity-40"
                 >
                   {dt(tag.title_key, tag.key)}
-                </button>
+                </Chip>
               );
             })}
           </div>
@@ -374,7 +378,7 @@ export function CollectionEditor({
 
         <section className="flex flex-col gap-4" aria-labelledby="editor-items-title">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="editor-items-title" className="font-display text-xl font-bold">
+            <h2 id="editor-items-title" className="font-display text-lg font-bold">
               {t("collections.editor.items")}
             </h2>
             <p className="tabular text-sm text-ink-muted">
@@ -427,9 +431,6 @@ export function CollectionEditor({
     </div>
   );
 }
-
-const inputClass =
-  "h-12 w-full rounded-[var(--radius-control)] bg-night px-4 text-ink ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-[var(--accent)] aria-[invalid=true]:ring-miss";
 
 function TextField({
   id,
