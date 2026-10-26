@@ -14,10 +14,10 @@ export function SanctionsBanner() {
       role="region"
       aria-label={t("social.sanctions.bannerLabel")}
       data-testid="sanctions-banner"
-      className="mx-auto flex w-full max-w-5xl px-4 sm:px-6"
+      className="mx-auto flex w-full max-w-[640px] px-4 sm:px-0"
     >
-      <p className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius-control)] bg-stage px-4 py-3 text-sm ring-1 ring-partial">
-        <TriangleAlert className="size-4 shrink-0 text-partial" aria-hidden />
+      <p className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius-control)] border-[1.5px] border-partial-line bg-partial-fill px-4 py-3 text-sm">
+        <TriangleAlert className="size-[22px] shrink-0 text-partial" aria-hidden />
         <span className="font-medium">{t("social.sanctions.banner")}</span>
         <Link
           href="/sanctions"
