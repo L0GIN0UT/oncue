@@ -44,9 +44,9 @@ test("гость: дейлик музыки от главной до итога,
     }
   });
 
-  // Главная — сегодняшняя игра: раунд виден на месте, адрес остаётся «/».
+  // Главная — хаб: плитка дейлика ведёт на /play/<режим>, сессию `/` не стартует.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /Раунд 1 из/ })).toBeVisible();
+  await expect(page.getByTestId("home-daily-music")).toHaveAttribute("href", `/play/${DAILY}`);
   await expect(page).toHaveURL("/");
 
   await page.goto(`/play/${DAILY}`);

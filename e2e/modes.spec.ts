@@ -106,9 +106,13 @@ test("каталог: карточки новых режимов и недель
 
 test("марафон: выбор режиссёра, три жизни, итог", async ({ page }) => {
   await page.goto("/");
-  // Гостевую сессию главная заводит асинхронно (старт сегодняшней игры): ждём раунд — значит,
-  // cookie сессии уже есть и ручной запрос /subjects пройдёт аутентификацию.
-  await expect(page.getByRole("heading", { name: /Раунд 1 из/ })).toBeVisible();
+  // Гостевую сессию главная заводит асинхронно (восстановление личных блоков): ждём cookie CSRF —
+  // значит, ручной запрос /subjects пройдёт аутентификацию.
+  await expect
+    .poll(async () => (await page.context().cookies()).some((c) => c.name === "gv_csrf"), {
+      timeout: 15_000,
+    })
+    .toBe(true);
   const api = await guestApi(page);
   // Персоны марафона — из проекции game: синтетический режиссёр с ≥ 5 играбельными фильмами.
   const found = await api.get(`/modes/${MARATHON}/subjects?q=${encodeURIComponent("Синтетический")}`);
