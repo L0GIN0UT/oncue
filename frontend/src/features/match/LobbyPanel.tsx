@@ -1,8 +1,9 @@
 "use client";
 /**
- * Лобби: код и ссылка-приглашение, игроки с готовностью, настройки. Хост выбирает только из
- * `room.options` (`session.lobby.overridable` шаблона, D12) — произвольных чисел нет; смена
- * настроек сбрасывает готовность всех (это делает сервер, экран только предупреждает).
+ * Лобби ожидания (макет Room): код и ссылка-приглашение, места игроков с готовностью, настройки
+ * строками. Хост выбирает только из `room.options` (`session.lobby.overridable` шаблона, D12) —
+ * произвольных чисел нет; смена настроек сбрасывает готовность всех (это делает сервер, экран
+ * только предупреждает). «Выйти» стоит в левом слоте шапки.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -13,9 +14,11 @@ import type { RoomView, SettingsOptions, SettingsOverride } from "@/shared/api/t
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
+import { cn } from "@/shared/lib/cn";
 import { useModeTitle } from "@/features/online/lists";
 import { fetchCollection } from "@/features/collections/api";
 import { InvitePanel } from "@/features/friends/InvitePanel";
+import { HeaderLeading } from "@/features/shell/header-leading";
 import { ChatPanel } from "./ChatPanel";
 import { PlayersRail } from "./PlayersRail";
 import type { FeedItem } from "./room-store";
@@ -85,39 +88,62 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
   };
 
   return (
-    <div className="flex flex-col gap-8" data-domain={room.mode.domain}>
-      <header className="flex flex-wrap items-end justify-between gap-6">
-        <div className="flex flex-col gap-2">
-          <p className="text-[var(--accent)]">{modeTitle(room.mode)}</p>
-          <h1 className="font-display text-2xl font-bold sm:text-3xl">{t("match.lobby.title")}</h1>
-          <p className="text-sm text-ink-muted">
-            {t("match.lobby.summary", {
-              rounds: room.settings.rounds,
-              seconds: room.settings.level_window_s,
-              players: room.settings.players_max,
-            })}
-          </p>
-        </div>
-        <div className="flex flex-col items-start gap-2 sm:items-end">
+    <div className="flex flex-col gap-[22px]" data-domain={room.mode.domain}>
+      {me && (
+        <HeaderLeading>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => act(commands.leave)}
+            data-testid="leave-room"
+          >
+            <LogOut aria-hidden />
+            {t("match.lobby.leaveShort")}
+          </Button>
+        </HeaderLeading>
+      )}
+
+      <header className="flex flex-col gap-1.5 px-0.5">
+        <p className="text-sm text-ink-muted">{modeTitle(room.mode)}</p>
+        <h1 className="font-display text-[28px] leading-[1.1] font-extrabold tracking-tight">
+          {t("match.lobby.title")}
+        </h1>
+        <p className="text-[15px] text-ink-muted">
+          {t("match.lobby.summary", {
+            rounds: room.settings.rounds,
+            seconds: room.settings.level_window_s,
+            players: room.settings.players_max,
+          })}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
           <span className="text-sm text-ink-muted">{t("match.lobby.code")}</span>
           <span
-            className="tabular rounded-[var(--radius-control)] bg-night px-4 py-2 font-display text-2xl font-bold tracking-[0.25em] ring-1 ring-rule"
+            className="tabular rounded-[var(--radius-control)] border-[1.5px] border-rule px-3.5 py-1.5 font-display text-xl font-extrabold tracking-[0.25em]"
             data-testid="room-code"
           >
             {room.code}
           </span>
-          <Button variant="quiet" size="sm" onClick={copyLink} data-testid="copy-link">
+          <Button variant="secondary" size="sm" onClick={copyLink} data-testid="copy-link">
             <Copy aria-hidden />
             {t("match.lobby.copyLink")}
           </Button>
         </div>
       </header>
 
-      <section aria-labelledby="lobby-players" className="flex flex-col gap-3">
-        <h2 id="lobby-players" className="font-display text-lg font-semibold">
-          {t("match.lobby.players", { count: room.players.length, max: room.settings.players_max })}
-        </h2>
-        <PlayersRail players={room.players} myId={myId} bubbles={bubbles} showReady />
+      <section
+        aria-label={t("match.lobby.players", {
+          count: room.players.length,
+          max: room.settings.players_max,
+        })}
+        className="flex flex-col gap-3"
+      >
+        <PlayersRail
+          players={room.players}
+          myId={myId}
+          bubbles={bubbles}
+          showReady
+          seats={room.settings.players_max}
+        />
         {isHost && room.players.length > 1 && (
           <ul className="flex flex-wrap gap-2" aria-label={t("match.lobby.hostActions")}>
             {room.players
@@ -148,36 +174,25 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
         )}
       </section>
 
-      {me && <InvitePanel roomCode={room.code} />}
+      <SettingsRows
+        room={room}
+        options={room.options ?? null}
+        editable={isHost}
+        onChange={(s) => act(() => commands.settings(s))}
+      />
 
       {(room.settings.collection_ids?.length ?? 0) > 0 && (
         <LobbyCollections ids={room.settings.collection_ids ?? []} />
       )}
 
-      <ChatPanel
-        chat={room.chat}
-        feed={feed}
-        players={room.players}
-        onEmote={commands.emote}
-        onChat={commands.chat}
-      />
-
-      {room.options && (
-        <SettingsForm
-          room={room}
-          options={room.options}
-          editable={isHost}
-          onChange={(s) => act(() => commands.settings(s))}
-        />
-      )}
-
       {room.start_error && !starting && <StartError code={room.start_error.code} />}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex gap-2.5">
         {me && (
           <Button
             size="lg"
-            variant={me.ready ? "secondary" : "primary"}
+            variant={me.ready || isHost ? "secondary" : "primary"}
+            className={cn(!isHost && "flex-1")}
             onClick={() => act(() => commands.ready(!me.ready))}
             data-testid="ready-toggle"
             aria-pressed={me.ready}
@@ -189,6 +204,7 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
         {isHost && (
           <Button
             size="lg"
+            className="flex-1"
             disabled={!allReady || !enough || starting}
             onClick={() => act(start)}
             data-testid="start-match"
@@ -197,28 +213,38 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
             {t("match.lobby.start")}
           </Button>
         )}
-        {isHost && room.memory_size > 0 && (
-          <Button
-            variant="ghost"
-            onClick={() => act(commands.resetMemory)}
-            data-testid="reset-memory"
-          >
-            <RotateCcw aria-hidden />
-            {t("match.lobby.resetMemory", { count: room.memory_size })}
-          </Button>
-        )}
-        <Button variant="ghost" onClick={() => act(commands.leave)} data-testid="leave-room">
-          <LogOut aria-hidden />
-          {t("match.lobby.leave")}
-        </Button>
       </div>
-      {isHost && (!allReady || !enough) && (
-        <p className="text-sm text-ink-muted" data-testid="start-hint">
+      {isHost && room.memory_size > 0 && (
+        <Button
+          variant="quiet"
+          size="sm"
+          className="self-center"
+          onClick={() => act(commands.resetMemory)}
+          data-testid="reset-memory"
+        >
+          <RotateCcw aria-hidden />
+          {t("match.lobby.resetMemory", { count: room.memory_size })}
+        </Button>
+      )}
+      {isHost && (!allReady || !enough) ? (
+        <p className="text-center text-[13px] text-ink-muted" data-testid="start-hint">
           {!enough
             ? t("match.lobby.needPlayers", { count: room.players_min })
             : t("match.lobby.waitReady")}
         </p>
+      ) : (
+        !isHost && <p className="text-center text-[13px] text-ink-muted">{t("match.lobby.hint")}</p>
       )}
+
+      {me && <InvitePanel roomCode={room.code} />}
+
+      <ChatPanel
+        chat={room.chat}
+        feed={feed}
+        players={room.players}
+        onEmote={commands.emote}
+        onChat={commands.chat}
+      />
     </div>
   );
 }
@@ -231,7 +257,7 @@ function StartError({ code }: { code: string }) {
   return (
     <p
       role="alert"
-      className="rounded-[var(--radius-control)] bg-miss/15 px-4 py-3 text-miss ring-1 ring-miss/40"
+      className="rounded-[var(--radius-control)] border-[1.5px] border-miss-line bg-miss-fill px-4 py-3"
       data-testid="start-error"
     >
       {t("match.lobby.startFailed", { reason: dt(key, t("match.error.generic")) })}
@@ -239,22 +265,24 @@ function StartError({ code }: { code: string }) {
   );
 }
 
-function SettingsForm({
+/**
+ * Настройки строками: подпись слева, значение справа. Хосту поля с выбором дают список значений
+ * из `options`; остальным и полям без выбора — текст.
+ */
+function SettingsRows({
   room,
   options,
   editable,
   onChange,
 }: {
   room: RoomView;
-  options: SettingsOptions;
+  options: SettingsOptions | null;
   editable: boolean;
   onChange: (s: SettingsOverride) => void;
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
   const [pending, setPending] = useState<SettingField | null>(null);
-  const fields = FIELDS.filter((f) => (options[f]?.length ?? 0) > 1);
-  if (!fields.length) return null;
 
   const label = (field: SettingField, value: string | number) => {
     if (field === "visibility")
@@ -266,21 +294,24 @@ function SettingsForm({
   };
 
   return (
-    <section aria-labelledby="lobby-settings" className="flex flex-col gap-3">
-      <h2 id="lobby-settings" className="font-display text-lg font-semibold">
-        {t("match.settings.title")}
-      </h2>
-      {editable && <p className="text-sm text-ink-muted">{t("match.settings.resetsReady")}</p>}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {fields.map((field) => {
-          const values = options[field] as (string | number)[];
-          const current = room.settings[field];
-          return (
-            <label key={field} className="flex flex-col gap-1.5 text-sm">
-              <span className="text-ink-muted">{t(`match.settings.${field}`)}</span>
+    <section
+      aria-label={t("match.settings.title")}
+      className="flex flex-col rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-1"
+    >
+      {FIELDS.map((field) => {
+        const values = (options?.[field] ?? []) as (string | number)[];
+        const current = room.settings[field];
+        const choosable = editable && values.length > 1;
+        return (
+          <label
+            key={field}
+            className="flex min-h-[52px] items-center justify-between gap-3 border-b-[1.5px] border-rule py-2 text-[15px] last:border-b-0"
+          >
+            <span>{t(`match.settings.${field}`)}</span>
+            {choosable ? (
               <select
                 value={String(current)}
-                disabled={!editable || pending !== null}
+                disabled={pending !== null}
                 onChange={async (e) => {
                   const raw = e.target.value;
                   const value = typeof values[0] === "number" ? Number(raw) : raw;
@@ -292,7 +323,7 @@ function SettingsForm({
                   }
                 }}
                 data-testid={`setting-${field}`}
-                className="h-11 rounded-[var(--radius-control)] bg-stage-raised px-3 text-base ring-1 ring-rule ring-inset focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:opacity-70"
+                className="h-11 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage-raised px-3 text-base text-ink disabled:opacity-70"
               >
                 {values.map((v) => (
                   <option key={String(v)} value={String(v)}>
@@ -300,10 +331,31 @@ function SettingsForm({
                   </option>
                 ))}
               </select>
-            </label>
-          );
-        })}
-      </div>
+            ) : values.length > 1 ? (
+              // Не хост: то же поле, но заблокированное — значение читается скринридером и тестами.
+              <select
+                value={String(current)}
+                disabled
+                data-testid={`setting-${field}`}
+                className="h-11 rounded-[var(--radius-control)] border-[1.5px] border-transparent bg-transparent px-3 text-base text-ink-muted"
+              >
+                {values.map((v) => (
+                  <option key={String(v)} value={String(v)}>
+                    {label(field, v)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-ink-muted">{label(field, current)}</span>
+            )}
+          </label>
+        );
+      })}
+      {editable && (
+        <p className="border-t-[1.5px] border-rule py-3 text-[13px] text-ink-muted">
+          {t("match.settings.resetsReady")}
+        </p>
+      )}
     </section>
   );
 }
@@ -317,7 +369,7 @@ function LobbyCollections({ ids }: { ids: string[] }) {
       className="flex flex-col gap-2"
       data-testid="lobby-collections"
     >
-      <h2 id="lobby-collections" className="font-display text-lg font-semibold">
+      <h2 id="lobby-collections" className="font-display text-base font-semibold">
         {t("match.lobby.collections")}
       </h2>
       <ul className="flex flex-wrap gap-2">
@@ -341,7 +393,7 @@ function LobbyCollection({ id }: { id: string }) {
     <li>
       <Link
         href={`/collections/${id}`}
-        className="inline-flex rounded-full bg-stage-raised px-3 py-1.5 text-sm ring-1 ring-rule hover:ring-[var(--accent)]"
+        className="inline-flex h-[34px] items-center rounded-full border-[1.5px] border-rule px-3.5 text-sm text-ink-muted hover:border-rule-strong hover:text-ink"
         dir="auto"
       >
         {detail.data?.title ?? t("match.lobby.collectionUnknown")}

@@ -9,12 +9,13 @@ function StreakHeader({ summary }: PresenterProps) {
   const t = useTranslations();
   return (
     <>
-      <h1 className="flex items-center gap-4 font-display font-bold" data-testid="final-score">
-        <Flame aria-hidden className="size-14 text-[var(--accent)] sm:size-16" />
-        <span className="flex flex-col">
-          <span className="text-lg font-semibold text-ink-muted">{t("results.streakLabel")}</span>
-          <span className="tabular text-7xl leading-none sm:text-8xl">{summary.score}</span>
-        </span>
+      <h1
+        className="flex items-center justify-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule py-3 font-display"
+        data-testid="final-score"
+      >
+        <Flame aria-hidden className="size-8 text-music" />
+        <span className="text-base font-medium text-ink-muted">{t("results.streakLabel")}</span>
+        <span className="tabular text-[40px] leading-none font-extrabold">{summary.score}</span>
       </h1>
       <RecordBadge record={summary.record} unit="streak" />
     </>

@@ -38,10 +38,10 @@ describe("GameScreen", () => {
     await user.keyboard("{Enter}");
 
     const reveal = await screen.findByTestId("reveal");
-    expect(reveal).toHaveTextContent("Угадано с 1-й попытки");
+    expect(reveal).toHaveTextContent("Угадал с 1-й");
     expect(reveal).toHaveTextContent("+6");
     expect(screen.getByRole("heading", { name: "Группа крови" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Следующий раунд" }));
+    await user.click(screen.getByRole("button", { name: "Продолжить" }));
     expect(await screen.findByRole("heading", { name: "Раунд 2 из 5" })).toBeInTheDocument();
   });
 

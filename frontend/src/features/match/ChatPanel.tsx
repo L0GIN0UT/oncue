@@ -10,6 +10,8 @@ import { useTranslations } from "next-intl";
 import { Send } from "lucide-react";
 import type { ChatOptions, PlayerSlot } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { inputClass } from "@/shared/ui/field";
+import { cn } from "@/shared/lib/cn";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { matchErrorKey } from "./errors";
 import { feedText } from "./PlayersRail";
@@ -61,7 +63,7 @@ export function ChatPanel({ chat, feed, players, onEmote, onChat }: Props) {
   return (
     <section
       aria-label={t("match.chat.title")}
-      className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage p-4 ring-1 ring-rule"
+      className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-4"
       data-testid="chat"
     >
       {(chat.emotes.length > 0 || chat.phrases.length > 0) && (
@@ -130,7 +132,7 @@ export function ChatPanel({ chat, feed, players, onEmote, onChat }: Props) {
             autoComplete="off"
             aria-invalid={!!error}
             aria-describedby={error ? `${id}-error` : undefined}
-            className="h-10 min-w-0 flex-1 rounded-[var(--radius-control)] bg-night px-3 ring-1 ring-rule ring-inset focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+            className={cn(inputClass, "h-11 min-w-0 flex-1 px-3")}
             data-testid="chat-input"
           />
           <Button type="submit" size="sm" className="h-10" disabled={busy || !text.trim()}>

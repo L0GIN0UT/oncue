@@ -53,7 +53,7 @@ export function ImageClue({ clue }: ClueStageProps) {
 
   return (
     <figure className="flex flex-col gap-2">
-      <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-control)] bg-night ring-1 ring-rule">
+      <div className="relative aspect-video w-full overflow-hidden rounded-[var(--radius-control)] border-[1.5px] border-rule bg-night">
         {previous && (
           // eslint-disable-next-line @next/next/no-img-element -- blob: из ответа game, оптимизация Next неприменима
           <img

@@ -32,7 +32,9 @@ describe("GameScreen — сессия по сборнику", () => {
     expect(await screen.findByText("Сборник по вступлению")).toBeInTheDocument();
     // Шкала времени из levels[].hint.seconds шаблона: 0,5 с → 1 с.
     expect(await screen.findByTestId("skip")).toHaveTextContent("Пропустить (+0,5 с)");
-    expect(screen.getByRole("list", { name: "Подсказки: открыт уровень 1 из 6" })).toBeVisible();
+    expect(
+      screen.getByRole("progressbar", { name: "Подсказки: открыт уровень 1 из 6" }),
+    ).toBeVisible();
     expect(kinds).toEqual(expect.arrayContaining(["play", "collection"]));
   });
 });

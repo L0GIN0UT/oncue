@@ -33,7 +33,7 @@ test("гость проходит дейлик музыки, делится ит
   // Верный ответ из автокомплита → ревил.
   await answerWithSuggestion(page, "Групп", "Группа крови");
   const reveal = page.getByTestId("reveal");
-  await expect(reveal).toContainText("Угадано с 3-й попытки");
+  await expect(reveal).toContainText("Угадал с 3-й");
   await expect(reveal).toContainText("+4");
   await expect(reveal.getByRole("heading", { name: "Группа крови" })).toBeVisible();
   await expect(reveal).toContainText("Кино");

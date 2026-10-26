@@ -1,38 +1,35 @@
 "use client";
 /**
- * Игровой экран (CSR, D2): индикатор раундов, прогресс сессии (жизни, серия, тур сетки),
- * загадка уровня, лента уровней, история попыток, ответ и ревил после раунда.
+ * Игровой экран (CSR, D2): номер раунда, прогресс сессии (жизни, серия, тур сетки), строки
+ * попыток, лента уровней, загадка уровня, ответ и модалка ответа раунда.
  *
  * Подача выбирается по данным (D12 плана этапа 3a): загадка — по `clue.kind` (сцена — по
  * `clue_type`), ответ — по `answer_format` режима, ревил — по `presentation`. Ключ режима и
  * `source_type` экран не читает. Режим сессии ищется по `mode.key` снимка во всех видах каталога
  * (`kind=play` и `kind=collection`), поэтому у сессии по сборнику те же уровни и название.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { Film, Music } from "lucide-react";
 import { isApiError } from "@/shared/api/errors";
 import type { AnswerFormat, ModeOut, Presentation, RoundOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
-import { AttemptHistory } from "./AttemptHistory";
-import { LevelTape } from "./LevelTape";
-import { RevealCard } from "./RevealCard";
-import { RoundRail } from "./RoundRail";
+import { AttemptRows } from "./AttemptRows";
+import { RevealDialog } from "./RevealDialog";
 import { SessionProgress } from "./SessionProgress";
 import { needsLevelClue } from "./answers/pick";
 import { answerRegistry } from "./answers/registry";
 import { clueRegistry, clueSceneOf } from "./clues/registry";
+import { TapeDeck } from "./TapeDeck";
 import { tapeWeights } from "./levels";
 import { useSessionMode } from "./modes";
 import type { Move } from "./moves";
 import { readyForResults, statsOf, visibleRound } from "./state";
 import { useClue, useReleaseClues } from "./use-clue";
 import { useGame } from "./use-game";
-
-/** Индикатор точками — пока раундов немного; длинные сессии (марафон, сетка) — только текстом. */
-const RAIL_MAX_ROUNDS = 12;
 
 /** Формат ответа: из режима, а пока список режимов не пришёл — по наличию вариантов раунда. */
 export function answerFormatOf(mode: ModeOut | undefined, round: RoundOut): AnswerFormat {
@@ -70,7 +67,6 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
     (value: number | null) => setProgressState({ tag: levelTag, value }),
     [levelTag],
   );
-  const inputRef = useRef<HTMLInputElement>(null);
   const onMove = useCallback((move: Move) => void act(move), [act]);
 
   // Уведомления хода — тостом.
@@ -89,10 +85,6 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (readyForResults(state)) router.replace(`/results/${sessionId}`);
   }, [state, router, sessionId]);
-
-  useEffect(() => {
-    if (playable) inputRef.current?.focus({ preventScroll: true });
-  }, [playable, round?.index, round?.level]);
 
   if (error) {
     const missing = isApiError(error) && error.status === 404;
@@ -123,6 +115,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   const Answer = answerRegistry[answerFormatOf(mode, round)];
   const isLastRound = round.index === snapshot.rounds.length - 1 || snapshot.status === "finished";
   const multiLevel = round.levels_count > 1;
+  const DomainIcon = domain === "film" ? Film : Music;
   const tapeProgress =
     progress === null || !weights.length
       ? null
@@ -130,22 +123,33 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
         weights.reduce((a, b) => a + b, 0);
 
   return (
-    <div data-domain={domain} className="flex flex-col gap-6 pt-4 sm:pt-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm text-[var(--accent)]">
+    <div data-domain={domain} className="flex flex-col gap-[26px] pt-2">
+      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-0.5">
+        <h1
+          className="flex items-baseline gap-2.5"
+          aria-label={t("game.roundTitle", {
+            index: round.index + 1,
+            total: snapshot.rounds.length,
+          })}
+          data-testid="round-title"
+        >
+          <span
+            aria-hidden
+            className="font-display text-[40px] leading-none font-extrabold tracking-tight"
+          >
+            {round.index + 1}
+          </span>
+          <span aria-hidden className="font-display text-[15px] font-medium text-ink-muted">
+            {t("game.roundOf", { total: snapshot.rounds.length })}
+          </span>
+        </h1>
+        <div className="flex flex-col items-end gap-0.5 text-sm text-ink-muted">
+          <p className="inline-flex items-center gap-2">
+            <DomainIcon className="size-4" aria-hidden />
             {dt(mode?.title_key ?? "", t(`domain.${domain}`))}
           </p>
-          <h1 className="font-display text-2xl font-bold" data-testid="round-title">
-            {t("game.roundTitle", { index: round.index + 1, total: snapshot.rounds.length })}
-          </h1>
-        </div>
-        <div className="flex items-center gap-5">
-          {snapshot.rounds.length <= RAIL_MAX_ROUNDS && (
-            <RoundRail rounds={snapshot.rounds} current={round.index} />
-          )}
           {mode?.presentation === "score" && (
-            <p className="tabular font-display text-xl font-semibold" data-testid="score">
+            <p className="tabular" data-testid="score">
               <span className="sr-only">{t("game.score")}: </span>
               {snapshot.score}
               <span className="text-ink-faint">/{snapshot.max_score}</span>
@@ -156,49 +160,40 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
 
       <SessionProgress rounds={snapshot.rounds} round={round} />
 
+      {multiLevel && (
+        <AttemptRows guesses={round.guesses} levelsCount={round.levels_count} active={playable} />
+      )}
+
+      {multiLevel && (withClue || revealing) && (
+        <TapeDeck weights={weights} levels={levels} level={round.level} progress={tapeProgress} />
+      )}
+
       {revealing ? (
-        <RevealCard
+        <RevealDialog
           sessionId={sessionId}
           round={round}
           presentation={presentation}
           stats={statsOf(state, round.index)}
           last={isLastRound}
           onNext={proceed}
-          domain={snapshot.mode.domain}
+          domain={domain}
         />
       ) : (
         <>
           {withClue && (
-            <section
-              aria-label={t("game.clueLabel")}
-              className="flex flex-col gap-5 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule sm:p-7"
-            >
-              <div className="min-h-44">
-                {Clue && clue.data ? (
-                  <Clue
-                    clue={clue.data}
-                    scene={clueSceneOf(snapshot.mode.clue_type)}
-                    onProgress={setProgress}
-                  />
-                ) : (
-                  <div className="grid min-h-44 place-items-center text-ink-muted" role="status">
-                    {clue.isError ? t("game.clueFailed") : t("game.clueLoading")}
-                  </div>
-                )}
-              </div>
-              {multiLevel && (
-                <LevelTape
-                  weights={weights}
-                  level={round.level}
-                  guesses={round.guesses}
-                  progress={tapeProgress}
+            <section aria-label={t("game.clueLabel")} className="flex flex-col items-center">
+              {Clue && clue.data ? (
+                <Clue
+                  clue={clue.data}
+                  scene={clueSceneOf(snapshot.mode.clue_type)}
+                  onProgress={setProgress}
                 />
+              ) : (
+                <div className="grid min-h-[88px] place-items-center text-ink-muted" role="status">
+                  {clue.isError ? t("game.clueFailed") : t("game.clueLoading")}
+                </div>
               )}
             </section>
-          )}
-
-          {multiLevel && (
-            <AttemptHistory guesses={round.guesses} levelsCount={round.levels_count} />
           )}
 
           <Answer
@@ -207,7 +202,7 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
             levels={levels}
             disabled={!playable || state.busy}
             onMove={onMove}
-            inputRef={inputRef}
+            focusKey={`${round.index}:${round.level}`}
           />
         </>
       )}
