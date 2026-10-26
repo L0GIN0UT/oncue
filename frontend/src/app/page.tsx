@@ -1,9 +1,11 @@
 import { fetchHomePage } from "@/shared/api/server";
 import { TodayGame } from "@/features/daily/TodayGame";
+import { EventSpot } from "@/features/events/EventSpot";
 
 /**
  * Главная — сегодняшняя игра (дейлик), а не лендинг. Музыка по умолчанию, кино — `?domain=film`
  * из меню. SSR отдаёт каркас и публичные блоки bff, личный статус догружает клиент (D2).
+ * `EventSpot` остаётся: на главной лежит находка сезонного события (`ui_spot`, page_key `home`).
  */
 export default async function HomePage({
   searchParams,
@@ -11,5 +13,10 @@ export default async function HomePage({
   searchParams: Promise<{ domain?: string | string[] }>;
 }) {
   const [{ domain }, page] = await Promise.all([searchParams, fetchHomePage()]);
-  return <TodayGame initial={page} domain={domain === "film" ? "film" : "music"} />;
+  return (
+    <>
+      <TodayGame initial={page} domain={domain === "film" ? "film" : "music"} />
+      <EventSpot pageKey="home" />
+    </>
+  );
 }
