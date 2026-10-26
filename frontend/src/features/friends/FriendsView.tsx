@@ -9,10 +9,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
+import { Avatar } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
 import { useViewer } from "@/features/auth/session";
 import { ProfileGate } from "@/features/progression/ProfileView";
-import { Tabs, type TabItem } from "@/features/shop/Tabs";
+import { TabPanel, Tabs, type TabItem } from "@/shared/ui/tabs";
 import { AddFriendPanel } from "./AddFriendPanel";
 import { PrivacyPanel, BlocksPanel } from "./PrivacyBlocks";
 import { ErrorLine } from "./ErrorLine";
@@ -30,8 +31,6 @@ import {
   removeFriend,
 } from "./api";
 
-const PANEL_ID = "friends-panel";
-
 export function FriendsView({ initialTab = "friends" }: { initialTab?: TabId }) {
   const t = useTranslations();
   const viewer = useViewer();
@@ -46,45 +45,68 @@ export function FriendsView({ initialTab = "friends" }: { initialTab?: TabId }) 
     return <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />;
 
   const incoming = requests.data?.incoming.length ?? 0;
-  const tabs: TabItem[] = [
-    { id: "friends", label: t("social.tabs.friends"), testId: "friends-tab-friends" },
+  const tabs: TabItem<TabId>[] = [
     {
-      id: "requests",
-      label: incoming
-        ? t("social.tabs.requestsCount", { count: incoming })
-        : t("social.tabs.requests"),
-      testId: "friends-tab-requests",
+      value: "friends",
+      label: <span data-testid="friends-tab-friends">{t("social.tabs.friends")}</span>,
     },
-    { id: "add", label: t("social.tabs.add"), testId: "friends-tab-add" },
-    { id: "blocks", label: t("social.tabs.blocks"), testId: "friends-tab-blocks" },
-    { id: "privacy", label: t("social.tabs.privacy"), testId: "friends-tab-privacy" },
+    {
+      value: "requests",
+      label: (
+        <span data-testid="friends-tab-requests">
+          {incoming
+            ? t("social.tabs.requestsCount", { count: incoming })
+            : t("social.tabs.requests")}
+        </span>
+      ),
+    },
+    { value: "add", label: <span data-testid="friends-tab-add">{t("social.tabs.add")}</span> },
+    {
+      value: "blocks",
+      label: <span data-testid="friends-tab-blocks">{t("social.tabs.blocks")}</span>,
+    },
+    {
+      value: "privacy",
+      label: <span data-testid="friends-tab-privacy">{t("social.tabs.privacy")}</span>,
+    },
   ];
 
   return (
-    <div className="flex flex-col gap-6 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-2">
-        <h1 className="font-display text-3xl font-bold">{t("social.title")}</h1>
-        <p className="max-w-[60ch] text-ink-muted">{t("social.lead")}</p>
+    <div className="flex flex-col gap-5 pt-2">
+      <header className="flex flex-col gap-2 px-0.5">
+        <h1 className="font-display text-[28px] leading-none font-extrabold">
+          {t("social.title")}
+        </h1>
+        <p className="text-sm text-ink-muted">{t("social.lead")}</p>
       </header>
       <Tabs
         tabs={tabs}
-        active={tab}
-        onChange={(id) => setTab(id as TabId)}
-        label={t("social.tabs.label")}
-        panelId={PANEL_ID}
+        value={tab}
+        onChange={setTab}
+        idBase="friends"
+        aria-label={t("social.tabs.label")}
       />
-      <div id={PANEL_ID} role="tabpanel" className="flex flex-col gap-4">
-        {tab === "friends" && <FriendsList />}
-        {tab === "requests" && <RequestsPanel />}
-        {tab === "add" && <AddFriendPanel />}
-        {tab === "blocks" && <BlocksPanel />}
-        {tab === "privacy" && <PrivacyPanel />}
-      </div>
+      <TabPanel idBase="friends" value="friends" active={tab === "friends"}>
+        <FriendsList />
+      </TabPanel>
+      <TabPanel idBase="friends" value="requests" active={tab === "requests"}>
+        <RequestsPanel />
+      </TabPanel>
+      <TabPanel idBase="friends" value="add" active={tab === "add"}>
+        <AddFriendPanel />
+      </TabPanel>
+      <TabPanel idBase="friends" value="blocks" active={tab === "blocks"}>
+        <BlocksPanel />
+      </TabPanel>
+      <TabPanel idBase="friends" value="privacy" active={tab === "privacy"}>
+        <PrivacyPanel />
+      </TabPanel>
     </div>
   );
 }
 
-function FriendsList() {
+/** Список друзей со статусами; используется на экране друзей и во вкладке профиля. */
+export function FriendsList() {
   const t = useTranslations();
   const client = useQueryClient();
   const action = useSocialAction();
@@ -132,8 +154,9 @@ function FriendsList() {
             key={f.user_id}
             data-testid={`friend-${f.nickname}`}
             data-status={f.status}
-            className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-rule"
+            className="flex min-h-14 flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
           >
+            <Avatar name={f.nickname} size="sm" />
             <Link
               href={`/players/${f.user_id}`}
               dir="auto"
@@ -212,7 +235,7 @@ function RequestsPanel() {
   return (
     <div className="flex flex-col gap-8">
       <section aria-labelledby="requests-in" className="flex flex-col gap-3">
-        <h2 id="requests-in" className="font-display text-xl font-semibold">
+        <h2 id="requests-in" className="font-semibold">
           {t("social.requests.incoming")}
         </h2>
         {incoming.length === 0 ? (
@@ -223,7 +246,7 @@ function RequestsPanel() {
               <li
                 key={r.id}
                 data-testid={`request-in-${r.nickname}`}
-                className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-rule"
+                className="flex min-h-14 flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
               >
                 <span dir="auto" className="min-w-32 flex-1 font-medium">
                   {r.nickname}
@@ -254,7 +277,7 @@ function RequestsPanel() {
         )}
       </section>
       <section aria-labelledby="requests-out" className="flex flex-col gap-3">
-        <h2 id="requests-out" className="font-display text-xl font-semibold">
+        <h2 id="requests-out" className="font-semibold">
           {t("social.requests.outgoing")}
         </h2>
         {outgoing.length === 0 ? (
@@ -265,7 +288,7 @@ function RequestsPanel() {
               <li
                 key={r.id}
                 data-testid={`request-out-${r.nickname}`}
-                className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-rule"
+                className="flex min-h-14 flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
               >
                 <span dir="auto" className="min-w-32 flex-1 font-medium">
                   {r.nickname}

@@ -1,6 +1,6 @@
 "use client";
 /**
- * Ввод промокода в профиле: `POST /v1/promo/redeem` прямо в progression с `Idempotency-Key`.
+ * Ввод промокода в магазине: `POST /v1/promo/redeem` прямо в progression с `Idempotency-Key`.
  * Неверный, просроченный и исчерпанный код дают один и тот же 404 — и одно сообщение (причину
  * перебору не раскрываем). 429 — обратный отсчёт по `Retry-After`. Ключ меняется после каждого
  * завершённого ответа; после обрыва сети повтор идёт с тем же ключом.
@@ -11,7 +11,8 @@ import { useTranslations } from "next-intl";
 import { ApiError, NetworkError } from "@/shared/api/errors";
 import type { PromoRedeemResult } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
-import { Field } from "@/shared/ui/field";
+import { inputClass } from "@/shared/ui/field";
+import { cn } from "@/shared/lib/cn";
 import { newIdempotencyKey, redeemPromo } from "@/features/shop/api";
 import { shopQueryKey } from "@/features/shop/api";
 import { profileQueryKey } from "./api";
@@ -92,38 +93,58 @@ export function PromoBlock() {
     : null;
 
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3" noValidate>
-      <Field
-        label={t("promo.label")}
-        hint={t("promo.hint")}
-        value={code}
-        onChange={(e) => {
-          setCode(e.target.value);
-          // Другой код — другой запрос, другой ключ идемпотентности.
-          key.current = null;
-        }}
-        autoComplete="off"
-        autoCapitalize="characters"
-        spellCheck={false}
-        maxLength={64}
-        data-testid="promo-input"
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="submit"
-          disabled={busy || remaining > 0}
-          aria-busy={busy}
-          data-testid="promo-submit"
-        >
-          {busy ? t("promo.busy") : t("promo.submit")}
-        </Button>
-        {remaining > 0 && (
-          <p className="tabular text-sm text-ink-muted" data-testid="promo-countdown">
-            {t("promo.rateLimited", { seconds: remaining })}
-          </p>
-        )}
-      </div>
-      <div aria-live="polite" className="flex flex-col gap-1">
+    <section
+      aria-labelledby="promo-title"
+      data-testid="block-promo"
+      className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-3.5"
+    >
+      <form
+        onSubmit={(e) => void submit(e)}
+        className="flex flex-wrap items-center justify-between gap-3"
+        noValidate
+      >
+        <div className="flex flex-col gap-0.5">
+          <h2 id="promo-title" className="font-semibold">
+            {t("promo.title")}
+          </h2>
+          <p className="text-[13px] text-ink-muted">{t("promo.hint")}</p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            aria-label={t("promo.label")}
+            placeholder={t("promo.placeholder")}
+            value={code}
+            onChange={(e) => {
+              setCode(e.target.value);
+              // Другой код — другой запрос, другой ключ идемпотентности.
+              key.current = null;
+            }}
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            maxLength={64}
+            data-testid="promo-input"
+            className={cn(inputClass, "h-11 w-[140px] tracking-[0.1em]")}
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            size="sm"
+            disabled={busy || remaining > 0}
+            aria-busy={busy}
+            data-testid="promo-submit"
+          >
+            {busy ? t("promo.busy") : t("promo.submit")}
+          </Button>
+        </div>
+      </form>
+      {remaining > 0 && (
+        <p className="tabular text-sm text-ink-muted" data-testid="promo-countdown">
+          {t("promo.rateLimited", { seconds: remaining })}
+        </p>
+      )}
+      <div aria-live="polite" className="flex flex-col gap-1 empty:hidden">
         {failure && (
           <p role="alert" className="text-sm text-miss" data-testid="promo-error">
             {t(FAILURE_KEYS[failure])}
@@ -136,6 +157,6 @@ export function PromoBlock() {
           </p>
         )}
       </div>
-    </form>
+    </section>
   );
 }

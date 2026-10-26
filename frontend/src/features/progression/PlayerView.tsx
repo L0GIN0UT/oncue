@@ -1,16 +1,20 @@
 "use client";
 /**
- * Профиль игрока `/players/[id]` (этап 5a): публичная часть прогресса — уровень, всего опыта,
- * полученные бейджи. Только пользователю с аккаунтом (аноним — вход, гость — регистрация); нет
- * игрока — 404; недоступный progression — «появится позже». Названия бейджей — из данных API.
+ * Профиль игрока `/players/[id]`: публичная часть прогресса — уровень, всего опыта, полученные
+ * бейджи, действия над игроком. Только пользователю с аккаунтом (аноним — вход, гость —
+ * регистрация); нет игрока — 404; недоступный progression — «появится позже». Названия бейджей —
+ * из данных API.
  */
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import { blockData } from "@/shared/api/blocks";
+import type { AppearanceCard } from "@/shared/api/types";
+import { StatTile } from "@/shared/ui/stat-tile";
 import { useViewer } from "@/features/auth/session";
-import { PlayerBadge, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
+import { Avatar, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
+import { itemOf } from "@/features/cosmetics/slots";
 import { PlayerActions } from "@/features/friends/PlayerActions";
 import { ReportButton } from "@/features/reports/ReportDialog";
 import { useMyUserId } from "@/features/auth/use-my-user-id";
@@ -39,56 +43,46 @@ export function PlayerView({ userId }: { userId: string }) {
         <p className="text-ink-muted">
           {err?.status === 404 ? t("progression.player.notFound") : t("progression.unavailable")}
         </p>
-        <Link href="/" className="underline underline-offset-4">
+        <Link href="/" className="text-music underline underline-offset-4">
           {t("progression.player.back")}
         </Link>
       </div>
     );
   }
-  const block = page.data?.blocks.progress;
+  if (!page.data)
+    return (
+      <p className="pt-6 text-ink-muted" role="status">
+        {t("common.loading")}
+      </p>
+    );
+  const block = page.data.blocks.progress;
   const data = block?.status === "ok" ? block.data : null;
   // Оформление необязательно: `null` или недоступный блок — игрок без рамки, титула и фона.
-  const appearance = blockData(page.data?.blocks.appearance);
-  const social = blockData(page.data?.blocks.social);
+  const appearance = blockData(page.data.blocks.appearance);
+  const social = blockData(page.data.blocks.social);
   // Ник из social (ADR 0069); нет ника (скрытый профиль, свой профиль, social недоступен) - «Игрок».
-  const nickname = page.data?.nickname ?? t("nav.player");
+  const nickname = page.data.nickname ?? t("nav.player");
   const avatarAsset = userId === myId ? null : (appearance?.custom_avatar_asset_id ?? null);
   // 5c: профиль закрыт, игрок заблокировал зрителя или неизвестен — ответы неразличимы.
-  if (page.data?.restricted) {
+  if (page.data.restricted) {
     return (
-      <div className="flex flex-col gap-6 pt-6 sm:pt-10" data-testid="player-restricted">
-        <h1 className="font-display text-3xl font-bold">{t("progression.player.title")}</h1>
-        <ProfileBackdrop
-          appearance={appearance}
-          className="rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
-        >
-          <PlayerBadge nickname={nickname} appearance={appearance} size="lg" />
-        </ProfileBackdrop>
+      <div className="flex flex-col gap-5 pt-2" data-testid="player-restricted">
+        <PlayerHeader nickname={nickname} appearance={appearance} level={null} />
         <p className="max-w-[60ch] text-ink-muted">{t("social.player.restricted")}</p>
         {social?.blocked_by_me && <PlayerActions userId={userId} social={social} />}
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-6 pt-6 sm:pt-10">
-      <h1 className="font-display text-3xl font-bold">{t("progression.player.title")}</h1>
+    <div className="flex flex-col gap-5 pt-2">
+      <PlayerHeader nickname={nickname} appearance={appearance} level={data?.level ?? null} />
       {social && <PlayerActions userId={userId} social={social} />}
-      {!block ? (
-        <p className="text-ink-muted" role="status">
-          {t("common.loading")}
-        </p>
-      ) : !data ? (
+      {!data ? (
         <p className="text-ink-muted" data-testid="player-unavailable">
           {t("progression.blockUnavailable")}
         </p>
       ) : (
         <>
-          <ProfileBackdrop
-            appearance={appearance}
-            className="rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
-          >
-            <PlayerBadge nickname={nickname} appearance={appearance} size="lg" />
-          </ProfileBackdrop>
           {avatarAsset && (
             <div>
               <ReportButton
@@ -100,28 +94,29 @@ export function PlayerView({ userId }: { userId: string }) {
               />
             </div>
           )}
-          <p className="font-display text-4xl font-bold" data-testid="player-level">
-            {t("progression.level.value", { level: data.level })}
-          </p>
-          <p className="tabular text-ink-muted" data-testid="player-xp">
-            {t("progression.player.totalXp", { xp: f.number(data.total_xp) })}
-          </p>
-          <section aria-labelledby="player-badges" className="flex flex-col gap-3">
-            <h2 id="player-badges" className="font-display text-xl font-semibold">
+          <div className="grid grid-cols-2 gap-2.5">
+            <StatTile accent value={data.level} label={t("progression.level.title")} />
+            <StatTile
+              value={<span data-testid="player-xp">{f.number(data.total_xp)}</span>}
+              label={t("progression.tiles.xp")}
+            />
+          </div>
+          <section aria-labelledby="player-badges" className="flex flex-col gap-2.5">
+            <h2 id="player-badges" className="px-0.5 font-semibold">
               {t("progression.player.badges")}
             </h2>
             {data.badges.length ? (
-              <ul className="grid gap-2 sm:grid-cols-2" data-testid="player-badges">
+              <ul className="flex flex-col gap-2.5" data-testid="player-badges">
                 {data.badges.map((b) => (
                   <li
                     key={b.key}
                     data-testid={`player-badge-${b.key}`}
-                    className="flex flex-col gap-0.5 rounded-lg bg-stage p-3 ring-1 ring-rule"
+                    className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
                   >
                     <span dir="auto" className="font-medium">
                       {b.title}
                     </span>
-                    <span className="text-xs text-ink-muted">
+                    <span className="text-sm text-ink-muted">
                       {t("progression.player.unlockedAt", {
                         date: f.dateTime(new Date(b.unlocked_at), { dateStyle: "long" }),
                       })}
@@ -136,5 +131,46 @@ export function PlayerView({ userId }: { userId: string }) {
         </>
       )}
     </div>
+  );
+}
+
+/** Шапка чужого профиля: аватар с рамкой, ник Unbounded, титул и уровень. */
+function PlayerHeader({
+  nickname,
+  appearance,
+  level,
+}: {
+  nickname: string;
+  appearance: AppearanceCard | null;
+  level: number | null;
+}) {
+  const t = useTranslations();
+  const title = itemOf(appearance, "title");
+  return (
+    <ProfileBackdrop appearance={appearance} className="rounded-[var(--radius-ticket)]">
+      <header className="flex items-center gap-4" data-testid="player-badge">
+        <Avatar nickname={nickname} appearance={appearance} size="lg" />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <h1
+            className="truncate font-display text-[26px] leading-none font-extrabold"
+            dir="auto"
+            data-testid="player-nickname"
+          >
+            {nickname}
+          </h1>
+          <p className="truncate text-sm text-ink-muted">
+            {title && (
+              <span dir="auto" data-testid="player-title">
+                {title.title}
+              </span>
+            )}
+            {title && level != null && " · "}
+            {level != null && (
+              <span data-testid="player-level">{t("progression.level.value", { level })}</span>
+            )}
+          </p>
+        </div>
+      </header>
+    </ProfileBackdrop>
   );
 }

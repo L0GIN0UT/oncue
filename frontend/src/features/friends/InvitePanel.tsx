@@ -30,7 +30,7 @@ export function InvitePanel({ roomCode }: { roomCode: string }) {
       className="flex flex-col gap-3"
       data-testid="invite-panel"
     >
-      <h2 id="invite-title" className="font-display text-xl font-semibold">
+      <h2 id="invite-title" className="font-semibold">
         {t("social.invite.title")}
       </h2>
       {friends.isPending ? (
@@ -82,7 +82,7 @@ function InviteRow({
   return (
     <li
       data-testid={`invite-${nickname}`}
-      className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-2 ring-1 ring-rule"
+      className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
     >
       <span dir="auto" className="min-w-28 flex-1 font-medium">
         {nickname}

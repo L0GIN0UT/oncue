@@ -195,9 +195,9 @@ function SectorList({
           data-testid={`sector-${s.key}`}
           data-hit={s.key === highlight}
           className={cn(
-            "flex items-baseline justify-between gap-2 rounded-lg bg-night px-3 py-2 text-sm ring-1 ring-rule",
-            "transition-[background-color,box-shadow] duration-500 motion-reduce:transition-none",
-            s.key === highlight && "ring-2 ring-[var(--accent,var(--color-music))]",
+            "flex min-h-[44px] items-center justify-between gap-2 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2 text-sm",
+            "transition-[background-color,border-color] duration-500 motion-reduce:transition-none",
+            s.key === highlight && "border-music shadow-[0_0_0_4px_var(--color-glow)]",
           )}
         >
           <span dir="auto" title={prizeText(s.prize)}>

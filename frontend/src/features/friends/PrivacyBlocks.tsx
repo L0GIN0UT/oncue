@@ -46,7 +46,7 @@ export function BlocksPanel() {
             <li
               key={b.user_id}
               data-testid={`block-${b.nickname}`}
-              className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-rule"
+              className="flex flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-3"
             >
               <span dir="auto" className="min-w-32 flex-1 font-medium">
                 {b.nickname}

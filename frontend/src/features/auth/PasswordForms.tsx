@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
 import { Button } from "@/shared/ui/button";
 import { Field } from "@/shared/ui/field";
+import { PasswordField } from "./PasswordField";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { errorText, useFinishSignIn } from "./AuthForms";
 import { CodeStep, type Challenge } from "./CodeStep";
@@ -12,10 +13,9 @@ import { CodeStep, type Challenge } from "./CodeStep";
 function NewPasswordField({ name }: { name: string }) {
   const t = useTranslations();
   return (
-    <Field
+    <PasswordField
       label={t("auth.newPassword")}
       name={name}
-      type="password"
       autoComplete="new-password"
       required
       maxLength={256}
@@ -29,7 +29,7 @@ function Done({ text, testId, children }: { text: string; testId: string; childr
     <div className="flex flex-col items-start gap-4">
       <p
         role="status"
-        className="rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule"
+        className="rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-3"
         data-testid={testId}
       >
         {text}
@@ -172,10 +172,9 @@ export function ChangePasswordForm() {
   return (
     <StartForm
       field={
-        <Field
+        <PasswordField
           label={t("auth.currentPassword")}
           name="current_password"
-          type="password"
           autoComplete="current-password"
           required
           maxLength={256}

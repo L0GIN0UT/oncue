@@ -236,7 +236,7 @@ test("санкции: баннер в оболочке, страница, онл
 test("вход заблокированного аккаунта: сообщение без причины", async ({ page, scenario }) => {
   await scenario({ social: { accountBanned: true } });
   await page.goto("/login");
-  await page.getByLabel("E-mail или ник").fill("player");
+  await page.getByLabel("Почта или ник").fill("player");
   await page.getByLabel("Пароль").fill("correct-horse");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByText("Аккаунт заблокирован.")).toBeVisible();

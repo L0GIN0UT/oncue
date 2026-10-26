@@ -21,7 +21,7 @@ export function RatingChangeBlock({ matchId, myId }: { matchId: string; myId: st
       className="flex flex-col gap-3"
       data-testid="rating-change"
     >
-      <h2 id="summary-rating" className="font-display text-xl font-semibold">
+      <h2 id="summary-rating" className="font-semibold">
         {t("rating.change.title")}
       </h2>
       {query.isPending ? (
@@ -51,7 +51,7 @@ function ChangeCard({ change }: { change: MatchChange }) {
       ? { delta, old, next }
       : null;
   return (
-    <div className="flex flex-col gap-2 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule">
+    <div className="flex flex-col gap-2 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage p-5">
       <p className="text-sm text-[var(--accent)]">
         {t("rating.change.ladder", { ladder: ladderLabel(change.ladder) })}
       </p>
@@ -68,7 +68,7 @@ function ChangeCard({ change }: { change: MatchChange }) {
             <span className="sr-only">{t("rating.change.delta")}: </span>
             <span
               className={cn(
-                "tabular font-display text-3xl font-bold",
+                "tabular font-display text-[28px] leading-none font-extrabold",
                 numbers.delta > 0 ? "text-exact" : numbers.delta < 0 ? "text-miss" : "text-ink",
               )}
               data-testid="rating-delta"

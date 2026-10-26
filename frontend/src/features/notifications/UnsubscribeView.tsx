@@ -85,8 +85,10 @@ export function UnsubscribeView() {
   }, []);
 
   return (
-    <div className="flex max-w-xl flex-col items-start gap-4 pt-12">
-      <h1 className="font-display text-2xl font-bold">{t("unsubscribe.title")}</h1>
+    <div className="mx-auto flex w-full max-w-[420px] flex-col items-center gap-5 pt-16 text-center">
+      <h1 className="font-display text-[28px] leading-tight font-extrabold">
+        {t("unsubscribe.title")}
+      </h1>
       <p
         role="status"
         aria-live="polite"
@@ -112,7 +114,10 @@ export function UnsubscribeView() {
         </Button>
       )}
       {state !== "checking" && state !== "working" && state !== "ready" && (
-        <Link href="/" className="underline underline-offset-4">
+        <Link
+          href="/"
+          className="text-sm text-ink-muted underline underline-offset-4 hover:text-ink"
+        >
           {t("unsubscribe.home")}
         </Link>
       )}

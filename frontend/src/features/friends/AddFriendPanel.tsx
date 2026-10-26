@@ -39,7 +39,7 @@ export function AddFriendPanel() {
   return (
     <div className="flex flex-col gap-8">
       <section aria-labelledby="add-nick" className="flex max-w-md flex-col gap-3">
-        <h2 id="add-nick" className="font-display text-xl font-semibold">
+        <h2 id="add-nick" className="font-semibold">
           {t("social.add.byNickname")}
         </h2>
         <form onSubmit={(e) => void submit(e, "nickname")} className="flex flex-col gap-3">
@@ -61,7 +61,7 @@ export function AddFriendPanel() {
         </form>
       </section>
       <section aria-labelledby="add-code" className="flex max-w-md flex-col gap-3">
-        <h2 id="add-code" className="font-display text-xl font-semibold">
+        <h2 id="add-code" className="font-semibold">
           {t("social.add.byCode")}
         </h2>
         <form onSubmit={(e) => void submit(e, "code")} className="flex flex-col gap-3">
@@ -107,7 +107,7 @@ function MyCode() {
 
   return (
     <section aria-labelledby="my-code" className="flex max-w-md flex-col gap-3">
-      <h2 id="my-code" className="font-display text-xl font-semibold">
+      <h2 id="my-code" className="font-semibold">
         {t("social.code.title")}
       </h2>
       <p className="text-sm text-ink-muted">{t("social.code.lead")}</p>
@@ -121,7 +121,7 @@ function MyCode() {
         </p>
       ) : (
         <p
-          className="tabular w-fit rounded-[var(--radius-control)] bg-stage px-4 py-2 font-display text-2xl tracking-widest ring-1 ring-rule"
+          className="tabular w-fit rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2 font-display text-2xl tracking-widest"
           data-testid="my-code"
         >
           {query.data.code}

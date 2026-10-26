@@ -38,7 +38,7 @@ export function RoomInviteCard() {
     <div
       role="alert"
       data-testid="room-invite-card"
-      className="fixed top-16 right-4 z-40 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[var(--radius-control)] bg-stage-raised p-4 shadow-lg ring-1 ring-rule"
+      className="fixed top-16 right-4 z-40 flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage-raised p-4"
     >
       <div className="flex flex-col gap-0.5">
         <p dir="auto" className="font-semibold break-words">

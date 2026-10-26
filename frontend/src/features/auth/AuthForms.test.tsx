@@ -83,7 +83,7 @@ describe("вход", () => {
   async function fillLogin() {
     const user = userEvent.setup();
     renderWithProviders(<LoginForm next="/solo" />);
-    await user.type(screen.getByLabelText("E-mail или ник"), "yan");
+    await user.type(screen.getByLabelText("Почта или ник"), "yan");
     await user.type(screen.getByLabelText("Пароль"), "correct horse 1");
     await user.click(screen.getByRole("button", { name: "Войти" }));
     return user;
@@ -126,7 +126,7 @@ describe("вход", () => {
     expect(confirm).toEqual([]);
   });
 
-  it("есть ссылка «Забыли пароль?»", () => {
+  it("есть ссылка «Забыл пароль»", () => {
     renderWithProviders(<LoginForm next={null} />);
     expect(screen.getByTestId("forgot-link")).toHaveAttribute("href", "/forgot-password");
   });

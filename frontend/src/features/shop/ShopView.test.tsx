@@ -19,15 +19,16 @@ async function open() {
 }
 
 describe("ShopView: витрина", () => {
-  it("вкладки слотов — в порядке данных bff, плюс «Инвентарь» и «Оформление»", async () => {
+  it("чипы слотов — в порядке данных bff, плюс «Мои»; первый слот выбран", async () => {
     await open();
-    const tabs = screen.getAllByRole("tab").map((t) => t.getAttribute("data-testid"));
-    expect(tabs).toEqual([
+    const chips = within(screen.getByRole("group", { name: "Разделы магазина" })).getAllByRole(
+      "button",
+    );
+    expect(chips.map((c) => c.getAttribute("data-testid"))).toEqual([
       ...SLOTS.map((s) => `shop-tab-${s}`),
       "shop-tab-inventory",
-      "shop-tab-appearance",
     ]);
-    expect(screen.getByTestId("shop-tab-avatar")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("shop-tab-avatar")).toHaveAttribute("aria-pressed", "true");
   });
 
   it("слот, которого нет в справочнике подписей, показывается своим ключом (без падения)", async () => {
@@ -63,31 +64,37 @@ describe("ShopView: витрина", () => {
     expect(screen.getByTestId("shop-item-x1")).toBeInTheDocument();
   });
 
-  it("карточки: состояние, цена, уровень и редкость; закрытый предмет нельзя купить", async () => {
+  it("плитки: состояние и подпись; выбранный предмет — в панели предпросмотра с ценой и редкостью", async () => {
     await open();
     const fox = screen.getByTestId("shop-item-fox");
     expect(fox).toHaveAttribute("data-state", "available");
-    expect(fox).toHaveTextContent("Лис");
-    expect(fox).toHaveTextContent("20 Версов");
-    expect(fox).toHaveTextContent("Обычный");
-    expect(screen.getByTestId("shop-buy-fox")).toBeEnabled();
+    expect(fox).toHaveAccessibleName("Аватар Лис, 20 Версов");
+    const preview = screen.getByTestId("shop-preview");
+    expect(preview).toHaveTextContent("Лис");
+    expect(preview).toHaveTextContent("Обычный");
+    expect(screen.getByTestId("shop-buy-fox")).toHaveTextContent("Купить · 20 Версов");
+
+    await userEvent.click(screen.getByTestId("shop-item-owl"));
+    expect(screen.getByTestId("shop-buy-owl")).toBeEnabled();
+    expect(screen.queryByTestId("shop-buy-fox")).toBeNull();
 
     await userEvent.click(screen.getByTestId("shop-tab-frame"));
-    const neon = screen.getByTestId("shop-item-neon_frame");
-    expect(neon).toHaveAttribute("data-state", "locked");
-    expect(neon).toHaveTextContent("Откроется на уровне 20");
+    await userEvent.click(screen.getByTestId("shop-item-neon_frame"));
+    expect(screen.getByTestId("shop-item-neon_frame")).toHaveAttribute("data-state", "locked");
+    expect(screen.getByTestId("shop-locked")).toHaveTextContent("Откроется на уровне 20");
     expect(screen.queryByTestId("shop-buy-neon_frame")).toBeNull();
+    await userEvent.click(screen.getByTestId("shop-item-gold_frame"));
     expect(screen.getByTestId("shop-buy-gold_frame")).toBeInTheDocument();
   });
 
-  it("переключение вкладок стрелками (клавиатура)", async () => {
+  it("«Мои» показывает число предметов и открывается чипом", async () => {
+    world.economy.owned.set(itemByKey("fox")!.id, "purchase");
     await open();
-    screen.getByTestId("shop-tab-avatar").focus();
-    await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByTestId("shop-tab-frame")).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("shop-tab-frame")).toHaveFocus();
-    await userEvent.keyboard("{End}");
-    expect(screen.getByTestId("shop-tab-appearance")).toHaveAttribute("aria-selected", "true");
+    const mine = screen.getByTestId("shop-tab-inventory");
+    await waitFor(() => expect(mine).toHaveTextContent("Мои · 1"));
+    await userEvent.click(mine);
+    expect(mine).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByTestId("inventory-item-fox")).toBeInTheDocument();
   });
 
   it("гость — приглашение, магазин не грузится", async () => {
@@ -150,6 +157,7 @@ describe("ShopView: покупка", () => {
       http.post("*/api/progression/v1/shop/items/:id/purchase", () => problem(status, code)),
     );
     await open();
+    await userEvent.click(screen.getByTestId("shop-item-owl"));
     await userEvent.click(screen.getByTestId("shop-buy-owl"));
     await userEvent.click(screen.getByTestId("shop-confirm"));
     expect(await screen.findByRole("alert")).toHaveTextContent(text);
@@ -206,7 +214,7 @@ describe("ShopView: покупка", () => {
     await waitFor(() => expect(pageLoads).toBeGreaterThanOrEqual(1));
   });
 
-  it("пока идёт покупка, остальные «Купить» заблокированы и не открывают диалог", async () => {
+  it("пока идёт покупка, кнопка «Купить» заблокирована и не открывает второй диалог", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
     server.use(
@@ -218,11 +226,11 @@ describe("ShopView: покупка", () => {
     await open();
     await userEvent.click(screen.getByTestId("shop-buy-fox"));
     await userEvent.click(screen.getByTestId("shop-confirm"));
-    await waitFor(() => expect(screen.getByTestId("shop-buy-owl")).toBeDisabled());
-    expect(screen.getByTestId("shop-buy-fox")).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId("shop-buy-fox")).toBeDisabled());
     release();
     await screen.findByRole("alert");
-    expect(screen.getByTestId("shop-buy-owl")).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.getByTestId("shop-buy-fox")).toBeEnabled();
   });
 
   it("диалог модальный: aria-modal и фокус не уходит за его пределы по Tab", async () => {
@@ -248,37 +256,32 @@ describe("ShopView: покупка", () => {
   });
 });
 
-describe("ShopView: инвентарь и оформление", () => {
-  it("инвентарь: надеть и снять предмет", async () => {
+describe("ShopView: «Мои» и оформление", () => {
+  it("надеть и снять предмет на панели предпросмотра", async () => {
     world.economy.owned.set(itemByKey("fox")!.id, "purchase");
     await open();
     await userEvent.click(screen.getByTestId("shop-tab-inventory"));
     const entry = await screen.findByTestId("inventory-item-fox");
-    expect(entry).toHaveTextContent("Лис");
-    await userEvent.click(within(entry).getByRole("button", { name: "Надеть" }));
+    expect(entry).toHaveAccessibleName("Аватар Лис, куплено");
+    await userEvent.click(screen.getByRole("button", { name: "Надеть" }));
     await waitFor(() =>
       expect(screen.getByTestId("inventory-item-fox")).toHaveAttribute("data-equipped", "true"),
     );
     expect(world.economy.equipped.get("avatar")).toBe(itemByKey("fox")!.id);
 
-    await userEvent.click(
-      within(screen.getByTestId("inventory-item-fox")).getByRole("button", { name: "Снять" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Снять" }));
     await waitFor(() => expect(world.economy.equipped.has("avatar")).toBe(false));
   });
 
-  it("оформление: выбор предмета слота и пустой слот", async () => {
+  it("купленный предмет в слоте витрины тоже можно надеть, надетый помечен", async () => {
     world.economy.owned.set(itemByKey("fox")!.id, "purchase");
-    world.economy.owned.set(itemByKey("champion")!.id, "promo");
     await open();
-    await userEvent.click(screen.getByTestId("shop-tab-appearance"));
-    const select = await screen.findByTestId("equip-avatar");
-    await userEvent.selectOptions(select, itemByKey("fox")!.id);
-    await waitFor(() => expect(world.economy.equipped.get("avatar")).toBe(itemByKey("fox")!.id));
-    await userEvent.selectOptions(screen.getByTestId("equip-avatar"), "");
-    await waitFor(() => expect(world.economy.equipped.has("avatar")).toBe(false));
-    // В слоте «рамка» нет своих предметов — выбирать нечего, кроме «Пусто».
-    expect(within(screen.getByTestId("equip-frame")).getAllByRole("option")).toHaveLength(1);
+    await userEvent.click(screen.getByTestId("shop-item-fox"));
+    await userEvent.click(await screen.findByTestId("equip-item-fox"));
+    await waitFor(() =>
+      expect(screen.getByTestId("shop-item-fox")).toHaveAccessibleName("Аватар Лис, надето"),
+    );
+    expect(screen.getByTestId("equip-item-fox")).toHaveTextContent("Снять");
   });
 
   it("ошибка оформления показывается сообщением", async () => {
@@ -289,9 +292,15 @@ describe("ShopView: инвентарь и оформление", () => {
       ),
     );
     await open();
-    await userEvent.click(screen.getByTestId("shop-tab-appearance"));
-    await userEvent.selectOptions(await screen.findByTestId("equip-avatar"), itemByKey("fox")!.id);
+    await userEvent.click(screen.getByTestId("shop-tab-inventory"));
+    await userEvent.click(await screen.findByRole("button", { name: "Надеть" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("нет в вашем инвентаре");
+  });
+
+  it("пустой инвентарь — подсказка, блок недоступен — сообщение", async () => {
+    await open();
+    await userEvent.click(screen.getByTestId("shop-tab-inventory"));
+    expect(await screen.findByTestId("inventory-empty")).toBeInTheDocument();
   });
 
   it("блок инвентаря недоступен — сообщение", async () => {

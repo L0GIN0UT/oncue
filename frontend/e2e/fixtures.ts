@@ -145,7 +145,7 @@ export async function giveUpRemaining(page: Page): Promise<void> {
 /** Войти через форму (мок identity: `player` и `author`, пароль `correct-horse`). */
 export async function login(page: Page, nickname = "player"): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("E-mail или ник").fill(nickname);
+  await page.getByLabel("Почта или ник").fill(nickname);
   await page.getByLabel("Пароль").fill("correct-horse");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page.getByTestId("user-name")).toHaveText(nickname);

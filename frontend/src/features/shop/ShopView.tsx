@@ -1,27 +1,34 @@
 "use client";
 /**
- * Магазин `/shop` (этап 5b): вкладки по слотам (порядок и состав слотов — из данных bff, код
- * ключей не знает), карточки предметов, покупка с подтверждением, вкладки «Инвентарь» и
- * «Оформление». Покупка — `POST /v1/shop/items/{id}/purchase` прямо в progression: один
- * `Idempotency-Key` на один показ подтверждения (повтор после сбоя — тот же ключ, новый показ —
- * новый), цена и условия проверяются сервером. Баланс и состояние карточки обновляются из ответа.
+ * Магазин `/shop` (шире основной колонки, 760 px): чипы слотов (порядок и состав — из данных bff,
+ * код ключей не знает) и «Мои», сетка плиток, справа предпросмотр выбранного предмета с одним
+ * действием, внизу промокод. Покупка — `POST /v1/shop/items/{id}/purchase` прямо в progression:
+ * один `Idempotency-Key` на один показ подтверждения (повтор после сбоя — тот же ключ, новый
+ * показ — новый), цена и условия проверяются сервером. Баланс и состояние плитки обновляются из
+ * ответа. Надеть и снять — на панели предпросмотра у купленного предмета.
  */
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { blockData } from "@/shared/api/blocks";
 import { isApiError } from "@/shared/api/errors";
 import type { ShopCatalogCard, ShopEntryCard, ShopPage } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
-import { useViewer } from "@/features/auth/session";
+import { Chip } from "@/shared/ui/chip";
+import { Modal } from "@/shared/ui/modal";
+import { useIcons } from "@/shared/ui/theme-provider";
+import { useSessionInfo, useViewer } from "@/features/auth/session";
+import { PromoBlock } from "@/features/progression/PromoBlock";
 import { profileQueryKey } from "@/features/progression/api";
 import { gateOf, ProfileGate } from "@/features/progression/ProfileView";
+import { HeaderLeading } from "@/features/shell/header-leading";
 import { fetchShopPage, newIdempotencyKey, purchaseItem, shopQueryKey } from "./api";
 import { purchaseErrorKey, type PurchaseError } from "./errors";
-import { AppearancePanel, InventoryPanel } from "./InventoryPanels";
-import { ItemCard } from "./ItemCard";
+import { EQUIP_ERROR_KEYS, useEquip, useProfileBlocks } from "./inventory";
+import { ItemPreview } from "./ItemPreview";
+import { ItemTile, type TileState } from "./ItemTile";
 import { useSlotTabLabel, useVerses } from "./labels";
-import { Tabs, type TabItem } from "./Tabs";
 
 const PURCHASE_ERROR_KEYS = {
   insufficientFunds: "shop.error.insufficientFunds",
@@ -35,9 +42,7 @@ const PURCHASE_ERROR_KEYS = {
   other: "shop.error.other",
 } as const satisfies Record<PurchaseError, string>;
 
-const PANEL_ID = "shop-panel";
-const INVENTORY = "inventory";
-const APPEARANCE = "appearance";
+const MINE = "mine";
 const slotTab = (slot: string) => `slot:${slot}`;
 
 /** Подставить результат покупки в кэш витрины: предмет куплен, баланс из ответа. */
@@ -54,27 +59,12 @@ function markOwned(page: ShopPage, itemId: string, balance: number | null): Shop
   return { ...page, blocks: { ...page.blocks, catalog: { ...catalog, data } } };
 }
 
-/** Фокус по Tab ходит по кругу внутри модального диалога. */
-function trapFocus(e: KeyboardEvent<HTMLElement>, root: HTMLElement | null) {
-  const items = root?.querySelectorAll<HTMLElement>("button:not(:disabled), [href], input, select");
-  if (!items?.length) return;
-  const first = items[0]!;
-  const last = items[items.length - 1]!;
-  const active = document.activeElement;
-  if (e.shiftKey && active === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault();
-    first.focus();
-  }
-}
-
 type Confirm = { entry: ShopEntryCard; key: string };
 
 export function ShopView() {
   const t = useTranslations();
   const viewer = useViewer();
+  const { back: Back } = useIcons();
   const query = useQuery({
     queryKey: shopQueryKey,
     queryFn: fetchShopPage,
@@ -96,11 +86,15 @@ export function ShopView() {
 
   const catalog = blockData(query.data?.blocks.catalog);
   return (
-    <div className="flex flex-col gap-6 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-2">
-        <h1 className="font-display text-3xl font-bold">{t("shop.title")}</h1>
-        <p className="max-w-[60ch] text-ink-muted">{t("shop.lead")}</p>
-      </header>
+    <div className="flex flex-col gap-4 pt-2 lg:-mx-[60px]">
+      <HeaderLeading>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/profile" aria-label={t("shop.backLabel")}>
+            <Back aria-hidden className="!size-[18px]" />
+            {t("shop.back")}
+          </Link>
+        </Button>
+      </HeaderLeading>
       {!query.data ? (
         <p className="text-ink-muted" role="status">
           {t("common.loading")}
@@ -118,40 +112,53 @@ export function ShopView() {
 
 function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
   const t = useTranslations();
+  const f = useFormatter();
   const client = useQueryClient();
   const slotLabel = useSlotTabLabel();
   const verses = useVerses();
-  const [active, setActive] = useState(() =>
-    catalog.slots[0] ? slotTab(catalog.slots[0]) : INVENTORY,
-  );
+  const { data: session } = useSessionInfo();
+  const profile = useProfileBlocks();
+  const equip = useEquip();
+  const [tab, setTab] = useState(() => (catalog.slots[0] ? slotTab(catalog.slots[0]) : MINE));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [error, setError] = useState<PurchaseError | null>(null);
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const lock = useRef(false);
-  const opener = useRef<HTMLElement | null>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (confirm) confirmRef.current?.focus();
-  }, [confirm]);
+  const nickname = session?.subject?.display_name ?? t("nav.player");
+  const equipped = new Set(
+    (profile.inventory ?? []).filter((e) => e.equipped).map((e) => e.item.id),
+  );
+  const mineCount = profile.inventory?.length ?? null;
 
-  const tabs: TabItem[] = [
-    ...catalog.slots.map((slot) => ({
-      id: slotTab(slot),
-      label: slotLabel(slot),
-      testId: `shop-tab-${slot}`,
-    })),
-    { id: INVENTORY, label: t("shop.tab.inventory"), testId: "shop-tab-inventory" },
-    { id: APPEARANCE, label: t("shop.tab.appearance"), testId: "shop-tab-appearance" },
-  ];
+  const slot = tab.startsWith("slot:") ? tab.slice(5) : null;
+  type Tile = { entry: ShopEntryCard; state: TileState };
+  const tiles: Tile[] =
+    slot !== null
+      ? catalog.items
+          .filter((e) => e.item.slot === slot)
+          .map((entry) => ({
+            entry,
+            state:
+              entry.state === "owned" && equipped.has(entry.item.id) ? "equipped" : entry.state,
+          }))
+      : (profile.inventory ?? []).map((e) => ({
+          entry: { item: e.item, state: "owned" as const },
+          state: e.equipped ? ("equipped" as const) : ("owned" as const),
+        }));
+  const current = tiles.find((x) => x.entry.item.id === selectedId) ?? tiles[0] ?? null;
 
-  const open = (entry: ShopEntryCard, button: HTMLElement) => {
+  const expiresAt =
+    current && profile.inventory
+      ? (profile.inventory.find((e) => e.item.id === current.entry.item.id)?.expires_at ?? null)
+      : null;
+
+  const open = (entry: ShopEntryCard) => {
     // Пока идёт покупка, новый показ подтверждения не открываем.
     if (lock.current) return;
-    opener.current = button;
     setError(null);
     setStatus(null);
     // Один ключ на один показ подтверждения.
@@ -161,7 +168,6 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
   const close = () => {
     setConfirm(null);
     setError(null);
-    opener.current?.focus();
   };
 
   const buy = async () => {
@@ -196,106 +202,189 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
     }
   };
 
-  const slot = active.startsWith("slot:") ? active.slice(5) : null;
-  const items = slot ? catalog.items.filter((e) => e.item.slot === slot) : [];
-
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs
-          tabs={tabs}
-          active={active}
-          onChange={setActive}
-          label={t("shop.tabs")}
-          panelId={PANEL_ID}
-        />
-        <p className="tabular font-medium" data-testid="shop-balance" aria-live="polite">
-          {t("shop.balance", { balance: catalog.balance })}
-        </p>
+      <header className="flex flex-col gap-2 px-0.5">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-display text-[28px] leading-none font-extrabold">
+            {t("shop.title")}
+          </h1>
+          <p
+            className="tabular inline-flex h-[38px] items-center rounded-full border-[1.5px] border-rule px-3.5 text-[15px] font-semibold text-music"
+            data-testid="shop-balance"
+            aria-live="polite"
+          >
+            {t("shop.balance", { balance: catalog.balance })}
+          </p>
+        </div>
+        <p className="text-sm text-ink-muted">{t("shop.lead")}</p>
+      </header>
+
+      <div role="group" aria-label={t("shop.tabs")} className="flex flex-wrap gap-2">
+        {catalog.slots.map((s) => (
+          <Chip
+            key={s}
+            selected={tab === slotTab(s)}
+            data-testid={`shop-tab-${s}`}
+            onClick={() => {
+              setTab(slotTab(s));
+              setSelectedId(null);
+            }}
+          >
+            {slotLabel(s)}
+          </Chip>
+        ))}
+        <Chip
+          selected={tab === MINE}
+          className="ml-auto"
+          data-testid="shop-tab-inventory"
+          onClick={() => {
+            setTab(MINE);
+            setSelectedId(null);
+          }}
+        >
+          {mineCount === null ? t("shop.tab.mine") : t("shop.tab.mineCount", { count: mineCount })}
+        </Chip>
       </div>
-      <div aria-live="polite" role="status" data-testid="shop-status" className="min-h-6 text-sm">
+      <div aria-live="polite" role="status" data-testid="shop-status" className="min-h-5 text-sm">
         {status}
       </div>
 
-      {confirm && (
-        <div
-          ref={dialogRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="shop-confirm-title"
-          data-testid="shop-confirm-dialog"
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && !busy) close();
-            if (e.key === "Tab") trapFocus(e, dialogRef.current);
-          }}
-          className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage-raised p-5 ring-2 ring-[var(--accent,var(--color-music))]"
+      {slot === null && profile.loading ? (
+        <p className="text-ink-muted" role="status">
+          {t("common.loading")}
+        </p>
+      ) : slot === null && !profile.inventory ? (
+        <p className="text-ink-muted" data-testid="inventory-unavailable">
+          {t("shop.blockUnavailable")}
+        </p>
+      ) : tiles.length === 0 ? (
+        <p
+          className="text-ink-muted"
+          data-testid={slot === null ? "inventory-empty" : "shop-empty"}
         >
-          <h2 id="shop-confirm-title" dir="auto" className="font-display text-lg font-semibold">
-            {t("shop.confirm.title", { title: confirm.entry.item.title })}
-          </h2>
-          <p className="text-ink-muted">
-            {t("shop.confirm.text", {
-              price: verses(confirm.entry.item.price ?? 0),
-              balance: verses(Math.max(0, catalog.balance - (confirm.entry.item.price ?? 0))),
-            })}
-          </p>
-          {error && (
-            <p role="alert" className="text-miss" data-testid="shop-error">
-              {error === "rateLimited" && retryAfter
-                ? t("shop.error.rateLimitedIn", { seconds: retryAfter })
-                : t(PURCHASE_ERROR_KEYS[error])}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              ref={confirmRef}
-              onClick={() => void buy()}
-              disabled={busy}
-              aria-busy={busy}
-              data-testid="shop-confirm"
+          {slot === null ? t("shop.inventory.empty") : t("shop.empty")}
+        </p>
+      ) : (
+        <div className="grid items-stretch gap-3.5 sm:grid-cols-[minmax(0,1fr)_240px]">
+          <ul className="grid grid-cols-3 content-start gap-2.5 sm:grid-cols-5">
+            {tiles.map(({ entry, state }) => (
+              <li key={entry.item.id} className="contents">
+                <ItemTile
+                  item={entry.item}
+                  state={state}
+                  selected={current?.entry.item.id === entry.item.id}
+                  onSelect={() => setSelectedId(entry.item.id)}
+                  testId={
+                    slot === null
+                      ? `inventory-item-${entry.item.key}`
+                      : `shop-item-${entry.item.key}`
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+          {current && (
+            <ItemPreview
+              item={current.entry.item}
+              nickname={nickname}
+              appearance={profile.appearance}
             >
-              {busy ? t("shop.confirm.busy") : t("shop.confirm.yes")}
-            </Button>
-            <Button variant="secondary" onClick={close} disabled={busy}>
-              {t("shop.confirm.no")}
-            </Button>
-          </div>
+              {current.state === "available" && current.entry.item.price != null && (
+                <Button
+                  disabled={busy}
+                  data-testid={`shop-buy-${current.entry.item.key}`}
+                  onClick={() => open(current.entry)}
+                >
+                  {t("shop.buyFor", { price: verses(current.entry.item.price) })}
+                </Button>
+              )}
+              {current.state === "locked" && (
+                <p className="text-sm text-ink-muted" data-testid="shop-locked">
+                  {current.entry.item.level_required != null
+                    ? t("shop.unlockLevel", { level: current.entry.item.level_required })
+                    : t("shop.state.locked")}
+                </p>
+              )}
+              {(current.state === "owned" || current.state === "equipped") && (
+                <Button
+                  variant="secondary"
+                  disabled={equip.pending !== null}
+                  data-testid={`equip-item-${current.entry.item.key}`}
+                  onClick={() =>
+                    void equip.run(
+                      current.entry.item.slot,
+                      current.state === "equipped" ? null : current.entry.item.id,
+                    )
+                  }
+                >
+                  {current.state === "equipped"
+                    ? t("shop.inventory.unequip")
+                    : t("shop.inventory.equip")}
+                </Button>
+              )}
+              {expiresAt && (
+                <p className="text-xs text-ink-muted">
+                  {t("shop.inventory.expires", {
+                    date: f.dateTime(new Date(expiresAt), { dateStyle: "long" }),
+                  })}
+                </p>
+              )}
+              <div aria-live="polite" data-testid="equip-feedback">
+                {equip.error && (
+                  <p role="alert" className="text-sm text-miss">
+                    {t(EQUIP_ERROR_KEYS[equip.error])}
+                  </p>
+                )}
+              </div>
+            </ItemPreview>
+          )}
         </div>
       )}
 
-      <div id={PANEL_ID} role="tabpanel" tabIndex={-1} className="outline-none">
-        {slot !== null ? (
-          items.length ? (
-            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {items.map(({ item, state }) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  state={state}
-                  actions={
-                    state === "available" && item.price != null ? (
-                      <Button
-                        size="sm"
-                        disabled={busy}
-                        data-testid={`shop-buy-${item.key}`}
-                        onClick={(e) => open({ item, state }, e.currentTarget)}
-                      >
-                        {t("shop.buy")}
-                      </Button>
-                    ) : null
-                  }
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="text-ink-muted">{t("shop.empty")}</p>
-          )
-        ) : active === INVENTORY ? (
-          <InventoryPanel />
-        ) : (
-          <AppearancePanel slots={catalog.slots} />
+      <PromoBlock />
+
+      <Modal
+        open={confirm !== null}
+        onClose={busy ? () => undefined : close}
+        aria-label={t("shop.confirm.label")}
+        data-testid="shop-confirm-dialog"
+        className="flex flex-col gap-3 p-5"
+      >
+        {confirm && (
+          <>
+            <h2 dir="auto" className="font-semibold">
+              {t("shop.confirm.title", { title: confirm.entry.item.title })}
+            </h2>
+            <p className="text-ink-muted">
+              {t("shop.confirm.text", {
+                price: verses(confirm.entry.item.price ?? 0),
+                balance: verses(Math.max(0, catalog.balance - (confirm.entry.item.price ?? 0))),
+              })}
+            </p>
+            {error && (
+              <p role="alert" className="text-miss" data-testid="shop-error">
+                {error === "rateLimited" && retryAfter
+                  ? t("shop.error.rateLimitedIn", { seconds: retryAfter })
+                  : t(PURCHASE_ERROR_KEYS[error])}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => void buy()}
+                disabled={busy}
+                aria-busy={busy}
+                data-testid="shop-confirm"
+              >
+                {busy ? t("shop.confirm.busy") : t("shop.confirm.yes")}
+              </Button>
+              <Button variant="secondary" onClick={close} disabled={busy}>
+                {t("shop.confirm.no")}
+              </Button>
+            </div>
+          </>
         )}
-      </div>
+      </Modal>
     </>
   );
 }

@@ -12,11 +12,14 @@ export function XpBar({
   xpToNext,
   level,
   compact = false,
+  bare = false,
 }: {
   xpInLevel: number;
   xpToNext: number | null | undefined;
   level: number;
   compact?: boolean;
+  /** Только полоса: подпись рядом рисует вызывающий, а `aria-valuetext` остаётся полным. */
+  bare?: boolean;
 }) {
   const t = useTranslations();
   const f = useFormatter();
@@ -43,16 +46,16 @@ export function XpBar({
         aria-valuetext={text}
         data-testid="xp-bar"
         className={cn(
-          "overflow-hidden rounded-full bg-night ring-1 ring-rule",
-          compact ? "h-2" : "h-3",
+          "box-border overflow-hidden rounded border-[1.5px] border-rule bg-stage-raised",
+          compact || bare ? "h-[11px]" : "h-3.5",
         )}
       >
         <div
-          className="h-full rounded-full bg-[var(--accent,var(--color-music))] transition-[width] duration-300 motion-reduce:transition-none"
+          className="h-full bg-music transition-[width] duration-300 motion-reduce:transition-none"
           style={{ width: `${percent}%` }}
         />
       </div>
-      {!compact && (
+      {!compact && !bare && (
         <p className="tabular text-sm text-ink-muted" data-testid="xp-text">
           {text}
         </p>
