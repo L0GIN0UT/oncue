@@ -14,7 +14,7 @@ test.skip(process.env.E2E_SEEDED !== "1", "стек не засеян: нуже�
 async function finishByGivingUp(page: Page): Promise<void> {
   for (;;) {
     const toResults = page.getByRole("button", { name: "К итогам" });
-    const next = page.getByRole("button", { name: "Следующий раунд" });
+    const next = page.getByRole("button", { name: "Продолжить" });
     const giveUp = page.locator("[data-testid=give-up]:enabled");
     await expect(toResults.or(next).or(giveUp).first()).toBeVisible();
     if (await toResults.isVisible()) return toResults.click();

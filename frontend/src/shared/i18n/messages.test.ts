@@ -61,7 +61,6 @@ describe("messages/ru.json", () => {
         `daily.action.${s}`,
       ]),
       ...["exact", "partial", "miss", "skip"].map((k) => `game.guess.${k}`),
-      ...["exact", "partial", "miss", "void", "active", "pending"].map((k) => `game.outcome.${k}`),
       ...["exact", "partial", "miss", "void"].map((k) => `game.reveal.${k}`),
       ...["rate_limited", "round_void", "network", "desync", "failed"].map(
         (k) => `game.notice.${k}`,

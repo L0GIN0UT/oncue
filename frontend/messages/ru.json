@@ -41,7 +41,8 @@
   "common": {
     "home": "На главную",
     "loading": "Загружаем…",
-    "retry": "Попробовать ещё раз"
+    "retry": "Попробовать ещё раз",
+    "close": "Закрыть"
   },
   "domain": {
     "music": "Музыка",
@@ -332,8 +333,6 @@
     "notFound": "Такой игры нет",
     "loadFailed": "Игра не загрузилась",
     "roundTitle": "Раунд {index} из {total}",
-    "roundsLabel": "Раунды: сейчас {current} из {total}",
-    "roundItem": "Раунд {index}",
     "score": "Очки",
     "clueLabel": "Загадка",
     "clueLoading": "Загружаем фрагмент…",
@@ -362,10 +361,7 @@
     "suggestions": "Подсказки",
     "submit": "Ответить",
     "skip": "Пропустить",
-    "skipSeconds": "Пропустить (+{seconds} с)",
-    "skipLast": "Пропустить и узнать ответ",
     "giveUp": "Сдаться",
-    "next": "Следующий раунд",
     "toResults": "К итогам",
     "guess": {
       "exact": "Верно",
@@ -373,25 +369,29 @@
       "miss": "Мимо",
       "skip": "Пропуск"
     },
-    "outcome": {
-      "exact": "угадано",
-      "partial": "угадано частично",
-      "miss": "не угадано",
-      "void": "не засчитан",
-      "active": "идёт",
-      "pending": "впереди"
-    },
     "reveal": {
-      "exact": "Угадано с {attempt}-й попытки",
+      "exact": "Угадал с {attempt}-й",
       "partial": "Почти: исполнитель верный",
-      "miss": "Не угадано",
+      "miss": "Не в этот раз",
       "void": "Недоступно — раунд не засчитан",
       "voidText": "Фрагмент этого раунда сейчас недоступен. Раунд не идёт в счёт.",
       "points": "+{points}",
-      "listen": "Слушать отрывок",
       "frameAlt": "Кадр из фильма «{title}»",
       "clueLoading": "Загружаем кадр…",
-      "clueFailed": "Кадр сейчас недоступен"
+      "dialog": "Ответ раунда",
+      "was": "Это был",
+      "attempt": "Попытка",
+      "attemptOf": "{attempt} из {total}",
+      "score": "Очки",
+      "keys": "Пробел или Enter: продолжить",
+      "save": {
+        "music": "В плейлист",
+        "film": "В закладки"
+      },
+      "saveAria": {
+        "music": "Добавить трек в плейлист",
+        "film": "Добавить фильм в закладки"
+      }
     },
     "role": {
       "artist": "Исполнитель",
@@ -435,7 +435,14 @@
       "stagesLabel": "Туры сетки",
       "yourPick": "Ваш выбор",
       "autoPick": "Выбор засчитан автоматически"
-    }
+    },
+    "roundOf": "раунд из {total}",
+    "clear": "Очистить",
+    "tapeSeconds": "{seconds} с",
+    "tapeStep": "{level} из {total}",
+    "skipGain": "+{seconds} с",
+    "skipLastHint": "и узнать ответ",
+    "continue": "Продолжить"
   },
   "results": {
     "title": "Итог",
@@ -477,7 +484,12 @@
       "collection": "Сборник «{title}»"
     },
     "collection": "Сборник",
-    "toCollection": "К сборнику"
+    "toCollection": "К сборнику",
+    "headline": {
+      "exact": "Угадал с {level}-й",
+      "done": "Игра сыграна",
+      "miss": "Не в этот раз"
+    }
   },
   "auth": {
     "signIn": "Войти",

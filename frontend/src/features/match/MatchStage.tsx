@@ -5,7 +5,7 @@
  * чат, ревил. Уровень приходит только после открытия (`level_opened`), исход своего ответа —
  * только в ответе команды; время и очки считает сервер.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Coffee, Flag } from "lucide-react";
 import type { MatchAnswer, RoomState } from "@/shared/api/types";
@@ -49,7 +49,6 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
   const domain = room.mode.domain;
   const [busy, setBusy] = useState(false);
   const [confirmForfeit, setConfirmForfeit] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const clue = useLevelClue(code, room.phase === "level_open" ? match?.clue : null);
   const Clue = clue.data ? clueRegistry[clue.data.kind] : null;
   const format = room.settings.answer_format;
@@ -75,10 +74,6 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
     [run, commands],
   );
   const onSkip = useCallback(() => void run(commands.skip), [run, commands]);
-
-  useEffect(() => {
-    if (myOpen) inputRef.current?.focus({ preventScroll: true });
-  }, [myOpen, match?.round_index, level]);
 
   return (
     <div
@@ -189,7 +184,7 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
                 canSkip={level !== null && level < match.levels_count}
                 onGuess={onGuess}
                 onSkip={onSkip}
-                inputRef={inputRef}
+                focusKey={`${match.round_index}:${level}`}
               />
             ) : (
               <p className="text-ink-muted">{t("match.formatUnsupported")}</p>

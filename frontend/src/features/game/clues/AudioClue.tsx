@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useTranslations, useFormatter } from "next-intl";
-import { Pause, Play } from "lucide-react";
+import { PlayButton } from "@/shared/ui/play-button";
 import { cn } from "@/shared/lib/cn";
 import type { ClueStageProps } from "./types";
 
@@ -66,10 +66,10 @@ export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps)
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-4 py-6",
-        // Чёрная сцена: звук фильма без картинки — экран «погашен», кадр будет в ревиле.
+        "flex flex-col items-center gap-4 py-2",
+        // Чёрная сцена: звук фильма без картинки — экран «погашен», кадр будет в ответе раунда.
         scene === "blackout" &&
-          "aspect-video w-full justify-center rounded-[var(--radius-control)] bg-black text-white ring-1 ring-rule",
+          "aspect-video w-full justify-center rounded-[var(--radius-control)] border-[1.5px] border-rule bg-black text-white",
       )}
       data-scene={scene}
       data-testid="clue-scene"
@@ -81,22 +81,11 @@ export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps)
         onEnded={stop}
         data-testid="clue-audio"
       />
-      <button
-        type="button"
+      <PlayButton
+        playing={playing}
         onClick={toggle}
-        aria-pressed={playing}
-        className="group grid size-28 place-items-center rounded-full bg-[var(--accent)] text-night shadow-[0_10px_0_-3px_var(--accent-deep)] transition-transform active:translate-y-1 sm:size-32"
-      >
-        {playing ? (
-          <Pause className="size-10" aria-hidden />
-        ) : (
-          <Play className="size-10 translate-x-0.5" aria-hidden />
-        )}
-        <span className="sr-only">{playing ? t("game.pause") : label}</span>
-      </button>
-      <p className="tabular font-display text-lg font-semibold" aria-hidden>
-        {label}
-      </p>
+        aria-label={playing ? t("game.pause") : label}
+      />
       {scene === "blackout" && <p className="text-sm text-white/70">{t("game.blackoutHint")}</p>}
     </div>
   );
