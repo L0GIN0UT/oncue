@@ -41,7 +41,7 @@ export function PhaseTimer({ clock, endsAt, totalS, className }: Props) {
         >
           <div
             className={cn(
-              "h-full rounded-full bg-[var(--accent)] transition-[width] duration-1000 ease-linear",
+              "h-full rounded-full bg-music transition-[width] duration-1000 ease-linear",
               seconds <= 5 && "bg-miss",
             )}
             style={{ width: `${fraction * 100}%` }}

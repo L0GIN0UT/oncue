@@ -29,11 +29,11 @@ export function ResultRows({ summary, items }: PresenterProps) {
           <li
             key={r.index}
             data-testid="result-row"
-            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-4 gap-y-1 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
+            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-3 gap-y-1 rounded-[var(--radius-control)] border-[1.5px] border-rule px-3.5 py-2.5"
           >
             <span aria-hidden className={cn("size-3 rounded-full", OUTCOME_TONE[r.outcome])} />
             <div className="min-w-0">
-              <p dir="auto" className="truncate font-medium">
+              <p dir="auto" className="truncate text-[15px] font-medium">
                 {item?.title ?? t("results.unknownItem")}
               </p>
               <p className="truncate text-sm text-ink-muted">
@@ -43,7 +43,7 @@ export function ResultRows({ summary, items }: PresenterProps) {
                   : ""}
               </p>
             </div>
-            <span className="tabular font-display text-lg font-semibold">+{r.points}</span>
+            <span className="tabular font-display text-base font-semibold">+{r.points}</span>
             {r.media_item_id ? (
               <SaveButton mediaItemId={r.media_item_id} domain={item?.domain} source="results" />
             ) : (
@@ -53,7 +53,7 @@ export function ResultRows({ summary, items }: PresenterProps) {
               <div className="col-span-4 col-start-1 mt-1 flex items-center gap-3 text-xs text-ink-muted sm:col-span-3 sm:col-start-2">
                 <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-rule">
                   <span
-                    className="block h-full rounded-full bg-[var(--accent)]"
+                    className="block h-full rounded-full bg-music"
                     style={{ width: `${Math.round(r.exact_pct)}%` }}
                   />
                 </span>
@@ -82,8 +82,8 @@ export function RecordBadge({
   return (
     <p
       className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full px-4 py-2 text-sm ring-1 ring-inset",
-        record.is_new ? "bg-[var(--accent)] text-night ring-transparent" : "ring-rule",
+        "flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-[var(--radius-control)] border-[1.5px] px-4 py-2 text-sm",
+        record.is_new ? "border-music bg-music text-night" : "border-rule",
       )}
       data-testid="record"
     >

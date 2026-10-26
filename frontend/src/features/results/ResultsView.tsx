@@ -1,8 +1,10 @@
 "use client";
 /**
- * Итог сессии (через bff, личный блок — CSR). Главная цифра и разбор — по `presentation`
- * (реестр презентеров: очки, серия, чемпион сетки, D12), затем «Поделиться» (текст тоже по
- * `presentation`), «Другие режимы», у гостя — предложение войти.
+ * Итог сессии карточкой в виде модалки (через bff, личный блок — CSR). Оверлея нет: меню шапки
+ * остаётся доступным (с главной пройденного дейлика сюда ведёт редирект). Цветная шапка («Угадал с N-й» янтарная,
+ * «Не в этот раз» серая), главная цифра и разбор — по `presentation` (реестр презентеров: очки,
+ * серия, чемпион сетки, D12), «Поделиться» (текст тоже по `presentation`), «Другие режимы», у гостя —
+ * предложение войти. Прямая ссылка `/results/[sessionId]` выглядит так же.
  *
  * Сессия по сборнику (этап 3b, D7): `collection` итога game → название сборника в заголовке и в
  * шэре, ссылка шэра и «Сыграть ещё» ведут на страницу сборника.
@@ -17,6 +19,7 @@ import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
 import type { ItemCard, ResultsPage } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useSessionInfo } from "@/features/auth/session";
@@ -122,51 +125,84 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
     else if (outcome === "failed") toast(t("results.shareFailed"));
   };
 
+  const first = summary.rounds.length === 1 ? summary.rounds[0] : null;
+  const won =
+    first?.outcome === "exact" ||
+    (first === null &&
+      (summary.score > 0 ||
+        summary.rounds.some((r) => r.outcome === "exact") ||
+        !!summary.bracket));
+  const headline =
+    first?.outcome === "exact"
+      ? t("results.headline.exact", { level: first.level ?? 1 })
+      : won
+        ? t("results.headline.done")
+        : t("results.headline.miss");
+
   return (
-    <div data-domain={domain} className="flex flex-col gap-10 pt-6 sm:pt-10">
-      <header className="flex flex-col items-start gap-3">
-        <p className="text-[var(--accent)]">{modeTitle}</p>
-        {collection?.title && (
-          <p className="text-ink-muted" data-testid="results-collection">
-            {t("results.collection")}{" "}
-            <Link
-              href={`/collections/${collection.id}`}
-              dir="auto"
-              className="text-ink underline-offset-4 hover:underline"
-            >
-              {collection.title}
-            </Link>
-          </p>
+    <section
+      aria-label={t("results.title")}
+      data-testid="results"
+      className="mx-auto mt-2 w-full max-w-[440px] animate-modal-in overflow-hidden rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage"
+    >
+      <div
+        data-domain={domain}
+        className={cn(
+          "px-5 py-4 text-center font-display text-lg font-extrabold",
+          won ? "bg-music text-night" : "bg-rule text-ink",
         )}
+      >
+        {headline}
+      </div>
+      <div className="flex flex-col gap-4 p-5">
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-sm text-ink-muted">{modeTitle}</p>
+          {collection?.title && (
+            <p className="text-sm text-ink-muted" data-testid="results-collection">
+              {t("results.collection")}{" "}
+              <Link
+                href={`/collections/${collection.id}`}
+                dir="auto"
+                className="text-ink underline-offset-4 hover:underline"
+              >
+                {collection.title}
+              </Link>
+            </p>
+          )}
+        </div>
         <Header summary={summary} items={items} modeTitle={modeTitle} />
-      </header>
 
-      <Body summary={summary} items={items} modeTitle={modeTitle} />
+        <Body summary={summary} items={items} modeTitle={modeTitle} />
 
-      <div className="flex flex-wrap gap-3">
-        <Button size="lg" onClick={onShare} data-testid="share">
-          <Share2 aria-hidden />
-          {t("results.share")}
-        </Button>
-        {collection ? (
-          <Button asChild size="lg" variant="secondary">
-            <Link href={`/collections/${collection.id}`}>{t("results.toCollection")}</Link>
+        <div className="flex gap-2.5">
+          <Button
+            size="lg"
+            variant="secondary"
+            className="h-[52px] flex-1"
+            onClick={onShare}
+            data-testid="share"
+          >
+            <Share2 aria-hidden />
+            {t("results.share")}
           </Button>
-        ) : (
-          <Button asChild size="lg" variant="secondary">
-            <Link href="/solo">{t("results.random")}</Link>
+          <Button asChild size="lg" className="h-[52px] flex-1">
+            {collection ? (
+              <Link href={`/collections/${collection.id}`}>{t("results.toCollection")}</Link>
+            ) : (
+              <Link href="/solo">{t("results.random")}</Link>
+            )}
           </Button>
+        </div>
+
+        {isGuest && (
+          <aside className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule p-4">
+            <p className="text-sm text-ink-muted">{t("results.guestPrompt")}</p>
+            <Button asChild variant="secondary" size="sm" className="self-start">
+              <Link href="/login">{t("results.guestAction")}</Link>
+            </Button>
+          </aside>
         )}
       </div>
-
-      {isGuest && (
-        <aside className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule sm:flex-row sm:items-center sm:justify-between">
-          <p className="max-w-[48ch] text-ink-muted">{t("results.guestPrompt")}</p>
-          <Button asChild variant="secondary">
-            <Link href="/login">{t("results.guestAction")}</Link>
-          </Button>
-        </aside>
-      )}
-    </div>
+    </section>
   );
 }

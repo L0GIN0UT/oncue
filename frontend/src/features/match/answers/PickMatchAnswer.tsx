@@ -32,7 +32,7 @@ export function PickMatchAnswer({ me, disabled, onGuess }: MatchAnswerProps) {
   }, [disabled, onGuess, options]);
 
   return (
-    <ul className="grid gap-3 sm:grid-cols-2" aria-label={t("game.optionsLabel")}>
+    <ul className="grid gap-2.5" aria-label={t("game.optionsLabel")}>
       {options.map((option, i) => (
         <li key={option.option_id}>
           <button
@@ -41,15 +41,15 @@ export function PickMatchAnswer({ me, disabled, onGuess }: MatchAnswerProps) {
             onClick={() => onGuess({ option_id: option.option_id })}
             data-testid={`match-option-${i}`}
             aria-keyshortcuts={String(i + 1)}
-            className="flex w-full items-baseline gap-3 rounded-[var(--radius-control)] bg-stage-raised p-4 text-left ring-1 ring-rule ring-inset hover:ring-2 hover:ring-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45"
+            className="flex min-h-[68px] w-full items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-2 text-left transition-colors hover:border-rule-strong disabled:pointer-events-none disabled:opacity-45"
           >
             <kbd
               aria-hidden
-              className="tabular rounded-md bg-night px-2 py-0.5 text-sm text-ink-muted ring-1 ring-rule"
+              className="tabular rounded-md border-[1.5px] border-rule px-2 py-0.5 text-sm text-ink-muted"
             >
               {i + 1}
             </kbd>
-            <span className="font-display text-lg font-semibold" dir="auto">
+            <span className="font-display text-base font-medium" dir="auto">
               {option.title ??
                 (option.label_key ? dt(option.label_key, option.option_id) : option.option_id)}
             </span>

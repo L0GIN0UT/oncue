@@ -25,7 +25,7 @@ function PlotBlock({ block }: BlockProps<"plot">) {
 
 function TaglineBlock({ block }: BlockProps<"tagline">) {
   return (
-    <blockquote className="border-l-4 border-[var(--accent)] pl-4 font-display text-2xl leading-snug font-semibold text-balance">
+    <blockquote className="border-l-4 border-music pl-4 font-display text-2xl leading-snug font-semibold text-balance">
       «{block.text}»
     </blockquote>
   );

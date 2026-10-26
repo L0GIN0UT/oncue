@@ -51,6 +51,12 @@ export const test = base.extend<Fixtures>({
   },
   expectAccessible: async ({}, use) => {
     await use(async (page) => {
+      // Появление модалки и строк идёт с прозрачностью: axe считает контраст по конечному виду.
+      await page.waitForFunction(() =>
+        document
+          .getAnimations()
+          .every((a) => a.effect?.getTiming().iterations === Infinity || a.playState !== "running"),
+      );
       const { violations } = await new AxeBuilder({ page }).analyze();
       const serious = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
       expect(
@@ -100,10 +106,16 @@ export async function playUntilResults(page: Page, action: Locator, maxSteps = 8
       await next.click();
       continue;
     }
-    await Promise.all([
-      page.waitForResponse((r) => isMove(r.url(), r.request().method())),
-      action.first().click(),
-    ]);
+    // Состояние могло уйти вперёд между проверкой и кликом (ответ показан модалкой, итог открыт):
+    // тогда клик не находит кнопку — перечитываем состояние, а не ждём таймаут теста.
+    const moved = page.waitForResponse((r) => isMove(r.url(), r.request().method()));
+    moved.catch(() => {});
+    try {
+      await action.first().click({ timeout: 3_000 });
+    } catch {
+      continue;
+    }
+    await moved;
   }
   throw new Error(`сессия не дошла до итога за ${maxSteps} шагов`);
 }
@@ -115,7 +127,7 @@ export const pickButton = (page: Page) => page.locator("[data-testid^=pick-optio
 export async function giveUpRemaining(page: Page): Promise<void> {
   for (;;) {
     const toResults = page.getByRole("button", { name: "К итогам" });
-    const next = page.getByRole("button", { name: "Следующий раунд" });
+    const next = page.getByRole("button", { name: "Продолжить" });
     const giveUp = page.locator("[data-testid=give-up]:enabled");
     await expect(toResults.or(next).or(giveUp).first()).toBeVisible();
     if (await toResults.isVisible()) {

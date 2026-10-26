@@ -70,7 +70,9 @@ test("игрок: лайк и избранное, 5 раундов, сохран
   await expect(page).toHaveURL(/\/play\/s\//);
   // Режим-шаблон найден в `GET /v1/modes?kind=collection`: название и лента уровней из конфига.
   await expect(page.getByText("Сборник по кадрам", { exact: true })).toBeVisible();
-  await expect(page.getByRole("list", { name: "Подсказки: открыт уровень 1 из 6" })).toBeVisible();
+  await expect(
+    page.getByRole("progressbar", { name: "Подсказки: открыт уровень 1 из 6" }),
+  ).toBeVisible();
 
   // Ревил: «Сохранить → Смотреть позже».
   const [move] = await Promise.all([

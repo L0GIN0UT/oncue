@@ -11,12 +11,15 @@ function BracketHeader({ summary }: PresenterProps) {
   const t = useTranslations();
   const champion = summary.bracket?.champion ?? null;
   return (
-    <div className="flex items-center gap-4" data-testid="final-score">
-      <Crown aria-hidden className="size-14 shrink-0 text-[var(--accent)] sm:size-16" />
-      <div className="flex flex-col gap-1">
-        <p className="text-lg font-semibold text-ink-muted">{t("results.championLabel")}</p>
+    <div
+      className="flex items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule p-4"
+      data-testid="final-score"
+    >
+      <Crown aria-hidden className="size-8 shrink-0 text-music" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="text-[13px] text-ink-muted">{t("results.championLabel")}</p>
         <h1
-          className="font-display text-4xl leading-tight font-bold text-balance sm:text-6xl"
+          className="font-display text-xl leading-tight font-medium text-balance"
           data-testid="bracket-champion"
         >
           {champion ?? t("results.unknownItem")}
@@ -44,18 +47,18 @@ function BracketBody(props: PresenterProps) {
     return t(key, values);
   };
   return (
-    <div className="flex flex-col gap-6" data-testid="bracket-picks">
+    <div className="flex flex-col gap-4" data-testid="bracket-picks">
       {picksByStage(picks).map(([stage, group]) => (
         <section key={stage} className="flex flex-col gap-2" aria-labelledby={`stage-${stage}`}>
-          <h2 id={`stage-${stage}`} className="font-display text-lg font-semibold">
+          <h2 id={`stage-${stage}`} className="font-display text-base font-semibold">
             {label(stage)}
           </h2>
-          <ol className="grid gap-2 sm:grid-cols-2">
+          <ol className="grid gap-2">
             {group.map((p, i) => (
               <li
                 key={`${stage}-${i}`}
                 data-testid="bracket-pick"
-                className="flex flex-col rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
+                className="flex flex-col rounded-[var(--radius-control)] border-[1.5px] border-rule px-4 py-3"
               >
                 <span className="font-medium">{p.winner}</span>
                 <span className="text-sm text-ink-muted">
