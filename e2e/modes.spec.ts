@@ -93,8 +93,13 @@ const pickOption = (page: Page) => page.locator("[data-testid^=pick-option-]:ena
 
 // ----------------------------------------------------------------------------- сценарии
 test("каталог: карточки новых режимов и недельная сетка среди «дня»", async ({ page }) => {
-  await page.goto("/solo");
+  // Витрина: домен — переключатель, тип режима — вкладка, строка режима раскрывается по клику.
+  const tabs: Record<string, string> = { random: "Быстрые", marathon: "Марафоны", pair: "Пары" };
   for (const key of [MARATHON, "music.marathon.artist", PAIR, "music.pair.popularity", DESCRIPTION, BLACKOUT, SOUNDTRACK]) {
+    const [domain, source] = key.split(".");
+    await page.goto("/solo");
+    await page.getByRole("radio", { name: domain === "film" ? "Кино" : "Музыка" }).click();
+    await page.getByRole("tab", { name: tabs[source!]! }).click();
     await expect(page.getByTestId(`mode-card-${key}`), key).toBeVisible();
   }
 });
