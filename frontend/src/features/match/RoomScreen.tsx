@@ -140,8 +140,8 @@ function RoomPreview({
       data-testid="room-preview"
     >
       <header className="flex flex-col gap-2">
-        <p className="text-[var(--accent)]">{modeTitle(room.mode)}</p>
-        <h1 className="font-display text-3xl font-bold">
+        <p className="text-sm text-ink-muted">{modeTitle(room.mode)}</p>
+        <h1 className="font-display text-[28px] leading-[1.1] font-extrabold tracking-tight">
           {t("match.preview.title", { code: room.code })}
         </h1>
         <p className="text-ink-muted">
@@ -279,11 +279,11 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
   const names = new Map(room.players.map((p) => [p.user_id, p.nickname]));
 
   return (
-    <div className="flex flex-col gap-6 pt-4 sm:pt-8">
+    <div className="flex flex-col gap-6 pt-2">
       {status.offline && (
         <div
           role="alert"
-          className="flex items-center gap-3 rounded-[var(--radius-control)] bg-miss/15 px-4 py-3 text-miss ring-1 ring-miss/40"
+          className="flex items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-miss-line bg-miss-fill px-4 py-3"
           data-testid="offline-banner"
         >
           <WifiOff className="size-5 shrink-0" aria-hidden />

@@ -1,7 +1,8 @@
 "use client";
 /**
- * Игроки комнаты: ник, хост, присутствие («Отключён», «Отошёл»), в матче — статус раунда
- * («Думает / Ответил / Мимо / Угадал») и очки. Текста чужих ответов здесь нет и быть не может:
+ * Игроки комнаты местами (по макету Room): аватар, ник, хост, присутствие («Отключён», «Отошёл»),
+ * в лобби — готовность, в матче — статус раунда («Думает / Ответил / Мимо / Угадал») и очки.
+ * Свободные места лобби — пунктирные плашки. Текста чужих ответов здесь нет и быть не может:
  * сервер отдаёт только статус (античит §12). Последняя эмоция игрока — пузырь у его места.
  */
 import { useTranslations } from "next-intl";
@@ -14,10 +15,10 @@ import { PlayerBadge } from "@/features/cosmetics/PlayerBadge";
 import type { FeedItem } from "./room-store";
 
 const STATUS_STYLE = {
-  thinking: "bg-stage-raised text-ink-muted ring-1 ring-rule ring-inset",
-  answered: "bg-partial/20 text-partial",
-  missed: "bg-miss/20 text-miss",
-  guessed: "bg-exact/20 text-exact",
+  thinking: "border-rule text-ink-muted",
+  answered: "border-partial-line bg-partial-fill text-ink",
+  missed: "border-miss-line bg-miss-fill text-ink",
+  guessed: "border-exact-line bg-exact-fill text-ink",
 } as const;
 
 type Props = {
@@ -27,18 +28,21 @@ type Props = {
   /** Последняя эмоция или фраза каждого игрока (уже отфильтрована по свежести). */
   bubbles?: Map<string, FeedItem>;
   showReady?: boolean;
+  /** Мест в комнате: недостающие рисуются пунктирными «свободно» (лобби). */
+  seats?: number;
 };
 
-export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }: Props) {
+export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady, seats }: Props) {
   const t = useTranslations();
   const dt = useDynamicT();
   const byUser = new Map((matchPlayers ?? []).map((p) => [p.user_id, p]));
   const sorted = [...players].sort((a, b) => a.slot - b.slot);
   // Оформление необязательно: нет ответа или отказ — ник без аватара и рамки.
   const appearances = usePlayersAppearance(players.map((p) => p.user_id));
+  const free = Math.max(0, (seats ?? 0) - players.filter((p) => p.presence !== "left").length);
   return (
     <ul
-      className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      className="grid gap-2.5 sm:grid-cols-2"
       aria-label={t("match.players")}
       data-testid="players"
     >
@@ -51,8 +55,8 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
             key={p.user_id}
             data-testid={`player-${p.nickname}`}
             className={cn(
-              "relative flex items-center gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-rule",
-              p.user_id === myId && "ring-[var(--accent)]",
+              "relative flex min-h-[60px] items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] bg-stage px-4 py-2",
+              p.user_id === myId ? "border-music" : "border-rule",
               gone && "opacity-60",
             )}
           >
@@ -63,10 +67,7 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
                 suffix={
                   <>
                     {p.is_host && (
-                      <Crown
-                        className="size-4 shrink-0 text-[var(--color-music)]"
-                        aria-label={t("match.host")}
-                      />
+                      <Crown className="size-4 shrink-0 text-music" aria-label={t("match.host")} />
                     )}
                     {p.user_id === myId && (
                       <span className="text-sm text-ink-faint">{t("match.you")}</span>
@@ -74,7 +75,7 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
                   </>
                 }
               />
-              <span className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+              <span className="flex flex-wrap items-center gap-2 pl-[52px] text-xs text-ink-muted empty:hidden">
                 {p.presence === "disconnected" && (
                   <span
                     className="flex items-center gap-1 text-miss"
@@ -86,17 +87,20 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
                 )}
                 {p.presence === "left" && <span>{t("match.presence.left")}</span>}
                 {p.away && p.presence === "online" && <span>{t("match.away")}</span>}
-                {showReady && p.presence === "online" && (
-                  <span data-testid="ready-state" className={p.ready ? "text-exact" : undefined}>
-                    {p.ready ? t("match.lobby.ready") : t("match.lobby.notReady")}
-                  </span>
-                )}
               </span>
             </div>
+            {showReady && p.presence === "online" && (
+              <span
+                data-testid="ready-state"
+                className={cn("text-[13px] lowercase", p.ready ? "text-exact" : "text-ink-muted")}
+              >
+                {p.ready ? t("match.lobby.ready") : t("match.lobby.notReady")}
+              </span>
+            )}
             {mp?.status && (
               <span
                 className={cn(
-                  "rounded-full px-2.5 py-1 text-xs font-medium",
+                  "rounded-full border-[1.5px] px-2.5 py-0.5 text-xs font-medium",
                   STATUS_STYLE[mp.status],
                 )}
                 data-testid="player-status"
@@ -117,7 +121,7 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
             {bubble && (
               <span
                 role="status"
-                className="absolute -top-3 right-3 max-w-[80%] truncate rounded-full bg-ink px-2.5 py-0.5 text-xs font-medium text-night shadow"
+                className="absolute -top-3 right-3 max-w-[80%] truncate rounded-full bg-ink px-2.5 py-0.5 text-xs font-medium text-night"
                 data-testid="emote-bubble"
               >
                 {feedText(bubble, dt)}
@@ -126,6 +130,15 @@ export function PlayersRail({ players, matchPlayers, myId, bubbles, showReady }:
           </li>
         );
       })}
+      {Array.from({ length: free }, (_, i) => (
+        <li
+          key={`free-${i}`}
+          aria-hidden
+          className="grid min-h-[60px] place-items-center rounded-[var(--radius-control)] border-[1.5px] border-dashed border-rule text-sm text-ink-muted"
+        >
+          {t("match.lobby.free")}
+        </li>
+      ))}
     </ul>
   );
 }

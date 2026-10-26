@@ -17,11 +17,13 @@ export function AttemptRows({
   guesses,
   levelsCount,
   active,
+  testId = "attempts",
 }: {
   guesses: GuessOut[];
   levelsCount: number;
   /** Раунд идёт: следующая после сделанных строка — текущая попытка. */
   active: boolean;
+  testId?: string;
 }) {
   const t = useTranslations();
   const [initial] = useState(guesses.length);
@@ -29,7 +31,7 @@ export function AttemptRows({
     <div
       role="list"
       aria-label={t("game.historyLabel")}
-      data-testid="attempts"
+      data-testid={testId}
       className="flex flex-col gap-2.5"
     >
       {Array.from({ length: levelsCount }, (_, i) => {

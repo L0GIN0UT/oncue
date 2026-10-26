@@ -121,8 +121,11 @@ function Headline({
   else line = t("match.summary.place", { place: mine.place });
   return (
     <header className="flex flex-col gap-2 pt-2">
-      {summary && <p className="text-[var(--accent)]">{modeTitle(summary.mode)}</p>}
-      <h1 className="font-display text-3xl font-bold sm:text-4xl" data-testid="summary-headline">
+      {summary && <p className="text-sm text-ink-muted">{modeTitle(summary.mode)}</p>}
+      <h1
+        className="font-display text-[28px] leading-[1.1] font-extrabold tracking-tight"
+        data-testid="summary-headline"
+      >
         {line}
       </h1>
       {mine && (
@@ -155,12 +158,12 @@ function Standings({
         <li
           key={p.user_id}
           className={cn(
-            "flex items-center gap-4 rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-rule",
-            p.user_id === myId && "ring-[var(--accent)]",
+            "flex min-h-[60px] items-center gap-4 rounded-[var(--radius-control)] border-[1.5px] bg-stage px-4 py-2",
+            p.user_id === myId ? "border-music" : "border-rule",
           )}
           data-testid={`standing-${p.nickname}`}
         >
-          <span className="tabular w-8 font-display text-2xl font-bold text-[var(--accent)]">
+          <span className="tabular w-8 font-display text-2xl font-extrabold text-music">
             {p.place}
           </span>
           <PlayerBadge
@@ -176,7 +179,7 @@ function Standings({
               {t(`online.finish.${p.finish}`)}
             </span>
           )}
-          <span className="tabular font-display text-xl font-semibold">{p.score}</span>
+          <span className="tabular font-display text-base font-semibold">{p.score}</span>
         </li>
       ))}
     </ol>
@@ -196,17 +199,17 @@ function Rounds({
   const names = new Map(summary.players.map((p) => [p.user_id, p.nickname]));
   return (
     <section aria-labelledby="summary-rounds" className="flex flex-col gap-3">
-      <h2 id="summary-rounds" className="font-display text-xl font-semibold">
+      <h2 id="summary-rounds" className="font-display text-base font-semibold">
         {t("match.summary.rounds")}
       </h2>
-      <ol className="flex flex-col divide-y divide-rule rounded-[var(--radius-ticket)] bg-stage ring-1 ring-rule">
+      <ol className="flex flex-col gap-2">
         {summary.rounds.map((r) => {
           const item = items.get(r.media_item_id);
           const winners = r.results.filter((x) => x.level !== null);
           return (
             <li
               key={r.index}
-              className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4"
+              className="flex min-h-[68px] flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-2"
               data-testid={`summary-round-${r.index}`}
             >
               <span className="tabular w-6 text-ink-faint">{r.index + 1}</span>
@@ -272,7 +275,7 @@ function RateOpponents({
 
   return (
     <section aria-labelledby="summary-rate" className="flex flex-col gap-3">
-      <h2 id="summary-rate" className="font-display text-xl font-semibold">
+      <h2 id="summary-rate" className="font-display text-base font-semibold">
         {t("match.rate.title")}
       </h2>
       <ul className="flex flex-col gap-2">

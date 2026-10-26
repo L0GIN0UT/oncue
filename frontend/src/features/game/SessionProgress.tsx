@@ -20,7 +20,7 @@ export function SessionProgress({ rounds, round }: { rounds: RoundOut[]; round: 
       {lives !== null && lives !== undefined && (
         <p className="flex items-center gap-2" data-testid="lives">
           <span className="text-sm text-ink-muted">{t("game.lives")}</span>
-          <span aria-hidden className="flex gap-1 text-[var(--accent)]">
+          <span aria-hidden className="flex gap-1 text-music">
             {Array.from({ length: Math.min(lives, 10) }, (_, i) => (
               <Heart key={i} className="size-4 fill-current" />
             ))}
@@ -30,7 +30,7 @@ export function SessionProgress({ rounds, round }: { rounds: RoundOut[]; round: 
       )}
       {streak !== null && streak !== undefined && (
         <p className="flex items-center gap-2" data-testid="streak">
-          <Flame aria-hidden className="size-4 text-[var(--accent)]" />
+          <Flame aria-hidden className="size-4 text-music" />
           <span className="text-sm text-ink-muted">{t("game.streak")}</span>
           <span className="tabular font-display text-lg font-semibold">{streak}</span>
         </p>
@@ -67,9 +67,9 @@ export function BracketProgress({ rounds, round }: { rounds: RoundOut[]; round: 
             key={s}
             aria-current={s === stage ? "step" : undefined}
             className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs ring-1 ring-rule ring-inset",
+              "rounded-full border-[1.5px] border-rule px-2.5 py-0.5 text-xs",
               s === stage
-                ? "bg-[var(--accent)] text-night ring-transparent"
+                ? "border-music bg-music text-night"
                 : s > stage
                   ? "text-ink-muted line-through decoration-rule"
                   : "text-ink-muted",

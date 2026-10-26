@@ -67,7 +67,7 @@ function ReferenceCard({ item }: { item: ShownItem }) {
   const t = useTranslations();
   return (
     <article
-      className="flex flex-wrap items-center gap-5 rounded-[var(--radius-control)] bg-night p-4 ring-1 ring-rule"
+      className="flex flex-wrap items-center gap-5 rounded-[var(--radius-control)] border-[1.5px] border-rule p-4"
       data-testid="shown-item"
     >
       {item.clue && <ShownMedia clue={item.clue} title={item.title} className="w-40" />}
@@ -110,7 +110,7 @@ function OptionButton({
       data-testid={`pick-option-${option.option_id}`}
       aria-keyshortcuts={String(index + 1)}
       className={cn(
-        "group flex w-full flex-col overflow-hidden rounded-[var(--radius-control)] bg-stage-raised text-left ring-1 ring-rule transition-[transform,box-shadow] ring-inset hover:ring-2 hover:ring-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none active:translate-y-px disabled:pointer-events-none disabled:opacity-45 motion-reduce:transition-none",
+        "group flex w-full flex-col overflow-hidden rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage text-left transition-colors hover:border-rule-strong active:translate-y-px disabled:pointer-events-none disabled:opacity-45 motion-reduce:transition-none",
         !media && "items-center justify-center",
       )}
     >
@@ -118,7 +118,7 @@ function OptionButton({
       <span className={cn("flex items-baseline gap-3 p-4", !media && "py-5")}>
         <kbd
           aria-hidden
-          className="tabular rounded-md bg-night px-2 py-0.5 font-mono text-sm text-ink-muted ring-1 ring-rule"
+          className="tabular rounded-md border-[1.5px] border-rule px-2 py-0.5 font-mono text-sm text-ink-muted"
         >
           {index + 1}
         </kbd>
