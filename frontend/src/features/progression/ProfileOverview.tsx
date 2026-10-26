@@ -321,12 +321,7 @@ function BadgesBlock({ badges }: { badges: BadgeCard[] }) {
       {badges.map((b) => {
         const unlocked = b.unlocked_at !== null && b.unlocked_at !== undefined;
         return (
-          <li
-            key={b.key}
-            data-testid={`badge-${b.key}`}
-            data-unlocked={unlocked}
-            className={cn(ROW, !unlocked && "opacity-80")}
-          >
+          <li key={b.key} data-testid={`badge-${b.key}`} data-unlocked={unlocked} className={ROW}>
             <span dir="auto" className="font-medium">
               {b.title}
             </span>

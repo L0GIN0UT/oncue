@@ -137,7 +137,7 @@ export function CatalogView({ openId = null }: { openId?: string | null }) {
 function MineTile({ isUser }: { isUser: boolean }) {
   const t = useTranslations();
   const mine = useQuery({
-    queryKey: collectionKeys.mine,
+    queryKey: [...collectionKeys.mine, "preview"],
     queryFn: () => fetchMyCollections(null),
     enabled: isUser,
   });

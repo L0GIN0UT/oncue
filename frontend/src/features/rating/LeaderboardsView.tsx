@@ -312,7 +312,9 @@ function MyPlace({ entry, ladder }: { entry: LeaderboardEntry; ladder: string | 
         <span className="tabular font-display text-[28px] font-extrabold tracking-[-0.03em]">
           {entry.rating}
         </span>
-        <TierBadge tier={tierKeyOf(entry.tier.family)}>{tierLabel(entry.tier)}</TierBadge>
+        <TierBadge tier={tierKeyOf(entry.tier.family)} className="text-black">
+          {tierLabel(entry.tier)}
+        </TierBadge>
       </div>
       <ListRow trailing={entry.matches_played}>{t("rating.board.colMatches")}</ListRow>
     </Tile>
@@ -389,7 +391,9 @@ function BoardTable({
                 </span>
               </span>
               <span role="cell">
-                <TierBadge tier={tierKeyOf(r.tier.family)}>{tierLabel(r.tier)}</TierBadge>
+                <TierBadge tier={tierKeyOf(r.tier.family)} className="text-black">
+                  {tierLabel(r.tier)}
+                </TierBadge>
               </span>
               <span role="cell" className="tabular text-right font-display text-sm font-extrabold">
                 {r.rating}

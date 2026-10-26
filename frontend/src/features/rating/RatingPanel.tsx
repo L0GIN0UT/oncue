@@ -72,7 +72,9 @@ function RatingBody({ rating, season }: { rating: RatingCard; season: SeasonCard
               </span>
             )}
             <span data-testid="tier">
-              <TierBadge tier={tierKeyOf(rating.tier.family)}>{tierLabel(rating.tier)}</TierBadge>
+              <TierBadge tier={tierKeyOf(rating.tier.family)} className="text-black">
+                {tierLabel(rating.tier)}
+              </TierBadge>
             </span>
           </div>
           {rating.place != null && (

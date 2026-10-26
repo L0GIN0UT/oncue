@@ -28,13 +28,16 @@ const ROUTES = [
   "/notifications",
   "/login",
   "/events/winter",
+  "/collections/00000000-0000-4000-a000-000000000001",
+  "/#notifications",
 ];
 const VIEWPORTS = [
   { width: 1280, height: 900 },
   { width: 390, height: 844 },
 ] as const;
 
-const slug = (route: string) => (route === "/" ? "home" : route.slice(1).replaceAll("/", "-"));
+const slug = (route: string) =>
+  route === "/" ? "home" : route.slice(1).replaceAll("/", "-").replace("#", "-").replace(/^-/, "");
 
 function start(command: string, args: string[], env: Record<string, string>): ChildProcess {
   return spawn(command, args, {
@@ -101,8 +104,14 @@ async function main() {
       await page.getByRole("button", { name: "Войти" }).click();
       await page.getByTestId("user-name").waitFor({ state: "attached" });
       for (const route of routes) {
-        await page.goto(route);
+        // «#notifications» — панель под колокольчиком поверх главной.
+        await page.goto(route.replace("#notifications", ""));
         await page.waitForLoadState("networkidle");
+        if (route.endsWith("#notifications")) {
+          await page.getByTestId("notification-bell").click();
+          await page.getByTestId("notifications-panel").waitFor();
+          await page.getByTestId("notification-item").first().waitFor();
+        }
         const file = path.join(OUT, `${slug(route)}-${viewport.width}.png`);
         await page.screenshot({ path: file, fullPage: true });
         console.log(`снимок: ${path.relative(process.cwd(), file)}`);

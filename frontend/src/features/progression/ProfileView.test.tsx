@@ -40,7 +40,6 @@ describe("ProfileView", () => {
   });
 
   it("5b: ник и «Своя аватарка» в плитке «Внешность»; блоки 5b недоступны — профиль цел", async () => {
-    const user = userEvent.setup();
     signInAsUser();
     const view = renderWithProviders(<ProfileView />);
     expect(await screen.findByTestId("player-nickname")).toHaveTextContent("player");
@@ -72,7 +71,6 @@ describe("ProfileView", () => {
   });
 
   it("«Лидеры» ведут к таблице лидеров, «Добавить» — к разделу друзей", async () => {
-    const user = userEvent.setup();
     server.use(
       http.get("*/api/web/v1/pages/online", () => HttpResponse.json({ status: "ok", blocks: {} })),
     );

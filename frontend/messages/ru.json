@@ -1310,7 +1310,6 @@
     "unavailable": "Рейтинг сейчас недоступен.",
     "calibration": "Калибровка: осталось {count, plural, one {# матч} few {# матча} many {# матчей} other {# матча}}",
     "calibrationHint": "Звание появится после калибровочных матчей.",
-    "points": "{rating} очк.",
     "place": "Место {place}",
     "toNext": "До следующего звания: {points, plural, one {# очко} few {# очка} many {# очков} other {# очка}}",
     "topTier": "Высшее звание",

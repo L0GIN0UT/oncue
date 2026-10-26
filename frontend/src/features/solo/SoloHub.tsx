@@ -381,6 +381,9 @@ function ModeCardTile({
       {open && (
         <div id={bodyId} className="flex animate-rise flex-col gap-3 pt-1">
           {description && <p className="text-[15px] leading-normal text-ink-soft">{description}</p>}
+          {!subject && mode.presentation === "score" && (
+            <p className="text-[13px] text-ink-muted">{t("solo.rounds", { count: mode.rounds })}</p>
+          )}
           {record?.percentile != null && (
             <p className="text-[13px] text-ink-muted">
               {t("records.percentile", { pct: Math.round(record.percentile) })}

@@ -1,10 +1,7 @@
 import { expect, giveUpButton, playUntilResults, test } from "./fixtures";
 import { openSoloMode } from "./hubs";
 
-test("витрина /solo: фильтр видов, сетка недели плиткой", async ({
-  page,
-  expectAccessible,
-}) => {
+test("витрина /solo: фильтр видов, сетка недели плиткой", async ({ page, expectAccessible }) => {
   for (const key of [
     "film.marathon.director",
     "music.marathon.artist",
