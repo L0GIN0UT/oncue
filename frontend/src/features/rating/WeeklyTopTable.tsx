@@ -1,7 +1,8 @@
 "use client";
-/** Топ недели ladder-а: прирост рейтинга с понедельника (ADR 0039); моя строка выделена. */
+/** Топ недели раздела: прирост рейтинга с понедельника (ADR 0039); моя строка выделена. */
 import { useFormatter, useTranslations } from "next-intl";
 import type { WeeklyTop } from "@/shared/api/types";
+import { Avatar } from "@/shared/ui/avatar";
 import { cn } from "@/shared/lib/cn";
 import { signedDelta } from "./logic";
 import { useLadderLabel } from "./labels";
@@ -28,44 +29,55 @@ export function WeeklyTopTable({
     month: "long",
   });
   return (
-    <div className="flex flex-col gap-2" data-testid={`weekly-${top.ladder}`}>
-      <Heading className="font-display text-lg font-semibold">
+    <div className="flex flex-col gap-2.5" data-testid={`weekly-${top.ladder}`}>
+      <Heading className="px-0.5 font-semibold">
         {t("rating.board.weekly")} · {ladderLabel(top.ladder)}
       </Heading>
-      <p className="text-sm text-ink-muted">{t("rating.board.weeklyLead", { date: since })}</p>
+      <p className="px-0.5 text-sm text-ink-muted">
+        {t("rating.board.weeklyLead", { date: since })}
+      </p>
       {rows.length === 0 ? (
         <p className="text-ink-muted">{t("rating.board.weeklyEmpty")}</p>
       ) : (
-        <ol className="flex flex-col divide-y divide-rule rounded-[var(--radius-ticket)] bg-stage ring-1 ring-rule">
-          {rows.map((r) => (
-            <li
-              key={r.user_id}
-              className={cn(
-                "flex items-center gap-4 px-4 py-3",
-                r.user_id === top.me?.user_id && "bg-stage-raised",
-              )}
-              data-testid={`weekly-row-${r.place}`}
-              value={r.place}
-            >
-              <span className="tabular w-8 font-display text-lg font-bold text-[var(--accent)]">
-                {r.place}
-              </span>
-              <span className="min-w-0 flex-1 truncate" dir="auto">
-                {r.nickname}
-                {r.user_id === top.me?.user_id && (
-                  <span className="text-sm text-ink-faint"> ({t("rating.board.you")})</span>
-                )}
-              </span>
-              <span
+        <ol className="flex flex-col gap-2">
+          {rows.map((r) => {
+            const mine = r.user_id === top.me?.user_id;
+            return (
+              <li
+                key={r.user_id}
                 className={cn(
-                  "tabular font-semibold",
-                  r.delta > 0 ? "text-exact" : r.delta < 0 ? "text-miss" : "text-ink-muted",
+                  "flex min-h-14 items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] px-4",
+                  mine ? "border-music bg-stage" : "border-rule",
                 )}
+                data-testid={`weekly-row-${r.place}`}
+                value={r.place}
               >
-                {signedDelta(r.delta)}
-              </span>
-            </li>
-          ))}
+                <span
+                  className={cn(
+                    "tabular w-8 font-display font-extrabold",
+                    mine ? "text-music" : "text-ink-muted",
+                  )}
+                >
+                  {r.place}
+                </span>
+                <Avatar name={r.nickname} size="sm" className={mine ? "border-music" : undefined} />
+                <span className="min-w-0 flex-1 truncate" dir="auto">
+                  {r.nickname}
+                  {mine && (
+                    <span className="text-sm text-ink-muted"> ({t("rating.board.you")})</span>
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    "tabular font-semibold",
+                    r.delta > 0 ? "text-exact" : r.delta < 0 ? "text-miss" : "text-ink-muted",
+                  )}
+                >
+                  {signedDelta(r.delta)}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

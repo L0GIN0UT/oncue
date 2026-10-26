@@ -1,4 +1,4 @@
-/** Каркас страниц входа и регистрации: заголовок и узкая колонка формы. */
+/** Каркас страниц входа и регистрации: заголовок по центру и узкая колонка формы (420 px). */
 import type { ReactNode } from "react";
 
 export function AuthShell({
@@ -11,10 +11,10 @@ export function AuthShell({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-8 pt-10 sm:pt-16">
-      <header className="flex flex-col gap-2">
-        <h1 className="font-display text-3xl font-bold">{title}</h1>
-        {lead && <p className="text-ink-muted">{lead}</p>}
+    <div className="mx-auto flex w-full max-w-[420px] flex-col gap-7 pt-8 sm:pt-14">
+      <header className="flex flex-col gap-2 text-center">
+        <h1 className="font-display text-[28px] leading-[1.1] font-extrabold">{title}</h1>
+        {lead && <p className="text-[15px] text-ink-muted">{lead}</p>}
       </header>
       {children}
     </div>

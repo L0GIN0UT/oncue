@@ -20,10 +20,10 @@ export function HomeProgress({ initial }: { initial: HomePage | null }) {
     <section
       aria-labelledby="home-progress-title"
       data-testid="home-progress"
-      className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
+      className="flex flex-col gap-3 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage p-5"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h2 id="home-progress-title" className="font-display text-lg font-semibold">
+        <h2 id="home-progress-title" className="font-semibold">
           {t("progression.home.title")}
         </h2>
         <Link href="/profile" className="text-sm underline-offset-4 hover:underline">

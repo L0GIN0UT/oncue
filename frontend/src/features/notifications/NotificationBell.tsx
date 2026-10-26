@@ -18,15 +18,15 @@ export function NotificationBell() {
         href="/notifications"
         data-testid="notification-bell"
         aria-label={t("nav.notifications")}
-        className="relative rounded-md px-3 py-2 text-ink-muted hover:text-ink"
+        className="relative grid size-11 place-items-center rounded-full border-[1.5px] border-transparent text-ink-muted transition-colors hover:border-rule hover:text-ink"
       >
-        <Bell className="size-5" aria-hidden />
+        <Bell aria-hidden />
         {count > 0 && (
           <span
             data-testid="notification-count"
             data-count={count}
             aria-hidden
-            className="tabular absolute top-0.5 right-0.5 grid min-w-5 place-items-center rounded-full bg-miss px-1 text-xs leading-5 font-semibold text-night"
+            className="tabular absolute top-1 right-0.5 grid min-w-[18px] place-items-center rounded-full bg-music px-1 text-[11px] leading-[18px] font-semibold text-night"
           >
             {count > MAX_SHOWN ? `${MAX_SHOWN}+` : count}
           </span>

@@ -94,33 +94,35 @@ function itemOf(catalog: Catalog, key: string) {
 const walletTotal = async (page: Page): Promise<number> =>
   (await json<Wallet>(await api(page, "progression").get("/me/wallet"))).total;
 
-/** Подпись «Баланс: N Версов»; допускает разделители разрядов (пробел, U+00A0, U+202F). */
+/** Подпись «N Версов»; допускает разделители разрядов (пробел, U+00A0, U+202F). */
 const SEP = "[\\s\\u00a0\\u202f]";
 const balanceText = (n: number): RegExp =>
-  new RegExp(`Баланс:${SEP}*${String(n).split("").join(`${SEP}?`)}${SEP}`);
+  new RegExp(`^${String(n).split("").join(`${SEP}?`)}${SEP}`);
 
 async function openSlot(page: Page, slot: string): Promise<void> {
   await page.getByTestId(`shop-tab-${slot}`).click();
-  await expect(page.getByTestId(`shop-tab-${slot}`)).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId(`shop-tab-${slot}`)).toHaveAttribute("aria-pressed", "true");
 }
 
 /** Покупка через UI: карточка -> «Купить» -> диалог -> «Подтвердить». */
 async function buyViaUi(page: Page, slot: string, key: string): Promise<void> {
   await openSlot(page, slot);
+  await page.getByTestId(`shop-item-${key}`).click();
   await page.getByTestId(`shop-buy-${key}`).click();
   await expect(page.getByTestId("shop-confirm-dialog")).toBeVisible();
   await page.getByTestId("shop-confirm").click();
 }
 
-/** Выбрать предмет (или «Пусто» при `label = null`) в слоте «Оформления» и дождаться сохранения. */
-async function equip(page: Page, slot: string, label: string | null): Promise<void> {
+/** Надеть (или снять, если надет) предмет из «Мои» кнопкой на панели и дождаться сохранения. */
+async function equip(page: Page, slot: string, key: string): Promise<void> {
+  await page.getByTestId(`inventory-item-${key}`).click();
   const [res] = await Promise.all([
     page.waitForResponse(
       (r) =>
         r.request().method() === "PUT" &&
         new URL(r.url()).pathname === `/api/progression/v1/me/appearance/${slot}`,
     ),
-    page.getByTestId(`equip-${slot}`).selectOption(label === null ? { value: "" } : { label }),
+    page.getByTestId(`equip-item-${key}`).click(),
   ]);
   expect(res.status(), await res.text()).toBe(200);
 }
@@ -137,7 +139,6 @@ test("витрина: вкладки слотов из данных, сидов�
   await expect(page.getByTestId("shop-balance")).toHaveText(balanceText(GRANT));
   for (const slot of catalog.slots) await expect(page.getByTestId(`shop-tab-${slot}`)).toBeVisible();
   await expect(page.getByTestId("shop-tab-inventory")).toBeVisible();
-  await expect(page.getByTestId("shop-tab-appearance")).toBeVisible();
 
   // Каждый сидовый предмет виден на вкладке своего слота.
   for (const key of [FRAME, TITLE, TITLE_RACE, EXPENSIVE]) {
@@ -189,6 +190,7 @@ test("повторная покупка того же предмета идем�
   // Страница открыта с кнопкой «Купить», а предмет уже куплен «с другой вкладки» (через API).
   await page.goto("/shop");
   await openSlot(page, race.slot);
+  await page.getByTestId(`shop-item-${TITLE_RACE}`).click();
   await expect(page.getByTestId(`shop-buy-${TITLE_RACE}`)).toBeVisible();
   const bought = await json<{ balance_after: number; repeated: boolean }>(
     await api(page, "progression").post(`/shop/items/${race.id}/purchase`),
@@ -241,10 +243,9 @@ test("оформление: рамка и титул в профиле, снят
   const title = itemOf(catalog, TITLE).item;
 
   await page.goto("/shop");
-  await page.getByTestId("shop-tab-appearance").click();
-  await expect(page.getByTestId(`appearance-slot-${frame.slot}`)).toBeVisible();
-  await equip(page, frame.slot, frame.title);
-  await equip(page, title.slot, title.title);
+  await page.getByTestId("shop-tab-inventory").click();
+  await equip(page, frame.slot, FRAME);
+  await equip(page, title.slot, TITLE);
 
   await page.goto("/profile");
   const badge = page.getByTestId("player-badge").first();
@@ -254,12 +255,12 @@ test("оформление: рамка и титул в профиле, снят
 
   // Снять: слоты пустые, в профиле ни рамки, ни титула.
   await page.goto("/shop");
-  await page.getByTestId("shop-tab-appearance").click();
-  await expect(page.getByTestId(`equip-${frame.slot}`)).not.toHaveValue("");
-  await equip(page, frame.slot, null);
-  await equip(page, title.slot, null);
-  await expect(page.getByTestId(`equip-${frame.slot}`)).toHaveValue("");
-  await expect(page.getByTestId(`equip-${title.slot}`)).toHaveValue("");
+  await page.getByTestId("shop-tab-inventory").click();
+  await expect(page.getByTestId(`inventory-item-${FRAME}`)).toHaveAttribute("data-equipped", "true");
+  await equip(page, frame.slot, FRAME);
+  await equip(page, title.slot, TITLE);
+  await expect(page.getByTestId(`inventory-item-${FRAME}`)).toHaveAttribute("data-equipped", "false");
+  await expect(page.getByTestId(`inventory-item-${TITLE}`)).toHaveAttribute("data-equipped", "false");
 
   await page.goto("/profile");
   const empty = page.getByTestId("player-badge").first();
@@ -301,14 +302,14 @@ test("промокод: награда Версами, повтор не нач�
     return res;
   };
 
-  await page.goto("/profile");
+  await page.goto("/shop");
   await expect(page.getByTestId("block-promo")).toBeVisible();
   const first = await redeem(code);
   expect(first.status(), await first.text()).toBe(200);
   await expect(page.getByTestId("promo-result")).toContainText(String(PROMO_VERSES));
   await expect(page.getByTestId("promo-error")).toHaveCount(0);
   await expect.poll(() => walletTotal(page), { message: "Версы за промокод" }).toBe(before + PROMO_VERSES);
-  await expect(page.getByTestId("wallet-total")).toContainText(String(before + PROMO_VERSES));
+  await expect(page.getByTestId("shop-balance")).toContainText(String(before + PROMO_VERSES));
 
   // Тот же игрок вводит тот же код ещё раз: та же награда с пометкой «повтор», второго начисления нет.
   const second = await redeem(code);

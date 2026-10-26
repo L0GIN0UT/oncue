@@ -56,7 +56,7 @@ test("гость и аноним видят «Онлайн доступен по
   await page.goto("/room/K7MQ2XWP");
   await page.getByTestId("online-login").click();
   await expect(page).toHaveURL(/\/login\?next=%2Froom%2FK7MQ2XWP$/);
-  await page.getByLabel("E-mail или ник").fill("player");
+  await page.getByLabel("Почта или ник").fill("player");
   await page.getByLabel("Пароль").fill("correct-horse");
   await page.getByRole("button", { name: "Войти" }).click();
   await expect(page).toHaveURL(/\/room\/K7MQ2XWP$/);

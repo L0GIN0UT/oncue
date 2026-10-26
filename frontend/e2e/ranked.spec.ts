@@ -156,8 +156,10 @@ test("лидерборды: ladder-ы, пагинация по курсору, �
   await expect(rows).toHaveCount(10);
   await expect(page.getByTestId("board-row-1")).toContainText("Платина 3");
   await expect(page.getByTestId("around-me")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Топ недели" }).click();
   await expect(page.getByTestId("weekly-film")).toContainText("игрок1");
   await expectAccessible(page);
+  await page.getByRole("tab", { name: "Рейтинг" }).click();
 
   await page.getByTestId("board-more").click();
   await expect(rows).toHaveCount(20);
@@ -165,10 +167,12 @@ test("лидерборды: ladder-ы, пагинация по курсору, �
   await expect(rows).toHaveCount(25);
   await expect(page.getByTestId("board-more")).toHaveCount(0);
 
-  await page.getByTestId("ladder-music").click();
-  await expect(page.getByTestId("ladder-music")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("weekly-music")).toBeVisible();
+  await page.getByRole("radio", { name: "Музыка" }).click();
+  await expect(page.getByRole("radio", { name: "Музыка" })).toHaveAttribute("aria-checked", "true");
   await expect(rows).toHaveCount(10);
+  await page.getByRole("tab", { name: "Топ недели" }).click();
+  await expect(page.getByTestId("weekly-music")).toBeVisible();
+  await page.getByRole("tab", { name: "Рейтинг" }).click();
 
   await login(page);
   await page.goto("/leaderboards");

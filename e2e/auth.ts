@@ -132,7 +132,7 @@ export async function loginViaUi(
   password: string,
 ): Promise<{ codeRequired: boolean }> {
   await page.goto("/login");
-  await page.getByLabel("E-mail или ник").fill(nickname);
+  await page.getByLabel("Почта или ник").fill(nickname);
   await page.getByLabel("Пароль").fill(password);
   const response = await submitThrottled(page, "Войти", "/api/identity/v1/auth/login");
   expect(response.status(), await response.text()).toBe(200);
