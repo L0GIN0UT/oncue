@@ -9,7 +9,8 @@ test("гость: профиль предлагает завести аккау�
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByTestId("home-progress")).toHaveCount(0);
+  // Гостю плитка прогресса зовёт войти.
+  await expect(page.getByTestId("home-progress")).toHaveAttribute("href", "/login");
   await page.goto("/profile");
   const gate = page.getByTestId("profile-gate");
   await expect(gate).toBeVisible();
@@ -104,16 +105,17 @@ test("деградация: погасший блок не роняет стра
   await expect(page.getByTestId("quest-win_duel")).toBeVisible();
 });
 
-test("меню: серия за неделю из прогресса и скрытие блока при сбое", async ({ page, scenario }) => {
+test("главная: прогресс и ранги из bff, заглушка при сбое", async ({ page, scenario }) => {
   await login(page);
   await page.goto("/");
-  await page.getByTestId("menu-button").click();
-  await expect(page.getByTestId("menu-week")).toContainText("Серия:");
-  await expect(page.getByTestId("menu-week").getByRole("listitem")).toHaveCount(7);
+  const progress = page.getByTestId("home-progress");
+  await expect(progress).toContainText("Уровень");
+  await expect(progress).toContainText("серия");
+  await expect(page.getByTestId("home-rank-music")).toBeVisible();
+  await expect(page.getByTestId("home-rank-film")).toBeVisible();
 
   await scenario({ progressDown: ["home"] });
   await page.reload();
-  await page.getByTestId("menu-button").click();
+  await expect(page.getByTestId("home-progress")).toContainText("Прогресс сейчас недоступен");
   await expect(page.getByTestId("nav-profile")).toBeVisible();
-  await expect(page.getByTestId("menu-week")).toHaveCount(0);
 });

@@ -10,72 +10,126 @@
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;800&display=swap" rel="stylesheet">
 <style>
-body{margin:0;background:#141414}
-a{color:#F2F2F2;text-decoration:none}a:hover{color:#FFFFFF}
+body{margin:0;background:#1A1A1A}
+a{color:#F2F2F2;text-decoration:none}
 .h{font-family:"Unbounded",sans-serif}
 .ico{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
-.ib{width:44px;height:44px;border-radius:999px;border:1.5px solid transparent;background:transparent;color:#A3A3A3;display:grid;place-items:center;cursor:pointer}
-.ib:hover{border-color:#3A3A3A;color:#F2F2F2}
-.btn{font:inherit;font-weight:600;font-size:15px;height:48px;padding:0 20px;border-radius:14px;cursor:pointer;border:1.5px solid #3A3A3A;background:#1C1C1C;color:#F2F2F2;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;justify-content:center}
-.btn:hover{border-color:#5A5A5A}
-.btn.go{background:#F2B13B;border-color:#F2B13B;color:#141414}
-.tab{height:40px;padding:0 4px;border:0;border-bottom:2px solid transparent;background:transparent;color:#A3A3A3;font:inherit;font-size:15px;font-weight:500;cursor:pointer}
-.tab.on{color:#F2F2F2;border-bottom-color:#F2B13B}
-.lob{display:flex;align-items:center;gap:14px;padding:0 18px;height:64px;border:1.5px solid #3A3A3A;border-radius:14px;box-sizing:border-box}
-.lob:hover{border-color:#5A5A5A;background:#1C1C1C}
-.av{width:36px;height:36px;border-radius:999px;border:1.5px solid #3A3A3A;display:grid;place-items:center;font-size:12px;font-weight:600;flex:none}
-.on{position:relative}.on::after{content:"";position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:999px;background:#9BE39F;border:2px solid #141414}
+.nav{font-family:"Unbounded",sans-serif;font-size:18px;font-weight:800;letter-spacing:-.02em;color:#6A6A6A;padding:8px 10px;border-radius:10px;white-space:nowrap}
+.nav:hover{color:#D9D9D9}.nav.on{color:#F2B13B}
+.ib{width:40px;height:40px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#ABABAB;display:grid;place-items:center;cursor:pointer;flex:none}
+.pillbtn{height:40px;padding:0 14px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;white-space:nowrap;line-height:1;flex:none;box-sizing:border-box}
+.tile{position:relative;overflow:hidden;background:#242424;border:1.5px solid #474747;border-radius:20px;padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;min-width:0;transition:border-color .15s,transform .15s}
+a.tile:hover{border-color:#6A6A6A;transform:translateY(-2px)}
+.cap{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6A6A6A;font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.s{font-size:13px;color:#ABABAB;line-height:1.45}
+.bar{height:6px;border-radius:3px;background:#2E2E2E;overflow:hidden}
+.fr{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.fr .av{width:42px;height:42px;border-radius:999px;border:1.5px solid #474747;display:grid;place-items:center;font-size:12px;font-weight:600}
+.fr .nm{font-size:12px;font-weight:600;color:#F2F2F2;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tier{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1A1A1A;white-space:nowrap}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lr{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:12px;background:#2E2E2E;font-size:13px}
+.seg{display:inline-flex;border:1.5px solid #474747;border-radius:999px;background:#242424;padding:2px;gap:2px}
+.seg span{height:24px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;font-size:12px;font-weight:600;color:#ABABAB}
+.seg span.on{background:#F2F2F2;color:#1A1A1A}
+.btn{height:30px;padding:0 12px;border-radius:999px;border:1.5px solid #474747;background:#242424;color:#F2F2F2;font-size:12px;font-weight:600;display:inline-flex;align-items:center;white-space:nowrap;flex:none;box-sizing:border-box}
+.av2{width:28px;height:28px;border-radius:999px;border:1.5px solid #474747;display:grid;place-items:center;font-size:10px;font-weight:600;flex:none;background:#242424}
+.lob{height:46px}
+.lob .a{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.lob .a b{font-weight:600;font-size:13px}
+.lob .a span{font-size:11px;color:#ABABAB}
+.mt{height:34px}
+.mt .n{flex:1;font-weight:600}
+.mt .sc{font-family:"Unbounded",sans-serif;font-size:13px;font-weight:800}
+.mt .pt{font-weight:600;min-width:34px;text-align:right}
+.dom{background:#242424;color:#ABABAB;height:20px}
 </style>
 </helmet>
-<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; min-height: 900px; display: flex; flex-direction: column; box-sizing: border-box">
-  <header style="display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box">
-    <div style="flex: 1; display: flex"><button class="ib" type="button" aria-label="Меню"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
-    <a href="A-Game.dc.html" class="h" style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em">Guessverse</a>
-    <div style="flex: 1; display: flex; gap: 4px; align-items: center; justify-content: flex-end">
-      <button class="ib" type="button" aria-label="Как играть"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.5"/></svg></button>
-      <button class="ib" type="button" aria-label="Прошлые дни"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>
-      <a href="Profile.dc.html" aria-label="Профиль" style="width: 38px; height: 38px; border-radius: 999px; border: 1.5px solid #3A3A3A; display: grid; place-items: center; font-weight: 600; font-size: 13px; margin-left: 6px">ИЛ</a>
+<div style="font-family: 'Onest', system-ui, sans-serif; color: #F2F2F2; max-width: 1280px; margin: 0 auto; min-height: 900px; padding: 0 24px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+
+  <header style="padding: 14px 0 0; display: flex; align-items: center; gap: 24px">
+    <a href="Home.dc.html" style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0"><span style="width: 36px; height: 36px; border-radius: 10px; background: #F2B13B; display: grid; place-items: center; color: #1A1A1A; flex: none"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></span><span class="h" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap">Guessverse</span></a>
+    <nav aria-label="Разделы" style="display: flex; align-items: center; gap: 8px"><a href="Home.dc.html" class="nav">Главная</a><span style="color: #474747">/</span><a href="Solo.dc.html" class="nav">Соло</a><span style="color: #474747">/</span><a href="Online.dc.html" class="nav on">Онлайн</a><span style="color: #474747">/</span><a href="Collections.dc.html" class="nav">Сборники</a></nav>
+    <div style="flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0">
+      <button class="ib" type="button" aria-label="Уведомления, 3 новых" style="position: relative"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span style="position:absolute;top:6px;right:6px;min-width:16px;height:16px;border-radius:999px;background:#F2B13B;color:#1A1A1A;font-size:10px;font-weight:700;display:grid;place-items:center">3</span></button>
+      <a href="Shop.dc.html" class="pillbtn" aria-label="1 250 Версов, магазин"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;color:#F2B13B"><circle cx="12" cy="12" r="8"/><path d="M9 9.5c0-1.4 1.3-2 3-2s3 .6 3 2-1.5 1.8-3 2.3-3 1-3 2.4 1.3 2.3 3 2.3 3-.8 3-2.3"/></svg><span>1 250</span></a>
+      <a href="Leaderboard.dc.html" class="ib" aria-label="Лидеры"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0zM6 6H4v2a3 3 0 0 0 3 3M18 6h2v2a3 3 0 0 1-3 3M12 13v4M8 21h8M9 17h6"/></svg></a>
+      <a href="Profile.dc.html" class="pillbtn" style="padding-left: 4px"><span style="width: 30px; height: 30px; border-radius: 999px; border: 2px solid #F2B13B; display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none">ИЛ</span><span>L0GIN0UT</span></a>
     </div>
   </header>
 
-  <main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 6px 24px 48px; box-sizing: border-box">
-    <div role="group" aria-label="Домен" style="display: inline-flex; padding: 3px; border-radius: 999px; background: #1C1C1C; border: 1.5px solid #3A3A3A; gap: 2px">
-      <button type="button" class="btn" style="height: 38px; padding: 0 22px; border: 0; border-radius: 999px; background: #F2F2F2; color: #141414; font-size: 14px">Музыка</button>
-      <button type="button" class="btn" style="height: 38px; padding: 0 22px; border: 0; border-radius: 999px; background: transparent; color: #A3A3A3; font-size: 14px">Кино</button>
+  <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+    <div class="tile" style="border-color: #F2B13B; box-shadow: 0 0 0 4px rgba(242,177,59,.12)">
+      <div class="row"><span class="cap" style="color: #F2B13B">Рейтинговая дуэль</span><span class="seg"><span class="on">Классика</span><span>Лайт</span></span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div class="lr"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;color:#ABABAB"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="h" style="font-size: 16px; font-weight: 800; flex: 1">1 480</span><span class="tier" style="background: #C9CCD6">Серебро II</span></div>
+        <div class="lr"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;color:#ABABAB"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 5v4M12 5v4M17 5v4"/></svg><span class="h" style="font-size: 16px; font-weight: 800; flex: 1">1 120</span><span class="tier" style="background: #B5703A">Бронза I</span></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px"><div class="bar" style="flex: 1"><div style="width: 82%; height: 100%; background: #C9CCD6"></div></div><span style="font-size: 12px; color: #ABABAB; white-space: nowrap">до Серебра I — 70</span></div>
+      <a href="Duel.dc.html" class="chip" style="background: #F2B13B; color: #1A1A1A; height: 36px; justify-content: center; font-size: 14px">Найти соперника</a>
+      <span class="s" style="font-size: 12px; text-align: center">очередь ~20 с · 128 игроков</span>
     </div>
 
-    <section style="width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 14px">
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 0 2px">
-        <h1 class="h" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">Онлайн</h1>
-        <span style="font-size: 14px; color: #A3A3A3"><span style="color: #9BE39F">●</span> 128 игроков сейчас</span>
+    <div class="tile">
+      <div class="row"><span class="cap">Комната для друзей</span><span class="chip" style="background: #2E2E2E; color: #ABABAB">до 6</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <a href="Room.dc.html" class="lr"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:16px;height:16px;color:#F2B13B"><path d="M12 5v14M5 12h14"/></svg><span style="flex: 1; font-weight: 600">Создать комнату</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;color:#6A6A6A"><path d="M9 6l6 6-6 6"/></svg></a>
+        <div class="lr"><span class="h" style="font-size: 14px; font-weight: 800; letter-spacing: .08em; flex: 1; color: #D9D9D9">K7MQ2XWP</span><a href="Room.dc.html" class="btn">Войти</a></div>
       </div>
+      <span class="s" style="font-size: 12px">до 6 игроков, любой сборник</span>
+      <div style="display: flex; gap: 6px; margin-top: auto"><span class="chip" style="background:#2E2E2E;color:#ABABAB">по коду</span><span class="chip" style="background:#2E2E2E;color:#ABABAB">без рейтинга</span></div>
+    </div>
 
-      <div style="border: 1.5px solid #3A3A3A; border-radius: 14px; padding: 20px; display: flex; align-items: center; gap: 18px; background: #1C1C1C">
-        <div style="display: flex; flex-direction: column; gap: 4px; flex: 1">
-          <span style="font-size: 13px; color: #A3A3A3">Рейтинговая дуэль 1×1</span>
-          <div style="display: flex; align-items: baseline; gap: 10px"><span class="h" style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; line-height: 1">1 480</span><span style="font-size: 14px; color: #A3A3A3">Серебро II · до следующего 70</span></div>
-          <div style="display: flex; gap: 4px; margin-top: 6px" aria-label="Последние пять матчей: победа, победа, поражение, победа, ничья"><span style="width:22px;height:6px;border-radius:3px;background:#9BE39F"></span><span style="width:22px;height:6px;border-radius:3px;background:#9BE39F"></span><span style="width:22px;height:6px;border-radius:3px;background:#F2A0A0"></span><span style="width:22px;height:6px;border-radius:3px;background:#9BE39F"></span><span style="width:22px;height:6px;border-radius:3px;background:#5A5A5A"></span></div>
-        </div>
-        <a href="Duel.dc.html" class="btn go" style="height: 56px; padding: 0 26px; font-size: 16px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0"/></svg>Найти соперника</a>
+    <div class="tile">
+      <div class="row"><span class="cap">Друзья в сети · 2</span><span class="chip" style="background: #2E2E2E; color: #9BE39F"><span style="width:6px;height:6px;border-radius:999px;background:#9BE39F"></span>онлайн</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div class="lr"><span class="av2">АК</span><span style="font-weight: 600">alina</span><span class="tier" style="background: #F2B13B">Золото III</span><span style="flex: 1"></span><a href="Duel.dc.html" class="btn">Вызвать</a></div>
+        <div class="lr"><span class="av2">МР</span><span style="font-weight: 600">marat</span><span class="tier" style="background: #C9CCD6">Серебро I</span><span style="flex: 1"></span><a href="Duel.dc.html" class="btn">Вызвать</a></div>
+        <div class="lr" style="color: #ABABAB"><span style="flex: 1">ещё 7 не в сети</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;color:#6A6A6A"><path d="M9 6l6 6-6 6"/></svg></div>
       </div>
-      <span style="font-size: 13px; color: #A3A3A3; text-align: center">Очередь около 20 секунд. Пока ждёшь, можно открыть другие вкладки.</span>
+    </div>
+  </section>
 
-      <div role="tablist" style="display: flex; gap: 22px; border-bottom: 1.5px solid #3A3A3A; margin-top: 6px">
-        <button class="tab on" type="button" role="tab" aria-selected="true">Лобби · 4</button>
-        <button class="tab" type="button" role="tab" aria-selected="false">Друзья в сети · 2</button>
-        <button class="tab" type="button" role="tab" aria-selected="false">Мои матчи</button>
-        <button class="tab" type="button" role="tab" aria-selected="false" style="margin-left: auto">По коду</button>
+  <section style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px">
+    <div class="tile">
+      <div class="row"><span class="cap">Открытые лобби · 4</span><a href="Lobbies.dc.html" class="s" style="font-size: 12px">все лобби</a></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div class="lr lob"><span class="av2">НГ</span><div class="a"><b>Пятничный рок</b><span>♪ · 10 раундов · Никита</span></div><span class="h" style="font-size: 13px">4 / 6</span><a href="Lobbies.dc.html" class="btn">Зайти</a></div>
+        <div class="lr lob"><span class="av2">ЕК</span><div class="a"><b>Нолан целиком</b><span>▣ · 8 раундов · Екатерина</span></div><span class="h" style="font-size: 13px">2 / 6</span><a href="Lobbies.dc.html" class="btn">Зайти</a></div>
+        <div class="lr lob"><span class="av2">ДС</span><div class="a"><b>Опенинги аниме</b><span>♪ · 12 раундов · Даша</span></div><span class="h" style="font-size: 13px">6 / 6</span><span class="chip" style="background:#242424;color:#F2B13B">идёт игра</span></div>
+        <div class="lr lob"><span class="av2">ТМ</span><div class="a"><b>Брит-рок 90-х</b><span>♪ · 10 раундов · Тимур</span></div><span class="h" style="font-size: 13px">3 / 6</span><a href="Lobbies.dc.html" class="btn">Зайти</a></div>
       </div>
+    </div>
 
-      <div style="display: flex; flex-direction: column; gap: 10px">
-        <a href="Room.dc.html" class="lob"><span class="av on">НГ</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Пятничный рок</span><span style="font-size: 13px; color: #A3A3A3">по отрывку · 10 раундов · Никита</span></span><span style="font-size: 14px; color: #A3A3A3">4 из 6</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:#A3A3A3;width:18px;height:18px"><path d="M9 6l6 6-6 6"/></svg></a>
-        <a href="Room.dc.html" class="lob"><span class="av on">ОЛ</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Только Нолан</span><span style="font-size: 13px; color: #A3A3A3">кино · сборник · 8 раундов · Ольга</span></span><span style="font-size: 14px; color: #A3A3A3">2 из 6</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:#A3A3A3;width:18px;height:18px"><path d="M9 6l6 6-6 6"/></svg></a>
-        <a href="Room.dc.html" class="lob"><span class="av on">ТМ</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Аниме-опенинги</span><span style="font-size: 13px; color: #A3A3A3">сборник · 12 раундов · Тимур</span></span><span style="font-size: 14px; color: #F2B13B">5 из 6</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:#A3A3A3;width:18px;height:18px"><path d="M9 6l6 6-6 6"/></svg></a>
-        <a href="Room.dc.html" class="lob" style="opacity: .6"><span class="av">ЕК</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Саундтреки 90-х</span><span style="font-size: 13px; color: #A3A3A3">идёт раунд 3 из 10 · Екатерина</span></span><span style="font-size: 14px; color: #A3A3A3">полная</span><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:#A3A3A3;width:18px;height:18px"><path d="M9 6l6 6-6 6"/></svg></a>
+    <div class="tile">
+      <div class="row"><span class="cap">Последние матчи</span><a href="Profile.dc.html" class="s" style="font-size: 12px">история</a></div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div class="lr mt"><span class="n">olga</span><span class="chip dom">♪</span><span class="sc">3 : 2</span><span class="pt" style="color: #9BE39F">+18</span></div>
+        <div class="lr mt"><span class="n">vera</span><span class="chip dom">▣</span><span class="sc">1 : 3</span><span class="pt" style="color: #F2A0A0">-14</span></div>
+        <div class="lr mt"><span class="n">sergey</span><span class="chip dom">♪</span><span class="sc">3 : 0</span><span class="pt" style="color: #9BE39F">+21</span></div>
+        <div class="lr mt"><span class="n">timur</span><span class="chip dom">♪</span><span class="sc">2 : 3</span><span class="pt" style="color: #F2A0A0">-12</span></div>
+        <div class="lr mt"><span class="n">dasha</span><span class="chip dom">▣</span><span class="sc">3 : 1</span><span class="pt" style="color: #9BE39F">+16</span></div>
       </div>
-      <a href="Room.dc.html" class="btn" style="align-self: center; margin-top: 4px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M12 5v14M5 12h14"/></svg>Создать комнату для друзей</a>
-    </section>
-  </main>
+    </div>
+  </section>
+
+  <section class="tile" style="padding: 14px 18px; flex-direction: row; align-items: center; gap: 18px">
+    <div style="display: flex; flex-direction: column; gap: 2px; min-width: 100px"><span class="cap">Топ недели</span><span class="s" style="font-size: 12px">по числу побед</span></div>
+    <div style="flex: 1; display: flex; justify-content: space-between; gap: 8px; min-width: 0">
+      <div class="fr"><span class="av">АК</span><span class="nm">alina</span><span class="s" style="font-size: 12px">41 победа</span><span class="tier" style="background: #8FD3FF">Алмаз</span></div>
+      <div class="fr"><span class="av">НГ</span><span class="nm">nikita</span><span class="s" style="font-size: 12px">38 побед</span><span class="tier" style="background: #F2B13B">Золото</span></div>
+      <div class="fr"><span class="av">ЕК</span><span class="nm">ekaterina</span><span class="s" style="font-size: 12px">35 побед</span><span class="tier" style="background: #F2B13B">Золото</span></div>
+      <div class="fr"><span class="av">МР</span><span class="nm">marat</span><span class="s" style="font-size: 12px">31 победа</span><span class="tier" style="background: #C9CCD6">Серебро</span></div>
+      <div class="fr"><span class="av">ДС</span><span class="nm">dasha</span><span class="s" style="font-size: 12px">29 побед</span><span class="tier" style="background: #C9CCD6">Серебро</span></div>
+      <div class="fr"><span class="av">ТМ</span><span class="nm">timur</span><span class="s" style="font-size: 12px">27 побед</span><span class="tier" style="background: #B5703A">Бронза</span></div>
+      <div class="fr"><span class="av">ВП</span><span class="nm">vera</span><span class="s" style="font-size: 12px">24 победы</span><span class="tier" style="background: #B5703A">Бронза</span></div>
+      <div class="fr"><span class="av">СК</span><span class="nm">sergey</span><span class="s" style="font-size: 12px">22 победы</span><span class="tier" style="background: #9AA4AE">Сталь</span></div>
+    </div>
+    <a href="Leaderboard.dc.html" class="pillbtn" style="height: 36px; font-size: 13px">Вся таблица</a>
+  </section>
+
+  <footer style="display: flex; justify-content: space-between; font-size: 12px; color: #6A6A6A; margin-top: auto"><span>Guessverse · квиз по музыке и кино</span><span>Частые вопросы · О сервисе · Конфиденциальность · Соглашение · Правообладателям · 18+</span></footer>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>

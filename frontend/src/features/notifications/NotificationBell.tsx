@@ -18,7 +18,7 @@ export function NotificationBell() {
         href="/notifications"
         data-testid="notification-bell"
         aria-label={t("nav.notifications")}
-        className="relative grid size-11 place-items-center rounded-full border-[1.5px] border-transparent text-ink-muted transition-colors hover:border-rule hover:text-ink"
+        className="relative grid size-10 flex-none place-items-center rounded-full border-[1.5px] border-rule bg-stage text-ink-muted transition-colors hover:border-rule-strong hover:text-ink"
       >
         <Bell aria-hidden />
         {count > 0 && (
@@ -26,7 +26,7 @@ export function NotificationBell() {
             data-testid="notification-count"
             data-count={count}
             aria-hidden
-            className="tabular absolute top-1 right-0.5 grid min-w-[18px] place-items-center rounded-full bg-music px-1 text-[11px] leading-[18px] font-semibold text-night"
+            className="tabular absolute top-1.5 right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-music px-1 text-[10px] leading-none font-bold text-night"
           >
             {count > MAX_SHOWN ? `${MAX_SHOWN}+` : count}
           </span>

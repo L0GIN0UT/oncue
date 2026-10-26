@@ -24,6 +24,7 @@ import {
   Search,
   Share2,
   Sparkles,
+  Trophy,
   Shirt,
   ShoppingBag,
   Upload,
@@ -37,6 +38,7 @@ export const ICON_SIZE = 22;
 
 export const defaultIcons = {
   bell: Bell,
+  leaders: Trophy,
   shop: ShoppingBag,
   verses: Coins,
   locked: Lock,

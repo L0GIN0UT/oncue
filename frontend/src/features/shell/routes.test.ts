@@ -1,0 +1,36 @@
+import { describe, expect, it } from "vitest";
+import { activeNav, isGameRoute, isWideRoute } from "./routes";
+
+describe("isGameRoute", () => {
+  it.each(["/play/music.daily.classic", "/play/s/abc", "/match/42", "/room/K7MQ2XWP", "/play"])(
+    "%s — игровой",
+    (p) => expect(isGameRoute(p)).toBe(true),
+  );
+  it.each(["/", "/solo", "/results/abc", "/playlists", "/roommates", "/lobbies"])(
+    "%s — обычный",
+    (p) => expect(isGameRoute(p)).toBe(false),
+  );
+});
+
+describe("isWideRoute", () => {
+  it("главная — широкая, остальные пока в колонке", () => {
+    expect(isWideRoute("/")).toBe(true);
+    expect(isWideRoute("/solo")).toBe(false);
+    expect(isWideRoute("/profile")).toBe(false);
+  });
+});
+
+describe("activeNav", () => {
+  it("пункт по разделу, вложенные страницы считаются разделом", () => {
+    expect(activeNav("/")).toBe("home");
+    expect(activeNav("/solo")).toBe("solo");
+    expect(activeNav("/online")).toBe("online");
+    expect(activeNav("/lobbies")).toBe("online");
+    expect(activeNav("/collections/abc/edit")).toBe("collections");
+  });
+  it("профиль, магазин, лидеры — ни один пункт", () => {
+    expect(activeNav("/profile")).toBeNull();
+    expect(activeNav("/shop")).toBeNull();
+    expect(activeNav("/leaderboards")).toBeNull();
+  });
+});

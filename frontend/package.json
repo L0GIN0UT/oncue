@@ -20,7 +20,8 @@
     "gen:api": "node scripts/gen-api.mjs",
     "gen:api:check": "node scripts/gen-api.mjs --check",
     "mock:api": "tsx e2e/mocks/server.ts",
-    "test:e2e:stack": "NODE_PATH=$PWD/node_modules playwright test -c ../e2e/playwright.config.ts"
+    "test:e2e:stack": "NODE_PATH=$PWD/node_modules playwright test -c ../e2e/playwright.config.ts",
+    "shots": "tsx scripts/shots.ts"
   },
   "dependencies": {
     "@fontsource-variable/onest": "^5.3.1",

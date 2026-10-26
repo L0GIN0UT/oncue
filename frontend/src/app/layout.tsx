@@ -7,7 +7,8 @@ import "@fontsource-variable/onest";
 import "@fontsource-variable/unbounded";
 import "./globals.css";
 import { Providers } from "@/shared/ui/providers";
-import { AppHeader } from "@/features/shell/AppHeader";
+import { PageColumn } from "@/features/shell/PageColumn";
+import { SiteChrome } from "@/features/shell/SiteChrome";
 import { HeaderLeadingProvider } from "@/features/shell/header-leading";
 import { SanctionsBanner } from "@/features/sanctions/SanctionsBanner";
 import { getThemeKey } from "@/shared/api/shell";
@@ -45,14 +46,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 {t("nav.skip")}
               </a>
               <HeaderLeadingProvider>
-                <AppHeader />
+                <SiteChrome />
                 <SanctionsBanner />
-                <main
-                  id="main"
-                  className="mx-auto flex w-full max-w-[640px] flex-1 flex-col px-4 pt-2 pb-16 sm:px-0"
-                >
-                  {children}
-                </main>
+                <PageColumn>{children}</PageColumn>
               </HeaderLeadingProvider>
             </ThemeProvider>
           </Providers>

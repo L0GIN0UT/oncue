@@ -38,6 +38,13 @@
     --color-skip-fill: #2e2e2e;
     --color-skip-line: #474747;
 
+    /* Звания рейтинга (значок с тёмным текстом night): одинаковы во всех темах. */
+    --color-tier-steel: #9aa4ae;
+    --color-tier-bronze: #b5703a;
+    --color-tier-silver: #c9ccd6;
+    --color-tier-gold: #f2b13b;
+    --color-tier-diamond: #8fd3ff;
+
     /* Свечение акцента вокруг активного элемента (единственная «тень» системы). */
     --color-glow: rgb(242 177 59 / 0.14);
 }

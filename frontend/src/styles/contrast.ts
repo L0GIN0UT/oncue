@@ -62,6 +62,13 @@ export const CORE_PAIRS: ContrastPair[] = [
   { fg: "night", bg: "ink", min: AA_TEXT, what: "кнопка: тёмный текст на светлой заливке" },
   { fg: "night", bg: "music", min: AA_TEXT, what: "текст на акценте музыки" },
   { fg: "night", bg: "film", min: AA_TEXT, what: "текст на акценте кино" },
+  // Значки званий: тёмный текст на цвете звания.
+  ...(["steel", "bronze", "silver", "gold", "diamond"] as const).map((tier) => ({
+    fg: "night",
+    bg: `tier-${tier}`,
+    min: AA_LARGE_UI,
+    what: `значок звания «${tier}»`,
+  })),
   { fg: "ink", bg: "music-deep", min: AA_LARGE_UI, what: "крупный текст на тёмном акценте музыки" },
   { fg: "ink", bg: "film-deep", min: AA_LARGE_UI, what: "крупный текст на тёмном акценте кино" },
   { fg: "skip", bg: "night", min: AA_LARGE_UI, what: "UI: пропуск" },

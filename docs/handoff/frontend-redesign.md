@@ -169,3 +169,42 @@
 - **Дуэль:** позиция прослушивания соперника («соперник слушает N с», серая метка на ленте) и история раундов матча (победитель каждого раунда). Сейчас точки раундов копятся из ревилов, увиденных на экране, и после перезагрузки страницы пусты; `TapeDeck` умеет серую метку (`opponentLevel`), но данных для неё нет.
 - **Лобби:** имя комнаты и уровень игрока на месте («Комната Никиты», «уровень 14») — в `RoomView` и `PlayerSlot` этих полей нет.
 - **Серия за день в шапке раунда** — текущая серия, а не только `best_streak`.
+
+## v3: фундамент (ветка `frontend/v3-foundation`)
+
+Спецификация v3 лежит в `frontend/design/mockups/` (`*.dc.html`, `SPEC-v3.md`); канон — `Home.dc.html`. Это третья версия: она заменяет описания шапки, меню и главной из этапа 0 выше.
+
+### Что сделано
+- **Токены** `default.css` — значения v3 (были слиты в #53), добавлены `--color-tier-steel|bronze|silver|gold|diamond`; тесты: `styles/v3-tokens.test.ts` (значения из спецификации), пары `night` на `tier-*` в `contrast.ts`. `winter.css` — холодный вариант тех же токенов, `themeColor` совпадает с фоном.
+- **Оболочка** (`features/shell`): `SiteHeader` (знак, «Главная / Соло / Онлайн / Сборники», колокольчик, пилюля Версов → `/shop`, лидеры, профиль), `GameShell` (для `/play/*`, `/match/*`, `/room/*`), `SiteChrome` выбирает одно из двух по адресу (`routes.ts`), `PageColumn` — ширина колонки. `AppHeader`, `MenuDrawer`, гамбургер, `week.ts` и пункт события в шапке удалены. Баланс Версов — из запроса профиля (`profileQueryKey`, `wallet.total`).
+- **Главная** `/` (`features/home`): три плитки (дейлик музыка, дейлик кино, прогресс с двумя рангами), «Лента дейлика», ряд плиток Соло / Онлайн / Сборники / Событие (события нет — сетка из трёх). `/` больше не стартует сессию: плитка дейлика ведёт на `/play/<mode_key>` (сыгран — на `/results/<id>`). `TodayGame` удалён. `data-testid`: `home-daily-music|film`, `home-progress`, `home-rank-music|film`, `home-feed`, `home-feed-action`, `home-solo`, `home-online`, `home-collections`, `home-event`, `home-event-progress`.
+- **e2e:** меню-пункты `nav-today-*`, `menu-button`, `menu-week` ушли; `openMenuItem(page, "nav-…")` теперь просто клик по шапке (`nav-home|solo|online|collections|profile|leaders|verses`). Тесты дейликов идут через плитки главной.
+- **Снимки:** `pnpm shots [маршруты]` (нужна `pnpm build`) → `docs/handoff/shots/<route>-1280|390.png`; `home-mockup-1280.png` — макет Home.
+
+### Что можно трогать (по зонам) — примитивы
+Не писать свои аналоги, брать из `src/shared/ui`:
+- `Tile` (`tile.tsx`): `cap`, `aside`, `title`, `subtitle`, `accent` (янтарная обводка), `href`, `className`, `data-testid`, `children` — слот содержимого.
+- `ListRow` (`list-row.tsx`): `lead` (метка Unbounded), `accentLead`, `trailing`, `children`. Не `Row` (52 px, список экрана).
+- `Cover` (`cover.tsx`): `src`, `alt`, `ratio` (`square|poster|frame`), `label` (чип в углу), `placeholder`. Без `src` — плоская заглушка токенного цвета.
+- `TierBadge` (`tier-badge.tsx`): `tier` (`steel|bronze|silver|gold|diamond`), `children`; `tierKeyOf(family)` — семейство из rating → значок (платина → серебро, киноман/меломан → алмаз).
+- `DailyBadge` (`daily-badge.tsx`): `domain`, `value|null`, `max`; `dailyOutcome(value, max)` — исход по доле (≥0,8 точно, ≥0,4 почти).
+- `SectionCap` (`section-cap.tsx`): капитель секции, `accent`.
+- `PillTabs` (`pill-tabs.tsx`, перенесён из `features/hubs`).
+- `GameShell` (`features/shell/GameShell.tsx`): пропсы `exit`, `volume`, `modeLabel`, `score`. Пока экран не передал `exit`, слева кнопка из `HeaderLeading` — так выход дуэли и комнаты не потерян. Подключать пропсы из экранов игры должна зона «игра» (сейчас `SiteChrome` рисует оболочку пустой).
+- Ширина страницы: маршрут новой страницы v3 добавить в `WIDE_ROUTES` (`features/shell/routes.ts`) — иначе она в колонке 640. Остальные экраны пока в 640.
+
+### Отклонения от макета (намеренные)
+- Капитель и неактивные пункты навигации — `ink-faint` (#9b9b9b), а не `ink-dim` (#6A6A6A): `ink-dim` не проходит axe (AA) на поверхностях.
+- Ссылки «Частые вопросы…» и подвал не сделаны (страниц нет).
+- Фон на снимках холодный: в моках активно событие, тема `winter`.
+
+### Нужно от бэкенда (главная)
+- **Лента дейлика:** результаты друзей по обоим дейликам (ник, аватар, очки музыки/кино), число друзей, сыгравших сегодня («друзья 4 из 9» в плитке). Пока пустое состояние с «Найти друзей».
+- **Дейлик кино:** кадр дня (размытый) для плитки; сейчас заглушка. Серия по доменам и «+N XP» за сыгранный дейлик.
+- **Прогресс:** название уровня («Меломан»), задания недели и сезон («1 из 3 · сезон 3, ещё 34 дня»).
+- **Онлайн:** счётчик игроков онлайн, друзья в сети, «до повышения N» очков (`RatingCard.next_tier_at` есть, в плитке пока не показан).
+- **Соло:** число режимов всего и размер архива дейликов; в плитке — первые 8 режимов блока `modes`.
+- **Событие:** текст задания находки («Пластинка под ёлкой…»).
+
+### Для этапа сборки (B)
+Не используются после перехода: `features/events/EventBanner.tsx` (`HeaderEventLink`, `HomeEventBanner`) вместе с тестами, `shared/ui/drawer.tsx`, `features/daily/DailyBoard`/`DailyTicket`, ключи `daily.*` и `events.banner.*` в `ru.json`, `HeaderLeading` (когда экраны игры передадут `exit` в `GameShell`).

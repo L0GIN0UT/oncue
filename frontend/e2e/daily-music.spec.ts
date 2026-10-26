@@ -6,15 +6,16 @@ test("гость проходит дейлик музыки, делится ит
   expectAccessible,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  // Главная — сегодняшняя игра: раунд виден на месте, адрес остаётся «/».
+  // Главная — хаб: плитки дейликов со статусом, игра стартует по клику на /play/*.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Раунд 1 из 5" })).toBeVisible();
-  await expect(page).toHaveURL("/");
-  await page.getByTestId("menu-button").click();
-  await expect(page.getByTestId("nav-today-music")).toContainText("продолжить");
-  await expect(page.getByTestId("nav-today-film")).toContainText("не сыграно");
-  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("home-daily-music")).toContainText("не сыгран");
+  await expect(page.getByTestId("home-daily-film")).toContainText("не сыгран");
   await expectAccessible(page);
+  await page.getByTestId("home-daily-music").click();
+  await expect(page).toHaveURL(/\/play\/s\//);
+  await expect(page.getByRole("heading", { name: "Раунд 1 из 5" })).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByTestId("home-daily-music")).toContainText("продолжить");
 
   // Прямая ссылка на режим возобновляет ту же сессию.
   await page.goto("/play/music.daily.classic");
@@ -54,12 +55,11 @@ test("гость проходит дейлик музыки, делится ит
   expect(copied).toContain("🟩");
   expect(copied).toContain("http://localhost:");
 
-  // Повторный вход в пройденный дейлик открывает итог.
+  // Пройденный дейлик на главной ведёт на итог.
   await page.goto("/");
+  await expect(page.getByTestId("home-daily-music")).toContainText("сыгран");
+  await page.getByTestId("home-daily-music").click();
   await expect(page).toHaveURL(/\/results\//);
-  await page.getByTestId("menu-button").click();
-  await expect(page.getByTestId("nav-today-music")).toContainText("сыграно");
-  await page.keyboard.press("Escape");
   await page.goto("/play/music.daily.classic");
   await expect(page).toHaveURL(/\/results\//);
   await expect(page.getByTestId("final-score")).toContainText("4");

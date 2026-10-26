@@ -21,7 +21,7 @@ import { Chip } from "@/shared/ui/chip";
 import { Segmented } from "@/shared/ui/segmented";
 import { useIcons } from "@/shared/ui/theme-provider";
 import { HubHeader } from "@/features/hubs/HubHeader";
-import { PillTabs } from "@/features/hubs/PillTabs";
+import { PillTabs } from "@/shared/ui/pill-tabs";
 
 type Domain = "music" | "film";
 

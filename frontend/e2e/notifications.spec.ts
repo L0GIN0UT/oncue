@@ -128,5 +128,5 @@ test("тема: data-theme=default; неизвестный ключ и сбой 
   await scenario({ themeKey: "default", shellDown: true });
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "default");
-  await expect(page.getByRole("link", { name: "Войти" })).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: "Войти" })).toBeVisible();
 });
