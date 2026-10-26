@@ -3,7 +3,15 @@
  * лайк и избранное, игра 5 раундов, «Сохранить» из ревила и итога (exclusive_with), «пройден»
  * открывает состав, гостю — регистрация. Селекторы — контракт `../e2e/collections.spec.ts`.
  */
-import { expect, giveUpButton, isMove, login, playUntilResults, test } from "./fixtures";
+import {
+  expect,
+  giveUpButton,
+  isMove,
+  login,
+  playUntilResults,
+  test,
+  openMenuItem,
+} from "./fixtures";
 
 const CURATED = "00000000-0000-4000-a000-000000000001";
 const UGC = "00000000-0000-4000-a000-000000000002";
@@ -135,14 +143,16 @@ test("мои сборники: плашка «скрыт модератором�
   expectAccessible,
 }) => {
   await login(page);
-  await page.getByTestId("user-name").click();
+  await openMenuItem(page, "nav-profile");
+  await page.getByTestId("nav-my-collections").click();
   await expect(page).toHaveURL(/\/me\/collections$/);
   await expect(
     page.getByTestId(`my-collection-${HIDDEN}`).getByTestId("my-collection-hidden"),
   ).toBeVisible();
   await expectAccessible(page);
-  await page.getByTestId("nav-collections").click();
+  await openMenuItem(page, "nav-collections");
   await expect(page).toHaveURL(/\/collections$/);
+  await openMenuItem(page, "nav-profile");
   await page.getByTestId("nav-library").click();
   await expect(page).toHaveURL(/\/library$/);
 });

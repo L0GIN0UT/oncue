@@ -69,7 +69,9 @@ test("дуэль: лобби → готовность → матч → «Соп�
   expectAccessible,
 }) => {
   await login(page);
+  await page.getByTestId("menu-button").click();
   await expect(page.getByTestId("nav-online")).toBeVisible();
+  await page.keyboard.press("Escape");
   const code = await createRoom(page, "music.duel.classic");
   const rival = await player("rival");
   await joinRoom(rival, code);

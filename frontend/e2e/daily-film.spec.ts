@@ -1,10 +1,12 @@
-import { answerWithSuggestion, expect, test } from "./fixtures";
+import { answerWithSuggestion, expect, test, openMenuItem } from "./fixtures";
 
 test("«Кадр дня»: кадр сменяется с каждой попыткой, ревил — чёткий кадр, год и режиссёр", async ({
   page,
 }) => {
+  // Кино — второй дейлик, открывается из меню (/?domain=film), игра рисуется на месте.
   await page.goto("/");
-  await page.getByTestId("daily-film.daily.frame").getByRole("link", { name: "Играть" }).click();
+  await openMenuItem(page, "nav-today-film");
+  await expect(page).toHaveURL(/\/\?domain=film$/);
   const frame = page.getByTestId("clue-image");
   await expect(frame).toHaveAttribute("alt", "Кадр из фильма, подсказка 1");
   const first = await frame.getAttribute("src");

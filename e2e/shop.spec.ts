@@ -128,7 +128,7 @@ async function equip(page: Page, slot: string, label: string | null): Promise<vo
 // ----------------------------------------------------------------------------- сценарий
 test("витрина: вкладки слотов из данных, сидовые предметы, анимированный предмет рисуется", async () => {
   const { page } = player;
-  await page.goto("/");
+  await page.goto("/profile");
   await page.getByTestId("nav-shop").click();
   await expect(page).toHaveURL(/\/shop$/);
 

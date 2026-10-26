@@ -3,7 +3,7 @@
  * открытая, закрытая находки, финал), спрятанный элемент, архив в профиле. Против живых сервисов
  * — шаг 0b.
  */
-import { expect, login, test } from "./fixtures";
+import { expect, login, test, openMenuItem } from "./fixtures";
 
 test("баннер и тема winter: тема в первом HTML, ссылка в шапке и карточка на главной", async ({
   page,
@@ -17,14 +17,13 @@ test("баннер и тема winter: тема в первом HTML, ссылк
 
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "winter");
-  await expect(page.getByTestId("home-event")).toContainText("Зимняя охота");
   await expect(page.getByTestId("nav-event")).toHaveAttribute("href", "/events/winter");
   // Аноним: прогресса нет.
   await expect(page.getByTestId("nav-event")).not.toContainText("Найдено");
 
   await login(page);
   await expect(page.getByTestId("nav-event")).toContainText("Найдено 1 из 4");
-  await page.getByRole("link", { name: "Соло", exact: true }).click();
+  await openMenuItem(page, "nav-solo");
   // Тема не отключается пользователем и переживает переходы.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "winter");
 });

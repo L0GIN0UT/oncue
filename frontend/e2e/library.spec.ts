@@ -58,6 +58,7 @@ test("гость: медиатека предлагает регистрацию
   page,
 }) => {
   await page.goto("/");
+  await page.getByTestId("menu-button").click();
   await expect(page.getByTestId("nav-collections")).toBeVisible();
   await expect(page.getByTestId("nav-library")).toHaveCount(0);
   await page.goto("/library");

@@ -151,3 +151,9 @@ export async function apiPut(page: Page, path: string, data?: unknown) {
     },
   });
 }
+
+/** Открыть меню шапки (пункты `nav-*` видны только при открытой панели) и нажать пункт. */
+export async function openMenuItem(page: Page, testId: string): Promise<void> {
+  await page.getByTestId("menu-button").click();
+  await page.getByTestId(testId).click();
+}
