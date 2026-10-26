@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, unwrap } from "@/shared/api/client";
 import type { DailyCard, HomePage } from "@/shared/api/types";
 import { recoverSession } from "@/features/auth/session";
@@ -18,12 +18,39 @@ import { nextMidnight } from "./countdown-time";
 
 export const homeQueryKey = ["page", "home"] as const;
 
-export function useHomePage(initial: HomePage | null) {
+export function useHomePage(initial: HomePage | null, { enabled = true } = {}) {
   return useQuery({
+    enabled,
     queryKey: homeQueryKey,
     queryFn: async (): Promise<HomePage> => unwrap(await api().web.GET("/v1/pages/home")),
     initialData: initial ?? undefined,
   });
+}
+
+/**
+ * Личный блок дейликов bff отдаёт только субъекту; анониму или с просроченным access —
+ * `unavailable` (game отвечает 401, а bff прячет его в блоке, и общий refresh на 401 не
+ * срабатывает). Поэтому фронтенд сам восстанавливает сессию — refresh при живой cookie
+ * `gv_csrf`, иначе гостевая — и перезапрашивает блок. Только один раз: недоступность из-за
+ * сбоя апстрима так не лечится, и цикла запросов быть не должно.
+ */
+export function useRecoverPersonalBlocks(
+  statuses: (string | undefined)[],
+  refresh: () => unknown,
+): boolean {
+  const recovered = useRef(false);
+  const [settled, setSettled] = useState(false);
+  const unavailable = statuses.includes("unavailable");
+  useEffect(() => {
+    if (recovered.current || !unavailable) return;
+    recovered.current = true;
+    void recoverSession()
+      .then(refresh)
+      .catch(() => undefined)
+      .finally(() => setSettled(true));
+  }, [unavailable, refresh]);
+  // Восстановление и повторный запрос завершены: дальнейшая недоступность — не ожидание.
+  return settled;
 }
 
 export function DailyBoard({ initial }: { initial: HomePage | null }) {
@@ -35,24 +62,9 @@ export function DailyBoard({ initial }: { initial: HomePage | null }) {
   const weeklyBlock = data?.blocks.weekly;
   const weekly = weeklyBlock?.status === "ok" ? (weeklyBlock.data ?? []) : [];
   const target = cards[0]?.next_reset_at ?? nextMidnight(new Date()).toISOString();
-  const refresh = useCallback(() => {
-    void client.invalidateQueries({ queryKey: homeQueryKey });
-  }, [client]);
+  const refresh = useCallback(() => client.invalidateQueries({ queryKey: homeQueryKey }), [client]);
 
-  // Личный блок дейликов bff отдаёт только субъекту; анониму или с просроченным access —
-  // `unavailable` (game отвечает 401, а bff прячет его в блоке, и общий refresh на 401 не
-  // срабатывает). Поэтому фронтенд сам восстанавливает сессию — refresh при живой cookie
-  // `gv_csrf`, иначе гостевая — и перезапрашивает блок. Только один раз: недоступность из-за
-  // сбоя апстрима так не лечится, и цикла запросов быть не должно.
-  const recovered = useRef(false);
-  useEffect(() => {
-    const personal = [block?.status, weeklyBlock?.status];
-    if (recovered.current || !personal.includes("unavailable")) return;
-    recovered.current = true;
-    void recoverSession()
-      .then(refresh)
-      .catch(() => undefined);
-  }, [block?.status, weeklyBlock?.status, refresh]);
+  useRecoverPersonalBlocks([block?.status, weeklyBlock?.status], refresh);
 
   return (
     <section aria-labelledby="dailies-title" className="flex flex-col gap-6">

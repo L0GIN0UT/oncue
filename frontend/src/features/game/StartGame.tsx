@@ -78,6 +78,7 @@ function useStartSession(
   modeKey: string,
   presetId: string | null,
   collection: CollectionStart | null,
+  onSession?: (id: string) => void,
 ) {
   const router = useRouter();
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -104,7 +105,8 @@ function useStartSession(
             }),
           ),
         );
-        router.replace(`/play/s/${s.id}`);
+        if (onSession) onSession(s.id);
+        else router.replace(`/play/s/${s.id}`);
       } catch (e) {
         const played = playedSessionOf(e);
         if (played) router.replace(`/results/${played}`);
@@ -116,7 +118,7 @@ function useStartSession(
         }
       }
     },
-    [modeKey, presetId, router, collection],
+    [modeKey, presetId, router, collection, onSession],
   );
   return { start, failure, pending, clearFailure: () => setFailure(null) };
 }
@@ -125,14 +127,22 @@ export function StartGame({
   modeKey,
   presetId,
   collection = null,
+  onSession,
 }: {
   modeKey: string;
   presetId: string | null;
   collection?: CollectionStart | null;
+  /** Сессия готова: показать игру на месте (главная), не меняя адрес. По умолчанию — переход на `/play/s/{id}`. */
+  onSession?: (id: string) => void;
 }) {
   const t = useTranslations();
   const modes = useAllModes();
-  const { start, failure, pending, clearFailure } = useStartSession(modeKey, presetId, collection);
+  const { start, failure, pending, clearFailure } = useStartSession(
+    modeKey,
+    presetId,
+    collection,
+    onSession,
+  );
   const back = collection ? `/collections/${collection.collectionId}` : "/solo";
   const mode = modes.data?.find((m) => m.key === modeKey);
   const subject = mode?.start?.subject ?? null;
