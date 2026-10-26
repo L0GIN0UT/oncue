@@ -5,3 +5,4 @@ src/shared/api/schema
 test-results
 playwright-report
 docs/screenshots
+design/mockups

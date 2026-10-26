@@ -1,29 +1,43 @@
 /*
- * Тема `default` («ночной зал», D3): глубокий сливовый фон, два доменных акцента (латунь — музыка,
- * плёнка — кино) и цвета исходов попытки. Это набор токенов по умолчанию: он же задаёт значения
- * на :root, остальные темы переопределяют их под `[data-theme="<key>"]` (ADR 0049).
+ * Тема `default` («Ночной эфир»): тёплый графит и один янтарный акцент. Это набор токенов по
+ * умолчанию: он же задаёт значения на :root, остальные темы переопределяют их под
+ * `[data-theme="<key>"]` (ADR 0049). Имена `music` и `film` сохранены для совместимости
+ * с компонентами, но домена в цвете больше нет: оба равны акценту.
  * Единственное место (вместе с остальными файлами src/styles), где разрешены литералы цвета.
  */
 @theme {
-    --color-night: #16112a;
-    --color-stage: #201939;
-    --color-stage-raised: #2a2249;
-    --color-rule: #3b3263;
-    --color-ink: #f1ecfa;
-    --color-ink-muted: #b0a8cc;
-    --color-ink-faint: #958db6;
+    --color-night: #141414;
+    --color-stage: #1c1c1c;
+    --color-stage-raised: #262626;
+    --color-rule: #3a3a3a;
+    --color-rule-strong: #5a5a5a;
+    --color-ink: #f2f2f2;
+    --color-ink-soft: #d9d9d9;
+    --color-ink-muted: #a3a3a3;
+    --color-ink-faint: #949494;
+    /* Самый слабый текст и пунктиры: только декор, в пары контраста текста не входит. */
+    --color-ink-dim: #5a5a5a;
 
-    --color-music: #f4b942;
-    --color-music-deep: #8a5d10;
-    --color-film: #6fd6c9;
-    --color-film-deep: #1f6f66;
+    /* Акцент один — янтарь; текст на нём — night. */
+    --color-music: #f2b13b;
+    --color-music-deep: #4d3b12;
+    --color-film: #f2b13b;
+    --color-film-deep: #4d3b12;
 
-    --color-exact: #8ee38b;
-    --color-partial: #f3d35c;
-    --color-miss: #ff8a7a;
-    --color-skip: #6d6591;
+    /* Исходы попытки: цвет значка/текста, заливка строки и её граница. */
+    --color-exact: #9be39f;
+    --color-exact-fill: #214d2a;
+    --color-exact-line: #2e6b3a;
+    --color-partial: #f2b13b;
+    --color-partial-fill: #4d3b12;
+    --color-partial-line: #6b5319;
+    --color-miss: #f2a0a0;
+    --color-miss-fill: #4d2323;
+    --color-miss-line: #6b3030;
+    --color-skip: #a3a3a3;
+    --color-skip-fill: #262626;
+    --color-skip-line: #3a3a3a;
 
-    /* Подсветка фона страницы (радиальные пятна под доменные акценты). */
-    --color-glow-music: rgb(244 185 66 / 0.08);
-    --color-glow-film: rgb(111 214 201 / 0.07);
+    /* Свечение акцента вокруг активного элемента (единственная «тень» системы). */
+    --color-glow: rgb(242 177 59 / 0.14);
 }

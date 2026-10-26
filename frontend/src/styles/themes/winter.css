@@ -1,28 +1,27 @@
 /*
- * Тема `winter` («зимняя охота», событие 5d): холодный сине-ледяной фон поверх набора `default`.
- * Применяется атрибутом data-theme="winter" на <html> (ключ приходит из bff, ADR 0049); значения
- * переопределяют токены :root. Единственное место (вместе с остальными файлами src/styles),
- * где разрешены литералы цвета.
+ * Тема `winter` («зимняя охота», событие 5d): холодный графит поверх набора `default`, акцент
+ * и исходы те же. Применяется атрибутом data-theme="winter" на <html> (ключ приходит из bff,
+ * ADR 0049); значения переопределяют токены :root. Единственное место (вместе с остальными
+ * файлами src/styles), где разрешены литералы цвета.
  */
 [data-theme="winter"] {
-    --color-night: #0e1a2b;
-    --color-stage: #152538;
-    --color-stage-raised: #1e3350;
-    --color-rule: #34506f;
-    --color-ink: #eef6ff;
-    --color-ink-muted: #b8cde3;
-    --color-ink-faint: #9db7d0;
+    --color-night: #101820;
+    --color-stage: #18222d;
+    --color-stage-raised: #212d3a;
+    --color-rule: #364859;
+    --color-rule-strong: #5b7188;
+    --color-ink: #eef4fa;
+    --color-ink-soft: #d3dde8;
+    --color-ink-muted: #a9b9c9;
+    --color-ink-faint: #94a6b8;
+    --color-ink-dim: #5b7188;
 
-    --color-music: #f6c978;
-    --color-music-deep: #8a5d10;
-    --color-film: #84e3f0;
-    --color-film-deep: #1f6f7a;
+    --color-music: #f4c06a;
+    --color-film: #f4c06a;
+    --color-partial: #f4c06a;
 
-    --color-exact: #92e6a0;
-    --color-partial: #f3d96b;
-    --color-miss: #ff9a8a;
-    --color-skip: #6785a6;
+    --color-skip-fill: #212d3a;
+    --color-skip-line: #364859;
 
-    --color-glow-music: rgb(246 201 120 / 0.07);
-    --color-glow-film: rgb(132 227 240 / 0.09);
+    --color-glow: rgb(244 192 106 / 0.14);
 }

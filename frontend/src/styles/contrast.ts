@@ -45,6 +45,7 @@ const SURFACES = ["night", "stage", "stage-raised"] as const;
 export const CORE_PAIRS: ContrastPair[] = [
   ...SURFACES.flatMap((bg) => [
     { fg: "ink", bg, min: AA_TEXT, what: "основной текст" },
+    { fg: "ink-soft", bg, min: AA_TEXT, what: "второстепенный светлый текст" },
     { fg: "ink-muted", bg, min: AA_TEXT, what: "вторичный текст" },
     { fg: "ink-faint", bg, min: AA_TEXT, what: "приглушённый текст" },
     { fg: "music", bg, min: AA_TEXT, what: "акцент музыки" },
@@ -52,6 +53,11 @@ export const CORE_PAIRS: ContrastPair[] = [
     { fg: "exact", bg, min: AA_TEXT, what: "исход: точно" },
     { fg: "partial", bg, min: AA_TEXT, what: "исход: частично" },
     { fg: "miss", bg, min: AA_TEXT, what: "исход: мимо" },
+  ]),
+  // Строки попыток: текст и значок исхода на собственной заливке.
+  ...(["exact", "partial", "miss", "skip"] as const).flatMap((o) => [
+    { fg: "ink", bg: `${o}-fill`, min: AA_TEXT, what: `основной текст в строке «${o}»` },
+    { fg: o, bg: `${o}-fill`, min: AA_TEXT, what: `значок и подпись в строке «${o}»` },
   ]),
   { fg: "night", bg: "ink", min: AA_TEXT, what: "кнопка: тёмный текст на светлой заливке" },
   { fg: "night", bg: "music", min: AA_TEXT, what: "текст на акценте музыки" },
