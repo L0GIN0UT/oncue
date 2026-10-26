@@ -39,12 +39,13 @@ describe("ProfileView", () => {
     }
   });
 
-  it("5b: карточка игрока, промокод и «Своя аватарка»; блоки 5b недоступны — профиль цел", async () => {
+  it("5b: ник и «Своя аватарка» во вкладке «Внешность»; блоки 5b недоступны — профиль цел", async () => {
+    const user = userEvent.setup();
     signInAsUser();
     const view = renderWithProviders(<ProfileView />);
-    expect(await screen.findByTestId("player-badge")).toHaveTextContent("player");
-    expect(screen.getByTestId("promo-input")).toBeInTheDocument();
-    expect(screen.getByTestId("avatar-status")).toHaveAttribute("data-status", "none");
+    expect(await screen.findByTestId("player-nickname")).toHaveTextContent("player");
+    await user.click(screen.getByRole("tab", { name: "Внешность" }));
+    expect(await screen.findByTestId("avatar-status")).toHaveAttribute("data-status", "none");
     expect(screen.getByRole("link", { name: "Перейти в магазин" })).toHaveAttribute(
       "href",
       "/shop",
@@ -54,8 +55,39 @@ describe("ProfileView", () => {
     world.scenario = { appearanceDown: true };
     renderWithProviders(<ProfileView />);
     expect(await screen.findByTestId("level-value")).toBeInTheDocument();
-    expect(screen.getByTestId("block-avatar-unavailable")).toBeInTheDocument();
-    expect(screen.getByTestId("player-badge")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Внешность" }));
+    expect(await screen.findByTestId("block-avatar-unavailable")).toBeInTheDocument();
+    expect(screen.getByTestId("player-nickname")).toBeInTheDocument();
+  });
+
+  it("обзор: четыре плитки, календарь и баланс Версов в ссылке на магазин", async () => {
+    server.use(
+      http.get("*/api/web/v1/pages/online", () => HttpResponse.json({ status: "ok", blocks: {} })),
+    );
+    signInAsUser();
+    renderWithProviders(<ProfileView />);
+
+    const tiles = await screen.findByTestId("profile-tiles");
+    expect(within(tiles).getByText("дней серия")).toBeInTheDocument();
+    expect(within(tiles).getByText("всего опыта")).toBeInTheDocument();
+    expect(within(tiles).getByText("заданий сегодня")).toBeInTheDocument();
+    expect(await screen.findByTestId("activity-calendar")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-shop")).toHaveAttribute("href", "/shop");
+    expect(screen.getByTestId("nav-shop")).toHaveTextContent("40 Версов");
+  });
+
+  it("вкладки: «Рейтинг» ведёт к таблице лидеров, «Друзья» — к разделу друзей", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get("*/api/web/v1/pages/online", () => HttpResponse.json({ status: "ok", blocks: {} })),
+    );
+    signInAsUser();
+    renderWithProviders(<ProfileView />);
+
+    await user.click(await screen.findByRole("tab", { name: "Рейтинг" }));
+    expect(screen.getByTestId("nav-leaderboards")).toHaveAttribute("href", "/leaderboards");
+    await user.click(screen.getByRole("tab", { name: /Друзья/ }));
+    expect(await screen.findByTestId("nav-friends")).toHaveAttribute("href", "/friends");
   });
 
   it("аноним и гость — приглашение вместо профиля", async () => {

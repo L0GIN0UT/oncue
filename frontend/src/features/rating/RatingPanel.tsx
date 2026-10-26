@@ -27,12 +27,12 @@ export function RatingPanel({
   }
   if (!ratings.length) return <p className="text-ink-muted">{t("rating.mine.empty")}</p>;
   return (
-    <ul className="grid gap-3 sm:grid-cols-2" data-testid="ratings">
+    <ul className="flex flex-col gap-2.5" data-testid="ratings">
       {ratings.map((r) => (
         <li
           key={r.ladder}
           data-testid={`rating-${r.ladder}`}
-          className="flex flex-col gap-2 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
+          className="flex flex-col gap-1.5 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-4"
         >
           <RatingBody rating={r} season={seasons?.find((s) => s.ladder === r.ladder) ?? null} />
         </li>
@@ -48,7 +48,7 @@ function RatingBody({ rating, season }: { rating: RatingCard; season: SeasonCard
   const left = pointsToNext(rating.rating, rating.next_tier_at);
   return (
     <>
-      <h3 className="text-sm text-[var(--accent)]">{ladderLabel(rating.ladder)}</h3>
+      <h3 className="text-sm text-music">{ladderLabel(rating.ladder)}</h3>
       {rating.calibrating || !rating.tier ? (
         <>
           <p className="font-display text-xl font-bold" data-testid="calibration">

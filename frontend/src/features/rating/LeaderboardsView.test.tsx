@@ -59,20 +59,23 @@ describe("LeaderboardsView — лидерборды", () => {
     const board = await screen.findByTestId("board");
     expect(within(board).getByTestId("board-row-1")).toHaveTextContent("игрок1");
     expect(within(board).getByTestId("board-row-1")).toHaveTextContent("Платина 2");
-    expect(screen.getByTestId("ladder-film")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("weekly-film")).toHaveTextContent("+42");
+    expect(screen.getByRole("radio", { name: "Кино" })).toHaveAttribute("aria-checked", "true");
     // Гость: «Моё место» недоступно.
     expect(screen.queryByTestId("around-me")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Топ недели" }));
+    expect(screen.getByTestId("weekly-film")).toHaveTextContent("+42");
+    await userEvent.click(screen.getByRole("tab", { name: "Рейтинг" }));
 
     await userEvent.click(screen.getByTestId("board-more"));
     await waitFor(() => expect(screen.getByTestId("board-row-3")).toBeInTheDocument());
     expect(screen.queryByTestId("board-more")).not.toBeInTheDocument();
     expect(seen).toEqual(["|", "|c2"]);
 
-    await userEvent.click(screen.getByTestId("ladder-music"));
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
     await waitFor(() =>
-      expect(screen.getByTestId("ladder-music")).toHaveAttribute("aria-pressed", "true"),
+      expect(screen.getByRole("radio", { name: "Музыка" })).toHaveAttribute("aria-checked", "true"),
     );
+    await userEvent.click(screen.getByRole("tab", { name: "Топ недели" }));
     expect(await screen.findByTestId("weekly-music")).toBeInTheDocument();
     expect(seen.at(-1)).toBe("music|");
   });
@@ -107,6 +110,7 @@ describe("LeaderboardsView — лидерборды", () => {
     );
     renderWithProviders(<LeaderboardsView />);
     expect(await screen.findByTestId("board")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Топ недели" }));
     expect(screen.getByText(/Топ недели не загрузился/)).toBeInTheDocument();
     expect(screen.getByText(/Список разделов не загрузился/)).toBeInTheDocument();
   });
@@ -129,11 +133,11 @@ describe("LeaderboardsView — лидерборды", () => {
     );
     renderWithProviders(<LeaderboardsView />);
     await screen.findByTestId("board-row-1");
-    await userEvent.click(screen.getByTestId("ladder-music"));
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
     expect(await screen.findByTestId("board-updating")).toBeInTheDocument();
     // Пока грузится: старая таблица на месте, переключатель не пропал.
     expect(screen.getByTestId("board-row-1")).toBeInTheDocument();
-    expect(screen.getByTestId("ladder-film")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Кино" })).toBeInTheDocument();
     release();
     await screen.findByTestId("board-row-7");
     expect(screen.queryByTestId("board-updating")).not.toBeInTheDocument();
@@ -151,7 +155,7 @@ describe("LeaderboardsView — лидерборды", () => {
     await userEvent.click(await screen.findByTestId("board-more"));
     expect(await screen.findByTestId("board-error")).toHaveTextContent("Список обновился");
     expect(screen.getByTestId("board-row-1")).toBeInTheDocument();
-    expect(screen.getByTestId("ladder-music")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Музыка" })).toBeInTheDocument();
   });
 
   it("422 без курсора — некорректный раздел, возврат к началу", async () => {
@@ -166,9 +170,9 @@ describe("LeaderboardsView — лидерборды", () => {
     await screen.findByTestId("board-row-1");
     // Раздел выбирается только из списка; некорректный приходит снаружи — эмулируем ответом сервера.
     server.use(http.get(URL_PAGE, () => problem(422, "common.validation_failed")));
-    await userEvent.click(screen.getByTestId("ladder-music"));
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
     expect(await screen.findByTestId("board-error")).toHaveTextContent("Некорректный раздел");
-    expect(screen.getByTestId("ladder-film")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Кино" })).toBeInTheDocument();
   });
 
   it("401 на «Моё место» — around сбрасывается, показано «Войдите»", async () => {
@@ -194,9 +198,9 @@ describe("LeaderboardsView — лидерборды", () => {
   it("у таблицы есть подпись для скринридеров", async () => {
     server.use(http.get(URL_PAGE, () => HttpResponse.json(page("film", [entry(1)], null))));
     renderWithProviders(<LeaderboardsView />);
-    const board = await screen.findByTestId("board");
-    expect(
-      within(board).getByText(/Таблица лидеров · Кино/, { selector: "caption" }),
-    ).toBeInTheDocument();
+    const table = await screen.findByRole("table", { name: "Таблица лидеров · Кино" });
+    // Заголовок колонок и одна строка игрока.
+    expect(within(table).getAllByRole("row")).toHaveLength(2);
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(5);
   });
 });

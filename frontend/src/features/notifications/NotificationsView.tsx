@@ -90,7 +90,7 @@ export function NotificationsView() {
     <div className="flex flex-col gap-6 pt-6 sm:pt-10">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-2">
-          <h1 className="font-display text-3xl font-bold">{t("notifications.title")}</h1>
+          <h1 className="font-display text-[28px] leading-none font-extrabold">{t("notifications.title")}</h1>
           <p className="max-w-[60ch] text-ink-muted">{t("notifications.lead")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -168,7 +168,7 @@ function Row({ item, onRead }: { item: NotificationItem; onRead: () => void }) {
       data-read={isRead}
       data-type={item.type}
       className={cn(
-        "flex flex-col gap-2 rounded-[var(--radius-control)] p-4 ring-1 ring-rule sm:flex-row sm:items-start sm:justify-between",
+        "flex flex-col gap-2 rounded-[var(--radius-control)] p-4 border-[1.5px] border-rule sm:flex-row sm:items-start sm:justify-between",
         isRead ? "bg-night" : "bg-stage",
       )}
     >

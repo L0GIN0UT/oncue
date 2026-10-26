@@ -29,7 +29,7 @@ function Done({ text, testId, children }: { text: string; testId: string; childr
     <div className="flex flex-col items-start gap-4">
       <p
         role="status"
-        className="rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule"
+        className="rounded-[var(--radius-ticket)] bg-stage p-6 border-[1.5px] border-rule"
         data-testid={testId}
       >
         {text}

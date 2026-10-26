@@ -83,7 +83,7 @@ export function NotificationSettingsView() {
   return (
     <div className="flex flex-col gap-8 pt-6 sm:pt-10">
       <header className="flex flex-col gap-2">
-        <h1 className="font-display text-3xl font-bold">{t("notifications.settings.title")}</h1>
+        <h1 className="font-display text-[28px] leading-none font-extrabold">{t("notifications.settings.title")}</h1>
         <p className="max-w-[60ch] text-ink-muted">{t("notifications.settings.lead")}</p>
         <Link href="/notifications" className="text-sm underline underline-offset-4">
           {t("notifications.back")}
@@ -100,7 +100,7 @@ export function NotificationSettingsView() {
       </div>
 
       <section aria-labelledby="types-title" className="flex flex-col gap-3">
-        <h2 id="types-title" className="font-display text-xl font-semibold">
+        <h2 id="types-title" className="font-semibold">
           {t("notifications.settings.types")}
         </h2>
         {settings.isPending ? (
@@ -117,7 +117,7 @@ export function NotificationSettingsView() {
               <li
                 key={row.type}
                 data-testid={`notification-type-${row.type}`}
-                className="flex flex-col gap-2 rounded-[var(--radius-control)] bg-stage p-4 ring-1 ring-rule"
+                className="flex flex-col gap-2 rounded-[var(--radius-control)] bg-stage p-4 border-[1.5px] border-rule"
               >
                 <span dir="auto" className="font-medium">
                   {row.title}
@@ -153,7 +153,7 @@ export function NotificationSettingsView() {
       </section>
 
       <section aria-labelledby="email-title" className="flex flex-col gap-3">
-        <h2 id="email-title" className="font-display text-xl font-semibold">
+        <h2 id="email-title" className="font-semibold">
           {t("notifications.settings.emailTitle")}
         </h2>
         <p className="text-sm text-ink-muted">{t("notifications.settings.emailLead")}</p>

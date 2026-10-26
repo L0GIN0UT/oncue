@@ -1,27 +1,30 @@
 "use client";
 /**
- * Переходы из профиля в разделы, которых нет в меню: магазин, друзья, рейтинг, медиатека, мои
- * сборники, безопасность. Временная плоская подборка этапа 0; экран профиля её переделает.
+ * Переходы из профиля в разделы, которых нет в меню: медиатека, мои сборники, уведомления,
+ * их настройки и безопасность. Магазин, друзья и рейтинг доступны из вкладок профиля.
  */
 import { useTranslations } from "next-intl";
 import { Row } from "@/shared/ui/row";
 
 const LINKS = [
-  { href: "/shop", key: "shop", testId: "nav-shop" },
-  { href: "/friends", key: "friends", testId: "nav-friends" },
-  { href: "/leaderboards", key: "leaderboards", testId: "nav-leaderboards" },
-  { href: "/library", key: "library", testId: "nav-library" },
-  { href: "/me/collections", key: "myCollections", testId: "nav-my-collections" },
-  { href: "/me/security", key: "security", testId: "nav-security" },
+  { href: "/library", label: "nav.library", testId: "nav-library" },
+  { href: "/me/collections", label: "nav.myCollections", testId: "nav-my-collections" },
+  { href: "/notifications", label: "nav.notifications", testId: "nav-notifications" },
+  {
+    href: "/notifications/settings",
+    label: "notifications.settingsLink",
+    testId: "nav-notification-settings",
+  },
+  { href: "/me/security", label: "nav.security", testId: "nav-security" },
 ] as const;
 
 export function ProfileLinks() {
   const t = useTranslations();
   return (
-    <nav aria-label={t("nav.profileSections")} className="flex flex-col gap-2.5">
+    <nav aria-label={t("progression.links.label")} className="flex flex-col gap-2.5">
       {LINKS.map((l) => (
         <Row key={l.href} href={l.href} data-testid={l.testId}>
-          {t(`nav.${l.key}`)}
+          {t(l.label)}
         </Row>
       ))}
     </nav>

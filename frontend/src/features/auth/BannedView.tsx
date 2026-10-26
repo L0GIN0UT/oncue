@@ -31,7 +31,7 @@ export function BannedView() {
 
   return (
     <div className="flex max-w-xl flex-col items-start gap-4 pt-12" data-testid="banned">
-      <h1 className="font-display text-3xl font-bold">{t("auth.banned.title")}</h1>
+      <h1 className="font-display text-[28px] leading-none font-extrabold">{t("auth.banned.title")}</h1>
       <p className="text-ink-muted">{t("auth.banned.text")}</p>
       <Button onClick={signOut} disabled={busy} data-testid="banned-logout">
         {busy ? t("auth.banned.signingOut") : t("auth.banned.signOut")}
