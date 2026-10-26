@@ -44,7 +44,7 @@ export function ItemPreview({
     <aside
       aria-label={t("shop.preview.label")}
       data-testid="shop-preview"
-      className="flex flex-col items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-[18px] text-center"
+      className="flex flex-col items-center gap-3 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage px-[18px] py-4 text-center"
     >
       <ProfileBackdrop appearance={shown} className="rounded-[var(--radius-control)] p-3">
         <div className="flex flex-col items-center gap-2">

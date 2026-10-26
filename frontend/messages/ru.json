@@ -1668,7 +1668,8 @@
       },
       "equip": "Надеть",
       "unequip": "Снять",
-      "expires": "До {date}"
+      "expires": "До {date}",
+      "toShop": "В магазин"
     },
     "equipError": {
       "notOwned": "Этого предмета нет в вашем инвентаре.",

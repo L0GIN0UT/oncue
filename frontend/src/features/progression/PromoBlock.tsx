@@ -96,7 +96,7 @@ export function PromoBlock() {
     <section
       aria-labelledby="promo-title"
       data-testid="block-promo"
-      className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-3.5"
+      className="flex flex-col gap-3 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage px-[18px] py-4"
     >
       <form
         onSubmit={(e) => void submit(e)}

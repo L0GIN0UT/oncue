@@ -53,16 +53,16 @@ export function ItemTile({
       data-rarity={item.rarity}
       onClick={onSelect}
       className={cn(
-        "flex aspect-square flex-col items-center justify-center gap-2 rounded-[var(--radius-control)] border-[1.5px] p-1 text-ink transition-colors",
+        "flex aspect-[4/5] flex-col items-center justify-center gap-2 rounded-[14px] border-[1.5px] bg-stage-raised p-1 text-ink transition-colors",
         selected
-          ? "border-music bg-stage shadow-[0_0_0_4px_var(--color-glow)]"
-          : "border-rule hover:border-rule-strong hover:bg-stage",
+          ? "border-music shadow-[0_0_0_4px_var(--color-glow)]"
+          : "border-rule hover:border-rule-strong",
       )}
     >
       <CosmeticImage
         item={item}
         decorative
-        className={cn("size-11 rounded-full object-cover", state === "locked" && "opacity-50")}
+        className={cn("size-14 rounded-full object-cover", state === "locked" && "opacity-50")}
       />
       <span aria-hidden className="tabular max-w-full truncate px-1 text-xs text-ink-muted">
         {caption}
