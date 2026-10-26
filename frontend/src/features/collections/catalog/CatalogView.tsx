@@ -270,7 +270,11 @@ function FilterBar({
     onChange({ sort: filters.sort === sort ? undefined : sort });
   return (
     <div className="contents" data-testid="collection-filters">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("collections.filters.domain")}>
+      <div
+        className="flex flex-wrap gap-1.5"
+        role="group"
+        aria-label={t("collections.filters.domain")}
+      >
         {[undefined, ...DOMAINS].map((d) => (
           <Chip
             key={d ?? "all"}

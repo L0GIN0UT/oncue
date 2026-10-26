@@ -89,7 +89,9 @@ export function OnlineHub() {
             aside={
               queues &&
               searching > 0 && (
-                <span className={CHIP}>{t("rating.queue.searchingCount", { count: searching })}</span>
+                <span className={CHIP}>
+                  {t("rating.queue.searchingCount", { count: searching })}
+                </span>
               )
             }
             data-testid="online-ranked"
@@ -221,7 +223,11 @@ export function OnlineHub() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 md:gap-8">
               {weekly.map((top) => (
-                <WeeklyStrip key={top.ladder} top={top} limit={weekly.length > 1 ? 5 : HUB_WEEKLY} />
+                <WeeklyStrip
+                  key={top.ladder}
+                  top={top}
+                  limit={weekly.length > 1 ? 5 : HUB_WEEKLY}
+                />
               ))}
             </div>
           )}

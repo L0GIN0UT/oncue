@@ -110,7 +110,6 @@ test("своя аватарка: без права — в магазин; куп
 }) => {
   await login(page);
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "none");
   await expect(page.getByTestId("avatar-upload")).toHaveCount(0);
 
@@ -124,7 +123,6 @@ test("своя аватарка: без права — в магазин; куп
   await expect(page.getByTestId("shop-item-custom_avatar")).toHaveAttribute("data-state", "owned");
 
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await page
     .getByTestId("avatar-upload")
     .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: PNG });
@@ -132,7 +130,6 @@ test("своя аватарка: без права — в магазин; куп
   await page.getByRole("button", { name: "Отправить на проверку" }).click();
   await expect(page.getByTestId("avatar-sent")).toBeVisible();
   await page.reload();
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "pending");
   await expectAccessible(page);
 });
@@ -144,7 +141,6 @@ test("своя аватарка: слишком большой файл откл
   await scenario({ avatarRequest: "rejected" });
   await login(page);
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   const status = page.getByTestId("avatar-status");
   await expect(status).toHaveAttribute("data-status", "rejected");
   await expect(status).toContainText("Неприемлемое содержание");
@@ -162,7 +158,6 @@ test("блоки 5b недоступны — профиль цел", async ({ pa
   await login(page);
   await page.goto("/profile");
   await expect(page.getByTestId("level-value")).toBeVisible();
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("block-avatar-unavailable")).toBeVisible();
   await expect(page.getByTestId("player-badge")).toBeVisible();
 });

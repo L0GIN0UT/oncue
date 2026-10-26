@@ -99,9 +99,13 @@ export function MyMatchList({ matches }: { matches: HistoryCard[] }) {
             className="block rounded-xl transition-opacity hover:opacity-85"
           >
             <ListRow
-              lead={<span aria-label={t("online.myMatches.place", { place: m.place })}>{m.place}</span>}
+              lead={
+                <span aria-label={t("online.myMatches.place", { place: m.place })}>{m.place}</span>
+              }
               accentLead
-              trailing={<span className="tabular">{t("online.myMatches.score", { score: m.score })}</span>}
+              trailing={
+                <span className="tabular">{t("online.myMatches.score", { score: m.score })}</span>
+              }
               className="min-h-11"
             >
               <span className="font-semibold">{title(m.mode)}</span>

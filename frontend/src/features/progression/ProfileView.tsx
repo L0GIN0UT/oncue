@@ -1,32 +1,29 @@
 "use client";
 /**
- * Профиль `/profile`: шапка с уровнем, вкладки «Обзор / Рейтинг / Внешность / Друзья», ссылка
- * в магазин с балансом Версов. Только пользователю: аноним — 401 и вход, гость — 403
- * `auth.guest_forbidden` и регистрация. Блоки bff гаснут независимо (`unavailable`) — страница
- * при этом цела.
+ * Профиль `/profile` по макету v3 (Profile): три колонки — игрок, внешность и друзья слева;
+ * рейтинг, статистика, календарь и серии по центру; задания, бейджи, колесо и переходы справа.
+ * Только пользователю: аноним — 401 и вход, гость — 403 `auth.guest_forbidden` и регистрация.
+ * Блоки bff гаснут независимо (`unavailable`) — страница при этом цела.
  */
-import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type { AppearanceCard, ProfilePage, ProgressCard } from "@/shared/api/types";
 import { blockData } from "@/shared/api/blocks";
+import { Avatar as AvatarCircle } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
-import { Row } from "@/shared/ui/row";
-import { TabPanel, Tabs, type TabItem } from "@/shared/ui/tabs";
+import { Tile } from "@/shared/ui/tile";
 import { useSessionInfo, useViewer } from "@/features/auth/session";
 import { Avatar, ProfileBackdrop } from "@/features/cosmetics/PlayerBadge";
 import { itemOf } from "@/features/cosmetics/slots";
 import { useHomePage } from "@/features/daily/DailyCards";
-import { FriendsList } from "@/features/friends/FriendsView";
 import { friendsKeys, fetchFriends } from "@/features/friends/api";
 import { useOnlinePage } from "@/features/online/bff";
-import { RatingPanel } from "@/features/rating/RatingPanel";
 import { fetchProfilePage, profileQueryKey } from "./api";
 import { isMaxLevel } from "./logic";
 import { AvatarBlock } from "./AvatarBlock";
-import { ProfileOverview } from "./ProfileOverview";
+import { ProfileCenter, ProfileRight } from "./ProfileOverview";
 import { XpBar } from "./XpBar";
 
 /** Кого и почему не пускаем: без входа, гость (нужен аккаунт) или отказ доступа аккаунту. */
@@ -69,8 +66,6 @@ export function ProfileGate({ variant }: { variant: GateVariant }) {
   );
 }
 
-type TabId = "overview" | "rating" | "look" | "friends";
-
 export function ProfileView() {
   const t = useTranslations();
   const viewer = useViewer();
@@ -103,10 +98,11 @@ export function ProfileView() {
   );
 }
 
+const LOOK_ID = "profile-look";
+
 function ProfileScreen({ blocks }: { blocks: ProfilePage["blocks"] }) {
   const t = useTranslations();
   const f = useFormatter();
-  const [tab, setTab] = useState<TabId>("overview");
   const appearance = blockData(blocks.appearance);
   const progress = blockData(blocks.progress);
   const wallet = blockData(blocks.wallet);
@@ -117,93 +113,91 @@ function ProfileScreen({ blocks }: { blocks: ProfilePage["blocks"] }) {
   const playedToday =
     blockData(home.data?.blocks.dailies)?.some((c) => c.status === "finished") ?? false;
   const friends = useQuery({ queryKey: friendsKeys.list, queryFn: fetchFriends });
-  const tabs: TabItem<TabId>[] = [
-    { value: "overview", label: t("progression.tabs.overview") },
-    { value: "rating", label: t("progression.tabs.rating") },
-    { value: "look", label: t("progression.tabs.look") },
-    {
-      value: "friends",
-      label:
-        friends.data === undefined
-          ? t("progression.tabs.friends")
-          : t("progression.tabs.friendsCount", { count: friends.data.items.length }),
-    },
-  ];
   const avatar = blocks.avatar?.status === "ok" ? blocks.avatar.data : null;
 
   return (
-    <div className="flex flex-col gap-5 pt-2">
-      <ProfileHeader appearance={appearance} progress={progress} onEdit={() => setTab("look")} />
-      <div className="flex items-end border-b-[1.5px] border-rule">
-        <Tabs
-          tabs={tabs}
-          value={tab}
-          onChange={setTab}
-          idBase="profile"
-          aria-label={t("progression.tabs.label")}
-          className="min-w-0 flex-1 border-b-0"
+    <div
+      className="grid items-start gap-5 pt-2 lg:grid-cols-[300px_minmax(0,1fr)_320px]"
+      data-testid="profile"
+    >
+      <div className="flex min-w-0 flex-col gap-5">
+        <PlayerCard
+          appearance={appearance}
+          progress={progress}
+          onEdit={() => {
+            const el = document.getElementById(LOOK_ID);
+            el?.scrollIntoView({ block: "center", behavior: "smooth" });
+            el?.focus({ preventScroll: true });
+          }}
         />
-        {wallet && (
-          <Link
-            href="/shop"
-            data-testid="nav-shop"
-            aria-label={t("progression.pillLabel", { total: f.number(wallet.total) })}
-            className="inline-flex h-11 shrink-0 items-center px-1 pl-3 text-[15px] font-medium whitespace-nowrap text-music"
-          >
-            {t("progression.pill", { total: f.number(wallet.total) })}
+        <Tile cap={t("progression.cols.look")} data-testid="block-look">
+          <div id={LOOK_ID} tabIndex={-1} className="flex flex-col gap-3 outline-none">
+            {avatar ? (
+              <section data-testid="block-avatar" aria-label={t("avatar.title")}>
+                <AvatarBlock avatar={avatar} currentUrl={appearance?.custom_avatar_url} />
+              </section>
+            ) : (
+              blocks.avatar != null && (
+                <p className="text-sm text-ink-muted" data-testid="block-avatar-unavailable">
+                  {t("progression.blockUnavailable")}
+                </p>
+              )
+            )}
+          </div>
+          <Link href="/shop" data-testid="nav-shop" className="text-xs font-semibold text-music">
+            {wallet
+              ? t("progression.cols.shopBalance", { total: f.number(wallet.total) })
+              : t("progression.look.shop")}
           </Link>
-        )}
-      </div>
-      <TabPanel idBase="profile" value="overview" active={tab === "overview"}>
-        <ProfileOverview blocks={blocks} ratings={ratings} playedToday={playedToday} />
-      </TabPanel>
-      <TabPanel idBase="profile" value="rating" active={tab === "rating"}>
-        <div className="flex flex-col gap-4">
-          <RatingPanel ratings={ratings} seasons={seasons} />
-          <Row href="/leaderboards" data-testid="nav-leaderboards">
-            {t("progression.ratingTab.all")}
-          </Row>
-        </div>
-      </TabPanel>
-      <TabPanel idBase="profile" value="look" active={tab === "look"}>
-        <div className="flex flex-col gap-4">
-          {avatar ? (
-            <section
-              aria-labelledby="avatar-title"
-              data-testid="block-avatar"
-              className="flex flex-col gap-2.5"
-            >
-              <h2 id="avatar-title" className="px-0.5 font-semibold">
-                {t("avatar.title")}
-              </h2>
-              <AvatarBlock avatar={avatar} currentUrl={appearance?.custom_avatar_url} />
-            </section>
-          ) : (
-            blocks.avatar != null && (
-              <p className="text-ink-muted" data-testid="block-avatar-unavailable">
-                {t("progression.blockUnavailable")}
-              </p>
+        </Tile>
+        <Tile
+          cap={t("progression.cols.friends")}
+          aside={
+            friends.data && (
+              <span className="rounded-full bg-stage-raised px-[9px] py-[3px] text-xs font-semibold text-ink-muted">
+                {friends.data.items.length}
+              </span>
             )
+          }
+          data-testid="profile-friends"
+        >
+          {friends.data && friends.data.items.length > 0 && (
+            <ul className="flex justify-between gap-2">
+              {friends.data.items.slice(0, 5).map((fr) => (
+                <li key={fr.user_id} title={fr.nickname} className="relative">
+                  <AvatarCircle name={fr.nickname} />
+                  {fr.status !== "offline" && (
+                    <span
+                      aria-hidden
+                      className="absolute right-0 bottom-0 size-[11px] rounded-full border-2 border-stage bg-exact"
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
-          <Row href="/shop" data-testid="to-shop">
-            {t("progression.look.shop")}
-          </Row>
-        </div>
-      </TabPanel>
-      <TabPanel idBase="profile" value="friends" active={tab === "friends"}>
-        <div className="flex flex-col gap-4">
-          <FriendsList />
-          <Row href="/friends" data-testid="nav-friends">
-            {t("progression.friendsTab.all")}
-          </Row>
-        </div>
-      </TabPanel>
+          <Link
+            href="/friends"
+            data-testid="nav-friends"
+            className="grid h-[34px] place-items-center rounded-full border-[1.5px] border-rule bg-stage-raised text-[13px] font-semibold hover:border-rule-strong"
+          >
+            {t("progression.cols.addFriend")}
+          </Link>
+        </Tile>
+      </div>
+      <ProfileCenter
+        blocks={blocks}
+        ratings={ratings}
+        seasons={seasons}
+        playedToday={playedToday}
+      />
+      <ProfileRight blocks={blocks} />
     </div>
   );
 }
 
-/** Шапка: аватар с рамкой и фоном, ник, титул, уровень, полоса опыта и «Изменить». */
-function ProfileHeader({
+/** Карточка игрока: аватар с рамкой и фоном, ник, титул, уровень, полоса опыта, серия и «Изменить». */
+function PlayerCard({
   appearance,
   progress,
   onEdit,
@@ -217,14 +211,15 @@ function ProfileHeader({
   const { data } = useSessionInfo();
   const name = data?.subject?.display_name ?? t("nav.player");
   const title = itemOf(appearance, "title");
+  const streak = Math.max(0, ...(progress?.streaks.map((s) => s.current) ?? []));
   return (
     <ProfileBackdrop appearance={appearance} className="rounded-[var(--radius-ticket)]">
-      <section className="flex items-center gap-4" data-testid="player-badge">
-        <Avatar nickname={name} appearance={appearance} size="lg" />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex min-w-0 items-baseline gap-2.5">
+      <Tile className="bg-transparent" data-testid="player-badge">
+        <div className="flex items-center gap-3.5">
+          <Avatar nickname={name} appearance={appearance} size="lg" />
+          <div className="flex min-w-0 flex-col gap-1">
             <h1
-              className="truncate font-display text-[26px] leading-none font-extrabold"
+              className="truncate font-display text-lg leading-tight font-extrabold"
               dir="auto"
               data-testid="player-nickname"
             >
@@ -232,7 +227,7 @@ function ProfileHeader({
             </h1>
             {title && (
               <span
-                className="truncate text-sm text-ink-muted"
+                className="w-max max-w-full truncate rounded-full bg-glow px-[9px] py-[3px] text-xs font-semibold text-music"
                 dir="auto"
                 data-testid="player-title"
               >
@@ -240,25 +235,16 @@ function ProfileHeader({
               </span>
             )}
           </div>
-          {progress && (
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:flex-nowrap">
-              <span
-                className="text-[13px] whitespace-nowrap text-ink-muted"
-                data-testid="level-value"
-              >
+        </div>
+        {progress && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-2 text-[13px]">
+              <span className="font-semibold" data-testid="level-value">
                 {t("progression.level.value", { level: progress.level })}
                 {isMaxLevel(progress) &&
                   ` · ${t("progression.level.max", { max: progress.max_level })}`}
               </span>
-              <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-0">
-                <XpBar
-                  xpInLevel={progress.xp_in_level}
-                  xpToNext={progress.xp_to_next}
-                  level={progress.level}
-                  bare
-                />
-              </div>
-              <span className="tabular text-[13px] whitespace-nowrap text-ink-muted">
+              <span className="tabular text-[11px] text-ink-muted">
                 {progress.xp_to_next === null
                   ? t("progression.header.xpMax")
                   : t("progression.header.xpLeft", {
@@ -267,12 +253,23 @@ function ProfileHeader({
                     })}
               </span>
             </div>
-          )}
+            <XpBar
+              xpInLevel={progress.xp_in_level}
+              xpToNext={progress.xp_to_next}
+              level={progress.level}
+              bare
+            />
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] text-ink-soft">
+            {t("progression.cols.streakDays", { count: streak })}
+          </span>
+          <Button variant="secondary" size="sm" onClick={onEdit} data-testid="profile-edit">
+            {t("progression.header.edit")}
+          </Button>
         </div>
-        <Button variant="secondary" size="sm" onClick={onEdit} data-testid="profile-edit">
-          {t("progression.header.edit")}
-        </Button>
-      </section>
+      </Tile>
     </ProfileBackdrop>
   );
 }

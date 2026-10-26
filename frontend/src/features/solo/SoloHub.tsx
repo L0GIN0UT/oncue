@@ -73,7 +73,10 @@ export function SoloHub({ initial }: { initial: SoloPage | null }) {
     { value: ALL, label: t("solo.tab.all") },
     ...groups.map((g) => ({
       value: groupId(g),
-      label: dt(`solo.tab.${g.source_type}`, dt(`solo.group.${g.source_type}.title`, g.source_type)),
+      label: dt(
+        `solo.tab.${g.source_type}`,
+        dt(`solo.group.${g.source_type}.title`, g.source_type),
+      ),
     })),
   ];
   const active = tabs.some((x) => x.value === filter) ? filter : ALL;
@@ -417,13 +420,7 @@ function ModeCardTile({
 }
 
 /** Плитка группы со строками (марафоны, пары): рекорд слева, режим, переход в игру справа. */
-function StreakTile({
-  group,
-  records,
-}: {
-  group: ModeGroup;
-  records: Map<string, RecordCard>;
-}) {
+function StreakTile({ group, records }: { group: ModeGroup; records: Map<string, RecordCard> }) {
   const t = useTranslations();
   const dt = useDynamicT();
   const icons = useIcons();
@@ -436,9 +433,7 @@ function StreakTile({
   return (
     <Tile
       cap={label}
-      aside={
-        domains.size === 1 && <span className={CHIP}>{t(`domain.${[...domains][0]!}`)}</span>
-      }
+      aside={domains.size === 1 && <span className={CHIP}>{t(`domain.${[...domains][0]!}`)}</span>}
       data-testid={`mode-group-${group.source_type}`}
     >
       <div className="flex flex-col gap-1.5">

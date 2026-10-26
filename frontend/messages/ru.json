@@ -1505,7 +1505,8 @@
     "pillLabel": "Магазин, {total} Версов",
     "calendar": {
       "title": "Календарь активности",
-      "label": "{month}: серия {streak, plural, =0 {не идёт} one {# день} few {# дня} other {# дней}}"
+      "label": "{month}: серия {streak, plural, =0 {не идёт} one {# день} few {# дня} other {# дней}}",
+      "streak": "серия {streak}"
     },
     "ratingTab": {
       "all": "Таблица лидеров"
@@ -1518,6 +1519,16 @@
     },
     "links": {
       "label": "Ещё"
+    },
+    "cols": {
+      "rating": "Рейтинг",
+      "leaders": "Лидеры",
+      "stats": "Статистика",
+      "look": "Внешность",
+      "friends": "Друзья",
+      "addFriend": "Добавить",
+      "shopBalance": "Магазин · {total} Версов",
+      "streakDays": "{count, plural, =0 {серия не идёт} one {серия # день} few {серия # дня} other {серия # дней}}"
     }
   },
   "events": {

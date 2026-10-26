@@ -316,7 +316,7 @@ test("регистрация из экрана онлайна возвращае
   await page.getByTestId("code-input").fill("123456");
   await page.getByTestId("code-submit").click();
   await expect(page).toHaveURL(/\/online$/);
-  await expect(page.getByRole("tab", { name: "По коду" })).toBeVisible();
+  await expect(page.getByTestId("room-code-input")).toBeVisible();
 });
 
 test("сборник: «Играть с друзьями» создаёт лобби по сборнику; у музыки без шаблона кнопки нет", async ({
