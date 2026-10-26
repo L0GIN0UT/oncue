@@ -5,23 +5,23 @@
  * файлами src/styles), где разрешены литералы цвета.
  */
 [data-theme="winter"] {
-    --color-night: #101820;
-    --color-stage: #18222d;
-    --color-stage-raised: #212d3a;
-    --color-rule: #364859;
-    --color-rule-strong: #5b7188;
+    --color-night: #161e26;
+    --color-stage: #202a35;
+    --color-stage-raised: #293542;
+    --color-rule: #435566;
+    --color-rule-strong: #6b8198;
     --color-ink: #eef4fa;
     --color-ink-soft: #d3dde8;
-    --color-ink-muted: #a9b9c9;
+    --color-ink-muted: #b1c1d1;
     --color-ink-faint: #94a6b8;
-    --color-ink-dim: #5b7188;
+    --color-ink-dim: #6b8198;
 
     --color-music: #f4c06a;
     --color-film: #f4c06a;
     --color-partial: #f4c06a;
 
-    --color-skip-fill: #212d3a;
-    --color-skip-line: #364859;
+    --color-skip-fill: #293542;
+    --color-skip-line: #435566;
 
     --color-glow: rgb(244 192 106 / 0.14);
 }

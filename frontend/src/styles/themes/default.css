@@ -6,37 +6,37 @@
  * Единственное место (вместе с остальными файлами src/styles), где разрешены литералы цвета.
  */
 @theme {
-    --color-night: #141414;
-    --color-stage: #1c1c1c;
-    --color-stage-raised: #262626;
-    --color-rule: #3a3a3a;
-    --color-rule-strong: #5a5a5a;
+    --color-night: #1a1a1a;
+    --color-stage: #242424;
+    --color-stage-raised: #2e2e2e;
+    --color-rule: #474747;
+    --color-rule-strong: #6a6a6a;
     --color-ink: #f2f2f2;
     --color-ink-soft: #d9d9d9;
-    --color-ink-muted: #a3a3a3;
-    --color-ink-faint: #949494;
+    --color-ink-muted: #ababab;
+    --color-ink-faint: #9b9b9b;
     /* Самый слабый текст и пунктиры: только декор, в пары контраста текста не входит. */
-    --color-ink-dim: #5a5a5a;
+    --color-ink-dim: #6a6a6a;
 
     /* Акцент один — янтарь; текст на нём — night. */
     --color-music: #f2b13b;
-    --color-music-deep: #4d3b12;
+    --color-music-deep: #5a4516;
     --color-film: #f2b13b;
-    --color-film-deep: #4d3b12;
+    --color-film-deep: #5a4516;
 
     /* Исходы попытки: цвет значка/текста, заливка строки и её граница. */
     --color-exact: #9be39f;
-    --color-exact-fill: #214d2a;
-    --color-exact-line: #2e6b3a;
+    --color-exact-fill: #27592f;
+    --color-exact-line: #357a42;
     --color-partial: #f2b13b;
-    --color-partial-fill: #4d3b12;
-    --color-partial-line: #6b5319;
+    --color-partial-fill: #5a4516;
+    --color-partial-line: #7a5f1e;
     --color-miss: #f2a0a0;
-    --color-miss-fill: #4d2323;
-    --color-miss-line: #6b3030;
-    --color-skip: #a3a3a3;
-    --color-skip-fill: #262626;
-    --color-skip-line: #3a3a3a;
+    --color-miss-fill: #552828;
+    --color-miss-line: #7a3838;
+    --color-skip: #ababab;
+    --color-skip-fill: #2e2e2e;
+    --color-skip-line: #474747;
 
     /* Свечение акцента вокруг активного элемента (единственная «тень» системы). */
     --color-glow: rgb(242 177 59 / 0.14);
