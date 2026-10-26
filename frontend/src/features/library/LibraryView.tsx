@@ -8,12 +8,16 @@ import { useId, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { isApiError } from "@/shared/api/errors";
 import type { ShelfCard } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/cn";
+import { inputClass } from "@/shared/ui/field";
 import { useToast } from "@/shared/ui/toast";
+import { useIcons } from "@/shared/ui/theme-provider";
 import { useViewer } from "@/features/auth/session";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { apiErrorText } from "@/features/collections/errors";
 import { createShelf, deleteShelf, fetchLibraryPage, libraryKeys, renameShelf } from "./api";
 import { useShelfTitle } from "./ShelfPicker";
@@ -22,8 +26,10 @@ export function LibraryGate({ status }: { status: number | null }) {
   const t = useTranslations();
   const guest = status === 403;
   return (
-    <div className="flex max-w-xl flex-col items-start gap-4 pt-12">
-      <h1 className="font-display text-2xl font-bold">{t("library.usersOnly.title")}</h1>
+    <div className="flex flex-col items-start gap-4 pt-8">
+      <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
+        {t("library.usersOnly.title")}
+      </h1>
       <p className="text-ink-muted">{t("library.usersOnly.text")}</p>
       <Button asChild>
         <Link href={guest ? "/register" : "/login"}>
@@ -52,11 +58,9 @@ export function LibraryView() {
   }
   const block = page.data?.blocks.shelves;
   return (
-    <div className="flex flex-col gap-8 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-2">
-        <h1 className="font-display text-3xl font-bold">{t("library.title")}</h1>
-        <p className="max-w-[60ch] text-ink-muted">{t("library.lead")}</p>
-      </header>
+    <div className="flex flex-col gap-4 pt-4">
+      <HubHeader title={t("library.title")} />
+      <p className="px-0.5 text-sm text-ink-muted">{t("library.lead")}</p>
       {!block ? (
         <p className="text-ink-muted" role="status">
           {t("common.loading")}
@@ -64,7 +68,7 @@ export function LibraryView() {
       ) : block.status !== "ok" ? (
         <p className="text-ink-muted">{t("library.unavailable")}</p>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="flex flex-col gap-2.5">
           {(block.data ?? []).map((shelf) => (
             <ShelfTile key={shelf.ref} shelf={shelf} />
           ))}
@@ -106,7 +110,7 @@ function ShelfTile({ shelf }: { shelf: ShelfCard }) {
   };
 
   return (
-    <li className="flex flex-col gap-3 rounded-xl bg-stage p-4 ring-1 ring-rule">
+    <li className="flex flex-col gap-1">
       {renaming && custom ? (
         <form
           className="flex flex-col gap-2"
@@ -123,7 +127,7 @@ function ShelfTile({ shelf }: { shelf: ShelfCard }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             dir="auto"
-            className="h-10 rounded-lg bg-night px-3 ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-music"
+            className={cn(inputClass, "h-11")}
           />
           <div className="flex gap-2">
             <Button size="sm" type="submit" disabled={pending || !name.trim()}>
@@ -138,19 +142,19 @@ function ShelfTile({ shelf }: { shelf: ShelfCard }) {
         <Link
           href={`/library/${shelf.ref}`}
           data-testid={`shelf-card-${shelf.ref}`}
-          className="flex items-baseline justify-between gap-3 rounded-lg hover:underline"
+          className="flex min-h-[60px] items-center justify-between gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-2 transition-colors hover:border-rule-strong"
         >
-          <span dir="auto" className="truncate font-display text-lg font-bold">
+          <span dir="auto" className="truncate font-semibold">
             {title(shelf)}
           </span>
-          <span className="tabular shrink-0 text-ink-muted">
+          <span className="tabular shrink-0 text-sm text-ink-muted">
             <span aria-hidden>{shelf.items_count}</span>
             <span className="sr-only">{t("library.count", { count: shelf.items_count })}</span>
           </span>
         </Link>
       )}
       {custom && !renaming && (
-        <div className="flex gap-2">
+        <div className="flex gap-1 px-2">
           <Button size="sm" variant="ghost" onClick={() => setRenaming(true)}>
             <Pencil aria-hidden />
             {t("library.rename")}
@@ -176,6 +180,7 @@ function ShelfTile({ shelf }: { shelf: ShelfCard }) {
 
 function NewShelfForm() {
   const t = useTranslations();
+  const Plus = useIcons().plus;
   const toast = useToast();
   const client = useQueryClient();
   const [title, setTitle] = useState("");
@@ -199,7 +204,7 @@ function NewShelfForm() {
     }
   };
   return (
-    <form onSubmit={(e) => void submit(e)} className="flex max-w-md flex-col gap-2">
+    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-2 pt-2">
       <label htmlFor={id} className="text-sm font-medium">
         {t("library.newShelf")}
       </label>
@@ -210,10 +215,16 @@ function NewShelfForm() {
           onChange={(e) => setTitle(e.target.value)}
           dir="auto"
           data-testid="shelf-new-title"
-          className="h-11 flex-1 rounded-[var(--radius-control)] bg-night px-4 ring-1 ring-rule outline-none ring-inset focus:ring-2 focus:ring-music"
+          className={cn(inputClass, "min-w-0 flex-1")}
         />
-        <Button type="submit" disabled={pending || !title.trim()} data-testid="shelf-create">
-          <Plus aria-hidden />
+        <Button
+          type="submit"
+          variant="secondary"
+          size="lg"
+          disabled={pending || !title.trim()}
+          data-testid="shelf-create"
+        >
+          <Plus aria-hidden size={18} />
           {t("library.create")}
         </Button>
       </div>

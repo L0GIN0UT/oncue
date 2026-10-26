@@ -49,8 +49,9 @@ test("страница события: карта, дневник, закрыт�
   await expect(page.getByTestId("event-point-lantern")).toHaveAttribute("data-state", "found");
   await expect(page.getByTestId("event-point-snowman")).toHaveAttribute("data-state", "open");
   await expect(page.getByTestId("event-point-star")).toBeDisabled();
-  await expect(page.getByTestId("event-diary-star")).toContainText("Пока скрыто");
-  await expect(page.getByTestId("event-diary-lantern")).toContainText("тайнику с вареньем");
+  await expect(page.getByTestId("event-point-star")).toHaveAccessibleName(/закрыто/);
+  await page.getByTestId("event-point-lantern").click();
+  await expect(page.getByTestId("event-find-detail")).toContainText("тайнику с вареньем");
 
   await page.getByTestId("event-point-duelist").click();
   await expect(page.getByTestId("event-find-progress")).toContainText("1 из 3");

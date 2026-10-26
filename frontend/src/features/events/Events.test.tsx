@@ -19,10 +19,13 @@ describe("EventView", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
     expect(screen.getByTestId("event-point-lantern")).toHaveAttribute("data-state", "found");
     expect(screen.getByTestId("event-point-snowman")).toHaveAttribute("data-state", "open");
-    // Закрытая находка не кликабельна и не раскрывает подсказку в дневнике.
+    // Закрытая находка не кликабельна; задание по умолчанию — следующая открытая.
     expect(screen.getByTestId("event-point-star")).toBeDisabled();
-    expect(screen.getByTestId("event-diary-star")).toHaveTextContent("Пока скрыто");
-    expect(screen.getByTestId("event-diary-lantern")).toHaveTextContent("тайнику с вареньем");
+    expect(screen.getByTestId("event-point-star")).toHaveAccessibleName(/закрыто/);
+    expect(screen.getByTestId("event-find-detail")).toHaveTextContent("доступна");
+    // Запись дневника найденной находки — в карточке задания по клику на узел.
+    fireEvent.click(screen.getByTestId("event-point-lantern"));
+    expect(screen.getByTestId("event-find-detail")).toHaveTextContent("тайнику с вареньем");
     expect(screen.getByTestId("event-reward")).toHaveAttribute("data-completed", "false");
   });
 
