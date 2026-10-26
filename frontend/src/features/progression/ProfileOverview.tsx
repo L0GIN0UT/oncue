@@ -1,8 +1,9 @@
 "use client";
 /**
- * Вкладка «Обзор» профиля: четыре плитки, календарь активности, серии, Версы, задания, бейджи,
- * колесо, архив событий. Блоки bff гаснут независимо (`unavailable`) — вкладка при этом цела.
- * Названия заданий, бейджей и секторов приходят из progression и показываются как есть.
+ * Центральная и правая колонки профиля (макет v3, Profile): рейтинг, статистика, календарь
+ * активности, серии, Версы; задания, бейджи, колесо, архив событий, переходы. Каждый блок — плитка;
+ * блоки bff гаснут независимо (`unavailable`) — экран при этом цел. Названия заданий, бейджей и
+ * секторов приходят из progression и показываются как есть.
  */
 import type { ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -15,8 +16,12 @@ import type {
   RatingCard,
   WalletCard,
 } from "@/shared/api/types";
+import Link from "next/link";
 import { cn } from "@/shared/lib/cn";
 import { StatTile } from "@/shared/ui/stat-tile";
+import { Tile } from "@/shared/ui/tile";
+import { RatingPanel } from "@/features/rating/RatingPanel";
+import type { SeasonCard } from "@/shared/api/types";
 import { useNow } from "@/features/daily/use-now";
 import { useTierLabel } from "@/features/rating/labels";
 import { EventsArchive } from "@/features/events/EventsArchive";
@@ -26,28 +31,49 @@ import { WheelBlock } from "./WheelBlock";
 
 type Block<T> = { status: "ok" | "unavailable"; data?: T | null } | undefined;
 
-export function ProfileOverview({
-  blocks,
-  ratings,
-  playedToday,
-}: {
+type ColumnProps = {
   blocks: ProfilePage["blocks"];
   ratings: RatingCard[] | null;
+  seasons: SeasonCard[] | null;
   playedToday: boolean;
-}) {
+};
+
+function streakOf(progress: ProgressCard | null | undefined): number {
+  return Math.max(0, ...(progress?.streaks.map((s) => s.current) ?? []));
+}
+
+/** Центр: рейтинг, статистика, календарь активности, серии дейлика, Версы. */
+export function ProfileCenter({ blocks, ratings, seasons, playedToday }: ColumnProps) {
   const t = useTranslations();
   const progress = blocks.progress?.status === "ok" ? blocks.progress.data : null;
   const quests = blocks.quests?.status === "ok" ? blocks.quests.data : null;
-  const streak = Math.max(0, ...(progress?.streaks.map((s) => s.current) ?? []));
+  const streak = streakOf(progress);
   const now = useNow();
   return (
-    <div className="flex flex-col gap-6">
-      <Tiles
-        progress={progress ?? null}
-        quests={quests ?? null}
-        ratings={ratings}
-        streak={streak}
-      />
+    <div className="flex min-w-0 flex-col gap-5">
+      <Tile
+        cap={t("progression.cols.rating")}
+        aside={
+          <Link
+            href="/leaderboards"
+            data-testid="nav-leaderboards"
+            className="text-xs font-semibold text-music"
+          >
+            {t("progression.cols.leaders")}
+          </Link>
+        }
+        data-testid="profile-rating"
+      >
+        <RatingPanel ratings={ratings} seasons={seasons} />
+      </Tile>
+      <Tile cap={t("progression.cols.stats")}>
+        <Tiles
+          progress={progress ?? null}
+          quests={quests ?? null}
+          ratings={ratings}
+          streak={streak}
+        />
+      </Tile>
       {now && <ActivityCalendar today={now} streak={streak} playedToday={playedToday} />}
       <Section id="level" title={t("progression.streaks.title")} block={blocks.progress}>
         {(p: ProgressCard) => <LevelDetails progress={p} />}
@@ -55,6 +81,15 @@ export function ProfileOverview({
       <Section id="wallet" title={t("progression.wallet.title")} block={blocks.wallet}>
         {(w: WalletCard) => <WalletBlock wallet={w} />}
       </Section>
+    </div>
+  );
+}
+
+/** Правая колонка: задания, бейджи, колесо, архив событий, переходы в разделы. */
+export function ProfileRight({ blocks }: { blocks: ProfilePage["blocks"] }) {
+  const t = useTranslations();
+  return (
+    <div className="flex min-w-0 flex-col gap-5">
       <Section id="quests" title={t("progression.quests.title")} block={blocks.quests}>
         {(q: QuestsCard) => <QuestsBlock quests={q} />}
       </Section>
@@ -65,7 +100,9 @@ export function ProfileOverview({
         {(w) => <WheelBlock wheel={w} />}
       </Section>
       <EventsArchive events={blocks.events ?? []} />
-      <ProfileLinks />
+      <Tile cap={t("progression.links.label")}>
+        <ProfileLinks />
+      </Tile>
     </div>
   );
 }
@@ -89,8 +126,8 @@ function Tiles({
   const none = t("progression.tiles.none");
   return (
     <section
-      aria-label={t("progression.tabs.overview")}
-      className="grid grid-cols-2 gap-2.5 sm:grid-cols-4"
+      aria-label={t("progression.cols.stats")}
+      className="grid grid-cols-2 gap-2"
       data-testid="profile-tiles"
     >
       <StatTile accent value={streak} label={t("progression.tiles.streak")} />
@@ -128,27 +165,19 @@ function Section<T>({
   const t = useTranslations();
   const data = block?.status === "ok" ? block.data : null;
   return (
-    <section
-      aria-labelledby={`${id}-title`}
-      data-testid={`block-${id}`}
-      className="flex flex-col gap-2.5"
-    >
-      <h2 id={`${id}-title`} className="px-0.5 font-semibold">
-        {title}
-      </h2>
+    <Tile cap={title} data-testid={`block-${id}`}>
       {data ? (
         children(data)
       ) : (
-        <p className="text-ink-muted" data-testid={`block-${id}-unavailable`}>
+        <p className="text-sm text-ink-muted" data-testid={`block-${id}-unavailable`}>
           {t("progression.blockUnavailable")}
         </p>
       )}
-    </section>
+    </Tile>
   );
 }
 
-const ROW =
-  "flex flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-3";
+const ROW = "flex flex-col gap-1 rounded-xl bg-stage-raised px-3.5 py-3";
 
 function LevelDetails({ progress }: { progress: ProgressCard }) {
   const t = useTranslations();
@@ -160,7 +189,7 @@ function LevelDetails({ progress }: { progress: ProgressCard }) {
           {progress.streaks.map((s) => (
             <li
               key={s.domain}
-              className="flex min-h-[52px] items-center justify-between gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4"
+              className="flex min-h-10 items-center justify-between gap-3 rounded-xl bg-stage-raised px-3.5"
             >
               <span>{t(s.domain === "music" ? "domain.music" : "domain.film")}</span>
               <span className="tabular text-sm text-ink-muted">
@@ -292,12 +321,7 @@ function BadgesBlock({ badges }: { badges: BadgeCard[] }) {
       {badges.map((b) => {
         const unlocked = b.unlocked_at !== null && b.unlocked_at !== undefined;
         return (
-          <li
-            key={b.key}
-            data-testid={`badge-${b.key}`}
-            data-unlocked={unlocked}
-            className={cn(ROW, !unlocked && "opacity-80")}
-          >
+          <li key={b.key} data-testid={`badge-${b.key}`} data-unlocked={unlocked} className={ROW}>
             <span dir="auto" className="font-medium">
               {b.title}
             </span>

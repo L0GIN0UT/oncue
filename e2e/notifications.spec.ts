@@ -101,7 +101,6 @@ const noticesOf = async (page: Page): Promise<Notice[]> =>
 /** Загрузить PNG в `/profile` и отправить на проверку (ждём ответ 202). */
 async function uploadAvatar(page: Page, seed: number): Promise<void> {
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("block-avatar")).toBeVisible();
   await page.getByTestId("avatar-upload").setInputFiles({
     name: `me${seed}.png`,
@@ -137,7 +136,6 @@ test("покупка товара «своя аватарка» и загруз�
 
   // Без права загрузки нет: профиль ведёт в магазин.
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "none");
   await expect(page.getByTestId("avatar-upload")).toHaveCount(0);
 
@@ -150,7 +148,6 @@ test("покупка товара «своя аватарка» и загруз�
 
   await uploadAvatar(page, 1);
   await page.reload();
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "pending");
 });
 
@@ -171,7 +168,7 @@ test("админ одобряет заявку: колокольчик, увед
   expect(Number(await count.getAttribute("data-count"))).toBeGreaterThanOrEqual(1);
 
   await page.getByTestId("notification-bell").click();
-  await expect(page).toHaveURL(/\/notifications$/);
+  await expect(page.getByTestId("notifications-panel")).toBeVisible();
   await expect
     .poll(async () => (await noticesOf(page)).some((t) => t.type === "avatar_approved"), {
       timeout: DELIVERY_TIMEOUT_MS,
@@ -210,7 +207,6 @@ test("после одобрения аватарка игрока — /ugc/…we
   expect(url).toMatch(/^\/ugc\/.+\.webp$/);
 
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   await expect(page.getByTestId("avatar-status")).toHaveAttribute("data-status", "approved");
   const img = page.getByTestId("player-badge").first().locator(`img[src="${url}"]`);
   await expect(img).toBeVisible();
@@ -242,7 +238,6 @@ test("отклонение второй заявки с причиной: уве
   await expect(item).toContainText("нарушает правила сообщества");
 
   await page.goto("/profile");
-  await page.getByRole("tab", { name: "Внешность" }).click();
   const status = page.getByTestId("avatar-status");
   await expect(status).toHaveAttribute("data-status", "rejected");
   await expect(status).toContainText("Неприемлемое содержание");

@@ -1,14 +1,16 @@
 "use client";
 /**
- * Строка сборника в каталоге (макет «Сборники», 68 px): обложка-пресет, название (UGC,
- * `dir="auto"`), «N треков · сложность · автор», лайки и стрелка. Вся строка — ссылка.
+ * Карточка сборника в каталоге (макет «Сборники»): обложка-пресет с чипами домена и числа единиц,
+ * название (UGC, `dir="auto"`), автор, сложность, лайки, прохождения и «Играть». Вся карточка —
+ * ссылка на сборник (он открывается модалкой).
  */
-import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Heart } from "lucide-react";
 import type { CollectionCard as Card, CollectionCardOut } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
+import { cn } from "@/shared/lib/cn";
 import { useIcons } from "@/shared/ui/theme-provider";
+import { Tile } from "@/shared/ui/tile";
 import { useCollectionsMeta } from "../api";
 import { Cover } from "../Cover";
 
@@ -35,38 +37,72 @@ export function useTagTitle(): (key: string) => string {
   };
 }
 
+const DIFFICULTY_TONE = {
+  easy: "text-exact",
+  medium: "text-music",
+  hard: "text-miss",
+} as const;
+
+/** Число для карточки: 1 204 → «1,2к», меньше тысячи — как есть. */
+function compact(n: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
 export function CollectionCard({ card }: Props) {
   const t = useTranslations();
+  const locale = useLocale();
   const authorName = useAuthorName();
-  const Next = useIcons().next;
-  const meta = [
-    t(`collections.row.items.${card.domain}`, { count: card.items_count }),
-    card.difficulty ? t(`collections.difficulty.${card.difficulty}`) : null,
-    card.kind === "curated" ? t("collections.row.curated") : authorName(card.author),
-  ].filter(Boolean);
+  const icons = useIcons();
+  const DomainIcon = icons[card.domain];
   return (
     <li data-domain={card.domain}>
-      <Link
+      <Tile
         href={`/collections/${card.collection_id}`}
         data-testid={`collection-card-${card.collection_id}`}
-        className="flex min-h-[68px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2 transition-colors hover:border-rule-strong hover:bg-stage"
+        className="h-full gap-0 p-0"
       >
-        <Cover preset={card.cover?.preset} size="sm" />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span dir="auto" className="truncate font-semibold">
+        <div className="relative">
+          <Cover preset={card.cover?.preset} className="aspect-[16/10] rounded-none ring-0" />
+          <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1.5 rounded-full bg-night/85 px-[9px] py-[3px] text-xs font-semibold text-music">
+            <DomainIcon aria-hidden className="size-3.5" />
+            {t(`domain.${card.domain}`)}
+          </span>
+          <span className="tabular absolute right-2.5 bottom-2.5 rounded-full bg-night/85 px-[9px] py-[3px] text-xs font-semibold">
+            {card.items_count}
+          </span>
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5 px-4 pt-3 pb-3.5">
+          <span dir="auto" className="truncate text-base font-semibold">
             {card.title}
           </span>
-          <span dir="auto" className="truncate text-[13px] text-ink-muted">
-            {meta.join(" · ")}
+          <span dir="auto" className="truncate text-xs text-ink-muted">
+            {t("collections.row.by", { name: authorName(card.author) })}
           </span>
-        </span>
-        <span className="tabular flex items-center gap-1 text-[13px] text-ink-muted">
-          <Heart aria-hidden className="size-4" />
-          <span className="sr-only">{t("collections.stats.likes")}</span>
-          {card.likes_count}
-        </span>
-        <Next aria-hidden size={18} className="shrink-0 text-ink-muted" />
-      </Link>
+          <div className="flex items-center justify-between gap-2 text-xs text-ink-muted">
+            <span
+              className={cn(
+                "font-semibold",
+                card.difficulty ? DIFFICULTY_TONE[card.difficulty] : "text-ink-muted",
+              )}
+            >
+              {card.difficulty
+                ? t(`collections.difficulty.${card.difficulty}`).toLowerCase()
+                : null}
+            </span>
+            <span className="tabular inline-flex items-center gap-1">
+              <Heart aria-hidden className="size-3.5 text-miss" />
+              <span className="sr-only">{t("collections.stats.likes")}</span>
+              {compact(card.likes_count, locale)}
+            </span>
+            <span className="tabular">
+              {t("collections.row.plays", { count: compact(card.plays_count, locale) })}
+            </span>
+          </div>
+          <span className="mt-1.5 grid h-8 place-items-center rounded-full border-[1.5px] border-rule bg-stage-raised text-[13px] font-semibold">
+            {t("collections.play.start")}
+          </span>
+        </div>
+      </Tile>
     </li>
   );
 }

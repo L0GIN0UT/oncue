@@ -26,9 +26,8 @@ import {
   unreadQueryKey,
 } from "./api";
 
-export function NotificationsView() {
-  const t = useTranslations();
-  const viewer = useViewer();
+/** Лента уведомлений и действия над ней: общий источник для страницы и панели под колокольчиком. */
+export function useNotificationFeed(enabled: boolean) {
   const client = useQueryClient();
   const [actionError, setActionError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,19 +37,16 @@ export function NotificationsView() {
     queryFn: ({ pageParam }) => fetchNotifications(pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
-    enabled: viewer.kind === "user",
+    enabled,
   });
 
   // Общий кэш с колокольчиком: точное число на сервере (в списке загружена только часть).
   const total = useQuery({
     queryKey: unreadQueryKey,
     queryFn: fetchUnreadCount,
-    enabled: viewer.kind === "user",
+    enabled,
     retry: false,
   });
-
-  if (!viewer.pending && viewer.kind !== "user")
-    return <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />;
 
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const loadedUnread = list.data ? unreadIn(list.data) : 0;
@@ -84,10 +80,26 @@ export function NotificationsView() {
     }
   };
 
+  return { list, items, unread, read, readAll, busy, actionError };
+}
+
+export function NotificationsView() {
+  const t = useTranslations();
+  const viewer = useViewer();
+  const { list, items, unread, read, readAll, busy, actionError } = useNotificationFeed(
+    viewer.kind === "user",
+  );
+
+  if (!viewer.pending && viewer.kind !== "user")
+    return <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />;
+
   const unauthorized = isApiError(list.error) && list.error.status === 401;
 
   return (
-    <div className="flex flex-col gap-5 pt-2">
+    <div
+      className="mx-auto flex w-full max-w-[720px] flex-col gap-5 pt-2"
+      data-testid="notifications-page"
+    >
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-2">
           <h1 className="font-display text-[28px] leading-none font-extrabold">
@@ -159,7 +171,7 @@ export function NotificationsView() {
   );
 }
 
-function Row({ item, onRead }: { item: NotificationItem; onRead: () => void }) {
+export function Row({ item, onRead }: { item: NotificationItem; onRead: () => void }) {
   const t = useTranslations();
   const f = useFormatter();
   const isRead = item.read_at !== null;

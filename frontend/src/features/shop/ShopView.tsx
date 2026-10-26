@@ -8,7 +8,6 @@
  * ответа. Надеть и снять — на панели предпросмотра у купленного предмета.
  */
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormatter, useTranslations } from "next-intl";
 import { blockData } from "@/shared/api/blocks";
@@ -17,12 +16,11 @@ import type { ShopCatalogCard, ShopEntryCard, ShopPage } from "@/shared/api/type
 import { Button } from "@/shared/ui/button";
 import { Chip } from "@/shared/ui/chip";
 import { Modal } from "@/shared/ui/modal";
-import { useIcons } from "@/shared/ui/theme-provider";
+import { Tile } from "@/shared/ui/tile";
 import { useSessionInfo, useViewer } from "@/features/auth/session";
 import { PromoBlock } from "@/features/progression/PromoBlock";
 import { profileQueryKey } from "@/features/progression/api";
 import { gateOf, ProfileGate } from "@/features/progression/ProfileView";
-import { HeaderLeading } from "@/features/shell/header-leading";
 import { fetchShopPage, newIdempotencyKey, purchaseItem, shopQueryKey } from "./api";
 import { purchaseErrorKey, type PurchaseError } from "./errors";
 import { EQUIP_ERROR_KEYS, useEquip, useProfileBlocks } from "./inventory";
@@ -64,7 +62,6 @@ type Confirm = { entry: ShopEntryCard; key: string };
 export function ShopView() {
   const t = useTranslations();
   const viewer = useViewer();
-  const { back: Back } = useIcons();
   const query = useQuery({
     queryKey: shopQueryKey,
     queryFn: fetchShopPage,
@@ -86,15 +83,7 @@ export function ShopView() {
 
   const catalog = blockData(query.data?.blocks.catalog);
   return (
-    <div className="flex flex-col gap-4 pt-2 lg:-mx-[60px]">
-      <HeaderLeading>
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/profile" aria-label={t("shop.backLabel")}>
-            <Back aria-hidden className="!size-[18px]" />
-            {t("shop.back")}
-          </Link>
-        </Button>
-      </HeaderLeading>
+    <div className="flex flex-col gap-5 pt-2" data-testid="shop">
       {!query.data ? (
         <p className="text-ink-muted" role="status">
           {t("common.loading")}
@@ -204,20 +193,17 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
 
   return (
     <>
-      <header className="flex flex-col gap-2 px-0.5">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="font-display text-[28px] leading-none font-extrabold">
-            {t("shop.title")}
-          </h1>
-          <p
-            className="tabular inline-flex h-[38px] items-center rounded-full border-[1.5px] border-rule px-3.5 text-[15px] font-semibold text-music"
-            data-testid="shop-balance"
-            aria-live="polite"
-          >
-            {t("shop.balance", { balance: catalog.balance })}
-          </p>
-        </div>
-        <p className="text-sm text-ink-muted">{t("shop.lead")}</p>
+      <header className="flex flex-wrap items-center gap-3.5">
+        <h1 className="font-display text-[28px] leading-none font-extrabold">{t("shop.title")}</h1>
+        <span className="flex-1" />
+        <p className="text-xs text-ink-muted">{t("shop.lead")}</p>
+        <p
+          className="tabular inline-flex h-10 items-center rounded-full border-[1.5px] border-rule bg-stage px-3.5 text-sm font-semibold"
+          data-testid="shop-balance"
+          aria-live="polite"
+        >
+          {t("shop.balance", { balance: catalog.balance })}
+        </p>
       </header>
 
       <div role="group" aria-label={t("shop.tabs")} className="flex flex-wrap gap-2">
@@ -236,7 +222,6 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
         ))}
         <Chip
           selected={tab === MINE}
-          className="ml-auto"
           data-testid="shop-tab-inventory"
           onClick={() => {
             setTab(MINE);
@@ -246,44 +231,73 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
           {mineCount === null ? t("shop.tab.mine") : t("shop.tab.mineCount", { count: mineCount })}
         </Chip>
       </div>
-      <div aria-live="polite" role="status" data-testid="shop-status" className="min-h-5 text-sm">
+      <div
+        aria-live="polite"
+        role="status"
+        data-testid="shop-status"
+        className="min-h-5 text-sm empty:hidden"
+      >
         {status}
       </div>
 
-      {slot === null && profile.loading ? (
-        <p className="text-ink-muted" role="status">
-          {t("common.loading")}
-        </p>
-      ) : slot === null && !profile.inventory ? (
-        <p className="text-ink-muted" data-testid="inventory-unavailable">
-          {t("shop.blockUnavailable")}
-        </p>
-      ) : tiles.length === 0 ? (
-        <p
-          className="text-ink-muted"
-          data-testid={slot === null ? "inventory-empty" : "shop-empty"}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Tile
+          cap={slot !== null ? slotLabel(slot) : t("shop.tab.mine")}
+          aside={
+            <span className="rounded-full bg-stage-raised px-[9px] py-[3px] text-xs font-semibold text-ink-muted">
+              {tiles.length}
+            </span>
+          }
         >
-          {slot === null ? t("shop.inventory.empty") : t("shop.empty")}
-        </p>
-      ) : (
-        <div className="grid items-stretch gap-3.5 sm:grid-cols-[minmax(0,1fr)_240px]">
-          <ul className="grid grid-cols-3 content-start gap-2.5 sm:grid-cols-5">
-            {tiles.map(({ entry, state }) => (
-              <li key={entry.item.id} className="contents">
-                <ItemTile
-                  item={entry.item}
-                  state={state}
-                  selected={current?.entry.item.id === entry.item.id}
-                  onSelect={() => setSelectedId(entry.item.id)}
-                  testId={
-                    slot === null
-                      ? `inventory-item-${entry.item.key}`
-                      : `shop-item-${entry.item.key}`
-                  }
-                />
-              </li>
-            ))}
-          </ul>
+          {slot === null && profile.loading ? (
+            <p className="text-ink-muted" role="status">
+              {t("common.loading")}
+            </p>
+          ) : slot === null && !profile.inventory ? (
+            <p className="text-ink-muted" data-testid="inventory-unavailable">
+              {t("shop.blockUnavailable")}
+            </p>
+          ) : tiles.length === 0 ? (
+            slot === null ? (
+              <div className="flex flex-col items-start gap-3">
+                <p className="text-ink-muted" data-testid="inventory-empty">
+                  {t("shop.inventory.empty")}
+                </p>
+                <Chip
+                  onClick={() => {
+                    const first = catalog.slots[0];
+                    if (first) setTab(slotTab(first));
+                  }}
+                >
+                  {t("shop.inventory.toShop")}
+                </Chip>
+              </div>
+            ) : (
+              <p className="text-ink-muted" data-testid="shop-empty">
+                {t("shop.empty")}
+              </p>
+            )
+          ) : (
+            <ul className="grid grid-cols-3 content-start gap-2.5 sm:grid-cols-5">
+              {tiles.map(({ entry, state }) => (
+                <li key={entry.item.id} className="contents">
+                  <ItemTile
+                    item={entry.item}
+                    state={state}
+                    selected={current?.entry.item.id === entry.item.id}
+                    onSelect={() => setSelectedId(entry.item.id)}
+                    testId={
+                      slot === null
+                        ? `inventory-item-${entry.item.key}`
+                        : `shop-item-${entry.item.key}`
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Tile>
+        <div className="flex flex-col gap-5">
           {current && (
             <ItemPreview
               item={current.entry.item}
@@ -339,10 +353,9 @@ function ShopBody({ catalog }: { catalog: ShopCatalogCard }) {
               </div>
             </ItemPreview>
           )}
+          <PromoBlock />
         </div>
-      )}
-
-      <PromoBlock />
+      </div>
 
       <Modal
         open={confirm !== null}

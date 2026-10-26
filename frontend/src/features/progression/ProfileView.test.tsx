@@ -39,23 +39,17 @@ describe("ProfileView", () => {
     }
   });
 
-  it("5b: ник и «Своя аватарка» во вкладке «Внешность»; блоки 5b недоступны — профиль цел", async () => {
-    const user = userEvent.setup();
+  it("5b: ник и «Своя аватарка» в плитке «Внешность»; блоки 5b недоступны — профиль цел", async () => {
     signInAsUser();
     const view = renderWithProviders(<ProfileView />);
     expect(await screen.findByTestId("player-nickname")).toHaveTextContent("player");
-    await user.click(screen.getByRole("tab", { name: "Внешность" }));
     expect(await screen.findByTestId("avatar-status")).toHaveAttribute("data-status", "none");
-    expect(screen.getByRole("link", { name: "Перейти в магазин" })).toHaveAttribute(
-      "href",
-      "/shop",
-    );
+    expect(screen.getByTestId("nav-shop")).toHaveAttribute("href", "/shop");
     view.unmount();
 
     world.scenario = { appearanceDown: true };
     renderWithProviders(<ProfileView />);
     expect(await screen.findByTestId("level-value")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Внешность" }));
     expect(await screen.findByTestId("block-avatar-unavailable")).toBeInTheDocument();
     expect(screen.getByTestId("player-nickname")).toBeInTheDocument();
   });
@@ -76,17 +70,14 @@ describe("ProfileView", () => {
     expect(screen.getByTestId("nav-shop")).toHaveTextContent("40 Версов");
   });
 
-  it("вкладки: «Рейтинг» ведёт к таблице лидеров, «Друзья» — к разделу друзей", async () => {
-    const user = userEvent.setup();
+  it("«Лидеры» ведут к таблице лидеров, «Добавить» — к разделу друзей", async () => {
     server.use(
       http.get("*/api/web/v1/pages/online", () => HttpResponse.json({ status: "ok", blocks: {} })),
     );
     signInAsUser();
     renderWithProviders(<ProfileView />);
 
-    await user.click(await screen.findByRole("tab", { name: "Рейтинг" }));
-    expect(screen.getByTestId("nav-leaderboards")).toHaveAttribute("href", "/leaderboards");
-    await user.click(screen.getByRole("tab", { name: /Друзья/ }));
+    expect(await screen.findByTestId("nav-leaderboards")).toHaveAttribute("href", "/leaderboards");
     expect(await screen.findByTestId("nav-friends")).toHaveAttribute("href", "/friends");
   });
 

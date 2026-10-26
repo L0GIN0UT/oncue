@@ -6,6 +6,8 @@
  */
 import { useTranslations } from "next-intl";
 import { useNow } from "@/features/daily/use-now";
+import { TierBadge, tierKeyOf } from "@/shared/ui/tier-badge";
+import { useIcons } from "@/shared/ui/theme-provider";
 import { daysLeft, pointsToNext } from "./logic";
 import { useLadderLabel, useTierLabel, type RatingCard, type SeasonCard } from "./labels";
 
@@ -27,12 +29,12 @@ export function RatingPanel({
   }
   if (!ratings.length) return <p className="text-ink-muted">{t("rating.mine.empty")}</p>;
   return (
-    <ul className="flex flex-col gap-2.5" data-testid="ratings">
+    <ul className="grid gap-x-7 gap-y-5 sm:grid-cols-2" data-testid="ratings">
       {ratings.map((r) => (
         <li
           key={r.ladder}
           data-testid={`rating-${r.ladder}`}
-          className="flex flex-col gap-1.5 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-4"
+          className="flex min-w-0 flex-col gap-2"
         >
           <RatingBody rating={r} season={seasons?.find((s) => s.ladder === r.ladder) ?? null} />
         </li>
@@ -45,10 +47,15 @@ function RatingBody({ rating, season }: { rating: RatingCard; season: SeasonCard
   const t = useTranslations();
   const ladderLabel = useLadderLabel();
   const tierLabel = useTierLabel();
+  const icons = useIcons();
+  const Glyph = rating.ladder === "film" ? icons.film : icons.music;
   const left = pointsToNext(rating.rating, rating.next_tier_at);
   return (
     <>
-      <h3 className="text-sm text-music">{ladderLabel(rating.ladder)}</h3>
+      <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-ink-muted">
+        <Glyph aria-hidden className="size-3.5" />
+        {ladderLabel(rating.ladder)}
+      </h3>
       {rating.calibrating || !rating.tier ? (
         <>
           <p className="font-display text-xl font-bold" data-testid="calibration">
@@ -58,14 +65,24 @@ function RatingBody({ rating, season }: { rating: RatingCard; season: SeasonCard
         </>
       ) : (
         <>
-          <p className="font-display text-2xl font-bold" data-testid="tier">
-            {tierLabel(rating.tier)}
-          </p>
-          <p className="tabular text-ink-muted">
-            {rating.rating !== null && t("rating.points", { rating: rating.rating })}
-            {rating.place != null && <> · {t("rating.place", { place: rating.place })}</>}
-          </p>
-          <p className="text-sm text-ink-muted" data-testid="next-tier">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {rating.rating !== null && (
+              <span className="tabular font-display text-[28px] leading-none font-extrabold">
+                {rating.rating}
+              </span>
+            )}
+            <span data-testid="tier">
+              <TierBadge tier={tierKeyOf(rating.tier.family)} className="text-black">
+                {tierLabel(rating.tier)}
+              </TierBadge>
+            </span>
+          </div>
+          {rating.place != null && (
+            <p className="tabular text-xs text-ink-muted">
+              {t("rating.place", { place: rating.place })}
+            </p>
+          )}
+          <p className="text-xs text-ink-muted" data-testid="next-tier">
             {left === null ? t("rating.topTier") : t("rating.toNext", { points: left })}
           </p>
         </>

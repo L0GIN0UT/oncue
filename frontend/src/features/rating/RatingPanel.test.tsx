@@ -42,7 +42,7 @@ describe("RatingPanel — звание, калибровка, сезон", () =>
     renderWithProviders(<RatingPanel ratings={[rating({})]} seasons={[season]} />);
     const card = screen.getByTestId("rating-film");
     expect(within(card).getByTestId("tier")).toHaveTextContent("Бронза 2");
-    expect(card).toHaveTextContent("1120 очк.");
+    expect(card).toHaveTextContent("1120");
     expect(card).toHaveTextContent("Место 42");
     expect(within(card).getByTestId("next-tier")).toHaveTextContent(
       "До следующего звания: 80 очков",

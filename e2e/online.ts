@@ -179,7 +179,7 @@ export async function createRoomFromHub(
   modeKey: string,
 ): Promise<string> {
   await page.goto("/online");
-  // Режимы комнаты — под кнопкой «Создать комнату для друзей» на вкладке «Лобби».
+  // Режимы комнаты — под кнопкой «Создать комнату».
   const row = page.getByTestId(`create-room-${modeKey}`);
   if (!(await row.isVisible())) await page.getByTestId("create-room-toggle").click();
   await row.click();

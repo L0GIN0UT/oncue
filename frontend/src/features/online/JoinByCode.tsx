@@ -1,18 +1,16 @@
 "use client";
 /**
  * Вход по коду: 8 символов `[A-HJ-NP-Z2-9]`, ввод приводится к верхнему регистру; ссылку на
- * комнату целиком тоже можно вставить. Проверка комнаты и вход — на экране комнаты.
- * Кнопка вторичная: на хабе главное действие — поиск соперника; `primary` — для экрана `/lobbies`.
+ * комнату целиком тоже можно вставить. Проверка комнаты и вход — на экране комнаты. Строка
+ * «код + Войти» из макетов «Онлайн» и «Лобби»; кнопка вторичная — главное действие экрана другое.
  */
 import { useId, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button } from "@/shared/ui/button";
-import { inputClass } from "@/shared/ui/field";
-import { cn } from "@/shared/lib/cn";
 import { isRoomCode, normalizeRoomCode, ROOM_CODE_LENGTH } from "@/features/match/code";
 
-export function JoinByCode({ primary = false }: { primary?: boolean }) {
+export function JoinByCode() {
   const t = useTranslations();
   const router = useRouter();
   const id = useId();
@@ -30,11 +28,16 @@ export function JoinByCode({ primary = false }: { primary?: boolean }) {
   };
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-3" data-testid="join-by-code">
-      <label htmlFor={`${id}-code`} className="text-sm font-medium">
+    <form
+      onSubmit={onSubmit}
+      noValidate
+      className="flex flex-col gap-1.5"
+      data-testid="join-by-code"
+    >
+      <label htmlFor={`${id}-code`} className="sr-only">
         {t("online.join.title")}
       </label>
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex h-12 items-center gap-2 rounded-xl bg-stage-raised pr-2 pl-3">
         <input
           id={`${id}-code`}
           name="code"
@@ -50,22 +53,14 @@ export function JoinByCode({ primary = false }: { primary?: boolean }) {
           placeholder="K7MQ2XWP"
           aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
           aria-invalid={error}
-          className={cn(
-            inputClass,
-            "tabular h-14 min-w-0 flex-1 font-display text-xl tracking-[0.3em] uppercase",
-          )}
+          className="tabular min-w-0 flex-1 bg-transparent font-display text-sm font-extrabold tracking-[0.08em] text-ink-soft uppercase outline-none placeholder:text-ink-faint"
           data-testid="room-code-input"
         />
-        <Button
-          type="submit"
-          size="lg"
-          variant={primary ? "primary" : "secondary"}
-          data-testid="room-code-submit"
-        >
+        <Button type="submit" size="sm" variant="secondary" data-testid="room-code-submit">
           {t("online.join.submit")}
         </Button>
       </div>
-      <p id={`${id}-hint`} className="text-[13px] text-ink-muted">
+      <p id={`${id}-hint`} className="text-xs text-ink-muted">
         {t("online.join.hint")}
       </p>
       {error && (

@@ -5,6 +5,7 @@
  */
 import { useFormatter, useTranslations } from "next-intl";
 import { cn } from "@/shared/lib/cn";
+import { Tile } from "@/shared/ui/tile";
 import { monthGrid, type DayState } from "./calendar";
 
 const CELL: Record<DayState, string> = {
@@ -31,12 +32,15 @@ export function ActivityCalendar({
   const { leading, days } = monthGrid(today, streak, playedToday);
   const month = f.dateTime(today, { month: "long" });
   return (
-    <section
-      aria-label={t("progression.calendar.title")}
+    <Tile
+      cap={<span className="capitalize">{month}</span>}
+      aside={
+        <span className="font-display text-base font-extrabold text-music">
+          {t("progression.calendar.streak", { streak })}
+        </span>
+      }
       data-testid="activity-calendar"
-      className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-4"
     >
-      <p className="text-center font-semibold capitalize">{month}</p>
       <div
         role="img"
         aria-label={t("progression.calendar.label", { month, streak })}
@@ -56,7 +60,7 @@ export function ActivityCalendar({
             data-state={d.state}
             aria-hidden
             className={cn(
-              "grid aspect-square place-items-center rounded-lg border-[1.5px] border-transparent text-xs",
+              "grid h-[22px] place-items-center rounded-md border-[1.5px] border-transparent text-xs",
               CELL[d.state],
             )}
           >
@@ -64,6 +68,6 @@ export function ActivityCalendar({
           </span>
         ))}
       </div>
-    </section>
+    </Tile>
   );
 }

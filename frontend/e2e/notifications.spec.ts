@@ -21,7 +21,7 @@ test("колокольчик: число из shell, realtime увеличива
   await expect(page.getByTestId("notification-count")).toHaveText("3");
 
   await page.getByTestId("notification-bell").click();
-  await expect(page).toHaveURL(/\/notifications$/);
+  await expect(page.getByTestId("notifications-panel")).toBeVisible();
   const items = page.getByTestId("notification-item");
   await expect(items).toHaveCount(4);
   await expect(items.first()).toContainText("Задание выполнено");
