@@ -1,21 +1,25 @@
 "use client";
 /**
- * Хаб онлайна `/online` (D2 плана этапа 4): создать комнату по онлайн-режиму, войти по коду,
- * открытые лобби и мои последние матчи. Данные — bff `/v1/pages/online`, блоки гаснут
- * независимо; гостю bff отвечает `auth_required` — экран регистрации (D13).
+ * Хаб онлайна `/online` (макет «Онлайн»): блок рейтинговой дуэли с кнопкой «Найти соперника» и
+ * вкладки — лобби (с созданием комнаты), друзья в сети, мои матчи, топ недели, вход по коду.
+ * Данные — bff `/v1/pages/online`, блоки гаснут независимо; гостю bff отвечает `auth_required` —
+ * экран регистрации (D13).
  */
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Plus } from "lucide-react";
 import type { Domain } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
+import { Avatar } from "@/shared/ui/avatar";
+import { Button } from "@/shared/ui/button";
+import { TabPanel, Tabs } from "@/shared/ui/tabs";
+import { useIcons } from "@/shared/ui/theme-provider";
 import { createRoom } from "@/features/match/api";
 import { matchErrorKey } from "@/features/match/errors";
 import { StatusDot } from "@/features/friends/StatusDot";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { useHasSanction } from "@/features/sanctions/use-sanctions";
-import { RatingPanel } from "@/features/rating/RatingPanel";
 import { WeeklyTopTable } from "@/features/rating/WeeklyTopTable";
 import { blockData, hasBlock, useOnlinePage, type OnlineModeCard } from "./bff";
 import { JoinByCode } from "./JoinByCode";
@@ -29,10 +33,14 @@ const HUB_WEEKLY = 3;
 const HUB_FRIENDS = 6;
 const DOMAINS: Domain[] = ["music", "film"];
 
+type HubTab = "lobbies" | "friends" | "matches" | "weekly" | "code";
+
 export function OnlineHub() {
   const t = useTranslations();
+  const idBase = useId();
   const page = useOnlinePage();
   const banned = useHasSanction("online");
+  const [tab, setTab] = useState<HubTab>("lobbies");
 
   if (page.isPending) {
     return (
@@ -52,27 +60,49 @@ export function OnlineHub() {
   if (page.data.status !== "ok") return <OnlineAuthRequired />;
 
   const blocks = page.data.blocks;
+  const queues = blockData(blocks?.queues);
   const modes = blockData(blocks?.modes);
   const rooms = blockData(blocks?.open_rooms);
   const matches = blockData(blocks?.my_matches);
   // Блоки 4b: пока bff их не отдаёт (null), секции не рисуем; unavailable — «не загрузилось».
   const weekly = blockData(blocks?.weekly);
   const friends = blockData(blocks?.friends);
+  const searching = (queues ?? []).reduce((sum, q) => sum + q.searching, 0);
+  const friendsOnline = (friends?.items ?? []).filter((f) => f.status !== "offline").length;
+
+  const tabs: { value: HubTab; label: string }[] = [
+    {
+      value: "lobbies",
+      label: rooms
+        ? t("online.tabs.lobbies", { count: rooms.items.length })
+        : t("online.tabs.lobbiesPlain"),
+    },
+    ...(hasBlock(blocks?.friends)
+      ? [{ value: "friends" as const, label: t("online.tabs.friends", { count: friendsOnline }) }]
+      : []),
+    { value: "matches", label: t("online.tabs.matches") },
+    ...(hasBlock(blocks?.weekly)
+      ? [{ value: "weekly" as const, label: t("online.tabs.weekly") }]
+      : []),
+    { value: "code", label: t("online.tabs.code") },
+  ];
+
+  const unavailable = <p className="py-2 text-ink-muted">{t("online.blockUnavailable")}</p>;
 
   return (
-    <div className="flex flex-col gap-12 pt-6 sm:pt-10">
-      <header className="flex max-w-3xl flex-col gap-3">
-        <h1 className="font-display text-3xl leading-tight font-bold sm:text-4xl">
-          {t("online.title")}
-        </h1>
-        <p className="max-w-[60ch] text-ink-muted">{t("online.lead")}</p>
-      </header>
+    <div className="flex flex-col gap-4 pt-4">
+      <HubHeader
+        title={t("online.title")}
+        aside={
+          queues && searching > 0 ? t("rating.queue.searchingCount", { count: searching }) : null
+        }
+      />
 
       {banned && (
         <p
           role="status"
           data-testid="online-banned"
-          className="max-w-3xl rounded-[var(--radius-control)] bg-stage px-4 py-3 ring-1 ring-partial"
+          className="rounded-[var(--radius-control)] border-[1.5px] border-partial-line bg-partial-fill px-4 py-3"
         >
           {t("online.banned")}{" "}
           <Link href="/sanctions" className="underline underline-offset-4">
@@ -81,52 +111,71 @@ export function OnlineHub() {
         </p>
       )}
 
-      {hasBlock(blocks?.queues) && <QueuePanel queues={blockData(blocks?.queues)} />}
+      {hasBlock(blocks?.queues) && (
+        <QueuePanel
+          queues={queues}
+          ratings={hasBlock(blocks?.ratings) ? blockData(blocks?.ratings) : []}
+          seasons={blockData(blocks?.seasons)}
+        />
+      )}
+      <Link
+        href="/leaderboards"
+        className="self-center text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+      >
+        {t("rating.board.fullTable")}
+      </Link>
 
-      {hasBlock(blocks?.ratings) && (
-        <section aria-labelledby="online-ratings" className="flex flex-col gap-4">
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="online-ratings" className="font-display text-xl font-semibold">
-              {t("rating.mine.title")}
-            </h2>
+      <Tabs
+        aria-label={t("online.tabs.label")}
+        idBase={idBase}
+        tabs={tabs}
+        value={tab}
+        onChange={setTab}
+        className="mt-1.5"
+      />
+
+      <TabPanel idBase={idBase} value="lobbies" active={tab === "lobbies"}>
+        <div className="flex flex-col gap-3.5 pt-3.5">
+          {rooms === null ? unavailable : <OpenRoomList rooms={rooms.items.slice(0, HUB_ROOMS)} />}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CreateRoom modes={modes} />
             <Link
-              href="/leaderboards"
+              href="/lobbies"
               className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
             >
-              {t("rating.board.fullTable")}
+              {t("online.lobbies.all")}
             </Link>
           </div>
-          <RatingPanel ratings={blockData(blocks?.ratings)} seasons={blockData(blocks?.seasons)} />
-        </section>
-      )}
-
-      <div className="grid gap-8 lg:grid-cols-[1fr_minmax(0,26rem)]">
-        <section aria-labelledby="online-create" className="flex flex-col gap-4">
-          <h2 id="online-create" className="font-display text-xl font-semibold">
-            {t("online.create.title")}
-          </h2>
-          {modes === null ? (
-            <p className="text-ink-muted">{t("online.blockUnavailable")}</p>
-          ) : (
-            <ModePicker modes={modes} />
-          )}
-        </section>
-        <JoinByCode />
-      </div>
+        </div>
+      </TabPanel>
 
       {hasBlock(blocks?.friends) && (
-        <section
-          aria-labelledby="online-friends"
-          className="flex flex-col gap-4"
-          data-testid="hub-friends"
-        >
-          <div className="flex items-baseline justify-between gap-4">
-            <h2 id="online-friends" className="font-display text-xl font-semibold">
-              {t("social.hub.title")}
-            </h2>
+        <TabPanel idBase={idBase} value="friends" active={tab === "friends"}>
+          <div className="flex flex-col gap-3.5 pt-3.5" data-testid="hub-friends">
+            {friends === null ? (
+              unavailable
+            ) : friends.items.length === 0 ? (
+              <p className="py-2 text-ink-muted">{t("social.friends.empty")}</p>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {friends.items.slice(0, HUB_FRIENDS).map((f) => (
+                  <li
+                    key={f.user_id}
+                    data-testid={`hub-friend-${f.nickname}`}
+                    className="flex min-h-[64px] items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px]"
+                  >
+                    <Avatar name={f.nickname} />
+                    <span dir="auto" className="min-w-0 flex-1 truncate font-semibold">
+                      {f.nickname}
+                    </span>
+                    <StatusDot status={f.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
             <Link
               href="/friends"
-              className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+              className="self-start text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
               data-testid="hub-friends-all"
             >
               {friends?.incoming_requests
@@ -134,93 +183,57 @@ export function OnlineHub() {
                 : t("social.hub.all")}
             </Link>
           </div>
-          {friends === null ? (
-            <p className="text-ink-muted">{t("online.blockUnavailable")}</p>
-          ) : friends.items.length === 0 ? (
-            <p className="text-ink-muted">{t("social.friends.empty")}</p>
-          ) : (
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {friends.items.slice(0, HUB_FRIENDS).map((f) => (
-                <li
-                  key={f.user_id}
-                  data-testid={`hub-friend-${f.nickname}`}
-                  className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] bg-stage px-4 py-2 ring-1 ring-rule"
-                >
-                  <span dir="auto" className="font-medium">
-                    {f.nickname}
-                  </span>
-                  <StatusDot status={f.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        </TabPanel>
       )}
 
-      <section aria-labelledby="online-lobbies" className="flex flex-col gap-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 id="online-lobbies" className="font-display text-xl font-semibold">
-            {t("online.lobbies.title")}
-          </h2>
-          <Link
-            href="/lobbies"
-            className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
-          >
-            {t("online.lobbies.all")}
-          </Link>
-        </div>
-        {rooms === null ? (
-          <p className="text-ink-muted">{t("online.blockUnavailable")}</p>
-        ) : (
-          <OpenRoomList rooms={rooms.items.slice(0, HUB_ROOMS)} />
-        )}
-      </section>
-
-      {hasBlock(blocks?.weekly) && (
-        <section aria-labelledby="online-weekly" className="flex flex-col gap-4">
-          <h2 id="online-weekly" className="sr-only">
-            {t("rating.board.weekly")}
-          </h2>
-          {weekly === null ? (
-            <p className="text-ink-muted">{t("rating.board.weeklyUnavailable")}</p>
+      <TabPanel idBase={idBase} value="matches" active={tab === "matches"}>
+        <div className="flex flex-col gap-3.5 pt-3.5">
+          {matches === null ? (
+            unavailable
           ) : (
-            <div className="grid gap-6 sm:grid-cols-2">
-              {weekly.map((top) => (
-                <WeeklyTopTable key={top.ladder} top={top} limit={HUB_WEEKLY} />
-              ))}
-            </div>
+            <MyMatchList matches={matches.items.slice(0, HUB_MATCHES)} />
           )}
-        </section>
-      )}
-
-      <section aria-labelledby="online-matches" className="flex flex-col gap-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 id="online-matches" className="font-display text-xl font-semibold">
-            {t("online.myMatches.title")}
-          </h2>
           <Link
             href="/me"
-            className="text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+            className="self-start text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline"
           >
             {t("online.myMatches.all")}
           </Link>
         </div>
-        {matches === null ? (
-          <p className="text-ink-muted">{t("online.blockUnavailable")}</p>
-        ) : (
-          <MyMatchList matches={matches.items.slice(0, HUB_MATCHES)} />
-        )}
-      </section>
+      </TabPanel>
+
+      {hasBlock(blocks?.weekly) && (
+        <TabPanel idBase={idBase} value="weekly" active={tab === "weekly"}>
+          <div className="flex flex-col gap-6 pt-3.5">
+            {weekly === null ? (
+              <p className="py-2 text-ink-muted">{t("rating.board.weeklyUnavailable")}</p>
+            ) : (
+              weekly.map((top) => <WeeklyTopTable key={top.ladder} top={top} limit={HUB_WEEKLY} />)
+            )}
+          </div>
+        </TabPanel>
+      )}
+
+      <TabPanel idBase={idBase} value="code" active={tab === "code"}>
+        <div className="pt-3.5">
+          <JoinByCode />
+        </div>
+      </TabPanel>
     </div>
   );
 }
 
-function ModePicker({ modes }: { modes: OnlineModeCard[] }) {
+/** «Создать комнату для друзей»: кнопка раскрывает режимы строками; комната создаётся по клику. */
+function CreateRoom({ modes }: { modes: OnlineModeCard[] | null }): ReactNode {
   const t = useTranslations();
   const dt = useDynamicT();
   const router = useRouter();
+  const icons = useIcons();
+  const panelId = useId();
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const Plus = icons.plus;
 
   const create = async (mode: OnlineModeCard) => {
     setBusy(mode.key);
@@ -234,57 +247,70 @@ function ModePicker({ modes }: { modes: OnlineModeCard[] }) {
     }
   };
 
-  if (!modes.length) return <p className="text-ink-muted">{t("online.create.empty")}</p>;
   return (
-    <div className="flex flex-col gap-6">
-      {DOMAINS.map((domain) => {
-        // Рейтинговые комнаты — только из очереди (4b); режимы по сборнику — со страницы сборника.
-        const list = modes.filter(
-          (m) => m.domain === domain && !m.online.ranked && !m.online.max_collections,
-        );
-        if (!list.length) return null;
-        return (
-          <div key={domain} data-domain={domain} className="flex flex-col gap-3">
-            <h3 className="text-sm text-[var(--accent)]">{t(`domain.${domain}`)}</h3>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {list.map((mode) => (
-                <li key={mode.key}>
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => create(mode)}
-                    data-testid={`create-room-${mode.key}`}
-                    className="group flex h-full w-full items-start gap-3 rounded-[var(--radius-control)] bg-stage-raised p-4 text-left ring-1 ring-rule ring-inset hover:ring-2 hover:ring-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:opacity-45"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-night">
-                      <Plus className="size-4" aria-hidden />
-                    </span>
-                    <span className="flex flex-col gap-1">
-                      <span className="font-display font-semibold">
-                        {dt(mode.title_key, mode.key)}
-                      </span>
-                      <span className="text-sm text-ink-muted">
-                        {busy === mode.key
-                          ? t("online.create.busy")
-                          : t("online.create.rules", {
-                              kind: t(`online.kind.${mode.online.kind}`),
-                              rounds: mode.online.rounds,
-                              min: mode.online.players_min,
-                              max: mode.online.players_max,
-                            })}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-      {error && (
-        <p role="alert" className="text-miss" data-testid="create-room-error">
-          {error}
-        </p>
+    <div className="flex w-full flex-col gap-3">
+      <Button
+        variant="secondary"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="self-start"
+        data-testid="create-room-toggle"
+      >
+        <Plus aria-hidden size={18} />
+        {t("online.create.toggle")}
+      </Button>
+      {open && (
+        <div id={panelId} className="flex animate-rise flex-col gap-3.5">
+          {modes === null ? (
+            <p className="text-ink-muted">{t("online.blockUnavailable")}</p>
+          ) : !modes.length ? (
+            <p className="text-ink-muted">{t("online.create.empty")}</p>
+          ) : (
+            DOMAINS.map((domain) => {
+              // Рейтинговые комнаты — только из очереди (4b); режимы по сборнику — со страницы сборника.
+              const list = modes.filter(
+                (m) => m.domain === domain && !m.online.ranked && !m.online.max_collections,
+              );
+              if (!list.length) return null;
+              return (
+                <div key={domain} data-domain={domain} className="flex flex-col gap-2">
+                  <h3 className="px-0.5 text-[13px] text-ink-muted">{t(`domain.${domain}`)}</h3>
+                  <ul className="flex flex-col gap-2.5">
+                    {list.map((mode) => (
+                      <li key={mode.key}>
+                        <button
+                          type="button"
+                          disabled={busy !== null}
+                          onClick={() => create(mode)}
+                          data-testid={`create-room-${mode.key}`}
+                          className="flex min-h-[64px] w-full flex-col justify-center gap-0.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2 text-left transition-colors hover:border-rule-strong hover:bg-stage disabled:opacity-45"
+                        >
+                          <span className="font-semibold">{dt(mode.title_key, mode.key)}</span>
+                          <span className="text-[13px] text-ink-muted">
+                            {busy === mode.key
+                              ? t("online.create.busy")
+                              : t("online.create.rules", {
+                                  kind: t(`online.kind.${mode.online.kind}`),
+                                  rounds: mode.online.rounds,
+                                  min: mode.online.players_min,
+                                  max: mode.online.players_max,
+                                })}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })
+          )}
+          {error && (
+            <p role="alert" className="text-miss" data-testid="create-room-error">
+              {error}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
