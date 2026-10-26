@@ -18,7 +18,7 @@ describe("MyCollections", () => {
     expect(within(row).getByTestId("my-collection-hidden")).toHaveTextContent("Скрыт модератором");
     expect(screen.queryByTestId(`my-collection-${draft.id}`)).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("my-collections-tab-drafts"));
+    await user.click(screen.getByRole("tab", { name: /Черновики/ }));
     const draftRow = screen.getByTestId(`my-collection-${draft.id}`);
     expect(draftRow).toHaveTextContent("Черновик игрока");
     expect(within(draftRow).queryByTestId("my-collection-hidden")).not.toBeInTheDocument();
@@ -29,7 +29,7 @@ describe("MyCollections", () => {
     const subject = signInAsUser();
     const draft = world.ugc.create(subject, "film", "Удалить меня");
     renderWithProviders(<MyCollections />);
-    await user.click(await screen.findByTestId("my-collections-tab-drafts"));
+    await user.click(await screen.findByRole("tab", { name: /Черновики/ }));
     const row = await screen.findByTestId(`my-collection-${draft.id}`);
     await user.click(within(row).getByTestId("my-collection-delete"));
     await user.click(within(row).getByTestId("my-collection-delete-confirm"));

@@ -1,185 +1,364 @@
 "use client";
 /**
- * Соло-хаб по блокам bff (`GET /v1/pages/solo`): наборы дня, сетка недели, витрина режимов
- * группами (`source_type` + `presentation`, порядок — как прислал bff) и личные рекорды.
+ * Соло-хаб по блокам bff (`GET /v1/pages/solo`): домен переключателем, вкладки по группам режимов
+ * (`source_type`, порядок — как прислал bff), в каждой — строки режимов, которые раскрываются
+ * по клику: описание, наборы-пресеты и главная кнопка «Играть». Личный рекорд — в самой строке.
+ * Сетка недели (плановый режим) — отдельная вкладка; сборники — вкладка со ссылками.
  *
- * Карточка режима строится по данным: пресеты — чипы старта, `start.subject` — переход к выбору
+ * Строка строится по данным: пресеты — чипы выбора набора, `start.subject` — переход к выбору
  * персоны на `/play/<key>`. Ключ режима нужен только для ссылки и `data-testid`.
  */
 import Link from "next/link";
+import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useFormatter, useTranslations } from "next-intl";
-import { Trophy } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
-import type { ModeCard, ModeGroup, RecordCard, SoloPage } from "@/shared/api/types";
+import type { DailyCard, ModeCard, ModeGroup, RecordCard, SoloPage } from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
-import { DailyTicket } from "@/features/daily/DailyCards";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { Chip } from "@/shared/ui/chip";
+import { Segmented } from "@/shared/ui/segmented";
+import { useIcons } from "@/shared/ui/theme-provider";
+import { HubHeader } from "@/features/hubs/HubHeader";
+import { PillTabs } from "@/features/hubs/PillTabs";
+
+type Domain = "music" | "film";
+
+const WEEKLY_TAB = "weekly";
+const COLLECTION_TAB = "collection";
 
 const descriptionKey = (titleKey: string) => titleKey.replace(/\.title$/, ".description");
+const groupId = (g: ModeGroup) => `${g.source_type}:${g.presentation}`;
 
 export function SoloHub({ initial }: { initial: SoloPage | null }) {
   const t = useTranslations();
+  const dt = useDynamicT();
+  const panelId = useId();
   const { data } = useQuery({
     queryKey: ["page", "solo"],
     queryFn: async (): Promise<SoloPage> => unwrap(await api().web.GET("/v1/pages/solo")),
     initialData: initial ?? undefined,
   });
-  const daily = data?.blocks.daily;
+  const [domain, setDomain] = useState<Domain>("music");
+  const [tab, setTab] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
   const weekly = data?.blocks.weekly;
   const modes = data?.blocks.modes;
-  const records = data?.blocks.records ?? null;
-  const dailies = [
-    ...(daily?.status === "ok" ? (daily.data ?? []) : []),
-    ...(weekly?.status === "ok" ? (weekly.data ?? []) : []),
+  const records = new Map<string, RecordCard>(
+    (data?.blocks.records?.status === "ok" ? (data.blocks.records.data ?? []) : []).map((r) => [
+      r.mode_key,
+      r,
+    ]),
+  );
+  const groups = (modes?.status === "ok" ? (modes.data ?? []) : [])
+    .map((g) => ({ ...g, modes: g.modes.filter((m) => m.domain === domain) }))
+    .filter((g) => g.modes.length > 0);
+  const weeklyCards = (weekly?.status === "ok" ? (weekly.data ?? []) : []).filter(
+    (c) => c.domain === domain,
+  );
+
+  const tabs = [
+    ...groups.map((g) => ({
+      value: groupId(g),
+      label: dt(
+        `solo.tab.${g.source_type}`,
+        dt(`solo.group.${g.source_type}.title`, g.source_type),
+      ),
+    })),
+    ...(weeklyCards.length ? [{ value: WEEKLY_TAB, label: t("solo.tab.weekly") }] : []),
+    { value: COLLECTION_TAB, label: t("solo.tab.collection") },
   ];
-  const dailyUnavailable = daily?.status === "unavailable" && weekly?.status !== "ok";
+  const active = tabs.some((x) => x.value === tab) ? tab! : tabs[0]!.value;
+  const activeGroup = groups.find((g) => groupId(g) === active);
+
+  function pickTab(value: string) {
+    setTab(value);
+    // Как в макете: при смене вкладки раскрыта первая строка.
+    const g = groups.find((x) => groupId(x) === value);
+    setOpen(g?.modes[0]?.key ?? (value === WEEKLY_TAB ? (weeklyCards[0]?.mode_key ?? null) : null));
+  }
+
+  function pickDomain(next: Domain) {
+    setDomain(next);
+    setTab(null);
+    setOpen(null);
+  }
+
+  // Раскрытая строка: явный выбор, а пока его нет — первая строка первой вкладки.
+  const firstKey =
+    activeGroup?.modes[0]?.key ?? (active === WEEKLY_TAB ? weeklyCards[0]?.mode_key : null);
+  const openKey = open ?? (tab === null ? (firstKey ?? null) : null);
+  const toggle = (key: string) => setOpen(openKey === key ? "" : key);
+
   return (
-    <div className="flex flex-col gap-12">
-      <section aria-labelledby="solo-daily" className="flex flex-col gap-5">
-        <h2 id="solo-daily" className="font-display text-xl font-semibold">
-          {t("daily.title")}
-        </h2>
-        {!data || dailyUnavailable ? (
-          <p className="text-ink-muted">{t("daily.unavailable")}</p>
-        ) : (
-          <ul className="grid gap-5 md:grid-cols-2">
-            {dailies.map((card) => (
-              <li key={card.mode_key}>
-                <DailyTicket card={card} />
-              </li>
-            ))}
-          </ul>
+    <div className="flex flex-col gap-5 pt-4">
+      <div className="flex justify-center">
+        <Segmented
+          aria-label={t("solo.domainLabel")}
+          value={domain}
+          onChange={pickDomain}
+          options={[
+            { value: "music", label: t("domain.music") },
+            { value: "film", label: t("domain.film") },
+          ]}
+        />
+      </div>
+      <HubHeader title={t("solo.title")} aside={t("solo.aside")} />
+      <PillTabs
+        aria-label={t("solo.tabsLabel")}
+        tabs={tabs}
+        value={active}
+        onChange={pickTab}
+        panelId={panelId}
+      />
+      <div
+        id={panelId}
+        role="tabpanel"
+        data-testid={activeGroup ? `mode-group-${activeGroup.source_type}` : `mode-group-${active}`}
+        className="flex flex-col gap-2.5"
+      >
+        {modes?.status !== "ok" && active !== COLLECTION_TAB && active !== WEEKLY_TAB && (
+          <p className="text-ink-muted">{t("solo.modesUnavailable")}</p>
         )}
-      </section>
+        {activeGroup?.modes.map((mode) => (
+          <ModeRow
+            key={mode.key}
+            mode={mode}
+            record={records.get(mode.key)}
+            open={openKey === mode.key}
+            onToggle={() => toggle(mode.key)}
+          />
+        ))}
+        {active === WEEKLY_TAB &&
+          weeklyCards.map((card) => (
+            <WeeklyRow
+              key={card.mode_key}
+              card={card}
+              open={openKey === card.mode_key}
+              onToggle={() => toggle(card.mode_key)}
+            />
+          ))}
+        {active === COLLECTION_TAB && <CollectionLinks />}
+      </div>
+    </div>
+  );
+}
 
-      {records?.status === "ok" && (records.data ?? []).length > 0 && (
-        <Records records={records.data ?? []} />
-      )}
-
-      {modes?.status === "ok" ? (
-        (modes.data ?? []).map((group) => (
-          <Group key={`${group.source_type}:${group.presentation}`} group={group} />
-        ))
-      ) : (
-        <p className="text-ink-muted">{t("solo.modesUnavailable")}</p>
+/** Общая оболочка раскрывающейся строки: заголовок-кнопка и панель под ней. */
+function ExpandRow({
+  testId,
+  domain,
+  title,
+  sub,
+  trailing,
+  open,
+  onToggle,
+  children,
+}: {
+  testId: string;
+  domain: Domain;
+  title: string;
+  sub: string;
+  trailing?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const icons = useIcons();
+  const panelId = useId();
+  const Glyph = icons[domain];
+  const Chevron = icons.expand;
+  return (
+    <div data-domain={domain} data-testid={testId}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className={cn(
+          "flex min-h-[60px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] px-[18px] py-2 text-left transition-colors",
+          open
+            ? "rounded-b-none border-music bg-stage shadow-[0_0_0_4px_var(--color-glow)]"
+            : "border-rule hover:border-rule-strong hover:bg-stage",
+        )}
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-stage-raised text-music">
+          <Glyph aria-hidden size={20} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-base font-semibold">{title}</span>
+          <span className="text-[13px] text-ink-muted">{sub}</span>
+        </span>
+        {trailing && (
+          <span className="text-[13px] whitespace-nowrap text-ink-muted">{trailing}</span>
+        )}
+        <Chevron
+          aria-hidden
+          size={18}
+          className={cn("shrink-0 text-ink-muted transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          className="flex animate-rise flex-col gap-3.5 rounded-b-[var(--radius-control)] border-[1.5px] border-t-0 border-music bg-stage px-[18px] pt-4 pb-[18px]"
+        >
+          {children}
+        </div>
       )}
     </div>
   );
 }
 
-function Group({ group }: { group: ModeGroup }) {
+function ModeRow({
+  mode,
+  record,
+  open,
+  onToggle,
+}: {
+  mode: ModeCard;
+  record: RecordCard | undefined;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const id = `solo-group-${group.source_type}-${group.presentation}`;
-  const fallback = t(`solo.presentation.${group.presentation}`);
-  return (
-    <section
-      aria-labelledby={id}
-      className="flex flex-col gap-5"
-      data-testid={`mode-group-${group.source_type}`}
-    >
-      <div>
-        <h2 id={id} className="font-display text-xl font-semibold">
-          {dt(`solo.group.${group.source_type}.title`, fallback)}
-        </h2>
-        <p className="mt-1 text-ink-muted">
-          {dt(`solo.group.${group.source_type}.text`, t("solo.groupText"))}
-        </p>
-      </div>
-      <div className="grid gap-5 md:grid-cols-2">
-        {group.modes.map((mode) => (
-          <ModeCardView key={mode.key} mode={mode} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ModeCardView({ mode }: { mode: ModeCard }) {
-  const t = useTranslations();
-  const dt = useDynamicT();
-  const chip =
-    "inline-flex h-10 items-center rounded-full px-4 text-sm font-medium ring-1 ring-inset transition-colors";
+  const icons = useIcons();
+  const [preset, setPreset] = useState<string | null>(null);
   const subject = mode.start?.subject ?? null;
   const presets = mode.presets ?? [];
+  const presentation = mode.presentation ?? "score";
   // Число раундов фиксировано только у режимов без «жизней» и выбора: иначе `rounds` — предел.
-  const fixedRounds = (mode.presentation ?? "score") === "score" && !subject;
+  const fixedRounds = presentation === "score" && !subject;
   const description = dt(descriptionKey(mode.title_key), "");
+  const sub = fixedRounds
+    ? t("solo.rounds", { count: mode.rounds })
+    : subject
+      ? t("solo.sub.subject")
+      : t(`solo.sub.${presentation}`);
+  const href = preset
+    ? `/play/${mode.key}?preset=${encodeURIComponent(preset)}`
+    : `/play/${mode.key}`;
+  const Play = icons.play;
   return (
-    <article
-      data-domain={mode.domain}
-      data-testid={`mode-card-${mode.key}`}
-      className="flex flex-col gap-4 rounded-[var(--radius-ticket)] bg-stage p-6 ring-1 ring-rule"
+    <ExpandRow
+      testId={`mode-card-${mode.key}`}
+      domain={mode.domain}
+      title={dt(mode.title_key, mode.key)}
+      sub={sub}
+      trailing={
+        record ? t(`records.best.${record.presentation}`, { best: record.best }) : undefined
+      }
+      open={open}
+      onToggle={onToggle}
     >
-      <div>
-        <p className="text-sm text-[var(--accent)]">{t(`domain.${mode.domain}`)}</p>
-        <h3 className="mt-1 font-display text-xl font-bold">{dt(mode.title_key, mode.key)}</h3>
-        {description && <p className="mt-1 text-ink-muted">{description}</p>}
-        {fixedRounds && (
-          <p className="mt-1 text-sm text-ink-muted">{t("solo.rounds", { count: mode.rounds })}</p>
-        )}
-      </div>
-      <ul className="mt-auto flex flex-wrap gap-2" aria-label={t("solo.presets")}>
-        <li>
-          <Link
-            href={`/play/${mode.key}`}
-            className={`${chip} bg-[var(--accent)] text-night ring-transparent hover:brightness-110`}
+      {description && <p className="text-[15px] leading-normal text-ink-soft">{description}</p>}
+      {record?.percentile != null && (
+        <p className="text-[13px] text-ink-muted">
+          {t("records.percentile", { pct: Math.round(record.percentile) })}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {presets.length > 0 ? (
+          <div
+            role="group"
+            aria-label={t("solo.presets")}
+            className="flex flex-wrap items-center gap-2"
           >
-            {subject
-              ? t("solo.pickSubject")
-              : presets.length
-                ? t("solo.anyPreset")
-                : t("solo.play")}
+            <Chip selected={preset === null} onClick={() => setPreset(null)}>
+              {t("solo.anyPreset")}
+            </Chip>
+            {presets.map((p) => (
+              <Chip key={p.id} selected={preset === p.id} onClick={() => setPreset(p.id)}>
+                {dt(p.title_key, p.id)}
+              </Chip>
+            ))}
+          </div>
+        ) : (
+          <span />
+        )}
+        <Button asChild>
+          <Link href={href}>
+            {!subject && <Play aria-hidden size={18} />}
+            {subject ? t("solo.pickSubject") : t("solo.play")}
           </Link>
-        </li>
-        {presets.map((p) => (
-          <li key={p.id}>
-            <Link
-              href={`/play/${mode.key}?preset=${encodeURIComponent(p.id)}`}
-              className={`${chip} text-ink ring-rule hover:bg-stage-raised`}
-            >
-              {dt(p.title_key, p.id)}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </article>
+        </Button>
+      </div>
+    </ExpandRow>
   );
 }
 
-function Records({ records }: { records: RecordCard[] }) {
+function WeeklyRow({
+  card,
+  open,
+  onToggle,
+}: {
+  card: DailyCard;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const format = useFormatter();
+  const finished = card.status === "finished";
+  const href =
+    finished && card.session_id ? `/results/${card.session_id}` : `/play/${card.mode_key}`;
   return (
-    <section aria-labelledby="solo-records" className="flex flex-col gap-5">
-      <h2 id="solo-records" className="font-display text-xl font-semibold">
-        {t("records.title")}
-      </h2>
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {records.map((r) => (
-          <li
-            key={r.mode_key}
-            data-domain={r.domain}
-            data-testid={`record-${r.mode_key}`}
-            className="flex items-center gap-4 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
-          >
-            <Trophy aria-hidden className="size-5 shrink-0 text-[var(--accent)]" />
-            <div className="min-w-0">
-              <p className="truncate font-medium">{dt(r.title_key, r.mode_key)}</p>
-              <p className="text-sm text-ink-muted">
-                {t(`records.best.${r.presentation}`, { best: r.best })}
-                {r.percentile !== null && r.percentile !== undefined
-                  ? ` · ${t("records.percentile", { pct: Math.round(r.percentile) })}`
-                  : ""}
-              </p>
-              <p className="text-xs text-ink-muted">
-                {format.dateTime(new Date(r.achieved_at), { day: "numeric", month: "long" })}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <ExpandRow
+      testId={`daily-${card.mode_key}`}
+      domain={card.domain}
+      title={dt(card.title_key, card.mode_key)}
+      sub={t(`daily.statusPlain.${card.status}`)}
+      open={open}
+      onToggle={onToggle}
+    >
+      <p className="text-[15px] leading-normal text-ink-soft">
+        {dt(descriptionKey(card.title_key), t(`daily.pitch.${card.domain}`))}
+      </p>
+      <div className="flex justify-end">
+        <Button asChild variant={finished ? "secondary" : "primary"}>
+          <Link href={href}>{t(`daily.action.${card.status}`)}</Link>
+        </Button>
+      </div>
+    </ExpandRow>
+  );
+}
+
+/** Вкладка «По сборнику»: сборники живут на своих экранах, здесь только входы. */
+function CollectionLinks() {
+  const t = useTranslations();
+  const icons = useIcons();
+  const Next = icons.next;
+  return (
+    <>
+      {[
+        {
+          href: "/me/collections",
+          key: "own",
+          title: t("solo.collection.own.title"),
+          sub: t("solo.collection.own.sub"),
+        },
+        {
+          href: "/collections",
+          key: "catalog",
+          title: t("solo.collection.catalog.title"),
+          sub: t("solo.collection.catalog.sub"),
+        },
+      ].map(({ href, key, title, sub }) => (
+        <Link
+          key={key}
+          href={href}
+          data-testid={`solo-collection-${key}`}
+          className="flex min-h-[60px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2 transition-colors hover:border-rule-strong hover:bg-stage"
+        >
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-base font-semibold">{title}</span>
+            <span className="text-[13px] text-ink-muted">{sub}</span>
+          </span>
+          <Next aria-hidden size={18} className="shrink-0 text-ink-muted" />
+        </Link>
+      ))}
+    </>
   );
 }

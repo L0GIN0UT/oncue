@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import { Button } from "@/shared/ui/button";
 import { useViewer } from "@/features/auth/session";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { fetchShelfPage, libraryKeys } from "./api";
 import { LibraryGate } from "./LibraryView";
 import { SaveButton } from "./SaveButton";
@@ -33,8 +34,8 @@ export function ShelfView({ shelfRef }: { shelfRef: string }) {
     const status = isApiError(list.error) ? list.error.status : null;
     if (status === 401 || status === 403) return <LibraryGate status={status} />;
     return (
-      <div className="flex flex-col items-start gap-4 pt-12">
-        <h1 className="font-display text-2xl font-bold">
+      <div className="flex flex-col items-start gap-4 pt-8">
+        <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
           {t(status === 404 ? "library.notFound" : "library.unavailable")}
         </h1>
         <Button asChild variant="secondary">
@@ -56,37 +57,32 @@ export function ShelfView({ shelfRef }: { shelfRef: string }) {
   const items = list.data.pages.flatMap((p) => p.blocks.shelf.data?.items ?? []);
 
   return (
-    <div className="flex flex-col gap-8 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-2">
-        <Link href="/library" className="text-sm text-ink-muted hover:text-ink">
-          ← {t("library.title")}
-        </Link>
-        <h1 dir="auto" className="font-display text-3xl font-bold">
-          {title(shelf)}
-        </h1>
-        <p className="text-ink-muted">{t("library.count", { count: shelf.items_count })}</p>
-      </header>
+    <div className="flex flex-col gap-4 pt-4">
+      <Link href="/library" className="self-start px-0.5 text-sm text-ink-muted hover:text-ink">
+        ← {t("library.title")}
+      </Link>
+      <HubHeader title={title(shelf)} aside={t("library.count", { count: shelf.items_count })} />
       {items.length === 0 ? (
         <p className="text-ink-muted">{t("library.empty")}</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2.5">
           {items.map((item) => (
             <li
               key={item.media_item_id}
               data-testid={`library-item-${item.media_item_id}`}
               data-domain={item.domain}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stage px-4 py-3 ring-1 ring-rule"
+              className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2"
             >
               <div className="min-w-0">
-                <p dir="auto" className="truncate font-medium">
+                <p dir="auto" className="truncate font-semibold">
                   {item.title}
                 </p>
-                <p dir="auto" className="truncate text-sm text-ink-muted">
+                <p dir="auto" className="truncate text-[13px] text-ink-muted">
                   {[item.year, ...(item.persons ?? [])].filter(Boolean).join(", ")}
                 </p>
                 {item.status === "unavailable" && (
                   <p
-                    className="text-sm text-miss"
+                    className="text-[13px] text-ink-soft"
                     data-testid={`library-item-unavailable-${item.media_item_id}`}
                   >
                     {t("library.unavailableItem")}

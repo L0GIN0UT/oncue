@@ -39,14 +39,52 @@ const problem = (status: number, code: string, details?: Record<string, unknown>
 const notInQueue = () => http.post(`${Q}/tick`, () => problem(404, "match.not_in_queue"));
 
 describe("QueuePanel — очередь рейтинговой дуэли", () => {
-  it("кнопки по ladder-ам и форматам из данных, названия через i18n", async () => {
+  it("раздел переключается, формат выбирается чипом, одна кнопка «Найти соперника»", async () => {
     server.use(notInQueue());
     renderWithProviders(<QueuePanel queues={QUEUES} />);
-    expect(screen.getByTestId("queue-enter-film-classic")).toHaveTextContent("Кино · Классика");
-    expect(screen.getByTestId("queue-enter-film-lite")).toHaveTextContent("Кино · Лайт");
-    expect(screen.getByTestId("queue-enter-music-classic")).toHaveTextContent("Музыка · Классика");
-    expect(screen.getByTestId("queue-enter-film-classic")).toHaveTextContent("Ищут 3 игрока");
-    await waitFor(() => expect(screen.getByTestId("queue-enter-film-lite")).toBeEnabled());
+    // Первый раздел из данных; у кино два формата — чипы, у музыки один — чипов нет.
+    expect(screen.getByTestId("queue-enter-film-classic")).toHaveTextContent("Найти соперника");
+    expect(screen.getByTestId("queue-format-film-classic")).toHaveTextContent("Классика");
+    expect(screen.getByTestId("queue-format-film-lite")).toHaveTextContent("Лайт");
+    expect(screen.getByTestId("queue-hint")).toHaveTextContent("Ищут 3 игрока");
+    await userEvent.click(screen.getByTestId("queue-format-film-lite"));
+    expect(screen.getByTestId("queue-enter-film-lite")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
+    expect(screen.getByTestId("queue-enter-music-classic")).toBeEnabled();
+    expect(screen.queryByTestId(/queue-format-/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("queue-hint")).toHaveTextContent("Ищет 1 игрок");
+  });
+
+  it("рейтинг раздела: очки, звание, путь до следующего; калибровка вместо звания", () => {
+    server.use(notInQueue());
+    const rating = (patch: Record<string, unknown>) => ({
+      calibrating: false,
+      calibration_left: 0,
+      ladder: "film",
+      matches_played: 12,
+      next_tier_at: 1600,
+      place: null,
+      rating: 1480,
+      tier: { title_key: "rating.tier.silver", step: 2 },
+      ...patch,
+    });
+    const { unmount } = renderWithProviders(
+      <QueuePanel queues={QUEUES} ratings={[rating({})] as never} />,
+    );
+    expect(screen.getByTestId("rating-film")).toHaveTextContent("1480");
+    expect(screen.getByTestId("tier")).toHaveTextContent("Серебро 2");
+    expect(screen.getByTestId("next-tier")).toHaveTextContent("До следующего звания: 120");
+    unmount();
+    renderWithProviders(
+      <QueuePanel
+        queues={QUEUES}
+        ratings={
+          [rating({ calibrating: true, calibration_left: 7, rating: null, tier: null })] as never
+        }
+      />,
+    );
+    expect(screen.getByTestId("calibration")).toHaveTextContent("Калибровка: осталось 7 матчей");
+    expect(screen.queryByTestId("tier")).not.toBeInTheDocument();
   });
 
   it("ожидание: подсказка «ищем дольше обычного» из ответа сервера, отмена", async () => {
@@ -63,18 +101,20 @@ describe("QueuePanel — очередь рейтинговой дуэли", () =
       }),
     );
     renderWithProviders(<QueuePanel queues={QUEUES} />);
+    await userEvent.click(screen.getByTestId("queue-format-film-lite"));
     await userEvent.click(screen.getByTestId("queue-enter-film-lite"));
     expect(await screen.findByTestId("queue-searching")).toHaveTextContent(
       "Ищем соперника: Кино · Лайт",
     );
     expect(screen.getByTestId("queue-slow")).toHaveTextContent("дольше обычного");
-    // Пока ищем, другие очереди недоступны.
-    expect(screen.getByTestId("queue-enter-music-classic")).toBeDisabled();
+    // Пока ищем, вторая очередь недоступна: кнопка и чипы заблокированы.
+    expect(screen.getByTestId("queue-enter-film-lite")).toBeDisabled();
+    expect(screen.getByTestId("queue-format-film-classic")).toBeDisabled();
 
     await userEvent.click(screen.getByTestId("queue-cancel"));
     await waitFor(() => expect(screen.queryByTestId("queue-searching")).not.toBeInTheDocument());
     expect(left).toBe(1);
-    expect(screen.getByTestId("queue-enter-music-classic")).toBeEnabled();
+    expect(screen.getByTestId("queue-enter-film-lite")).toBeEnabled();
   });
 
   it("матч найден: сигнал на экране и переход в комнату", async () => {
@@ -105,6 +145,7 @@ describe("QueuePanel — очередь рейтинговой дуэли", () =
       ),
     );
     renderWithProviders(<QueuePanel queues={QUEUES} />);
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
     await userEvent.click(screen.getByTestId("queue-enter-music-classic"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Вы уже в другой комнате");
     expect(screen.getByRole("link", { name: "Перейти в комнату" })).toHaveAttribute(

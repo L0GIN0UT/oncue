@@ -33,16 +33,16 @@ export function OnlineAuthRequired() {
   const next = safeNext(pathname);
   return (
     <section
-      className="mt-10 flex max-w-2xl flex-col items-start gap-5 rounded-[var(--radius-ticket)] bg-stage p-7 ring-1 ring-rule sm:mt-16 sm:p-10"
+      className="mt-6 flex flex-col items-start gap-5 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage p-6 sm:mt-10 sm:p-8"
       data-testid="online-auth-required"
       aria-labelledby="online-auth-title"
     >
-      <span className="grid size-12 place-items-center rounded-full bg-stage-raised ring-1 ring-rule">
+      <span className="grid size-12 place-items-center rounded-full border-[1.5px] border-rule bg-stage-raised">
         <Users className="size-6 text-[var(--color-music)]" aria-hidden />
       </span>
       <h1
         id="online-auth-title"
-        className="font-display text-2xl leading-tight font-bold sm:text-3xl"
+        className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]"
       >
         {t("online.auth.title")}
       </h1>

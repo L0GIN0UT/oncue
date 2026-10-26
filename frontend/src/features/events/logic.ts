@@ -56,3 +56,14 @@ export function sortedFinds(finds: readonly EventFindCard[]): EventFindCard[] {
 export function progressPct(found: number, total: number): number {
   return total > 0 ? Math.min(100, Math.round((found / total) * 100)) : 0;
 }
+
+/** Точки тропы в процентах карты; найденная часть — по первым `found` узлам, остальное — пунктир. */
+export function trailPaths(finds: readonly EventFindCard[]): { found: string; rest: string } {
+  const pts = finds.map((f) => `${f.x_pct} ${f.y_pct}`);
+  const foundCount = finds.filter((f) => f.state === "found").length;
+  const line = (list: string[]) => (list.length > 1 ? `M ${list.join(" L ")}` : "");
+  return {
+    found: line(pts.slice(0, foundCount)),
+    rest: line(pts.slice(Math.max(foundCount - 1, 0))),
+  };
+}

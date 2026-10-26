@@ -5,6 +5,7 @@
  * сервисов — `../e2e/friends.spec.ts` (шаг 0b). Мок — e2e/mocks/social.ts.
  */
 import { expect, login, test } from "./fixtures";
+import { createRoomFromHub, openHubTab } from "./hubs";
 
 const MOCK_URL = `http://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 3101}`;
 const COMMENTED = "00000000-0000-4000-a000-000000000001";
@@ -98,8 +99,10 @@ test("приглашение: из лобби зовём друга онлайн
 }) => {
   await login(page);
   await page.goto("/online");
+  await openHubTab(page, /^Друзья/);
   await expect(page.getByTestId("hub-friend-Анна")).toContainText("В сети");
-  await page.getByTestId("create-room-music.duel.classic").click();
+  await openHubTab(page, /^Лобби/);
+  await createRoomFromHub(page, "music.duel.classic");
   await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
   const panel = page.getByTestId("invite-panel");
   await expect(panel.getByTestId("invite-Анна")).toBeVisible();
@@ -229,7 +232,7 @@ test("санкции: баннер в оболочке, страница, онл
 
   await page.goto("/online");
   await expect(page.getByTestId("online-banned")).toBeVisible();
-  await page.getByTestId("create-room-music.duel.classic").click();
+  await createRoomFromHub(page, "music.duel.classic");
   await expect(page.getByTestId("create-room-error")).toContainText("недоступны");
 });
 

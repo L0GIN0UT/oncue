@@ -38,7 +38,7 @@ export function Cover({
       aria-hidden
       className={cn(
         "grid shrink-0 place-items-center rounded-[var(--radius-control)] ring-1 ring-rule",
-        size === "sm" && "size-12 text-2xl",
+        size === "sm" && "size-11 rounded-[10px] text-xl",
         size === "md" && "aspect-[4/3] w-full text-4xl",
         size === "lg" && "aspect-[4/3] w-full text-6xl sm:w-64",
         className,

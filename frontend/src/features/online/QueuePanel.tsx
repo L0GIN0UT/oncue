@@ -1,37 +1,57 @@
 "use client";
 /**
- * Очередь рейтинговой дуэли в хабе онлайна (4b, ADR 0038): кнопки по ladder-ам и форматам из
- * блока `queues`, ожидание с heartbeat, отмена, подсказка «ищем дольше обычного», сигнал и
- * переход в комнату при найденном матче. Названия ladder-ов и форматов — из данных (i18n).
+ * Блок рейтинговой дуэли в хабе онлайна (4b, ADR 0038; макет «Онлайн»): переключатель раздела
+ * (ladder), рейтинг и звание раздела, одна главная кнопка «Найти соперника», ожидание с
+ * heartbeat, отмена, подсказка «ищем дольше обычного», сигнал и переход в комнату при найденном
+ * матче. Ladder-ы и форматы — из данных блока `queues`, названия — через i18n.
  *
  * Доступность: статусы поиска объявляются одной живой областью (без вложенных `role=status`),
  * ошибки — отдельным `role=alert`; фокус идёт за действием (отмена → в поиске, после отмены —
  * на кнопку входа, матч найден — на ссылку в комнату).
  */
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Loader2, Swords } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { Chip } from "@/shared/ui/chip";
+import { Segmented } from "@/shared/ui/segmented";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import type { OnlineQueue, QueueFormat } from "@/shared/api/types";
-import { useFormatLabel, useLadderLabel } from "@/features/rating/labels";
+import {
+  useFormatLabel,
+  useLadderLabel,
+  useTierLabel,
+  type RatingCard,
+  type SeasonCard,
+} from "@/features/rating/labels";
+import { pointsToNext } from "@/features/rating/logic";
+import { SeasonLine } from "@/features/rating/RatingPanel";
 import { useMatchFound } from "./use-match-found";
 import { useQueue } from "./use-queue";
 
 const buttonKey = (ladder: string, format: string) => `${ladder}-${format}`;
 
-export function QueuePanel({ queues }: { queues: OnlineQueue[] | null }) {
+type Props = {
+  /** `null` — блок очередей недоступен. */
+  queues: OnlineQueue[] | null;
+  /** `null` — блок рейтингов недоступен. */
+  ratings?: RatingCard[] | null;
+  seasons?: SeasonCard[] | null;
+};
+
+export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
   const t = useTranslations();
   const dt = useDynamicT();
   const router = useRouter();
   const ladderLabel = useLadderLabel();
   const formatLabel = useFormatLabel();
   const { state, enter, leave, dismiss } = useQueue();
+  const [pickedLadder, setPickedLadder] = useState<string | null>(null);
+  const [pickedFormat, setPickedFormat] = useState<Record<string, QueueFormat>>({});
 
-  const enterButtons = useRef(new Map<string, HTMLButtonElement>());
-  const lastKey = useRef<string | null>(null);
+  const enterButton = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const roomLink = useRef<HTMLAnchorElement>(null);
   const prevPhase = useRef(state.phase);
@@ -42,8 +62,7 @@ export function QueuePanel({ queues }: { queues: OnlineQueue[] | null }) {
     prevPhase.current = state.phase;
     if (prev === state.phase) return;
     if (state.phase === "searching" && prev === "entering") cancelButton.current?.focus();
-    else if (state.phase === "idle" && prev === "searching" && lastKey.current)
-      enterButtons.current.get(lastKey.current)?.focus();
+    else if (state.phase === "idle" && prev === "searching") enterButton.current?.focus();
     else if (state.phase === "matched") roomLink.current?.focus();
   }, [state.phase]);
 
@@ -53,82 +72,92 @@ export function QueuePanel({ queues }: { queues: OnlineQueue[] | null }) {
     (code) => router.push(`/room/${code}`),
   );
 
-  const ladders = [...new Set((queues ?? []).map((q) => q.ladder))];
   const busy = state.phase !== "idle" && state.phase !== "error";
-
-  const start = (ladder: string, format: QueueFormat) => {
-    lastKey.current = buttonKey(ladder, format);
-    void enter(ladder, format);
-  };
+  const ladders = [...new Set((queues ?? []).map((q) => q.ladder))];
+  // Пока идёт поиск, на экране раздел, в котором ищут.
+  const searchingLadder = state.phase === "searching" ? state.ladder : null;
+  const ladder =
+    searchingLadder ?? (pickedLadder && ladders.includes(pickedLadder) ? pickedLadder : ladders[0]);
+  const pools = (queues ?? []).filter((q) => q.ladder === ladder);
+  const format =
+    pools.find((q) => q.format === pickedFormat[ladder ?? ""])?.format ?? pools[0]?.format;
+  const pool = pools.find((q) => q.format === format);
 
   return (
-    <section aria-labelledby="online-queue" className="flex flex-col gap-4" data-testid="queue">
-      <div className="flex flex-col gap-1">
-        <h2 id="online-queue" className="font-display text-xl font-semibold">
-          {t("rating.queue.title")}
-        </h2>
-        <p className="max-w-[60ch] text-sm text-ink-muted">{t("rating.queue.lead")}</p>
-      </div>
-
+    <section
+      aria-label={t("rating.queue.title")}
+      className="flex flex-col gap-3.5"
+      data-testid="queue"
+    >
       {queues === null ? (
         <p className="text-ink-muted" data-testid="queue-unavailable">
           {t("rating.queue.unavailable")}
         </p>
-      ) : !queues.length ? (
+      ) : !ladder ? (
         <p className="text-ink-muted">{t("rating.queue.empty")}</p>
       ) : (
-        <div className="flex flex-col gap-4">
-          {ladders.map((ladder) => (
-            <div
-              key={ladder}
-              className="flex flex-col gap-2"
-              data-domain={ladder}
-              data-testid={`queue-ladder-${ladder}`}
-            >
-              <h3 className="text-sm text-[var(--accent)]">{ladderLabel(ladder)}</h3>
-              <ul className="grid gap-3 sm:grid-cols-2">
-                {queues
-                  .filter((q) => q.ladder === ladder)
-                  .map((q) => {
-                    const hint = dt(`rating.formatHint.${q.format}`, "");
-                    return (
-                      <li key={q.format}>
-                        <button
-                          type="button"
-                          ref={(node) => {
-                            const key = buttonKey(q.ladder, q.format);
-                            if (node) enterButtons.current.set(key, node);
-                            else enterButtons.current.delete(key);
-                          }}
-                          disabled={busy}
-                          onClick={() => start(q.ladder, q.format)}
-                          data-testid={`queue-enter-${q.ladder}-${q.format}`}
-                          className="flex h-full w-full items-start gap-3 rounded-[var(--radius-control)] bg-stage-raised p-4 text-left ring-1 ring-rule ring-inset hover:ring-2 hover:ring-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:opacity-45"
-                        >
-                          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-night">
-                            <Swords className="size-4" aria-hidden />
-                          </span>
-                          <span className="flex flex-col gap-1">
-                            <span className="font-display font-semibold">
-                              {t("rating.queue.start", {
-                                ladder: ladderLabel(q.ladder),
-                                format: formatLabel(q.format),
-                              })}
-                            </span>
-                            <span className="text-sm text-ink-muted">
-                              {[hint, t("rating.queue.searchingCount", { count: q.searching })]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-              </ul>
+        <>
+          {ladders.length > 1 && (
+            <div className="flex justify-center">
+              <Segmented
+                aria-label={t("online.rating.ladders")}
+                value={ladder}
+                onChange={(next) => !busy && setPickedLadder(next)}
+                options={ladders.map((l) => ({ value: l, label: ladderLabel(l) }))}
+              />
             </div>
-          ))}
-        </div>
+          )}
+          <div
+            data-domain={ladder}
+            data-testid={`queue-ladder-${ladder}`}
+            className="flex flex-col gap-4 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage p-5 sm:flex-row sm:items-center sm:gap-[18px]"
+          >
+            <RatingSummary
+              ladder={ladder}
+              ratings={ratings}
+              season={seasons?.find((s) => s.ladder === ladder) ?? null}
+            />
+            <Button
+              ref={enterButton}
+              size="lg"
+              disabled={busy || !format}
+              onClick={() => format && void enter(ladder, format)}
+              data-testid={`queue-enter-${buttonKey(ladder, format ?? "")}`}
+              className="sm:px-[26px]"
+            >
+              {t("online.rating.find")}
+            </Button>
+          </div>
+          {pools.length > 1 && (
+            <div
+              role="group"
+              aria-label={t("online.rating.formats")}
+              className="flex flex-wrap items-center justify-center gap-2"
+            >
+              {pools.map((q) => (
+                <Chip
+                  key={q.format}
+                  selected={q.format === format}
+                  disabled={busy}
+                  onClick={() => setPickedFormat((cur) => ({ ...cur, [q.ladder]: q.format }))}
+                  data-testid={`queue-format-${buttonKey(q.ladder, q.format)}`}
+                >
+                  {formatLabel(q.format)}
+                </Chip>
+              ))}
+            </div>
+          )}
+          {pool && (
+            <p className="text-center text-[13px] text-ink-muted" data-testid="queue-hint">
+              {[
+                dt(`rating.formatHint.${pool.format}`, ""),
+                t("rating.queue.searchingCount", { count: pool.searching }),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+        </>
       )}
 
       <div aria-live="polite" data-testid="queue-status">
@@ -137,7 +166,7 @@ export function QueuePanel({ queues }: { queues: OnlineQueue[] | null }) {
         )}
         {state.phase === "searching" && (
           <div
-            className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage p-5 ring-1 ring-rule"
+            className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-music bg-stage p-5"
             data-testid="queue-searching"
           >
             <p className="flex items-center gap-2 font-medium">
@@ -174,7 +203,7 @@ export function QueuePanel({ queues }: { queues: OnlineQueue[] | null }) {
         )}
         {state.phase === "matched" && (
           <div
-            className="flex flex-col gap-3 rounded-[var(--radius-ticket)] bg-stage p-5 ring-2 ring-[var(--accent)]"
+            className="flex flex-col gap-3 rounded-[var(--radius-control)] border-[1.5px] border-music bg-stage p-5 shadow-[0_0_0_4px_var(--color-glow)]"
             data-testid="queue-found"
           >
             <p className="font-display text-lg font-semibold">{t("rating.queue.found")}</p>
@@ -204,5 +233,58 @@ export function QueuePanel({ queues }: { queues: OnlineQueue[] | null }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Рейтинг раздела слева в блоке: очки крупно, звание и путь до следующего; калибровка — вместо звания. */
+function RatingSummary({
+  ladder,
+  ratings,
+  season,
+}: {
+  ladder: string;
+  ratings: RatingCard[] | null;
+  season: SeasonCard | null;
+}) {
+  const t = useTranslations();
+  const tierLabel = useTierLabel();
+  const rating = ratings?.find((r) => r.ladder === ladder) ?? null;
+  const left = rating ? pointsToNext(rating.rating, rating.next_tier_at) : null;
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-1" data-testid={`rating-${ladder}`}>
+      <span className="text-[13px] text-ink-muted">{t("rating.queue.title")}</span>
+      {ratings === null ? (
+        <p className="text-ink-muted" data-testid="ratings-unavailable">
+          {t("rating.unavailable")}
+        </p>
+      ) : !rating ? (
+        <p className="text-sm text-ink-muted">{t("rating.mine.empty")}</p>
+      ) : rating.calibrating || !rating.tier ? (
+        <>
+          <p className="font-display text-xl font-bold" data-testid="calibration">
+            {t("rating.calibration", { count: rating.calibration_left })}
+          </p>
+          <p className="text-sm text-ink-muted">{t("rating.calibrationHint")}</p>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-baseline gap-x-2.5">
+            {rating.rating !== null && (
+              <span className="tabular font-display text-[32px] leading-none font-extrabold tracking-[-0.03em]">
+                {rating.rating}
+              </span>
+            )}
+            <span className="text-sm text-ink-muted" data-testid="tier">
+              {tierLabel(rating.tier)}
+            </span>
+          </div>
+          <p className="text-sm text-ink-muted" data-testid="next-tier">
+            {left === null ? t("rating.topTier") : t("rating.toNext", { points: left })}
+            {rating.place != null && <> · {t("rating.place", { place: rating.place })}</>}
+          </p>
+        </>
+      )}
+      {season && <SeasonLine season={season} />}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventFindCard } from "@/shared/api/types";
-import { openSpotFor, playRoute, progressPct, sortedFinds } from "./logic";
+import { openSpotFor, playRoute, progressPct, sortedFinds, trailPaths } from "./logic";
 
 const find = (over: Partial<EventFindCard> & { key: string }): EventFindCard => ({
   number: 1,
@@ -72,5 +72,33 @@ describe("sortedFinds / progressPct", () => {
     expect(progressPct(1, 4)).toBe(25);
     expect(progressPct(9, 4)).toBe(100);
     expect(progressPct(0, 0)).toBe(0);
+  });
+});
+
+describe("trailPaths", () => {
+  const at = (n: number, state: EventFindCard["state"]) =>
+    find({ key: `f${n}`, number: n, x_pct: n * 10, y_pct: n * 5, state });
+
+  it("сплошная линия — до последней найденной, пунктир — от неё до конца", () => {
+    const finds = [at(1, "found"), at(2, "found"), at(3, "open"), at(4, "locked")];
+    expect(trailPaths(finds)).toEqual({
+      found: "M 10 5 L 20 10",
+      rest: "M 20 10 L 30 15 L 40 20",
+    });
+  });
+
+  it("ничего не найдено — только пунктир с первой точки; найдено всё — только сплошная", () => {
+    expect(trailPaths([at(1, "open"), at(2, "locked")])).toEqual({
+      found: "",
+      rest: "M 10 5 L 20 10",
+    });
+    expect(trailPaths([at(1, "found"), at(2, "found")])).toEqual({
+      found: "M 10 5 L 20 10",
+      rest: "",
+    });
+  });
+
+  it("одна точка линии не даёт", () => {
+    expect(trailPaths([at(1, "open")])).toEqual({ found: "", rest: "" });
   });
 });

@@ -5,6 +5,7 @@
  */
 import type { Page } from "@playwright/test";
 import { expect, login, test } from "./fixtures";
+import { openHubTab, pickLadder } from "./hubs";
 import { QUEUE_TICK_S } from "./mocks/match";
 
 /** Предел ожидания «матч найден»: несколько периодов heartbeat мока. */
@@ -30,15 +31,18 @@ test("хаб: звание со ступенью, калибровка вмес�
 }) => {
   await login(page);
   await page.goto("/online");
+  await pickLadder(page, "music");
   const music = page.getByTestId("rating-music");
   await expect(music.getByTestId("tier")).toHaveText("Бронза 2");
-  await expect(music).toContainText("1120 очк.");
+  await expect(music).toContainText("1120");
   await expect(music.getByTestId("next-tier")).toContainText("До следующего звания: 80 очков");
   await expect(music.getByTestId("season-music")).toHaveText("Сезон 3 · осталось 12 дней");
   // В калибровке звание скрыто.
+  await pickLadder(page, "film");
   const film = page.getByTestId("rating-film");
   await expect(film.getByTestId("calibration")).toHaveText("Калибровка: осталось 7 матчей");
   await expect(film.getByTestId("tier")).toHaveCount(0);
+  await openHubTab(page, "Топ недели");
   await expect(page.getByTestId("weekly-film")).toContainText("игрок1");
   await expectAccessible(page);
 
@@ -54,11 +58,16 @@ test("очередь: ожидание, подсказка, отмена; вто
 }) => {
   await login(page);
   await page.goto("/online");
-  await expect(page.getByTestId("queue-enter-music-classic")).toHaveText(/Музыка · Классика/);
-  await expect(page.getByTestId("queue-enter-film-lite")).toHaveText(/Кино · Лайт/);
+  await pickLadder(page, "music");
+  await expect(page.getByTestId("queue-enter-music-classic")).toHaveText("Найти соперника");
+  await pickLadder(page, "film");
+  await page.getByTestId("queue-format-film-lite").click();
+  await expect(page.getByTestId("queue-enter-film-lite")).toHaveText("Найти соперника");
+  await pickLadder(page, "music");
 
   // Ожидание с подсказкой и отменой.
   await scenario({ match: { queueSlow: true } });
+  await pickLadder(page, "music");
   await page.getByTestId("queue-enter-music-classic").click();
   await expect(page.getByTestId("queue-searching")).toContainText(
     "Ищем соперника: Музыка · Классика",
@@ -70,10 +79,12 @@ test("очередь: ожидание, подсказка, отмена; вто
   await expect(page.getByTestId("queue-enter-music-classic")).toBeEnabled();
 
   // Снова в очередь; соперник встаёт в ту же — его перебрасывает в комнату сразу.
+  await pickLadder(page, "music");
   await page.getByTestId("queue-enter-music-classic").click();
   await expect(page.getByTestId("queue-searching")).toBeVisible();
   const rival = await player("rival");
   await rival.goto("/online");
+  await pickLadder(rival, "music");
   await rival.getByTestId("queue-enter-music-classic").click();
   await expect(rival.getByTestId("queue-found")).toBeVisible();
   await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
@@ -116,9 +127,11 @@ test("rating недоступен: итог рейтингового матча 
   await scenario({ match: { ratingDown: true } });
   await login(page);
   await page.goto("/online");
+  await pickLadder(page, "film");
   await page.getByTestId("queue-enter-film-classic").click();
   const rival = await player("rival");
   await rival.goto("/online");
+  await pickLadder(rival, "film");
   await rival.getByTestId("queue-enter-film-classic").click();
   await expectQueueFound(page);
   await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);

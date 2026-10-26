@@ -103,7 +103,7 @@ export function ShelfPicker({ mediaItemId, domain, source, onClose, labelledBy }
       ref={menu}
       onKeyDown={onKeyDown}
       data-testid="shelf-picker"
-      className="absolute top-full left-0 z-30 mt-2 flex w-64 flex-col gap-1 rounded-[var(--radius-control)] bg-stage-raised p-2 text-ink shadow-xl ring-1 ring-rule"
+      className="absolute top-full left-0 z-30 mt-2 flex w-64 flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage-raised p-2 text-ink"
     >
       {!ready ? (
         <p className="px-3 py-2 text-sm text-ink-muted" role="status">
@@ -122,7 +122,7 @@ export function ShelfPicker({ mediaItemId, domain, source, onClose, labelledBy }
                 data-testid={`shelf-option-${shelf.ref}`}
                 onClick={() => void toggle(shelf)}
                 className={cn(
-                  "flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-rule/60 focus:bg-rule/60",
+                  "flex min-h-11 items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-left text-sm hover:bg-rule/60 focus:bg-rule/60",
                   on && "text-ink",
                 )}
               >
@@ -140,7 +140,7 @@ export function ShelfPicker({ mediaItemId, domain, source, onClose, labelledBy }
       )}
       <Link
         href="/library"
-        className="mt-1 rounded-lg px-3 py-2 text-xs text-ink-muted hover:text-ink"
+        className="mt-1 flex min-h-11 items-center rounded-[10px] px-3 py-2 text-xs text-ink-muted hover:text-ink"
       >
         {t("library.picker.manage")}
       </Link>

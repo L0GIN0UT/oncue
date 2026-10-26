@@ -1,10 +1,10 @@
 import { expect, giveUpButton, playUntilResults, test } from "./fixtures";
+import { openSoloMode } from "./hubs";
 
-test("витрина /solo: карточки новых режимов, сетка недели среди наборов дня", async ({
+test("витрина /solo: режимы по вкладкам, сетка недели отдельной вкладкой", async ({
   page,
   expectAccessible,
 }) => {
-  await page.goto("/solo");
   for (const key of [
     "film.marathon.director",
     "music.marathon.artist",
@@ -14,9 +14,12 @@ test("витрина /solo: карточки новых режимов, сетк
     "film.random.blackout",
     "film.random.soundtrack",
   ]) {
-    await expect(page.getByTestId(`mode-card-${key}`), key).toBeVisible();
+    await expect(await openSoloMode(page, key), key).toBeVisible();
   }
-  await expect(page.getByRole("heading", { name: "Марафоны" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Марафоны" })).toBeVisible();
+  await page.getByRole("radio", { name: "Кино" }).click();
+  await page.getByRole("tab", { name: "Сетка недели" }).click();
+  await expect(page.getByTestId("daily-film.bracket.weekly")).toBeVisible();
   await expectAccessible(page);
 });
 

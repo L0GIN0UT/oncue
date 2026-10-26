@@ -5,6 +5,7 @@
  */
 import type { Page } from "@playwright/test";
 import { expect, login, test } from "./fixtures";
+import { createRoomFromHub, openHubTab } from "./hubs";
 
 /** Ответить свободным текстом (мок сверяет название без регистра). */
 async function answer(page: Page, text: string) {
@@ -17,7 +18,7 @@ async function answer(page: Page, text: string) {
 /** Хост создаёт комнату из хаба; возвращает код. */
 async function createRoom(page: Page, modeKey: string): Promise<string> {
   await page.goto("/online");
-  await page.getByTestId(`create-room-${modeKey}`).click();
+  await createRoomFromHub(page, modeKey);
   await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
   return (await page.getByTestId("room-code").textContent())!.trim();
 }
@@ -166,6 +167,7 @@ test("дуэль: лобби → готовность → матч → «Соп�
 
   // История в хабе: жалоба на игрока матча (bff отдаёт participants, ADR 0069).
   await page.goto("/online");
+  await openHubTab(page, "Мои матчи");
   await expect(page.getByTestId("history-report-rival").first()).toBeVisible();
 });
 
@@ -295,9 +297,11 @@ test("хаб: открытые лобби и вход в комнату из с�
   await rival.goto("/online");
   await expect(rival.getByTestId(`open-room-${code}`)).toBeVisible();
   await expectAccessible(rival);
+  await openHubTab(rival, "По коду");
   await rival.getByTestId("room-code-input").fill("ABC");
   await rival.getByTestId("room-code-submit").click();
   await expect(rival.getByTestId("room-code-error")).toContainText("8 символов");
+  await openHubTab(rival, /^Лобби/);
   await rival.getByTestId(`open-room-${code}`).getByRole("link").click();
   await rival.getByTestId("join-room").click();
   await expect(page.getByTestId("player-rival")).toBeVisible();
@@ -317,7 +321,7 @@ test("регистрация из экрана онлайна возвращае
   await page.getByTestId("code-input").fill("123456");
   await page.getByTestId("code-submit").click();
   await expect(page).toHaveURL(/\/online$/);
-  await expect(page.getByTestId("join-by-code")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "По коду" })).toBeVisible();
 });
 
 test("сборник: «Играть с друзьями» создаёт лобби по сборнику; у музыки без шаблона кнопки нет", async ({

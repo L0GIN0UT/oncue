@@ -4,6 +4,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
 import { Button } from "@/shared/ui/button";
+import { HubHeader } from "@/features/hubs/HubHeader";
 import { JoinByCode } from "./JoinByCode";
 import { OpenRoomList } from "./lists";
 
@@ -24,17 +25,11 @@ export function LobbiesView() {
   const rooms = query.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
-    <div className="flex flex-col gap-10 pt-6 sm:pt-10">
-      <header className="flex flex-col gap-3">
-        <h1 className="font-display text-3xl leading-tight font-bold">
-          {t("online.lobbies.title")}
-        </h1>
-        <p className="max-w-[60ch] text-ink-muted">{t("online.lobbies.lead")}</p>
-      </header>
-      <div className="max-w-xl">
-        <JoinByCode />
-      </div>
-      <section aria-label={t("online.lobbies.title")} className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5 pt-4">
+      <HubHeader title={t("online.lobbies.title")} />
+      <p className="px-0.5 text-sm text-ink-muted">{t("online.lobbies.lead")}</p>
+      <JoinByCode primary />
+      <section aria-label={t("online.lobbies.title")} className="flex flex-col gap-3.5">
         {query.isPending ? (
           <p className="text-ink-muted" role="status">
             {t("common.loading")}
