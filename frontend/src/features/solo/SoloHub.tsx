@@ -1,33 +1,46 @@
 "use client";
 /**
- * Соло-хаб по блокам bff (`GET /v1/pages/solo`): домен переключателем, вкладки по группам режимов
- * (`source_type`, порядок — как прислал bff), в каждой — строки режимов, которые раскрываются
- * по клику: описание, наборы-пресеты и главная кнопка «Играть». Личный рекорд — в самой строке.
- * Сетка недели (плановый режим) — отдельная вкладка; сборники — вкладка со ссылками.
- *
- * Строка строится по данным: пресеты — чипы выбора набора, `start.subject` — переход к выбору
- * персоны на `/play/<key>`. Ключ режима нужен только для ссылки и `data-testid`.
+ * Соло-хаб по макету v3 (Solo) и блокам bff (`GET /v1/pages/solo`): переключатель домена и фильтр
+ * видов режимов, три плитки (дейлик, сетка недели, сборник), сетка быстрых режимов, плитки
+ * марафонов и пар. Режимы группируются по данным: группа с `presentation: "score"` — карточки
+ * сетки (раскрываются по клику: описание, пресеты, «Играть»), остальные — плитка со строками.
+ * Ключи режимов нужны только для ссылок и `data-testid`.
  */
 import Link from "next/link";
 import { useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
-import type { DailyCard, ModeCard, ModeGroup, RecordCard, SoloPage } from "@/shared/api/types";
+import { blockData } from "@/shared/api/blocks";
+import type {
+  DailyCard,
+  Domain,
+  ModeCard,
+  ModeGroup,
+  RecordCard,
+  SoloPage,
+} from "@/shared/api/types";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button";
+import { useViewer } from "@/features/auth/session";
+import { collectionKeys, fetchShowcase } from "@/features/collections/api";
+import { dailyHref } from "@/features/home/DailyTiles";
+import { formatClock, remainingUntil } from "@/features/daily/countdown-time";
+import { useNow } from "@/features/daily/use-now";
 import { Chip } from "@/shared/ui/chip";
+import { Cover } from "@/shared/ui/cover";
+import { ListRow } from "@/shared/ui/list-row";
+import { PillTabs } from "@/shared/ui/pill-tabs";
 import { Segmented } from "@/shared/ui/segmented";
 import { useIcons } from "@/shared/ui/theme-provider";
-import { HubHeader } from "@/features/hubs/HubHeader";
-import { PillTabs } from "@/shared/ui/pill-tabs";
+import { Tile } from "@/shared/ui/tile";
 
-type Domain = "music" | "film";
+const ALL = "all";
+/** Виды режимов, которые макет показывает плитками со строками, а не карточками сетки. */
+const ROW_SOURCES = new Set(["marathon", "pair"]);
+const asRows = (g: ModeGroup) => g.presentation !== "score" || ROW_SOURCES.has(g.source_type);
 
-const WEEKLY_TAB = "weekly";
-const COLLECTION_TAB = "collection";
-
+const CHIP = "rounded-full bg-stage-raised px-[9px] py-[3px] text-xs font-semibold text-ink-muted";
 const descriptionKey = (titleKey: string) => titleKey.replace(/\.title$/, ".description");
 const groupId = (g: ModeGroup) => `${g.source_type}:${g.presentation}`;
 
@@ -35,66 +48,49 @@ export function SoloHub({ initial }: { initial: SoloPage | null }) {
   const t = useTranslations();
   const dt = useDynamicT();
   const panelId = useId();
+  const viewer = useViewer();
   const { data } = useQuery({
     queryKey: ["page", "solo"],
     queryFn: async (): Promise<SoloPage> => unwrap(await api().web.GET("/v1/pages/solo")),
     initialData: initial ?? undefined,
   });
   const [domain, setDomain] = useState<Domain>("music");
-  const [tab, setTab] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>(ALL);
   const [open, setOpen] = useState<string | null>(null);
 
-  const weekly = data?.blocks.weekly;
-  const modes = data?.blocks.modes;
+  const blocks = data?.blocks;
   const records = new Map<string, RecordCard>(
-    (data?.blocks.records?.status === "ok" ? (data.blocks.records.data ?? []) : []).map((r) => [
-      r.mode_key,
-      r,
-    ]),
+    (blockData(blocks?.records) ?? []).map((r) => [r.mode_key, r]),
   );
-  const groups = (modes?.status === "ok" ? (modes.data ?? []) : [])
+  const modesUnavailable = blocks?.modes?.status !== "ok";
+  const groups = (blockData(blocks?.modes) ?? [])
     .map((g) => ({ ...g, modes: g.modes.filter((m) => m.domain === domain) }))
     .filter((g) => g.modes.length > 0);
-  const weeklyCards = (weekly?.status === "ok" ? (weekly.data ?? []) : []).filter(
-    (c) => c.domain === domain,
-  );
+  const daily = (blockData(blocks?.daily) ?? []).find((c) => c.domain === domain);
+  const weekly = (blockData(blocks?.weekly) ?? []).find((c) => c.domain === domain);
 
   const tabs = [
+    { value: ALL, label: t("solo.tab.all") },
     ...groups.map((g) => ({
       value: groupId(g),
-      label: dt(
-        `solo.tab.${g.source_type}`,
-        dt(`solo.group.${g.source_type}.title`, g.source_type),
-      ),
+      label: dt(`solo.tab.${g.source_type}`, dt(`solo.group.${g.source_type}.title`, g.source_type)),
     })),
-    ...(weeklyCards.length ? [{ value: WEEKLY_TAB, label: t("solo.tab.weekly") }] : []),
-    { value: COLLECTION_TAB, label: t("solo.tab.collection") },
   ];
-  const active = tabs.some((x) => x.value === tab) ? tab! : tabs[0]!.value;
-  const activeGroup = groups.find((g) => groupId(g) === active);
-
-  function pickTab(value: string) {
-    setTab(value);
-    // Как в макете: при смене вкладки раскрыта первая строка.
-    const g = groups.find((x) => groupId(x) === value);
-    setOpen(g?.modes[0]?.key ?? (value === WEEKLY_TAB ? (weeklyCards[0]?.mode_key ?? null) : null));
-  }
+  const active = tabs.some((x) => x.value === filter) ? filter : ALL;
+  const shown = groups.filter((g) => active === ALL || groupId(g) === active);
+  const gridModes = shown.filter((g) => !asRows(g)).flatMap((g) => g.modes);
+  const streakGroups = shown.filter(asRows);
 
   function pickDomain(next: Domain) {
     setDomain(next);
-    setTab(null);
+    setFilter(ALL);
     setOpen(null);
   }
 
-  // Раскрытая строка: явный выбор, а пока его нет — первая строка первой вкладки.
-  const firstKey =
-    activeGroup?.modes[0]?.key ?? (active === WEEKLY_TAB ? weeklyCards[0]?.mode_key : null);
-  const openKey = open ?? (tab === null ? (firstKey ?? null) : null);
-  const toggle = (key: string) => setOpen(openKey === key ? "" : key);
-
   return (
-    <div className="flex flex-col gap-5 pt-4">
-      <div className="flex justify-center">
+    <div className="flex flex-col gap-5" data-testid="solo">
+      <h1 className="sr-only">{t("solo.title")}</h1>
+      <section className="flex flex-wrap items-center justify-between gap-4">
         <Segmented
           aria-label={t("solo.domainLabel")}
           value={domain}
@@ -104,261 +100,373 @@ export function SoloHub({ initial }: { initial: SoloPage | null }) {
             { value: "film", label: t("domain.film") },
           ]}
         />
-      </div>
-      <HubHeader title={t("solo.title")} aside={t("solo.aside")} />
-      <PillTabs
-        aria-label={t("solo.tabsLabel")}
-        tabs={tabs}
-        value={active}
-        onChange={pickTab}
-        panelId={panelId}
-      />
-      <div
-        id={panelId}
-        role="tabpanel"
-        data-testid={activeGroup ? `mode-group-${activeGroup.source_type}` : `mode-group-${active}`}
-        className="flex flex-col gap-2.5"
-      >
-        {modes?.status !== "ok" && active !== COLLECTION_TAB && active !== WEEKLY_TAB && (
-          <p className="text-ink-muted">{t("solo.modesUnavailable")}</p>
-        )}
-        {activeGroup?.modes.map((mode) => (
-          <ModeRow
-            key={mode.key}
-            mode={mode}
-            record={records.get(mode.key)}
-            open={openKey === mode.key}
-            onToggle={() => toggle(mode.key)}
-          />
-        ))}
-        {active === WEEKLY_TAB &&
-          weeklyCards.map((card) => (
-            <WeeklyRow
-              key={card.mode_key}
-              card={card}
-              open={openKey === card.mode_key}
-              onToggle={() => toggle(card.mode_key)}
-            />
-          ))}
-        {active === COLLECTION_TAB && <CollectionLinks />}
-      </div>
-    </div>
-  );
-}
-
-/** Общая оболочка раскрывающейся строки: заголовок-кнопка и панель под ней. */
-function ExpandRow({
-  testId,
-  domain,
-  title,
-  sub,
-  trailing,
-  open,
-  onToggle,
-  children,
-}: {
-  testId: string;
-  domain: Domain;
-  title: string;
-  sub: string;
-  trailing?: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  const icons = useIcons();
-  const panelId = useId();
-  const Glyph = icons[domain];
-  const Chevron = icons.expand;
-  return (
-    <div data-domain={domain} data-testid={testId}>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={onToggle}
-        className={cn(
-          "flex min-h-[60px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] px-[18px] py-2 text-left transition-colors",
-          open
-            ? "rounded-b-none border-music bg-stage shadow-[0_0_0_4px_var(--color-glow)]"
-            : "border-rule hover:border-rule-strong hover:bg-stage",
-        )}
-      >
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-stage-raised text-music">
-          <Glyph aria-hidden size={20} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-base font-semibold">{title}</span>
-          <span className="text-[13px] text-ink-muted">{sub}</span>
-        </span>
-        {trailing && (
-          <span className="text-[13px] whitespace-nowrap text-ink-muted">{trailing}</span>
-        )}
-        <Chevron
-          aria-hidden
-          size={18}
-          className={cn("shrink-0 text-ink-muted transition-transform", open && "rotate-180")}
+        <PillTabs
+          aria-label={t("solo.tabsLabel")}
+          tabs={tabs}
+          value={active}
+          onChange={(v) => {
+            setFilter(v);
+            setOpen(null);
+          }}
+          panelId={panelId}
         />
-      </button>
-      {open && (
-        <div
-          id={panelId}
-          className="flex animate-rise flex-col gap-3.5 rounded-b-[var(--radius-control)] border-[1.5px] border-t-0 border-music bg-stage px-[18px] pt-4 pb-[18px]"
-        >
-          {children}
-        </div>
-      )}
+      </section>
+
+      <section className="grid items-stretch gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <DailyTile domain={domain} card={daily} />
+        {weekly && <BracketTile card={weekly} />}
+        <WeekCollectionTile domain={domain} />
+      </section>
+
+      <section id={panelId} role="tabpanel" className="flex flex-col gap-5">
+        {modesUnavailable && <p className="text-ink-muted">{t("solo.modesUnavailable")}</p>}
+        {gridModes.length > 0 && (
+          <div className="flex flex-col gap-2.5" data-testid="mode-group-score">
+            <span className="text-[11px] font-semibold tracking-[0.12em] text-ink-faint uppercase">
+              {t("solo.modes")}
+            </span>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {gridModes.map((mode) => (
+                <ModeCardTile
+                  key={mode.key}
+                  mode={mode}
+                  record={records.get(mode.key)}
+                  isUser={viewer.kind === "user"}
+                  open={open === mode.key}
+                  onToggle={() => setOpen(open === mode.key ? null : mode.key)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {streakGroups.length > 0 && (
+          <div className="grid gap-5 md:grid-cols-2" data-testid="mode-group-streak">
+            {streakGroups.map((g) => (
+              <StreakTile key={groupId(g)} group={g} records={records} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function ModeRow({
+function ResetChip({ target }: { target: string }) {
+  const t = useTranslations();
+  const now = useNow();
+  const clock = now ? formatClock(remainingUntil(new Date(target), now)) : "––:––:––";
+  return (
+    <span className={cn(CHIP, "tabular relative whitespace-nowrap")}>
+      {t("home.daily.resetIn", { clock })}
+    </span>
+  );
+}
+
+/** Дейлик выбранного домена: единственная янтарная кнопка экрана — круглый Play. */
+function DailyTile({ domain, card }: { domain: Domain; card: DailyCard | undefined }) {
+  const t = useTranslations();
+  const icons = useIcons();
+  const Play = icons.play;
+  const Calendar = icons.calendar;
+  const Glyph = icons[domain];
+  const finished = card?.status === "finished";
+  return (
+    <Tile
+      accent
+      cap={t(`home.daily.${domain}.cap`)}
+      aside={card ? <ResetChip target={card.next_reset_at} /> : undefined}
+      title={t(`solo.daily.${domain}.title`)}
+      subtitle={t(`solo.daily.${domain}.sub`)}
+      data-testid={`solo-daily-${domain}`}
+    >
+      <Glyph
+        aria-hidden
+        className="pointer-events-none absolute top-9 -right-2.5 size-24 text-stage-raised"
+        strokeWidth={1.5}
+      />
+      <div className="relative mt-auto flex items-center gap-2.5">
+        <ListRow className="flex-1">
+          <span className="flex items-center gap-2">
+            <Calendar aria-hidden className="size-4 text-ink-muted" />
+            {card
+              ? t(`home.daily.status.${card.status}`, {
+                  score: card.score ?? 0,
+                  max: card.max_score,
+                })
+              : t("home.daily.unavailable")}
+          </span>
+        </ListRow>
+        {card && (
+          <Link
+            href={dailyHref(card)}
+            aria-label={finished ? t("daily.action.finished") : t("solo.play")}
+            data-testid={`solo-daily-play-${domain}`}
+            className="grid size-11 flex-none place-items-center rounded-full bg-music text-night"
+          >
+            <Play aria-hidden className="ml-0.5 size-5" fill="currentColor" />
+          </Link>
+        )}
+      </div>
+    </Tile>
+  );
+}
+
+/** Сетка недели («Топ-32»): плитка только если бэкенд отдал набор недели для домена. */
+function BracketTile({ card }: { card: DailyCard }) {
+  const t = useTranslations();
+  const dt = useDynamicT();
+  const icons = useIcons();
+  const Glyph = icons[card.domain];
+  return (
+    <Tile
+      cap={t("solo.weekly.cap", { domain: t(`domain.${card.domain}`).toLowerCase() })}
+      aside={<ResetChip target={card.next_reset_at} />}
+      data-testid={`daily-${card.mode_key}`}
+    >
+      <div className="flex items-start gap-3.5">
+        <Cover
+          ratio="poster"
+          className="w-[76px] flex-none"
+          placeholder={<Glyph className="size-6" />}
+        />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="font-display text-xl leading-[1.1] font-extrabold tracking-[-0.02em]">
+            {dt(card.title_key, card.mode_key)}
+          </span>
+          <span className="text-[13px] leading-[1.45] text-ink-muted">
+            {dt(descriptionKey(card.title_key), t(`daily.pitch.${card.domain}`))}
+          </span>
+          <span className="w-fit rounded-full bg-glow px-[9px] py-[3px] text-xs font-semibold text-music">
+            {t(`daily.statusPlain.${card.status}`)}
+          </span>
+        </div>
+      </div>
+      <Link
+        href={dailyHref(card)}
+        className="mt-auto grid h-[34px] place-items-center rounded-full border-[1.5px] border-rule bg-stage-raised text-[13px] font-semibold hover:border-rule-strong"
+      >
+        {t(`daily.action.${card.status}`)}
+      </Link>
+    </Tile>
+  );
+}
+
+/** «Сборник недели»: первый избранный сборник домена; нет данных — вход в каталог. */
+function WeekCollectionTile({ domain }: { domain: Domain }) {
+  const t = useTranslations();
+  const icons = useIcons();
+  const showcase = useQuery({
+    queryKey: collectionKeys.showcase({ domain }),
+    queryFn: () => fetchShowcase({ domain }),
+    staleTime: 60_000,
+  });
+  const blocks = showcase.data?.blocks;
+  const card = blockData(blocks?.featured)?.items[0] ?? blockData(blocks?.popular)?.items[0];
+  const Glyph = icons[domain];
+  if (!card)
+    return (
+      <Tile
+        href="/collections"
+        cap={t("solo.collection.cap")}
+        title={t("solo.collection.emptyTitle")}
+        subtitle={t("solo.collection.emptySub")}
+        data-testid="solo-collection-week"
+      >
+        <span className="mt-auto grid h-[34px] place-items-center rounded-full border-[1.5px] border-rule bg-stage-raised text-[13px] font-semibold">
+          {t("solo.collection.open")}
+        </span>
+      </Tile>
+    );
+  return (
+    <Tile
+      href={`/collections/${card.collection_id}`}
+      cap={t("solo.collection.cap")}
+      aside={<span className={CHIP}>{t(`domain.${card.domain}`)}</span>}
+      data-testid="solo-collection-week"
+    >
+      <div className="flex items-start gap-3.5">
+        <Cover className="w-24 flex-none" placeholder={<Glyph className="size-6" />} />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="font-display text-xl leading-[1.1] font-extrabold tracking-[-0.02em]">
+            {card.title}
+          </span>
+          <span className="text-[13px] leading-[1.45] text-ink-muted">
+            {t("solo.collection.meta", { count: card.items_count, likes: card.likes_count })}
+          </span>
+          {card.author.nickname && (
+            <span className="text-xs text-ink-faint">
+              {t("solo.collection.author", { name: card.author.nickname })}
+            </span>
+          )}
+        </div>
+      </div>
+      <span className="mt-auto grid h-[34px] place-items-center rounded-full bg-ink text-[13px] font-semibold text-night">
+        {t("solo.play")}
+      </span>
+    </Tile>
+  );
+}
+
+/** Карточка режима в сетке: заголовок-кнопка раскрывает описание, пресеты и «Играть». */
+function ModeCardTile({
   mode,
   record,
+  isUser,
   open,
   onToggle,
 }: {
   mode: ModeCard;
   record: RecordCard | undefined;
+  isUser: boolean;
   open: boolean;
   onToggle: () => void;
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
   const icons = useIcons();
+  const bodyId = useId();
   const [preset, setPreset] = useState<string | null>(null);
   const subject = mode.start?.subject ?? null;
   const presets = mode.presets ?? [];
-  const presentation = mode.presentation ?? "score";
-  // Число раундов фиксировано только у режимов без «жизней» и выбора: иначе `rounds` — предел.
-  const fixedRounds = presentation === "score" && !subject;
+  const Glyph = icons[mode.domain];
+  const Chevron = icons.expand;
+  const Play = icons.play;
   const description = dt(descriptionKey(mode.title_key), "");
-  const sub = fixedRounds
-    ? t("solo.rounds", { count: mode.rounds })
-    : subject
-      ? t("solo.sub.subject")
-      : t(`solo.sub.${presentation}`);
+  // У гостя рекордов нет; у игрока без рекорда — «ещё не играл».
+  const rec = record
+    ? { text: t(`records.best.${record.presentation}`, { best: record.best }), good: true }
+    : isUser
+      ? { text: t("solo.notPlayed"), good: false }
+      : null;
   const href = preset
     ? `/play/${mode.key}?preset=${encodeURIComponent(preset)}`
     : `/play/${mode.key}`;
-  const Play = icons.play;
   return (
-    <ExpandRow
-      testId={`mode-card-${mode.key}`}
-      domain={mode.domain}
-      title={dt(mode.title_key, mode.key)}
-      sub={sub}
-      trailing={
-        record ? t(`records.best.${record.presentation}`, { best: record.best }) : undefined
-      }
-      open={open}
-      onToggle={onToggle}
+    <Tile
+      data-testid={`mode-card-${mode.key}`}
+      className={cn("gap-2 rounded-2xl px-3.5 py-3", open && "sm:col-span-2 lg:col-span-4")}
     >
-      {description && <p className="text-[15px] leading-normal text-ink-soft">{description}</p>}
-      {record?.percentile != null && (
-        <p className="text-[13px] text-ink-muted">
-          {t("records.percentile", { pct: Math.round(record.percentile) })}
-        </p>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={onToggle}
+        className="flex w-full items-center gap-2.5 text-left"
+      >
+        <span className="grid size-[34px] flex-none place-items-center rounded-[10px] bg-stage-raised text-music">
+          <Glyph aria-hidden size={18} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-sm leading-tight font-semibold">
+            {dt(mode.title_key, mode.key)}
+          </span>
+          {description && (
+            <span className="truncate text-xs leading-tight text-ink-muted">{description}</span>
+          )}
+        </span>
+        <Chevron
+          aria-hidden
+          size={16}
+          className={cn("flex-none text-ink-muted transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {rec && (
+        <span className={cn("text-[11px]", rec.good ? "text-exact" : "text-ink-faint")}>
+          {rec.text}
+        </span>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {presets.length > 0 ? (
-          <div
-            role="group"
-            aria-label={t("solo.presets")}
-            className="flex flex-wrap items-center gap-2"
-          >
-            <Chip selected={preset === null} onClick={() => setPreset(null)}>
-              {t("solo.anyPreset")}
-            </Chip>
-            {presets.map((p) => (
-              <Chip key={p.id} selected={preset === p.id} onClick={() => setPreset(p.id)}>
-                {dt(p.title_key, p.id)}
-              </Chip>
-            ))}
+      {open && (
+        <div id={bodyId} className="flex animate-rise flex-col gap-3 pt-1">
+          {description && <p className="text-[15px] leading-normal text-ink-soft">{description}</p>}
+          {record?.percentile != null && (
+            <p className="text-[13px] text-ink-muted">
+              {t("records.percentile", { pct: Math.round(record.percentile) })}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {presets.length > 0 ? (
+              <div
+                role="group"
+                aria-label={t("solo.presets")}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <Chip selected={preset === null} onClick={() => setPreset(null)}>
+                  {t("solo.anyPreset")}
+                </Chip>
+                {presets.map((p) => (
+                  <Chip key={p.id} selected={preset === p.id} onClick={() => setPreset(p.id)}>
+                    {dt(p.title_key, p.id)}
+                  </Chip>
+                ))}
+              </div>
+            ) : (
+              <span />
+            )}
+            <Link
+              href={href}
+              className="inline-flex h-11 items-center gap-2 rounded-[14px] border-[1.5px] border-rule bg-stage-raised px-[18px] text-[15px] font-semibold hover:border-rule-strong"
+            >
+              {!subject && <Play aria-hidden size={16} />}
+              {subject ? t("solo.pickSubject") : t("solo.play")}
+            </Link>
           </div>
-        ) : (
-          <span />
-        )}
-        <Button asChild>
-          <Link href={href}>
-            {!subject && <Play aria-hidden size={18} />}
-            {subject ? t("solo.pickSubject") : t("solo.play")}
-          </Link>
-        </Button>
-      </div>
-    </ExpandRow>
+        </div>
+      )}
+    </Tile>
   );
 }
 
-function WeeklyRow({
-  card,
-  open,
-  onToggle,
+/** Плитка группы со строками (марафоны, пары): рекорд слева, режим, переход в игру справа. */
+function StreakTile({
+  group,
+  records,
 }: {
-  card: DailyCard;
-  open: boolean;
-  onToggle: () => void;
+  group: ModeGroup;
+  records: Map<string, RecordCard>;
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
-  const finished = card.status === "finished";
-  const href =
-    finished && card.session_id ? `/results/${card.session_id}` : `/play/${card.mode_key}`;
-  return (
-    <ExpandRow
-      testId={`daily-${card.mode_key}`}
-      domain={card.domain}
-      title={dt(card.title_key, card.mode_key)}
-      sub={t(`daily.statusPlain.${card.status}`)}
-      open={open}
-      onToggle={onToggle}
-    >
-      <p className="text-[15px] leading-normal text-ink-soft">
-        {dt(descriptionKey(card.title_key), t(`daily.pitch.${card.domain}`))}
-      </p>
-      <div className="flex justify-end">
-        <Button asChild variant={finished ? "secondary" : "primary"}>
-          <Link href={href}>{t(`daily.action.${card.status}`)}</Link>
-        </Button>
-      </div>
-    </ExpandRow>
-  );
-}
-
-/** Вкладка «По сборнику»: сборники живут на своих экранах, здесь только входы. */
-function CollectionLinks() {
-  const t = useTranslations();
   const icons = useIcons();
   const Next = icons.next;
+  const domains = new Set(group.modes.map((m) => m.domain));
+  const label = dt(
+    `solo.tab.${group.source_type}`,
+    dt(`solo.group.${group.source_type}.title`, group.source_type),
+  );
   return (
-    <>
-      {[
-        {
-          href: "/me/collections",
-          key: "own",
-          title: t("solo.collection.own.title"),
-          sub: t("solo.collection.own.sub"),
-        },
-        {
-          href: "/collections",
-          key: "catalog",
-          title: t("solo.collection.catalog.title"),
-          sub: t("solo.collection.catalog.sub"),
-        },
-      ].map(({ href, key, title, sub }) => (
-        <Link
-          key={key}
-          href={href}
-          data-testid={`solo-collection-${key}`}
-          className="flex min-h-[60px] w-full items-center gap-3.5 rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-2 transition-colors hover:border-rule-strong hover:bg-stage"
-        >
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-base font-semibold">{title}</span>
-            <span className="text-[13px] text-ink-muted">{sub}</span>
-          </span>
-          <Next aria-hidden size={18} className="shrink-0 text-ink-muted" />
-        </Link>
-      ))}
-    </>
+    <Tile
+      cap={label}
+      aside={
+        domains.size === 1 && <span className={CHIP}>{t(`domain.${[...domains][0]!}`)}</span>
+      }
+      data-testid={`mode-group-${group.source_type}`}
+    >
+      <div className="flex flex-col gap-1.5">
+        {group.modes.map((mode) => {
+          const record = records.get(mode.key);
+          const subject = mode.start?.subject ?? null;
+          return (
+            <div key={mode.key} data-testid={`mode-card-${mode.key}`}>
+              <ListRow
+                lead={record?.best ?? "–"}
+                accentLead
+                trailing={
+                  <Link
+                    href={`/play/${mode.key}`}
+                    className="inline-flex items-center gap-1 font-semibold text-ink hover:text-music"
+                  >
+                    {subject ? t("solo.pickSubject") : t("solo.play")}
+                    <Next aria-hidden className="size-3.5" />
+                  </Link>
+                }
+              >
+                {dt(mode.title_key, mode.key)}
+              </ListRow>
+            </div>
+          );
+        })}
+      </div>
+      <span className="text-xs text-ink-muted">{t(`solo.sub.${group.presentation}`)}</span>
+    </Tile>
   );
 }

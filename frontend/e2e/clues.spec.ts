@@ -1,7 +1,7 @@
 import { expect, giveUpButton, playUntilResults, test } from "./fixtures";
 import { openSoloMode } from "./hubs";
 
-test("витрина /solo: режимы по вкладкам, сетка недели отдельной вкладкой", async ({
+test("витрина /solo: фильтр видов, сетка недели плиткой", async ({
   page,
   expectAccessible,
 }) => {
@@ -18,7 +18,6 @@ test("витрина /solo: режимы по вкладкам, сетка не�
   }
   await expect(page.getByRole("tab", { name: "Марафоны" })).toBeVisible();
   await page.getByRole("radio", { name: "Кино" }).click();
-  await page.getByRole("tab", { name: "Сетка недели" }).click();
   await expect(page.getByTestId("daily-film.bracket.weekly")).toBeVisible();
   await expectAccessible(page);
 });

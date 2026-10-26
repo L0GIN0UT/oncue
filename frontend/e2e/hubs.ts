@@ -5,12 +5,11 @@ const TAB_BY_SOURCE: Record<string, string> = {
   random: "Быстрые",
   marathon: "Марафоны",
   pair: "Пары",
-  weekly: "Сетка недели",
 };
 
 /**
  * Открыть `/solo` и раскрыть строку режима `<домен>.<тип>.<имя>`: домен — переключатель,
- * тип — вкладка. Возвращает строку (`mode-card-<key>`).
+ * тип — фильтр-вкладка. Возвращает строку (`mode-card-<key>`).
  */
 export async function openSoloMode(page: Page, key: string): Promise<Locator> {
   const [domain, source] = key.split(".");

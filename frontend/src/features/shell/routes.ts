@@ -11,7 +11,7 @@ export function isGameRoute(pathname: string): boolean {
  * Страницы на полной ширине 1280 px (макеты v3). Остальные пока в колонке 640 px — их переводит
  * каждый агент вместе с экраном: добавил экран на v3 — добавь его маршрут сюда.
  */
-const WIDE_ROUTES = ["/"];
+const WIDE_ROUTES = ["/", "/solo"];
 
 export function isWideRoute(pathname: string): boolean {
   return WIDE_ROUTES.some((r) => (r === "/" ? pathname === "/" : pathname.startsWith(r)));
