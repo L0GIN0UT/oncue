@@ -13,10 +13,13 @@ describe("isGameRoute", () => {
 });
 
 describe("isWideRoute", () => {
-  it("главная — широкая, остальные пока в колонке", () => {
-    expect(isWideRoute("/")).toBe(true);
-    expect(isWideRoute("/solo")).toBe(false);
-    expect(isWideRoute("/profile")).toBe(false);
+  it("главная и экраны v3 — широкие, остальные пока в колонке", () => {
+    for (const p of ["/", "/solo", "/online", "/lobbies", "/collections", "/profile", "/shop"])
+      expect(isWideRoute(p)).toBe(true);
+    expect(isWideRoute("/leaderboards")).toBe(true);
+    expect(isWideRoute("/players/abc")).toBe(true);
+    expect(isWideRoute("/me/security")).toBe(false);
+    expect(isWideRoute("/friends")).toBe(false);
   });
 });
 
