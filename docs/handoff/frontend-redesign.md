@@ -1,0 +1,59 @@
+# Редизайн фронтенда «Ночной эфир» — передача
+
+Цель: переделать все экраны `frontend/` под новую дизайн-систему, не меняя бэкенд и контракты. Источник правды по дизайну — канвас [макетов](https://claude.ai/artifact/TWuBCKXfmGJDitYCe7dH8D) и его исходники в `frontend/design/mockups/*.dc.html` (обычный HTML с инлайновыми стилями: размеры, отступы, цвета, тексты, состояния). Борды `B-*` и `C-*` — отвергнутые варианты, не использовать; `Home`, `Game`, `Results`, `Palette` — устаревшие версии, ориентир только `A-Game`, `Duel`, `Room`, `Solo`, `Online`, `Collections`, `Profile`, `Shop`, `Event`, `Leaderboards`, `Login`, `Main`.
+
+Общее задание агентам (правила, токены, структура, проверки) — в файле «Guessverse — промпт редизайна фронтенда.md» у владельца; ниже — всё, что нужно знать следующей сессии.
+
+## Этапы и статус
+
+| Этап | Кто | Ветка | Статус |
+|---|---|---|---|
+| 0. Фундамент | один агент | `frontend/redesign-base` | PR открыт, ждёт слияния (метка `e2e`) |
+| 1. Экраны «Игра» | агент | `frontend/redesign-game` | не начат, ждёт слияния этапа 0 |
+| 1. Экраны «Хабы» | агент | `frontend/redesign-hubs` | не начат |
+| 1. Экраны «Профиль» | агент | `frontend/redesign-profile` | не начат |
+| 2. Сборка | один агент | `frontend/redesign-final` | не начат |
+
+Этап 1 стартует от `main` после слияния этапа 0: примитивы общие.
+
+Зоны этапа 1: агент правит только свои `src/features/*` и `src/app/*`. В `src/shared/ui` и `src/styles` не лезть; не хватает примитива — сделать внутри своей feature и записать сюда, что вынести в общие на этапе 2.
+
+- **Игра:** `features/game`, `daily`, `results`, `match`, `online` (экран матча); маршруты `/`, `/play/*`, `/results/*`, `/match/*`, `/room/*`; макеты `A-Game`, `Duel`, `Room`.
+- **Хабы:** `features/solo`, `online` (хаб, очередь, лобби), `collections`, `library`, `events`; маршруты `/solo`, `/online`, `/lobbies`, `/collections/*`, `/library/*`, `/events/*`, `/me/collections`; макеты `Solo`, `Online`, `Collections`, `Event`. У редактора сборника и медиатеки макета нет: собрать из строк, вкладок и поля поиска.
+- **Профиль:** `features/progression`, `rating`, `friends`, `shop`, `cosmetics`, `notifications`, `sanctions`, `auth`, `reports`, `comments`; маршруты `/profile`, `/players/*`, `/leaderboards`, `/friends`, `/shop`, `/notifications/*`, `/me`, `/me/security`, `/login`, `/register`, `/forgot-password`, `/unsubscribe`, `/banned`, `/sanctions`; макеты `Profile`, `Leaderboards`, `Shop`, `Login`. У уведомлений и настроек макета нет: строки и переключатели в стиле системы.
+
+## Этап 0 — что сделано
+
+**Токены** (`src/styles/themes/default.css`, `winter.css`, `tokens.css`, `theme.ts`, `src/app/globals.css`):
+- Фон `night` #141414, поверхности `stage` #1C1C1C / `stage-raised` #262626, линии `rule` #3A3A3A / `rule-strong` #5A5A5A, текст `ink` / `ink-soft` / `ink-muted` / `ink-faint` (#949494, проходит AA как текст) / `ink-dim` (#5A5A5A, только декор), акцент один — янтарь `music` #F2B13B.
+- Старые имена сохранены: `film` равен `music` (домена в цвете больше нет), `music-deep`/`film-deep` = заливка «частично». Исходы: `exact|partial|miss|skip` (значок/текст) + `*-fill` (заливка строки) + `*-line` (граница). `glow` — свечение акцента (`0 0 0 4px`), единственная «тень». Токены `glow-music`/`glow-film` и фоновые пятна удалены.
+- Радиусы: `--radius-control` 14 px (контролы и строки), `--radius-ticket` 20 px (модалки, крупные блоки), `--radius-pill` 999 px. Границы 1,5 px пишутся `border-[1.5px]`.
+- Движение (классы Tailwind из `globals.css`): `animate-pulse-ring` (кнопка Play), `animate-row-in` (250 мс), `animate-rise` (180 мс, подсказки и панель), `animate-modal-in` (250 мс). `prefers-reduced-motion` выключает всё.
+- Фокус: `:focus-visible` — янтарная рамка + свечение. `winter` приведена к тому же набору имён (холодные поверхности, янтарь чуть светлее).
+- Контраст: в `CORE_PAIRS` добавлены `ink-soft` на поверхностях и пары «текст/значок исхода на своей заливке»; `themeColor` = `night` темы.
+
+**Оболочка** (`src/features/shell/`, `src/app/layout.tsx`): `SiteHeader` удалён.
+- `AppHeader`: сетка `1fr auto 1fr` (знак ровно по центру), слева кнопка меню, справа ссылка события, колокольчик, аватар → `/profile` (гостю — «Войти»). Аватар содержит `data-testid="user-name"` (sr-only имя).
+- `HeaderLeading` (`header-leading.tsx`): экран внутри процесса (дуэль, комната, магазин) рисует `<HeaderLeading><Button …>Сдаться</Button></HeaderLeading>` и подменяет левую кнопку; слот очищается при уходе экрана.
+- `MenuDrawer`: «Сегодня · музыка», «Сегодня · кино» (статус из `pages/home`, запрос только пока меню открыто), «Соло», «Онлайн», «Сборники», «Профиль» (только пользователю) и блок серии за неделю (`week.ts`). `data-testid`: `nav-today-music|film`, `nav-solo`, `nav-online`, `nav-collections`, `nav-profile`, `menu-week`, `menu-button`.
+- `layout.tsx`: колонка `max-w-[640px]`, баннер санкций вписан в стиль (`partial-fill`).
+- Главная `/` — `features/daily/TodayGame`: находит дейлик домена (`/?domain=film`, по умолчанию музыка) в `pages/home` и вызывает `StartGame` (старт, возобновление или переход на итог) и показывает `GameScreen` на месте, адрес остаётся `/`. Старый лендинг убран; `DailyBoard`/`DailyTicket`, `HomeProgress`, `HomeEventBanner` и `EventSpot pageKey="home"` с главной больше не показываются — файлы пока остались (агент «Игра» решает, что из них переиспользовать, дубли удаляет этап 2).
+
+**Примитивы** (`src/shared/ui/`, у каждого тест в соседнем `*.test.tsx`, состояния проверяются в тестах): `Button` (primary/secondary/ghost/quiet/icon), `Segmented`, `Tabs`+`TabPanel`, `Chip`, `Row`, `Field` (+ `inputClass`), `ComboField` (подсказки вверх), `Modal`, `Drawer`, `use-overlay` (Escape, фокус, Tab-ловушка, блок прокрутки), `Tape`, `AttemptRow`, `PlayButton`, `Avatar`, `StatTile`, `Wordmark` («Guessverse», Unbounded 800). Иконки темы дополнены (`menu`, `close`, `back`, `exit`, `help`, `calendar`, `play`, `pause`, `correct`, `wrong`, `music`, `film`, `plus`, `share`, `expand`, `next`), размер `ICON_SIZE` = 22.
+
+Подписи и aria-тексты примитивы получают пропсами (внутри i18n нет).
+
+## Соглашения для этапа 1
+- Одна янтарная кнопка (`Button` primary) на экран; вторичное — `secondary`/`ghost`, вкладки `Tabs`, фильтры `Chip`.
+- Списки — `Row` (52 px; `size="lg"` 68 px), не карточки.
+- Хелпер для e2e: меню открывается кнопкой `menu-button`; пункты `nav-*` видны только при открытом меню.
+- `data-testid` сохранять там, где они были; E2E на моках — `pnpm test:e2e`, на стеке — метка `e2e` на PR.
+
+## Нужно от бэкенда
+- **Серия за неделю в меню:** `pages/home` отдаёт только `best_streak` (число). Клетки недели восстановлены по длине серии и признаку «дейлик сыгран сегодня» (`week.ts`). Нужны отметки по дням недели и текущая (не лучшая) серия.
+- **«Раунд N» в статусе дейлика в меню:** `DailyCard` не отдаёт номер текущего раунда; показываем «продолжить». Нужно `round` в карточке дейлика.
+- **Главная без сессии:** личный блок дейликов приходит только субъекту; гостевая сессия выдаётся клиентом (`recoverSession`). Публичный `mode_key` дейлика по домену (без личного статуса) убрал бы ожидание.
+
+## Отложено
+- Светлая тема — задача на потом (этап 2: только проверить, что токены её допускают).
+- `/` пока рендерит прежний `GameScreen` (сессия стартует через `StartGame` с `onSession`); новый игровой экран по макету `A-Game` — задача агента «Игра».
