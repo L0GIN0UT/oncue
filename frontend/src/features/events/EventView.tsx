@@ -1,44 +1,100 @@
 "use client";
 /**
- * Страница сезонного события `/events/[key]` (этап 5d, ADR 0054; макет «Событие»): слева карта
- * с тропой и узлами-находками, справа «Задание» выбранной находки и «Награда». Фон карты —
+ * Дневник сезонного события модалкой (этап 5d, ADR 0054; макет v3 «Событие»): слева карта с тропой
+ * и узлами-находками, справа «Задание» выбранной находки и «Награда». Открывается с главной
+ * (плитка события) и по прямой ссылке `/events/[key]` — та же модалка поверх главной. Фон карты —
  * картинка события (`map_url`), узлы стоят по координатам из данных (`x_pct`, `y_pct`); тропа —
  * сплошная до найденных, пунктир дальше, следующий узел пульсирует. Только пользователю (аноним —
  * вход, гость — регистрация). Тексты и награды приходят из определения события и показываются
  * как есть. Закрытые находки не кликабельны; узел — кнопка с понятной подписью.
  */
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { Star } from "lucide-react";
+import { Star, X } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type { EventFindCard, EventPageView } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { Avatar } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
+import { Modal } from "@/shared/ui/modal";
+import { SectionCap } from "@/shared/ui/section-cap";
 import { useIcons } from "@/shared/ui/theme-provider";
 import { useViewer } from "@/features/auth/session";
 import { useNow } from "@/features/daily/use-now";
-import { HeaderLeading } from "@/features/shell/header-leading";
 import { ProfileGate, gateOf } from "@/features/progression/ProfileView";
 import { daysLeft } from "@/features/rating/logic";
 import { playRoute, sortedFinds, trailPaths } from "./logic";
 import { useEventPage } from "./use-event";
 
-export function EventView({ eventKey }: { eventKey: string }) {
+export function EventView({
+  eventKey,
+  onClose = () => undefined,
+}: {
+  eventKey: string;
+  /** Закрытие модалки (Escape, фон, крестик): страница возвращает на главную. */
+  onClose?: () => void;
+}) {
+  const t = useTranslations();
+  // Модалка рисуется порталом только после гидратации: на прямой ссылке сервер её не отдаёт.
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
+  return (
+    <Modal
+      open={mounted}
+      onClose={onClose}
+      aria-label={t("events.dialog")}
+      data-testid="event-modal"
+      className="max-w-[1240px] border-rule-strong bg-night"
+    >
+      <EventBody eventKey={eventKey} onClose={onClose} />
+    </Modal>
+  );
+}
+
+function CloseButton({ onClose }: { onClose: () => void }) {
+  const t = useTranslations();
+  return (
+    <Button
+      variant="icon"
+      aria-label={t("common.close")}
+      onClick={onClose}
+      data-testid="event-close"
+      className="border-rule bg-stage"
+    >
+      <X aria-hidden />
+    </Button>
+  );
+}
+
+function EventBody({ eventKey, onClose }: { eventKey: string; onClose: () => void }) {
   const t = useTranslations();
   const viewer = useViewer();
   const query = useEventPage(eventKey);
 
   if (!viewer.pending && viewer.kind !== "user")
-    return <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />;
+    return (
+      <div className="flex flex-col gap-3 p-5">
+        <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />
+        <CloseButton onClose={onClose} />
+      </div>
+    );
   if (query.isError && !query.data) {
     const err = isApiError(query.error) ? query.error : null;
     const gate = gateOf(err?.status ?? null, err?.code ?? null);
-    if (gate) return <ProfileGate variant={gate} />;
+    if (gate)
+      return (
+        <div className="flex flex-col gap-3 p-5">
+          <ProfileGate variant={gate} />
+          <CloseButton onClose={onClose} />
+        </div>
+      );
     const notFound = err?.status === 404;
     return (
-      <div className="flex flex-col items-start gap-3 pt-8" data-testid="event-error">
+      <div className="flex flex-col items-start gap-3 p-6" data-testid="event-error">
         <h1 className="font-display text-[28px] leading-tight font-extrabold tracking-[-0.03em]">
           {notFound ? t("events.notFound.title") : t("events.unavailable")}
         </h1>
@@ -51,25 +107,17 @@ export function EventView({ eventKey }: { eventKey: string }) {
   }
   if (!query.data)
     return (
-      <p className="pt-12 text-ink-muted" role="status">
+      <p className="p-12 text-ink-muted" role="status">
         {t("common.loading")}
       </p>
     );
-  return <EventContent page={query.data} />;
+  return <EventContent page={query.data} onClose={onClose} />;
 }
 
-/**
- * Страница шире колонки 640: карта и задание рядом (макет 1280). Блок выходит из колонки
- * симметрично по центру и на узком экране сжимается до ширины окна с полями.
- */
-const BREAKOUT = "relative left-1/2 w-[min(1280px,calc(100vw-2rem))] -translate-x-1/2";
-
-function EventContent({ page }: { page: EventPageView }) {
+function EventContent({ page, onClose }: { page: EventPageView; onClose: () => void }) {
   const t = useTranslations();
   const f = useFormatter();
   const now = useNow();
-  const icons = useIcons();
-  const Back = icons.back;
   const finds = sortedFinds(page.finds);
   const [selected, setSelected] = useState<string | null>(null);
   // Пока игрок не выбрал точку, показано задание следующей находки (или последняя найденная).
@@ -78,17 +126,8 @@ function EventContent({ page }: { page: EventPageView }) {
   const ended = page.status !== "active";
   const left = now === null ? null : daysLeft(page.ends_at, now.getTime());
   return (
-    <div className={cn(BREAKOUT, "flex flex-col gap-4 pt-4")} data-testid="event-page">
-      <HeaderLeading>
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/" aria-label={t("events.backLabel")}>
-            <Back aria-hidden size={18} />
-            {t("events.back")}
-          </Link>
-        </Button>
-      </HeaderLeading>
-
-      <header className="flex flex-wrap items-end justify-between gap-3 px-0.5">
+    <div className="flex flex-col gap-4 p-5 sm:p-6" data-testid="event-page">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="text-[13px] text-ink-muted" data-testid="event-period">
             {ended
@@ -114,18 +153,21 @@ function EventContent({ page }: { page: EventPageView }) {
             </p>
           )}
         </div>
-        <Progress page={page} />
+        <div className="flex items-center gap-4">
+          <Progress page={page} />
+          <CloseButton onClose={onClose} />
+        </div>
       </header>
 
-      <section className="flex flex-wrap items-stretch gap-[18px]">
+      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <EventMap
           page={page}
           finds={finds}
           selected={current?.key ?? null}
           onSelect={setSelected}
         />
-        <aside className="flex max-w-[420px] min-w-0 flex-[1_1_320px] flex-col gap-3.5">
-          <span className="px-0.5 text-[13px] text-ink-muted">{t("events.task.caption")}</span>
+        <aside className="flex min-w-0 flex-col gap-2.5">
+          <SectionCap>{t("events.task.caption")}</SectionCap>
           {current && <FindDetail key={current.key} find={current} animate={selected !== null} />}
           <Reward page={page} />
         </aside>
@@ -191,7 +233,7 @@ function EventMap({
       role="group"
       aria-label={t("events.map.title")}
       data-testid="event-map"
-      className="relative min-w-0 flex-[999_1_560px] overflow-hidden rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage"
+      className="relative min-w-0 overflow-hidden rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage"
     >
       {page.map_url ? (
         // Карта — статика с S3/CDN; размеры заранее неизвестны, поэтому обычный <img>.
@@ -346,7 +388,7 @@ function Reward({ page }: { page: EventPageView }) {
   if (!reward) return null;
   return (
     <>
-      <span className="px-0.5 text-[13px] text-ink-muted">{t("events.reward.caption")}</span>
+      <SectionCap className="mt-1.5">{t("events.reward.caption")}</SectionCap>
       <section
         aria-labelledby="event-reward-title"
         data-testid="event-reward"
