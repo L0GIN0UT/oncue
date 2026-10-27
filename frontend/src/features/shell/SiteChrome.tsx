@@ -4,16 +4,18 @@ import { usePathname } from "next/navigation";
 import { useSessionInfo } from "@/features/auth/session";
 import { PresenceHeartbeat } from "@/features/friends/use-presence";
 import { GameShell } from "./GameShell";
+import { useGameShellSlots } from "./game-shell-slots";
 import { isGameRoute } from "./routes";
 import { SiteHeader } from "./SiteHeader";
 
 export function SiteChrome() {
   const pathname = usePathname();
   const { data } = useSessionInfo();
+  const slots = useGameShellSlots();
   return (
     <>
       {data?.subject?.kind === "user" && <PresenceHeartbeat />}
-      {isGameRoute(pathname) ? <GameShell /> : <SiteHeader />}
+      {isGameRoute(pathname) ? <GameShell {...slots} /> : <SiteHeader />}
     </>
   );
 }

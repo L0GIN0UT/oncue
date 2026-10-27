@@ -13,6 +13,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { GameShellSlotsProvider } from "./game-shell-slots";
 
 const NodeContext = createContext<ReactNode>(null);
 const SetterContext = createContext<Dispatch<SetStateAction<ReactNode>> | null>(null);
@@ -21,7 +22,9 @@ export function HeaderLeadingProvider({ children }: { children: ReactNode }) {
   const [node, setNode] = useState<ReactNode>(null);
   return (
     <SetterContext.Provider value={setNode}>
-      <NodeContext.Provider value={node}>{children}</NodeContext.Provider>
+      <NodeContext.Provider value={node}>
+        <GameShellSlotsProvider>{children}</GameShellSlotsProvider>
+      </NodeContext.Provider>
     </SetterContext.Provider>
   );
 }
