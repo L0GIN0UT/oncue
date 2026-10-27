@@ -12,13 +12,14 @@ import { useTranslations } from "next-intl";
 import { Check, Copy, Crown, LogOut, Play, RotateCcw, UserX } from "lucide-react";
 import type { RoomView, SettingsOptions, SettingsOverride } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { SectionCap } from "@/shared/ui/section-cap";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { cn } from "@/shared/lib/cn";
 import { useModeTitle } from "@/features/online/lists";
 import { fetchCollection } from "@/features/collections/api";
 import { InvitePanel } from "@/features/friends/InvitePanel";
-import { HeaderLeading } from "@/features/shell/header-leading";
+import { GameShellSlots } from "@/features/shell/game-shell-slots";
 import { ChatPanel } from "./ChatPanel";
 import { PlayersRail } from "./PlayersRail";
 import type { FeedItem } from "./room-store";
@@ -88,23 +89,30 @@ export function LobbyPanel({ room, myId, bubbles, feed, act, commands }: Props) 
   };
 
   return (
-    <div className="flex flex-col gap-[22px]" data-domain={room.mode.domain}>
-      {me && (
-        <HeaderLeading>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => act(commands.leave)}
-            data-testid="leave-room"
-          >
-            <LogOut aria-hidden />
-            {t("match.lobby.leaveShort")}
-          </Button>
-        </HeaderLeading>
-      )}
+    <div
+      className="flex flex-col gap-6 rounded-[20px] border-[1.5px] border-rule bg-stage p-5 sm:p-6"
+      data-domain={room.mode.domain}
+    >
+      <GameShellSlots
+        exit={
+          me ? (
+            <button
+              type="button"
+              onClick={() => act(commands.leave)}
+              data-testid="leave-room"
+              aria-label={t("match.lobby.leaveShort")}
+              className="inline-flex size-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-rule bg-stage text-sm font-semibold text-ink transition-colors hover:border-rule-strong sm:w-auto sm:pr-4 sm:pl-3"
+            >
+              <LogOut className="size-[18px]" aria-hidden />
+              <span className="hidden sm:inline">{t("match.lobby.leaveShort")}</span>
+            </button>
+          ) : undefined
+        }
+        modeLabel={modeTitle(room.mode)}
+      />
 
       <header className="flex flex-col gap-1.5 px-0.5">
-        <p className="text-sm text-ink-muted">{modeTitle(room.mode)}</p>
+        <SectionCap>{modeTitle(room.mode)}</SectionCap>
         <h1 className="font-display text-[28px] leading-[1.1] font-extrabold tracking-tight">
           {t("match.lobby.title")}
         </h1>
@@ -296,7 +304,7 @@ function SettingsRows({
   return (
     <section
       aria-label={t("match.settings.title")}
-      className="flex flex-col rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-1"
+      className="flex flex-col rounded-[var(--radius-control)] border-[1.5px] border-rule px-[18px] py-1"
     >
       {FIELDS.map((field) => {
         const values = (options?.[field] ?? []) as (string | number)[];

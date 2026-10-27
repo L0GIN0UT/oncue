@@ -67,7 +67,7 @@ export function ScoreStrip({
     <section
       aria-label={t("match.strip.label")}
       data-testid="score-strip"
-      className="flex items-center gap-[18px] rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-3.5"
+      className="flex items-center gap-[18px] rounded-[20px] border-[1.5px] border-rule bg-stage px-[18px] py-3.5"
     >
       <StripPlayer
         player={mine}
@@ -77,7 +77,9 @@ export function ScoreStrip({
         status={matchPlayers?.find((m) => m.user_id === mine.user_id)?.status ?? null}
         appearance={appearances.get(mine.user_id)}
         bubble={bubbles.get(mine.user_id)}
-        dots={<RoundDots id={mine.user_id} total={roundsTotal} winners={winners} />}
+        dots={
+          <RoundDots id={mine.user_id} total={roundsTotal} winners={winners} current={roundIndex} />
+        }
       />
       <div className="flex flex-col items-center gap-0.5" data-testid="duel-score">
         <span className="tabular font-display text-[28px] leading-none font-extrabold tracking-tight">
@@ -96,7 +98,14 @@ export function ScoreStrip({
           status={matchPlayers?.find((m) => m.user_id === rival.user_id)?.status ?? null}
           appearance={appearances.get(rival.user_id)}
           bubble={bubbles.get(rival.user_id)}
-          dots={<RoundDots id={rival.user_id} total={roundsTotal} winners={winners} />}
+          dots={
+            <RoundDots
+              id={rival.user_id}
+              total={roundsTotal}
+              winners={winners}
+              current={roundIndex}
+            />
+          }
         />
       ) : (
         <div className="min-w-0 flex-1" />
@@ -174,7 +183,18 @@ function StripPlayer({
   );
 }
 
-function RoundDots({ id, total, winners }: { id: string; total: number; winners: RoundWinners }) {
+function RoundDots({
+  id,
+  total,
+  winners,
+  current,
+}: {
+  id: string;
+  total: number;
+  winners: RoundWinners;
+  /** Идущий сейчас раунд: янтарная рамка у ещё не сыгранного кружка. */
+  current: number;
+}) {
   const t = useTranslations();
   const results = Array.from({ length: total }, (_, i) => {
     if (!winners.has(i)) return "pending" as const;
@@ -191,19 +211,21 @@ function RoundDots({ id, total, winners }: { id: string; total: number; winners:
     <span
       role="img"
       aria-label={t("match.strip.dots", { won, lost })}
-      className="flex gap-1"
+      className="flex gap-1.5"
       data-testid="round-dots"
     >
       {results.map((r, i) => (
         <i
           key={i}
           data-result={r}
+          data-current={r === "pending" && i === current ? "" : undefined}
           className={cn(
-            "block h-1.5 w-3.5 rounded-[3px]",
-            r === "won" && "bg-exact",
-            r === "lost" && "bg-miss",
-            r === "draw" && "bg-rule-strong",
-            r === "pending" && "bg-rule",
+            "block size-3.5 rounded-full border-[1.5px]",
+            r === "won" && "border-exact-line bg-exact-fill",
+            r === "lost" && "border-miss-line bg-miss-fill",
+            r === "draw" && "border-rule-strong bg-skip-fill",
+            r === "pending" &&
+              (i === current ? "border-music bg-skip-fill" : "border-rule bg-skip-fill"),
           )}
         />
       ))}

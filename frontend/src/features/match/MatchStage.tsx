@@ -19,7 +19,8 @@ import { TapeDeck } from "@/features/game/TapeDeck";
 import { clueRegistry, clueSceneOf } from "@/features/game/clues/registry";
 import { tapeWeights } from "@/features/game/levels";
 import { useSessionMode } from "@/features/game/modes";
-import { HeaderLeading } from "@/features/shell/header-leading";
+import { MuteButton } from "@/features/game/MuteButton";
+import { GameShellSlots } from "@/features/shell/game-shell-slots";
 import { useModeTitle } from "@/features/online/lists";
 import { isKnownAnswerFormat, matchAnswerRegistry } from "./answers/registry";
 import { ChatPanel } from "./ChatPanel";
@@ -110,19 +111,26 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
       data-testid="match-stage"
       data-phase={room.phase}
     >
-      {iAmIn && (
-        <HeaderLeading>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirmForfeit(true)}
-            data-testid="forfeit"
-          >
-            <LogOut aria-hidden />
-            {duel ? t("match.forfeit.actionDuel") : t("match.forfeit.actionParty")}
-          </Button>
-        </HeaderLeading>
-      )}
+      <GameShellSlots
+        exit={
+          iAmIn ? (
+            <button
+              type="button"
+              onClick={() => setConfirmForfeit(true)}
+              data-testid="forfeit"
+              className="inline-flex size-11 items-center justify-center gap-2 rounded-full border-[1.5px] border-rule bg-stage text-sm font-semibold text-ink transition-colors hover:border-rule-strong sm:w-auto sm:pr-4 sm:pl-3"
+              aria-label={duel ? t("match.forfeit.actionDuel") : t("match.forfeit.actionParty")}
+            >
+              <LogOut className="size-[18px]" aria-hidden />
+              <span className="hidden sm:inline">
+                {duel ? t("match.forfeit.actionDuel") : t("match.forfeit.actionParty")}
+              </span>
+            </button>
+          ) : undefined
+        }
+        volume={<MuteButton />}
+        modeLabel={modeTitle(room.mode)}
+      />
 
       {/* Номер раунда для скринридера и тестов; на экране его показывают полоса счёта и крупная цифра. */}
       {match ? (
@@ -133,56 +141,54 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
         <h1 className="font-display text-2xl font-bold">{t("match.starting")}</h1>
       )}
 
-      {duel && match ? (
-        <ScoreStrip
-          players={room.players}
-          matchPlayers={match.players}
-          myId={myId}
-          roundIndex={match.round_index}
-          roundsTotal={match.rounds_total}
-          winners={winners}
-          bubbles={bubbles}
-        />
-      ) : (
-        <>
-          {match && (
-            <div className="flex items-end justify-between gap-3 px-0.5" aria-hidden>
-              <span className="flex items-baseline gap-2.5">
-                <span className="font-display text-[40px] leading-none font-extrabold tracking-tight">
-                  {match.round_index + 1}
-                </span>
-                <span className="font-display text-[15px] font-medium text-ink-muted">
-                  {t("game.roundOf", { total: match.rounds_total })}
-                </span>
-              </span>
-              <span className="text-sm text-ink-muted">{modeTitle(room.mode)}</span>
-            </div>
-          )}
-          <PlayersRail
+      <div className="flex flex-col gap-2.5">
+        {duel && match ? (
+          <ScoreStrip
             players={room.players}
-            matchPlayers={match?.players}
+            matchPlayers={match.players}
             myId={myId}
+            roundIndex={match.round_index}
+            roundsTotal={match.rounds_total}
+            winners={winners}
             bubbles={bubbles}
           />
-        </>
-      )}
+        ) : (
+          <>
+            {match && (
+              <div className="flex items-end justify-between gap-3 px-0.5" aria-hidden>
+                <span className="flex items-baseline gap-2.5">
+                  <span className="font-display text-[40px] leading-none font-extrabold tracking-tight">
+                    {match.round_index + 1}
+                  </span>
+                  <span className="font-display text-[15px] font-medium text-ink-muted">
+                    {t("game.roundOf", { total: match.rounds_total })}
+                  </span>
+                </span>
+                <span className="text-sm text-ink-muted">{modeTitle(room.mode)}</span>
+              </div>
+            )}
+            <PlayersRail
+              players={room.players}
+              matchPlayers={match?.players}
+              myId={myId}
+              bubbles={bubbles}
+            />
+          </>
+        )}
+        {levelOpen && rowsTotal > 0 && (
+          <AttemptRows
+            guesses={guesses}
+            levelsCount={rowsTotal}
+            active={myOpen}
+            testId={guesses.length > 0 ? "my-guesses" : "my-attempts"}
+          />
+        )}
+      </div>
 
-      {match && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-0.5 text-sm text-ink-muted">
-          {match.levels_count > 1 && level !== null ? (
-            <p data-testid="match-level">
-              {t("match.levelOf", { level, total: match.levels_count })}
-            </p>
-          ) : (
-            <span />
-          )}
-          {room.phase === "level_open" && rivalStatus?.status && rival && (
-            <p className="inline-flex items-center gap-2 text-music" data-testid="rival-line">
-              <span aria-hidden className="size-2 rounded-full bg-music" />
-              {t(`match.rival.${rivalStatus.status}`, { name: rival.nickname })}
-            </p>
-          )}
-        </div>
+      {match && match.levels_count > 1 && level !== null && (
+        <p className="sr-only" data-testid="match-level">
+          {t("match.levelOf", { level, total: match.levels_count })}
+        </p>
       )}
 
       {(room.phase === "level_open" || room.phase === "reveal") && (
@@ -209,15 +215,6 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
 
       {levelOpen && (
         <>
-          {rowsTotal > 0 && (
-            <AttemptRows
-              guesses={guesses}
-              levelsCount={rowsTotal}
-              active={myOpen}
-              testId={guesses.length > 0 ? "my-guesses" : "my-attempts"}
-            />
-          )}
-
           {match.levels_count > 1 && level !== null && (
             <TapeDeck
               weights={weights}
@@ -225,6 +222,19 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
               level={level}
               progress={room.phase === "level_open" ? tapeProgress : null}
             />
+          )}
+
+          {room.phase === "level_open" && rivalStatus?.status && rival && (
+            <p
+              className="flex items-center justify-end gap-2 text-[13px] text-ink-muted"
+              data-testid="rival-line"
+            >
+              <span
+                aria-hidden
+                className="size-2 animate-pulse rounded-full bg-music motion-reduce:animate-none"
+              />
+              {t(`match.rival.${rivalStatus.status}`, { name: rival.nickname })}
+            </p>
           )}
 
           <section aria-label={t("game.clueLabel")} className="flex flex-col items-center">
