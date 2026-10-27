@@ -10,14 +10,18 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
-import { Film, Music } from "lucide-react";
+import { useFormatter, useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type { AnswerFormat, ModeOut, Presentation, RoundOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { SectionCap } from "@/shared/ui/section-cap";
+import { GameShellSlots } from "@/features/shell/game-shell-slots";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { AttemptRows } from "./AttemptRows";
+import { ExitLink } from "./ExitLink";
+import { MuteButton } from "./MuteButton";
+import { RoundTabs } from "./RoundTabs";
 import { RevealDialog } from "./RevealDialog";
 import { SessionProgress } from "./SessionProgress";
 import { needsLevelClue } from "./answers/pick";
@@ -39,6 +43,7 @@ export function answerFormatOf(mode: ModeOut | undefined, round: RoundOut): Answ
 export function GameScreen({ sessionId }: { sessionId: string }) {
   const t = useTranslations();
   const dt = useDynamicT();
+  const format = useFormatter();
   const router = useRouter();
   const toast = useToast();
   const { state, error, act, proceed, dismissNotice, reportError } = useGame(sessionId);
@@ -67,6 +72,10 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
     (value: number | null) => setProgressState({ tag: levelTag, value }),
     [levelTag],
   );
+  // Кадровая загадка показывает сам кадр вместо ленты; вид помним и на ответе раунда.
+  const [imageClue, setImageClue] = useState(false);
+  const knownKind = clue.data?.kind;
+  if (knownKind && imageClue !== (knownKind === "image")) setImageClue(knownKind === "image");
   const onMove = useCallback((move: Move) => void act(move), [act]);
 
   // Уведомления хода — тостом.
@@ -115,7 +124,15 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
   const Answer = answerRegistry[answerFormatOf(mode, round)];
   const isLastRound = round.index === snapshot.rounds.length - 1 || snapshot.status === "finished";
   const multiLevel = round.levels_count > 1;
-  const DomainIcon = domain === "film" ? Film : Music;
+  const modeTitle = dt(mode?.title_key ?? "", t(`domain.${domain}`));
+  const day = snapshot.day
+    ? format.dateTime(new Date(`${snapshot.day}T12:00:00`), { day: "numeric", month: "long" })
+    : null;
+  const modeLabel = [modeTitle, t(`domain.${domain}`).toLowerCase(), day]
+    .filter(Boolean)
+    .join(" · ");
+  const showTabs =
+    presentation === "score" && snapshot.rounds.length > 1 && snapshot.rounds.length <= 10;
   const tapeProgress =
     progress === null || !weights.length
       ? null
@@ -124,47 +141,45 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
 
   return (
     <div data-domain={domain} className="flex flex-col gap-[26px] pt-2">
-      <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-0.5">
-        <h1
-          className="flex items-baseline gap-2.5"
-          aria-label={t("game.roundTitle", {
-            index: round.index + 1,
-            total: snapshot.rounds.length,
-          })}
-          data-testid="round-title"
-        >
-          <span
-            aria-hidden
-            className="font-display text-[40px] leading-none font-extrabold tracking-tight"
-          >
-            {round.index + 1}
-          </span>
-          <span aria-hidden className="font-display text-[15px] font-medium text-ink-muted">
-            {t("game.roundOf", { total: snapshot.rounds.length })}
-          </span>
-        </h1>
-        <div className="flex flex-col items-end gap-0.5 text-sm text-ink-muted">
-          <p className="inline-flex items-center gap-2">
-            <DomainIcon className="size-4" aria-hidden />
-            {dt(mode?.title_key ?? "", t(`domain.${domain}`))}
-          </p>
-          {mode?.presentation === "score" && (
-            <p className="tabular" data-testid="score">
-              <span className="sr-only">{t("game.score")}: </span>
-              {snapshot.score}
-              <span className="text-ink-faint">/{snapshot.max_score}</span>
+      <GameShellSlots
+        exit={<ExitLink />}
+        volume={<MuteButton />}
+        modeLabel={modeLabel}
+        score={
+          mode?.presentation === "score" ? (
+            <p className="flex flex-col items-end gap-1" data-testid="score">
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="tabular font-display text-[28px] leading-none font-extrabold tracking-tight">
+                  <span className="sr-only">{t("game.score")}: </span>
+                  {snapshot.score}
+                </span>
+                <span className="tabular font-display text-[15px] font-medium text-ink-faint">
+                  / {snapshot.max_score}
+                </span>
+              </span>
+              <SectionCap>{t("game.scoreCap")}</SectionCap>
             </p>
-          )}
-        </div>
-      </header>
+          ) : null
+        }
+      />
 
-      <SessionProgress rounds={snapshot.rounds} round={round} />
+      <h1
+        className="sr-only"
+        aria-label={t("game.roundTitle", { index: round.index + 1, total: snapshot.rounds.length })}
+        data-testid="round-title"
+      >
+        {t("game.roundTitle", { index: round.index + 1, total: snapshot.rounds.length })}
+      </h1>
 
-      {multiLevel && (
-        <AttemptRows guesses={round.guesses} levelsCount={round.levels_count} active={playable} />
-      )}
+      <div className="flex flex-col gap-2.5">
+        {showTabs && <RoundTabs rounds={snapshot.rounds} current={round.index} />}
+        <SessionProgress rounds={snapshot.rounds} round={round} />
+        {multiLevel && (
+          <AttemptRows guesses={round.guesses} levelsCount={round.levels_count} active={playable} />
+        )}
+      </div>
 
-      {multiLevel && (withClue || revealing) && (
+      {multiLevel && (withClue || revealing) && !imageClue && (
         <TapeDeck weights={weights} levels={levels} level={round.level} progress={tapeProgress} />
       )}
 

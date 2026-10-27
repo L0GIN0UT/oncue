@@ -413,6 +413,20 @@
     "notFound": "Такой игры нет",
     "loadFailed": "Игра не загрузилась",
     "roundTitle": "Раунд {index} из {total}",
+    "exit": "Выйти",
+    "mute": "Выключить звук",
+    "unmute": "Включить звук",
+    "scoreCap": "очки",
+    "roundsLabel": "Раунды",
+    "roundTab": "Раунд {index}: {state}",
+    "roundState": {
+      "exact": "угадал",
+      "partial": "почти",
+      "miss": "мимо",
+      "skip": "пропуск",
+      "current": "текущий",
+      "upcoming": "впереди"
+    },
     "score": "Очки",
     "clueLabel": "Загадка",
     "clueLoading": "Загружаем фрагмент…",
@@ -450,6 +464,7 @@
       "exact": "Угадал с {attempt}-й",
       "partial": "Почти: исполнитель верный",
       "miss": "Не в этот раз",
+      "skip": "Пропущено",
       "void": "Недоступно — раунд не засчитан",
       "voidText": "Фрагмент этого раунда сейчас недоступен. Раунд не идёт в счёт.",
       "points": "+{points}",
@@ -518,7 +533,6 @@
     "tapeSeconds": "{seconds} с",
     "tapeStep": "{level} из {total}",
     "skipGain": "+{seconds} с",
-    "skipLastHint": "и узнать ответ",
     "continue": "Продолжить"
   },
   "results": {

@@ -7,11 +7,12 @@
  * Данные ответа есть только у завершённого раунда (D11). У сетки (`presentation: bracket`)
  * ответа нет — модалка показывает сделанный выбор и долю согласных (`stats.agree_pct`).
  */
-import { useEffect, useState, type ComponentType, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import { Film, Music, Users, X } from "lucide-react";
 import type { Domain, MoveStats, Presentation, RoundOut } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
+import { Cover } from "@/shared/ui/cover";
 import { Modal } from "@/shared/ui/modal";
 import { StatTile } from "@/shared/ui/stat-tile";
 import { cn } from "@/shared/lib/cn";
@@ -38,11 +39,18 @@ const HEAD = {
   exact: "bg-music text-night",
   partial: "bg-partial-fill text-ink",
   miss: "bg-rule text-ink",
+  skip: "bg-rule text-ink",
   void: "bg-rule text-ink",
 } as const;
 
 /** Удержанный Enter из поля ответа не должен тут же закрыть только что открытый ответ. */
 const KEYBOARD_GUARD_MS = 300;
+
+/** «Пропущено»: раунд закончен, а на каждом уровне игрок пропускал, не отвечая. */
+const wasSkipped = (round: RoundOut): boolean =>
+  roundOutcome(round) === "miss" &&
+  round.guesses.length > 0 &&
+  round.guesses.every((g) => g.kind === "skip");
 
 /** Тело по подаче итога (D12): ответ раунда или сделанный выбор. */
 const bodies: Record<Presentation, ComponentType<BodyProps>> = {
@@ -62,8 +70,12 @@ export function RevealDialog({
 }: Props) {
   const t = useTranslations();
   const outcome = roundOutcome(round);
-  const kind =
-    outcome === "exact" || outcome === "partial" || outcome === "void" ? outcome : "miss";
+  const skipped = wasSkipped(round);
+  const kind = skipped
+    ? "skip"
+    : outcome === "exact" || outcome === "partial" || outcome === "void"
+      ? outcome
+      : "miss";
   const choice = presentation === "bracket";
   const Body = bodies[presentation];
   const [openedAt] = useState(() => Date.now());
@@ -148,6 +160,7 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
   const reveal = round.reveal ?? null;
   const outcome = roundOutcome(round);
   const scored = outcome === "exact" || outcome === "partial";
+  const skipped = wasSkipped(round);
   if (!reveal) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
@@ -180,10 +193,14 @@ function AnswerBody({ sessionId, round, stats, domain }: BodyProps) {
       <div className="grid w-full grid-cols-2 gap-2.5">
         <StatTile
           className="items-center"
-          value={t("game.reveal.attemptOf", {
-            attempt: round.guesses.length,
-            total: round.levels_count,
-          })}
+          value={
+            skipped
+              ? "—"
+              : t("game.reveal.attemptOf", {
+                  attempt: round.guesses.length,
+                  total: round.levels_count,
+                })
+          }
           label={t("game.reveal.attempt")}
         />
         <StatTile
@@ -234,19 +251,17 @@ function AgreePct({ pct }: { pct: number }) {
   );
 }
 
-/** Плашка-заглушка: обложка 1:1 у музыки, постер 2:3 у кино. */
-function Art({ domain, children }: { domain: Domain; children?: ReactNode }) {
+/** Заглушка и картинка ответа: обложка 1:1 у музыки (220 px), постер 2:3 у кино (180 px). */
+function Art({ domain, src, alt = "" }: { domain: Domain; src?: string | null; alt?: string }) {
   const Icon = domain === "film" ? Film : Music;
   return (
-    <div
-      className={cn(
-        "relative grid place-items-center overflow-hidden rounded-[var(--radius-control)] bg-stage-raised text-ink-dim",
-        domain === "film" ? "h-[270px] w-[180px]" : "size-[220px]",
-      )}
-    >
-      <Icon className="size-12" aria-hidden />
-      {children}
-    </div>
+    <Cover
+      src={src}
+      alt={alt}
+      ratio={domain === "film" ? "poster" : "square"}
+      placeholder={<Icon className="size-12" aria-hidden />}
+      className={cn("rounded-[14px]", domain === "film" ? "w-[180px]" : "w-[220px]")}
+    />
   );
 }
 
@@ -272,18 +287,19 @@ function FinalArt({
       <img
         src={objectUrl}
         alt={t("game.reveal.frameAlt", { title })}
-        className="aspect-video w-full rounded-[var(--radius-control)] border-[1.5px] border-rule object-cover"
+        className="aspect-video w-full rounded-[14px] border-[1.5px] border-rule object-cover"
         data-testid="reveal-image"
       />
     );
   }
   return (
-    <Art domain={domain}>
+    <div className="relative">
+      <Art domain={domain} />
       {frame && (
         <span className="sr-only" role="status">
           {t("game.reveal.clueLoading")}
         </span>
       )}
-    </Art>
+    </div>
   );
 }

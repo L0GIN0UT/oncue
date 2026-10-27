@@ -4,7 +4,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 import { server, signInAsGuest, setupMockBackend, world } from "@/test/msw";
-import { renderWithProviders } from "@/test/render";
+import { renderWithGameShell, renderWithProviders } from "@/test/render";
 import { itemById, personId } from "../../../e2e/mocks/world";
 import { GameScreen } from "./GameScreen";
 
@@ -62,7 +62,7 @@ describe("GameScreen — режимы этапа 3a", () => {
   it("марафон: жизни из progress, сдача отнимает жизнь", async () => {
     const user = userEvent.setup();
     const s = start("film.marathon.director", [personId("Андрей Тарковский")]);
-    renderWithProviders(<GameScreen sessionId={s.id} />);
+    renderWithGameShell(<GameScreen sessionId={s.id} />);
     expect(await screen.findByTestId("lives")).toHaveTextContent("3");
     // 5 фильмов марафона — индикатор точками; счёт идёт очками.
     expect(await screen.findByTestId("score")).toBeInTheDocument();

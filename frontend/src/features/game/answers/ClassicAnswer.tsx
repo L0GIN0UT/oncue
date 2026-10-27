@@ -1,5 +1,9 @@
 "use client";
-/** Формат `classic`: поле ответа с подсказками, «Пропустить» рядом и тихая «Сдаться» под ним. */
+/**
+ * Формат `classic`: поле ответа с подсказками и одна кнопка рядом — «Пропустить», пока ответа нет,
+ * «Ответить», когда он есть, а на последней попытке вместо «Пропустить» красная «Сдаться».
+ * На прочих уровнях «Сдаться» остаётся тихой ссылкой под полем.
+ */
 import { useFormatter, useTranslations } from "next-intl";
 import { Button } from "@/shared/ui/button";
 import { AnswerBox } from "../AnswerBox";
@@ -11,6 +15,7 @@ export function ClassicAnswer({ round, domain, levels, disabled, onMove, focusKe
   const format = useFormatter();
   const gain = skipGainSeconds(levels, round.level);
   const lastLevel = round.level >= round.levels_count;
+  const giveUp = () => onMove({ kind: "give_up" });
   return (
     <div className="flex flex-col gap-3">
       <AnswerBox
@@ -18,40 +23,43 @@ export function ClassicAnswer({ round, domain, levels, disabled, onMove, focusKe
         disabled={disabled}
         focusKey={focusKey}
         onAnswer={(answer) => onMove({ kind: "guess", answer })}
-        skip={{
-          testId: "skip",
-          onSkip: () => onMove({ kind: "skip" }),
-          // Прибавка времени и итог последнего пропуска слышит скринридер; на экране — «Пропустить».
-          label: (
-            <>
-              {t("game.skip")}{" "}
-              {lastLevel ? (
-                <span className="sr-only">{t("game.skipLastHint")}</span>
-              ) : (
-                gain !== null && (
-                  <span className="sr-only">
-                    (
-                    {t("game.skipGain", {
-                      seconds: format.number(gain, { maximumFractionDigits: 1 }),
-                    })}
-                    )
-                  </span>
-                )
-              )}
-            </>
-          ),
-        }}
+        skip={
+          lastLevel
+            ? null
+            : {
+                testId: "skip",
+                onSkip: () => onMove({ kind: "skip" }),
+                // Прибавка времени слышна скринридеру; на экране — «Пропустить».
+                label: (
+                  <>
+                    {t("game.skip")}{" "}
+                    {gain !== null && (
+                      <span className="sr-only">
+                        (
+                        {t("game.skipGain", {
+                          seconds: format.number(gain, { maximumFractionDigits: 1 }),
+                        })}
+                        )
+                      </span>
+                    )}
+                  </>
+                ),
+              }
+        }
+        giveUp={lastLevel ? { label: t("game.giveUp"), onGiveUp: giveUp, testId: "give-up" } : null}
       />
-      <Button
-        variant="quiet"
-        size="sm"
-        className="self-center"
-        disabled={disabled}
-        onClick={() => onMove({ kind: "give_up" })}
-        data-testid="give-up"
-      >
-        {t("game.giveUp")}
-      </Button>
+      {!lastLevel && (
+        <Button
+          variant="quiet"
+          size="sm"
+          className="self-center"
+          disabled={disabled}
+          onClick={giveUp}
+          data-testid="give-up"
+        >
+          {t("game.giveUp")}
+        </Button>
+      )}
     </div>
   );
 }

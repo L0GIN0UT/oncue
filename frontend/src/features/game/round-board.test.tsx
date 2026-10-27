@@ -158,6 +158,21 @@ describe("RevealDialog", () => {
     expect(screen.getByTestId("save-button")).toHaveTextContent("В плейлист");
   });
 
+  it("пропуск на каждом уровне: шапка «Пропущено», попытка — прочерк", () => {
+    signInAsGuest();
+    renderWithProviders(
+      <RevealDialog
+        {...base}
+        last={false}
+        round={finishedRound({ points: 0, guesses: [guess("skip", null), guess("skip", null)] })}
+        onNext={vi.fn()}
+        domain="music"
+      />,
+    );
+    expect(screen.getByTestId("reveal-outcome")).toHaveTextContent("Пропущено");
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
   it("промах: серая шапка; последний раунд — «К итогам»; Escape и пробел продолжают", async () => {
     signInAsGuest();
     const user = userEvent.setup();
