@@ -2,14 +2,14 @@
 /**
  * Вкладки раундов 1…N с цветом исхода: сыгранный раунд заливается цветом исхода (точно, почти, мимо,
  * пропуск), текущий — янтарём, будущие — пустые. Это индикатор, не переключатель: вернуться в
- * сыгранный раунд нельзя, а ответ раунда открывается модалкой.
+ * сыгранный раунд нельзя, а ответ раунда открывается модалкой. Те же вкладки — в итогах.
  */
 import { useTranslations } from "next-intl";
 import type { RoundOut } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { roundOutcome } from "./levels";
 
-type TabState = "exact" | "partial" | "miss" | "skip" | "current" | "upcoming";
+export type TabState = "exact" | "partial" | "miss" | "skip" | "current" | "upcoming";
 
 const TONE: Record<TabState, string> = {
   exact: "border-exact-line bg-exact-fill text-exact",
@@ -30,30 +30,43 @@ export function tabState(round: RoundOut, current: number): TabState {
   return round.index === current ? "current" : "upcoming";
 }
 
-export function RoundTabs({ rounds, current }: { rounds: RoundOut[]; current: number }) {
+export type OutcomeTab = { index: number; state: TabState };
+
+/** Ряд вкладок по готовым состояниям (используют экран раунда и итоги). */
+export function OutcomeTabs({ tabs, className }: { tabs: OutcomeTab[]; className?: string }) {
   const t = useTranslations();
   return (
-    <ol aria-label={t("game.roundsLabel")} data-testid="round-tabs" className="mb-1.5 flex gap-2">
-      {rounds.map((round) => {
-        const state = tabState(round, current);
-        return (
-          <li
-            key={round.index}
-            aria-label={t("game.roundTab", {
-              index: round.index + 1,
-              state: t(`game.roundState.${state}`),
-            })}
-            aria-current={state === "current" ? "step" : undefined}
-            data-state={state}
-            className={cn(
-              "grid h-[34px] flex-1 place-items-center rounded-full border-[1.5px] text-[13px] font-semibold",
-              TONE[state],
-            )}
-          >
-            {round.index + 1}
-          </li>
-        );
-      })}
+    <ol
+      aria-label={t("game.roundsLabel")}
+      data-testid="round-tabs"
+      className={cn("flex gap-2", className)}
+    >
+      {tabs.map(({ index, state }) => (
+        <li
+          key={index}
+          aria-label={t("game.roundTab", {
+            index: index + 1,
+            state: t(`game.roundState.${state}`),
+          })}
+          aria-current={state === "current" ? "step" : undefined}
+          data-state={state}
+          className={cn(
+            "grid h-[34px] flex-1 place-items-center rounded-full border-[1.5px] text-[13px] font-semibold",
+            TONE[state],
+          )}
+        >
+          {index + 1}
+        </li>
+      ))}
     </ol>
+  );
+}
+
+export function RoundTabs({ rounds, current }: { rounds: RoundOut[]; current: number }) {
+  return (
+    <OutcomeTabs
+      className="mb-1.5"
+      tabs={rounds.map((round) => ({ index: round.index, state: tabState(round, current) }))}
+    />
   );
 }

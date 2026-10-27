@@ -1,6 +1,6 @@
 /** Итог по `presentation` (реестр презентеров) на мок-бэкенде. */
 import { describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { signInAsGuest, setupMockBackend, world } from "@/test/msw";
 import { renderWithProviders } from "@/test/render";
 import { personId, type MockSession } from "../../../e2e/mocks/world";
@@ -60,5 +60,30 @@ describe("ResultsView по presentation", () => {
     const stages = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(stages).toEqual(["Финал", "Полуфинал", "1/4 финала"]);
     expect(screen.queryByTestId("result-row")).not.toBeInTheDocument();
+  });
+});
+
+describe("ResultsView: следующий шаг", () => {
+  it("после дейлика музыки предлагает дейлик кино, вкладки и «открыто N с» в строках", async () => {
+    const s = world.startSession(signInAsGuest(), world.mode("music.daily.classic")!, null);
+    playOut(s);
+    renderWithProviders(<ResultsView sessionId={s.id} />);
+    const next = await screen.findByTestId("results-next");
+    await waitFor(() => expect(next).toHaveTextContent("Теперь кино"));
+    expect(next).toHaveAttribute("href", "/play/film.daily.frame");
+    expect(screen.getByTestId("round-tabs").querySelectorAll("li")).toHaveLength(5);
+    expect(screen.getByTestId("final-guessed")).toHaveTextContent("очков · 0 из 5 угадано");
+    expect(screen.getAllByTestId("result-row")).toHaveLength(5);
+  });
+
+  it("соло-режим не из дейликов ведёт к режимам", async () => {
+    const m = world.startSession(signInAsGuest(), world.mode("film.marathon.director")!, null, [
+      personId("Андрей Тарковский"),
+    ]);
+    playOut(m);
+    renderWithProviders(<ResultsView sessionId={m.id} />);
+    const next = await screen.findByTestId("results-next");
+    expect(next).toHaveTextContent("Другие режимы");
+    expect(next).toHaveAttribute("href", "/solo");
   });
 });

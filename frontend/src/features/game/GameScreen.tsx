@@ -148,8 +148,8 @@ export function GameScreen({ sessionId }: { sessionId: string }) {
         score={
           mode?.presentation === "score" ? (
             <p className="flex flex-col items-end gap-1" data-testid="score">
-              <span className="inline-flex items-baseline gap-1.5">
-                <span className="tabular font-display text-[28px] leading-none font-extrabold tracking-tight">
+              <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+                <span className="tabular font-display text-[22px] leading-none font-extrabold tracking-tight sm:text-[28px]">
                   <span className="sr-only">{t("game.score")}: </span>
                   {snapshot.score}
                 </span>

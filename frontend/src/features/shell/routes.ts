@@ -1,7 +1,10 @@
 /** Какая оболочка и какая ширина у маршрута: список правится по мере перевода экранов на v3. */
 
-/** Игровые маршруты: вместо шапки сайта — оболочка игры `GameShell`. */
-const GAME_ROUTE = /^\/(play|match|room)(\/|$)/;
+/**
+ * Игровые маршруты: вместо шапки сайта — оболочка игры `GameShell`. Итоги (`/results`) тоже в ней:
+ * в макете Results шапка игры с «На главную», а следующий шаг итогов ведёт в игру или на главную.
+ */
+const GAME_ROUTE = /^\/(play|match|room|results)(\/|$)/;
 
 export function isGameRoute(pathname: string): boolean {
   return GAME_ROUTE.test(pathname);
@@ -21,6 +24,7 @@ const WIDE_ROUTES = [
   "/players",
   "/leaderboards",
   "/shop",
+  "/results",
 ];
 
 export function isWideRoute(pathname: string): boolean {
