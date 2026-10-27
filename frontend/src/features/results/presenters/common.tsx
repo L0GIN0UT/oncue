@@ -1,66 +1,82 @@
 "use client";
 /** Общие части презентеров итога: строки раундов и рекорд режима. */
-import { useTranslations } from "next-intl";
-import { Trophy } from "lucide-react";
+import { useFormatter, useTranslations } from "next-intl";
+import { Film, Music, Trophy } from "lucide-react";
 import type { ResultRecord, ResultRoundCard } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
+import { Cover } from "@/shared/ui/cover";
+import { levelSeconds } from "@/features/game/levels";
 import { SaveButton } from "@/features/library/SaveButton";
 import type { PresenterProps } from "./types";
 
-const OUTCOME_TONE: Record<ResultRoundCard["outcome"], string> = {
-  exact: "bg-exact",
-  partial: "bg-partial",
-  miss: "bg-miss",
-  gave_up: "bg-miss",
-  void: "bg-skip",
+/** Цвет очков раунда: зелёные у угаданного и частичного, красные у нуля. */
+const POINTS_TONE: Record<ResultRoundCard["outcome"], string> = {
+  exact: "text-exact",
+  partial: "text-partial",
+  miss: "text-miss",
+  gave_up: "text-miss",
+  void: "text-skip",
 };
 
 /**
- * Строка на каждый сыгранный раунд (у марафона и пары — столько, сколько успели сыграть).
- * У раунда с единицей — «Сохранить» в медиатеку (этап 3b, D5; источник `results`).
+ * Строка на каждый сыгранный раунд (у марафона и пары — столько, сколько успели сыграть): обложка
+ * 48 px (плашка, пока бэкенд не отдаёт картинки), название и исполнитель, «открыто N с» либо
+ * исход словами, очки. У раунда с единицей — «Сохранить» в медиатеку (этап 3b, D5; источник
+ * `results`).
  */
-export function ResultRows({ summary, items }: PresenterProps) {
+export function ResultRows({ summary, items, domain, levels }: PresenterProps) {
   const t = useTranslations();
+  const format = useFormatter();
+  const Icon = domain === "film" ? Film : Music;
   return (
-    <ol className="flex flex-col gap-2" aria-label={t("results.roundsLabel")}>
+    <ol className="flex flex-col gap-2.5" aria-label={t("results.roundsLabel")}>
       {summary.rounds.map((r) => {
         const item = r.media_item_id ? items.get(r.media_item_id) : undefined;
+        const seconds = r.level !== null ? levelSeconds(levels, r.level) : null;
+        const persons = item?.persons.map((p) => p.name).join(", ");
         return (
           <li
             key={r.index}
             data-testid="result-row"
-            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-3 gap-y-1 rounded-[var(--radius-control)] border-[1.5px] border-rule px-3.5 py-2.5"
+            className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-[14px] border-[1.5px] border-rule bg-stage px-3.5 py-3"
           >
-            <span aria-hidden className={cn("size-3 rounded-full", OUTCOME_TONE[r.outcome])} />
-            <div className="min-w-0">
-              <p dir="auto" className="truncate text-[15px] font-medium">
+            <Cover
+              ratio={domain === "film" ? "poster" : "square"}
+              src={null}
+              placeholder={<Icon className="size-5" aria-hidden />}
+              className="w-12 flex-none rounded-[10px]"
+            />
+            <div className="min-w-0 flex-1 basis-40">
+              <p dir="auto" className="truncate text-base font-semibold">
                 {item?.title ?? t("results.unknownItem")}
               </p>
-              <p className="truncate text-sm text-ink-muted">
-                {t(`results.outcome.${r.outcome}`, { level: r.level ?? 0 })}
-                {item
-                  ? `, ${[item.year, ...item.persons.map((p) => p.name)].filter(Boolean).join(", ")}`
-                  : ""}
+              <p className="truncate text-[13px] text-ink-muted">
+                {[persons, item?.year].filter(Boolean).join(" · ")}
+                {r.exact_pct !== null && r.exact_pct !== undefined && (
+                  <>
+                    {persons || item?.year ? " · " : ""}
+                    {t("results.exactPct", { pct: Math.round(r.exact_pct) })}
+                  </>
+                )}
               </p>
             </div>
-            <span className="tabular font-display text-base font-semibold">+{r.points}</span>
-            {r.media_item_id ? (
+            <span className="text-[13px] text-ink-muted">
+              {seconds !== null && r.outcome !== "void"
+                ? t("results.opened", {
+                    seconds: format.number(seconds, { maximumFractionDigits: 1 }),
+                  })
+                : t(`results.outcome.${r.outcome}`, { level: r.level ?? 0 })}
+            </span>
+            <span
+              className={cn(
+                "tabular min-w-16 text-right font-display text-lg font-extrabold",
+                POINTS_TONE[r.outcome],
+              )}
+            >
+              {r.points > 0 ? `+${r.points}` : r.points}
+            </span>
+            {r.media_item_id && (
               <SaveButton mediaItemId={r.media_item_id} domain={item?.domain} source="results" />
-            ) : (
-              <span />
-            )}
-            {r.exact_pct !== null && r.exact_pct !== undefined && (
-              <div className="col-span-4 col-start-1 mt-1 flex items-center gap-3 text-xs text-ink-muted sm:col-span-3 sm:col-start-2">
-                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-rule">
-                  <span
-                    className="block h-full rounded-full bg-music"
-                    style={{ width: `${Math.round(r.exact_pct)}%` }}
-                  />
-                </span>
-                <span className="tabular">
-                  {t("results.exactPct", { pct: Math.round(r.exact_pct) })}
-                </span>
-              </div>
             )}
           </li>
         );

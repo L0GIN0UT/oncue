@@ -1,10 +1,10 @@
 "use client";
 /**
- * Итог сессии карточкой в виде модалки (через bff, личный блок — CSR). Оверлея нет: меню шапки
- * остаётся доступным (с главной пройденного дейлика сюда ведёт редирект). Цветная шапка («Угадал с N-й» янтарная,
- * «Не в этот раз» серая), главная цифра и разбор — по `presentation` (реестр презентеров: очки,
- * серия, чемпион сетки, D12), «Поделиться» (текст тоже по `presentation`), «Другие режимы», у гостя —
- * предложение войти. Прямая ссылка `/results/[sessionId]` выглядит так же.
+ * Итог сессии (через bff, личный блок — CSR) в оболочке игры: карточка итога (цветная шапка, счёт,
+ * вкладки раундов), строки раундов с обложкой, «Поделиться», следующий шаг («Теперь кино» после
+ * дейлика музыки), «На главную». Главная цифра и разбор — по `presentation` (реестр презентеров:
+ * очки, серия, чемпион сетки, D12), у гостя — предложение войти. С главной пройденного дейлика
+ * сюда ведёт ссылка плитки.
  *
  * Сессия по сборнику (этап 3b, D7): `collection` итога game → название сборника в заголовке и в
  * шэре, ссылка шэра и «Сыграть ещё» ведут на страницу сборника.
@@ -13,16 +13,20 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
-import { Share2 } from "lucide-react";
+import { useFormatter, useTranslations } from "next-intl";
+import { ArrowRight, Share2 } from "lucide-react";
 import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
-import type { ItemCard, ResultsPage } from "@/shared/api/types";
+import type { Domain, ItemCard, ResultsPage } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useSessionInfo } from "@/features/auth/session";
+import { useHomePage } from "@/features/daily/DailyCards";
+import { ExitLink } from "@/features/game/ExitLink";
+import { useSessionMode } from "@/features/game/modes";
+import { GameShellSlots } from "@/features/shell/game-shell-slots";
 import { presenterRegistry } from "./presenters/registry";
 import { fetchCollection } from "@/features/collections/api";
 import { buildShareText, shareResult, type ShareCollection, type Translate } from "./share";
@@ -57,7 +61,9 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
   const dt = useDynamicT();
   const router = useRouter();
   const toast = useToast();
+  const format = useFormatter();
   const session = useSessionInfo();
+  const home = useHomePage(null);
   const { data, error } = useQuery({
     queryKey: ["page", "results", sessionId],
     queryFn: async (): Promise<ResultsPage> =>
@@ -68,6 +74,13 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
       ),
   });
 
+  const summaryData = data?.blocks.result.status === "ok" ? data.blocks.result.data : null;
+  const sessionDomain: Domain | undefined = summaryData
+    ? summaryData.mode_key?.split(".")[0] === "film"
+      ? "film"
+      : "music"
+    : undefined;
+  const { mode } = useSessionMode(sessionDomain, summaryData?.mode_key ?? undefined);
   const unfinished = isApiError(error) && error.status === 409;
   const collection = useSessionCollection(sessionId, Boolean(data));
   useEffect(() => {
@@ -105,10 +118,30 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
       i,
     ]),
   );
-  const domain = summary.mode_key?.split(".")[0] === "film" ? "film" : "music";
+  const domain = sessionDomain ?? "music";
   const modeTitle = dt(`modes.${summary.mode_key ?? ""}.title`, t(`domain.${domain}`));
   const isGuest = session.data?.subject?.kind !== "user";
   const { Header, Body } = presenterRegistry[summary.presentation ?? "score"];
+
+  // Следующий шаг: у дейлика — дейлик другого домена, если он ещё не сыгран; у сборника — сам
+  // сборник; иначе — режимы соло.
+  const dailyBlock = home.data?.blocks.dailies;
+  const dailies = dailyBlock?.status === "ok" ? (dailyBlock.data ?? []) : [];
+  const dailyCard = dailies.find((c) => c.mode_key === summary.mode_key);
+  const otherDaily = dailyCard
+    ? dailies.find((c) => c.domain !== dailyCard.domain && c.status !== "finished")
+    : undefined;
+  const next = collection
+    ? { href: `/collections/${collection.id}`, label: t("results.toCollection") }
+    : otherDaily
+      ? { href: `/play/${otherDaily.mode_key}`, label: t(`results.next.${otherDaily.domain}`) }
+      : { href: "/solo", label: t("results.random") };
+  const day = dailyCard
+    ? format.dateTime(new Date(`${dailyCard.day}T12:00:00`), { day: "numeric", month: "long" })
+    : null;
+  const caption = [modeTitle, t(`domain.${domain}`).toLowerCase(), day, t("results.caption")]
+    .filter(Boolean)
+    .join(" · ");
 
   const onShare = async () => {
     const shareCollection: ShareCollection | null = collection?.title
@@ -138,59 +171,63 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
       : won
         ? t("results.headline.done")
         : t("results.headline.miss");
+  const presenterProps = { summary, items, modeTitle, domain, levels: mode?.levels ?? [] };
 
   return (
-    <section
-      aria-label={t("results.title")}
-      data-testid="results"
-      className="mx-auto mt-2 w-full max-w-[440px] animate-modal-in overflow-hidden rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage"
-    >
-      <div
-        data-domain={domain}
-        className={cn(
-          "px-5 py-4 text-center font-display text-lg font-extrabold",
-          won ? "bg-music text-night" : "bg-rule text-ink",
-        )}
-      >
-        {headline}
-      </div>
-      <div className="flex flex-col gap-4 p-5">
-        <div className="flex flex-col items-center gap-1 text-center">
-          <p className="text-sm text-ink-muted">{modeTitle}</p>
-          {collection?.title && (
-            <p className="text-sm text-ink-muted" data-testid="results-collection">
-              {t("results.collection")}{" "}
-              <Link
-                href={`/collections/${collection.id}`}
-                dir="auto"
-                className="text-ink underline-offset-4 hover:underline"
-              >
-                {collection.title}
-              </Link>
-            </p>
-          )}
-        </div>
-        <Header summary={summary} items={items} modeTitle={modeTitle} />
+    <>
+      <GameShellSlots exit={<ExitLink label={t("results.home")} />} modeLabel={caption} />
+      <div data-testid="results" className="mx-auto mt-2 flex w-full max-w-[720px] flex-col gap-6">
+        <section
+          aria-label={t("results.title")}
+          className="animate-modal-in overflow-hidden rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage"
+        >
+          <div
+            data-domain={domain}
+            className={cn(
+              "px-4 py-3.5 text-center font-display text-lg font-extrabold",
+              won ? "bg-music text-night" : "bg-rule text-ink",
+            )}
+          >
+            {headline}
+          </div>
+          <div className="flex flex-col items-center gap-4 px-6 pt-6 pb-6">
+            {collection?.title && (
+              <p className="text-sm text-ink-muted" data-testid="results-collection">
+                {t("results.collection")}{" "}
+                <Link
+                  href={`/collections/${collection.id}`}
+                  dir="auto"
+                  className="text-ink underline-offset-4 hover:underline"
+                >
+                  {collection.title}
+                </Link>
+              </p>
+            )}
+            <Header {...presenterProps} />
+          </div>
+        </section>
 
-        <Body summary={summary} items={items} modeTitle={modeTitle} />
+        <Body {...presenterProps} />
 
-        <div className="flex gap-2.5">
+        <div className="flex flex-wrap gap-3">
           <Button
             size="lg"
             variant="secondary"
-            className="h-[52px] flex-1"
+            className="min-w-40 flex-1"
             onClick={onShare}
             data-testid="share"
           >
             <Share2 aria-hidden />
             {t("results.share")}
           </Button>
-          <Button asChild size="lg" className="h-[52px] flex-1">
-            {collection ? (
-              <Link href={`/collections/${collection.id}`}>{t("results.toCollection")}</Link>
-            ) : (
-              <Link href="/solo">{t("results.random")}</Link>
-            )}
+          <Button asChild size="lg" className="min-w-52 flex-[1.4]" data-testid="results-next">
+            <Link href={next.href}>
+              {next.label}
+              <ArrowRight aria-hidden />
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="secondary" className="min-w-40 flex-1">
+            <Link href="/">{t("results.home")}</Link>
           </Button>
         </div>
 
@@ -203,6 +240,6 @@ export function ResultsView({ sessionId }: { sessionId: string }) {
           </aside>
         )}
       </div>
-    </section>
+    </>
   );
 }

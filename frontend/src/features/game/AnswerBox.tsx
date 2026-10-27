@@ -19,13 +19,22 @@ type Props = {
   onAnswer: (answer: Answer) => void;
   /** Без пропуска (последний уровень матча) кнопка до ввода остаётся «Ответить» и неактивна. */
   skip?: { label: ReactNode; onSkip: () => void; testId?: string } | null;
+  /** Последняя попытка: вместо «Пропустить» красная «Сдаться» (пока ответа нет). */
+  giveUp?: { label: ReactNode; onGiveUp: () => void; testId?: string } | null;
   /** Меняется — поле берёт фокус (новый раунд или уровень). */
   focusKey?: string;
 };
 
 const TEXT_MAX = 120;
 
-export function AnswerBox({ domain, disabled, onAnswer, skip = null, focusKey }: Props) {
+export function AnswerBox({
+  domain,
+  disabled,
+  onAnswer,
+  skip = null,
+  giveUp = null,
+  focusKey,
+}: Props) {
   const t = useTranslations();
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<Suggestion | null>(null);
@@ -90,7 +99,7 @@ export function AnswerBox({ domain, disabled, onAnswer, skip = null, focusKey }:
         }}
         data-testid="answer-input"
       />
-      {hasAnswer || !skip ? (
+      {hasAnswer || (!skip && !giveUp) ? (
         <Button
           type="submit"
           size="lg"
@@ -99,7 +108,18 @@ export function AnswerBox({ domain, disabled, onAnswer, skip = null, focusKey }:
         >
           {t("game.submit")}
         </Button>
-      ) : (
+      ) : giveUp ? (
+        <Button
+          type="button"
+          size="lg"
+          className="border-miss-line bg-miss-line text-white hover:border-miss hover:bg-miss-line"
+          disabled={disabled}
+          onClick={giveUp.onGiveUp}
+          data-testid={giveUp.testId}
+        >
+          {giveUp.label}
+        </Button>
+      ) : skip ? (
         <Button
           type="button"
           size="lg"
@@ -110,7 +130,7 @@ export function AnswerBox({ domain, disabled, onAnswer, skip = null, focusKey }:
         >
           {skip.label}
         </Button>
-      )}
+      ) : null}
     </form>
   );
 }

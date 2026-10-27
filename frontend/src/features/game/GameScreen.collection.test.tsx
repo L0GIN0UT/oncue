@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { setupMockBackend, server, signInAsGuest, world } from "@/test/msw";
-import { renderWithProviders } from "@/test/render";
+import { renderWithGameShell } from "@/test/render";
 import { ITEMS } from "../../../e2e/mocks/world";
 import { GameScreen } from "./GameScreen";
 
@@ -27,9 +27,9 @@ describe("GameScreen — сессия по сборнику", () => {
       version: 1,
       itemIds: tracks.map((t) => t.id),
     });
-    renderWithProviders(<GameScreen sessionId={s.id} />);
+    renderWithGameShell(<GameScreen sessionId={s.id} />);
 
-    expect(await screen.findByText("Сборник по вступлению")).toBeInTheDocument();
+    expect(await screen.findByTestId("game-mode")).toHaveTextContent(/Сборник по вступлению/);
     // Шкала времени из levels[].hint.seconds шаблона: 0,5 с → 1 с.
     expect(await screen.findByTestId("skip")).toHaveTextContent("Пропустить (+0,5 с)");
     expect(

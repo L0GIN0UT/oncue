@@ -413,6 +413,20 @@
     "notFound": "Такой игры нет",
     "loadFailed": "Игра не загрузилась",
     "roundTitle": "Раунд {index} из {total}",
+    "exit": "Выйти",
+    "mute": "Выключить звук",
+    "unmute": "Включить звук",
+    "scoreCap": "очки",
+    "roundsLabel": "Раунды",
+    "roundTab": "Раунд {index}: {state}",
+    "roundState": {
+      "exact": "угадал",
+      "partial": "почти",
+      "miss": "мимо",
+      "skip": "пропуск",
+      "current": "текущий",
+      "upcoming": "впереди"
+    },
     "score": "Очки",
     "clueLabel": "Загадка",
     "clueLoading": "Загружаем фрагмент…",
@@ -450,6 +464,7 @@
       "exact": "Угадал с {attempt}-й",
       "partial": "Почти: исполнитель верный",
       "miss": "Не в этот раз",
+      "skip": "Пропущено",
       "void": "Недоступно — раунд не засчитан",
       "voidText": "Фрагмент этого раунда сейчас недоступен. Раунд не идёт в счёт.",
       "points": "+{points}",
@@ -518,7 +533,6 @@
     "tapeSeconds": "{seconds} с",
     "tapeStep": "{level} из {total}",
     "skipGain": "+{seconds} с",
-    "skipLastHint": "и узнать ответ",
     "continue": "Продолжить"
   },
   "results": {
@@ -534,6 +548,14 @@
       "void": "раунд не засчитан"
     },
     "exactPct": "угадали {pct}% игроков",
+    "opened": "открыто {seconds} с",
+    "guessed": "очков · {guessed} из {total} угадано",
+    "home": "На главную",
+    "next": {
+      "music": "Теперь музыка",
+      "film": "Теперь кино"
+    },
+    "caption": "итоги",
     "share": "Поделиться",
     "copied": "Результат скопирован",
     "shareFailed": "Не получилось поделиться. Скопируйте результат вручную.",
@@ -1597,6 +1619,7 @@
     "daysLeft": "{days, plural, one {ещё # день} few {ещё # дня} many {ещё # дней} other {ещё # дня}}",
     "back": "Назад",
     "backLabel": "Назад к игре",
+    "dialog": "Дневник события",
     "progressLabel": "Найдено находок",
     "task": {
       "caption": "Задание"

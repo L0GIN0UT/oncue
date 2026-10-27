@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations, useFormatter } from "next-intl";
 import { PlayButton } from "@/shared/ui/play-button";
 import { cn } from "@/shared/lib/cn";
+import { useMuted } from "../use-muted";
 import type { ClueStageProps } from "./types";
 
 export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps) {
@@ -16,6 +17,7 @@ export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps)
   const audio = useRef<HTMLAudioElement>(null);
   const frame = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const muted = useMuted();
   const seconds = clue.meta.seconds ?? null;
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export function AudioClue({ clue, onProgress, scene = "stage" }: ClueStageProps)
         ref={audio}
         src={clue.objectUrl}
         preload="auto"
+        muted={muted}
         onEnded={stop}
         data-testid="clue-audio"
       />
