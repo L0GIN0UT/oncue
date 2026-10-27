@@ -69,10 +69,10 @@ test("игрок: лайк и избранное, 5 раундов, сохран
   await page.getByTestId("collection-play").click();
   await expect(page).toHaveURL(/\/play\/s\//);
   // Режим-шаблон найден в `GET /v1/modes?kind=collection`: название и лента уровней из конфига.
-  await expect(page.getByText("Сборник по кадрам", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("progressbar", { name: "Подсказки: открыт уровень 1 из 6" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("game-mode")).toContainText("Сборник по кадрам");
+  // Кадровая загадка: вместо ленты — сам кадр, проясняющийся по уровням.
+  await expect(page.getByTestId("clue-image")).toBeVisible();
+  await expect(page.getByTestId("attempts").locator("[data-result]")).toHaveCount(6);
 
   // Ревил: «Сохранить → Смотреть позже».
   const [move] = await Promise.all([

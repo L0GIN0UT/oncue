@@ -83,7 +83,8 @@ async function login(page: Page, nickname: string): Promise<void> {
 }
 
 async function shot(page: Page, name: string, width: number, fullPage = true): Promise<void> {
-  await page.waitForLoadState("networkidle");
+  // В комнате канал опрашивается постоянно: «сеть затихла» там не наступает.
+  await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => undefined);
   await page.waitForTimeout(400);
   const file = path.join(OUT, `${name}-${width}.png`);
   await page.screenshot({ path: file, fullPage });
