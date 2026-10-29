@@ -115,8 +115,15 @@ from bff_web_service.application.dto import (
     WheelCard,
     WheelSectorCard,
 )
-from bff_web_service.application.ports import UpstreamUnavailableError
+from bff_web_service.application.ports import (
+    ServiceTokens,
+    UpstreamRejectedError,
+    UpstreamUnavailableError,
+)
 from bff_web_service.infrastructure.http import UpstreamHttp
+from gv_core.errors import DependencyUnavailableError
+
+HTTP_UNAUTHORIZED = 401
 
 log = structlog.get_logger(__name__)
 
@@ -417,7 +424,9 @@ class HttpGameClient:
         modes_ttl_s: int,
         cache_prefix: str,
         collection_modes_ttl_s: int = 30,
+        service_tokens: ServiceTokens | None = None,
     ) -> None:
+        self._service_tokens = service_tokens
         self._http, self._ttl = http, modes_ttl_s
         self._collection_modes_ttl, self._prefix = collection_modes_ttl_s, cache_prefix
         self._modes_key = f"{cache_prefix}game:modes:v1"
@@ -458,13 +467,26 @@ class HttpGameClient:
         return _parse(self._http.service, _RESULT, body).dto()
 
     async def daily_results(
-        self, token: str, user_ids: Sequence[UUID], domain: Domain | None = None
+        self, user_ids: Sequence[UUID], domain: Domain | None = None
     ) -> list[DailyResult]:
-        """``GET /v1/daily/results?user_ids=...`` (повторяющийся параметр)."""
+        """``GET /internal/v1/daily/results?user_ids=...`` под сервисным токеном bff_web."""
+        if self._service_tokens is None:
+            raise UpstreamUnavailableError(self._http.service, "service_auth_not_configured")
+        try:
+            token = await self._service_tokens.token()
+        except DependencyUnavailableError as exc:
+            raise UpstreamUnavailableError(self._http.service, "service_token_unavailable") from exc
         pairs = [("user_ids", str(i)) for i in user_ids]
         if domain is not None:
             pairs.append(("domain", domain))
-        body = await self._http.get(f"/v1/daily/results?{urlencode(pairs)}", token=token)
+        try:
+            body = await self._http.get(
+                f"/internal/v1/daily/results?{urlencode(pairs)}", token=token
+            )
+        except UpstreamRejectedError as exc:
+            if exc.status == HTTP_UNAUTHORIZED:
+                self._service_tokens.invalidate()
+            raise
         results = [r.dto() for r in _parse(self._http.service, _DAILY_RESULTS, body)]
         if not {r.user_id for r in results} <= set(user_ids):
             raise UpstreamUnavailableError(self._http.service, "contract_violation")

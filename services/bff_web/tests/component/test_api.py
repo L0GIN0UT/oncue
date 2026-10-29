@@ -207,6 +207,7 @@ RESULT_BRACKET = {
 }
 
 
+SERVICE_TOKEN = TestTokenIssuer().issue_service("bff_web", "game", ["daily.results"])
 REWARDS_PENDING = {
     "session_id": str(SESSION),
     "settled": False,
@@ -280,12 +281,16 @@ def stubs() -> Iterator[Stubs]:
         _social_defaults(social)
         progression = stack.enter_context(stub_service(PROGRESSION, service="progression"))
         _progression_defaults(progression)
+        identity = stack.enter_context(stub_service(IDENTITY, service="identity"))
+        identity.route("POST", "/internal/v1/service-tokens").respond(
+            200, json={"access_token": SERVICE_TOKEN, "token_type": "Bearer", "expires_in": 600}
+        )
         yield Stubs(
             social=social,
             progression=progression,
             game=stack.enter_context(stub_service(GAME, service="game")),
             catalog=stack.enter_context(stub_service(CATALOG, service="catalog")),
-            identity=stack.enter_context(stub_service(IDENTITY, service="identity")),
+            identity=identity,
             collections=stack.enter_context(stub_service(COLLECTIONS, service="collections")),
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
             match=stack.enter_context(stub_service(MATCH, service="match")),
@@ -318,6 +323,10 @@ async def bff(
         },
         page_cache={"key_prefix": prefix},
         pages={"relations_batch_size": 3, "results_rewards_retry_delay_s": 0},
+        service_auth={
+            "token_url": f"{IDENTITY}/internal/v1/service-tokens",
+            "client_secret": "test-service-secret",
+        },
     )
     runtime = await Infrastructure.open(settings, DEFINITION.tables)
     try:
@@ -3493,7 +3502,7 @@ def _feed_friends_routes(
 
     return {
         "relations": social.route("GET", RELATIONS_PATH).mock(side_effect=relations),
-        "results": game.route("GET", "/v1/daily/results").mock(side_effect=daily_results),
+        "results": game.route("GET", "/internal/v1/daily/results").mock(side_effect=daily_results),
         "appearance": _appearance_route(bff),
     }
 
@@ -3544,7 +3553,9 @@ async def test_home_feed_shows_visible_friends_with_domain_badges_and_counter(bf
     # Очки закрытого друга не покидают bff; оформление - только у показанного.
     assert str(F2) not in response.text  # закрытый друг не попадает ни в items, ни в оформление
     asked = routes["results"].calls.last.request
-    assert asked.headers["authorization"] == f"Bearer {token}"
+    # Очки чужих игроков запрашиваются сервисным токеном bff_web, а не токеном зрителя.
+    assert asked.headers["authorization"] == f"Bearer {SERVICE_TOKEN}"
+    assert token not in asked.headers["authorization"]
     assert sorted(asked.url.params.get_list("user_ids")) == sorted(map(str, (F1, F2, F3)))
     assert routes["appearance"].calls.last.request.url.params.get_list("user_ids") == [str(F1)]
     assert "authorization" in routes["relations"].calls.last.request.headers

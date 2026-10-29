@@ -96,6 +96,18 @@ class UpstreamRejectedError(Exception):
         self.details = details or {}
 
 
+class ServiceTokens(Protocol):
+    """Сервисный токен bff_web для internal-ручек (``gv_auth.ServiceTokenProvider``)."""
+
+    async def token(self) -> str:
+        """Действующий токен."""
+        ...
+
+    def invalidate(self) -> None:
+        """Забыть токен (ответ 401)."""
+        ...
+
+
 class GameClient(Protocol):
     """Публичный API game (``/api/game/v1`` на gateway, внутри — ``/v1``)."""
 
@@ -111,12 +123,15 @@ class GameClient(Protocol):
         ...
 
     async def daily_results(
-        self, token: str, user_ids: Sequence[UUID], domain: Domain | None = None
+        self, user_ids: Sequence[UUID], domain: Domain | None = None
     ) -> list[DailyResult]:
-        """Завершённые дейлики перечисленных пользователей в текущем периоде (личный вызов).
+        """Завершённые дейлики перечисленных пользователей в текущем периоде.
 
-        Не больше ``GV_GAME__DAILY_RESULTS_MAX_USERS`` игроков за вызов; кому можно показывать
-        чужие очки, решает вызывающий (social). Не кэшируется.
+        Internal-ручка game под сервисным токеном bff_web (область ``daily.results``), а не
+        токеном зрителя: кому можно показывать чужие очки, решает вызывающий по данным social.
+        Не больше ``GV_GAME__DAILY_RESULTS_MAX_USERS`` игроков за вызов. Не кэшируется. Токен
+        не получен (``GV_SERVICE_AUTH__*`` не заданы, identity недоступен) —
+        ``UpstreamUnavailableError``.
         """
         ...
 

@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import httpx
+import structlog
 
 from bff_web_service.api.deps import BffDeps
-from bff_web_service.application.ports import PageCache
+from bff_web_service.application.ports import PageCache, ServiceTokens
 from bff_web_service.application.queries import (
     EventsContext,
     GetCollectionPage,
@@ -49,7 +50,21 @@ from bff_web_service.infrastructure.clients import (
 )
 from bff_web_service.infrastructure.http import CircuitBreaker, UpstreamHttp
 from bff_web_service.settings import Settings
-from gv_service import Infrastructure
+from gv_service import Infrastructure, ServiceAuthNotConfiguredError, build_service_token_provider
+
+log = structlog.get_logger(__name__)
+
+
+def _game_tokens(infra: Infrastructure) -> ServiceTokens | None:
+    """Сервисный токен bff_web → game (область ``daily.results``); не настроен — ``None``.
+
+    Без токена блоки «друзья» и «среди друзей» гаснут (``unavailable``), остальное работает.
+    """
+    try:
+        return build_service_token_provider(infra, "game")
+    except ServiceAuthNotConfiguredError:
+        log.warning("bff.service_auth_not_configured", audience="game")
+        return None
 
 
 def build_deps(infra: Infrastructure) -> BffDeps:
@@ -77,6 +92,7 @@ def build_deps(infra: Infrastructure) -> BffDeps:
 
     game = HttpGameClient(
         upstream("game", up.game_url),
+        service_tokens=_game_tokens(infra),
         modes_ttl_s=pc.modes_ttl_s,
         cache_prefix=pc.key_prefix,
         collection_modes_ttl_s=pc.collection_modes_ttl_s,

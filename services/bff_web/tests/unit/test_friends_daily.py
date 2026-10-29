@@ -95,7 +95,7 @@ class FakeGame:
     delay_s: float = 0
 
     async def daily_results(
-        self, token: str, user_ids: list[UUID], domain: Domain | None = None
+        self, user_ids: list[UUID], domain: Domain | None = None
     ) -> list[DailyResult]:
         self.result_calls.append(list(user_ids))
         if self.delay_s:

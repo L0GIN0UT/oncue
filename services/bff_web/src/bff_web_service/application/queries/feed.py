@@ -128,7 +128,7 @@ class FriendsDaily:
         by_id = {f.user_id: f for f in scanned}
         fetched = await asyncio.gather(
             *(
-                limiter.attempt(self._game.daily_results(token, [f.user_id for f in chunk]))
+                limiter.attempt(self._game.daily_results([f.user_id for f in chunk]))
                 for chunk in _chunks(scanned, self._limits.results_batch)
             )
         )
