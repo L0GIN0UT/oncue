@@ -53,7 +53,7 @@
 
 Подробные чек-листы — в [handoff этапа 5](handoff/stage-5.md); к ним добавляется чек-лист 5c.
 
-- **PR-A «дейлик и итоги»:** (1) `GET /v1/daily/results` (game) отдаёт очки дейлика по списку `user_ids` любому пользователю с аккаунтом: приватность (`stats_visible`) держит только bff. Безопасный вариант — перенести ручку в `/internal/v1` под сервисный токен bff (клиент `bff_web` в `GV_SERVICE_CLIENTS` identity, `GV_SERVICE_SECRET_BFF_WEB`) — нужно решение владельца. (2) ledger progression: чтение `GET /v1/me/rewards`, индексы `0012`; `total_xp_after` считается суммой журнала игрока — при росте истории брать из `progress.total_xp`.
+- **PR-A «дейлик и итоги»:** (1) `GET /v1/daily/results` (game) отдаёт очки дейлика по списку `user_ids` любому пользователю с аккаунтом: приватность (`stats_visible`) держит только bff. Решено владельцем и сделано: ручка internal (`/internal/v1/daily/results`), сервисный токен `bff_web` (область `daily.results`); на стенде нужна запись клиента в `GV_SERVICE_CLIENTS` и `GV_SERVICE_SECRET_BFF_WEB` (`gv dev secrets`). (2) ledger progression: чтение `GET /v1/me/rewards`, индексы `0012`; `total_xp_after` считается суммой журнала игрока — при росте истории брать из `progress.total_xp`.
 - **4a:** identity (realtime-токен), match (античит).
 - **4b:** identity, match, rating; допущения сидов (K Эло 40/20, пороги званий, фильтры `similar`).
 - **5a:** ledger progression — роли Postgres, миграции `0002`–`0004`, начисления и потолки, конфиг и публикация, ручная выдача и сторно, награды сезона и недели; живая проверка `e2e/progression.spec.ts`, `/profile`, колесо, админка «Прогрессия»; смена пароля сид-админа локального стенда.

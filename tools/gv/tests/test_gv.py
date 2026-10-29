@@ -226,7 +226,14 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     out = fill_secrets(template)
     values = dict(line.split("=", 1) for line in out.splitlines())
     clients = {c["client_id"]: c for c in json.loads(values["GV_SERVICE_CLIENTS"])}
-    assert set(clients) == {"game", "admin", "match", "progression", "notifications"}
+    assert set(clients) == {
+        "game",
+        "admin",
+        "match",
+        "progression",
+        "notifications",
+        "bff_web",
+    }
     assert clients["game"]["audiences"] == {"media_pipeline": ["assets.link"]}
     assert clients["admin"]["audiences"] == {"identity": ["admin_sessions"]}
     # Этап 4a §2.7: план раундов у game (D5) и ссылки ассетов у media_pipeline.
@@ -239,6 +246,9 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     assert clients["notifications"]["audiences"] == {
         "identity": ["users.emails.read", "users.active.list"]
     }
+    # PR-A: bff_web -> game (очки дейлика друзей), секрет в GV_SERVICE_SECRET_BFF_WEB.
+    assert clients["bff_web"]["audiences"] == {"game": ["daily.results"]}
+    assert service_secret_env("bff_web") == "GV_SERVICE_SECRET_BFF_WEB"
     secrets_seen = set()
     for client_id, client in clients.items():
         secret = values[service_secret_env(client_id)]
