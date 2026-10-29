@@ -470,6 +470,16 @@ class SessionResult(BaseModel):
     record: ResultRecord | None = None
     bracket: BracketOut | None = None
     collection: CollectionRef | None = Field(default=None, description="Сессия по сборнику")
+    mode_key: str | None = Field(default=None, description="Режим сессии")
+    domain: Domain | None = Field(default=None, description="Домен режима")
+    day: date | None = Field(default=None, description="Период планового набора; иначе `null`")
+    daily: bool = Field(
+        default=False,
+        description=(
+            "Сессия дейлика: плановый набор с типом Source из "
+            "`GV_GAME__DAILY_RESULTS_SOURCE_TYPES` (результаты друзей считаются только для неё)"
+        ),
+    )
 
 
 # ----------------------------------------------------------------------------- сборники
@@ -499,6 +509,17 @@ class PlayabilityOut(BaseModel):
 
     mode_key: str
     playable_ids: list[UUID]
+
+
+class DailyResultOut(BaseModel):
+    """Завершённый дейлик одного игрока в текущем периоде (по режиму)."""
+
+    user_id: UUID
+    mode_key: str
+    domain: Domain
+    day: date = Field(description="Начало периода набора")
+    score: int = Field(ge=0)
+    max_score: int = Field(ge=0)
 
 
 class DailyStatus(BaseModel):

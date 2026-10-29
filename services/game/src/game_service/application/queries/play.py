@@ -18,6 +18,7 @@ from game_service.domain.errors import (
     SessionNotFinishedError,
     SessionNotFoundError,
     SubjectsNotSupportedError,
+    TooManyUsersError,
 )
 from game_service.domain.session import SessionStatus
 from gv_core.clock import Clock
@@ -119,6 +120,9 @@ class PlayQueries:
         subjects_per_min: int,
         playability_per_min: int = 30,
         candidate_limit: int = 5000,
+        daily_results_per_min: int = 60,
+        daily_results_max_users: int = 50,
+        daily_results_source_types: frozenset[str] = frozenset({"daily"}),
     ) -> None:
         self._uow = uow
         self._clock = clock
@@ -128,6 +132,9 @@ class PlayQueries:
         self._subjects_per_min = subjects_per_min
         self._playability_per_min = playability_per_min
         self._candidate_limit = candidate_limit
+        self._daily_results_per_min = daily_results_per_min
+        self._daily_results_max_users = daily_results_max_users
+        self._daily_source_types = daily_results_source_types
 
     async def modes(
         self, domain: str | None, *, collection: bool = False, online: bool = False
@@ -177,7 +184,14 @@ class PlayQueries:
                         is_new=found.session_id == session.id,
                         percentile=await uow.records.percentile(session.mode_key, found.best),
                     )
-        return await self._presenter.result(session, rules, items, stats, record)
+        result = await self._presenter.result(session, rules, items, stats, record)
+        return {
+            **result,
+            "mode_key": session.mode_key,
+            "domain": session.domain,
+            "day": session.day.isoformat() if session.day is not None else None,
+            "daily": session.day is not None and rules.source_type in self._daily_source_types,
+        }
 
     async def daily(self, player: Player, domain: str | None) -> list[Json]:
         """Плановые наборы субъекта (дейлик, неделя сетки): статус, очки, смена периода."""
@@ -206,6 +220,56 @@ class PlayQueries:
                 }
             )
         return result
+
+    async def daily_results(
+        self, player: Player, user_ids: Sequence[UUID], domain: str | None
+    ) -> list[Json]:
+        """Завершённые дейлики ТЕКУЩЕГО периода у перечисленных пользователей.
+
+        Только очки (``score``/``max_score``) по режимам с типом Source из настройки
+        ``daily_results_source_types``: прошлых периодов, ответов, ходов и гостей здесь нет.
+        Кому показывать чужие очки (друзья, приватность статистики), решает вызывающий
+        (bff по данным social): game дружбы не знает, поэтому ручка ограничена пользователем с
+        аккаунтом, потолком игроков и лимитом частоты. Игроки без завершённой попытки в
+        ответ не попадают. Гостя отсекает слой API (``require_user``).
+
+        Raises:
+            TooManyUsersError: игроков больше ``daily_results_max_users`` (422).
+            GameRateLimitedError: лимит ``GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN``.
+        """
+        ids = list(dict.fromkeys(user_ids))
+        if len(ids) > self._daily_results_max_users:
+            raise TooManyUsersError(
+                "слишком много игроков в запросе",
+                details={"given": len(ids), "max": self._daily_results_max_users},
+            )
+        await self._limiter.hit(
+            "daily_results",
+            str(player.actor_id),
+            limit=self._daily_results_per_min,
+            window_s=60,
+        )
+        now = self._clock.now()
+        periods = [
+            (rules.key, rules.period_start(now))
+            for rules in await self._catalog.published()
+            if rules.schedule is not None
+            and rules.source_type in self._daily_source_types
+            and (domain is None or rules.domain == domain)
+        ]
+        async with self._uow() as uow:
+            scores = await uow.sessions.finished_daily_scores(periods, ids)
+        return [
+            {
+                "user_id": str(s.user_id),
+                "mode_key": s.mode_key,
+                "domain": s.domain,
+                "day": s.day.isoformat(),
+                "score": s.score,
+                "max_score": s.max_score,
+            }
+            for s in sorted(scores, key=lambda x: (str(x.user_id), x.mode_key))
+        ]
 
     async def subjects(
         self, player: Player, mode_key: str, q: str | None, limit: int

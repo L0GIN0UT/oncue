@@ -61,6 +61,12 @@ class GameSettings(BaseModel):
     candidate_limit: int = Field(default=5000, ge=1, le=100000)
     # Окно, на сколько дней вперёд админ видит наборы, ограничено для GET /admin/v1/daily-sets.
     admin_daily_range_days: int = Field(default=62, ge=1, le=366)
+    # Результаты дейлика по списку игроков (`GET /v1/daily/results`, друзья на главной и в
+    # итогах): не больше столько игроков за вызов (перебор чужих очков режется потолком и
+    # лимитом `GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN`); учитываются режимы с этими типами
+    # Source (недельная сетка не входит).
+    daily_results_max_users: int = Field(default=50, ge=1, le=100)
+    daily_results_source_types: tuple[str, ...] = ("daily",)
     # Точный ответ на уровне 1 быстрее порога — флаг в лог для детектора аномалий (§9 п. 4).
     fast_exact_ms: int = Field(default=300, ge=0)
 
@@ -79,6 +85,8 @@ class GameLimits(BaseModel):
     subjects_per_min: int = Field(default=60, ge=1)
     # Этап 3b (план §2.5, §2.8): проверка играбельности черновика сборника в конструкторе.
     playability_per_min: int = Field(default=30, ge=1)
+    # Результаты дейлика по списку игроков (друзья): запросов в минуту на пользователя.
+    daily_results_per_min: int = Field(default=60, ge=1)
 
 
 class Settings(ServiceSettings):

@@ -237,6 +237,27 @@ class LadderRepository(Protocol):
 
 
 # ---------------------------------------------------------------- сессии
+@dataclass(frozen=True, slots=True)
+class DailyScore:
+    """Завершённая попытка планового набора периода (чтение для результатов друзей).
+
+    Attributes:
+        user_id: Игрок-пользователь (гости в выборку не попадают).
+        mode_key: Режим.
+        day: Начало периода набора.
+        domain: Домен режима (``music``/``film``).
+        score: Очки сессии.
+        max_score: Максимум очков сессии.
+    """
+
+    user_id: UUID
+    mode_key: str
+    day: date
+    domain: str
+    score: int
+    max_score: int
+
+
 class SessionRepository(Protocol):
     """Соло-сессии."""
 
@@ -254,6 +275,16 @@ class SessionRepository(Protocol):
 
     async def find_daily(self, mode_key: str, day: date, player: PlayerRef) -> GameSession | None:
         """Попытка игрока в дейлик дня."""
+        ...
+
+    async def finished_daily_scores(
+        self, periods: Sequence[tuple[str, date]], user_ids: Sequence[UUID]
+    ) -> list[DailyScore]:
+        """Завершённые попытки пользователей ``user_ids`` в периодах ``(mode_key, day)``.
+
+        Одним запросом по уникальному индексу попытки дня; гости и незавершённые сессии
+        не попадают.
+        """
         ...
 
     async def stale_ids(self, now: datetime, limit: int) -> list[UUID]:
