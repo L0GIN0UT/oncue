@@ -1682,6 +1682,11 @@ export interface components {
              * @enum {string}
              */
             state: "locked" | "open" | "found";
+            /**
+             * Task I18N
+             * @description Ключ i18n текста задания («что сделать»); null - задания нет
+             */
+            task_i18n?: string | null;
             /** Title */
             title: string;
             trigger: components["schemas"]["FindTrigger"];
@@ -1760,6 +1765,8 @@ export interface components {
             /** Play Page */
             play_page?: ("home" | "daily" | "solo" | "online" | "collections" | "leaderboards" | "wheel" | "shop" | "profile") | null;
             reward: components["schemas"]["FindRewardBody"];
+            /** Task I18N */
+            task_i18n?: string | null;
             /** Title */
             title: string;
             /** Trigger */
