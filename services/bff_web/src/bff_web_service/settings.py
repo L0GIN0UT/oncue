@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from gv_service import ServiceSettings
 
@@ -51,6 +51,7 @@ class PageCacheSettings(BaseModel):
         collection_modes_ttl_s: Режимы сборника с играбельностью
             (``game /v1/collections/{id}/modes``, не зависят от субъекта).
         leaderboard_ttl_s: Ladder-ы, общие лидерборд и топ недели (rating; 10 с, ADR 0039).
+        online_count_ttl_s: Публичный счётчик «игроков онлайн» (social `/v1/presence/online-count`).
         key_prefix: Пространство имён ключей (несколько стендов или тесты на одном Redis).
         op_timeout_s: Предел одной операции с Redis; дольше — промах кэша.
     """
@@ -62,6 +63,7 @@ class PageCacheSettings(BaseModel):
     collections_ttl_s: int = Field(default=30, ge=1, le=3600)
     collection_modes_ttl_s: int = Field(default=30, ge=1, le=3600)
     leaderboard_ttl_s: int = Field(default=10, ge=1, le=600)
+    online_count_ttl_s: int = Field(default=5, ge=1, le=60)
     active_event_ttl_s: int = Field(default=30, ge=1, le=30)
     event_progress_ttl_s: int = Field(default=15, ge=1, le=30)
     key_prefix: str = "bff_web:"
@@ -115,6 +117,9 @@ class PagesSettings(BaseModel):
             (предел источника — 12); больше игроков матча режутся на пачки.
         comments_limit: Комментариев в первой странице блока ``comments`` страницы сборника
             (дальше — курсор social напрямую; предел источника — 100).
+        room_name_template: Название комнаты без имени от хоста (`{host}` — ник хоста).
+        levels_batch_size: Игроков в одном вызове `progression /internal/v1/levels` (предел
+            источника задаёт `GV_PROGRESSION__LEVELS_MAX_USERS`, по умолчанию 50).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -137,6 +142,15 @@ class PagesSettings(BaseModel):
     default_theme_key: str = Field(default="default", pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
     appearance_batch_size: int = Field(default=12, ge=1, le=12)
     comments_limit: int = Field(default=30, ge=1, le=100)
+    room_name_template: str = Field(default="Комната {host}", min_length=1, max_length=60)
+    levels_batch_size: int = Field(default=50, ge=1, le=100)
+
+    @field_validator("room_name_template")
+    @classmethod
+    def _template_has_host(cls, value: str) -> str:
+        if "{host}" not in value:
+            raise ValueError("шаблон названия комнаты должен содержать {host}")
+        return value
 
 
 class Settings(ServiceSettings):

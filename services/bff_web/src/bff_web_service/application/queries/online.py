@@ -28,9 +28,11 @@ from bff_web_service.application.dto import (
     MyMatch,
     MyMatches,
     OnlineBlocks,
+    OnlineCountCard,
     OnlineModeCard,
     OnlinePage,
     OnlineStatus,
+    OpenRooms,
     PlayerAppearanceCard,
     SeasonCard,
     SubjectKind,
@@ -58,6 +60,7 @@ from bff_web_service.application.queries.common import (
     item_card,
     screen_error,
 )
+from bff_web_service.application.queries.rooms import fetch_levels, room_title
 from bff_web_service.domain import Block
 from gv_core.errors import ForbiddenError, UnauthenticatedError
 
@@ -97,9 +100,14 @@ class GetOnlinePage:
         weekly_limit: int,
         social: SocialClient | None = None,
         match_players_limit: int = 0,
+        progression: ProgressionClient | None = None,
+        room_name_template: str = "Комната {host}",
+        levels_batch_size: int = 50,
     ) -> None:
         self._match, self._game, self._rating = match, game, rating
         self._social = social
+        self._progression = progression
+        self._room_template, self._levels_batch = room_name_template, levels_batch_size
         self._players_limit = match_players_limit
         self._concurrency = concurrency
         self._rooms_limit, self._matches_limit = rooms_limit, matches_limit
@@ -121,8 +129,15 @@ class GetOnlinePage:
         limiter = Limiter(self._concurrency)
         # Топ недели зависит от списка ladder-ов, но не ждёт остальных блоков: цепочка
         # «ladder-ы → топы» идёт параллельно с первыми вызовами, а не после них.
-        rooms, matches, modes, pool, ratings, (ladders, weekly, friends) = await asyncio.gather(
-            limiter.attempt(self._match.open_rooms(token, limit=self._rooms_limit)),
+        (
+            rooms,
+            matches,
+            modes,
+            pool,
+            ratings,
+            (ladders, weekly, friends, online_count),
+        ) = await asyncio.gather(
+            self._open_rooms(limiter, token),
             limiter.attempt(self._match.my_matches(token, limit=self._matches_limit)),
             limiter.attempt(self._game.online_modes()),
             limiter.attempt(self._match.queue_pool(token)),
@@ -153,7 +168,43 @@ class GetOnlinePage:
                 seasons=_seasons(ladders),
                 weekly=weekly,
                 friends=friends,
+                online_count=online_count,
             ),
+        )
+
+    async def _open_rooms(self, limiter: Limiter, token: str) -> OpenRooms | UpstreamError:
+        """Открытые лобби с названием и уровнем хоста.
+
+        Уровни хостов берутся у progression после ответа match (нужны id хостов); сбой
+        progression оставляет ``host_level = None``, список лобби целый.
+        """
+        rooms = await limiter.attempt(self._match.open_rooms(token, limit=self._rooms_limit))
+        if isinstance(rooms, UpstreamUnavailableError | UpstreamRejectedError):
+            return rooms
+        levels = await fetch_levels(
+            self._progression,
+            limiter,
+            [r.host_id for r in rooms.items if r.host_id is not None],
+            batch_size=self._levels_batch,
+        )
+        items = [
+            replace(
+                r,
+                title=room_title(r.settings.name, r.host_nickname, self._room_template),
+                host_level=levels[r.host_id].level if r.host_id in levels else None,
+            )
+            for r in rooms.items
+        ]
+        return replace(rooms, items=items)
+
+    async def _online_count(self, limiter: Limiter) -> Block[OnlineCountCard] | None:
+        """Игроков онлайн (social, публичный общий кэш); ``None`` — клиент не подключён."""
+        if self._social is None:
+            return None
+        value = await limiter.attempt(self._social.online_count())
+        block = block_of(value, "online.online_count")
+        return (
+            Block.ok(OnlineCountCard(block.data)) if block.data is not None else Block.unavailable()
         )
 
     async def _with_participants(
@@ -207,13 +258,18 @@ class GetOnlinePage:
     async def _rating_and_social(
         self, limiter: Limiter, token: str
     ) -> tuple[
-        list[LadderCard] | UpstreamError, Block[list[WeeklyTopCard]], Block[FriendsCard] | None
+        list[LadderCard] | UpstreamError,
+        Block[list[WeeklyTopCard]],
+        Block[FriendsCard] | None,
+        Block[OnlineCountCard] | None,
     ]:
-        """Ladder-ы с топом недели и друзья - независимые цепочки параллельно."""
-        (ladders, weekly), friends = await asyncio.gather(
-            self._ladders_and_weekly(limiter, token), self._friends(limiter, token)
+        """Ladder-ы с топом недели, друзья и счётчик онлайна - независимые цепочки параллельно."""
+        (ladders, weekly), friends, online_count = await asyncio.gather(
+            self._ladders_and_weekly(limiter, token),
+            self._friends(limiter, token),
+            self._online_count(limiter),
         )
-        return ladders, weekly, friends
+        return ladders, weekly, friends, online_count
 
     async def _ladders_and_weekly(
         self, limiter: Limiter, token: str

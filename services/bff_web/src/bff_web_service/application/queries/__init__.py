@@ -75,6 +75,7 @@ from bff_web_service.application.queries.progression import (
     HomeProgress,
 )
 from bff_web_service.application.queries.rating import GetLeaderboardsPage
+from bff_web_service.application.queries.rooms import GetRoomPage
 from bff_web_service.domain import Block
 from gv_core.errors import ConflictError, ForbiddenError, NotFoundError, UnauthenticatedError
 
@@ -95,6 +96,7 @@ __all__ = [
     "GetPlayerPage",
     "GetProfilePage",
     "GetResultsPage",
+    "GetRoomPage",
     "GetSession",
     "GetShellPage",
     "GetShopPage",

@@ -249,6 +249,7 @@ def _social_defaults(social: ServiceStub) -> None:
         200, json={"incoming": [], "outgoing": []}
     )
     social.route("GET", "/v1/me/sanctions").respond(200, json={"items": []})
+    social.route("GET", "/v1/presence/online-count").respond(200, json={"count": 128})
     social.route("GET", "/v1/players/relations").respond(200, json={"items": []})
     social.route("GET", f"/v1/collections/{COLLECTION_ID}/comments").respond(
         200, json={"items": [], "total": 0, "next_cursor": None}
@@ -1151,6 +1152,13 @@ async def test_online_page_for_user_all_blocks(bff: Bff) -> None:
     assert room["mode"]["kind"] == "lobby"
     assert room["mode"]["ranked"] is False  # поле по умолчанию match
     assert room["settings"]["collection_ids"] == ["0192a3b4-c5d6-7e8f-9a0b-000000000c01"]
+    # Онлайн: название хоста, id хоста и «игроков сейчас»; уровень хоста без сервисного
+    # токена не заполняется (progression не вызывается), лобби при этом целы.
+    assert room["settings"]["name"] == "Вечер кино"
+    assert room["title"] == "Вечер кино"
+    assert room["host_id"] == "0192a3b4-c5d6-7e8f-9a0b-000000000e01"
+    assert room["host_level"] is None
+    assert blocks["online_count"] == {"status": "ok", "data": {"count": 128}}
     assert blocks["open_rooms"]["data"]["next_cursor"] == "c2Vjb25k"
     cards = [{**m, "participants": []} for m in SAMPLES["my_matches"]["items"]]
     assert blocks["my_matches"] == {
@@ -1322,6 +1330,7 @@ async def test_online_page_match_stub_501_and_game_down_are_unavailable(bff: Bff
             "seasons": UNAVAILABLE,
             "weekly": UNAVAILABLE,
             "friends": {"status": "ok", "data": {"items": [], "incoming_requests": 0}},
+            "online_count": {"status": "ok", "data": {"count": 128}},
         },
     }
 

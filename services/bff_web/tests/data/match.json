@@ -12,6 +12,7 @@
           "clue_type": "frame_progressive",
           "answer_format": "classic"
         },
+        "host_id": "0192a3b4-c5d6-7e8f-9a0b-000000000e01",
         "host_nickname": "neo_2026",
         "players": 2,
         "players_max": 6,
@@ -24,7 +25,8 @@
           "visibility": "public",
           "collection_ids": [
             "0192a3b4-c5d6-7e8f-9a0b-000000000c01"
-          ]
+          ],
+          "name": "Вечер кино"
         },
         "created_at": "2026-10-22T10:00:00Z"
       }

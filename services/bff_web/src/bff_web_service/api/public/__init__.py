@@ -35,6 +35,7 @@ from bff_web_service.api.public.schemas import (
     PlayerPage,
     ProfilePage,
     ResultsPage,
+    RoomPage,
     SessionInfo,
     ShellPage,
     ShopPage,
@@ -58,6 +59,7 @@ _SHELF_REF = (
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )
 _CURSOR = r"^[A-Za-z0-9_-]{1,512}$"
+_ROOM_CODE = r"^[A-HJ-NP-Z2-9]{8}$"
 # Ключ режима без перечня доменов и типов: допустимость проверяет collections (422).
 _MODE_KEY = r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,4}$"
 VARY = "Authorization, Cookie"
@@ -165,7 +167,7 @@ def _cache_headers(
     )
 
 
-def build_public_router(deps: BffDeps) -> APIRouter:
+def build_public_router(deps: BffDeps) -> APIRouter:  # noqa: PLR0915 - перечень ручек
     """Публичные ручки."""
     router = APIRouter(prefix="/v1", tags=["bff_web"])
     policy = deps.http_cache
@@ -453,6 +455,26 @@ def build_public_router(deps: BffDeps) -> APIRouter:
             response, personal=page.personal, policy=policy, max_age_s=policy.leaderboards_max_age_s
         )
         return LeaderboardsPage.model_validate(page, from_attributes=True)
+
+    @router.get(
+        "/pages/rooms/{code}",
+        response_model=RoomPage,
+        summary="Комната: состав, название и уровни игроков",
+        description=(
+            "Комната по коду (match `/v1/rooms/{code}`) + уровни игроков (progression, "
+            "internal-ручка под сервисным токеном bff_web). Только пользователь: без токена "
+            "— 401, гость — 403 `auth.guest_forbidden`. Нет комнаты — 404 "
+            "`match.room_not_found`; match недоступен — блок `room` `unavailable`; "
+            "progression недоступен — у игроков `level: null`. Всегда `private, no-store`."
+        ),
+        responses=problem_responses(401, 403, 404, 422, 429),
+    )
+    async def room_page(
+        viewer: CurrentViewer, response: Response, code: Annotated[str, Path(pattern=_ROOM_CODE)]
+    ) -> RoomPage:
+        _cache_headers(response, personal=True, policy=policy)
+        page = await deps.get_room(viewer, code)
+        return RoomPage.model_validate(page, from_attributes=True)
 
     @router.get(
         "/pages/match/{match_id}",
