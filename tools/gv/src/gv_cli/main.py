@@ -456,6 +456,9 @@ def dev_seed_real(
         int, typer.Option("--min-collection-size", help="Минимум треков в сборнике жанра")
     ] = 20,
     tracks_limit: Annotated[int | None, typer.Option("--tracks-limit")] = None,
+    package_units: Annotated[
+        int, typer.Option("--package-units", min=1, help="Единиц в одном пакете-архиве")
+    ] = 100,
     date_: Annotated[str | None, typer.Option("--date", help="День плановых наборов")] = None,
 ) -> None:
     """Дополнительный засев реальными открытыми медиа (только local; после ``gv dev seed``)."""
@@ -502,6 +505,7 @@ def dev_seed_real(
             ffmpeg=ffmpeg or seed_real.default_ffmpeg(),
             min_collection_size=min_collection_size,
             tracks_limit=tracks_limit,
+            package_units=package_units,
             echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN),
         )
     except seed_module.SeedError as exc:

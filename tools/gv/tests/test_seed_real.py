@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from gv_cli.seed import SeedError
 from gv_cli.seed_real import (
     TARGET_AUDIO_S,
+    PackageEntry,
+    RealSeeder,
     RealUnit,
     audio_target,
     catalog_row,
@@ -17,9 +20,13 @@ from gv_cli.seed_real import (
     film_collections,
     load_track_rows,
     music_collections,
+    package_manifest,
     prepare_audio,
     read_jsonl,
+    split_batches,
     track_from_meta,
+    unit_files,
+    write_package,
 )
 
 pytestmark = pytest.mark.unit
@@ -196,3 +203,113 @@ class TestMissingSummary:
         assert "(30)" in text
         assert "k00" in text
         assert "k03" not in text
+
+
+# ---------------------------------------------------------------- клиент пакета media-pipeline
+class TestPackage:
+    def _entries(self, tmp_path: Path) -> list[PackageEntry]:
+        audio = tmp_path / "a.m4a"
+        audio.write_bytes(b"audio")
+        poster = tmp_path / "p.jpg"
+        poster.write_bytes(b"poster")
+        frames = tuple(tmp_path / f"f{n}.jpg" for n in range(1, 4))
+        for f in frames:
+            f.write_bytes(f.name.encode())
+        track = _track(1, "folk")
+        film = RealUnit(
+            key="film:tmdb-550",
+            domain="film",
+            title="f",
+            year=1999,
+            genres=(),
+            poster=poster,
+            frames=frames,
+        )
+        return [
+            PackageEntry(track, "0192a3b4-c5d6-7e8f-9a0b-000000000101", unit_files(track, audio)),
+            PackageEntry(film, "0192a3b4-c5d6-7e8f-9a0b-000000000102", unit_files(film, None)),
+        ]
+
+    def test_manifest_matches_contract_schema(self, tmp_path: Path) -> None:
+        from jsonschema import Draft202012Validator
+
+        schema = json.loads(
+            (
+                Path(__file__).resolve().parents[3]
+                / "contracts/packages/media_package_manifest.v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        manifest = package_manifest(self._entries(tmp_path))
+        assert not list(Draft202012Validator(schema).iter_errors(manifest))
+        track, film = manifest["items"]
+        assert (track["kind"], track["origin"]) == ("track", "upload")
+        assert (film["kind"], film["origin"]) == ("film", "tmdb")
+        assert film["source_url"] == "https://www.themoviedb.org/movie/550"
+        assert [(f["role"], f.get("position")) for f in film["files"]] == [
+            ("frame", 1),
+            ("frame", 2),
+            ("frame", 3),
+            ("poster", None),
+        ]
+
+    def test_write_package_stores_files_without_compression(self, tmp_path: Path) -> None:
+        import zipfile
+
+        entries = self._entries(tmp_path)
+        archive = tmp_path / "p.zip"
+        assert write_package(archive, entries) == 5
+        with zipfile.ZipFile(archive) as zf:
+            assert {i.compress_type for i in zf.infolist()} == {zipfile.ZIP_STORED}
+            manifest = json.loads(zf.read("manifest.json"))
+            for item in manifest["items"]:
+                for file in item["files"]:
+                    assert zf.getinfo(file["path"]).file_size > 0
+            assert zf.read("film-tmdb-550/frame-2.jpg") == b"f2.jpg"
+
+    def test_split_batches(self, tmp_path: Path) -> None:
+        entries = self._entries(tmp_path) * 3
+        assert [len(b) for b in split_batches(entries, 4)] == [4, 2]
+
+    def test_wait_package_reports_errors_and_returns_failed_keys(self) -> None:
+        status = {
+            "status": "partial",
+            "total": 3,
+            "done": 2,
+            "failed": 1,
+            "missing_source": 2,
+            "missing_license": 2,
+            "errors": [{"item_key": "film:tmdb-1", "path": "x.jpg", "code": "source.unsupported"}],
+        }
+        seeder = _bare_seeder(status)
+        assert seeder._wait_package("pkg") == {"film:tmdb-1"}
+        assert any("film:tmdb-1" in line for line in seeder.lines)
+
+    def test_wait_package_raises_when_package_is_rejected(self) -> None:
+        seeder = _bare_seeder(
+            {"status": "failed", "done": 0, "total": 0, "error_code": "package.symlink",
+             "error_message": "в архиве ссылки", "errors": []}
+        )  # fmt: skip
+        with pytest.raises(SeedError, match=r"package.symlink"):
+            seeder._wait_package("pkg")
+
+
+def _bare_seeder(status: dict[str, object]) -> Any:
+    """RealSeeder без сети: только опрос статуса пакета."""
+
+    class Resp:
+        def json(self) -> dict[str, object]:
+            return status
+
+    class Media:
+        def get(self, _url: str) -> Resp:
+            return Resp()
+
+    seeder = RealSeeder.__new__(RealSeeder)
+    seeder.lines = []  # type: ignore[attr-defined]
+    seeder._media = Media()  # type: ignore[assignment]
+    seeder._package_timeout_s = 1.0
+    seeder._echo = seeder.lines.append  # type: ignore[attr-defined]
+    seeder._keep_token = lambda: None  # type: ignore[method-assign]
+    seeder._check = lambda *_a, **_k: None  # type: ignore[method-assign]
+    seeder._poll = lambda check, **_k: check()  # type: ignore[method-assign]
+    return seeder

@@ -78,8 +78,11 @@ uv run gv dev seed-real --real-dir C:/gv-media --import-dir <каталог seed
   poster/frames/audio/album/license в импорт не попадают;
 - перекодирует клипы в `<real-dir>/seedpack/audio/*.m4a`: ffmpeg зацикливает 30 секунд до
   50 с (профили читают `start_s` 30 у реверса и до 15 с уровня), как у синтетики;
-- загружает `audio` на трек, шесть `frame` (`position` 1..6) и `poster` на фильм; уже
-  загруженное пропускает; ждёт наборы ассетов;
+- собирает недостающие файлы в zip с `manifest.json` (пачками `--package-units`, по умолчанию
+  100 единиц; `ZIP_STORED`: медиа уже сжато), отправляет `POST /admin/v1/packages` и ждёт статус
+  `GET /admin/v1/packages/{id}`: `audio` на трек, шесть `frame` (`position` 1..6) и `poster` на
+  фильм; уже загруженное пропускает; ждёт наборы ассетов. Приём файлов и проверки архива — на
+  стороне media-pipeline (`services/media_pipeline/CLAUDE.md`), клиент остаётся тонким;
 - собирает сборники: по жанрам (до 6, 20–40 треков, `--min-collection-size`), «Топ по
   рейтингу», «Фильмы 80-х», «Нулевые», «Мультфильмы» и публикует их; обновляет наборы периода.
 

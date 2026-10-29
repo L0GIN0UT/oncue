@@ -22,7 +22,10 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import time
+import uuid
+import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,12 +33,12 @@ from typing import Any
 
 from gv_cli.seed import (
     FRAMES_PER_FILM,
+    REASON,
     CollectionItemSpec,
     CollectionSpec,
     SeedConfig,
     Seeder,
     SeedError,
-    SourceSpec,
     _ItemRef,
 )
 
@@ -49,6 +52,13 @@ MAX_COLLECTION_ITEMS = 40
 MAX_MUSIC_COLLECTIONS = 6
 # Через сколько секунд обновлять admin-токен (срок жизни короче засева).
 TOKEN_REFRESH_S = 240.0
+# Пакеты для media-pipeline: единиц в пакете, чтение файла при отправке, ожидание статуса.
+PACKAGE_UNITS = 100
+PACKAGE_CHUNK = 1024 * 1024
+PACKAGE_UPLOAD_TIMEOUT_S = 600.0
+PACKAGE_TIMEOUT_S = 3600.0
+PACKAGE_ERRORS_SHOWN = 10
+PACKAGE_TERMINAL = frozenset({"done", "partial", "failed"})
 # Поля строки импорта каталога (``seeds/catalog/README.md``); остальное уходит в «extras».
 _IMPORT_FIELDS = (
     "key",
@@ -451,13 +461,118 @@ def film_collections(
     return specs
 
 
+# ---------------------------------------------------------------- пакет для media-pipeline
+@dataclass(frozen=True, slots=True)
+class PackageFile:
+    """Файл записи пакета: роль в манифесте, путь на диске и порядок среди исходников вида."""
+
+    role: str
+    path: Path
+    position: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PackageEntry:
+    """Запись пакета: единица, её id в каталоге и файлы к загрузке."""
+
+    unit: RealUnit
+    media_item_id: str
+    files: tuple[PackageFile, ...]
+
+
+def unit_files(unit: RealUnit, audio: Path | None) -> tuple[PackageFile, ...]:
+    """Файлы единицы: аудио трека (перекодированное) или кадры 1..6 и постер фильма."""
+    if unit.domain == "music":
+        return (PackageFile("audio", audio),) if audio is not None else ()
+    files = [PackageFile("frame", f, n) for n, f in enumerate(unit.frames, start=1)]
+    if unit.poster is not None:
+        files.append(PackageFile("poster", unit.poster))
+    return tuple(files)
+
+
+def unit_provenance(unit: RealUnit) -> dict[str, str]:
+    """``origin``/``source_url``/``license_note`` записи манифеста (пустое не передаётся)."""
+    if unit.domain == "music":
+        note = f"Free Music Archive, {unit.license or 'CC'} (local, ADR 0014)"
+        return {"origin": ORIGIN_TRACK, "license_note": note}
+    tmdb_id = unit.key.rsplit("-", 1)[-1]
+    return {
+        "origin": ORIGIN_FILM,
+        "source_url": f"https://www.themoviedb.org/movie/{tmdb_id}",
+        "license_note": NOTE_FILM,
+    }
+
+
+def _arcname(unit: RealUnit, file: PackageFile) -> str:
+    suffix = "" if file.position is None else f"-{file.position}"
+    return f"{unit.key.replace(':', '-')}/{file.role}{suffix}{file.path.suffix.lower()}"
+
+
+def package_manifest(entries: Sequence[PackageEntry]) -> dict[str, Any]:
+    """``manifest.json`` по схеме ``contracts/packages/media_package_manifest.v1.json``."""
+    return {
+        "version": 1,
+        "items": [
+            {
+                "key": e.unit.key,
+                "kind": "track" if e.unit.domain == "music" else "film",
+                "media_item_id": e.media_item_id,
+                "files": [
+                    {
+                        "role": f.role,
+                        "path": _arcname(e.unit, f),
+                        **({"position": f.position} if f.position is not None else {}),
+                    }
+                    for f in e.files
+                ],
+                **unit_provenance(e.unit),
+            }
+            for e in entries
+        ],
+    }
+
+
+def write_package(archive: Path, entries: Sequence[PackageEntry]) -> int:
+    """Записать zip с манифестом; вернуть число файлов.
+
+    ``ZIP_STORED``: JPEG и AAC уже сжаты, а высокая степень сжатия у media-pipeline считается
+    признаком zip-бомбы.
+    """
+    count = 0
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as zf:
+        zf.writestr("manifest.json", json.dumps(package_manifest(entries), ensure_ascii=False))
+        for entry in entries:
+            for file in entry.files:
+                zf.write(file.path, _arcname(entry.unit, file))
+                count += 1
+    return count
+
+
+def split_batches(entries: Sequence[PackageEntry], size: int) -> list[Sequence[PackageEntry]]:
+    """Разбить записи на пакеты по ``size`` единиц."""
+    return [entries[i : i + size] for i in range(0, len(entries), size)]
+
+
 # ---------------------------------------------------------------- оркестрация
 class RealSeeder(Seeder):
     """:class:`Seeder` для реальных единиц: те же шаги, другой набор файлов и исходников."""
 
-    def __init__(self, config: SeedConfig, units: Sequence[RealUnit], **kwargs: Any) -> None:
+    def __init__(
+        self,
+        config: SeedConfig,
+        units: Sequence[RealUnit],
+        *,
+        package_units: int = PACKAGE_UNITS,
+        package_timeout_s: float = PACKAGE_TIMEOUT_S,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(config, **kwargs)
         self._units = list(units)
+        self._package_units = package_units
+        self._package_timeout_s = package_timeout_s
+        # Ключ идемпотентности пакета: повтор запроса в рамках запуска возвращает тот же пакет,
+        # а новый запуск (после исправления файлов) обрабатывается заново.
+        self._run_id = uuid.uuid4().hex[:12]
         self._audio: dict[str, Path] = {}
         self._token_at = 0.0
 
@@ -495,51 +610,110 @@ class RealSeeder(Seeder):
         """Подготовленные m4a (ключ единицы → файл)."""
         self._audio = dict(audio)
 
-    def _plan_uploads(self, unit: RealUnit) -> list[tuple[SourceSpec, Path, str, str]]:
-        """Что загрузить на единицу: (спецификация, файл, origin, license_note)."""
-        if unit.domain == "music":
-            audio = self._audio.get(unit.key)
-            if audio is None:
-                return []
-            note = f"Free Music Archive, {unit.license or 'CC'} (local, ADR 0014)"
-            return [(SourceSpec("audio", audio.name, "audio/mp4"), audio, ORIGIN_TRACK, note)]
-        plan = [
-            (SourceSpec("frame", f.name, "image/jpeg", position=n), f, ORIGIN_FILM, NOTE_FILM)
-            for n, f in enumerate(unit.frames, start=1)
-        ]
-        if unit.poster is not None:
-            plan.append(
-                (
-                    SourceSpec("poster", "poster.jpg", "image/jpeg"),
-                    unit.poster,
-                    ORIGIN_FILM,
-                    NOTE_FILM,
-                )
-            )
-        return plan
-
     def upload_real(self, items: Mapping[str, _ItemRef]) -> int:
-        """Загрузить недостающие исходники и дождаться наборов ассетов; вернуть число единиц."""
-        done = 0
+        """Отправить недостающие исходники пакетами и дождаться наборов ассетов.
+
+        Клиент только собирает zip с ``manifest.json`` и ждёт статус; приём файлов, проверки
+        архива и нарезка — на стороне media-pipeline (``POST /admin/v1/packages``). Единицы с
+        ошибками по файлам в ожидание наборов не попадают. Вернуть число единиц.
+        """
+        entries: list[PackageEntry] = []
         for unit in sorted(self._units, key=lambda u: u.key):
             ref = items.get(unit.key)
             if ref is None:
                 continue
             self._keep_token()
             have = self._uploaded(ref.media_item_id)
-            todo = [p for p in self._plan_uploads(unit) if (p[0].kind, p[0].position) not in have]
-            if todo:
-                self._echo(f"seed-real: {unit.key} — исходников {len(todo)}")
-            for spec, path, origin, note in todo:
-                self._upload_one(
-                    ref.media_item_id, unit.key, spec, path, origin=origin, license_note=note
-                )
-            done += 1
+            files = tuple(
+                f
+                for f in unit_files(unit, self._audio.get(unit.key))
+                if (f.role, f.position or 1) not in have
+            )
+            if files:
+                entries.append(PackageEntry(unit, ref.media_item_id, files))
+        failed: set[str] = set()
+        for batch in split_batches(entries, self._package_units):
+            failed |= self._send_package(batch)
+        waiting = 0
         for unit in sorted(self._units, key=lambda u: u.key):
             ref = items.get(unit.key)
-            if ref is not None and self._plan_uploads(unit):
-                self._wait_assets(ref.media_item_id, unit.key)
-        return done
+            if ref is None or unit.key in failed or not unit_files(unit, self._audio.get(unit.key)):
+                continue
+            self._wait_assets(ref.media_item_id, unit.key)
+            waiting += 1
+        return waiting
+
+    def _send_package(self, batch: Sequence[PackageEntry]) -> set[str]:
+        """Собрать и отправить один пакет, дождаться статуса; вернуть ключи записей с ошибками."""
+        with tempfile.TemporaryDirectory(prefix="gv-seed-package-") as tmp:
+            archive = Path(tmp) / "package.zip"
+            count = write_package(archive, batch)
+            self._echo(
+                f"seed-real: пакет — единиц {len(batch)}, файлов {count}, "
+                f"{archive.stat().st_size // 1024} КБ"
+            )
+            self._keep_token()
+            package_id = self._post_package(archive)
+        return self._wait_package(package_id)
+
+    def _post_package(self, archive: Path) -> str:
+        """``POST /admin/v1/packages`` потоком; ключ идемпотентности: запуск и хэш архива."""
+        hasher = hashlib.sha256()
+        with archive.open("rb") as handle:
+            while block := handle.read(PACKAGE_CHUNK):
+                hasher.update(block)
+        digest = hasher.hexdigest()
+        size = archive.stat().st_size
+
+        def chunks() -> Iterable[bytes]:
+            with archive.open("rb") as handle:
+                while block := handle.read(PACKAGE_CHUNK):
+                    yield block
+
+        resp = self._media.post(
+            "/admin/v1/packages",
+            params={"reason": REASON},
+            headers={
+                "Idempotency-Key": f"seed-package-{self._run_id}-{digest[:24]}",
+                "Content-Type": "application/zip",
+                "Content-Length": str(size),
+            },
+            content=chunks(),
+            timeout=PACKAGE_UPLOAD_TIMEOUT_S,
+        )
+        self._check(resp, {202}, "отправка пакета")
+        return str(resp.json()["package_id"])
+
+    def _wait_package(self, package_id: str) -> set[str]:
+        """Ждать завершения пакета; вывести ошибки по файлам, вернуть ключи записей с ошибками."""
+        state: dict[str, Any] = {}
+
+        def check() -> bool:
+            self._keep_token()
+            resp = self._media.get(f"/admin/v1/packages/{package_id}")
+            self._check(resp, {200}, f"статус пакета {package_id}")
+            state.update(resp.json())
+            return str(state["status"]) in PACKAGE_TERMINAL
+
+        self._poll(
+            check,
+            timeout_s=self._package_timeout_s,
+            what=f"обработка пакета {package_id}",
+            on_timeout=lambda: f"{state.get('done')}/{state.get('total')} файлов",
+        )
+        if state["status"] == "failed" and not state.get("done"):
+            raise SeedError(
+                f"пакет {package_id} отвергнут: {state.get('error_code')} — "
+                f"{state.get('error_message') or 'все файлы с ошибками'}"
+            )
+        failed = {str(e["item_key"]) for e in state.get("errors", []) if e.get("item_key")}
+        self._echo(
+            f"seed-real: пакет {state['status']}: принято {state['done']} из {state['total']}, "
+            f"без источника {state['missing_source']}, без лицензии {state['missing_license']}"
+        )
+        for error in list(state.get("errors", []))[:PACKAGE_ERRORS_SHOWN]:
+            self._echo(f"  ! {error['item_key']} {error['path']}: {error['code']}")
+        return failed
 
     def _uploaded(self, media_item_id: str) -> set[tuple[str, int]]:
         resp = self._media.get("/admin/v1/sources", params={"media_item_id": media_item_id})
@@ -563,6 +737,7 @@ def run_seed_real(
     seedpack: Path | None = None,
     min_collection_size: int = MIN_COLLECTION_ITEMS,
     tracks_limit: int | None = None,
+    package_units: int = PACKAGE_UNITS,
     echo: Callable[[str], None] = print,
 ) -> dict[str, int]:
     """Полный засев реальными медиа на живом стеке; вернуть итоговые числа."""
@@ -577,7 +752,7 @@ def run_seed_real(
     audio = prepare_audio(units, seedpack or real_dir / "seedpack", ffmpeg)
     echo(f"seed-real: аудио подготовлено: {len(audio)}")
     specs = music_collections(units, min_size=min_collection_size) + film_collections(units)
-    seeder = RealSeeder(config, units, echo=echo)
+    seeder = RealSeeder(config, units, package_units=package_units, echo=echo)
     try:
         seeder.set_audio(audio)
         seeder.authenticate()
