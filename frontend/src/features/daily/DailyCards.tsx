@@ -40,14 +40,24 @@ export function useRecoverPersonalBlocks(
 ): boolean {
   const recovered = useRef(false);
   const [settled, setSettled] = useState(false);
+  const mounted = useRef(true);
   const unavailable = statuses.includes("unavailable");
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (recovered.current || !unavailable) return;
     recovered.current = true;
     void recoverSession()
       .then(refresh)
       .catch(() => undefined)
-      .finally(() => setSettled(true));
+      .finally(() => {
+        // Экран мог закрыться, пока шло восстановление: состояние уже не нужно.
+        if (mounted.current) setSettled(true);
+      });
   }, [unavailable, refresh]);
   // Восстановление и повторный запрос завершены: дальнейшая недоступность — не ожидание.
   return settled;
