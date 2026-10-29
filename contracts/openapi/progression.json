@@ -3724,6 +3724,102 @@
         "title": "ServiceMeta",
         "type": "object"
       },
+      "SessionRewards": {
+        "description": "Награды за игровую сессию текущего пользователя (экран итогов).\n\nНачисление асинхронное (по событию game): пока его нет, `settled = false`, суммы нулевые —\nэто не ошибка, клиент спрашивает позже. Чужая сессия неотличима от неначисленной.",
+        "properties": {
+          "level_after": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень после сессии",
+            "title": "Level After"
+          },
+          "level_before": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень до сессии; null — опыта нет",
+            "title": "Level Before"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "settled": {
+            "description": "Начисление за сессию уже есть",
+            "title": "Settled",
+            "type": "boolean"
+          },
+          "streak": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionStreakView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Серия дейлика на день сессии; null — не дейлик"
+          },
+          "verses": {
+            "description": "Начисленные Версы, целые",
+            "minimum": 0.0,
+            "title": "Verses",
+            "type": "integer"
+          },
+          "xp": {
+            "description": "Начисленный опыт (с бустом)",
+            "minimum": 0.0,
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "settled",
+          "xp",
+          "verses"
+        ],
+        "title": "SessionRewards",
+        "type": "object"
+      },
+      "SessionStreakView": {
+        "description": "Серия дейлика, в которую засчитана сессия.",
+        "properties": {
+          "current": {
+            "minimum": 1.0,
+            "title": "Current",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "current"
+        ],
+        "title": "SessionStreakView",
+        "type": "object"
+      },
       "ShopCatalog": {
         "description": "Витрина: активные предметы, можно отфильтровать по слоту.",
         "properties": {
@@ -8690,6 +8786,87 @@
           }
         },
         "summary": "Мои задания",
+        "tags": [
+          "progression"
+        ]
+      }
+    },
+    "/v1/me/rewards": {
+      "get": {
+        "description": "Опыт, Версы, уровень до/после и серия дейлика за сессию `session_id` (соло или дейлик) — только текущего пользователя, по журналам начислений. Начисление асинхронное: до него (а также за чужую или несуществующую сессию, или если потолок съел всё) ответ 200 с `settled = false` и нулями — это не ошибка и не раскрывает существование чужих сессий. Только чтение, в ledger ничего не пишется.",
+        "operationId": "my_rewards_v1_me_rewards_get",
+        "parameters": [
+          {
+            "description": "Идентификатор игровой сессии",
+            "in": "query",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор игровой сессии",
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRewards"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Награды за мою игровую сессию",
         "tags": [
           "progression"
         ]

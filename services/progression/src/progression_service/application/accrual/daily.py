@@ -22,6 +22,23 @@ from progression_service.domain import experience, wallet
 log = structlog.get_logger(__name__)
 
 DAILY_REASON = "daily"
+_DAILY_OP_PARTS = 4
+
+
+def daily_op_id(user_id: UUID, domain: str, day: date) -> str:
+    """``op_id`` награды за дейлик: один на игрока, домен и день."""
+    return f"daily:{user_id}:{domain}:{day.isoformat()}"
+
+
+def parse_daily_op_id(op_id: str) -> tuple[str, date] | None:
+    """Домен и день из ``op_id`` награды за дейлик; ``None`` — это не она."""
+    parts = op_id.split(":")
+    if len(parts) != _DAILY_OP_PARTS or parts[0] != "daily" or not parts[2]:
+        return None
+    try:
+        return parts[2], date.fromisoformat(parts[3])
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +83,7 @@ class AccrueDaily:
             if changed:
                 await uow.streaks.save(daily.user_id, daily.domain, streak)
             reward_streak = 1 if late else streak.current
-            op_id = f"daily:{daily.user_id}:{daily.domain}:{daily.day.isoformat()}"
+            op_id = daily_op_id(daily.user_id, daily.domain, daily.day)
             ref = str(daily.session_id)
             xp = await poster.xp(
                 daily.user_id,

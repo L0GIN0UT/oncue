@@ -58,6 +58,33 @@ class MyProgress(BaseModel):
     config_version: int = Field(ge=1)
 
 
+class SessionStreakView(BaseModel):
+    """Серия дейлика, в которую засчитана сессия."""
+
+    domain: Domain
+    current: int = Field(ge=1)
+
+
+class SessionRewards(BaseModel):
+    """Награды за игровую сессию текущего пользователя (экран итогов).
+
+    Начисление асинхронное (по событию game): пока его нет, `settled = false`, суммы нулевые —
+    это не ошибка, клиент спрашивает позже. Чужая сессия неотличима от неначисленной.
+    """
+
+    session_id: UUID
+    settled: bool = Field(description="Начисление за сессию уже есть")
+    xp: int = Field(ge=0, description="Начисленный опыт (с бустом)")
+    verses: int = Field(ge=0, description="Начисленные Версы, целые")
+    level_before: int | None = Field(
+        default=None, ge=1, description="Уровень до сессии; null — опыта нет"
+    )
+    level_after: int | None = Field(default=None, ge=1, description="Уровень после сессии")
+    streak: SessionStreakView | None = Field(
+        default=None, description="Серия дейлика на день сессии; null — не дейлик"
+    )
+
+
 class BadgeRef(BaseModel):
     """Бейдж в публичном профиле."""
 
