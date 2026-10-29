@@ -874,6 +874,7 @@ export class MatchWorld {
       .map((r) => ({
         code: r.code,
         created_at: r.createdAt,
+        host_id: r.hostId,
         host_nickname: this.nickname(r.hostId),
         mode: r.def.ref,
         players: r.players.length,
