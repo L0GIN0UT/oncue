@@ -65,12 +65,6 @@ class SourceNotFoundError(NotFoundError):
     default_code = "source.not_found"
 
 
-class ProvenanceRequiredError(InvalidInputError):
-    """Вне local/ci у загрузки нет ``origin``/``source_url``/``license_note`` (D6, 422)."""
-
-    default_code = "source.provenance_required"
-
-
 class CollectionContentInvalidError(InvalidInputError):
     """Свои загадки сборника нарушают контракт: эмодзи вне строгого набора RGI или длиннее
     лимита, единица повторяется (защита в глубину, ADR 0029). Повтор события не поможет."""
@@ -121,3 +115,9 @@ class UgcNotPendingError(ConflictError):
     """Решение невозможно из текущего статуса (409)."""
 
     default_code = "ugc.not_pending"
+
+
+class PackageNotFoundError(NotFoundError):
+    """Пакет пакетной загрузки не найден (404)."""
+
+    default_code = "package.not_found"

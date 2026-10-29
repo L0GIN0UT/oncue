@@ -45,6 +45,8 @@ def _uploaded(kind: str = "frame", position: int = 3, origin: str = "upload") ->
         "bytes": 5,
         "mime": "image/jpeg",
         "scheduled_asset_set_ids": [],
+        "source_missing": True,
+        "license_missing": True,
         "position": position,
         "origin": origin,
     }
@@ -87,6 +89,8 @@ def _listed(source: uuid.UUID = SOURCE, position: int = 3, kind: str = "frame") 
         "origin": "upload",
         "status": "ready",
         "created_at": "2026-10-16T10:00:00Z",
+        "source_missing": True,
+        "license_missing": True,
     }
 
 
@@ -143,9 +147,10 @@ def test_empty_provenance_is_not_sent_in_ci(client: Any, login: Any, media: Any)
     assert b'name="origin"' not in body and b'name="source_url"' not in body
 
 
-def test_provenance_required_outside_local_ci(
+def test_provenance_is_optional_outside_local_ci(
     client: Any, login: Any, catalog: Any, media: Any, settings: Any
 ) -> None:
+    """ADR 0072: на проде форма отправляет загрузку и без происхождения."""
     settings.GV_ENVIRONMENT = "prod"
     login()
     _open(catalog, media)
@@ -153,22 +158,20 @@ def test_provenance_required_outside_local_ci(
     response = client.post(
         f"/catalog/items/{ITEM}/sources/", _form(origin="", source_url="", license_note="")
     )
-    assert response.status_code == 400
-    assert "без происхождения исходник не примут" in response.content.decode()
-    assert not route.called
+    assert response.status_code == 302
+    assert route.called
+    body = route.calls.last.request.content
+    assert b'name="origin"' not in body and b'name="license_note"' not in body
 
 
-def test_provenance_refusal_from_media_is_explained_and_audited(
-    client: Any, login: Any, catalog: Any, media: Any, problem: Any
+def test_sources_without_attribution_are_marked(
+    client: Any, login: Any, catalog: Any, media: Any
 ) -> None:
     login()
-    _open(catalog, media)
-    media.route("POST", "/admin/v1/sources").respond(
-        422, json=problem(422, "source.provenance_required")
-    )
-    response = client.post(f"/catalog/items/{ITEM}/sources/", _form(), follow=True)
-    assert "Укажите происхождение исходника" in response.content.decode()
-    assert AuditEntry.objects.get().error_code == "source.provenance_required"
+    _open(catalog, media, [_listed()])
+    page = client.get(f"/catalog/items/{ITEM}/")
+    html = page.content.decode()
+    assert "не указан" in html and "не указана" in html
 
 
 def test_bad_position_and_url_are_form_errors(

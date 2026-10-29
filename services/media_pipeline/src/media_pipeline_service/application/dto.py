@@ -19,6 +19,7 @@ from media_pipeline_service.domain.sources import (
 )
 
 GENERATE_TASK = "media.generate_asset_set"
+PACKAGE_TASK = "media.package.process"
 """Тип задачи RabbitMQ генерации набора; ``task_id = <asset_set_id>:<generation>``."""
 
 
@@ -105,7 +106,7 @@ class IssuedLink:
 
 @dataclass(frozen=True, slots=True)
 class SourceProvenance:
-    """Происхождение загружаемого исходника (D6 плана этапа 3a).
+    """Происхождение загружаемого исходника (необязательно, ADR 0072).
 
     Attributes:
         origin: ``upload`` | ``seed`` | ``tmdb``; ``None`` — не указано (``upload``).
@@ -116,11 +117,6 @@ class SourceProvenance:
     origin: SourceOrigin | None = None
     source_url: str | None = None
     license_note: str | None = None
-
-    @property
-    def is_complete(self) -> bool:
-        """Указаны все три поля (обязательно вне local/ci)."""
-        return self.origin is not None and bool(self.source_url) and bool(self.license_note)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +132,8 @@ class UploadResult:
     scheduled_asset_set_ids: tuple[UUID, ...]
     position: int = 1
     origin: SourceOrigin = SourceOrigin.UPLOAD
+    source_missing: bool = False
+    license_missing: bool = False
 
     def to_json(self) -> dict[str, Any]:
         """JSON-объект для хранения ответа идемпотентной мутации."""
@@ -149,6 +147,8 @@ class UploadResult:
             "scheduled_asset_set_ids": [str(i) for i in self.scheduled_asset_set_ids],
             "position": self.position,
             "origin": self.origin.value,
+            "source_missing": self.source_missing,
+            "license_missing": self.license_missing,
         }
 
     @classmethod
@@ -164,6 +164,8 @@ class UploadResult:
             scheduled_asset_set_ids=tuple(UUID(i) for i in data["scheduled_asset_set_ids"]),
             position=int(data.get("position", 1)),
             origin=SourceOrigin(data.get("origin", SourceOrigin.UPLOAD.value)),
+            source_missing=bool(data.get("source_missing", False)),
+            license_missing=bool(data.get("license_missing", False)),
         )
 
 
@@ -215,6 +217,19 @@ class SourceListView:
     position: int
     status: SourceStatus
     created_at: datetime
+    media_item_id: UUID | None = None
+    source_url: str | None = None
+    license_note: str | None = None
+
+    @property
+    def source_missing(self) -> bool:
+        """Источник не указан."""
+        return not self.source_url
+
+    @property
+    def license_missing(self) -> bool:
+        """Лицензия не указана."""
+        return not self.license_note
 
     @classmethod
     def of(cls, source: SourceMedia) -> SourceListView:
@@ -226,6 +241,9 @@ class SourceListView:
             position=source.position,
             status=source.status,
             created_at=source.created_at,
+            media_item_id=source.media_item_id,
+            source_url=source.source_url,
+            license_note=source.license_note,
         )
 
 

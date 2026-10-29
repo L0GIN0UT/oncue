@@ -7,7 +7,9 @@
 * ``media.ugc.purge`` — гарантированное удаление объектов UGC из очереди ``ugc_object_purge``
   (снятие, отклонение, замена, отмена заявки) до успеха (ADR 0048);
 * ``media.ugc.orphans`` — ``p/``-объекты старше ``GV_MEDIA__UGC_ORPHAN_TTL_H`` без
-  ``pending``-строки в БД.
+  ``pending``-строки в БД;
+* ``media.package.orphans`` — архивы пакетов ``k/*`` старше ``GV_MEDIA__PACKAGE_ORPHAN_TTL_H``
+  без незавершённого пакета.
 
 Задачи идемпотентны: повтор или запуск в двух репликах ничего не дублирует.
 """
@@ -37,6 +39,9 @@ def build_jobs(container: MediaContainer) -> list[PeriodicJob]:
     async def sweep_ugc_orphans() -> None:
         await container.ugc.orphans.sweep()
 
+    async def sweep_package_orphans() -> None:
+        await container.sweep_package_orphans.sweep()
+
     async def backfill() -> None:
         await container.backfill.execute()
 
@@ -50,5 +55,11 @@ def build_jobs(container: MediaContainer) -> list[PeriodicJob]:
         PeriodicJob("media.ugc.purge", m.ugc_purge_interval_s, purge_ugc, m.ugc_purge_jitter_s),
         PeriodicJob(
             "media.ugc.orphans", m.ugc_orphan_interval_s, sweep_ugc_orphans, m.ugc_orphan_jitter_s
+        ),
+        PeriodicJob(
+            "media.package.orphans",
+            m.package_orphan_interval_s,
+            sweep_package_orphans,
+            m.package_orphan_jitter_s,
         ),
     ]

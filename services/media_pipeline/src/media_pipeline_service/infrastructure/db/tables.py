@@ -319,3 +319,56 @@ admin_actions = Table(
     CheckConstraint("length(reason) > 0", name="reason_not_empty"),
     Index("ix_admin_actions_target_id", "target_id"),
 )
+
+# Пакетная загрузка исходников архивом (ADR 0072 и план «пакеты»): строка на архив со
+# счётчиками файлов и строки ошибок по файлам. Сам архив лежит в бакете исходников под
+# ``archive_key`` до конца обработки.
+import_packages = Table(
+    "import_packages",
+    _md,
+    Column("id", Uuid, primary_key=True),
+    Column("actor_id", Uuid, nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("archive_key", String(80), nullable=True),
+    Column("archive_sha256", String(64), nullable=False),
+    Column("archive_bytes", BigInteger, nullable=False),
+    Column("total", Integer, nullable=False, server_default=text("0")),
+    Column("done", Integer, nullable=False, server_default=text("0")),
+    Column("failed", Integer, nullable=False, server_default=text("0")),
+    Column("missing_source", Integer, nullable=False, server_default=text("0")),
+    Column("missing_license", Integer, nullable=False, server_default=text("0")),
+    Column("errors_dropped", Integer, nullable=False, server_default=text("0")),
+    Column("error_code", String(64), nullable=True),
+    Column("error_message", String(500), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=True),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+    Column("heartbeat_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint(
+        "status IN ('queued', 'processing', 'done', 'partial', 'failed')", name="status_valid"
+    ),
+    CheckConstraint(
+        "total >= 0 AND done >= 0 AND failed >= 0 AND done + failed <= total",
+        name="counters_valid",
+    ),
+    CheckConstraint("archive_bytes >= 0", name="archive_bytes_non_negative"),
+    Index("ix_import_packages_created_at", "created_at"),
+)
+
+import_package_errors = Table(
+    "import_package_errors",
+    _md,
+    Column(
+        "package_id",
+        Uuid,
+        ForeignKey("import_packages.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("seq", Integer, primary_key=True),
+    Column("item_key", String(190), nullable=True),
+    Column("path", String(300), nullable=True),
+    Column("role", String(16), nullable=True),
+    Column("code", String(64), nullable=False),
+    Column("message", String(500), nullable=False),
+)

@@ -89,6 +89,24 @@ class MediaSettings(BaseModel):
     ugc_orphan_interval_s: float = Field(default=3600, gt=0)
     ugc_orphan_jitter_s: float = Field(default=300, ge=0)
 
+    # Пакетная загрузка архивом (zip + manifest.json): все лимиты - конфиг, не код.
+    package_max_archive_mb: int = Field(default=1024, ge=1, le=16_384)
+    package_max_entries: int = Field(default=5000, ge=1, le=100_000)
+    package_max_unpacked_mb: int = Field(default=4096, ge=1, le=65_536)
+    package_max_ratio: int = Field(default=100, ge=1, le=10_000)
+    package_max_manifest_kb: int = Field(default=2048, ge=1, le=65_536)
+    # Сколько ошибок по файлам хранить в статусе пакета (остальные - счётчиком).
+    package_max_errors: int = Field(default=500, ge=1, le=10_000)
+    # Размер части multipart-загрузки архива в S3 (минимум S3 - 5 МБ).
+    package_upload_part_mb: int = Field(default=8, ge=5, le=128)
+    # Воркер обновляет отметку живости после каждого файла; пакет `processing` без отметки
+    # дольше lease (воркер упал) может взять другой воркер.
+    package_lease_s: int = Field(default=300, ge=30, le=86_400)
+    # Задача relay ``media.package.orphans``: архивы `k/*` старше TTL без незавершённого пакета.
+    package_orphan_ttl_h: int = Field(default=24, ge=1, le=720)
+    package_orphan_interval_s: float = Field(default=3600, gt=0)
+    package_orphan_jitter_s: float = Field(default=300, ge=0)
+
     @property
     def source_host_list(self) -> frozenset[str]:
         """Allowlist хостов исходников в нижнем регистре."""

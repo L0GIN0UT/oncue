@@ -74,3 +74,4 @@
 | [0069](0069-event-audience-and-tails-5c.md) | Полная аудитория `event_started` из identity, экран блокировки и хвосты 5c (черновик; уточняет 0054, 0047, 0052) |
 | [0070](0070-lobby-clue-answer-overrides.md) | Переопределения `clue` и `answer.format` лобби в `round-plans`: допустимость из `lobby.overridable`, проверка ядром, пул под переопределённую загадку (черновик; уточняет 0033, 0034) |
 | [0071](0071-event-runs-exclusion-and-own-avatar-source.md) | `EXCLUDE USING gist` по периодам запусков событий и адрес своей аватарки в `me/appearance` вместо `current_url` (черновик; уточняет 0054, 0048, 0060) |
+| [0072](0072-source-provenance-optional.md) | Происхождение исходника (источник, лицензия) необязательно; обязательна возможность его найти и снять (уточняет D6 этапа 3a, ADR 0014) |

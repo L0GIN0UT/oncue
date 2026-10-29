@@ -28,6 +28,7 @@ from media_pipeline_service.application.ports import (
     AssetSetRepository,
     CollectionStateRepository,
     DynamicProfileRepository,
+    ImportPackageRepository,
     LinkIssuanceJournal,
     MediaItemStateRepository,
     ProfileSetCount,
@@ -40,6 +41,7 @@ from media_pipeline_service.domain.collections import CollectionState
 from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
 from media_pipeline_service.domain.errors import MediaItemNotFoundError
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
+from media_pipeline_service.domain.packages import ImportPackage, PackageFileError, PackageStatus
 from media_pipeline_service.domain.sources import (
     AssetScope,
     ScopeKind,
@@ -57,6 +59,8 @@ from media_pipeline_service.infrastructure.db.tables import (
     asset_sets,
     collections_state,
     idempotency_keys,
+    import_package_errors,
+    import_packages,
     link_issuance,
     media_items_state,
     source_media,
@@ -368,6 +372,22 @@ class SqlSourceMediaRepository:
             .all()
         )
         return [_to_source(r) for r in rows]
+
+    async def list_unattributed(self, *, limit: int, after_id: UUID | None) -> list[SourceMedia]:
+        """Файловые каталожные исходники без источника или лицензии, keyset по ``id``."""
+        query = (
+            select(source_media)
+            .where(
+                source_media.c.scope_kind.is_(None),
+                source_media.c.kind != "text",
+                (source_media.c.source_url.is_(None)) | (source_media.c.license_note.is_(None)),
+            )
+            .order_by(source_media.c.id)
+            .limit(limit)
+        )
+        if after_id is not None:
+            query = query.where(source_media.c.id > after_id)
+        return [_to_source(r) for r in (await self._s.execute(query)).mappings().all()]
 
     async def list_for_scope(self, scope: AssetScope) -> list[SourceMedia]:
         """Исходники владельца (индекс ``uq_source_media_scope_item``)."""
@@ -873,6 +893,135 @@ class SqlAdminAuditLog:
 
 
 # ---------------------------------------------------------------- Unit of Work
+class SqlImportPackageRepository:
+    """Пакеты пакетной загрузки: строка пакета и ошибки по файлам."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, package_id: UUID, *, for_update: bool = False) -> ImportPackage | None:
+        """Пакет с ошибками (по ``seq``)."""
+        query = select(import_packages).where(import_packages.c.id == package_id)
+        if for_update:
+            query = query.with_for_update()
+        row = (await self._s.execute(query)).mappings().first()
+        if row is None:
+            return None
+        errors = (
+            (
+                await self._s.execute(
+                    select(import_package_errors)
+                    .where(import_package_errors.c.package_id == package_id)
+                    .order_by(import_package_errors.c.seq)
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return ImportPackage(
+            row["id"],
+            actor_id=row["actor_id"],
+            reason=row["reason"],
+            archive_key=row["archive_key"],
+            archive_sha256=row["archive_sha256"],
+            archive_bytes=row["archive_bytes"],
+            created_at=row["created_at"],
+            status=PackageStatus(row["status"]),
+            total=row["total"],
+            done=row["done"],
+            failed=row["failed"],
+            missing_source=row["missing_source"],
+            missing_license=row["missing_license"],
+            errors_dropped=row["errors_dropped"],
+            error_code=row["error_code"],
+            error_message=row["error_message"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+            heartbeat_at=row["heartbeat_at"],
+            errors=[
+                PackageFileError(
+                    seq=e["seq"],
+                    item_key=e["item_key"],
+                    path=e["path"],
+                    role=e["role"],
+                    code=e["code"],
+                    message=e["message"],
+                )
+                for e in errors
+            ],
+        )
+
+    @staticmethod
+    def _values(package: ImportPackage) -> dict[str, Any]:
+        return {
+            "actor_id": package.actor_id,
+            "reason": package.reason,
+            "status": package.status.value,
+            "archive_key": package.archive_key,
+            "archive_sha256": package.archive_sha256,
+            "archive_bytes": package.archive_bytes,
+            "total": package.total,
+            "done": package.done,
+            "failed": package.failed,
+            "missing_source": package.missing_source,
+            "missing_license": package.missing_license,
+            "errors_dropped": package.errors_dropped,
+            "error_code": package.error_code,
+            "error_message": package.error_message,
+            "created_at": package.created_at,
+            "started_at": package.started_at,
+            "finished_at": package.finished_at,
+            "heartbeat_at": package.heartbeat_at,
+        }
+
+    async def active_archive_keys(self, keys: Sequence[str]) -> set[str]:
+        """Ключи архивов, на которые ссылается ещё не завершённый пакет."""
+        if not keys:
+            return set()
+        rows = await self._s.execute(
+            select(import_packages.c.archive_key).where(import_packages.c.archive_key.in_(keys))
+        )
+        return {r[0] for r in rows}
+
+    async def add(self, package: ImportPackage) -> None:
+        """Вставить пакет."""
+        await self._s.execute(
+            insert(import_packages).values(id=package.id, **self._values(package))
+        )
+
+    async def save(self, package: ImportPackage) -> None:
+        """Обновить пакет и дописать новые ошибки (при перезапуске старые стираются)."""
+        await self._s.execute(
+            update(import_packages)
+            .where(import_packages.c.id == package.id)
+            .values(**self._values(package))
+        )
+        if package.errors_reset:
+            await self._s.execute(
+                delete(import_package_errors).where(
+                    import_package_errors.c.package_id == package.id
+                )
+            )
+            package.errors_reset = False
+        if package.new_errors:
+            await self._s.execute(
+                insert(import_package_errors),
+                [
+                    {
+                        "package_id": package.id,
+                        "seq": e.seq,
+                        "item_key": e.item_key,
+                        "path": e.path,
+                        "role": e.role,
+                        "code": e.code,
+                        "message": e.message,
+                    }
+                    for e in package.new_errors
+                ],
+            )
+            package.new_errors = []
+
+
 class SqlMediaUnitOfWork:
     """Транзакция use-case с репозиториями и записью событий в outbox.
 
@@ -890,6 +1039,7 @@ class SqlMediaUnitOfWork:
     profiles: DynamicProfileRepository
     collections: CollectionStateRepository
     ugc: UgcImageRepository
+    packages: ImportPackageRepository
     idempotency: IdempotencyStore
     audit: AdminAuditLog
 
@@ -931,6 +1081,7 @@ class SqlMediaUnitOfWork:
         self.profiles = SqlDynamicProfileRepository(s)
         self.collections = SqlCollectionStateRepository(s)
         self.ugc = SqlUgcImageRepository(s)
+        self.packages = SqlImportPackageRepository(s)
         self.idempotency = SqlIdempotencyStore(s, idempotency_keys, self._clock)
         self.audit = SqlAdminAuditLog(s)
         return self

@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
+from pathlib import Path
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from media_pipeline_service.domain.clues import MaskRegion
 from media_pipeline_service.domain.collections import CollectionState
 from media_pipeline_service.domain.dynamic_profiles import DynamicProfile
 from media_pipeline_service.domain.media_items import MediaItemState
+from media_pipeline_service.domain.packages import ImportPackage
 from media_pipeline_service.domain.sources import AssetScope, SourceMedia
 from media_pipeline_service.domain.ugc import UgcImage, UgcPurpose, UgcStatus
 
@@ -60,6 +62,19 @@ class ObjectStorage(Protocol):
 
     async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
         """Удалить объекты (отсутствующие — не ошибка)."""
+        ...
+
+    async def put_stream(
+        self, area: StorageArea, key: str, chunks: AsyncIterator[bytes], content_type: str
+    ) -> None:
+        """Записать объект потоком (multipart upload): в памяти не больше одной части.
+
+        Ошибка источника ``chunks`` прерывает загрузку, недозаписанный объект не остаётся.
+        """
+        ...
+
+    async def download_to(self, area: StorageArea, key: str, path: Path, *, max_bytes: int) -> None:
+        """Скачать объект в файл потоком; сверх лимита или без объекта - ``GenerationError``."""
         ...
 
     async def copy(self, area: StorageArea, source_key: str, target_key: str) -> None:
@@ -291,6 +306,13 @@ class SourceMediaRepository(Protocol):
         """Исходники единицы одного владельца (``None`` — каталожные), по времени создания."""
         ...
 
+    async def list_unattributed(self, *, limit: int, after_id: UUID | None) -> list[SourceMedia]:
+        """Каталожные файловые исходники без источника или лицензии (ADR 0072), по ``id``.
+
+        Тексты загадок (``kind=text``) не считаются: у них нет файла и нет автора-источника.
+        """
+        ...
+
     async def list_for_scope(self, scope: AssetScope) -> list[SourceMedia]:
         """Все исходники владельца (сборника)."""
         ...
@@ -502,6 +524,26 @@ class UgcImageRepository(Protocol):
         ...
 
 
+class ImportPackageRepository(Protocol):
+    """Пакеты пакетной загрузки и ошибки по файлам."""
+
+    async def get(self, package_id: UUID, *, for_update: bool = False) -> ImportPackage | None:
+        """Пакет с ошибками по id."""
+        ...
+
+    async def active_archive_keys(self, keys: Sequence[str]) -> set[str]:
+        """Какие из ключей архивов ещё нужны (на них ссылается незавершённый пакет)."""
+        ...
+
+    async def add(self, package: ImportPackage) -> None:
+        """Новый пакет."""
+        ...
+
+    async def save(self, package: ImportPackage) -> None:
+        """Записать состояние и ещё не записанные ошибки (``new_errors``)."""
+        ...
+
+
 class MediaUnitOfWork(UnitOfWork, Protocol):
     """Транзакция use-case с репозиториями сервиса."""
 
@@ -512,6 +554,7 @@ class MediaUnitOfWork(UnitOfWork, Protocol):
     links: LinkIssuanceJournal
     profiles: DynamicProfileRepository
     collections: CollectionStateRepository
+    packages: ImportPackageRepository
     # Ключи admin-мутаций в транзакции этого UoW (``gv_db.idempotency``).
     idempotency: IdempotencyStore
     audit: AdminAuditLog

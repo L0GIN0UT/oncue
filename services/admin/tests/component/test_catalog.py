@@ -334,6 +334,8 @@ def test_upload_source_is_multipart(client: Any, login: Any, media: Any) -> None
             "bytes": 7,
             "mime": "audio/mp4",
             "scheduled_asset_set_ids": [str(uuid7())],
+            "source_missing": True,
+            "license_missing": True,
             "position": 1,
             "origin": "upload",
         },

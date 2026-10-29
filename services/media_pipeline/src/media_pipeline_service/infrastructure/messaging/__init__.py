@@ -25,6 +25,7 @@ from media_pipeline_service.application.commands.collections import (
 from media_pipeline_service.application.commands.profiles import ClueAssetsRequest
 from media_pipeline_service.application.dto import (
     GENERATE_TASK,
+    PACKAGE_TASK,
     CatalogSource,
     CatalogTexts,
     MediaItemSnapshot,
@@ -293,6 +294,12 @@ class _GeneratePayload(_Payload):
     generation: int = Field(ge=1)
 
 
+class _PackagePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    package_id: UUID
+
+
 def build_task_handlers(container: MediaContainer) -> dict[str, TaskHandler]:
     """Обработчики задач RabbitMQ.
 
@@ -304,4 +311,8 @@ def build_task_handlers(container: MediaContainer) -> dict[str, TaskHandler]:
         p = _parse(_GeneratePayload, payload)
         await container.generate.execute(p.asset_set_id, p.generation)
 
-    return {GENERATE_TASK: generate}
+    async def process_package(payload: dict[str, Any]) -> None:
+        p = _parse(_PackagePayload, payload)
+        await container.process_package.execute(p.package_id)
+
+    return {GENERATE_TASK: generate, PACKAGE_TASK: process_package}

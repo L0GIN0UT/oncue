@@ -30,8 +30,6 @@ SOURCE_KINDS = [
 SOURCE_ORIGINS = [("", "—"), ("upload", "своя загрузка"), ("tmdb", "TMDB"), ("seed", "засев")]
 POSITION_MIN, POSITION_MAX = 1, 100
 SOURCE_URL_MAX, LICENSE_NOTE_MAX = 2000, 500
-# Где происхождение исходника необязательно (как у media-pipeline, D6 плана этапа 3a).
-PROVENANCE_OPTIONAL_ENVS = frozenset({"local", "ci"})
 # Пределы текстов загадок — как ClueTextsIn в contracts/openapi/catalog.json.
 PLOT_MAX, TAGLINE_MAX, EMOJI_MAX = 2000, 300, 64
 REPUBLISH_DOMAINS = [("", "все домены"), ("film", "фильмы"), ("music", "музыка")]
@@ -116,10 +114,10 @@ class ImportForm(MutationForm):
 
 
 class SourceUploadForm(MutationForm):
-    """Загрузка исходника в media-pipeline: вид, порядок и происхождение (D6).
+    """Загрузка исходника в media-pipeline: вид, порядок и происхождение.
 
-    Вне local/ci происхождение, ссылка на источник и лицензия обязательны — как у
-    media-pipeline (иначе 422 ``source.provenance_required``): форма не отправит запрос зря.
+    Происхождение, ссылка на источник и лицензия необязательны в любой среде (ADR 0072):
+    пустое не отправляется, а в таблице исходников помечается «не указана».
     """
 
     kind = forms.ChoiceField(label="Тип", choices=SOURCE_KINDS)
@@ -148,14 +146,6 @@ class SourceUploadForm(MutationForm):
         if upload.size > limit:
             raise forms.ValidationError(f"файл больше {settings.GV_MAX_UPLOAD_MB} МБ")
         return upload
-
-    def clean(self) -> dict[str, Any]:
-        data = super().clean() or {}
-        if settings.GV_ENVIRONMENT not in PROVENANCE_OPTIONAL_ENVS:
-            for name in ("origin", "source_url", "license_note"):
-                if not data.get(name) and name not in self.errors:
-                    self.add_error(name, "обязательно: без происхождения исходник не примут")
-        return data
 
     def fields_payload(self, media_item_id: str) -> dict[str, str]:
         """Поля multipart-формы ``POST /admin/v1/sources`` (пустые не передаются)."""

@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from gv_core.clock import Clock
 from gv_core.errors import DependencyUnavailableError
 from gv_messaging.ports import TaskQueue
-from gv_service import Environment, Infrastructure
+from gv_service import Infrastructure
+from media_pipeline_service.application.archive import ArchiveLimits
 from media_pipeline_service.application.commands.catalog import (
     DisableItemAssets,
     PlanAssetSets,
@@ -29,6 +30,11 @@ from media_pipeline_service.application.commands.generation import (
     RegenerateAssetSet,
 )
 from media_pipeline_service.application.commands.links import IssueAssetLink, PurgeLinkJournal
+from media_pipeline_service.application.commands.packages import (
+    ProcessPackage,
+    SubmitPackage,
+    SweepOrphanPackageArchives,
+)
 from media_pipeline_service.application.commands.profiles import (
     ApplyClueAssetsRequested,
     BackfillDynamicProfiles,
@@ -69,6 +75,7 @@ from media_pipeline_service.application.ports import (
 )
 from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+from media_pipeline_service.application.queries.packages import GetPackage
 from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.application.queries.sources import ListSources
 from media_pipeline_service.application.queries.ugc import GetUgcImage, ListUgcQueue
@@ -96,7 +103,6 @@ from media_pipeline_service.settings import Settings
 
 _MB = 1024 * 1024
 # Окружения, где загрузка без происхождения (D6) допустима: синтетика засева и тесты.
-DEV_ENVIRONMENTS = frozenset({Environment.LOCAL, Environment.CI})
 
 
 class _NoRedisLimiter:
@@ -134,7 +140,7 @@ class MediaAdapters:
             else UnconfiguredSigner()
         )
         return cls(
-            storage=S3Storage(settings.s3),
+            storage=S3Storage(settings.s3, part_size=m.package_upload_part_mb * _MB),
             fetcher=HttpSourceFetcher(
                 allowed_hosts=m.source_host_list,
                 max_bytes=m.max_source_mb * _MB,
@@ -315,8 +321,57 @@ class MediaContainer:
             self.directory,
             self.plan(),
             storage=self.adapters.storage,
-            require_provenance=self.settings.environment not in DEV_ENVIRONMENTS,
         )
+
+    @cached_property
+    def archive_limits(self) -> ArchiveLimits:
+        """Лимиты пакета из настроек."""
+        m = self.settings.media
+        return ArchiveLimits(
+            max_archive_bytes=m.package_max_archive_mb * _MB,
+            max_entries=m.package_max_entries,
+            max_unpacked_bytes=m.package_max_unpacked_mb * _MB,
+            max_entry_bytes=m.max_upload_mb * _MB,
+            max_ratio=m.package_max_ratio,
+            max_manifest_bytes=m.package_max_manifest_kb * 1024,
+        )
+
+    @cached_property
+    def submit_package(self) -> SubmitPackage:
+        """Приём пакета-архива потоком."""
+        a = self.adapters
+        return SubmitPackage(
+            self.uow_factory(), self.clock, a.storage, a.queue, a.tokens, limits=self.archive_limits
+        )
+
+    @cached_property
+    def process_package(self) -> ProcessPackage:
+        """Разбор пакета задачей воркера."""
+        return ProcessPackage(
+            self.uow_factory(),
+            self.clock,
+            self.adapters.storage,
+            self.upload,
+            limits=self.archive_limits,
+            max_upload_bytes=self.settings.media.max_upload_mb * _MB,
+            keep_errors=self.settings.media.package_max_errors,
+            lease=timedelta(seconds=self.settings.media.package_lease_s),
+        )
+
+    @cached_property
+    def sweep_package_orphans(self) -> SweepOrphanPackageArchives:
+        """Чистка осиротевших архивов пакетов (задача relay)."""
+        return SweepOrphanPackageArchives(
+            self.uow_factory(),
+            self.adapters.storage,
+            self.clock,
+            ttl=timedelta(hours=self.settings.media.package_orphan_ttl_h),
+        )
+
+    @cached_property
+    def get_package(self) -> GetPackage:
+        """Статус пакета (admin)."""
+        return GetPackage(self.uow_factory())
 
     @cached_property
     def set_position(self) -> SetSourcePosition:

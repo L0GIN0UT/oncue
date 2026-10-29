@@ -59,9 +59,6 @@ _MESSAGES: Mapping[str, str] = {
     "catalog.clue_texts_empty": "Одобрять нечего: тексты загадок пусты",
     "catalog.tasks_unavailable": "Очередь задач catalog недоступна — повторите позже",
     # media-pipeline, этап 3a: исходники новых видов
-    "source.provenance_required": (
-        "Укажите происхождение исходника, ссылку на источник и лицензию"
-    ),
     "source.kind_not_applicable": "Этот вид исходника не используется для домена единицы",
     "source.position": "Порядок исходника — от 1 до 100",
     "source.not_found": "Исходник не найден",

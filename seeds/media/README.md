@@ -47,7 +47,7 @@ uv run gv dev seed [--date YYYY-MM-DD]
 3. Для каждой единицы найти `media_item_id` в админке (карточка единицы) и загрузить файлы:
    `POST /admin/v1/sources` (media-pipeline, multipart: `media_item_id`, `kind` из таблицы
    выше, `position` для кадров последовательности, `reason`, `file`; заголовок
-   `Idempotency-Key`). Вне local/ci обязательны `origin`, `source_url`, `license_note` (D6).
+   `Idempotency-Key`). `origin`, `source_url`, `license_note` необязательны (ADR 0072).
 4. media-pipeline генерирует наборы по профилям `default` и публикует `AssetsReady`;
    game заполняет проекцию `clue_assets`.
 5. game публикует сиды режимов (`seeds/game/modes`, только local/ci, `GV_GAME__BOOTSTRAP_MODES_DIR`)

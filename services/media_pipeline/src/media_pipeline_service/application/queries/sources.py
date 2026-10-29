@@ -25,3 +25,13 @@ class ListSources:
             sources = await uow.sources.list_for_item(media_item_id)
         ordered = sorted(sources, key=lambda s: (s.kind.value, s.position, s.created_at, s.id))
         return [SourceListView.of(s) for s in ordered]
+
+    async def unattributed(self, *, limit: int, after_id: UUID | None) -> list[SourceListView]:
+        """Файловые исходники без источника или лицензии по всем единицам (ADR 0072).
+
+        Страницы — по ``id`` (uuid7, то есть по времени создания): ``after_id`` — последний
+        ``source_media_id`` предыдущей страницы.
+        """
+        async with self._uow() as uow:
+            sources = await uow.sources.list_unattributed(limit=limit, after_id=after_id)
+        return [SourceListView.of(s) for s in sources]
