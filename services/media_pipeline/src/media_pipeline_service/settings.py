@@ -53,6 +53,10 @@ class MediaSettings(BaseModel):
     fetch_timeout_s: float = Field(default=20.0, gt=0)
     max_image_pixels: int = Field(default=40_000_000, ge=1_000)
     poster_max_width: int = Field(default=720, ge=64, le=4096)
+    # Обложка (ADR 0073): свои, более строгие лимиты, чем у остальных изображений.
+    cover_max_mb: int = Field(default=5, ge=1, le=50)
+    cover_min_side_px: int = Field(default=200, ge=1, le=4096)
+    cover_max_side_px: int = Field(default=4096, ge=64, le=16_384)
     webp_quality: int = Field(default=80, ge=1, le=100)
     # None — встроенный media_pipeline_service/config/asset_profiles.yaml.
     profiles_path: Path | None = None

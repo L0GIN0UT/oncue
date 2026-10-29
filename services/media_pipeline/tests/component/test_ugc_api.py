@@ -48,6 +48,7 @@ async def ugc_client(media: Any) -> AsyncIterator[Client]:
                 list_sets=media.list_sets,
                 list_profiles=media.list_profiles,
                 list_sources=media.list_sources,
+                get_source_preview=media.get_source_preview,
                 submit_package=media.submit_package,
                 get_package=media.get_package,
                 ugc=media.ugc,

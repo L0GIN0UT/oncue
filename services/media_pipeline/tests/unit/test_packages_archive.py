@@ -304,7 +304,7 @@ def test_manifest_rejects_bad_items(item: dict[str, Any]) -> None:
 
 def test_manifest_unknown_role_and_file_budget() -> None:
     with pytest.raises(PackageRejectedError) as exc:
-        parse_manifest(manifest(files=[{"role": "cover", "path": "c.jpg"}]), max_files=10)
+        parse_manifest(manifest(files=[{"role": "banner", "path": "c.jpg"}]), max_files=10)
     assert exc.value.code == "package.role_unknown"
     many = manifest(files=[{"role": "frame", "path": f"{i}.jpg"} for i in range(11)])
     with pytest.raises(PackageRejectedError) as exc:

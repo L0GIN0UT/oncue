@@ -139,11 +139,13 @@ class RoundAssets:
     Attributes:
         asset: Набор загадки (``None`` — ассетов нет, раунд аннулируется).
         reveal: Набор ревила другого типа (``clue.reveal``, ADR 0026) или ``None``.
+        artwork: Набор картинки ответа (обложка, постер; ADR 0073) или ``None``.
         shown: Наборы подачи показанных единиц.
     """
 
     asset: AssetRef | None
     reveal: AssetRef | None = None
+    artwork: AssetRef | None = None
     shown: Mapping[UUID, AssetRef] = field(default_factory=dict)
 
 
@@ -166,6 +168,7 @@ class Round:
         choice: Выбранный вариант (формат ``pick``).
         stage: Этап раунда для UI (тур сетки) или ``None``.
         reveal_asset: Набор ревила другого типа или ``None``.
+        artwork_asset: Набор картинки ответа (ADR 0073) или ``None``.
     """
 
     index: int
@@ -182,6 +185,7 @@ class Round:
     choice: str | None = None
     stage: int | None = None
     reveal_asset: AssetRef | None = None
+    artwork_asset: AssetRef | None = None
 
     @property
     def finished(self) -> bool:
@@ -473,6 +477,7 @@ class GameSession(AggregateRoot[UUID]):
             options=planned.options,
             stage=stage,
             reveal_asset=assets.reveal,
+            artwork_asset=assets.artwork,
         )
         if assets.asset is None:
             r.state = kernel_round.void(r.state)

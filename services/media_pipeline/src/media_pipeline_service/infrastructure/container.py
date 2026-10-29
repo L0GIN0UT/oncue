@@ -51,6 +51,7 @@ from media_pipeline_service.application.commands.ugc import (
     UgcUseCases,
 )
 from media_pipeline_service.application.generators import (
+    ArtworkGenerator,
     AudioBlackoutGenerator,
     AudioIntroGenerator,
     AudioReverseGenerator,
@@ -77,7 +78,7 @@ from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 from media_pipeline_service.application.queries.packages import GetPackage
 from media_pipeline_service.application.queries.profiles import ListProfiles
-from media_pipeline_service.application.queries.sources import ListSources
+from media_pipeline_service.application.queries.sources import GetSourcePreview, ListSources
 from media_pipeline_service.application.queries.ugc import GetUgcImage, ListUgcQueue
 from media_pipeline_service.application.sources import SourceIngestor
 from media_pipeline_service.domain.links import LinkPolicy
@@ -88,7 +89,7 @@ from media_pipeline_service.infrastructure.config import load_profiles, load_ugc
 from media_pipeline_service.infrastructure.db.repositories import SqlMediaUnitOfWork
 from media_pipeline_service.infrastructure.fetcher import HttpSourceFetcher
 from media_pipeline_service.infrastructure.ffmpeg import FfmpegTranscoder
-from media_pipeline_service.infrastructure.images import PillowImageProcessor
+from media_pipeline_service.infrastructure.images import CoverNormalizer, PillowImageProcessor
 from media_pipeline_service.infrastructure.links import (
     NginxSecureLinkSigner,
     RedisLinkRateLimiter,
@@ -198,6 +199,7 @@ class MediaContainer:
                 FrameProgressiveGenerator(a.images),
                 FrameSequenceGenerator(a.images),
                 PosterMaskedGenerator(a.images, max_width=self.settings.media.poster_max_width),
+                ArtworkGenerator(a.images),
                 DescriptionGenerator(),
                 EmojiGenerator(),
             ]
@@ -239,9 +241,15 @@ class MediaContainer:
                 SourceKind.AUDIO_CLIP: a.transcoder,
                 SourceKind.FRAME: a.images,
                 SourceKind.POSTER: a.images,
+                SourceKind.COVER: CoverNormalizer(
+                    a.images,
+                    min_side_px=self.settings.media.cover_min_side_px,
+                    max_side_px=self.settings.media.cover_max_side_px,
+                ),
             },
             a.tokens,
             max_bytes=self.settings.media.max_source_mb * _MB,
+            kind_max_bytes={SourceKind.COVER: self.settings.media.cover_max_mb * _MB},
         )
 
     # ------------------------------------------------------------------ use-cases
@@ -442,6 +450,15 @@ class MediaContainer:
     def list_sources(self) -> ListSources:
         """Исходники единицы (admin)."""
         return ListSources(self.uow_factory())
+
+    @cached_property
+    def get_source_preview(self) -> GetSourcePreview:
+        """Просмотр картинки исходника (admin)."""
+        return GetSourcePreview(
+            self.uow_factory(),
+            self.adapters.storage,
+            max_bytes=self.settings.media.max_source_mb * _MB,
+        )
 
     @cached_property
     def ugc_catalog(self) -> UgcCatalog:

@@ -217,7 +217,8 @@
               "frame",
               "poster",
               "soundtrack",
-              "audio_clip"
+              "audio_clip",
+              "cover"
             ],
             "title": "Kind",
             "type": "string"
@@ -769,6 +770,7 @@
           "poster",
           "soundtrack",
           "audio_clip",
+          "cover",
           "text"
         ],
         "title": "SourceKind",
@@ -2159,7 +2161,7 @@
             "description": "Зависимость временно недоступна"
           }
         },
-        "summary": "Загрузить исходник (аудио, кадр, постер, саундтрек, звук фильма) для единицы",
+        "summary": "Загрузить исходник (аудио, кадр, постер, обложка, саундтрек, звук) для единицы",
         "tags": [
           "admin"
         ]
@@ -2296,6 +2298,96 @@
           }
         },
         "summary": "Изменить порядок исходника",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/sources/{source_media_id}/preview": {
+      "get": {
+        "description": "Нормализованная копия читается из хранилища по ключу сервиса, адресов S3 в ответе нет. Заголовки: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`. Нет исходника, он не изображение, не готов или принадлежит сборнику - 404 `source.not_found`.",
+        "operationId": "source_preview_admin_v1_sources__source_media_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_media_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Media Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Изображение (PNG: нормализованная копия исходника)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Картинка каталожного исходника (обложка, постер, кадр)",
         "tags": [
           "admin"
         ]

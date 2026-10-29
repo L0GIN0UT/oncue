@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -37,6 +38,20 @@ class GameSettings(BaseModel):
     bootstrap_interval_s: float = Field(default=3600.0, gt=0)
     # Ссылка в тексте «Поделиться» (D14); пусто — без ссылки.
     share_url: str = ""
+    # Картинка ответа (ADR 0073): домен -> параметры профиля ``artwork`` media-pipeline. Должны
+    # совпадать с asset_profiles.yaml (contract-тест сверяет с golden-хэшами): по хэшу game
+    # находит готовый набор в проекции. Домена нет в словаре - у ревила ``artwork: null``.
+    artwork_profiles: dict[str, dict[str, Any]] = Field(
+        default_factory=lambda: {
+            "music": {"source_kinds": ["cover"], "width": 600, "height": 600, "fit": "cover"},
+            "film": {
+                "source_kinds": ["poster", "frame"],
+                "width": 600,
+                "height": 900,
+                "fit": "cover",
+            },
+        }
+    )
     # Ссылки ревила кэшируются в процессе до истечения минус этот запас.
     reveal_link_margin_s: float = Field(default=10.0, ge=0)
     reveal_cache_size: int = Field(default=10000, ge=100)

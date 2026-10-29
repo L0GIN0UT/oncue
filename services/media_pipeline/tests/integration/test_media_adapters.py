@@ -18,7 +18,7 @@ from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import ImageOps
 from media_pipeline_service.domain.clues import MaskRegion
 from media_pipeline_service.infrastructure.ffmpeg import FfmpegTranscoder
-from media_pipeline_service.infrastructure.images import PillowImageProcessor
+from media_pipeline_service.infrastructure.images import CoverNormalizer, PillowImageProcessor
 from PIL import Image, ImageDraw
 
 pytestmark = pytest.mark.integration
@@ -278,3 +278,84 @@ async def test_reverse_level_is_reversed_and_lacks_later_audio(two_tone_mp3: byt
     assert _goertzel(head, 3000) > 5 * _goertzel(head, 440)
     assert _goertzel(tail, 440) > 5 * _goertzel(tail, 3000)
     assert _goertzel(forward[:quarter], 440) > 5 * _goertzel(forward[:quarter], 3000)
+
+
+# ------------------------------------------------------- картинка ответа и обложка (ADR 0073)
+def _image_bytes(size: tuple[int, int], fmt: str, **save: object) -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", size, (200, 30, 30)).save(out, format=fmt, **save)
+    return out.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("fit", "size", "expected"),
+    [
+        ("cover", (800, 600), (600, 900)),  # заполнить рамку, лишнее обрезается
+        ("contain", (800, 600), (600, 450)),  # вписать целиком, пропорции сохранены
+        ("cover", (300, 300), (600, 900)),  # маленький исходник растягивается до рамки
+    ],
+)
+async def test_render_into_frame(
+    processor: PillowImageProcessor, fit: str, size: tuple[int, int], expected: tuple[int, int]
+) -> None:
+    rendered = await processor.render(
+        _image_bytes(size, "PNG"),
+        ImageOps(max_width=600, height=900, fit=fit),  # type: ignore[arg-type]
+    )
+    assert (rendered.width, rendered.height) == expected
+    assert rendered.mime == "image/webp"
+
+
+def _cover(min_side: int = 200, max_side: int = 4096) -> CoverNormalizer:
+    return CoverNormalizer(
+        PillowImageProcessor(max_pixels=40_000_000), min_side_px=min_side, max_side_px=max_side
+    )
+
+
+async def test_cover_normalizer_accepts_normal_image_and_strips_metadata() -> None:
+    result = await _cover().normalize(_jpeg_with_exif())
+    assert result.data.startswith(b"\x89PNG")
+    assert b"SECRET" not in result.data
+
+
+@pytest.mark.parametrize(
+    ("data", "code"),
+    [
+        (_image_bytes((100, 300), "PNG"), "source.side_out_of_range"),  # меньше минимума
+        (_image_bytes((5000, 300), "PNG"), "source.side_out_of_range"),  # больше максимума
+        (b"\x89PNG\r\n\x1a\n" + bytes(64), "source.undecodable"),  # усечённый PNG
+        (b"GIF89a" + bytes(40), "source.undecodable"),  # формат вне списка
+        (b"<svg xmlns='http://www.w3.org/2000/svg'/>", "source.undecodable"),
+    ],
+)
+async def test_cover_normalizer_rejects(data: bytes, code: str) -> None:
+    with pytest.raises(GenerationError) as exc:
+        await _cover().normalize(data)
+    assert (exc.value.code, exc.value.retryable) == (code, False)
+
+
+async def test_cover_normalizer_rejects_animation() -> None:
+    frames = [Image.new("RGB", (300, 300), c) for c in ((255, 0, 0), (0, 255, 0))]
+    out = io.BytesIO()
+    frames[0].save(out, format="WEBP", save_all=True, append_images=frames[1:], duration=100)
+    with pytest.raises(GenerationError) as exc:
+        await _cover().normalize(out.getvalue())
+    assert exc.value.code == "source.animated"
+
+
+async def test_cover_normalizer_rejects_decompression_bomb() -> None:
+    # 30000×30000 одноцветный 1-битный PNG: файл крошечный, а пикселей больше предела Pillow.
+    out = io.BytesIO()
+    Image.new("1", (30_000, 30_000)).save(out, format="PNG")
+    assert len(out.getvalue()) < 1_000_000
+    with pytest.raises(GenerationError) as exc:
+        await _cover().normalize(out.getvalue())
+    assert (exc.value.code, exc.value.retryable) == ("source.undecodable", False)
+
+
+async def test_cover_normalizer_checks_sides_by_header() -> None:
+    out = io.BytesIO()
+    Image.new("1", (20_000, 50)).save(out, format="PNG")
+    with pytest.raises(GenerationError) as exc:
+        await _cover().normalize(out.getvalue())
+    assert exc.value.code == "source.side_out_of_range"

@@ -208,6 +208,14 @@ class FinalClue(BaseModel):
     mime: str
 
 
+class Artwork(BaseModel):
+    """Картинка ответа: обложка альбома трека или постер фильма (ADR 0073)."""
+
+    url: str
+    expires_at: datetime
+    mime: str
+
+
 class Reveal(BaseModel):
     """Ответ раунда — только у завершённого раунда."""
 
@@ -219,6 +227,13 @@ class Reveal(BaseModel):
         default=None, description="Метрика сравнения загаданной единицы («больше/меньше»)"
     )
     final_clue: FinalClue
+    artwork: Artwork | None = Field(
+        default=None,
+        description=(
+            "Обложка (трек) или постер (фильм); null, если картинки нет или она временно "
+            "недоступна - заглушку рисует клиент"
+        ),
+    )
 
 
 class ShownItem(BaseModel):

@@ -284,3 +284,117 @@ def test_without_upload_perm_forms_are_hidden_and_forbidden(
     assert response.status_code == 403
     assert not route.called
     assert not AuditEntry.objects.exists()
+
+
+# ------------------------------------------------------------------ обложка (ADR 0073)
+PNG = b"\x89PNG\r\n\x1a\n" + b"pixels"
+
+
+def test_cover_is_offered_and_uploaded_with_normalized_file_name(
+    client: Any, login: Any, catalog: Any, media: Any
+) -> None:
+    login()
+    _open(catalog, media)
+    page = client.get(f"/catalog/items/{ITEM}/").content.decode()
+    assert 'value="cover"' in page
+    route = media.route("POST", "/admin/v1/sources").respond(201, json=_uploaded("cover"))
+    hostile = SimpleUploadedFile(
+        "../../etc/pass wd?.jpg", b"\xff\xd8jpg", content_type="image/jpeg"
+    )
+    client.post(
+        f"/catalog/items/{ITEM}/sources/",
+        _form(kind="cover", position="1", file=hostile),
+        follow=True,
+    )
+    body = route.calls.last.request.content
+    assert b'name="kind"\r\n\r\ncover\r\n' in body
+    assert b'filename="pass_wd_.jpg"' in body
+    assert b"etc" not in body.split(b'name="file"')[1].split(b"\r\n")[0]
+    entry = AuditEntry.objects.get(action="media.upload_source")
+    assert entry.after is not None and entry.after["kind"] == "cover"
+
+
+def test_cover_above_its_own_limit_is_rejected_before_media(
+    client: Any, login: Any, catalog: Any, media: Any, settings: Any
+) -> None:
+    settings.GV_COVER_MAX_MB = 1
+    login()
+    _open(catalog, media)
+    route = media.route("POST", "/admin/v1/sources").respond(201, json=_uploaded("cover"))
+    big = SimpleUploadedFile(
+        "c.jpg", b"\xff\xd8" + bytes(1024 * 1024 + 1), content_type="image/jpeg"
+    )
+    response = client.post(f"/catalog/items/{ITEM}/sources/", _form(kind="cover", file=big))
+    assert response.status_code == 400
+    assert "обложка больше 1 МБ" in response.content.decode()
+    assert not route.called
+    # у других видов тот же размер проходит (общий предел больше)
+    ok = SimpleUploadedFile(
+        "f.jpg", b"\xff\xd8" + bytes(1024 * 1024 + 1), content_type="image/jpeg"
+    )
+    media.route("POST", "/admin/v1/sources").respond(201, json=_uploaded("frame"))
+    assert (
+        client.post(f"/catalog/items/{ITEM}/sources/", _form(kind="frame", file=ok)).status_code
+        == 302
+    )
+
+
+def test_ready_image_sources_show_preview_through_proxy(
+    client: Any, login: Any, catalog: Any, media: Any
+) -> None:
+    login()
+    cover, audio = uuid7(), uuid7()
+    _open(catalog, media, [_listed(cover, 1, "cover"), _listed(audio, 1, "audio")])
+    page = client.get(f"/catalog/items/{ITEM}/").content.decode()
+    assert f'src="/catalog/sources/{cover}/preview/"' in page
+    assert f"/catalog/sources/{audio}/preview/" not in page
+    assert "http" not in page.split('<img src="/catalog/sources/', 1)[1].split(">", 1)[0]
+
+
+def test_source_preview_proxy_streams_bytes_with_safe_headers(
+    client: Any, login: Any, media: Any
+) -> None:
+    login()
+    route = media.route("GET", f"/admin/v1/sources/{SOURCE}/preview").respond(
+        200, content=PNG, headers={"Content-Type": "image/png"}
+    )
+    response = client.get(f"/catalog/sources/{SOURCE}/preview/")
+    assert response.status_code == 200
+    assert response.content == PNG and response["Content-Type"] == "image/png"
+    assert "no-store" in response["Cache-Control"]
+    assert response["X-Content-Type-Options"] == "nosniff"
+    assert "authorization" not in {k.lower() for k in response.headers}
+    assert route.call_count == 1
+    assert not AuditEntry.objects.exists()  # миниатюры не аудируются
+
+
+@pytest.mark.parametrize(("upstream", "expected"), [(404, 404), (503, 503), (500, 502)])
+def test_source_preview_proxy_maps_service_failures(
+    client: Any, login: Any, media: Any, upstream: int, expected: int
+) -> None:
+    login()
+    media.route("GET", f"/admin/v1/sources/{SOURCE}/preview").respond(
+        upstream,
+        json={"type": "about:blank", "code": "source.not_found", "title": "x", "status": upstream},
+    )
+    response = client.get(f"/catalog/sources/{SOURCE}/preview/")
+    assert response.status_code == expected
+
+
+def test_source_preview_rejects_wrong_content_type_from_service(
+    client: Any, login: Any, media: Any
+) -> None:
+    login()
+    media.route("GET", f"/admin/v1/sources/{SOURCE}/preview").respond(
+        200, content=b"<html>", headers={"Content-Type": "text/html"}
+    )
+    assert client.get(f"/catalog/sources/{SOURCE}/preview/").status_code == 502
+
+
+def test_source_preview_requires_login(client: Any, media: Any) -> None:
+    route = media.route("GET", f"/admin/v1/sources/{SOURCE}/preview").respond(
+        200, content=PNG, headers={"Content-Type": "image/png"}
+    )
+    response = client.get(f"/catalog/sources/{SOURCE}/preview/")
+    assert response.status_code == 302 and "/login/" in response["Location"]
+    assert not route.called

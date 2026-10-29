@@ -26,9 +26,11 @@ import httpx
 import pytest
 import respx
 import sqlalchemy as sa
+import yaml
 from media_pipeline_service.application.dto import GENERATE_TASK, PACKAGE_TASK
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import StorageArea
+from media_pipeline_service.infrastructure.config import read_profiles_document
 from media_pipeline_service.infrastructure.container import MediaAdapters
 from media_pipeline_service.infrastructure.db.tables import TABLES
 from media_pipeline_service.infrastructure.fetcher import HttpSourceFetcher
@@ -150,9 +152,17 @@ async def service(
     """Сервис на реальной инфраструктуре.
 
     ``indirect``-параметры: ``{"redis_down": True}`` — лимитер ссылок смотрит в недоступный
-    Redis; ``{"environment": "production"}`` — окружение сервиса (по умолчанию ``ci``).
+    Redis; ``{"environment": "production"}`` — окружение сервиса (по умолчанию ``ci``);
+    ``{"with_artwork": True}`` — со встроенными профилями ``artwork`` (по умолчанию они убраны,
+    чтобы счёт наборов в остальных тестах не зависел от картинки ответа).
     """
     options: dict[str, Any] = getattr(request, "param", {})
+    profiles_path = None
+    if not options.get("with_artwork"):
+        document = read_profiles_document()
+        document["profiles"] = [p for p in document["profiles"] if p["clue_type"] != "artwork"]
+        profiles_path = request.getfixturevalue("tmp_path") / "asset_profiles.yaml"
+        profiles_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
     assert DEFINITION.migrations_path is not None
     await apply_migrations(database_url, DEFINITION.migrations_path)
     suffix = uuid7().hex[-12:]
@@ -174,6 +184,7 @@ async def service(
             max_upload_mb=1,
             package_max_archive_mb=options.get("package_max_archive_mb", 1024),
             package_max_ratio=options.get("package_max_ratio", 100),
+            profiles_path=profiles_path,
         ),
     )
     runtime = await Infrastructure.open(settings, TABLES)
@@ -261,6 +272,32 @@ async def _ready_poster(service: Service) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------- события → ассеты → ссылки
+@pytest.mark.parametrize("service", [{"with_artwork": True}], indirect=True)
+async def test_film_poster_also_builds_artwork_and_issues_its_link(service: Service) -> None:
+    """Картинка ответа (ADR 0073): постер фильма даёт одноуровневый набор ``artwork`` 600×900."""
+    created = load_example("catalog.MediaItemCreated", fresh_id=False)
+    assert await service.deliver(created) is Outcome.PROCESSED
+    assert await service.run_tasks() == 2  # poster_masked + artwork
+    item_id = created.payload["media_item_id"]
+    response = await service.client.get(
+        "/internal/v1/asset-sets", params={"media_item_id": item_id}
+    )
+    by_type = {s["clue_type"]: s for s in response.json()}
+    assert set(by_type) == {"poster_masked", "artwork"}
+    artwork = by_type["artwork"]
+    assert (artwork["status"], artwork["levels_count"]) == ("ready", 1)
+    ready = [e for e in await service.outbox() if e.event_type == "media_pipeline.AssetsReady"]
+    assert {e.payload["clue_type"] for e in ready} == {"poster_masked", "artwork"}
+    for event in ready:
+        assert_event_matches_schema(event)
+    link = await service.client.post(
+        "/internal/v1/asset-links",
+        json={"asset_set_id": artwork["asset_set_id"], "level": 1, "subject": "game:1"},
+    )
+    assert link.status_code == 200, link.text
+    assert link.json()["mime"] == "image/webp"
+
+
 async def test_created_event_to_assets_ready_and_signed_link(service: Service) -> None:
     asset_set = await _ready_poster(service)
     created = load_example("catalog.MediaItemCreated", fresh_id=False)

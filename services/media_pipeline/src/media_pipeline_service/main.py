@@ -12,6 +12,7 @@ from gv_service import Infrastructure, PeriodicJob, ServiceDefinition, ServiceSe
 from media_pipeline_service.api.admin import build_admin_router
 from media_pipeline_service.api.internal import build_internal_router
 from media_pipeline_service.api.public import build_public_router
+from media_pipeline_service.domain.sources import SourceKind
 from media_pipeline_service.infrastructure import jobs, messaging
 from media_pipeline_service.infrastructure.container import MediaAdapters, container_for
 from media_pipeline_service.infrastructure.db.tables import TABLES
@@ -35,10 +36,12 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
             list_sets=c.list_sets,
             list_profiles=c.list_profiles,
             list_sources=c.list_sources,
+            get_source_preview=c.get_source_preview,
             submit_package=c.submit_package,
             get_package=c.get_package,
             ugc=c.ugc,
             max_upload_bytes=c.settings.media.max_upload_mb * _MB,
+            kind_upload_limits={SourceKind.COVER: c.settings.media.cover_max_mb * _MB},
         ),
     ]
 

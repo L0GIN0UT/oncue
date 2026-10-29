@@ -143,3 +143,24 @@ profiles:
       levels:
         - { seconds: 4 }
         - { seconds: 15 }
+
+  # Картинка ответа (ревил раунда, ADR 0073): одна картинка нужного размера. Параметры совпадают
+  # с contracts/clues/params_hash.golden.json (profile:artwork:*); game держит такие же в
+  # GV_GAME__ARTWORK_PROFILES. Порядок source_kinds — приоритет видов исходника.
+  - clue_type: artwork
+    profile_key: default
+    domains: [music]
+    params:
+      source_kinds: [cover]
+      width: 600
+      height: 600
+      fit: cover
+
+  - clue_type: artwork
+    profile_key: film
+    domains: [film]
+    params:
+      source_kinds: [poster, frame]
+      width: 600
+      height: 900
+      fit: cover

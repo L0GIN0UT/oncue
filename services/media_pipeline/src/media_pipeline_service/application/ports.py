@@ -151,6 +151,10 @@ class ImageOps:
         blur_px: Радиус гауссова размытия в пикселях результата.
         pixel_block: Размер блока пикселизации (1 — без пикселизации).
         mask_regions: Закрашиваемые области (доли сторон исходного кадра).
+        height: Высота результата для картинки ответа (``artwork``): вместе с ``max_width``
+            задаёт рамку ``max_width`` × ``height``; ``None`` — только ограничение ширины.
+        fit: Как вписать в рамку: ``cover`` — заполнить и обрезать по центру, ``contain`` —
+            вписать целиком.
     """
 
     max_width: int
@@ -158,6 +162,8 @@ class ImageOps:
     blur_px: float = 0.0
     pixel_block: int = 1
     mask_regions: tuple[MaskRegion, ...] = ()
+    height: int | None = None
+    fit: Literal["cover", "contain"] = "contain"
 
 
 @dataclass(frozen=True, slots=True)

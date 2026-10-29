@@ -38,6 +38,11 @@ class ClueParams(BaseModel):
         """Число уровней."""
         raise NotImplementedError
 
+    def source_kind_names(self) -> tuple[str, ...]:
+        """Виды исходников, которые профиль принимает вместо вида генератора (по умолчанию
+        пусто: тогда нужен только вид генератора)."""
+        return ()
+
 
 class AudioIntroLevel(BaseModel):
     """Уровень ``audio_intro``: длина отрывка с начала (от ``start_s``)."""
@@ -260,3 +265,36 @@ class EmojiParams(ClueParams):
         if any(b <= a for a, b in pairwise(explicit)):
             raise ValueError("emoji: count должен строго расти по уровням")
         return self
+
+
+# ---------------------------------------------------------------- картинка ответа (ADR 0073)
+ArtworkSourceKind = Literal["cover", "poster", "frame"]
+ArtworkFit = Literal["cover", "contain"]
+
+
+class ArtworkParams(ClueParams):
+    """Параметры ``artwork``: одна картинка ответа без уровней.
+
+    Исходник — первый найденный вид из ``source_kinds`` (у фильма без постера — кадр);
+    размер и способ вписывания — из конфига профиля.
+    """
+
+    source_kinds: tuple[ArtworkSourceKind, ...] = Field(min_length=1, max_length=3)
+    width: int = Field(ge=64, le=2048)
+    height: int = Field(ge=64, le=2048)
+    fit: ArtworkFit
+
+    @property
+    def levels_count(self) -> int:
+        """Всегда один «уровень»."""
+        return 1
+
+    @model_validator(mode="after")
+    def _unique_kinds(self) -> Self:
+        if len(set(self.source_kinds)) != len(self.source_kinds):
+            raise ValueError("artwork: виды исходников не должны повторяться")
+        return self
+
+    def source_kind_names(self) -> tuple[str, ...]:
+        """Виды исходников, которые принимает профиль."""
+        return self.source_kinds

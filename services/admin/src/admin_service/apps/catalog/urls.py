@@ -16,6 +16,7 @@ urlpatterns = [
     path("items/<uuid:item_id>/aliases/", views.item_aliases, name="aliases"),
     path("items/<uuid:item_id>/sources/", views.source_upload, name="upload"),
     path("items/<uuid:item_id>/sources/position/", views.source_position, name="position"),
+    path("sources/<uuid:source_id>/preview/", views.source_preview, name="source_preview"),
     path("items/<uuid:item_id>/clue-texts/", views.clue_texts, name="clue_texts"),
     path("items/<uuid:item_id>/clue-texts/save/", views.clue_texts_save, name="clue_texts_save"),
     path(

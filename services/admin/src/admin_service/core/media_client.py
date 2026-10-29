@@ -9,11 +9,15 @@ from __future__ import annotations
 from typing import IO, Any
 from uuid import UUID
 
+from django.conf import settings
+
 from admin_service.core.service_client import ServiceClient
 
 MEDIA = "media_pipeline"
 _SOURCES = "/admin/v1/sources"
 UGC_PREVIEW_TYPE = "image/webp"
+# Нормализованная копия исходника-изображения (ADR 0073): media хранит PNG.
+SOURCE_PREVIEW_TYPE = "image/png"
 UGC_PREVIEW_MAX_BYTES = 5 * 1024 * 1024
 """Потолок тела предпросмотра (лимиты назначений media - до 1,5 МБ)."""
 
@@ -106,6 +110,14 @@ class MediaAdminClient:
     def ugc_settings(self) -> Any:
         """Настройки модерации → ``{purposes, reasons[{code, title}]}``."""
         return self._client.get("/admin/v1/ugc-images/settings")
+
+    def source_preview(self, source_media_id: UUID) -> bytes:
+        """Байты PNG каталожного исходника-изображения (обложка, постер, кадр)."""
+        return self._client.get_bytes(
+            f"/admin/v1/sources/{source_media_id}/preview",
+            accept=SOURCE_PREVIEW_TYPE,
+            max_bytes=int(settings.GV_MAX_UPLOAD_MB) * 1024 * 1024,
+        )
 
     def ugc_preview(self, asset_id: UUID) -> bytes:
         """Байты WebP ``pending``-изображения (ADR 0061); ссылок и адресов S3 нет."""

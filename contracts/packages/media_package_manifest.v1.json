@@ -2,7 +2,7 @@
   "$id": "urn:guessverse:contracts:packages:media_package_manifest:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "manifest.json в корне zip-архива пакетной загрузки исходников (POST /admin/v1/packages, media-pipeline). Метаданные записей каталога в манифесте не нужны: пакет несёт только файлы к уже существующим единицам. Источник и лицензия необязательны (ADR 0072).",
+  "description": "manifest.json в корне zip-архива пакетной загрузки исходников (POST /admin/v1/packages, media-pipeline). Метаданные записей каталога в манифесте не нужны: пакет несёт только файлы к уже существующим единицам. Источник и лицензия необязательны (ADR 0072). Формат 1.1: роль cover.",
   "properties": {
     "items": {
       "items": {
@@ -25,13 +25,14 @@
                   "type": "integer"
                 },
                 "role": {
-                  "description": "Вид исходника (source_media.kind). Новые виды добавляются в enum новой минорной версией",
+                  "description": "Вид исходника (source_media.kind). Новые виды добавляются в enum новой минорной версией формата (1.1: cover — обложка альбома трека; поле version остаётся 1)",
                   "enum": [
                     "audio",
                     "frame",
                     "poster",
                     "soundtrack",
-                    "audio_clip"
+                    "audio_clip",
+                    "cover"
                   ],
                   "type": "string"
                 }

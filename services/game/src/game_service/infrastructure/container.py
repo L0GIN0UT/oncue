@@ -12,6 +12,7 @@ from functools import cached_property
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from game_service.application.artwork import ArtworkProfiles
 from game_service.application.catalog import ModeCatalog
 from game_service.application.commands.daily import (
     DailySetAdmin,
@@ -235,6 +236,7 @@ class GameContainer:
             assets=self.adapters.assets,
             limiter=self.adapters.limiter,
             presenter=self.presenter,
+            artwork=ArtworkProfiles(self.settings.game.artwork_profiles),
             limits=PlayLimits(
                 guess_per_min=lim.guess_per_min,
                 clue_per_min=lim.clue_per_min,

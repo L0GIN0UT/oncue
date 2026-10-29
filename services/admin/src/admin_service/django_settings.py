@@ -197,6 +197,7 @@ GV_SERVICE_URLS = dict(GV.admin.service_urls)
 GV_SERVICE_TIMEOUT_S = GV.admin.service_timeout_s
 GV_IP_ALLOWLIST = list(GV.effective_ip_allowlist)
 GV_MAX_UPLOAD_MB = GV.admin.max_upload_mb
+GV_COVER_MAX_MB = GV.admin.cover_max_mb
 GV_SHOP_MEDIA_MAX_BYTES = GV.admin.shop_media_max_bytes
 GV_MODE_CONFIG_MAX_BYTES = GV.admin.mode_config_max_bytes
 GV_DAILY_TIMEZONE = GV.admin.daily_timezone

@@ -28,12 +28,13 @@ from game_service.domain.projection import CatalogItem
 from game_service.domain.session import GameSession, Round
 from game_service.domain.share import share_text
 from gv_core.clock import Clock
-from gv_core.errors import GoneError
+from gv_core.errors import DependencyUnavailableError, GoneError, RateLimitedError
 from gv_game_kernel import AssetPort, AssetRef, ClueView, ModeEngine, RoundOutcome, RoundResult
 
 log = structlog.get_logger(__name__)
 
 REVEAL = "reveal"
+ARTWORK = "artwork"
 """Тег кэша: ассет ревила раунда."""
 
 
@@ -189,6 +190,29 @@ class SessionPresenter:
             log.warning("game.reveal_gone", session_id=str(session.id), round=r.index)
             return None
 
+    async def artwork(self, session: GameSession, r: Round) -> Json | None:
+        """Картинка ответа завершённого раунда (обложка, постер) или ``None``.
+
+        Недоступность картинки (нет набора, единица заблокирована, media недоступен, лимит
+        выдачи) ревил не ломает: поле ``artwork`` остаётся ``null``, заглушку рисует клиент.
+        """
+        if r.artwork_asset is None:
+            return None
+        view = self._cache.get(session.id, r.index, ARTWORK)
+        if view is None:
+            try:
+                link = await self._assets.link(r.artwork_asset, 1, subject_of(session.id))
+            except (GoneError, DependencyUnavailableError, RateLimitedError):
+                log.warning("game.artwork_unavailable", session_id=str(session.id), round=r.index)
+                return None
+            view = ClueView(level=1, kind="image", asset=link)
+            self._cache.put(session.id, r.index, view, ARTWORK)
+        return {
+            "url": view.asset.url,
+            "expires_at": iso(view.asset.expires_at),
+            "mime": view.asset.mime,
+        }
+
     async def _shown_clue(
         self,
         session: GameSession,
@@ -228,6 +252,7 @@ class SessionPresenter:
             "persons": [{"name": p.name, "role": p.role} for p in item.persons],
             "metric": rules.engine.metric_of(item.to_ref()),
             "final_clue": asset_json(view),
+            "artwork": await self.artwork(session, r),
         }
 
     def _status(self, session: GameSession, r: Round) -> str:

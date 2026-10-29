@@ -37,7 +37,7 @@ def test_example_is_valid_and_parses() -> None:
     assert not list(validator().iter_errors(example()))
     manifest = parse_manifest(json.dumps(example()).encode(), max_files=100)
     assert [i.key for i in manifest.items] == ["track:fma-123", "film:tmdb-550"]
-    assert manifest.file_count == 4
+    assert manifest.file_count == 5
 
 
 def test_roles_in_schema_match_service_roles() -> None:
@@ -65,7 +65,7 @@ def _mutations() -> list[tuple[str, Any]]:
         ("bad_origin", mutate(lambda d: d["items"][0].update(origin="catalog"))),
         ("bad_uuid", mutate(lambda d: d["items"][0].update(media_item_id="nope"))),
         ("no_files", mutate(lambda d: d["items"][0].update(files=[]))),
-        ("bad_role", mutate(lambda d: d["items"][0]["files"][0].update(role="cover"))),
+        ("bad_role", mutate(lambda d: d["items"][0]["files"][0].update(role="banner"))),
         ("position0", mutate(lambda d: d["items"][1]["files"][1].update(position=0))),
         ("extra_file", mutate(lambda d: d["items"][0]["files"][0].update(extra=1))),
         ("long_license", mutate(lambda d: d["items"][0].update(license_note="x" * 501))),

@@ -1091,6 +1091,7 @@ def _round_json(r: Round) -> dict[str, Any]:
         "choice": r.choice,
         "stage": r.stage,
         "reveal_asset": _asset_json(r.reveal_asset),
+        "artwork_asset": _asset_json(r.artwork_asset),
     }
 
 
@@ -1114,6 +1115,7 @@ def _round_of(r: dict[str, Any]) -> Round:
         choice=r.get("choice"),
         stage=r.get("stage"),
         reveal_asset=_asset_of(r.get("reveal_asset")),
+        artwork_asset=_asset_of(r.get("artwork_asset")),
     )
 
 

@@ -74,7 +74,7 @@ source_media = Table(
     Column("scope_kind", String(16), nullable=True),
     Column("scope_id", Uuid, nullable=True),
     CheckConstraint(
-        "kind IN ('audio', 'frame', 'poster', 'soundtrack', 'audio_clip', 'text')",
+        "kind IN ('audio', 'frame', 'poster', 'soundtrack', 'audio_clip', 'text', 'cover')",
         name="kind_valid",
     ),
     CheckConstraint(

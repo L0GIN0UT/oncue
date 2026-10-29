@@ -67,6 +67,12 @@ class AssetProfile:
         """Число уровней профиля."""
         return self.params.levels_count
 
+    @property
+    def accepted_kinds(self) -> frozenset[SourceKind]:
+        """Виды исходников, из которых профиль строит набор (параметры могут задать несколько)."""
+        names = self.params.source_kind_names()
+        return frozenset(SourceKind(n) for n in names) if names else frozenset({self.source_kind})
+
     def params_json(self) -> dict[str, Any]:
         """Параметры как JSON-объект (для хранения и хэша)."""
         if self.raw_params is not None:

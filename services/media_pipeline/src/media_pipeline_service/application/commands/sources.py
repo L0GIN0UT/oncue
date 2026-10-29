@@ -223,7 +223,7 @@ class UploadSource:
         if state.is_blocked:
             raise ConflictError("единица заблокирована", code="media_item.blocked")
         if state.domain is None or not any(
-            p.source_kind is kind for p in await self._profiles.for_domain(uow, state.domain)
+            kind in p.accepted_kinds for p in await self._profiles.for_domain(uow, state.domain)
         ):
             raise InvalidInputError(
                 f"исходник вида {kind.value} не используется для домена единицы",

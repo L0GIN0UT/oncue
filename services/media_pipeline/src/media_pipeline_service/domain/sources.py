@@ -22,6 +22,8 @@ class SourceKind(StrEnum):
     POSTER = "poster"
     SOUNDTRACK = "soundtrack"
     AUDIO_CLIP = "audio_clip"
+    # Обложка альбома трека (ADR 0073); у фильма картинку ответа даёт постер или кадр.
+    COVER = "cover"
     # Тексты загадок (ADR 0024): содержимое приходит в событии catalog, а не файлом.
     TEXT = "text"
 
@@ -91,6 +93,7 @@ FAMILY_BY_KIND: dict[SourceKind, MediaFamily] = {
     SourceKind.POSTER: MediaFamily.IMAGE,
     SourceKind.SOUNDTRACK: MediaFamily.AUDIO,
     SourceKind.AUDIO_CLIP: MediaFamily.AUDIO,
+    SourceKind.COVER: MediaFamily.IMAGE,
     SourceKind.TEXT: MediaFamily.TEXT,
 }
 

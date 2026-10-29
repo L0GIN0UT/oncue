@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from media_pipeline_service.application.dto import SourceListView
-from media_pipeline_service.application.ports import UnitOfWorkFactory
+from media_pipeline_service.application.ports import ObjectStorage, StorageArea, UnitOfWorkFactory
+from media_pipeline_service.domain.errors import SourceNotFoundError
+from media_pipeline_service.domain.sources import FAMILY_BY_KIND, MediaFamily, SourceStatus
 
 
 class ListSources:
@@ -35,3 +38,46 @@ class ListSources:
         async with self._uow() as uow:
             sources = await uow.sources.list_unattributed(limit=limit, after_id=after_id)
         return [SourceListView.of(s) for s in sources]
+
+
+@dataclass(frozen=True, slots=True)
+class SourcePreview:
+    """Содержимое исходника-изображения для просмотра в админке."""
+
+    data: bytes
+    content_type: str
+
+
+class GetSourcePreview:
+    """Картинка каталожного исходника (обложка, постер, кадр) для админки.
+
+    Читается нормализованная копия из бакета исходников по ключу из БД: адресов S3 в ответе нет.
+    Не изображение, не готовый и «чужой» (scope сборника) исходники недоступны — 404.
+    """
+
+    def __init__(self, uow: UnitOfWorkFactory, storage: ObjectStorage, *, max_bytes: int) -> None:
+        self._uow = uow
+        self._storage = storage
+        self._max_bytes = max_bytes
+
+    async def execute(self, source_id: UUID) -> SourcePreview:
+        """Прочитать картинку.
+
+        Raises:
+            SourceNotFoundError: нет исходника, он не изображение, не готов или принадлежит
+                сборнику.
+        """
+        async with self._uow() as uow:
+            source = await uow.sources.get(source_id)
+        if (
+            source is None
+            or source.scope is not None
+            or source.status is not SourceStatus.READY
+            or FAMILY_BY_KIND[source.kind] is not MediaFamily.IMAGE
+            or source.object_key is None
+        ):
+            raise SourceNotFoundError("исходник не найден")
+        data = await self._storage.get(
+            StorageArea.SOURCES, source.object_key, max_bytes=self._max_bytes
+        )
+        return SourcePreview(data=data, content_type=source.mime or "image/png")

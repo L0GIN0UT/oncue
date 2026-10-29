@@ -28,6 +28,7 @@ from uuid import UUID
 
 import structlog
 
+from game_service.application.artwork import ARTWORK_CLUE_TYPE, ArtworkProfiles
 from game_service.application.catalog import ModeCatalog
 from game_service.application.commands.daily import ScheduleDailySets
 from game_service.application.ports import GameUnitOfWork, Json, RateLimiter, UnitOfWorkFactory
@@ -200,7 +201,9 @@ class PlayService:
         limiter: RateLimiter,
         presenter: SessionPresenter,
         limits: PlayLimits,
+        artwork: ArtworkProfiles | None = None,
     ) -> None:
+        self._artwork = artwork or ArtworkProfiles({})
         self._uow = uow
         self._clock = clock
         self._random = random
@@ -496,6 +499,8 @@ class PlayService:
         rules: ModeRules,
         planned: PlannedRound,
         scope: UUID | None = None,
+        *,
+        domain: str,
     ) -> RoundAssets:
         """Наборы раунда; ``scope`` — сборник сессии: его свой набор первым (ADR 0029)."""
         ids = [planned.target, *planned.shown]
@@ -509,10 +514,19 @@ class PlayService:
                 [planned.target], reveal_for.clue_type, reveal_for.params_hash, scope=scope
             )
             reveal = found[planned.target].to_ref() if planned.target in found else None
+        artwork = None
+        artwork_hash = self._artwork.params_hash(domain)
+        if artwork_hash is not None:
+            # Картинка ответа — всегда каталожная (своих у сборников нет, ADR 0073).
+            found = await uow.projection.ready_assets(
+                [planned.target], ARTWORK_CLUE_TYPE, artwork_hash
+            )
+            artwork = found[planned.target].to_ref() if planned.target in found else None
         target = ready.get(planned.target)
         return RoundAssets(
             asset=target.to_ref() if target is not None else None,
             reveal=reveal,
+            artwork=artwork,
             shown={i: ready[i].to_ref() for i in planned.shown if i in ready},
         )
 
@@ -551,7 +565,9 @@ class PlayService:
                 session.complete(now)
                 break
             session.materialize_next(
-                await self._round_assets(uow, rules, planned, session.collection_id),
+                await self._round_assets(
+                    uow, rules, planned, session.collection_id, domain=session.domain
+                ),
                 levels_count=rules.levels_count,
                 max_points=rules.round_max,
                 stage=rules.engine.round_stage(len(session.rounds)),
