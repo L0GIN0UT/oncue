@@ -64,6 +64,7 @@ ignore = [
 "**/tests/**" = ["S101", "S311", "PLR2004", "ARG001", "ARG002", "FBT001", "S105", "S106"]
 "tools/gv/**" = ["T201", "S603", "S607", "FBT001", "FBT002"]  # typer: bool-опции — норма
 "libs/testkit/**" = ["S101"]
+"seeds/media/fetch_*.py" = ["T201", "S310", "PLR2004", "TRY300", "BLE001", "RUF100", "B905"]  # разовые выгрузки для local
 
 [tool.ruff.lint.isort]
 known-first-party = ["gv_*"]

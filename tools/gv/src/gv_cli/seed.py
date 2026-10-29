@@ -598,12 +598,16 @@ class Seeder:
             self._echo(f"seed: импорт {file_id}")
             resp = self._catalog.post(
                 "/admin/v1/imports",
-                headers={"Idempotency-Key": f"seed-import-{stem}"},
+                headers={"Idempotency-Key": self._import_key(stem, file_id)},
                 json={"source": "file", "file_id": file_id, "reason": REASON},
             )
             self._check(resp, {200, 202}, f"импорт {file_id}")
             import_id = str(resp.json()["import_id"])
             self._wait_import(import_id, file_id)
+
+    def _import_key(self, stem: str, file_id: str) -> str:  # noqa: ARG002 — для переопределения
+        """Ключ идемпотентности импорта файла (у файла с меняющимся содержимым - свой)."""
+        return f"seed-import-{stem}"
 
     def _wait_import(self, import_id: str, file_id: str) -> None:
         def check() -> bool:
@@ -636,7 +640,7 @@ class Seeder:
             check,
             timeout_s=self._cfg.import_timeout_s,
             what="появление единиц каталога",
-            on_timeout=lambda: f"не найдены единицы: {sorted(expected - set(seen))}",
+            on_timeout=lambda: _missing_summary(expected - set(seen)),
         )
         return {key: seen[key] for key in expected}
 
@@ -698,15 +702,24 @@ class Seeder:
         for seed_key, ref in sorted(items.items()):
             self._wait_assets(ref.media_item_id, seed_key)
 
-    def _upload_one(self, media_item_id: str, seed_key: str, spec: SourceSpec, path: Path) -> None:
+    def _upload_one(
+        self,
+        media_item_id: str,
+        seed_key: str,
+        spec: SourceSpec,
+        path: Path,
+        *,
+        origin: str = SOURCE_ORIGIN,
+        license_note: str = LICENSE_NOTE,
+    ) -> None:
         slug = seed_key.replace(":", "-")
         key = f"seed-source-{slug}-{spec.kind}-{spec.position}"
         data = {
             "media_item_id": media_item_id,
             "kind": spec.kind,
             "position": str(spec.position),
-            "origin": SOURCE_ORIGIN,
-            "license_note": LICENSE_NOTE,
+            "origin": origin,
+            "license_note": license_note,
             "reason": REASON,
         }
 
@@ -1683,6 +1696,12 @@ def _publish_errors(resp: httpx.Response) -> list[dict[str, Any]]:
         return []
     errors = (body.get("details") or {}).get("errors") or []
     return [e for e in errors if isinstance(e, dict)]
+
+
+def _missing_summary(missing: Iterable[str], shown: int = 10) -> str:
+    """Короткая сводка недостающих ключей: всего и первые ``shown``."""
+    ordered = sorted(missing)
+    return f"не найдены единицы ({len(ordered)}): {ordered[:shown]}"
 
 
 def _jsonl_keys(path: Path) -> set[str]:
