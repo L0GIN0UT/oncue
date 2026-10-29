@@ -121,11 +121,12 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 | `GV_PUBLIC_ORIGINS` | identity, game | JSON-массив Origin веб-клиента (dev — `["https://localhost"]`): только с них принимаются мутации по cookie (CSRF) |
 | `GV_JWT__SIGNING_KEYS` | identity | JSON `[{kid, private_pem, active}]`; `gv dev secrets` генерирует Ed25519-ключ. Пусто — временный ключ (только local/ci) |
 | `GV_GAME__DAILY_SEED_SECRET` | game | Секрет розыгрыша наборов дня; без него compose не стартует |
-| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin, match / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
+| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin, match, bff_web / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
 | `CENTRIFUGO_API_KEY` | Centrifugo, match | Ключ server API; match получает его как `GV_REALTIME__API_KEY` (identity — нет) |
 | `CENTRIFUGO_TOKEN_HMAC_SECRET` | Centrifugo, identity | Секрет connection-токенов (`GV_REALTIME__CONNECTION_TOKEN_SECRET` у identity) |
 | `CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET` | Centrifugo, match | Секрет subscription-токенов каналов комнат (`GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET` у match); **обязан отличаться** от секрета connection-токенов, секреты ≥ 32 символов |
 | `CENTRIFUGO_ALLOWED_ORIGINS` | Centrifugo | Origin веб-клиента (dev — `https://localhost`); без него compose не стартует |
+| `GV_SERVICE_SECRET_BFF_WEB` | bff_web | Секрет сервисного токена bff_web для `progression /internal/v1/levels` (область `levels.read`); его sha256 — в `GV_SERVICE_CLIENTS` identity (запись `bff_web` генерирует `gv gen`) |
 | `GV_SERVICE_SECRET_MATCH` | match | Секрет сервисного токена match для game и media-pipeline; его sha256 — в `GV_SERVICE_CLIENTS` identity |
 
 **Онлайн (этап 4a).**
