@@ -19,7 +19,6 @@ from game_service.api.public.schemas import (
     ClueOut,
     ClueRequest,
     CollectionModeOut,
-    DailyResultOut,
     DailyStatus,
     Domain,
     GiveUpRequest,
@@ -50,8 +49,6 @@ SessionId = Annotated[UUID, Path(description="Идентификатор сес�
 RoundIndex = Annotated[int, Path(ge=0, le=MAX_ROUND_INDEX, description="Номер раунда с 0")]
 PathModeKey = Annotated[ModeKey, Path(description="Ключ режима")]
 MODES_CACHE = "public, max-age=30"
-MAX_DAILY_RESULTS_USERS = 100
-"""Жёсткий предел схемы; рабочий — `GV_GAME__DAILY_RESULTS_MAX_USERS` (422)."""
 
 
 class ServiceMeta(BaseModel):
@@ -351,33 +348,5 @@ def build_public_router(c: ApiServices) -> APIRouter:
         return [
             DailyStatus.model_validate(d) for d in await c.queries.daily(player_of(subject), domain)
         ]
-
-    @router.get(
-        "/daily/results",
-        response_model=list[DailyResultOut],
-        summary="Результаты дейлика игроков в текущем периоде",
-        description=(
-            "Для bff (друзья на главной и в итогах дейлика): завершённые дейлики перечисленных "
-            "пользователей в ТЕКУЩЕМ периоде (`day` режима), только очки; прошлых периодов, "
-            "ответов и гостей нет, игроки без завершённой попытки не возвращаются. "
-            "Кого можно показывать зрителю, решает вызывающий по данным social (game дружбы не "
-            "знает): ручка только для пользователей с аккаунтом (гость — 403 "
-            "`auth.guest_forbidden`), не больше `GV_GAME__DAILY_RESULTS_MAX_USERS` игроков "
-            "(422 `game.too_many_users`, `details.given/max`), лимит "
-            "`GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN` на пользователя (429). Учитываются режимы с "
-            "типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES` (по умолчанию `daily`)."
-        ),
-        responses=problem_responses(401, 403, 422, 429, 503),
-    )
-    async def daily_results(
-        subject: User,
-        user_ids: Annotated[
-            list[UUID],
-            Query(min_length=1, max_length=MAX_DAILY_RESULTS_USERS, description="Игроки"),
-        ],
-        domain: Annotated[Domain | None, Query()] = None,
-    ) -> list[DailyResultOut]:
-        rows = await c.queries.daily_results(player_of(subject), user_ids, domain)
-        return [DailyResultOut.model_validate(r) for r in rows]
 
     return router

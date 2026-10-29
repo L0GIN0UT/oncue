@@ -511,17 +511,6 @@ class PlayabilityOut(BaseModel):
     playable_ids: list[UUID]
 
 
-class DailyResultOut(BaseModel):
-    """Завершённый дейлик одного игрока в текущем периоде (по режиму)."""
-
-    user_id: UUID
-    mode_key: str
-    domain: Domain
-    day: date = Field(description="Начало периода набора")
-    score: int = Field(ge=0)
-    max_score: int = Field(ge=0)
-
-
 class DailyStatus(BaseModel):
     """Статус дейлика для текущего субъекта (гость или пользователь)."""
 

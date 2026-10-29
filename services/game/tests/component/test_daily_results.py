@@ -1,4 +1,5 @@
-"""Результаты дейлика игроков в текущем периоде (``GET /v1/daily/results``) и признаки итога."""
+"""Результаты дейлика игроков в текущем периоде (``GET /internal/v1/daily/results``, сервисный
+токен bff_web) и признаки дейлика в итоге."""
 
 from __future__ import annotations
 
@@ -38,11 +39,21 @@ async def finish_daily(game: Any, token: str, *, hit_first: bool) -> dict[str, A
     return await play_out(game, token, snap)
 
 
-async def results(game: Any, token: str, ids: list[UUID], **params: str) -> httpx.Response:
+PATH = "/internal/v1/daily/results"
+
+
+def service(game: Any, scopes: tuple[str, ...] = ("daily.results",), audience: str = "game") -> str:
+    """Сервисный токен bff_web (по умолчанию — с областью ``daily.results`` для game)."""
+    return str(game.issuer.issue_service("bff_web", audience, scopes))
+
+
+async def results(
+    game: Any, ids: list[UUID], token: str | None = None, **params: str
+) -> httpx.Response:
     response: httpx.Response = await game.client.get(
-        "/v1/daily/results",
+        PATH,
         params=[("user_ids", str(i)) for i in ids] + list(params.items()),
-        headers=bearer(token),
+        headers=bearer(token or service(game)),
     )
     return response
 
@@ -56,8 +67,7 @@ async def test_returns_only_finished_users_of_current_period(game: Any) -> None:
     guest = game.issuer.issue_guest()
     await finish_daily(game, guest, hit_first=False)
 
-    viewer = game.issuer.issue()
-    response = await results(game, viewer, [winner, loser, active, silent])
+    response = await results(game, [winner, loser, active, silent])
 
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == "no-store"
@@ -78,41 +88,52 @@ async def test_domain_filter_and_next_period_are_empty(game: Any) -> None:
     await prepared(game)
     player = uuid7()
     await finish_daily(game, game.issuer.issue(user_id=player), hit_first=True)
-    viewer = game.issuer.issue()
 
-    assert len((await results(game, viewer, [player], domain="music")).json()) == 1
-    assert (await results(game, viewer, [player], domain="film")).json() == []
+    assert len((await results(game, [player], domain="music")).json()) == 1
+    assert (await results(game, [player], domain="film")).json() == []
 
     # Наступил следующий период: вчерашние очки чужих игроков не отдаются.
     game.clock.advance(timedelta(days=1))
-    assert (await results(game, viewer, [player])).json() == []
+    assert (await results(game, [player])).json() == []
 
 
-async def test_guest_and_anonymous_are_rejected(game: Any) -> None:
+async def test_only_service_token_with_daily_results_scope_is_accepted(game: Any) -> None:
     ids = [uuid7()]
-    guest = await results(game, game.issuer.issue_guest(), ids)
-    assert_problem(guest, 403, "auth.guest_forbidden")
-    anonymous = await game.client.get(
-        "/v1/daily/results", params=[("user_ids", str(i)) for i in ids]
-    )
+    params = [("user_ids", str(i)) for i in ids]
+    anonymous = await game.client.get(PATH, params=params)
     assert_problem(anonymous, 401, "auth.unauthenticated")
+    # Пользовательский JWT (в том числе гостя) и токен другому сервису - 401.
+    for token in (
+        game.issuer.issue(),
+        game.issuer.issue_guest(),
+        service(game, audience="media_pipeline"),
+    ):
+        response = await game.client.get(PATH, params=params, headers=bearer(token))
+        assert response.status_code == 401, response.text
+    # Сервисный токен game без нужной области - 403.
+    no_scope = await results(game, ids, service(game, scopes=("rounds.plan",)))
+    assert_problem(no_scope, 403, "auth.forbidden")
+    # Публичной ручки нет.
+    public = await game.client.get(
+        "/v1/daily/results", params=params, headers=bearer(game.issuer.issue())
+    )
+    assert public.status_code == 404
 
 
 async def test_user_ids_are_capped(game: Any) -> None:
-    viewer = game.issuer.issue()
-    over_setting = await results(game, viewer, [uuid7() for _ in range(51)])
+    over_setting = await results(game, [uuid7() for _ in range(51)])
     assert_problem(over_setting, 422, "game.too_many_users")
     assert over_setting.json()["details"] == {"given": 51, "max": 50}
-    over_schema = await results(game, viewer, [uuid7() for _ in range(101)])
+    over_schema = await results(game, [uuid7() for _ in range(101)])
     assert over_schema.status_code == 422
-    assert (await results(game, viewer, [])).status_code == 422
+    assert (await results(game, [])).status_code == 422
 
 
 async def test_duplicate_ids_do_not_count_against_cap(game: Any) -> None:
     await prepared(game)
     player = uuid7()
     await finish_daily(game, game.issuer.issue(user_id=player), hit_first=True)
-    response = await results(game, game.issuer.issue(), [player] * 60)
+    response = await results(game, [player] * 60)
     assert response.status_code == 200, response.text
     assert len(response.json()) == 1
 

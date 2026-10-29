@@ -5504,6 +5504,146 @@
         ]
       }
     },
+    "/internal/v1/daily/results": {
+      "get": {
+        "description": "Для bff_web (друзья на главной и в итогах дейлика): завершённые дейлики перечисленных пользователей в ТЕКУЩЕМ периоде (`day` режима), только очки; прошлых периодов, ответов и гостей нет, игроки без завершённой попытки не возвращаются. Сервисный токен с областью `daily.results` (audience = game): game дружбы не знает, кого показывать зрителю, решает bff по данным social. Не больше `GV_GAME__DAILY_RESULTS_MAX_USERS` игроков (422 `game.too_many_users`, `details.given/max`), лимит `GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN` на клиента (429). Режимы — с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES`.",
+        "operationId": "daily_results_internal_v1_daily_results_get",
+        "parameters": [
+          {
+            "description": "Игроки",
+            "in": "query",
+            "name": "user_ids",
+            "required": true,
+            "schema": {
+              "description": "Игроки",
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "User Ids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "music",
+                    "film"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DailyResultOut"
+                  },
+                  "title": "Response Daily Results Internal V1 Daily Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Результаты дейлика игроков в текущем периоде",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
     "/internal/v1/modes/{mode_key}/versions/{version}": {
       "get": {
         "description": "Для проверки шаблона и переопределений лобби в match; версии неизменяемы (кэшируется вызывающим без срока). Ошибки: 404 `game.mode_not_found` (нет такой опубликованной или архивной версии).",
@@ -5918,146 +6058,6 @@
           }
         },
         "summary": "Дейлики текущего субъекта",
-        "tags": [
-          "game"
-        ]
-      }
-    },
-    "/v1/daily/results": {
-      "get": {
-        "description": "Для bff (друзья на главной и в итогах дейлика): завершённые дейлики перечисленных пользователей в ТЕКУЩЕМ периоде (`day` режима), только очки; прошлых периодов, ответов и гостей нет, игроки без завершённой попытки не возвращаются. Кого можно показывать зрителю, решает вызывающий по данным social (game дружбы не знает): ручка только для пользователей с аккаунтом (гость — 403 `auth.guest_forbidden`), не больше `GV_GAME__DAILY_RESULTS_MAX_USERS` игроков (422 `game.too_many_users`, `details.given/max`), лимит `GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN` на пользователя (429). Учитываются режимы с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES` (по умолчанию `daily`).",
-        "operationId": "daily_results_v1_daily_results_get",
-        "parameters": [
-          {
-            "description": "Игроки",
-            "in": "query",
-            "name": "user_ids",
-            "required": true,
-            "schema": {
-              "description": "Игроки",
-              "items": {
-                "format": "uuid",
-                "type": "string"
-              },
-              "maxItems": 100,
-              "minItems": 1,
-              "title": "User Ids",
-              "type": "array"
-            }
-          },
-          {
-            "in": "query",
-            "name": "domain",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "music",
-                    "film"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Domain"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/DailyResultOut"
-                  },
-                  "title": "Response Daily Results V1 Daily Results Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Не аутентифицирован"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Недостаточно прав"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Некорректные данные"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Слишком много запросов"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Зависимость временно недоступна"
-          }
-        },
-        "summary": "Результаты дейлика игроков в текущем периоде",
         "tags": [
           "game"
         ]

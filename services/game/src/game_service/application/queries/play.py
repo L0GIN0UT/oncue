@@ -120,7 +120,7 @@ class PlayQueries:
         subjects_per_min: int,
         playability_per_min: int = 30,
         candidate_limit: int = 5000,
-        daily_results_per_min: int = 60,
+        daily_results_per_min: int = 600,
         daily_results_max_users: int = 50,
         daily_results_source_types: frozenset[str] = frozenset({"daily"}),
     ) -> None:
@@ -222,16 +222,16 @@ class PlayQueries:
         return result
 
     async def daily_results(
-        self, player: Player, user_ids: Sequence[UUID], domain: str | None
+        self, caller: str, user_ids: Sequence[UUID], domain: str | None
     ) -> list[Json]:
         """Завершённые дейлики ТЕКУЩЕГО периода у перечисленных пользователей.
 
         Только очки (``score``/``max_score``) по режимам с типом Source из настройки
         ``daily_results_source_types``: прошлых периодов, ответов, ходов и гостей здесь нет.
         Кому показывать чужие очки (друзья, приватность статистики), решает вызывающий
-        (bff по данным social): game дружбы не знает, поэтому ручка ограничена пользователем с
-        аккаунтом, потолком игроков и лимитом частоты. Игроки без завершённой попытки в
-        ответ не попадают. Гостя отсекает слой API (``require_user``).
+        (bff по данным social): game дружбы не знает, поэтому ручка internal — только по
+        сервисному токену с областью ``daily.results`` (``caller`` — клиент токена), с потолком
+        игроков и лимитом частоты. Игроки без завершённой попытки в ответ не попадают.
 
         Raises:
             TooManyUsersError: игроков больше ``daily_results_max_users`` (422).
@@ -245,7 +245,7 @@ class PlayQueries:
             )
         await self._limiter.hit(
             "daily_results",
-            str(player.actor_id),
+            caller,
             limit=self._daily_results_per_min,
             window_s=60,
         )
