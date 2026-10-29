@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -119,6 +119,10 @@ class ProgressRepository(Protocol):
 
     async def get(self, user_id: UUID) -> ProgressRow | None:
         """Прогресс без блокировки."""
+        ...
+
+    async def many(self, user_ids: Sequence[UUID]) -> list[ProgressRow]:
+        """Прогресс пачки игроков без блокировки (отсутствующие строки не возвращаются)."""
         ...
 
     async def save(self, row: ProgressRow) -> None:

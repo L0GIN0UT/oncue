@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
 from gv_core.clock import Clock
-from gv_core.errors import NotFoundError
+from gv_core.errors import InvalidInputError, NotFoundError, RateLimitedError
 from progression_service.application.accrual.common import published_config
 from progression_service.application.boosts import BoostState, boost_state
 from progression_service.application.ports import UnitOfWorkFactory
+from progression_service.application.ports.shop import AttemptLimiter
 from progression_service.domain import levels
 from progression_service.domain.ledger import Bucket, Entry
 
@@ -71,13 +73,88 @@ class WalletView:
     recent: tuple[Entry, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class PlayerLevelView:
+    """Уровень игрока для internal-пачки (без персональных данных)."""
+
+    user_id: UUID
+    level: int
+    xp_in_level: int
+
+
+class TooManyUsersError(InvalidInputError):
+    """В пачке уровней больше игроков, чем ``GV_PROGRESSION__LEVELS_MAX_USERS``."""
+
+    default_code = "progression.too_many_users"
+
+
+class LevelsRateLimitedError(RateLimitedError):
+    """Клиент запрашивает уровни слишком часто (``GV_PROGRESSION__LEVELS_PER_MIN``)."""
+
+    default_code = "progression.levels_rate_limited"
+
+
+LEVELS_WINDOW_S = 60
+"""Окно лимита пачек уровней."""
+
+
 class ProgressQueries:
     """Чтение прогресса и кошелька."""
 
-    def __init__(self, uow: UnitOfWorkFactory, clock: Clock, *, recent_limit: int) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWorkFactory,
+        clock: Clock,
+        *,
+        recent_limit: int,
+        limiter: AttemptLimiter | None = None,
+        levels_max_users: int = 50,
+        levels_per_min: int = 600,
+    ) -> None:
         self._uow = uow
         self._clock = clock
         self._recent_limit = recent_limit
+        self._limiter = limiter
+        self._levels_max_users = levels_max_users
+        self._levels_per_min = levels_per_min
+
+    async def levels(self, caller: str, user_ids: Sequence[UUID]) -> list[PlayerLevelView]:
+        """Уровни игроков пачкой (internal, сервисный токен ``bff_web``).
+
+        Дубли схлопываются (порядок первого вхождения). Скрытый профиль пропускается; игрок
+        без строки прогресса — уровень 1 (как в ``my_progress``). Журналы не читаются.
+
+        Raises:
+            TooManyUsersError: уникальных игроков больше ``levels_max_users`` (422).
+            LevelsRateLimitedError: больше ``levels_per_min`` пачек в минуту от клиента.
+            DependencyUnavailableError: лимитер недоступен (fail-closed).
+            ConfigUnavailableError: нет опубликованного конфига.
+        """
+        unique = list(dict.fromkeys(user_ids))
+        if len(unique) > self._levels_max_users:
+            raise TooManyUsersError(
+                "слишком много игроков в запросе",
+                details={"given": len(unique), "max": self._levels_max_users},
+            )
+        if self._limiter is not None:
+            window = await self._limiter.hit(f"levels:{caller}", LEVELS_WINDOW_S)
+            if window.count > self._levels_per_min:
+                raise LevelsRateLimitedError(
+                    "слишком частые запросы уровней", details={"retry_after": window.resets_in_s}
+                )
+        async with self._uow() as uow:
+            cfg = (await published_config(uow)).config
+            rows = {r.user_id: r for r in await uow.progress.many(unique)}
+        result: list[PlayerLevelView] = []
+        for user_id in unique:
+            row = rows.get(user_id)
+            if row is not None and row.hidden:
+                continue
+            pos = levels.progress(
+                cfg.levels, row.total_xp if row else 0, floor_level=row.level if row else 1
+            )
+            result.append(PlayerLevelView(user_id, pos.level, pos.xp_in_level))
+        return result
 
     async def my_progress(self, user_id: UUID) -> ProgressView:
         """Прогресс игрока; у того, кто ещё ничего не получал, — первый уровень.
