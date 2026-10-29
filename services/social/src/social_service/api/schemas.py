@@ -51,6 +51,12 @@ class FriendList(BaseModel):
     total: int = Field(ge=0)
 
 
+class OnlineCount(BaseModel):
+    """Игроки с аккаунтом онлайн (гости не считаются)."""
+
+    count: int = Field(ge=0)
+
+
 class FriendRequestCreate(_Request):
     """Заявка по нику, коду добавления или id игрока (ровно одно поле)."""
 
