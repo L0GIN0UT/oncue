@@ -9,6 +9,7 @@ body:
     - key: pumpkin
       number: 1
       title: Тыква
+      task_i18n: event.halloween.pumpkin.task
       diary_before: Тыква прячется на главной.
       diary_after: Тыква нашлась и ухмыльнулась.
       x_pct: 20
@@ -19,6 +20,7 @@ body:
     - key: ghost_rounds
       number: 2
       title: Призрак раундов
+      task_i18n: event.halloween.ghost_rounds.task
       diary_before: Призрак появляется после десяти сыгранных раундов.
       diary_after: Призрак наигрался и исчез.
       x_pct: 45
@@ -30,6 +32,7 @@ body:
     - key: bat_top
       number: 3
       title: Летучая мышь
+      task_i18n: event.halloween.bat_top.task
       diary_before: Мышь висит под таблицей лидеров.
       diary_after: Мышь взмахнула крыльями.
       x_pct: 70
@@ -40,6 +43,7 @@ body:
     - key: witch_cauldron
       number: 4
       title: Котёл ведьмы
+      task_i18n: event.halloween.witch_cauldron.task
       diary_before: Котёл закипит, когда найдены все остальные находки.
       diary_after: Зелье сварено.
       x_pct: 85

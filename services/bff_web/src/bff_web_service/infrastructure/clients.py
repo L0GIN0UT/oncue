@@ -1768,6 +1768,7 @@ class _EventFindIn(_In):
     play_page: str | None = None
     trigger: _FindTriggerIn
     found_at: datetime | None = None
+    task_i18n: str | None = None
 
     def dto(self) -> EventFindCard:
         t = self.trigger
@@ -1784,6 +1785,7 @@ class _EventFindIn(_In):
             self.play_page,
             EventFindTriggerCard(t.type, t.page_key, t.metric, t.progress, t.target, t.period),
             self.found_at,
+            self.task_i18n,
         )
 
 

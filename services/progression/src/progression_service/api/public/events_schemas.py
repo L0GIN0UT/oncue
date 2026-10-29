@@ -81,6 +81,10 @@ class EventFind(BaseModel):
     reward: FindReward
     play_page: str | None = Field(description="Раздел для кнопки «играть»")
     trigger: FindTrigger
+    task_i18n: str | None = Field(
+        default=None,
+        description="Ключ i18n текста задания («что сделать»); null - задания нет",
+    )
     found_at: datetime | None
 
 

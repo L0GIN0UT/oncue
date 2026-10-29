@@ -433,6 +433,10 @@ class EventFindCard(BaseModel):
     play_page: str | None = None
     trigger: EventFindTriggerCard
     found_at: datetime | None = None
+    task_i18n: str | None = Field(
+        default=None,
+        description="Ключ i18n текста задания («что сделать»); null - задания нет",
+    )
 
 
 class EventPageView(BaseModel):

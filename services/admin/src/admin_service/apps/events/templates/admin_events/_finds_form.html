@@ -36,6 +36,8 @@
     <p><label>Ключ <input type="text" name="f{{ r.i }}_key" value="{{ r.v.key }}" maxlength="64"></label></p>
     {% if r.err.title %}<ul class="errorlist"><li>{{ r.err.title }}</li></ul>{% endif %}
     <p><label>Название <input type="text" name="f{{ r.i }}_title" value="{{ r.v.title }}" maxlength="120" size="50"></label></p>
+    {% if r.err.task_i18n %}<ul class="errorlist"><li>{{ r.err.task_i18n }}</li></ul>{% endif %}
+    <p><label>Задание (ключ i18n) <input type="text" name="f{{ r.i }}_task_i18n" value="{{ r.v.task_i18n }}" maxlength="200" size="50" placeholder="event.name.find.task"></label></p>
     {% if r.err.diary_before %}<ul class="errorlist"><li>{{ r.err.diary_before }}</li></ul>{% endif %}
     <p><label>Дневник до<br><textarea name="f{{ r.i }}_diary_before" rows="2" cols="80">{{ r.v.diary_before }}</textarea></label></p>
     {% if r.err.diary_after %}<ul class="errorlist"><li>{{ r.err.diary_after }}</li></ul>{% endif %}

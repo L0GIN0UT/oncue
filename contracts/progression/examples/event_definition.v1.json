@@ -7,6 +7,7 @@
       "key": "first_leaf",
       "number": 1,
       "title": "Первый лист",
+      "task_i18n": "event.autumn_grove.first_leaf.task",
       "diary_before": "Где-то на главной шуршит лист.",
       "diary_after": "Лист найден: он был спрятан у входа.",
       "x_pct": 12.5,

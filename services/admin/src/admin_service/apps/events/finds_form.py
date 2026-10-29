@@ -52,6 +52,7 @@ MAX_FINDS = 20
 MIN_FINDS = 2
 MAX_ROWS = 50  # сколько строк форма вообще разбирает (защита от раздутого POST)
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_I18N_RE = re.compile(r"^[a-z0-9_]+(\.[a-z0-9_]+)+$")
 _THEME_RE = re.compile(r"^([a-z][a-z0-9_-]*)?$")
 _TAG_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _SLOT_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -61,6 +62,7 @@ ROW_FIELDS = (
     "src",
     "key",
     "title",
+    "task_i18n",
     "diary_before",
     "diary_after",
     "x_pct",
@@ -144,6 +146,7 @@ def row_from_find(find: Any, src: int) -> Row:
         "src": str(src),
         "key": _text(f.get("key")),
         "title": _text(f.get("title")),
+        "task_i18n": _text(f.get("task_i18n")),
         "diary_before": _text(f.get("diary_before")),
         "diary_after": _text(f.get("diary_after")),
         "x_pct": _text(f.get("x_pct")),
@@ -307,6 +310,10 @@ def _find(row: Row, number: int, base: dict[str, Any]) -> dict[str, Any]:
         },
         "final": bool(row.get("final")),
     }
+    if row["task_i18n"]:
+        find["task_i18n"] = row["task_i18n"]
+    else:
+        find.pop("task_i18n", None)
     if row["play_page"]:
         find["play_page"] = row["play_page"]
     else:
@@ -431,6 +438,12 @@ def _row_errors(row: Row) -> dict[str, str]:
         errors["key"] = "ключ: a-z, цифры, _, начинается с буквы, до 64 символов"
     if not 1 <= len(row["title"]) <= 120:
         errors["title"] = "название: 1-120 символов"
+    if row["task_i18n"] and not (
+        len(row["task_i18n"]) <= 200 and _I18N_RE.fullmatch(row["task_i18n"])
+    ):
+        errors["task_i18n"] = (
+            "ключ i18n: a-z, цифры, _, части через точку (event.name.task), до 200 символов"
+        )
     for name in ("diary_before", "diary_after"):
         if len(row[name]) > 1000:
             errors[name] = "до 1000 символов"

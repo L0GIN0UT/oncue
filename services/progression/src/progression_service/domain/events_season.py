@@ -283,6 +283,7 @@ class FindDef:
     final: bool
     play_page: str | None
     trigger: Trigger
+    task_i18n: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +346,7 @@ def parse_definition(body: Mapping[str, Any]) -> Definition:
                     final=bool(f["final"]),
                     play_page=f.get("play_page"),
                     trigger=_trigger(f["trigger"]),
+                    task_i18n=f.get("task_i18n"),
                 )
                 for f in body["finds"]
             ),

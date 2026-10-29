@@ -18,6 +18,7 @@ from progression_service.api.public.events_schemas import EventKey, RunStatus, T
 
 Slug = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=64)]
 SlotKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]*$", max_length=32)]
+I18nKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]+(\.[a-z0-9_]+)+$", max_length=200)]
 ItemKey = Annotated[str, StringConstraints(max_length=64)]
 TagKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,31}$")]
 """Ключ тега сборника - как `TagKey` в collections (ADR 0067)."""
@@ -107,6 +108,7 @@ class FindDefinition(_Strict):
     key: Slug
     number: int = Field(ge=1, le=20)
     title: str = Field(min_length=1, max_length=120)
+    task_i18n: I18nKey | None = None
     diary_before: str = Field(max_length=1000)
     diary_after: str = Field(max_length=1000)
     x_pct: float = Field(ge=0, le=100)

@@ -81,9 +81,11 @@ class EventKit:
         final: bool = False,
         xp: int = 10,
         verses: int = 5,
+        task_i18n: str | None = None,
     ) -> dict[str, Any]:
         """Находка определения (по умолчанию - спрятанный элемент на главной)."""
         return {
+            **({"task_i18n": task_i18n} if task_i18n else {}),
             "key": key,
             "number": number,
             "title": f"Находка {key}",

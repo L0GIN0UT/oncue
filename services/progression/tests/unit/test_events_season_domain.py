@@ -94,6 +94,14 @@ def test_parse_sorts_finds_by_number_and_reads_reward() -> None:
     assert [f.key for f in definition.server_finds()] == ["b"]
 
 
+def test_parse_reads_optional_task_i18n() -> None:
+    raw = sample()
+    raw["finds"][1]["task_i18n"] = "event.sample.a.task"
+    finds = {f.key: f for f in parse_definition(raw).finds}
+    assert finds["a"].task_i18n == "event.sample.a.task"
+    assert finds["b"].task_i18n is None
+
+
 def test_valid_definition_has_no_errors() -> None:
     assert definition_errors(parse_definition(sample()), slot_keys={"frame"}) == []
 

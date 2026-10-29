@@ -1454,6 +1454,7 @@ class EventFindCard:
     play_page: str | None
     trigger: EventFindTriggerCard
     found_at: datetime | None
+    task_i18n: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

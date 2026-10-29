@@ -2535,6 +2535,7 @@ EVENT_FIND = {
     "diary": "Нашёл снеговика",
     "reward": {"xp": 50, "verses": 5},
     "play_page": "solo",
+    "task_i18n": "event.winter.snowman.task",
     "trigger": {
         "type": "ui_spot",
         "page_key": "shop",
@@ -2712,6 +2713,7 @@ async def test_event_page_returns_page_with_theme(bff: Bff) -> None:
     assert (body["found"], body["total"], body["map_url"]) == (1, 5, "/media/events/winter.webp")
     assert body["finds"][0]["state"] == "found"
     assert body["finds"][0]["x_pct"] == 12.5
+    assert body["finds"][0]["task_i18n"] == "event.winter.snowman.task"
     route = bff.stubs.progression.route("GET", "/v1/events/winter")
     assert route.calls.last.request.headers["authorization"] == f"Bearer {token}"
 
