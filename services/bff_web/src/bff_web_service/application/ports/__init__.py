@@ -26,6 +26,7 @@ from bff_web_service.application.dto import (
     CollectionList,
     CollectionMode,
     CommentsCard,
+    DailyResult,
     DailyStatus,
     Domain,
     EventArchiveCard,
@@ -52,6 +53,7 @@ from bff_web_service.application.dto import (
     RatingCard,
     SanctionsCard,
     SessionResult,
+    SessionRewardsCard,
     Shelf,
     ShelfItems,
     ShopCatalogCard,
@@ -105,6 +107,16 @@ class GameClient(Protocol):
         """Плановые режимы периода (дейлики и недельная сетка) субъекта токена.
 
         Личные, не кэшируются.
+        """
+        ...
+
+    async def daily_results(
+        self, token: str, user_ids: Sequence[UUID], domain: Domain | None = None
+    ) -> list[DailyResult]:
+        """Завершённые дейлики перечисленных пользователей в текущем периоде (личный вызов).
+
+        Не больше ``GV_GAME__DAILY_RESULTS_MAX_USERS`` игроков за вызов; кому можно показывать
+        чужие очки, решает вызывающий (social). Не кэшируется.
         """
         ...
 
@@ -257,6 +269,13 @@ class ProgressionClient(Protocol):
 
     async def wallet(self, token: str) -> WalletCard:
         """Версы (``/v1/me/wallet``)."""
+        ...
+
+    async def session_rewards(self, token: str, session_id: UUID) -> SessionRewardsCard:
+        """Награды за свою игровую сессию (``/v1/me/rewards``).
+
+        Ещё не начислено (или сессия чужая) — ``settled = false`` с нулями, не ошибка.
+        """
         ...
 
     async def quests(self, token: str) -> QuestsCard:

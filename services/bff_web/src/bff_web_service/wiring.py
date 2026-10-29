@@ -27,9 +27,13 @@ from bff_web_service.application.queries import (
     GetShellPage,
     GetShopPage,
     GetSoloPage,
+    HomeFeed,
     HomeProgress,
     PageLayout,
+    ResultRewards,
+    ResultsFriends,
 )
+from bff_web_service.application.queries.feed import FeedLimits, FriendsDaily
 from bff_web_service.infrastructure.cache import RedisPageCache
 from bff_web_service.infrastructure.clients import (
     HttpCatalogClient,
@@ -109,6 +113,19 @@ def build_deps(infra: Infrastructure) -> BffDeps:
         weekly_source_types=pages.weekly_source_types,
         collection_source_types=pages.collection_source_types,
     )
+    friends = FriendsDaily(
+        social,
+        game,
+        progression,
+        concurrency=up.max_concurrency,
+        limits=FeedLimits(
+            scan_limit=pages.friends_scan_limit,
+            results_batch=pages.friends_results_batch_size,
+            relations_batch=pages.friends_relations_batch_size,
+            appearance_batch=pages.appearance_batch_size,
+            deadline_s=pages.home_feed_deadline_s,
+        ),
+    )
     return BffDeps(
         get_session=GetSession(identity),
         get_home=GetHomePage(
@@ -116,6 +133,9 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             concurrency=up.max_concurrency,
             layout=layout,
             events=events,
+            feed=HomeFeed(
+                friends, concurrency=up.max_concurrency, items_limit=pages.home_feed_items_limit
+            ),
             progress=HomeProgress(
                 progression,
                 concurrency=up.max_concurrency,
@@ -134,7 +154,24 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             concurrency=up.max_concurrency,
         ),
         get_solo=GetSoloPage(game, concurrency=up.max_concurrency, layout=layout),
-        get_results=GetResultsPage(game, catalog, concurrency=up.max_concurrency),
+        get_results=GetResultsPage(
+            game,
+            catalog,
+            concurrency=up.max_concurrency,
+            rewards=ResultRewards(
+                progression,
+                concurrency=up.max_concurrency,
+                deadline_s=pages.results_rewards_deadline_s,
+                retries=pages.results_rewards_retries,
+                retry_delay_s=pages.results_rewards_retry_delay_s,
+            ),
+            friends=ResultsFriends(
+                friends,
+                game,
+                concurrency=up.max_concurrency,
+                items_limit=pages.results_friends_limit,
+            ),
+        ),
         get_collections=GetCollectionsPage(
             collections,
             concurrency=up.max_concurrency,
