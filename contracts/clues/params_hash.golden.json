@@ -31,32 +31,32 @@
       "params_hash": "971d8f584d635057cd6a077acde170e9fabba40467dac78803651b249b213d60"
     },
     {
-      "canonical_json": "{\"levels\":[{\"blur_px\":48,\"crop\":0.35,\"max_width\":960},{\"blur_px\":32,\"crop\":0.5,\"max_width\":960},{\"blur_px\":20,\"crop\":0.7,\"max_width\":960},{\"blur_px\":12,\"crop\":1,\"max_width\":960},{\"blur_px\":6,\"crop\":1,\"max_width\":960},{\"blur_px\":0,\"crop\":1,\"max_width\":960}]}",
+      "canonical_json": "{\"levels\":[{\"blur_px\":25,\"crop\":0.35,\"max_width\":960},{\"blur_px\":20,\"crop\":0.5,\"max_width\":960},{\"blur_px\":15,\"crop\":0.7,\"max_width\":960},{\"blur_px\":10,\"crop\":1,\"max_width\":960},{\"blur_px\":5,\"crop\":1,\"max_width\":960},{\"blur_px\":0,\"crop\":1,\"max_width\":960}]}",
       "name": "profile:frame_progressive:default",
       "params": {
         "levels": [
           {
-            "blur_px": 48,
+            "blur_px": 25,
             "crop": 0.35,
             "max_width": 960
           },
           {
-            "blur_px": 32,
+            "blur_px": 20,
             "crop": 0.5,
             "max_width": 960
           },
           {
-            "blur_px": 20,
+            "blur_px": 15,
             "crop": 0.7,
             "max_width": 960
           },
           {
-            "blur_px": 12,
+            "blur_px": 10,
             "crop": 1.0,
             "max_width": 960
           },
           {
-            "blur_px": 6,
+            "blur_px": 5,
             "crop": 1.0,
             "max_width": 960
           },
@@ -67,7 +67,7 @@
           }
         ]
       },
-      "params_hash": "9a4e41897de9dc5d592ef2e4b42f6456054a961a48fe8d2a14cd94d8e85322dc"
+      "params_hash": "ff3b5dec568ef991cfe8428ef323cd1e3914518ce97c1cc2f986dcf087e7f5ec"
     },
     {
       "canonical_json": "{\"levels\":[{\"pixel_block\":48},{\"pixel_block\":24},{\"pixel_block\":12},{\"pixel_block\":6},{\"pixel_block\":1}]}",

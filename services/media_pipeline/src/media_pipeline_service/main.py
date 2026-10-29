@@ -33,6 +33,7 @@ def build_routers(infra: Infrastructure, adapters: MediaAdapters | None = None) 
             upload=c.upload,
             set_position=c.set_position,
             regenerate=c.regenerate,
+            replan=c.replan,
             list_sets=c.list_sets,
             list_profiles=c.list_profiles,
             list_sources=c.list_sources,

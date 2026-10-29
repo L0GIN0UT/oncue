@@ -17,11 +17,11 @@ clue:
   type: frame_progressive
   params:
     levels:
-      - { blur_px: 48, crop: 0.35, max_width: 960 }
-      - { blur_px: 32, crop: 0.5, max_width: 960 }
-      - { blur_px: 20, crop: 0.7, max_width: 960 }
-      - { blur_px: 12, crop: 1.0, max_width: 960 }
-      - { blur_px: 6, crop: 1.0, max_width: 960 }
+      - { blur_px: 25, crop: 0.35, max_width: 960 }
+      - { blur_px: 20, crop: 0.5, max_width: 960 }
+      - { blur_px: 15, crop: 0.7, max_width: 960 }
+      - { blur_px: 10, crop: 1.0, max_width: 960 }
+      - { blur_px: 5, crop: 1.0, max_width: 960 }
       - { blur_px: 0, crop: 1.0, max_width: 960 }
 answer:
   format: classic
