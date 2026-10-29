@@ -47,7 +47,7 @@ uv run gv dev seed [--date YYYY-MM-DD]
 3. Для каждой единицы найти `media_item_id` в админке (карточка единицы) и загрузить файлы:
    `POST /admin/v1/sources` (media-pipeline, multipart: `media_item_id`, `kind` из таблицы
    выше, `position` для кадров последовательности, `reason`, `file`; заголовок
-   `Idempotency-Key`). Вне local/ci обязательны `origin`, `source_url`, `license_note` (D6).
+   `Idempotency-Key`). `origin`, `source_url`, `license_note` необязательны (ADR 0072).
 4. media-pipeline генерирует наборы по профилям `default` и публикует `AssetsReady`;
    game заполняет проекцию `clue_assets`.
 5. game публикует сиды режимов (`seeds/game/modes`, только local/ci, `GV_GAME__BOOTSTRAP_MODES_DIR`)
@@ -57,3 +57,34 @@ uv run gv dev seed [--date YYYY-MM-DD]
 
 Минимум пула для публикации конфига — `source.params.pool.min_playable` в сидах режимов
 (10 для дейликов, 20 для случайных): загрузите исходники хотя бы для такого числа единиц.
+
+## Реальные открытые медиа (только local)
+
+Дополнение к синтетике, ничего не удаляет. Файлы лежат **вне репозитория** (ADR 0014), по
+умолчанию в `C:/gv-media`:
+
+```bash
+uv run python seeds/media/fetch_tmdb.py        # фильмы TMDB → tmdb/ (ключ TMDB в .keys.env)
+uv run python seeds/media/fetch_fma.py --count 1000   # клипы FMA по 30 с → fma/clips
+uv run gv dev seed-real --real-dir C:/gv-media --import-dir <каталог seeds/catalog стенда> \
+    --ffmpeg <путь к ffmpeg>                   # переменные админа — как у `gv dev seed`
+```
+
+Что делает `gv dev seed-real` (`tools/gv/src/gv_cli/seed_real.py`):
+
+- пишет `real-films.jsonl` и `real-tracks.jsonl` в `--import-dir` (это каталог, который
+  смонтирован в catalog; в git не попадают) и импортирует их; `overview` фильма уходит в
+  `clue_texts.plot_raw` (загадка «описание»), `listens` трека — в `metrics.popularity`;
+  poster/frames/audio/album/license в импорт не попадают;
+- перекодирует клипы в `<real-dir>/seedpack/audio/*.m4a`: ffmpeg зацикливает 30 секунд до
+  50 с (профили читают `start_s` 30 у реверса и до 15 с уровня), как у синтетики;
+- собирает недостающие файлы в zip с `manifest.json` (пачками `--package-units`, по умолчанию
+  100 единиц; `ZIP_STORED`: медиа уже сжато), отправляет `POST /admin/v1/packages` и ждёт статус
+  `GET /admin/v1/packages/{id}`: `audio` на трек, шесть `frame` (`position` 1..6) и `poster` на
+  фильм; уже загруженное пропускает; ждёт наборы ассетов. Приём файлов и проверки архива — на
+  стороне media-pipeline (`services/media_pipeline/CLAUDE.md`), клиент остаётся тонким;
+- собирает сборники: по жанрам (до 6, 20–40 треков, `--min-collection-size`), «Топ по
+  рейтингу», «Фильмы 80-х», «Нулевые», «Мультфильмы» и публикует их; обновляет наборы периода.
+
+У реальных фильмов нет `soundtrack` и `audio_clip`, поэтому режимы «саундтрек» и «затемнение»
+по-прежнему играют на синтетике. Повторный запуск безопасен (стабильные `Idempotency-Key`).

@@ -7,7 +7,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 import aioboto3  # type: ignore[import-untyped]  # у aioboto3 нет стабов; API — как у boto3 S3
@@ -22,6 +24,8 @@ from media_pipeline_service.domain.ugc import PUBLIC_PREFIX
 from media_pipeline_service.settings import S3Settings
 
 _DELETE_BATCH = 1000  # предел DeleteObjects в S3
+_MB = 1024 * 1024
+_DOWNLOAD_CHUNK = _MB
 
 
 def assets_read_policy(bucket: str) -> str:
@@ -61,8 +65,9 @@ class S3Storage:
     бакет исходников наружу не публикуется.
     """
 
-    def __init__(self, settings: S3Settings) -> None:
+    def __init__(self, settings: S3Settings, *, part_size: int = 8 * _MB) -> None:
         self._settings = settings
+        self._part_size = part_size
         self._session = aioboto3.Session()
         self._buckets = {
             StorageArea.SOURCES: settings.bucket_sources,
@@ -131,6 +136,82 @@ class S3Storage:
         if len(data) > max_bytes:
             raise GenerationError("source.too_large", retryable=False)
         return data
+
+    async def put_stream(
+        self, area: StorageArea, key: str, chunks: AsyncIterator[bytes], content_type: str
+    ) -> None:
+        """Записать объект потоком: части ``part_size`` (минимум S3 - 5 МБ), последняя меньше.
+
+        Тело до одной части уходит обычным ``put_object``. При ошибке источника или S3
+        multipart-загрузка прерывается (``abort``), чтобы не копить неоплачиваемые части.
+        """
+        bucket = self.bucket(area)
+        buffer = bytearray()
+        parts: list[dict[str, Any]] = []
+        upload_id: str | None = None
+        async with self._client() as s3:
+
+            async def send(data: bytes) -> None:
+                nonlocal upload_id
+                if upload_id is None:
+                    created = await s3.create_multipart_upload(
+                        Bucket=bucket, Key=key, ContentType=content_type
+                    )
+                    upload_id = created["UploadId"]
+                number = len(parts) + 1
+                reply = await s3.upload_part(
+                    Bucket=bucket, Key=key, UploadId=upload_id, PartNumber=number, Body=data
+                )
+                parts.append({"ETag": reply["ETag"], "PartNumber": number})
+
+            try:
+                async for chunk in chunks:
+                    buffer += chunk
+                    while len(buffer) >= self._part_size:
+                        await send(bytes(buffer[: self._part_size]))
+                        del buffer[: self._part_size]
+                if upload_id is None:
+                    await s3.put_object(
+                        Bucket=bucket, Key=key, Body=bytes(buffer), ContentType=content_type
+                    )
+                    return
+                if buffer:
+                    await send(bytes(buffer))
+                await s3.complete_multipart_upload(
+                    Bucket=bucket,
+                    Key=key,
+                    UploadId=upload_id,
+                    MultipartUpload={"Parts": parts},
+                )
+            except BaseException:
+                if upload_id is not None:
+                    with suppress(Exception):
+                        await s3.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
+                raise
+
+    async def download_to(self, area: StorageArea, key: str, path: Path, *, max_bytes: int) -> None:
+        """Скачать объект в локальный файл потоком (в памяти - один кусок)."""
+        async with self._client() as s3:
+            try:
+                response = await s3.get_object(Bucket=self.bucket(area), Key=key)
+            except ClientError as exc:
+                code = exc.response.get("Error", {}).get("Code", "")
+                if code in {"NoSuchKey", "404"}:
+                    raise GenerationError("source.missing", retryable=False) from exc
+                raise
+            if int(response.get("ContentLength", 0)) > max_bytes:
+                raise GenerationError("source.too_large", retryable=False)
+            written = 0
+            stream = response["Body"]
+            try:
+                with path.open("wb") as out:
+                    while chunk := await stream.read(_DOWNLOAD_CHUNK):
+                        written += len(chunk)
+                        if written > max_bytes:
+                            raise GenerationError("source.too_large", retryable=False)
+                        out.write(chunk)
+            finally:
+                stream.close()
 
     async def copy(self, area: StorageArea, source_key: str, target_key: str) -> None:
         """Скопировать объект внутри бакета (серверная копия, метаданные и тип сохраняются)."""

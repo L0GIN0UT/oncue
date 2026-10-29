@@ -305,6 +305,219 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "PackageAccepted": {
+        "description": "Пакет принят в обработку (разбор идёт задачей).",
+        "properties": {
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PackageStatus"
+          }
+        },
+        "required": [
+          "package_id",
+          "status"
+        ],
+        "title": "PackageAccepted",
+        "type": "object"
+      },
+      "PackageErrorOut": {
+        "description": "Ошибка одного файла пакета.",
+        "properties": {
+          "code": {
+            "description": "Машинный код: source.*, package.*",
+            "title": "Code",
+            "type": "string"
+          },
+          "item_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ключ записи манифеста",
+            "title": "Item Key"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Путь файла в архиве",
+            "title": "Path"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "required": [
+          "item_key",
+          "path",
+          "role",
+          "code",
+          "message"
+        ],
+        "title": "PackageErrorOut",
+        "type": "object"
+      },
+      "PackageStatus": {
+        "description": "Состояние пакета.",
+        "enum": [
+          "queued",
+          "processing",
+          "done",
+          "partial",
+          "failed"
+        ],
+        "title": "PackageStatus",
+        "type": "string"
+      },
+      "PackageStatusOut": {
+        "description": "Состояние пакета: счётчики по файлам и ошибки.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "done": {
+            "minimum": 0.0,
+            "title": "Done",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Почему пакет отвергнут целиком (package.*)",
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/PackageErrorOut"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "errors_dropped": {
+            "description": "Ошибок сверх лимита хранения (только счётчик)",
+            "minimum": 0.0,
+            "title": "Errors Dropped",
+            "type": "integer"
+          },
+          "failed": {
+            "minimum": 0.0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "missing_license": {
+            "description": "Принятых файлов без лицензии",
+            "minimum": 0.0,
+            "title": "Missing License",
+            "type": "integer"
+          },
+          "missing_source": {
+            "description": "Принятых файлов без источника",
+            "minimum": 0.0,
+            "title": "Missing Source",
+            "type": "integer"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PackageStatus"
+          },
+          "total": {
+            "description": "Файлов в манифесте (0, пока архив не разобран)",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "package_id",
+          "status",
+          "total",
+          "done",
+          "failed",
+          "missing_source",
+          "missing_license",
+          "errors",
+          "errors_dropped",
+          "error_code",
+          "error_message",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "PackageStatusOut",
+        "type": "object"
+      },
       "Problem": {
         "description": "RFC 9457 Problem Details — тело любого ответа-ошибки сервиса (для OpenAPI).\n\nAttributes:\n    type: URN проблемы ``urn:guessverse:problem:<code>``.\n    title: Человекочитаемый заголовок.\n    status: HTTP-статус.\n    code: Машинный код ошибки — на него опираются клиенты.\n    detail: Пояснение.\n    correlation_id: Идентификатор цепочки запроса (для поиска в логах).\n    details: Безопасные для клиента подробности (``AppError.details``).\n    errors: Ошибки валидации полей запроса.",
         "properties": {
@@ -572,6 +785,35 @@
           "kind": {
             "$ref": "#/components/schemas/SourceKind"
           },
+          "license_missing": {
+            "description": "Лицензия не указана",
+            "title": "License Missing",
+            "type": "boolean"
+          },
+          "license_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Основание; null — не указана",
+            "title": "License Note"
+          },
+          "media_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Item Id"
+          },
           "origin": {
             "$ref": "#/components/schemas/SourceOrigin"
           },
@@ -587,6 +829,23 @@
             "title": "Source Media Id",
             "type": "string"
           },
+          "source_missing": {
+            "description": "Источник не указан",
+            "title": "Source Missing",
+            "type": "boolean"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Откуда взят файл; null — не указан",
+            "title": "Source Url"
+          },
           "status": {
             "$ref": "#/components/schemas/SourceStatus"
           }
@@ -597,7 +856,9 @@
           "position",
           "origin",
           "status",
-          "created_at"
+          "created_at",
+          "source_missing",
+          "license_missing"
         ],
         "title": "SourceListItem",
         "type": "object"
@@ -937,6 +1198,11 @@
           "kind": {
             "$ref": "#/components/schemas/SourceKind"
           },
+          "license_missing": {
+            "description": "Лицензия не указана",
+            "title": "License Missing",
+            "type": "boolean"
+          },
           "media_item_id": {
             "format": "uuid",
             "title": "Media Item Id",
@@ -971,6 +1237,11 @@
             "format": "uuid",
             "title": "Source Media Id",
             "type": "string"
+          },
+          "source_missing": {
+            "description": "Источник не указан",
+            "title": "Source Missing",
+            "type": "boolean"
           }
         },
         "required": [
@@ -982,7 +1253,9 @@
           "mime",
           "scheduled_asset_set_ids",
           "position",
-          "origin"
+          "origin",
+          "source_missing",
+          "license_missing"
         ],
         "title": "UploadResponse",
         "type": "object"
@@ -1269,6 +1542,253 @@
         ]
       }
     },
+    "/admin/v1/packages": {
+      "post": {
+        "description": "Тело запроса - zip-архив (`application/zip`), причина - в query `reason`. Архив пишется в хранилище потоком, ответ 202 с `package_id` приходит сразу, разбор идёт задачей; статус - `GET /admin/v1/packages/{id}`. В корне архива `manifest.json` по схеме `contracts/packages/media_package_manifest.v1.json`. Каждый файл проходит тот же приём, что и `POST /admin/v1/sources`; один плохой файл не останавливает остальные. Лимиты размера архива, числа файлов, распакованного размера и степени сжатия - конфиг `GV_MEDIA__PACKAGE_*`. Повтор с тем же `Idempotency-Key` и архивом отвечает тем же `package_id`; тот же архив с новым ключом, от того же админа и с той же причиной, исходники повторно не создаёт (иначе создаст: идемпотентность файлов привязана к актору и причине). Ошибки: 413 `package.archive_too_large`, 422 `package.not_zip`.",
+        "operationId": "submit_package_archive_admin_v1_packages_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "reason",
+            "required": true,
+            "schema": {
+              "maxLength": 500,
+              "minLength": 3,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/zip": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Problem Details"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Загрузить пакет исходников архивом (zip + manifest.json)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/packages/{package_id}": {
+      "get": {
+        "operationId": "package_status_admin_v1_packages__package_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Package Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Статус пакета: счётчики и ошибки по файлам",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/v1/profiles": {
       "get": {
         "operationId": "admin_profiles_admin_v1_profiles_get",
@@ -1378,17 +1898,63 @@
     },
     "/admin/v1/sources": {
       "get": {
-        "description": "По виду, затем по `position` (кадры `frame_sequence`: 1 — самый сложный). Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`.",
+        "description": "По виду, затем по `position` (кадры `frame_sequence`: 1 — самый сложный). Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`. Вместо `media_item_id` можно передать `without_attribution=true`: файловые исходники всех единиц без источника или лицензии (страницы по `after`).",
         "operationId": "admin_sources_admin_v1_sources_get",
         "parameters": [
           {
             "in": "query",
             "name": "media_item_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "format": "uuid",
-              "title": "Media Item Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Media Item Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "without_attribution",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Without Attribution",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           }
         ],
@@ -1459,7 +2025,7 @@
         ]
       },
       "post": {
-        "description": "Вне local/ci обязательны origin, source_url и license_note (D6 плана этапа 3a), иначе 422 source.provenance_required. position — порядок среди исходников вида (кадры frame_sequence: 1 — самый сложный).",
+        "description": "origin, source_url и license_note необязательны (ADR 0072): origin по умолчанию upload, пустые источник и лицензия отмечаются в ответе (source_missing, license_missing). position — порядок среди исходников вида (кадры frame_sequence: 1 — самый сложный).",
         "operationId": "upload_source_admin_v1_sources_post",
         "parameters": [
           {

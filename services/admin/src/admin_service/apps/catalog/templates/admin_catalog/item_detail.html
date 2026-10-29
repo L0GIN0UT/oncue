@@ -51,10 +51,10 @@
 {% if sources_error %}<ul class="messagelist"><li class="error">{{ sources_error }}</li></ul>{% endif %}
 {% if position_form and position_form.errors %}<ul class="messagelist"><li class="error">Порядок не изменён: {% for field, errs in position_form.errors.items %}{{ errs|join:", " }} {% endfor %}</li></ul>{% endif %}
 <table>
-  <thead><tr><th>Вид</th><th>Порядок</th><th>Происхождение</th><th>Статус</th><th>Загружен</th><th>id</th>{% if can_upload %}<th>Новый порядок</th>{% endif %}</tr></thead>
+  <thead><tr><th>Вид</th><th>Порядок</th><th>Происхождение</th><th>Источник</th><th>Лицензия</th><th>Статус</th><th>Загружен</th><th>id</th>{% if can_upload %}<th>Новый порядок</th>{% endif %}</tr></thead>
   {% for s in sources %}
   <tr>
-    <td>{{ s.kind }}</td><td>{{ s.position }}</td><td>{{ s.origin }}</td><td>{{ s.status }}</td><td>{{ s.created_at }}</td>
+    <td>{{ s.kind }}</td><td>{{ s.position }}</td><td>{{ s.origin }}</td><td>{% if s.source_url %}{{ s.source_url }}{% else %}<em>не указан</em>{% endif %}</td><td>{% if s.license_note %}{{ s.license_note }}{% else %}<em>не указана</em>{% endif %}</td><td>{{ s.status }}</td><td>{{ s.created_at }}</td>
     <td><small><code>{{ s.source_media_id }}</code></small></td>
     {% if s.position_form %}<td>
       <form method="post" action="{% url 'catalog:position' item_id=item_id %}">

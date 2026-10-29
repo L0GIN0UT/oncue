@@ -31,7 +31,6 @@ from media_pipeline_service.application.sources import (
 )
 from media_pipeline_service.domain.errors import (
     MediaItemNotFoundError,
-    ProvenanceRequiredError,
     SourceNotFoundError,
 )
 from media_pipeline_service.domain.sources import (
@@ -47,8 +46,9 @@ log = structlog.get_logger(__name__)
 class UploadSource:
     """Принять файл, перекодировать, сохранить и запланировать (пере)генерацию наборов.
 
-    Вне local/ci (``require_provenance``) загрузка без ``origin``, ``source_url`` и
-    ``license_note`` отклоняется (D6): по ним исходник снимают по жалобе правообладателя.
+    Происхождение (``origin``, ``source_url``, ``license_note``) необязательно в любой среде
+    (ADR 0072): пустое не блокирует загрузку, ``origin`` по умолчанию ``upload``. Исходники
+    без источника или лицензии помечаются в ответах и находятся фильтром списка.
     """
 
     def __init__(
@@ -60,7 +60,6 @@ class UploadSource:
         plan: PlanAssetSets,
         *,
         storage: ObjectStorage,
-        require_provenance: bool,
     ) -> None:
         self._storage = storage
         self._uow = uow
@@ -68,7 +67,6 @@ class UploadSource:
         self._ingestor = ingestor
         self._profiles = profiles
         self._plan = plan
-        self._require_provenance = require_provenance
 
     async def execute(
         self,
@@ -86,7 +84,7 @@ class UploadSource:
 
         Args:
             position: Порядок среди исходников вида (кадры ``frame_sequence``).
-            provenance: Происхождение (D6); вне local/ci — все поля обязательны.
+            provenance: Происхождение; все поля необязательны (ADR 0072).
 
         Ключ и ответ сохраняются в той же транзакции, что и исходник, аудит и планирование
         наборов: сбой до коммита не оставляет ключа (повтор выполнится заново), после
@@ -98,14 +96,15 @@ class UploadSource:
                 использован с другим запросом (``idempotency.key_reused``) или запрос с ним
                 выполняется параллельно (``idempotency.in_progress``).
             InvalidInputError: вид исходника не используется профилями домена единицы,
-                файл не того типа, больше лимита или не декодируется; нет обязательного
-                происхождения (``source.provenance_required``).
+                файл не того типа, больше лимита или не декодируется.
         """
         provenance = provenance or SourceProvenance()
-        if self._require_provenance and not provenance.is_complete:
-            raise ProvenanceRequiredError(
-                "вне local/ci нужны origin, source_url и license_note исходника"
-            )
+        # Пустая строка = «не указано»: в БД всегда NULL, без значений-заглушек.
+        provenance = SourceProvenance(
+            origin=provenance.origin,
+            source_url=provenance.source_url or None,
+            license_note=provenance.license_note or None,
+        )
         origin = provenance.origin or SourceOrigin.UPLOAD
         fingerprint = request_fingerprint(
             "source.upload",
@@ -185,6 +184,8 @@ class UploadSource:
                         scheduled_asset_set_ids=planned.asset_set_ids,
                         position=position,
                         origin=origin,
+                        source_missing=not provenance.source_url,
+                        license_missing=not provenance.license_note,
                     ).to_json()
 
                 response, executed_now = await run_idempotent(

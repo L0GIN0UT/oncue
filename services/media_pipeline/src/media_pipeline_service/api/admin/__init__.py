@@ -12,21 +12,26 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from gv_auth import Principal, require_perm
+from gv_core.errors import InvalidInputError
 from gv_service import IdempotencyKey, Reason, problem_responses
+from gv_service.problems import problem
 from media_pipeline_service.api.common import AssetSetItem
 from media_pipeline_service.api.ugc import register_ugc_admin_routes
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
+from media_pipeline_service.application.commands.packages import PackageTooLargeError, SubmitPackage
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.commands.ugc import UgcUseCases
 from media_pipeline_service.application.dto import SourceProvenance
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
+from media_pipeline_service.application.queries.packages import GetPackage
 from media_pipeline_service.application.queries.profiles import ListProfiles
 from media_pipeline_service.application.queries.sources import ListSources
 from media_pipeline_service.domain.errors import SourceTooLargeError
+from media_pipeline_service.domain.packages import PackageStatus
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin, SourceStatus
 
 # Виды, которые админ загружает файлом (``text`` приходит из catalog, файлом не грузится).
@@ -58,6 +63,8 @@ class UploadResponse(BaseModel):
     scheduled_asset_set_ids: list[UUID]
     position: int = Field(ge=1, le=100)
     origin: SourceOrigin
+    source_missing: bool = Field(description="Источник не указан")
+    license_missing: bool = Field(description="Лицензия не указана")
 
 
 class SourceOut(BaseModel):
@@ -81,6 +88,47 @@ class SourceListItem(BaseModel):
     origin: SourceOrigin
     status: SourceStatus
     created_at: datetime
+    media_item_id: UUID | None = None
+    source_url: str | None = Field(default=None, description="Откуда взят файл; null — не указан")
+    license_note: str | None = Field(default=None, description="Основание; null — не указана")
+    source_missing: bool = Field(description="Источник не указан")
+    license_missing: bool = Field(description="Лицензия не указана")
+
+
+class PackageAccepted(BaseModel):
+    """Пакет принят в обработку (разбор идёт задачей)."""
+
+    package_id: UUID
+    status: PackageStatus
+
+
+class PackageErrorOut(BaseModel):
+    """Ошибка одного файла пакета."""
+
+    item_key: str | None = Field(description="Ключ записи манифеста")
+    path: str | None = Field(description="Путь файла в архиве")
+    role: str | None
+    code: str = Field(description="Машинный код: source.*, package.*")
+    message: str
+
+
+class PackageStatusOut(BaseModel):
+    """Состояние пакета: счётчики по файлам и ошибки."""
+
+    package_id: UUID
+    status: PackageStatus
+    total: int = Field(ge=0, description="Файлов в манифесте (0, пока архив не разобран)")
+    done: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    missing_source: int = Field(ge=0, description="Принятых файлов без источника")
+    missing_license: int = Field(ge=0, description="Принятых файлов без лицензии")
+    errors: list[PackageErrorOut]
+    errors_dropped: int = Field(ge=0, description="Ошибок сверх лимита хранения (только счётчик)")
+    error_code: str | None = Field(description="Почему пакет отвергнут целиком (package.*)")
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
 
 
 class ProfileSets(BaseModel):
@@ -139,6 +187,8 @@ def build_admin_router(
     list_sets: ListAssetSets,
     list_profiles: ListProfiles,
     list_sources: ListSources,
+    submit_package: SubmitPackage,
+    get_package: GetPackage,
     ugc: UgcUseCases,
     max_upload_bytes: int,
 ) -> APIRouter:
@@ -151,8 +201,9 @@ def build_admin_router(
         response_model=UploadResponse,
         summary="Загрузить исходник (аудио, кадр, постер, саундтрек, звук фильма) для единицы",
         description=(
-            "Вне local/ci обязательны origin, source_url и license_note (D6 плана этапа 3a), "
-            "иначе 422 source.provenance_required. position — порядок среди исходников вида "
+            "origin, source_url и license_note необязательны (ADR 0072): origin по умолчанию "
+            "upload, пустые источник и лицензия отмечаются в ответе (source_missing, "
+            "license_missing). position — порядок среди исходников вида "
             "(кадры frame_sequence: 1 — самый сложный)."
         ),
         responses=problem_responses(401, 403, 404, 409, 422, 503),
@@ -195,6 +246,89 @@ def build_admin_router(
             scheduled_asset_set_ids=list(result.scheduled_asset_set_ids),
             position=result.position,
             origin=result.origin,
+            source_missing=result.source_missing,
+            license_missing=result.license_missing,
+        )
+
+    @router.post(
+        "/packages",
+        status_code=202,
+        response_model=PackageAccepted,
+        summary="Загрузить пакет исходников архивом (zip + manifest.json)",
+        description=(
+            "Тело запроса - zip-архив (`application/zip`), причина - в query `reason`. "
+            "Архив пишется в хранилище потоком, ответ 202 с `package_id` приходит сразу, "
+            "разбор идёт задачей; статус - `GET /admin/v1/packages/{id}`. В корне архива "
+            "`manifest.json` по схеме `contracts/packages/media_package_manifest.v1.json`. "
+            "Каждый файл проходит тот же приём, что и `POST /admin/v1/sources`; один плохой "
+            "файл не останавливает остальные. Лимиты размера архива, числа файлов, "
+            "распакованного размера и степени сжатия - конфиг `GV_MEDIA__PACKAGE_*`. "
+            "Повтор с тем же `Idempotency-Key` и архивом отвечает тем же `package_id`; тот же "
+            "архив с новым ключом, от того же админа и с той же причиной, исходники повторно "
+            "не создаёт (иначе создаст: идемпотентность файлов привязана к актору и причине). "
+            "Ошибки: 413 "
+            "`package.archive_too_large`, 422 `package.not_zip`."
+        ),
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+            }
+        },
+        responses=problem_responses(401, 403, 409, 413, 422, 503),
+    )
+    async def submit_package_archive(
+        request: Request,
+        principal: Uploader,
+        key: IdempotencyKey,
+        reason: Reason,
+    ) -> PackageAccepted | Response:
+        declared = request.headers.get("content-length")
+        try:
+            result = await submit_package.execute(
+                body=request.stream(),
+                declared_length=int(declared) if declared and declared.isdigit() else None,
+                actor_id=principal.user_id,
+                reason=reason,
+                idempotency_key=key,
+            )
+        except PackageTooLargeError as exc:
+            return problem(
+                413,
+                exc.code,
+                "Архив больше допустимого размера",
+                extra={"details": exc.details},
+            )
+        return PackageAccepted(package_id=result.package_id, status=result.status)
+
+    @router.get(
+        "/packages/{package_id}",
+        response_model=PackageStatusOut,
+        summary="Статус пакета: счётчики и ошибки по файлам",
+        responses=problem_responses(401, 403, 404, 422),
+    )
+    async def package_status(package_id: UUID, _: Viewer) -> PackageStatusOut:
+        package = await get_package.execute(package_id)
+        return PackageStatusOut(
+            package_id=package.id,
+            status=package.status,
+            total=package.total,
+            done=package.done,
+            failed=package.failed,
+            missing_source=package.missing_source,
+            missing_license=package.missing_license,
+            errors=[
+                PackageErrorOut(
+                    item_key=e.item_key, path=e.path, role=e.role, code=e.code, message=e.message
+                )
+                for e in package.errors
+            ],
+            errors_dropped=package.errors_dropped,
+            error_code=package.error_code,
+            error_message=package.error_message,
+            created_at=package.created_at,
+            started_at=package.started_at,
+            finished_at=package.finished_at,
         )
 
     @router.post(
@@ -276,11 +410,29 @@ def build_admin_router(
         summary="Исходники единицы с порядком (для карточки в админке)",
         description=(
             "По виду, затем по `position` (кадры `frame_sequence`: 1 — самый сложный). "
-            "Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`."
+            "Без ссылок на объекты S3. Перестановка — `PUT /admin/v1/sources/{id}/position`. "
+            "Вместо `media_item_id` можно передать `without_attribution=true`: файловые "
+            "исходники всех единиц без источника или лицензии (страницы по `after`)."
         ),
         responses=problem_responses(401, 403, 422),
     )
-    async def admin_sources(media_item_id: UUID, _: Viewer) -> list[SourceListItem]:
+    async def admin_sources(
+        _: Viewer,
+        *,
+        media_item_id: UUID | None = None,
+        without_attribution: bool = False,
+        after: UUID | None = None,
+        limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    ) -> list[SourceListItem]:
+        if media_item_id is not None and not without_attribution:
+            views = await list_sources.execute(media_item_id)
+        elif media_item_id is None and without_attribution:
+            views = await list_sources.unattributed(limit=limit, after_id=after)
+        else:
+            raise InvalidInputError(
+                "нужен ровно один из media_item_id и without_attribution=true",
+                code="request.validation_failed",
+            )
         return [
             SourceListItem(
                 source_media_id=v.source_media_id,
@@ -289,8 +441,13 @@ def build_admin_router(
                 origin=v.origin,
                 status=v.status,
                 created_at=v.created_at,
+                media_item_id=v.media_item_id,
+                source_url=v.source_url,
+                license_note=v.license_note,
+                source_missing=v.source_missing,
+                license_missing=v.license_missing,
             )
-            for v in await list_sources.execute(media_item_id)
+            for v in views
         ]
 
     @router.get(

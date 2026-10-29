@@ -436,6 +436,83 @@ def dev_seed(
         raise typer.Exit(1) from exc
 
 
+@dev.command("seed-real")
+def dev_seed_real(
+    *,
+    real_dir: Annotated[
+        Path, typer.Option("--real-dir", envvar="GV_REAL_MEDIA_DIR", help="Выгрузки tmdb/ и fma/")
+    ] = Path("C:/gv-media"),
+    import_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--import-dir",
+            help="Куда писать real-*.jsonl: каталог, который видит catalog",
+        ),
+    ] = None,
+    ffmpeg: Annotated[
+        str | None, typer.Option("--ffmpeg", envvar="GV_FFMPEG", help="Путь к ffmpeg")
+    ] = None,
+    min_collection_size: Annotated[
+        int, typer.Option("--min-collection-size", help="Минимум треков в сборнике жанра")
+    ] = 20,
+    tracks_limit: Annotated[int | None, typer.Option("--tracks-limit")] = None,
+    package_units: Annotated[
+        int, typer.Option("--package-units", min=1, help="Единиц в одном пакете-архиве")
+    ] = 100,
+    date_: Annotated[str | None, typer.Option("--date", help="День плановых наборов")] = None,
+) -> None:
+    """Дополнительный засев реальными открытыми медиа (только local; после ``gv dev seed``)."""
+    from datetime import date as date_type
+
+    from gv_cli import seed as seed_module
+    from gv_cli import seed_real
+
+    env = os.environ
+    secret_env = service_secret_env("admin")
+    missing = [
+        n
+        for n in ("GV_BOOTSTRAP_ADMIN__LOGIN", "GV_BOOTSTRAP_ADMIN__PASSWORD", secret_env)
+        if not env.get(n)
+    ]
+    if missing:
+        raise typer.BadParameter(f"нет переменных окружения: {', '.join(missing)}")
+
+    def url(name: str, default: str) -> str:
+        return env.get(f"GV_SEED__{name}_URL", default)
+
+    root = repo_root()
+    config = seed_module.SeedConfig(
+        identity_url=url("IDENTITY", "http://127.0.0.1:8100"),
+        catalog_url=url("CATALOG", "http://127.0.0.1:8101"),
+        media_url=url("MEDIA", "http://127.0.0.1:8102"),
+        game_url=url("GAME", "http://127.0.0.1:8103"),
+        collections_url=url("COLLECTIONS", "http://127.0.0.1:8106"),
+        progression_url=url("PROGRESSION", "http://127.0.0.1:8109"),
+        social_url=url("SOCIAL", "http://127.0.0.1:8111"),
+        admin_login=env["GV_BOOTSTRAP_ADMIN__LOGIN"],
+        admin_password=env["GV_BOOTSTRAP_ADMIN__PASSWORD"],
+        service_secret=env[secret_env],
+        repo_root=root,
+        day=date_type.fromisoformat(date_) if date_ else None,
+        catalog_dir=import_dir,
+        import_timeout_s=3000.0,
+        assets_timeout_s=900.0,
+    )
+    try:
+        seed_real.run_seed_real(
+            config,
+            real_dir=real_dir,
+            ffmpeg=ffmpeg or seed_real.default_ffmpeg(),
+            min_collection_size=min_collection_size,
+            tracks_limit=tracks_limit,
+            package_units=package_units,
+            echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN),
+        )
+    except seed_module.SeedError as exc:
+        typer.secho(str(exc), fg="red")
+        raise typer.Exit(1) from exc
+
+
 @dev.command("secrets")
 def make_secrets() -> None:
     """Вывести содержимое .env со случайными паролями (сохранить в infra/compose/.env)."""

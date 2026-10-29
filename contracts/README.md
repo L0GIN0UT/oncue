@@ -10,6 +10,7 @@
 | `events/<service>/examples/<Event>.v<N>.json` | руками | Пример конверта: вход для тестов потребителей (`gv_testkit.load_example`) |
 | `clues/<clue_type>.params.v<N>.json` | руками | Параметры уровней загадок (media-pipeline, game_kernel) |
 | `clues/params_hash.golden.json` | руками (генерируется алгоритмом) | Golden-векторы `params_hash`: их проверяют media-pipeline и game_kernel |
+| `packages/media_package_manifest.v1.json` (+ `examples/`) | руками, contract-first | Манифест zip-пакета пакетной загрузки исходников (media-pipeline, `POST /admin/v1/packages`); совместимо — новое необязательное поле, иначе `v<N+1>` |
 | `modes/mode_config.v1.json`, `modes/params/*.v<N>.json` | руками, contract-first | Конфиг режима и параметры плагинов (`source.*`, `scorer.*`, `matcher.*`, общий `pool`); модели — `gv_game_kernel.spec` |
 
 Проверки: `uv run gv contracts check [--base origin/main]` (совместимость всех `*.json`, включая `modes/**`) и тесты `tools/gv/tests/test_contracts.py` (схемы валидны, у каждого события есть валидный пример), `libs/game_kernel/tests/test_contracts.py` (модели ↔ `modes/**`, сиды `seeds/game/modes`).

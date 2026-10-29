@@ -12,7 +12,9 @@ import functools
 import hashlib
 import io
 import json
+import stat
 import subprocess
+import zipfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,7 +26,7 @@ import httpx
 import pytest
 import respx
 import sqlalchemy as sa
-from media_pipeline_service.application.dto import GENERATE_TASK
+from media_pipeline_service.application.dto import GENERATE_TASK, PACKAGE_TASK
 from media_pipeline_service.application.errors import GenerationError
 from media_pipeline_service.application.ports import StorageArea
 from media_pipeline_service.infrastructure.container import MediaAdapters
@@ -102,6 +104,17 @@ class Service:
     issuer: TestTokenIssuer
     definition: ServiceDefinition
 
+    async def source_keys(self) -> list[str]:
+        """Ключи объектов бакета исходников."""
+        keys: list[str] = []
+        token = None
+        while True:
+            page = await self.storage.list_objects(StorageArea.SOURCES, "", limit=1000, token=token)
+            keys += [o.key for o in page.items]
+            token = page.next_token
+            if token is None:
+                return keys
+
     async def run_job(self, name: str) -> JobResult:
         return await run_periodic_job(self.definition, name, self.infra)
 
@@ -112,8 +125,8 @@ class Service:
         done = 0
         while self.queue.tasks:
             task = self.queue.tasks.pop(0)
-            assert task["task_type"] == GENERATE_TASK
-            await self.tasks[GENERATE_TASK](task["payload"])
+            assert task["task_type"] in {GENERATE_TASK, PACKAGE_TASK}
+            await self.tasks[task["task_type"]](task["payload"])
             done += 1
         return done
 
@@ -159,6 +172,8 @@ async def service(
             public_base_url="https://gv.test",
             link_max_per_window=3,
             max_upload_mb=1,
+            package_max_archive_mb=options.get("package_max_archive_mb", 1024),
+            package_max_ratio=options.get("package_max_ratio", 100),
         ),
     )
     runtime = await Infrastructure.open(settings, TABLES)
@@ -665,6 +680,7 @@ async def test_admin_sources_lists_catalog_sources_by_kind_and_position(
     assert {s["origin"] for s in body} == {"tmdb", "catalog"}
     assert set(body[0]) == {
         "source_media_id", "kind", "position", "origin", "status", "created_at",
+        "media_item_id", "source_url", "license_note", "source_missing", "license_missing",
     }  # fmt: skip
     assert "uri" not in json.dumps(body)
 
@@ -888,17 +904,32 @@ async def test_admin_source_position(service: Service) -> None:
 
 
 @pytest.mark.parametrize("service", [{"environment": "production"}], indirect=True)
-async def test_admin_upload_requires_provenance_outside_local(service: Service) -> None:
-    """Вне local/ci D6 требует происхождения исходника."""
+async def test_admin_upload_provenance_is_optional_everywhere(service: Service) -> None:
+    """ADR 0072: на проде загрузка без источника и лицензии проходит и помечается."""
     event, item_id = _music_item_event()
     await service.deliver(event)
     form = {"media_item_id": item_id, "kind": "audio", "reason": "лицензированный превью"}
     files = {"file": ("track.wav", _wav(1), "audio/wav")}
     headers = {**service.admin(), "Idempotency-Key": f"upload-{uuid7().hex}"}
+    uploaded = await service.client.post(
+        "/admin/v1/sources", data=form, files=files, headers=headers
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    assert (body["origin"], body["source_missing"], body["license_missing"]) == (
+        "upload",
+        True,
+        True,
+    )
+    listed = await service.client.get(
+        "/admin/v1/sources", params={"without_attribution": "true"}, headers=service.admin()
+    )
+    assert [i["source_media_id"] for i in listed.json()] == [body["source_media_id"]]
+    assert listed.json()[0]["license_note"] is None
     assert_problem(
-        await service.client.post("/admin/v1/sources", data=form, files=files, headers=headers),
+        await service.client.get("/admin/v1/sources", headers=service.admin()),
         422,
-        "source.provenance_required",
+        "request.validation_failed",
     )
     assert_problem(
         await service.client.post(
@@ -1220,3 +1251,235 @@ async def test_social_content_removed_takes_avatar_down_once(service: Service) -
     assert await service.deliver(dismissed) is Outcome.PROCESSED
     assert await service.deliver(_moderated(uuid7(), case_id=str(uuid7()))) is Outcome.PROCESSED
     assert len([e for e in await service.outbox() if "AssetModerated" in e.event_type]) == 1
+
+
+# ---------------------------------------------------------------- пакетная загрузка архивом
+def _package_zip(entries: dict[str | zipfile.ZipInfo, bytes], manifest: Any) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    return buffer.getvalue()
+
+
+def _package_headers(
+    service: Service, *perms: str, idem: str | None = None, admin: UUID | None = None
+) -> dict[str, str]:
+    """Заголовки загрузки; ``admin`` - один и тот же админ (по умолчанию токен с новым id)."""
+    token = service.issuer.issue(user_id=admin, perms=perms or ADMIN_PERMS)
+    return {
+        "Authorization": f"Bearer {token}",
+        "Idempotency-Key": idem or f"pkg-{uuid7().hex}",
+        "Content-Type": "application/zip",
+    }
+
+
+async def _package_status(service: Service, package_id: str) -> dict[str, Any]:
+    response = await service.client.get(
+        f"/admin/v1/packages/{package_id}", headers=service.admin("admin.access")
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _archive_keys(service: Service) -> list[str]:
+    """Ключи архивов пакетов в бакете исходников (после обработки их быть не должно)."""
+    return [k for k in await service.source_keys() if k.startswith("k/")]
+
+
+@pytest.mark.parametrize("service", [{"package_max_ratio": 10_000}], indirect=True)
+async def test_package_upload_end_to_end(service: Service) -> None:
+    event, item_id = _music_item_event()
+    await service.deliver(event)
+    manifest = {
+        "version": 1,
+        "items": [
+            {
+                "key": "track:fma-1",
+                "kind": "track",
+                "media_item_id": item_id,
+                "files": [
+                    {"role": "audio", "path": "audio/a.bin"},
+                    {"role": "audio", "path": "audio/broken.m4a"},
+                ],
+                "license_note": "",
+            }
+        ],
+    }
+    archive = _package_zip(
+        {"audio/a.bin": _wav(50), "audio/broken.m4a": b"not audio at all"}, manifest
+    )
+    headers = _package_headers(service)
+    first = await service.client.post(
+        "/admin/v1/packages", params={"reason": "пакет"}, content=archive, headers=headers
+    )
+    assert first.status_code == 202, first.text
+    package_id = first.json()["package_id"]
+    assert first.json()["status"] == "queued"
+    again = await service.client.post(
+        "/admin/v1/packages", params={"reason": "пакет"}, content=archive, headers=headers
+    )
+    assert (again.status_code, again.json()["package_id"]) == (202, package_id)
+
+    assert (await _package_status(service, package_id))["status"] == "queued"
+    await service.run_tasks()
+    status = await _package_status(service, package_id)
+    assert status["error_code"] is None, status
+    assert (status["status"], status["total"], status["done"], status["failed"]) == (
+        "partial",
+        2,
+        1,
+        1,
+    )
+    assert (status["missing_source"], status["missing_license"]) == (1, 1)
+    (error,) = status["errors"]
+    assert (error["path"], error["role"], error["item_key"]) == (
+        "audio/broken.m4a",
+        "audio",
+        "track:fma-1",
+    )
+    assert error["code"].startswith("source.")
+    # исходник прошёл тот же приём, что и ручная загрузка: он виден в списке единицы
+    listed = await service.client.get(
+        "/admin/v1/sources",
+        params={"media_item_id": item_id},
+        headers=service.admin("admin.access"),
+    )
+    (source,) = [s for s in listed.json() if s["kind"] == "audio"]
+    assert (source["origin"], source["license_note"], source["license_missing"]) == (
+        "upload",
+        None,
+        True,
+    )
+    sets = (
+        await service.client.get("/internal/v1/asset-sets", params={"media_item_id": item_id})
+    ).json()
+    assert sets and {s["status"] for s in sets} == {"ready"}
+    assert await _archive_keys(service) == []
+
+
+@pytest.mark.parametrize("service", [{"package_max_ratio": 10_000}], indirect=True)
+async def test_package_resend_with_new_key_does_not_duplicate_sources(service: Service) -> None:
+    event, item_id = _music_item_event()
+    await service.deliver(event)
+    manifest = {
+        "version": 1,
+        "items": [
+            {
+                "key": "track:fma-2",
+                "kind": "track",
+                "media_item_id": item_id,
+                "files": [{"role": "audio", "path": "a.bin"}],
+            }
+        ],
+    }
+    archive = _package_zip({"a.bin": _wav(50)}, manifest)
+    admin = uuid7()  # повтор того же пакета тем же админом (ключи идемпотентности - на актора)
+    for _ in range(2):
+        response = await service.client.post(
+            "/admin/v1/packages",
+            params={"reason": "пакет"},
+            content=archive,
+            headers=_package_headers(service, admin=admin),
+        )
+        assert response.status_code == 202
+        await service.run_tasks()
+        assert (await _package_status(service, response.json()["package_id"]))["done"] == 1
+    listed = await service.client.get(
+        "/admin/v1/sources",
+        params={"media_item_id": item_id},
+        headers=service.admin("admin.access"),
+    )
+    assert len([s for s in listed.json() if s["kind"] == "audio"]) == 1
+
+
+async def test_malicious_package_is_rejected_by_worker_and_reported(service: Service) -> None:
+    link = zipfile.ZipInfo("link.wav")
+    link.create_system = 3
+    link.external_attr = (stat.S_IFLNK | 0o777) << 16
+    manifest = {
+        "version": 1,
+        "items": [
+            {"key": "track:evil", "kind": "track", "files": [{"role": "audio", "path": "link.wav"}]}
+        ],
+    }
+    response = await service.client.post(
+        "/admin/v1/packages",
+        params={"reason": "пакет"},
+        content=_package_zip({link: b"/etc/passwd"}, manifest),
+        headers=_package_headers(service),
+    )
+    assert response.status_code == 202
+    await service.run_tasks()
+    status = await _package_status(service, response.json()["package_id"])
+    assert (status["status"], status["error_code"]) == ("failed", "package.symlink")
+    assert (status["done"], status["errors"]) == (0, [])
+    assert await _archive_keys(service) == []
+
+
+async def test_package_api_contract(service: Service) -> None:
+    archive = _package_zip({}, {"version": 1, "items": []})
+    post = service.client.post
+    assert_problem(
+        await post(
+            "/admin/v1/packages",
+            params={"reason": "причина"},
+            content=archive,
+            headers={"Idempotency-Key": "key-00001", "Content-Type": "application/zip"},
+        ),
+        401,
+        "auth.unauthenticated",
+    )
+    assert_problem(  # без права загрузки - 403
+        await post(
+            "/admin/v1/packages",
+            params={"reason": "причина"},
+            content=archive,
+            headers=_package_headers(service, "admin.access"),
+        ),
+        403,
+        "auth.forbidden",
+    )
+    assert_problem(  # не zip
+        await post(
+            "/admin/v1/packages",
+            params={"reason": "причина"},
+            content=b"MZ not a zip",
+            headers=_package_headers(service),
+        ),
+        422,
+        "package.not_zip",
+    )
+    assert_problem(  # без Idempotency-Key
+        await post(
+            "/admin/v1/packages",
+            params={"reason": "причина"},
+            content=archive,
+            headers={**service.admin(), "Content-Type": "application/zip"},
+        ),
+        422,
+        "idempotency.key_required",
+    )
+    assert_problem(
+        await service.client.get(
+            f"/admin/v1/packages/{uuid7()}", headers=service.admin("admin.access")
+        ),
+        404,
+        "package.not_found",
+    )
+    assert await _archive_keys(service) == []
+
+
+@pytest.mark.parametrize("service", [{"package_max_archive_mb": 1}], indirect=True)
+async def test_package_over_limit_is_413_and_leaves_nothing(service: Service) -> None:
+    big = b"PK\x03\x04" + b"\x00" * (1024 * 1024 + 10)
+    response = await service.client.post(
+        "/admin/v1/packages",
+        params={"reason": "причина"},
+        content=big,
+        headers=_package_headers(service),
+    )
+    assert response.status_code == 413
+    assert response.json()["code"] == "package.archive_too_large"
+    assert await _archive_keys(service) == []

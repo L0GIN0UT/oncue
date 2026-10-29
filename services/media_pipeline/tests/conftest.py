@@ -8,10 +8,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 from uuid import UUID
@@ -37,7 +39,8 @@ from media_pipeline_service.domain.collections import CollectionState
 from media_pipeline_service.domain.dynamic_profiles import DynamicProfile, DynamicProfileStatus
 from media_pipeline_service.domain.errors import InvalidUgcImageError
 from media_pipeline_service.domain.media_items import ItemStatus, MediaItemState
-from media_pipeline_service.domain.sources import AssetScope, SourceMedia
+from media_pipeline_service.domain.packages import ImportPackage
+from media_pipeline_service.domain.sources import AssetScope, SourceKind, SourceMedia
 from media_pipeline_service.domain.ugc import UgcImage, UgcPurpose, UgcStatus
 
 from gv_core.domain import AggregateRoot, DomainEvent
@@ -65,6 +68,7 @@ class MemoryDb:
     profiles: dict[UUID, DynamicProfile] = field(default_factory=dict)
     collections: dict[UUID, CollectionState] = field(default_factory=dict)
     ugc: dict[UUID, UgcImage] = field(default_factory=dict)
+    packages: dict[UUID, ImportPackage] = field(default_factory=dict)
     purge: dict[str, datetime] = field(default_factory=dict)
 
 
@@ -165,6 +169,20 @@ class FakeSources(_Repo):
             for s in self.db.sources.values()
             if s.media_item_id == media_item_id and s.scope == scope
         ]
+
+    async def list_unattributed(self, *, limit: int, after_id: UUID | None) -> list[SourceMedia]:
+        found = sorted(
+            (
+                s
+                for s in self.db.sources.values()
+                if s.scope is None
+                and s.kind is not SourceKind.TEXT
+                and (not s.source_url or not s.license_note)
+                and (after_id is None or s.id > after_id)
+            ),
+            key=lambda s: s.id,
+        )
+        return [copy.deepcopy(s) for s in found[:limit]]
 
     async def list_for_scope(self, scope: AssetScope) -> list[SourceMedia]:
         return [copy.deepcopy(s) for s in self.db.sources.values() if s.scope == scope]
@@ -342,6 +360,31 @@ class FakeIdempotency(_Repo):
         )
 
 
+class FakePackages(_Repo):
+    async def get(self, package_id: UUID, *, for_update: bool = False) -> ImportPackage | None:
+        found = self.db.packages.get(package_id)
+        return copy.deepcopy(found) if found else None
+
+    async def active_archive_keys(self, keys: Sequence[str]) -> set[str]:
+        wanted = set(keys)
+        return {
+            p.archive_key
+            for p in self.db.packages.values()
+            if p.archive_key is not None and p.archive_key in wanted
+        }
+
+    async def add(self, package: ImportPackage) -> None:
+        self.db.packages[package.id] = copy.deepcopy(package)
+
+    async def save(self, package: ImportPackage) -> None:
+        stored = copy.deepcopy(package)
+        stored.new_errors = []
+        stored.errors_reset = False
+        self.db.packages[package.id] = stored
+        package.new_errors = []
+        package.errors_reset = False
+
+
 class FakeUgc(_Repo):
     async def add(self, image: UgcImage) -> None:
         self.db.ugc[image.id] = image
@@ -447,6 +490,7 @@ class FakeMediaUnitOfWork:
         self.profiles = FakeProfiles(self)
         self.collections = FakeCollections(self)
         self.ugc = FakeUgc(self)
+        self.packages = FakePackages(self)
         self.idempotency = FakeIdempotency(self)
         self.audit = FakeAudit(self)
 
@@ -481,6 +525,7 @@ class FakeMediaUnitOfWork:
             "profiles",
             "collections",
             "ugc",
+            "packages",
             "purge",
         ):
             setattr(self._db, name, getattr(self.view, name))
@@ -520,6 +565,20 @@ class FakeStorage:
         if len(data) > max_bytes:
             raise GenerationError("source.too_large", retryable=False)
         return data
+
+    async def put_stream(
+        self, area: StorageArea, key: str, chunks: AsyncIterator[bytes], content_type: str
+    ) -> None:
+        if self.fail_put:
+            raise ConnectionError("S3 недоступен (фейк)")
+        data = bytearray()
+        async for chunk in chunks:  # ошибка источника: объект не появляется, как при abort
+            data += chunk
+        self.objects[(area, key)] = (bytes(data), content_type)
+
+    async def download_to(self, area: StorageArea, key: str, path: Path, *, max_bytes: int) -> None:
+        data = await self.get(area, key, max_bytes=max_bytes)
+        await asyncio.to_thread(path.write_bytes, data)
 
     async def delete(self, area: StorageArea, keys: Sequence[str]) -> None:
         if self.fail_delete:
@@ -696,10 +755,10 @@ class MediaHarness:
         *,
         max_attempts: int = 3,
         link_max: int = 3,
-        require_provenance: bool = False,
         max_profiles: int = 3,
         backfill_batch: int = 2,
         profiles: dict[str, Any] | None = None,
+        package_limits: Any = None,
     ) -> None:
 
         from media_pipeline_service.application.commands.catalog import (
@@ -826,9 +885,42 @@ class MediaHarness:
             self.directory,
             self.plan,
             storage=self.storage,
-            require_provenance=require_provenance,
         )
         self.set_position = SetSourcePosition(uow, self.clock, self.plan, storage=self.storage)
+
+        from media_pipeline_service.application.archive import ArchiveLimits
+        from media_pipeline_service.application.commands.packages import (
+            ProcessPackage,
+            SubmitPackage,
+            SweepOrphanPackageArchives,
+        )
+        from media_pipeline_service.application.queries.packages import GetPackage
+
+        self.package_limits = package_limits or ArchiveLimits(
+            max_archive_bytes=1_000_000,
+            max_entries=50,
+            max_unpacked_bytes=5_000_000,
+            max_entry_bytes=100_000,
+            max_ratio=100,
+            max_manifest_bytes=100_000,
+        )
+        self.submit_package = SubmitPackage(
+            uow, self.clock, self.storage, self.queue, self.tokens, limits=self.package_limits
+        )
+        self.process_package = ProcessPackage(
+            uow,
+            self.clock,
+            self.storage,
+            self.upload,
+            limits=self.package_limits,
+            max_upload_bytes=self.package_limits.max_entry_bytes,
+            keep_errors=3,
+            lease=timedelta(seconds=300),
+        )
+        self.sweep_package_orphans = SweepOrphanPackageArchives(
+            uow, self.storage, self.clock, ttl=timedelta(hours=24)
+        )
+        self.get_package = GetPackage(uow)
         self.policy = LinkPolicy(ttl_s=60, max_per_window=link_max, window_s=60)
         self.issue_link = IssueAssetLink(
             uow,
@@ -924,5 +1016,5 @@ def media() -> MediaHarness:
 @pytest.fixture
 def media_factory() -> type[MediaHarness]:
     """Конструктор harness с параметрами (``max_attempts``, ``link_max``,
-    ``require_provenance``, ``max_profiles``, ``backfill_batch``, ``profiles``)."""
+    ``max_profiles``, ``backfill_batch``, ``profiles``)."""
     return MediaHarness

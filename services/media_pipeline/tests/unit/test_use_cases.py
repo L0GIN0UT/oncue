@@ -587,11 +587,11 @@ async def test_assets_failed_shares_item_event_counter(media: Any) -> None:
 
 
 # ---------------------------------------------------------------- этап 3a: происхождение и порядок
-async def test_upload_requires_provenance_outside_local(media_factory: Any) -> None:
+async def test_upload_provenance_is_optional(media_factory: Any) -> None:
+    """ADR 0072: пустые источник и лицензия не блокируют загрузку, а помечаются."""
     from media_pipeline_service.application.dto import SourceProvenance
-    from media_pipeline_service.domain.errors import ProvenanceRequiredError
 
-    media = media_factory(require_provenance=True)
+    media = media_factory()
     await media.sync.apply_snapshot(snapshot(sources=()))
     upload = {
         "media_item_id": ITEM,
@@ -600,14 +600,31 @@ async def test_upload_requires_provenance_outside_local(media_factory: Any) -> N
         "actor_id": ACTOR,
         "reason": "кадр",
     }
-    for partial in (
-        None,
-        SourceProvenance(origin=SourceOrigin.UPLOAD, source_url="https://example.org/f"),
-        SourceProvenance(source_url="https://example.org/f", license_note="CC0"),
-    ):
-        with pytest.raises(ProvenanceRequiredError):
-            await media.upload.execute(**upload, idempotency_key=key(), provenance=partial)
-    assert media.storage.keys(StorageArea.SOURCES) == []
+    expected = (
+        (None, SourceOrigin.UPLOAD, True, True),
+        (
+            SourceProvenance(origin=SourceOrigin.UPLOAD, source_url="https://example.org/f"),
+            SourceOrigin.UPLOAD,
+            False,
+            True,
+        ),
+        (
+            SourceProvenance(source_url="https://example.org/f", license_note="CC0"),
+            SourceOrigin.UPLOAD,
+            False,
+            False,
+        ),
+        (SourceProvenance(license_note=""), SourceOrigin.UPLOAD, True, True),
+    )
+    for partial, origin, source_missing, license_missing in expected:
+        uploaded = await media.upload.execute(**upload, idempotency_key=key(), provenance=partial)
+        assert (uploaded.origin, uploaded.source_missing, uploaded.license_missing) == (
+            origin,
+            source_missing,
+            license_missing,
+        )
+    unattributed = await media.list_sources.unattributed(limit=10, after_id=None)
+    assert len(unattributed) == 3
 
     full = SourceProvenance(
         origin=SourceOrigin.SEED, source_url="https://example.org/f", license_note="CC0"
