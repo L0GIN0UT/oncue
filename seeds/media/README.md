@@ -66,6 +66,7 @@ uv run gv dev seed [--date YYYY-MM-DD]
 ```bash
 uv run python seeds/media/fetch_tmdb.py        # фильмы TMDB → tmdb/ (ключ TMDB в .keys.env)
 uv run python seeds/media/fetch_fma.py --count 1000   # клипы FMA по 30 с → fma/clips
+uv run python seeds/media/fetch_jamendo.py --count 400  # Jamendo: клипы 30 с + обложки → jamendo/
 uv run gv dev seed-real --real-dir C:/gv-media --import-dir <каталог seeds/catalog стенда> \
     --ffmpeg <путь к ffmpeg>                   # переменные админа — как у `gv dev seed`
 ```
@@ -88,3 +89,21 @@ uv run gv dev seed-real --real-dir C:/gv-media --import-dir <каталог seed
 
 У реальных фильмов нет `soundtrack` и `audio_clip`, поэтому режимы «саундтрек» и «затемнение»
 по-прежнему играют на синтетике. Повторный запуск безопасен (стабильные `Idempotency-Key`).
+
+## Jamendo: клипы и обложки (`fetch_jamendo.py`)
+
+Выгрузка треков [Jamendo](https://developer.jamendo.com) (API v3.0) в `<root>/jamendo/`:
+`clips/<id>.mp3`, `covers/<album_id>.jpg` (600 px, один файл на альбом) и
+`catalog-tracks.jsonl` (формат как у FMA, плюс `source_url`, `origin: "jamendo"`, `cover`).
+Ключ — `JAMENDO_CLIENT_ID` в окружении или в `<root>/.keys.env`.
+
+- Берётся `--count` треков (по умолчанию 400) с равной квотой на ~12 жанров, по популярности;
+  только с разрешённым скачиванием, с названием (< 60 символов), исполнителем, обложкой и жанром.
+- Трек скачивается целиком, ffmpeg режет клип 30 с (с 30-й секунды, у треков короче 60 с — с
+  середины), исходник удаляется. Повторный запуск не качает готовое заново.
+- `+` в `include` нужно кодировать как `%2B`, иначе API отдаёт пустой список; пустые ответы
+  на живой запрос случаются — скрипт повторяет.
+
+**Лицензии.** `license_ccurl` сохраняется как есть и не фильтруется: часть треков под
+`NC` (некоммерческие) и `ND`. Для локального стенда это допустимо, для публичного релиза
+условия каждой лицензии нужно проверить (и отфильтровать или получить права).
