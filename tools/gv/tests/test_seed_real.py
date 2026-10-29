@@ -10,23 +10,30 @@ import pytest
 
 from gv_cli.seed import SeedError
 from gv_cli.seed_real import (
+    GENRE_TITLES,
     TARGET_AUDIO_S,
     PackageEntry,
     PackageFile,
     RealSeeder,
     RealUnit,
     audio_target,
+    build_units,
     catalog_row,
     ffmpeg_command,
     film_collections,
+    import_rows,
+    load_jamendo_rows,
     load_track_rows,
     music_collections,
+    normalize_genre,
     package_manifest,
     prepare_audio,
     read_jsonl,
     split_batches,
     track_from_meta,
     unit_files,
+    unit_provenance,
+    write_jsonl,
     write_package,
 )
 
@@ -335,3 +342,183 @@ def _bare_seeder(status: dict[str, object]) -> Any:
     seeder._check = lambda *_a, **_k: None  # type: ignore[method-assign]
     seeder._poll = lambda check, **_k: check()  # type: ignore[method-assign]
     return seeder
+
+
+# ---------------------------------------------------------------- Jamendo и обложки (ADR 0073)
+def _jamendo_row(track_id: int, genre: str = "rock", *, album_id: int = 7) -> dict[str, Any]:
+    """Строка ``jamendo/catalog-tracks.jsonl`` (формат ``seeds/media/fetch_jamendo.py``)."""
+    return {
+        "key": f"track:jamendo-{track_id}",
+        "kind": "track",
+        "title": f"j{track_id}",
+        "year": 2015,
+        "persons": [{"name": "Artist", "role": "artist"}],
+        "genres": [genre, "dance"],
+        "metrics": {"duration_ms": 30000},
+        "album": "Album",
+        "license": "http://creativecommons.org/licenses/by-nc-sa/3.0/",
+        "source_url": f"https://www.jamendo.com/track/{track_id}",
+        "origin": "jamendo",
+        "audio": f"{track_id}.mp3",
+        "cover": f"{album_id}.jpg",
+    }
+
+
+def _make_jamendo(root: Path, rows: list[dict[str, Any]], *, with_cover: bool = True) -> Path:
+    folder = root / "jamendo"
+    (folder / "clips").mkdir(parents=True)
+    (folder / "covers").mkdir()
+    for row in rows:
+        (folder / "clips" / row["audio"]).write_bytes(b"mp3")
+        if with_cover:
+            (folder / "covers" / row["cover"]).write_bytes(b"\xff\xd8\xffjpg")
+    write_jsonl(folder / "catalog-tracks.jsonl", rows)
+    return folder
+
+
+def _jamendo_unit(**extra: Any) -> RealUnit:
+    fields: dict[str, Any] = {
+        "key": "track:jamendo-1",
+        "domain": "music",
+        "title": "t",
+        "year": None,
+        "genres": ("rock",),
+        "provider": "jamendo",
+    }
+    return RealUnit(**(fields | extra))
+
+
+class TestJamendo:
+    def test_rows_keep_only_tracks_with_clip_and_find_cover(self, tmp_path: Path) -> None:
+        rows = [_jamendo_row(1), _jamendo_row(2, album_id=8), _jamendo_row(3)]
+        folder = _make_jamendo(tmp_path, rows)
+        (folder / "clips" / "3.mp3").unlink()  # клип не докачан — трек отбрасывается
+        (folder / "covers" / "8.jpg").unlink()  # обложки нет — трек остаётся без неё
+        loaded = load_jamendo_rows(folder)
+        assert [r["key"] for r in loaded] == ["track:jamendo-1", "track:jamendo-2"]
+        assert loaded[0]["cover"] == "7.jpg"
+        assert loaded[1].get("cover") is None
+
+    def test_missing_folder_gives_no_rows(self, tmp_path: Path) -> None:
+        assert load_jamendo_rows(tmp_path / "nope") == []
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("hiphop", "hip-hop"), ("Hip Hop", "hip-hop"), ("rock", "rock"), (" Jazz ", "jazz")],
+    )
+    def test_genre_names_match_fma(self, raw: str, expected: str) -> None:
+        assert normalize_genre(raw) == expected
+
+    def test_rows_normalize_genres(self, tmp_path: Path) -> None:
+        folder = _make_jamendo(tmp_path, [_jamendo_row(1, "hiphop")])
+        assert load_jamendo_rows(folder)[0]["genres"] == ["hip-hop", "dance"]
+
+    def test_build_units_adds_jamendo_with_cover_and_source_fields(self, tmp_path: Path) -> None:
+        _make_jamendo(tmp_path, [_jamendo_row(1), _jamendo_row(2, album_id=8)])
+        units = {u.key: u for u in build_units(tmp_path)}
+        first = units["track:jamendo-1"]
+        assert (first.domain, first.provider) == ("music", "jamendo")
+        assert first.genres == ("rock", "dance")
+        assert first.audio == tmp_path / "jamendo" / "clips" / "1.mp3"
+        assert first.cover == tmp_path / "jamendo" / "covers" / "7.jpg"
+        assert first.source_url == "https://www.jamendo.com/track/1"
+        assert first.license.endswith("by-nc-sa/3.0/")
+        assert units["track:jamendo-2"].cover == tmp_path / "jamendo" / "covers" / "8.jpg"
+
+    def test_tracks_limit_applies_per_source(self, tmp_path: Path) -> None:
+        _make_jamendo(tmp_path, [_jamendo_row(n) for n in range(1, 6)])
+        assert len(build_units(tmp_path, tracks_limit=2)) == 2
+
+    def test_import_rows_contain_jamendo_tracks_without_service_fields(
+        self, tmp_path: Path
+    ) -> None:
+        _make_jamendo(tmp_path, [_jamendo_row(1, "hiphop")])
+        films, tracks = import_rows(tmp_path, build_units(tmp_path))
+        assert films == []
+        (row,) = tracks
+        assert row["key"] == "track:jamendo-1" and row["genres"] == ["hip-hop", "dance"]
+        # поля выгрузки (источник, обложка, файл, лицензия) в строку импорта каталога не уходят
+        assert not {"origin", "cover", "audio", "source_url", "license", "album"} & set(row)
+        assert row["metrics"] == {"duration_ms": 30000}
+
+
+class TestCoverFiles:
+    def test_track_with_cover_uploads_audio_and_cover(self, tmp_path: Path) -> None:
+        unit = _jamendo_unit(audio=Path("a.mp3"), cover=Path("7.jpg"))
+        files = unit_files(unit, tmp_path / "a.m4a")
+        assert [(f.role, f.path.name, f.position) for f in files] == [
+            ("audio", "a.m4a", None),
+            ("cover", "7.jpg", None),
+        ]
+
+    def test_fma_track_has_no_cover(self, tmp_path: Path) -> None:
+        files = unit_files(_track(1, "rock"), tmp_path / "a.m4a")
+        assert [f.role for f in files] == ["audio"]
+
+    def test_cover_is_offered_even_without_audio(self) -> None:
+        """Аудио подготовлено не у всех единиц; обложка от него не зависит."""
+        assert [f.role for f in unit_files(_jamendo_unit(cover=Path("7.jpg")), None)] == ["cover"]
+
+    def test_manifest_with_cover_matches_schema(self, tmp_path: Path) -> None:
+        from jsonschema import Draft202012Validator
+
+        schema = json.loads(
+            (
+                Path(__file__).resolve().parents[3]
+                / "contracts/packages/media_package_manifest.v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        unit = _jamendo_unit(
+            source_url="https://www.jamendo.com/track/1",
+            license="http://creativecommons.org/licenses/by/3.0/",
+            audio=Path("a.mp3"),
+            cover=Path("7.jpg"),
+        )
+        entry = PackageEntry(
+            unit, "0192a3b4-c5d6-7e8f-9a0b-000000000101", unit_files(unit, tmp_path / "a.m4a")
+        )
+        manifest = package_manifest([entry])
+        assert not list(Draft202012Validator(schema).iter_errors(manifest))
+        item = manifest["items"][0]
+        assert [f["role"] for f in item["files"]] == ["audio", "cover"]
+        assert item["files"][1]["path"] == "track-jamendo-1/cover.jpg"
+        assert item["origin"] == "upload"
+
+
+class TestProvenance:
+    def test_jamendo_uses_upload_origin_with_source_and_license(self) -> None:
+        unit = _jamendo_unit(
+            source_url="https://www.jamendo.com/track/1",
+            license="http://creativecommons.org/licenses/by-nc-sa/3.0/",
+        )
+        assert unit_provenance(unit) == {
+            "origin": "upload",
+            "source_url": "https://www.jamendo.com/track/1",
+            "license_note": (
+                "Jamendo, http://creativecommons.org/licenses/by-nc-sa/3.0/ (local, ADR 0014)"
+            ),
+        }
+
+    def test_jamendo_without_source_url_omits_it(self) -> None:
+        assert "source_url" not in unit_provenance(_jamendo_unit())
+
+    def test_fma_and_tmdb_provenance_unchanged(self) -> None:
+        fma = unit_provenance(_track(1, "rock"))
+        assert fma["origin"] == "upload" and fma["license_note"].startswith("Free Music Archive")
+        assert "source_url" not in fma
+        assert unit_provenance(_film(550, 1999, 8.0))["origin"] == "tmdb"
+
+
+class TestJamendoGenres:
+    def test_all_fetch_genres_have_collection_titles(self) -> None:
+        for genre in ("jazz", "classical", "metal", "reggae", "blues", "ambient", "lounge"):
+            assert genre in GENRE_TITLES, genre
+
+    def test_hiphop_from_both_sources_form_one_collection(self) -> None:
+        units = [_track(n, "hip-hop", listens=n) for n in range(1, 11)]
+        units += [
+            _jamendo_unit(key=f"track:jamendo-{n}", genres=(normalize_genre("hiphop"),))
+            for n in range(1, 11)
+        ]
+        (spec,) = music_collections(units, min_size=20)
+        assert spec.title == "Хип-хоп" and len(spec.items) == 20
