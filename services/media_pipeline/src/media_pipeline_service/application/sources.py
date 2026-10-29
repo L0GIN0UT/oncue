@@ -48,18 +48,23 @@ class SourceIngestor:
         tokens: TokenSource,
         *,
         max_bytes: int,
+        kind_max_bytes: Mapping[SourceKind, int] | None = None,
     ) -> None:
         self._storage = storage
         self._normalizers = normalizers
         self._tokens = tokens
         self._max_bytes = max_bytes
+        self._kind_max_bytes = dict(kind_max_bytes or {})
+
+    def max_bytes_for(self, kind: SourceKind) -> int:
+        """Лимит размера файла вида: свой, если задан, но не больше общего."""
+        return min(self._max_bytes, self._kind_max_bytes.get(kind, self._max_bytes))
 
     def check(self, kind: SourceKind, data: bytes) -> None:
         """Проверить размер и сигнатуру до перекодирования."""
-        if len(data) > self._max_bytes:
-            raise SourceTooLargeError(
-                "исходник больше лимита", details={"max_bytes": self._max_bytes}
-            )
+        limit = self.max_bytes_for(kind)
+        if len(data) > limit:
+            raise SourceTooLargeError("исходник больше лимита", details={"max_bytes": limit})
         detected = detect_type(data[:_SIGNATURE_BYTES])
         if detected is None or detected.family is not FAMILY_BY_KIND[kind]:
             raise UnsupportedSourceError(f"файл не подходит для исходника вида {kind.value}")

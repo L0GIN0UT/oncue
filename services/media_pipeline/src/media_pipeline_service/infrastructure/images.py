@@ -16,7 +16,12 @@ from PIL import Image, ImageDraw, ImageFilter, UnidentifiedImageError
 from PIL import ImageOps as PilImageOps
 
 from media_pipeline_service.application.errors import GenerationError
-from media_pipeline_service.application.ports import ImageOps, NormalizedMedia, RenderedImage
+from media_pipeline_service.application.ports import (
+    ImageOps,
+    NormalizedMedia,
+    RenderedImage,
+    SourceNormalizer,
+)
 
 _FORMATS = ("JPEG", "PNG", "WEBP")
 
@@ -71,7 +76,11 @@ class PillowImageProcessor:
         image = self._open(data)
         image = _mask(image, ops)
         image = _center_crop(image, ops.crop)
-        if image.width > ops.max_width:
+        if ops.height is not None:
+            frame = (ops.max_width, ops.height)
+            fitter = PilImageOps.fit if ops.fit == "cover" else PilImageOps.contain
+            image = fitter(image, frame, Image.Resampling.LANCZOS)
+        elif image.width > ops.max_width:
             height = max(1, round(image.height * ops.max_width / image.width))
             image = image.resize((ops.max_width, height), Image.Resampling.LANCZOS)
         if ops.pixel_block > 1:
@@ -90,6 +99,39 @@ class PillowImageProcessor:
     async def render(self, data: bytes, ops: ImageOps) -> RenderedImage:
         """Отрендерить уровень."""
         return await asyncio.to_thread(self._render_sync, data, ops)
+
+
+class CoverNormalizer:
+    """Приём обложки: к проверкам изображения добавляет лимиты сторон и один кадр.
+
+    Стороны и число кадров читаются по заголовку, до декодирования пикселей (защита от
+    «бомб»); дальше работает общая нормализация (перекодирование из пикселей, без метаданных).
+    """
+
+    def __init__(self, inner: SourceNormalizer, *, min_side_px: int, max_side_px: int) -> None:
+        self._inner = inner
+        self._min_side = min_side_px
+        self._max_side = max_side_px
+
+    def _check(self, data: bytes) -> None:
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                image = Image.open(io.BytesIO(data), formats=_FORMATS)
+                width, height = image.size
+                frames = getattr(image, "n_frames", 1)
+        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError,
+                Image.DecompressionBombWarning) as exc:  # fmt: skip
+            raise GenerationError("source.undecodable", retryable=False) from exc
+        if frames != 1:
+            raise GenerationError("source.animated", retryable=False)
+        if not all(self._min_side <= side <= self._max_side for side in (width, height)):
+            raise GenerationError("source.side_out_of_range", retryable=False)
+
+    async def normalize(self, data: bytes) -> NormalizedMedia:
+        """Проверить стороны и кадры, затем перекодировать."""
+        await asyncio.to_thread(self._check, data)
+        return await self._inner.normalize(data)
 
 
 def _mask(image: Image.Image, ops: ImageOps) -> Image.Image:

@@ -49,7 +49,7 @@ from gv_db.idempotency import IdempotencyRecord
 
 if TYPE_CHECKING:
     from media_pipeline_service.application.commands.collections import SyncCollectionAssets
-    from media_pipeline_service.application.queries.sources import ListSources
+    from media_pipeline_service.application.queries.sources import GetSourcePreview, ListSources
 
 
 @dataclass
@@ -785,6 +785,7 @@ class MediaHarness:
             UploadSource,
         )
         from media_pipeline_service.application.generators import (
+            ArtworkGenerator,
             AudioIntroGenerator,
             DescriptionGenerator,
             EmojiGenerator,
@@ -819,6 +820,7 @@ class MediaHarness:
                 PosterMaskedGenerator(self.images, max_width=480),
                 DescriptionGenerator(),
                 EmojiGenerator(),
+                ArtworkGenerator(self.images),
             ]
         )
         self.profiles = self.registry.build_catalog(profiles or TEST_PROFILES)
@@ -842,6 +844,7 @@ class MediaHarness:
                 SourceKind.AUDIO_CLIP: self.transcoder,
                 SourceKind.FRAME: self.images,
                 SourceKind.POSTER: self.images,
+                SourceKind.COVER: self.images,
             },
             self.tokens,
             max_bytes=10_000,
@@ -993,6 +996,13 @@ class MediaHarness:
         from media_pipeline_service.application.queries.sources import ListSources
 
         return ListSources(self.uow)
+
+    @property
+    def get_source_preview(self) -> GetSourcePreview:
+        """Картинка исходника для админки."""
+        from media_pipeline_service.application.queries.sources import GetSourcePreview
+
+        return GetSourcePreview(self.uow, self.storage, max_bytes=10_000)
 
     async def run_tasks(self) -> int:
         """Выполнить все поставленные задачи генерации (повторы — как ретраи очереди)."""

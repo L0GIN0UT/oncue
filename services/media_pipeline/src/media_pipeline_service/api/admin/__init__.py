@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -29,13 +30,13 @@ from media_pipeline_service.application.dto import SourceProvenance
 from media_pipeline_service.application.queries.asset_sets import ListAssetSets
 from media_pipeline_service.application.queries.packages import GetPackage
 from media_pipeline_service.application.queries.profiles import ListProfiles
-from media_pipeline_service.application.queries.sources import ListSources
+from media_pipeline_service.application.queries.sources import GetSourcePreview, ListSources
 from media_pipeline_service.domain.errors import SourceTooLargeError
 from media_pipeline_service.domain.packages import PackageStatus
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin, SourceStatus
 
 # Виды, которые админ загружает файлом (``text`` приходит из catalog, файлом не грузится).
-UploadKind = Literal["audio", "frame", "poster", "soundtrack", "audio_clip"]
+UploadKind = Literal["audio", "frame", "poster", "soundtrack", "audio_clip", "cover"]
 UploadOrigin = Literal["upload", "seed", "tmdb"]
 
 _READ_CHUNK = 1024 * 1024
@@ -187,10 +188,12 @@ def build_admin_router(
     list_sets: ListAssetSets,
     list_profiles: ListProfiles,
     list_sources: ListSources,
+    get_source_preview: GetSourcePreview,
     submit_package: SubmitPackage,
     get_package: GetPackage,
     ugc: UgcUseCases,
     max_upload_bytes: int,
+    kind_upload_limits: Mapping[SourceKind, int] | None = None,
 ) -> APIRouter:
     """Ручки админки: загрузка исходников, перегенерация, просмотр наборов."""
     router = APIRouter(prefix="/admin/v1", tags=["admin"])
@@ -199,7 +202,7 @@ def build_admin_router(
         "/sources",
         status_code=201,
         response_model=UploadResponse,
-        summary="Загрузить исходник (аудио, кадр, постер, саундтрек, звук фильма) для единицы",
+        summary="Загрузить исходник (аудио, кадр, постер, обложка, саундтрек, звук) для единицы",
         description=(
             "origin, source_url и license_note необязательны (ADR 0072): origin по умолчанию "
             "upload, пустые источник и лицензия отмечаются в ответе (source_missing, "
@@ -221,7 +224,10 @@ def build_admin_router(
         source_url: Annotated[str | None, Form(min_length=1, max_length=2000)] = None,
         license_note: Annotated[str | None, Form(min_length=1, max_length=500)] = None,
     ) -> UploadResponse:
-        data = await _read_limited(file, max_upload_bytes)
+        limit = min(
+            max_upload_bytes, (kind_upload_limits or {}).get(SourceKind(kind), max_upload_bytes)
+        )
+        data = await _read_limited(file, limit)
         result = await upload.execute(
             media_item_id=media_item_id,
             kind=SourceKind(kind),
@@ -300,6 +306,37 @@ def build_admin_router(
                 extra={"details": exc.details},
             )
         return PackageAccepted(package_id=result.package_id, status=result.status)
+
+    @router.get(
+        "/sources/{source_media_id}/preview",
+        response_class=Response,
+        summary="Картинка каталожного исходника (обложка, постер, кадр)",
+        description=(
+            "Нормализованная копия читается из хранилища по ключу сервиса, адресов S3 в ответе "
+            "нет. Заголовки: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, "
+            "`Content-Disposition: inline`. Нет исходника, он не изображение, не готов или "
+            "принадлежит сборнику - 404 `source.not_found`."
+        ),
+        responses={
+            **problem_responses(401, 403, 404),
+            200: {
+                "description": "Изображение (PNG: нормализованная копия исходника)",
+                "content": {"image/png": {"schema": {"type": "string", "format": "binary"}}},
+            },
+        },
+    )
+    async def source_preview(source_media_id: UUID, principal: Viewer) -> Response:
+        del principal  # доступ проверяет зависимость Viewer
+        result = await get_source_preview.execute(source_media_id)
+        return Response(
+            content=result.data,
+            media_type=result.content_type,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+            },
+        )
 
     @router.get(
         "/packages/{package_id}",

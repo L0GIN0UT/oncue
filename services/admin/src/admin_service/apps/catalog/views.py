@@ -25,14 +25,17 @@ from admin_service.apps.catalog.forms import (
     SearchForm,
     SourcePositionForm,
     SourceUploadForm,
+    safe_upload_name,
 )
 from admin_service.core.catalog_client import CATALOG, CatalogAdminClient
-from admin_service.core.media_client import MEDIA, MediaAdminClient
+from admin_service.core.media_client import MEDIA, SOURCE_PREVIEW_TYPE, MediaAdminClient
 from admin_service.core.permissions import STAFF_PERM, has_perm, require_perm
-from admin_service.core.views import fetch, mutate, read, with_links
+from admin_service.core.views import error_status, fetch, mutate, read, with_links
 
 EDIT_TEXTS = "catalog.edit_aliases"  # тексты загадок — то же право, что алиасы (§2.7 плана 3a)
 UPLOAD = "media.upload_source"
+# Виды исходников-изображений: у готового показывается превью (через прокси admin).
+IMAGE_KINDS = frozenset({"frame", "poster", "cover"})
 IMPORT = "catalog.import"
 
 
@@ -110,7 +113,12 @@ def _sources(rows: Any, *, can_upload: bool) -> list[dict[str, Any]]:
             if can_upload
             else None
         )
-        result.append({**row, "position_form": form})
+        preview_url = (
+            reverse("catalog:source_preview", kwargs={"source_id": source_id})
+            if row.get("kind") in IMAGE_KINDS and row.get("status") == "ready"
+            else None
+        )
+        result.append({**row, "position_form": form, "preview_url": preview_url})
     return result
 
 
@@ -233,6 +241,26 @@ def item_aliases(request: HttpRequest, item_id: UUID) -> HttpResponse:
     return redirect("catalog:item", item_id=item_id)
 
 
+@require_GET
+@require_perm(STAFF_PERM)
+def source_preview(request: HttpRequest, source_id: UUID) -> HttpResponse:
+    """Прокси картинки исходника: байты из media-pipeline, токен и адреса S3 браузеру не уходят."""
+    data, error = read(request, MEDIA, lambda c: MediaAdminClient(c).source_preview(source_id))
+    if error is not None:
+        # Картинке нужен статус, а не страница: нет исходника/не картинка — 404, сбои — 502/503.
+        return HttpResponse(
+            error.message, status=error_status(error), content_type="text/plain; charset=utf-8"
+        )
+    # Без аудита просмотра: это не персональные данные, а миниатюры карточки (по записи на каждую
+    # картинку засоряли бы журнал); загрузка исходника аудируется.
+    response = HttpResponse(data, content_type=SOURCE_PREVIEW_TYPE)
+    response["Cache-Control"] = "no-store, private"
+    response["Pragma"] = "no-cache"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Disposition"] = "inline"
+    return response
+
+
 @require_POST
 @require_perm(UPLOAD)
 def source_upload(request: HttpRequest, item_id: UUID) -> HttpResponse:
@@ -262,7 +290,7 @@ def source_upload(request: HttpRequest, item_id: UUID) -> HttpResponse:
         },
         call=lambda c: MediaAdminClient(c).upload_source(
             fields=fields,
-            file_name=upload.name or "upload",
+            file_name=safe_upload_name(upload.name),
             file=upload.file,
             content_type=upload.content_type or "application/octet-stream",
             idempotency_key=key,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from django import forms
@@ -24,11 +25,15 @@ SOURCE_KINDS = [
     ("audio", "аудио (трек)"),
     ("frame", "кадр"),
     ("poster", "постер"),
+    ("cover", "обложка альбома (трек)"),
     ("soundtrack", "саундтрек фильма"),
     ("audio_clip", "звук фильма"),
 ]
 SOURCE_ORIGINS = [("", "—"), ("upload", "своя загрузка"), ("tmdb", "TMDB"), ("seed", "засев")]
 POSITION_MIN, POSITION_MAX = 1, 100
+COVER_KIND = "cover"
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+UPLOAD_NAME_MAX = 80
 SOURCE_URL_MAX, LICENSE_NOTE_MAX = 2000, 500
 # Пределы текстов загадок — как ClueTextsIn в contracts/openapi/catalog.json.
 PLOT_MAX, TAGLINE_MAX, EMOJI_MAX = 2000, 300, 64
@@ -113,6 +118,16 @@ class ImportForm(MutationForm):
         return {"source": data["source"], "ref": data["ref"]}
 
 
+def safe_upload_name(name: str | None) -> str:
+    """Имя файла для multipart-запроса к media: без пути и спецсимволов, не длиннее лимита.
+
+    Сервис имя клиента не использует (тип — по содержимому, ключ объекта случайный); имя
+    нормализуется ради логов и прокси между admin и media.
+    """
+    base = _SAFE_NAME.sub("_", (name or "").replace("\\", "/").rsplit("/", 1)[-1]).strip("._")
+    return base[:UPLOAD_NAME_MAX] or "upload"
+
+
 class SourceUploadForm(MutationForm):
     """Загрузка исходника в media-pipeline: вид, порядок и происхождение.
 
@@ -146,6 +161,15 @@ class SourceUploadForm(MutationForm):
         if upload.size > limit:
             raise forms.ValidationError(f"файл больше {settings.GV_MAX_UPLOAD_MB} МБ")
         return upload
+
+    def clean(self) -> dict[str, Any]:
+        data = super().clean() or {}
+        upload = data.get("file")
+        # Обложка — своя, меньшая граница (ADR 0073); тип и размеры по содержимому проверяет media.
+        too_big = upload is not None and upload.size > settings.GV_COVER_MAX_MB * 1024 * 1024
+        if data.get("kind") == COVER_KIND and too_big:
+            self.add_error("file", f"обложка больше {settings.GV_COVER_MAX_MB} МБ")
+        return data
 
     def fields_payload(self, media_item_id: str) -> dict[str, str]:
         """Поля multipart-формы ``POST /admin/v1/sources`` (пустые не передаются)."""

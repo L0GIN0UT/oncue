@@ -360,6 +360,33 @@
         "seconds": 0.1
       },
       "params_hash": "403efe45b35278f4cc183dc6cc19144e7acb44a9c96c6dde2e58f6c0ec611641"
+    },
+    {
+      "canonical_json": "{\"fit\":\"cover\",\"height\":600,\"source_kinds\":[\"cover\"],\"width\":600}",
+      "name": "profile:artwork:default",
+      "params": {
+        "fit": "cover",
+        "height": 600,
+        "source_kinds": [
+          "cover"
+        ],
+        "width": 600
+      },
+      "params_hash": "cb71071617f1c5b4239d5f487d633b1174afec1fb89bc0fb9392af7e7543218b"
+    },
+    {
+      "canonical_json": "{\"fit\":\"cover\",\"height\":900,\"source_kinds\":[\"poster\",\"frame\"],\"width\":600}",
+      "name": "profile:artwork:film",
+      "params": {
+        "fit": "cover",
+        "height": 900,
+        "source_kinds": [
+          "poster",
+          "frame"
+        ],
+        "width": 600
+      },
+      "params_hash": "39ca3adee867348bc9934210b13459fcda6007eebe008913ad2f92f81186182c"
     }
   ]
 }

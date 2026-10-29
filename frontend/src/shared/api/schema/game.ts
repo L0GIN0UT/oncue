@@ -658,6 +658,21 @@ export interface components {
             reason: string;
         };
         /**
+         * Artwork
+         * @description Картинка ответа: обложка альбома трека или постер фильма (ADR 0073).
+         */
+        Artwork: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Mime */
+            mime: string;
+            /** Url */
+            url: string;
+        };
+        /**
          * AssetRequestCreate
          * @description Запросить генерацию ассетов под параметры загадки черновика (ADR 0025).
          */
@@ -1678,6 +1693,8 @@ export interface components {
          * @description Ответ раунда — только у завершённого раунда.
          */
         Reveal: {
+            /** @description Обложка (трек) или постер (фильм); null, если картинки нет или она временно недоступна - заглушку рисует клиент */
+            artwork?: components["schemas"]["Artwork"] | null;
             final_clue: components["schemas"]["FinalClue"];
             /**
              * Media Item Id

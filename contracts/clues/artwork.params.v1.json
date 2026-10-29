@@ -1,0 +1,48 @@
+{
+  "$id": "urn:guessverse:contracts:clues:artwork:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Обложка или постер ответа (ревил раунда): одна картинка нужного размера, без уровней. Берётся первый подходящий вид исходника из source_kinds.",
+  "properties": {
+    "fit": {
+      "description": "cover - заполнить и обрезать по центру; contain - вписать без обрезки",
+      "enum": [
+        "cover",
+        "contain"
+      ],
+      "type": "string"
+    },
+    "height": {
+      "maximum": 2048,
+      "minimum": 64,
+      "type": "integer"
+    },
+    "source_kinds": {
+      "items": {
+        "enum": [
+          "cover",
+          "poster",
+          "frame"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "width": {
+      "maximum": 2048,
+      "minimum": 64,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "source_kinds",
+    "width",
+    "height",
+    "fit"
+  ],
+  "title": "artwork params v1",
+  "type": "object"
+}

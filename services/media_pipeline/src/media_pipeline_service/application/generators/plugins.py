@@ -23,6 +23,7 @@ from media_pipeline_service.application.generators.base import (
 )
 from media_pipeline_service.application.ports import ImageOps, ImageProcessor, Transcoder
 from media_pipeline_service.domain.clues import (
+    ArtworkParams,
     AudioBlackoutParams,
     AudioIntroParams,
     AudioReverseParams,
@@ -34,7 +35,12 @@ from media_pipeline_service.domain.clues import (
     PosterMaskedParams,
     SoundtrackParams,
 )
-from media_pipeline_service.domain.sources import SourceKind, SourceMedia, sources_by_position
+from media_pipeline_service.domain.sources import (
+    SourceKind,
+    SourceMedia,
+    best_source,
+    sources_by_position,
+)
 from media_pipeline_service.domain.texts import (
     TEXT_ASSET_EXT,
     TEXT_ASSET_MIME,
@@ -208,6 +214,41 @@ class PosterMaskedGenerator(SingleSourceGenerator):
         """Отрендерить уровни."""
         ops = poster_ops(_expect(params, PosterMaskedParams), self._max_width)
         return await _render_all(self._processor, _single(sources), ops)
+
+
+class ArtworkGenerator:
+    """Картинка ответа (ADR 0073): обложка альбома, постер или кадр нужного размера.
+
+    Один уровень. Какой исходник брать, решает конфиг профиля: первый найденный вид из
+    ``source_kinds`` (у фильма без постера — кадр); нет ни одного — набор не планируется.
+    """
+
+    clue_type: ClassVar[str] = "artwork"
+    source_kind: ClassVar[SourceKind] = SourceKind.COVER
+    params_model: ClassVar[type[ClueParams]] = ArtworkParams
+
+    def __init__(self, processor: ImageProcessor) -> None:
+        self._processor = processor
+
+    def source_count(self, params: ClueParams) -> int:  # noqa: ARG002 — сигнатура протокола
+        """Один исходник."""
+        return 1
+
+    def sources_for(
+        self, params: ClueParams, sources: Sequence[SourceMedia]
+    ) -> list[SourceMedia] | None:
+        """Лучший исходник первого вида из ``source_kinds``, у которого он есть."""
+        for name in _expect(params, ArtworkParams).source_kinds:
+            source = best_source(sources, SourceKind(name))
+            if source is not None:
+                return [source]
+        return None
+
+    async def generate(self, sources: Sequence[bytes], params: ClueParams) -> list[GeneratedAsset]:
+        """Отрендерить картинку в рамку профиля."""
+        p = _expect(params, ArtworkParams)
+        op = ImageOps(max_width=p.width, height=p.height, fit=p.fit)
+        return [await _render(self._processor, _single(sources), op)]
 
 
 class FrameSequenceGenerator:

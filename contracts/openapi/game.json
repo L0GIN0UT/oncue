@@ -99,6 +99,31 @@
         "title": "ArchiveRequest",
         "type": "object"
       },
+      "Artwork": {
+        "description": "Картинка ответа: обложка альбома трека или постер фильма (ADR 0073).",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at",
+          "mime"
+        ],
+        "title": "Artwork",
+        "type": "object"
+      },
       "AssetRequestCreate": {
         "additionalProperties": false,
         "description": "Запросить генерацию ассетов под параметры загадки черновика (ADR 0025).",
@@ -2358,6 +2383,17 @@
       "Reveal": {
         "description": "Ответ раунда — только у завершённого раунда.",
         "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Artwork"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Обложка (трек) или постер (фильм); null, если картинки нет или она временно недоступна - заглушку рисует клиент"
+          },
           "final_clue": {
             "$ref": "#/components/schemas/FinalClue"
           },

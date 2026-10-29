@@ -44,6 +44,7 @@ class AdminConfig(BaseModel):
         service_urls: Базовые URL сервисов, чьи admin-API вызывает админка.
         service_timeout_s: Таймаут вызова сервиса.
         max_upload_mb: Предел размера загружаемого исходника (аудио, кадр, постер).
+        cover_max_mb: Предел размера обложки альбома (меньше общего).
         forwarded_allow_ips: Кому uvicorn доверяет ``X-Forwarded-For`` (IP для allowlist).
         mode_config_max_bytes: Предел размера текста конфига режима в редакторе (как
             ``GV_GAME__MODE_CONFIG_MAX_BYTES`` у game: больше сервис всё равно не примет).
@@ -83,6 +84,8 @@ class AdminConfig(BaseModel):
     )
     service_timeout_s: float = Field(default=10.0, gt=0)
     max_upload_mb: int = Field(default=50, ge=1)
+    # Предел обложки (ADR 0073); не больше GV_MEDIA__COVER_MAX_MB media-pipeline, иначе откажет он.
+    cover_max_mb: int = Field(default=5, ge=1)
     forwarded_allow_ips: str = "127.0.0.1"
     mode_config_max_bytes: int = Field(default=65536, ge=1024)
     daily_timezone: str = "Europe/Moscow"

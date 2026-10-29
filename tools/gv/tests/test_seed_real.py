@@ -12,6 +12,7 @@ from gv_cli.seed import SeedError
 from gv_cli.seed_real import (
     TARGET_AUDIO_S,
     PackageEntry,
+    PackageFile,
     RealSeeder,
     RealUnit,
     audio_target,
@@ -251,6 +252,27 @@ class TestPackage:
             ("frame", 3),
             ("poster", None),
         ]
+
+    def test_manifest_accepts_cover_role(self, tmp_path: Path) -> None:
+        """Роль ``cover`` (формат манифеста 1.1, ADR 0073) проходит схему контракта."""
+        from jsonschema import Draft202012Validator
+
+        schema = json.loads(
+            (
+                Path(__file__).resolve().parents[3]
+                / "contracts/packages/media_package_manifest.v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        cover = tmp_path / "cover.jpg"
+        cover.write_bytes(b"c.jpg")
+        track, _ = self._entries(tmp_path)
+        entry = PackageEntry(
+            track.unit, track.media_item_id, (*track.files, PackageFile("cover", cover))
+        )
+        manifest = package_manifest([entry])
+        assert not list(Draft202012Validator(schema).iter_errors(manifest))
+        assert [f["role"] for f in manifest["items"][0]["files"]] == ["audio", "cover"]
+        assert manifest["items"][0]["files"][1]["path"].endswith("/cover.jpg")
 
     def test_write_package_stores_files_without_compression(self, tmp_path: Path) -> None:
         import zipfile

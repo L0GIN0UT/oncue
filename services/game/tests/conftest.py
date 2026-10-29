@@ -210,6 +210,24 @@ class GameService:
         assert await self.deliver(envelope) is Outcome.PROCESSED
         return asset_set_id
 
+    async def ready_artwork(self, item_id: UUID, domain: str = "music") -> UUID:
+        """``AssetsReady`` картинки ответа (обложка, постер) по профилю домена (ADR 0073)."""
+        params = GameSettings().artwork_profiles[domain]
+        base = load_example("media_pipeline.AssetsReady")
+        asset_set_id = uuid7()
+        payload = {
+            **base.payload,
+            "asset_set_id": str(asset_set_id),
+            "media_item_id": str(item_id),
+            "clue_type": "artwork",
+            "params_hash": params_hash(params),
+            "levels_count": 1,
+            "version": 3,
+        }
+        envelope = base.model_copy(update={"aggregate_id": str(item_id), "payload": payload})
+        assert await self.deliver(envelope) is Outcome.PROCESSED
+        return asset_set_id
+
 
 @pytest.fixture
 def fake_clock_start() -> FakeClock:

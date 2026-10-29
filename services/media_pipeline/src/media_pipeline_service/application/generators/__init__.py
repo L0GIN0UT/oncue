@@ -7,6 +7,7 @@ from media_pipeline_service.application.generators.base import (
     SingleSourceGenerator,
 )
 from media_pipeline_service.application.generators.plugins import (
+    ArtworkGenerator,
     AudioBlackoutGenerator,
     AudioIntroGenerator,
     AudioReverseGenerator,
@@ -19,6 +20,7 @@ from media_pipeline_service.application.generators.plugins import (
 )
 
 __all__ = [
+    "ArtworkGenerator",
     "AssetGenerator",
     "AudioBlackoutGenerator",
     "AudioIntroGenerator",

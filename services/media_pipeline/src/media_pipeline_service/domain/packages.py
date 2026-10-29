@@ -34,6 +34,7 @@ ROLE_KINDS: dict[str, SourceKind] = {
     "poster": SourceKind.POSTER,
     "soundtrack": SourceKind.SOUNDTRACK,
     "audio_clip": SourceKind.AUDIO_CLIP,
+    "cover": SourceKind.COVER,
 }
 ITEM_KINDS = frozenset({"track", "film"})
 _ORIGINS = frozenset({SourceOrigin.UPLOAD, SourceOrigin.SEED, SourceOrigin.TMDB})

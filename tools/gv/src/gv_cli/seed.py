@@ -94,7 +94,8 @@ class SourceSpec:
     """Исходник единицы: вид media-pipeline, шаблон имени файла генератора и позиция.
 
     Attributes:
-        kind: ``SourceKind`` загрузки (``audio``, ``frame``, ``soundtrack``, ``audio_clip``).
+        kind: ``SourceKind`` загрузки (``audio``, ``frame``, ``soundtrack``, ``audio_clip``,
+            ``cover``, ``poster``).
         filename: Шаблон имени в каталоге генератора: ``{slug}`` — ключ с ``-`` вместо ``:``
             (``film-x``), ``{short}`` — ключ без вида (``x``).
         mime: MIME файла.
