@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -33,9 +34,13 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
         # ходов), читаются по умолчанию; старое окно ops («user:op» → полный ответ)
         # сжимается до статуса и кода по игрокам; остальное не меняется при перезаписи.
         encoded = encode(room)
-        same = set(data) - {"ops", "match"}
+        same = set(data) - {"ops", "match", "settings"}
         assert {k: encoded[k] for k in same} == {k: data[k] for k in same}
         assert encoded["start_error"] is None
+        # Название комнаты добавлено после снимка: читается как «не задано», остальное то же.
+        assert encoded["settings"].pop("name") is None
+        assert encoded["settings"] == data["settings"]
+        encoded = encode(room)
         assert encode(decode(encoded)) == encoded
         legacy = {tuple(key.split(":", 1)) for key in data["ops"]}
         compact = {(user, op) for user, ops in encoded["ops"].items() for op in ops}
@@ -45,6 +50,17 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
                 assert "body" not in outcome or "room" not in outcome["body"]
         players = encoded["match"]["contest"]["players"]
         assert all(p["elapsed_ms"] is None and p["window_ms"] is None for p in players.values())
+
+
+async def test_room_name_survives_snapshot_without_schema_bump() -> None:
+    h = Harness()
+    room, _ = await h.room()
+    assert room.settings.name is None
+    named = replace(room, settings=replace(room.settings, name="Вечер кино"))
+    data = encode(named)
+    assert data["schema_version"] == SCHEMA_VERSION
+    assert data["settings"]["name"] == "Вечер кино"
+    assert loads(dumps(named)).settings.name == "Вечер кино"
 
 
 async def test_live_room_round_trips_through_snapshot() -> None:

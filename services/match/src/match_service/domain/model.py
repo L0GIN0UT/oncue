@@ -149,6 +149,7 @@ class RoomSettings:
 
     Attributes:
         level_window_s: Окно уровня, выбранное хостом; ``None`` — окна шаблона.
+        name: Название комнаты от хоста (необязательное, при создании).
     """
 
     rounds: int
@@ -158,6 +159,8 @@ class RoomSettings:
     players_max: int
     visibility: str
     collection_ids: tuple[UUID, ...] = ()
+    name: str | None = None
+    """Название комнаты, введённое хостом (после ``gv_text.ugc``); ``None`` — не задано."""
 
 
 @dataclass(slots=True)

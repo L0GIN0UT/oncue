@@ -231,6 +231,7 @@ class RoomQueries:
                 {
                     "code": room.code,
                     "mode": mode_ref(room),
+                    "host_id": str(room.host_id),
                     "host_nickname": host.nickname if host is not None else "",
                     "players": sum(1 for s in room.seats if s.presence is not Presence.LEFT),
                     "players_max": room.settings.players_max,
