@@ -115,9 +115,13 @@ test("дуэль: лобби → готовность → матч → «Соп�
   await expect(page.getByTestId("player-rival").getByTestId("emote-bubble")).toHaveText("🤝 GG");
 
   // «Отошёл / Вернулся»: отметка видна сопернику.
-  await rival.getByTestId("away-toggle").click();
+  // Кнопка берёт состояние из своего слота: возврат жмём, когда соперник уже получил свою дельту.
+  const awayToggle = rival.getByTestId("away-toggle");
+  await awayToggle.click();
+  await expect(awayToggle).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("player-rival")).toContainText("Отошёл");
-  await rival.getByTestId("away-toggle").click();
+  await awayToggle.click();
+  await expect(awayToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByTestId("player-rival")).not.toContainText("Отошёл");
 
   // Второй раунд: соперник сдаётся.
