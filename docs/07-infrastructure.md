@@ -141,6 +141,8 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 
 Dev-оверлей (`compose.services.dev.yml`) монтирует `seeds/game/modes` в game (`GV_GAME__BOOTSTRAP_MODES_DIR`) и `seeds/rating/ladders` в rating (`GV_RATING__BOOTSTRAP_LADDERS_DIR`), `seeds/progression` в progression (`GV_PROGRESSION__BOOTSTRAP_CONFIG_DIR`, версия 1 конфига) и включает у identity `GV_EMAIL__BACKEND=log` (код из письма пишется в лог, только local/ci; [ADR 0041](adr/0041-email-codes-trusted-devices.md)).
 
+**Засев стенда.** `gv dev seed` наполняет стенд синтетикой, `gv dev seed-real` дополняет его реальными открытыми медиа из `C:/gv-media`. Чистый стенд только на реальных данных — `gv dev seed-real --without-synthetic`: синтетика пропускается, выполняются базовые шаги (онлайн-шаблоны, предметы, события, social), дейлики и «рекомендуемое» строятся из сборников `real-*`, а режим без материала попадает в итоговую сводку, не прерывая засев. Подробности — `seeds/media/README.md`.
+
 Остальные настройки сервисов описаны в `settings.py` сервиса и в [плане этапа 1](plans/stage-1.md).
 
 **TLS на gateway.** Сертификаты лежат в `infra/nginx/certs/{fullchain,privkey}.pem`, каталог в `.gitignore`. Команды выпуска — в шапке `infra/compose/compose.gateway.yml`:

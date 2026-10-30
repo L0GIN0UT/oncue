@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 
-from gv_cli.seed import SeedError
+from gv_cli import seed_real
+from gv_cli.seed import CollectionItemSpec, CollectionSpec, ModePlan, SeedConfig, SeedError
 from gv_cli.seed_real import (
     GENRE_TITLES,
     TARGET_AUDIO_S,
@@ -16,6 +17,7 @@ from gv_cli.seed_real import (
     PackageFile,
     RealSeeder,
     RealUnit,
+    SkippedMode,
     audio_target,
     build_units,
     catalog_row,
@@ -33,6 +35,7 @@ from gv_cli.seed_real import (
     track_from_meta,
     unit_files,
     unit_provenance,
+    with_featured,
     write_jsonl,
     write_package,
 )
@@ -522,3 +525,311 @@ class TestJamendoGenres:
         ]
         (spec,) = music_collections(units, min_size=20)
         assert spec.title == "Хип-хоп" and len(spec.items) == 20
+
+
+# ---------------------------------------------------------------- без синтетики
+def _spec(key: str, domain: str, size: int = 3, rank: int | None = None) -> CollectionSpec:
+    return CollectionSpec(
+        key=key,
+        title=key,
+        domain=domain,
+        default_mode_key="m",
+        items=tuple(CollectionItemSpec(seed_key=f"{domain}:{n}") for n in range(size)),
+        featured_rank=rank,
+    )
+
+
+def _plan(
+    key: str, domain: str | None, min_playable: int, *, period: str | None = None, **extra: Any
+) -> ModePlan:
+    return ModePlan(
+        key=key,
+        min_playable=min_playable,
+        period=period,
+        timezone="UTC",
+        size=None,
+        themed=False,
+        domain=domain,
+        **extra,
+    )
+
+
+class TestWithFeatured:
+    def test_one_per_domain(self) -> None:
+        specs = [
+            _spec("real-music-rock", "music"),
+            _spec("real-music-pop", "music"),
+            _spec("real-film-80s", "film"),
+            _spec("real-film-top", "film"),
+        ]
+        ranked = {s.key: s.featured_rank for s in with_featured(specs)}
+        assert ranked == {
+            "real-music-rock": 2,
+            "real-music-pop": None,
+            "real-film-80s": None,
+            "real-film-top": 1,
+        }
+
+    def test_film_without_top_takes_first(self) -> None:
+        ranked = with_featured([_spec("real-film-80s", "film"), _spec("real-film-00s", "film")])
+        assert [s.featured_rank for s in ranked] == [1, None]
+
+    def test_domain_without_collections_is_skipped(self) -> None:
+        ranked = with_featured([_spec("real-music-rock", "music")])
+        assert [s.featured_rank for s in ranked] == [2]
+
+    def test_existing_rank_is_kept(self) -> None:
+        specs = [_spec("a", "film", rank=7), _spec("real-film-top", "film")]
+        assert [s.featured_rank for s in with_featured(specs)] == [7, None]
+
+    def test_empty(self) -> None:
+        assert with_featured([]) == []
+
+
+def _config(**extra: Any) -> SeedConfig:
+    return SeedConfig(
+        identity_url="",
+        catalog_url="",
+        media_url="",
+        game_url="",
+        collections_url="",
+        admin_login="",
+        admin_password="",
+        service_secret="",
+        repo_root=Path(),
+        **extra,
+    )
+
+
+def _standalone_seeder(units: list[RealUnit], playable: dict[str, set[str]] | None = None) -> Any:
+    """RealSeeder без сети: проекция game и опрос подменены."""
+    seeder = RealSeeder.__new__(RealSeeder)
+    seeder._units = units
+    seeder._cfg = _config(assets_timeout_s=1.0)
+    seeder._echo = lambda _msg: None
+    ready = playable or {}
+
+    def playable_ids(mode_key: str) -> set[str]:
+        if mode_key not in ready:
+            raise SeedError(f"режим {mode_key} не опубликован")
+        return ready[mode_key]
+
+    def poll(check: Any, **_kw: Any) -> None:
+        if not check():
+            raise SeedError("таймаут")
+
+    seeder._playable_ids = playable_ids  # type: ignore[method-assign]
+    seeder._poll = poll  # type: ignore[method-assign]
+    return seeder
+
+
+def _items(units: list[RealUnit]) -> dict[str, Any]:
+    return {u.key: object() for u in units}
+
+
+class TestPlanModes:
+    def test_mode_without_material_is_skipped_not_fatal(self) -> None:
+        films = [_film(n, 1990, 7.0) for n in range(6)]
+        seeder = _standalone_seeder(films, {"film.daily": {str(n) for n in range(6)}})
+        plans = [_plan("film.daily", "film", 5), _plan("music.daily", "music", 5)]
+        ready, skipped = seeder.plan_modes(plans, _items(films))
+        assert [p.key for p in ready] == ["film.daily"]
+        assert skipped == [SkippedMode("music.daily", "нет единиц домена music")]
+
+    def test_not_enough_units(self) -> None:
+        films = [_film(n, 1990, 7.0) for n in range(3)]
+        seeder = _standalone_seeder(films, {"film.daily": set()})
+        ready, skipped = seeder.plan_modes([_plan("film.daily", "film", 5)], _items(films))
+        assert ready == []
+        assert skipped == [SkippedMode("film.daily", "единиц 3 из 5")]
+
+    def test_units_missing_in_catalog_are_not_counted(self) -> None:
+        films = [_film(n, 1990, 7.0) for n in range(6)]
+        seeder = _standalone_seeder(films, {"film.daily": set()})
+        ready, skipped = seeder.plan_modes([_plan("film.daily", "film", 5)], {})
+        assert ready == []
+        assert skipped[0].reason == "нет единиц домена film"
+
+    def test_pool_not_playable_reports_reason(self) -> None:
+        films = [_film(n, 1990, 7.0) for n in range(6)]
+        seeder = _standalone_seeder(films, {"film.daily": {"a", "b"}})
+        ready, skipped = seeder.plan_modes([_plan("film.daily", "film", 5)], _items(films))
+        assert ready == []
+        assert skipped == [SkippedMode("film.daily", "играбельных 2 из 5")]
+
+    def test_mode_not_published_reports_reason(self) -> None:
+        films = [_film(n, 1990, 7.0) for n in range(6)]
+        seeder = _standalone_seeder(films, {})
+        ready, skipped = seeder.plan_modes([_plan("film.daily", "film", 5)], _items(films))
+        assert ready == []
+        assert "не опубликован" in skipped[0].reason
+
+    def test_mode_published_later_is_waited_for(self) -> None:
+        films = [_film(n, 1990, 7.0) for n in range(6)]
+        seeder = _standalone_seeder(films, {})
+        attempts = {"n": 0}
+
+        def playable_ids(_mode_key: str) -> set[str]:
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise SeedError("режим не опубликован")  # game ещё не опубликовал сид
+            return {str(n) for n in range(6)}
+
+        def poll(check: Any, **_kw: Any) -> None:
+            for _ in range(5):
+                if check():
+                    return
+            raise SeedError("таймаут")
+
+        seeder._playable_ids = playable_ids
+        seeder._poll = poll
+        ready, skipped = seeder.plan_modes([_plan("film.daily", "film", 5)], _items(films))
+        assert [p.key for p in ready] == ["film.daily"]
+        assert skipped == []
+        assert attempts["n"] == 3
+
+    def test_mode_without_domain_counts_all_units(self) -> None:
+        units = [_film(1, 1990, 7.0), _track(2, "rock")]
+        seeder = _standalone_seeder(units, {"any": {"x", "y"}})
+        ready, _skipped = seeder.plan_modes([_plan("any", None, 2)], _items(units))
+        assert [p.key for p in ready] == ["any"]
+
+
+class TestStandaloneSteps:
+    def test_order(self) -> None:
+        seeder = _standalone_seeder([])
+        calls: list[str] = []
+        daily = _plan("film.daily", "film", 1, period="day")
+        lobby = _plan("film.lobby", "film", 1, online=True, uses_collection=True)
+        missing = SkippedMode("music.daily", "нет единиц домена music")
+
+        seeder.plan_modes = lambda _plans, _items: ([daily, lobby], [missing])
+        seeder.wait_online_templates = lambda plans: calls.append(
+            "templates:" + ",".join(p.key for p in plans)
+        )
+        seeder.seed_collections = lambda specs, _i: calls.append("collection:" + specs[0].key)
+        seeder.wait_online_collections = lambda pairs, _i: calls.append("lobby:" + pairs[0][0].key)
+        seeder.regenerate_period_sets = lambda plans: calls.append("period:" + plans[0].key)
+        seeder.seed_progression = lambda: calls.append("progression")
+        seeder.seed_events = lambda: calls.append("events")
+        seeder.seed_social = lambda: calls.append("social")
+
+        skipped = seeder.seed_standalone([daily, lobby], [_spec("real-film-top", "film", 5)], {})
+
+        assert calls == [
+            "templates:film.lobby",
+            "collection:real-film-top",
+            "lobby:film.lobby",
+            "period:film.daily",
+            "progression",
+            "events",
+            "social",
+        ]
+        assert skipped == [missing]
+
+    def test_failures_go_to_summary(self) -> None:
+        seeder = _standalone_seeder([])
+        lobby = _plan("music.lobby", "music", 1, online=True, uses_collection=True)
+        daily = _plan("film.daily", "film", 1, period="day")
+
+        def boom(*_a: Any) -> None:
+            raise SeedError("плохо")
+
+        seeder.plan_modes = lambda plans, _items: (list(plans), [])
+        seeder.wait_online_templates = boom
+        seeder.seed_collections = boom
+        seeder.regenerate_period_sets = boom
+        seeder.seed_progression = lambda: None
+        seeder.seed_events = lambda: None
+        seeder.seed_social = lambda: None
+
+        skipped = seeder.seed_standalone([lobby, daily], [_spec("real-film-top", "film")], {})
+
+        # Шаблон лобби не опубликован: режим один раз в сводке и дальше не ждётся (лобби).
+        assert [s.key for s in skipped] == [
+            "music.lobby",
+            "collection:real-film-top",
+            "film.daily",
+        ]
+
+
+class _FakeSeeder:
+    """Замена RealSeeder: записывает вызовы шагов в общий журнал."""
+
+    log: list[str] = []  # noqa: RUF012 — общий журнал теста
+    specs: list[CollectionSpec] = []  # noqa: RUF012
+
+    def __init__(self, *_a: Any, **_kw: Any) -> None:
+        pass
+
+    def __getattr__(self, name: str) -> Any:
+        def step(*args: Any, **_kw: Any) -> Any:
+            type(self).log.append(name)
+            if name in {"mode_plans", "resolve_items"}:
+                return [] if name == "mode_plans" else {}
+            if name == "upload_real":
+                return 0
+            if name == "seed_standalone":
+                type(self).specs = args[1]
+                return [SkippedMode("music.daily", "нет единиц домена music")]
+            return None
+
+        return step
+
+
+class TestRunSeedReal:
+    def _run(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, without_synthetic: bool
+    ) -> tuple[list[str], dict[str, int], list[str]]:
+        units = [_film(n, 1990, 8.0 - n / 10) for n in range(6)]
+        _FakeSeeder.log = []
+        monkeypatch.setattr(seed_real, "RealSeeder", _FakeSeeder)
+        monkeypatch.setattr(seed_real, "build_units", lambda *_a, **_k: units)
+        monkeypatch.setattr(seed_real, "prepare_audio", lambda *_a, **_k: {})
+        config = _config(catalog_dir=tmp_path / "catalog")
+        lines: list[str] = []
+        result = seed_real.run_seed_real(
+            config,
+            real_dir=tmp_path,
+            ffmpeg="ffmpeg",
+            without_synthetic=without_synthetic,
+            echo=lines.append,
+        )
+        return list(_FakeSeeder.log), result, lines
+
+    def test_default_keeps_old_flow(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        log, result, lines = self._run(tmp_path, monkeypatch, without_synthetic=False)
+        assert log == [
+            "set_audio",
+            "authenticate",
+            "mode_plans",
+            "import_catalog",
+            "resolve_items",
+            "upload_real",
+            "wait_profiles",
+            "seed_collections",
+            "regenerate_period_sets",
+            "close",
+        ]
+        assert result["skipped"] == 0
+        assert not any("пропущено" in line for line in lines)
+
+    def test_without_synthetic_runs_standalone(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        log, result, lines = self._run(tmp_path, monkeypatch, without_synthetic=True)
+        assert log == [
+            "set_audio",
+            "authenticate",
+            "mode_plans",
+            "import_catalog",
+            "resolve_items",
+            "upload_real",
+            "wait_profiles",
+            "seed_standalone",
+            "close",
+        ]
+        assert result["skipped"] == 1
+        assert "seed-real: пропущено music.daily: нет единиц домена music" in lines
+        assert any("рекомендуемые сборники" in line and "real-film-top" in line for line in lines)
+        assert {s.key: s.featured_rank for s in _FakeSeeder.specs}["real-film-top"] == 1

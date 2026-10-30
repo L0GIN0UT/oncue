@@ -30,7 +30,7 @@ import time
 import uuid
 import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -39,10 +39,12 @@ from gv_cli.seed import (
     REASON,
     CollectionItemSpec,
     CollectionSpec,
+    ModePlan,
     SeedConfig,
     Seeder,
     SeedError,
     _ItemRef,
+    lobby_collections,
 )
 
 REAL_FILMS_FILE = "real-films.jsonl"
@@ -110,6 +112,12 @@ GENRE_ALIASES: Mapping[str, str] = {"hiphop": "hip-hop", "hip hop": "hip-hop"}
 MUSIC_COVERS = ("vinyl", "neon", "night", "sunset", "forest", "ocean")
 MUSIC_MODE = "music.collection.intro"
 FILM_MODE = "film.collection.frame"
+# «Рекомендуемое» без синтетики: порядок по доменам и сборник, который предпочитаем в кино.
+FEATURED_RANKS: Mapping[str, int] = {"film": 1, "music": 2}
+FEATURED_FILM_KEY = "real-film-top"
+# Сколько ждать пул одного режима без синтетики, прежде чем пропустить режим (в сводку):
+# иначе N режимов без материала держали бы засев N × ``assets_timeout_s``.
+PLAYABLE_WAIT_S = 300.0
 
 # Типы колбэков для тестов: ffmpeg и копирование не выполняются в unit-тестах.
 Runner = Callable[[Sequence[str]], None]
@@ -530,6 +538,40 @@ def film_collections(
     return specs
 
 
+def with_featured(specs: Sequence[CollectionSpec]) -> list[CollectionSpec]:
+    """Отметить «рекомендуемым» один сборник каждого домена (без синтетики отметить некого).
+
+    Кино — «Топ по рейтингу», если он есть, иначе первый киношный; музыка — первый
+    (музыкальные уже отсортированы от крупных жанров). Сборник с уже заданным
+    ``featured_rank`` не трогается.
+    """
+    chosen: dict[str, str] = {}
+    for spec in specs:
+        if spec.featured_rank is not None:
+            chosen[spec.domain] = spec.key
+    for domain in FEATURED_RANKS:
+        if domain in chosen:
+            continue
+        of_domain = [s for s in specs if s.domain == domain]
+        if of_domain:
+            preferred = [s for s in of_domain if s.key == FEATURED_FILM_KEY]
+            chosen[domain] = (preferred or of_domain)[0].key
+    return [
+        replace(s, featured_rank=FEATURED_RANKS[s.domain])
+        if chosen.get(s.domain) == s.key and s.featured_rank is None
+        else s
+        for s in specs
+    ]
+
+
+@dataclass(frozen=True, slots=True)
+class SkippedMode:
+    """Режим или сборник, оставшийся без материала: попадает в итоговую сводку."""
+
+    key: str
+    reason: str
+
+
 # ---------------------------------------------------------------- пакет для media-pipeline
 @dataclass(frozen=True, slots=True)
 class PackageFile:
@@ -795,6 +837,125 @@ class RealSeeder(Seeder):
             self._echo(f"  ! {error['item_key']} {error['path']}: {error['code']}")
         return failed
 
+    # ------------------------------------------------------------ без синтетики
+    def seed_standalone(
+        self,
+        plans: Sequence[ModePlan],
+        specs: Sequence[CollectionSpec],
+        items: Mapping[str, _ItemRef],
+    ) -> list[SkippedMode]:
+        """Шаги после загрузки реальных единиц на стенде без ``gv dev seed``.
+
+        Режим без материала не получает набор и не роняет засев — он попадает в сводку.
+        Порядок: пулы режимов → онлайн-шаблоны → сборники → лобби-сборники → наборы
+        периода (когда реальные единицы уже в проекциях) → progression, события, social.
+        """
+        ready, skipped = self.plan_modes(plans, items)
+        no_template = self._wait_templates([p for p in ready if p.online])
+        skipped += no_template
+        # Режим без шаблона дальше не ждём: иначе он дважды в сводке и ещё до таймаута на лобби.
+        lost = {s.key for s in no_template}
+        ready = [p for p in ready if p.key not in lost]
+        skipped += self._seed_collections_soft(specs, items)
+        skipped += self._wait_lobbies([p for p in ready if p.lobby_by_collection], specs, items)
+        skipped += self._regenerate_soft([p for p in ready if p.period is not None])
+        self.seed_progression()
+        self.seed_events()
+        self.seed_social()
+        return skipped
+
+    def plan_modes(
+        self, plans: Sequence[ModePlan], items: Mapping[str, _ItemRef]
+    ) -> tuple[list[ModePlan], list[SkippedMode]]:
+        """Разделить режимы на имеющие материал и оставшиеся без него (с причиной)."""
+        loaded = [u for u in self._units if u.key in items]
+        ready: list[ModePlan] = []
+        skipped: list[SkippedMode] = []
+        for plan in plans:
+            have = [u for u in loaded if plan.domain in (None, u.domain)]
+            if len(have) < plan.min_playable:
+                reason = (
+                    f"нет единиц домена {plan.domain}"
+                    if not have
+                    else f"единиц {len(have)} из {plan.min_playable}"
+                )
+                skipped.append(SkippedMode(plan.key, reason))
+                continue
+            problem = self._playable_problem(plan)
+            if problem is None:
+                ready.append(plan)
+            else:
+                skipped.append(SkippedMode(plan.key, problem))
+        return ready, skipped
+
+    def _playable_problem(self, plan: ModePlan) -> str | None:
+        """``None`` — в проекции game хватает играбельных единиц; иначе причина (по таймауту).
+
+        Пока режим не опубликован (404) или пул не дорос, ждём: game публикует сид режима,
+        когда под него готов пул.
+        """
+        state = {"note": ""}
+
+        def enough() -> bool:
+            try:
+                count = len(self._playable_ids(plan.key))
+            except SeedError as exc:
+                state["note"] = str(exc)
+                return False
+            state["note"] = f"играбельных {count} из {plan.min_playable}"
+            return count >= plan.min_playable
+
+        timeout_s = min(self._cfg.assets_timeout_s, PLAYABLE_WAIT_S)
+        self._echo(f"seed-real: ожидание пула {plan.key} (до {timeout_s:.0f} с)")
+        try:
+            self._poll(enough, timeout_s=timeout_s, what=f"пул {plan.key}")
+        except SeedError:
+            return state["note"]
+        return None
+
+    def _wait_templates(self, plans: Sequence[ModePlan]) -> list[SkippedMode]:
+        try:
+            self.wait_online_templates(plans)
+        except SeedError as exc:
+            return [SkippedMode(p.key, f"шаблон не опубликован: {exc}") for p in plans]
+        return []
+
+    def _seed_collections_soft(
+        self, specs: Sequence[CollectionSpec], items: Mapping[str, _ItemRef]
+    ) -> list[SkippedMode]:
+        """Сборники по одному: недоступный сборник не мешает остальным."""
+        skipped: list[SkippedMode] = []
+        for spec in specs:
+            try:
+                self.seed_collections([spec], items)
+            except SeedError as exc:
+                skipped.append(SkippedMode(f"collection:{spec.key}", str(exc)))
+        return skipped
+
+    def _wait_lobbies(
+        self,
+        plans: Sequence[ModePlan],
+        specs: Sequence[CollectionSpec],
+        items: Mapping[str, _ItemRef],
+    ) -> list[SkippedMode]:
+        skipped: list[SkippedMode] = []
+        for plan in plans:
+            try:
+                self.wait_online_collections(lobby_collections([plan], specs), items)
+            except SeedError as exc:
+                skipped.append(SkippedMode(plan.key, f"лобби по сборнику: {exc}"))
+        return skipped
+
+    def _regenerate_soft(self, plans: Sequence[ModePlan]) -> list[SkippedMode]:
+        """Наборы периода по одному режиму: непригодный набор попадает в сводку, а не роняет."""
+        skipped: list[SkippedMode] = []
+        for plan in plans:
+            try:
+                self.regenerate_period_sets([plan])
+            except SeedError as exc:
+                skipped.append(SkippedMode(plan.key, f"набор периода: {exc}"))
+        return skipped
+
     def _uploaded(self, media_item_id: str) -> set[tuple[str, int]]:
         resp = self._media.get("/admin/v1/sources", params={"media_item_id": media_item_id})
         self._check(resp, {200}, f"исходники единицы {media_item_id}")
@@ -818,9 +979,17 @@ def run_seed_real(
     min_collection_size: int = MIN_COLLECTION_ITEMS,
     tracks_limit: int | None = None,
     package_units: int = PACKAGE_UNITS,
+    without_synthetic: bool = False,
     echo: Callable[[str], None] = print,
 ) -> dict[str, int]:
-    """Полный засев реальными медиа на живом стеке; вернуть итоговые числа."""
+    """Полный засев реальными медиа на живом стеке; вернуть итоговые числа.
+
+    Args:
+        without_synthetic: Стенд без ``gv dev seed``: после реальных данных выполняются
+            базовые шаги (шаблоны, предметы, события, social), по одному реальному сборнику
+            каждого домена получает «рекомендуемое», режимы без материала пропускаются и
+            перечисляются в сводке.
+    """
     units = build_units(real_dir, tracks_limit=tracks_limit)
     if not units:
         raise SeedError(f"в {real_dir} нет реальных единиц (tmdb/fma/jamendo)")
@@ -832,7 +1001,10 @@ def run_seed_real(
     audio = prepare_audio(units, seedpack or real_dir / "seedpack", ffmpeg)
     echo(f"seed-real: аудио подготовлено: {len(audio)}")
     specs = music_collections(units, min_size=min_collection_size) + film_collections(units)
+    if without_synthetic:
+        specs = with_featured(specs)
     seeder = RealSeeder(config, units, package_units=package_units, echo=echo)
+    skipped: list[SkippedMode] = []
     try:
         seeder.set_audio(audio)
         seeder.authenticate()
@@ -841,14 +1013,24 @@ def run_seed_real(
         items = seeder.resolve_items({u.key for u in units})
         uploaded = seeder.upload_real(items)
         seeder.wait_profiles()
-        seeder.seed_collections(specs, items)
-        seeder.regenerate_period_sets(plans)
+        if without_synthetic:
+            skipped = seeder.seed_standalone(plans, specs, items)
+        else:
+            seeder.seed_collections(specs, items)
+            seeder.regenerate_period_sets(plans)
     finally:
         seeder.close()
+    if without_synthetic:
+        featured = [s.key for s in specs if s.featured_rank is not None]
+        echo(f"seed-real: рекомендуемые сборники: {featured or '—'}")
+        for item in skipped:
+            echo(f"seed-real: пропущено {item.key}: {item.reason}")
+        echo(f"seed-real: пропущено режимов и сборников: {len(skipped)}")
     echo("seed-real: готово")
     return {
         "films": len(films),
         "tracks": len(tracks),
         "uploaded": uploaded,
         "collections": len(specs),
+        "skipped": len(skipped),
     }
