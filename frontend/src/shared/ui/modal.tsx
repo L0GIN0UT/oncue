@@ -1,9 +1,20 @@
 "use client";
 /** Модалка: диалог по центру поверх затемнения; Escape и клик по фону закрывают, фокус возвращается. */
-import { useRef, type ReactNode } from "react";
+import { useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/shared/lib/cn";
 import { useOverlay } from "./use-overlay";
+
+const noopSubscribe = () => () => undefined;
+
+/** `false` на сервере и при гидратации, `true` после неё: портал не должен расходиться с серверной разметкой. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+}
 
 type Props = {
   open: boolean;
@@ -24,8 +35,10 @@ export function Modal({
   "data-testid": testId,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  useOverlay(open, onClose, ref);
-  if (!open || typeof document === "undefined") return null;
+  const hydrated = useHydrated();
+  const shown = open && hydrated;
+  useOverlay(shown, onClose, ref);
+  if (!shown) return null;
   return createPortal(
     <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-night/70 p-4">
       <div aria-hidden className="absolute inset-0" onClick={onClose} />

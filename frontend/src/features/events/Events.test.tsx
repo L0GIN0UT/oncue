@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { setupMockBackend, signInAsGuest, signInAsUser, world } from "@/test/msw";
 import { renderWithProviders } from "@/test/render";
-import { HeaderEventLink } from "./EventBanner";
 import { EventSpot } from "./EventSpot";
 import { EventView } from "./EventView";
 import { EventsArchive } from "./EventsArchive";
@@ -102,29 +101,7 @@ describe("EventSpot", () => {
   });
 });
 
-describe("баннер и архив", () => {
-  it("ссылка в шапке ведёт на событие и показывает прогресс игрока", async () => {
-    signInAsUser();
-    world.scenario.event = "active";
-    renderWithProviders(<HeaderEventLink />);
-    const link = await screen.findByTestId("nav-event");
-    expect(link).toHaveAttribute("href", "/events/winter");
-    await waitFor(() => expect(link).toHaveTextContent("Найдено 1 из 4"));
-  });
-
-  it("аноним видит баннер без прогресса; без события ссылки нет", async () => {
-    world.scenario.event = "active";
-    const { unmount } = renderWithProviders(<HeaderEventLink />);
-    const link = await screen.findByTestId("nav-event");
-    expect(link).not.toHaveTextContent("Найдено");
-    unmount();
-
-    world.scenario.event = undefined;
-    renderWithProviders(<HeaderEventLink />);
-    await new Promise((r) => setTimeout(r, 80));
-    expect(screen.queryByTestId("nav-event")).toBeNull();
-  });
-
+describe("архив", () => {
   it("архив: записи со ссылками; пустой архив ничего не рисует", () => {
     const { unmount } = renderWithProviders(<EventsArchive events={[]} />);
     expect(screen.queryByTestId("events-archive")).toBeNull();

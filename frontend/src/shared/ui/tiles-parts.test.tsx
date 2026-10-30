@@ -1,8 +1,7 @@
-/** Мелкие примитивы хабов: ListRow, Cover, SectionCap, TierBadge, DailyBadge. */
+/** Мелкие примитивы хабов: ListRow, Cover, SectionCap, TierBadge. */
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Cover } from "./cover";
-import { DailyBadge, dailyOutcome } from "./daily-badge";
 import { ListRow } from "./list-row";
 import { SectionCap } from "./section-cap";
 import { TIER_KEYS, TierBadge, tierKeyOf } from "./tier-badge";
@@ -68,30 +67,5 @@ describe("TierBadge", () => {
     expect(tierKeyOf("melomaniac")).toBe("diamond");
     expect(tierKeyOf("что-то новое")).toBe("steel");
     expect(tierKeyOf(null)).toBe("steel");
-  });
-});
-
-describe("DailyBadge", () => {
-  it("исход по доле очков", () => {
-    expect(dailyOutcome(5, 5)).toBe("exact");
-    expect(dailyOutcome(4, 5)).toBe("exact");
-    expect(dailyOutcome(3, 5)).toBe("partial");
-    expect(dailyOutcome(2, 5)).toBe("partial");
-    expect(dailyOutcome(1, 5)).toBe("miss");
-    expect(dailyOutcome(0, 5)).toBe("miss");
-    expect(dailyOutcome(null, 5)).toBe("skip");
-  });
-
-  it("музыка «♪ 5», кино «▣ 4», нет результата «—»", () => {
-    const { container } = render(
-      <>
-        <DailyBadge domain="music" value={5} />
-        <DailyBadge domain="film" value={4} />
-        <DailyBadge domain="film" value={null} />
-      </>,
-    );
-    const badges = [...container.querySelectorAll("[data-outcome]")];
-    expect(badges.map((b) => b.textContent)).toEqual(["♪5", "▣4", "▣—"]);
-    expect(badges.map((b) => b.getAttribute("data-outcome"))).toEqual(["exact", "exact", "skip"]);
   });
 });

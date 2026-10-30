@@ -19,6 +19,3 @@ export const REPORT_TEXT_MAX_LENGTH = 300;
 
 /** Размер страницы комментариев. */
 export const COMMENTS_PAGE_SIZE = 20;
-
-/** Окно правки своего комментария, мс (`comments.edit_window_s` = 300 с); точно решает сервер. */
-export const COMMENT_EDIT_WINDOW_MS = 5 * 60_000;

@@ -121,13 +121,15 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 | `GV_PUBLIC_ORIGINS` | identity, game | JSON-массив Origin веб-клиента (dev — `["https://localhost"]`): только с них принимаются мутации по cookie (CSRF) |
 | `GV_JWT__SIGNING_KEYS` | identity | JSON `[{kid, private_pem, active}]`; `gv dev secrets` генерирует Ed25519-ключ. Пусто — временный ключ (только local/ci) |
 | `GV_GAME__DAILY_SEED_SECRET` | game | Секрет розыгрыша наборов дня; без него compose не стартует |
-| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin, match, bff_web / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
+| `GV_SERVICE_SECRET_<CLIENT>`, `GV_SERVICE_CLIENTS` | game, admin, match, progression, notifications, bff_web / identity | Сервисные токены (D13 плана этапа 2): в `GV_SERVICE_CLIENTS` — sha256 секретов |
 | `CENTRIFUGO_API_KEY` | Centrifugo, match | Ключ server API; match получает его как `GV_REALTIME__API_KEY` (identity — нет) |
 | `CENTRIFUGO_TOKEN_HMAC_SECRET` | Centrifugo, identity | Секрет connection-токенов (`GV_REALTIME__CONNECTION_TOKEN_SECRET` у identity) |
 | `CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET` | Centrifugo, match | Секрет subscription-токенов каналов комнат (`GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET` у match); **обязан отличаться** от секрета connection-токенов, секреты ≥ 32 символов |
 | `CENTRIFUGO_ALLOWED_ORIGINS` | Centrifugo | Origin веб-клиента (dev — `https://localhost`); без него compose не стартует |
 | `GV_SERVICE_SECRET_BFF_WEB` | bff_web | Секрет сервисного токена bff_web для `game /internal/v1/daily/results` (область `daily.results`) и `progression /internal/v1/levels` (область `levels.read`); его sha256 — в `GV_SERVICE_CLIENTS` identity (запись `bff_web` генерирует `gv gen`) |
 | `GV_SERVICE_SECRET_MATCH` | match | Секрет сервисного токена match для game и media-pipeline; его sha256 — в `GV_SERVICE_CLIENTS` identity |
+
+**Старый `.env` и новые клиенты сервисных токенов.** `gv dev secrets` создаёт файл целиком и существующий `.env` не дополняет. Если стенд поднят до появления клиента (`bff_web`, `progression`, `notifications`), compose не стартует: нет `GV_SERVICE_SECRET_<CLIENT>` (`${...:?задайте ...}`), а без записи клиента в `GV_SERVICE_CLIENTS` identity отвечает на выдачу токена отказом, и блоки bff «очки друзей в дейлике» и «уровни игроков» приходят `unavailable`. Что сделать: сгенерировать секрет (`gv dev secrets` в временный файл, взять из него только нужные строки `GV_SERVICE_SECRET_<CLIENT>`), дописать их в `.env`, добавить в JSON `GV_SERVICE_CLIENTS` запись `{"client_id":"bff_web","secret_sha256":"<sha256 секрета>","audiences":{"game":["daily.results"],"progression":["levels.read"]}}` (актуальный состав записей — `SERVICE_CLIENTS` в `tools/gv/src/gv_cli/generate.py` и `.env.example`), затем пересоздать identity и клиента. Секреты в логи и тикеты не копировать.
 
 **Онлайн (этап 4a).**
 

@@ -24,12 +24,6 @@ export function useRarityLabel(): (rarity: string) => string {
   return (rarity) => dt(`shop.rarity.${rarity}`, rarity);
 }
 
-/** Подпись источника предмета в инвентаре. */
-export function useSourceLabel(): (source: string) => string {
-  const dt = useDynamicT();
-  return (source) => dt(`shop.inventory.source.${source}`, source);
-}
-
 export function useVerses(): (amount: number) => string {
   const t = useTranslations();
   return (amount) => t("shop.price", { price: amount });

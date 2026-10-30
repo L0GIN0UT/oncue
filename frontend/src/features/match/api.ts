@@ -1,13 +1,6 @@
 /** Чтение комнат и матчей match (`/api/match/v1/...`) и личности игрока (identity `/v1/me`). */
 import { api, unwrap } from "@/shared/api/client";
-import type {
-  MatchResult,
-  MyMatchesPage,
-  RateKind,
-  RoomState,
-  RoomView,
-  TickResult,
-} from "@/shared/api/types";
+import type { MyMatchesPage, RateKind, RoomState, RoomView, TickResult } from "@/shared/api/types";
 import type { components } from "@/shared/api/schema/match";
 import { newIdempotencyKey } from "@/shared/lib/id";
 
@@ -27,12 +20,6 @@ export async function sendTick(code: string, knownVersion: number | null): Promi
       params: { path: { code } },
       body: { known_version: knownVersion },
     }),
-  );
-}
-
-export async function fetchMatch(matchId: string): Promise<MatchResult> {
-  return unwrap(
-    await api().match.GET("/v1/matches/{match_id}", { params: { path: { match_id: matchId } } }),
   );
 }
 
