@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EventFindCard } from "@/shared/api/types";
-import { openSpotFor, playRoute, progressPct, sortedFinds, trailPaths } from "./logic";
+import { openSpotFor, playRoute, sortedFinds, trailPaths } from "./logic";
 
 const find = (over: Partial<EventFindCard> & { key: string }): EventFindCard => ({
   number: 1,
@@ -61,17 +61,11 @@ describe("openSpotFor", () => {
   });
 });
 
-describe("sortedFinds / progressPct", () => {
+describe("sortedFinds", () => {
   it("сортирует по номеру, не меняя исходный массив", () => {
     const src = [find({ key: "b", number: 2 }), find({ key: "a", number: 1 })];
     expect(sortedFinds(src).map((f) => f.key)).toEqual(["a", "b"]);
     expect(src[0]!.key).toBe("b");
-  });
-
-  it("доля ограничена 0..100, деление на ноль безопасно", () => {
-    expect(progressPct(1, 4)).toBe(25);
-    expect(progressPct(9, 4)).toBe(100);
-    expect(progressPct(0, 0)).toBe(0);
   });
 });
 

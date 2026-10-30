@@ -56,10 +56,7 @@ describe("messages/ru.json", () => {
         `game.answerLabel.${d}`,
         `game.answerPlaceholder.${d}`,
       ]),
-      ...["not_started", "in_progress", "finished"].flatMap((s) => [
-        `daily.status.${s}`,
-        `daily.action.${s}`,
-      ]),
+      ...["not_started", "in_progress", "finished"].map((s) => `daily.action.${s}`),
       ...["exact", "partial", "miss", "skip"].map((k) => `game.guess.${k}`),
       ...["exact", "partial", "miss", "void"].map((k) => `game.reveal.${k}`),
       ...["rate_limited", "round_void", "network", "desync", "failed"].map(

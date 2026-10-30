@@ -4,7 +4,7 @@
  * только на сервере: клиент шлёт лишь id предмета и ключ идемпотентности.
  */
 import { api, unwrap } from "@/shared/api/client";
-import { ApiError, isApiError } from "@/shared/api/errors";
+import { ApiError } from "@/shared/api/errors";
 import type { PromoRedeemResult, PurchaseResult, ShopPage } from "@/shared/api/types";
 import { newIdempotencyKey } from "@/shared/lib/id";
 
@@ -59,11 +59,6 @@ export async function submitAvatar(file: File, key: string) {
       },
     }),
   );
-}
-
-/** Код ошибки Problem Details или `null` (сеть и прочее). */
-export function problemCode(e: unknown): string | null {
-  return isApiError(e) ? e.code : null;
 }
 
 export function statusOf(e: unknown): number | null {
