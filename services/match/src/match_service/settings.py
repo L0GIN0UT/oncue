@@ -47,6 +47,7 @@ class MatchSettings(BaseModel):
         state_per_player_per_min: ``GET /state`` игрока в минуту (ресинк).
         join_by_code_per_user_per_min: Поиск комнаты по коду пользователем (fail-closed).
         emote_per_player_per_min: Эмоции и фразы игрока в минуту.
+        listen_per_player_per_min: Позиции прослушивания игрока в минуту (`/listen`).
         create_lock_ms: Замок от параллельного создания комнат одним игроком.
         pending_room_ms: Свежий указатель ``player:{id}:room`` на ещё не созданную комнату
             считается занятым (создание или вход в процессе).
@@ -112,12 +113,17 @@ class MatchSettings(BaseModel):
     rate_per_user_per_hour: int = Field(default=60, ge=1)
     room_idle_close_min: float = Field(default=30, gt=0)
     empty_lobby_close_s: int = Field(default=120, ge=0, le=86_400)
+    # Картинка ответа в ревиле (ADR 0073): ссылка короткоживущая (GV_MEDIA__LINK_TTL_S), а ревил
+    # может идти дольше - владелец перевыдаёт её за столько секунд до истечения.
+    artwork_refresh_margin_s: int = Field(default=10, ge=0, le=600)
     op_window: int = Field(default=32, ge=4, le=1024)
     poison_limit: int = Field(default=3, ge=1, le=100)
     tick_per_player_per_min: int = Field(default=150, ge=1)
     state_per_player_per_min: int = Field(default=60, ge=1)
     join_by_code_per_user_per_min: int = Field(default=20, ge=1)
     emote_per_player_per_min: int = Field(default=30, ge=1)
+    # Позиция прослушивания соперника (listen_s): фронт шлёт не чаще раза в секунду.
+    listen_per_player_per_min: int = Field(default=120, ge=1)
     create_lock_ms: int = Field(default=5000, ge=100, le=60_000)
     op_users_max: int = Field(default=16, ge=2, le=256)
     pending_room_ms: int = Field(default=10_000, ge=1000, le=120_000)

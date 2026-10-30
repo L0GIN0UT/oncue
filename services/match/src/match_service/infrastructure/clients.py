@@ -269,6 +269,10 @@ def parse_plan(data: dict[str, Any]) -> RoundPlan:  # Any: JSON ответа Rou
                 reveal_asset_set_id=(
                     UUID(r["reveal_asset_set_id"]) if r.get("reveal_asset_set_id") else None
                 ),
+                # Поле необязательное: старый game его не присылает (ADR 0073).
+                artwork_asset_set_id=(
+                    UUID(r["artwork_asset_set_id"]) if r.get("artwork_asset_set_id") else None
+                ),
             )
         )
     return RoundPlan(

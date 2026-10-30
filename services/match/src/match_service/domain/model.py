@@ -175,6 +175,8 @@ class Seat:
     presence: Presence = Presence.ONLINE
     away: bool = False
     ready: bool = False
+    listen_s: int | None = None
+    """Сколько секунд игрок слушает открытый уровень (эфемерно, ответа не раскрывает)."""
 
 
 # ----------------------------------------------------------------------------- план
@@ -230,6 +232,8 @@ class PlannedRound:
     levels: tuple[LevelAsset, ...]
     options: tuple[PlanOption, ...] = ()
     reveal_asset_set_id: UUID | None = None
+    artwork_asset_set_id: UUID | None = None
+    """Набор картинки ответа (обложка, постер; ADR 0073): ссылка — только в ревиле."""
 
     def asset_for(self, level: int) -> UUID | None:
         """Набор ассетов уровня ``level`` или ``None``."""
@@ -347,6 +351,7 @@ class MatchState:
         contest: Состояние раунда ядра (``ContestRoundState``).
         clue: Ссылка открытого уровня (одна на комнату, раунд и уровень, D11).
         final_clue: Ассет ревила текущего раунда.
+        artwork: Картинка ответа текущего раунда (``Clue`` уровня 1) — только в ревиле.
         started_at_ms: Когда кончился отсчёт (``MatchStarted``).
         started_written: ``MatchStarted`` записан в outbox.
         finished_written: Итог и ``MatchFinished`` записаны в Postgres.
@@ -370,6 +375,7 @@ class MatchState:
     contest: ContestRoundState | None = None
     clue: Clue | None = None
     final_clue: Clue | None = None
+    artwork: Clue | None = None
     records: list[RoundRecord] = field(default_factory=list)
     finish: MatchFinish | None = None
     abort_reason: str | None = None

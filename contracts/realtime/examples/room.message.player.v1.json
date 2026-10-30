@@ -1,6 +1,7 @@
 {
   "delta": {
     "away": false,
+    "listen_s": 3,
     "presence": "disconnected",
     "ready": true,
     "score": 0,

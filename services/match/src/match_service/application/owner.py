@@ -33,6 +33,7 @@ from gv_game_kernel import (
     AnswerInput,
     AnswerKindError,
     AssetPort,
+    AssetRef,
     ClueView,
     ConfigError,
     ContestRoundState,
@@ -71,6 +72,7 @@ from match_service.domain.model import (
     MatchPlayer,
     MatchState,
     Phase,
+    PlannedRound,
     PlayerFinish,
     Presence,
 )
@@ -172,6 +174,7 @@ class OwnerSettings:
     op_users_max: int = 16
     pending_room_ms: int = 10_000
     empty_lobby_ms: int = 0
+    artwork_refresh_margin_ms: int = 10_000
 
     @property
     def timing(self) -> Timing:
@@ -188,6 +191,8 @@ ROOM_RESULT_KINDS = frozenset(
     {"join", "leave", "ready", "settings", "kick", "transfer_host", "reset_memory", "start"}
 )
 """Команды, чей ответ — ``RoomCommandResult`` (версия и вид комнаты)."""
+UNREMEMBERED_KINDS = frozenset({"listen"})
+"""Частые эфемерные команды: их ``op_id`` не занимает окно (иначе вытеснят повтор ответа)."""
 CHAT_PHASES = frozenset({Phase.LOBBY, Phase.REVEAL, Phase.SUMMARY})
 """Свободный чат — только вне уровня: иначе подсказка ответа соперникам (аудит §7)."""
 INTERNAL_ERROR = "match.unavailable"
@@ -403,6 +408,7 @@ class RoomOwner:
             "emote": self._emote,
             "chat": self._chat,
             "away": self._away,
+            "listen": self._listen,
             "rename": self._rename,
             "remove": self._remove,
             "evict": self._evict,
@@ -480,7 +486,9 @@ class RoomOwner:
             self._failures.pop(room.code, None)
         # Окно op_id — только участникам (иначе посторонние раздувают снимок, аудит Н8);
         # добровольный выход тоже запоминается — его повтор должен вернуть тот же ответ.
-        remembered = room.is_member(command.user_id) or (command.kind == "leave" and was_member)
+        remembered = command.kind not in UNREMEMBERED_KINDS and (
+            room.is_member(command.user_id) or (command.kind == "leave" and was_member)
+        )
         if int(reply["status"]) < SERVER_ERROR and remembered:
             room.remember_op(
                 command.user_id,
@@ -561,6 +569,7 @@ class RoomOwner:
                 needs.extend(await self._resolve(room, rules, need))
         if rules is not None:
             match_fsm.refresh_statuses(room, rules)
+        await self._refresh_artwork(room)
         await self._ranked_abort(room)
         await self._drop_spectators(room)
         if room.is_closed or room.phase is Phase.LOBBY:
@@ -664,7 +673,8 @@ class RoomOwner:
                 log.exception("match.clue_failed", room=room.code, attempt=attempt)
         clue = clue_of(view) if view is not None else None
         if isinstance(need, NeedFinalClue):
-            match_fsm.set_final_clue(room, need.round_index, clue)
+            artwork = await self._link_artwork(room, round_, f"{subject}:reveal")
+            match_fsm.set_final_clue(room, need.round_index, clue, artwork)
             return []
         return list(
             match_fsm.set_clue(
@@ -676,6 +686,53 @@ class RoomOwner:
                 now_ms=self._now(),
             )
         )
+
+    async def _link_artwork(self, room: Room, round_: PlannedRound, subject: str) -> Clue | None:
+        """Ссылка на картинку ответа (ADR 0073) или ``None``: любой сбой ревил не ломает."""
+        if round_.artwork_asset_set_id is None:
+            return None
+        asset = AssetRef(asset_set_id=round_.artwork_asset_set_id, levels_count=1)
+        for attempt in range(2):  # один повтор, как у остальных ссылок
+            try:
+                link = await self._assets.link(asset, 1, subject)
+            except GoneError:
+                return None
+            except AppError as exc:
+                log.warning(
+                    "match.artwork_unavailable", room=room.code, code=exc.code, attempt=attempt
+                )
+            except Exception:
+                log.exception("match.artwork_failed", room=room.code, attempt=attempt)
+            else:
+                return Clue(
+                    level=1,
+                    kind="artwork",
+                    url=link.url,
+                    expires_at_ms=int(link.expires_at.timestamp() * 1000),
+                    mime=link.mime,
+                )
+        return None
+
+    async def _refresh_artwork(self, room: Room) -> None:
+        """Перевыдать ссылку на картинку, пока ревил идёт, а ссылка истекает или истекла.
+
+        Субъект тот же (``room:{code}:{round}:reveal``). Пока ссылка жива, сбой перевыдачи
+        повторится на следующем тике; истёкшая и не перевыданная ссылка снимается (``null``).
+        """
+        match = room.match
+        if match is None or room.phase is not Phase.REVEAL or match.artwork is None:
+            return
+        now = self._now()
+        if match.artwork.expires_at_ms - now > self._settings.artwork_refresh_margin_ms:
+            return
+        index = match.round_index
+        fresh = await self._link_artwork(
+            room, match.plan[index], f"room:{room.code}:{index}:reveal"
+        )
+        if fresh is not None:
+            match_fsm.set_artwork(room, index, fresh)
+        elif match.artwork.expires_at_ms <= now:
+            match_fsm.set_artwork(room, index, None)
 
     @staticmethod
     def unpersisted(room: Room) -> bool:
@@ -1075,6 +1132,19 @@ class RoomOwner:
 
     async def _away(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
         room.set_away(cmd.user_id, away=bool(cmd.data.get("away")), now_ms=now)
+        return self._version(room)
+
+    async def _listen(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
+        """Позиция прослушивания; повтор и устаревший уровень - без ошибки и без сообщения."""
+        del now
+        if room.is_closed:
+            raise MatchNotFoundError("комната закрыта", code=errors.ROOM_NOT_FOUND)
+        match_fsm.listen(
+            room,
+            cmd.user_id,
+            level=int(cmd.data["level"]),
+            position_ms=int(cmd.data["position_ms"]),
+        )
         return self._version(room)
 
     async def _unknown(self, room: Room, cmd: RoomCommand, now: int) -> Builder:

@@ -269,7 +269,10 @@ class GameContainer:
     def round_plans(self) -> RoundPlans:
         """План раундов матча для match (internal API, ADR 0033)."""
         return RoundPlans(
-            self.uow_factory(), self.catalog, candidate_limit=self.settings.game.candidate_limit
+            self.uow_factory(),
+            self.catalog,
+            candidate_limit=self.settings.game.candidate_limit,
+            artwork=ArtworkProfiles(self.settings.game.artwork_profiles),
         )
 
     @cached_property

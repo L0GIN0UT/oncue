@@ -1958,6 +1958,19 @@
           "answer": {
             "$ref": "#/components/schemas/AnswerKey"
           },
+          "artwork_asset_set_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Набор картинки ответа (обложка, постер; ADR 0073), если готов; иначе `null`",
+            "title": "Artwork Asset Set Id"
+          },
           "index": {
             "exclusiveMaximum": 50.0,
             "minimum": 0.0,

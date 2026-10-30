@@ -1518,6 +1518,11 @@ export interface components {
          */
         PlannedRound: {
             answer: components["schemas"]["AnswerKey"];
+            /**
+             * Artwork Asset Set Id
+             * @description Набор картинки ответа (обложка, постер; ADR 0073), если готов; иначе `null`
+             */
+            artwork_asset_set_id?: string | null;
             /** Index */
             index: number;
             /** Levels */

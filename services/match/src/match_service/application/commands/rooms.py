@@ -153,6 +153,7 @@ class RoomLimits:
     chat_slow_interval_s: int
     join_by_code_per_user_per_min: int = 20
     emote_per_min: int = 30
+    listen_per_min: int = 120
     create_lock_ms: int = 5000
     pending_room_ms: int = 10_000
     room_name_max_length: int = 40
@@ -450,6 +451,21 @@ class RoomService:
             await self._limiter.hit("emote_slow", user, limit=1, window_s=interval)
         await self._limiter.hit("emote", user, limit=self._limits.emote_per_min, window_s=60)
         return await self.command(actor, code, "emote", op_id, {"kind": kind, "key": key})
+
+    async def listen(
+        self, actor: Actor, code: str, op_id: str, level: int, position_ms: int
+    ) -> CommandOutcome:
+        """Позиция прослушивания уровня: лимит ``GV_MATCH__LISTEN_PER_PLAYER_PER_MIN``.
+
+        Raises:
+            MatchRateLimitedError: лимит позиций игрока в минуту.
+        """
+        await self._limiter.hit(
+            "listen", str(actor.user_id), limit=self._limits.listen_per_min, window_s=60
+        )
+        return await self.command(
+            actor, code, "listen", op_id, {"level": level, "position_ms": position_ms}
+        )
 
     async def chat(self, actor: Actor, code: str, op_id: str, text: str) -> CommandOutcome:
         """Свободный чат лобби: санкции, лимиты, ``gv_text.ugc`` + denylist (ADR 0030).

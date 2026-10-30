@@ -138,6 +138,7 @@ class RoomActor:
             match.started_written if match else None,
             match.finished_written if match else None,
             match.final_clue if match else None,
+            match.artwork if match else None,
         )
 
     async def run(self, stop: asyncio.Event) -> None:

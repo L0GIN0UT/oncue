@@ -34,12 +34,20 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
         # ходов), читаются по умолчанию; старое окно ops («user:op» → полный ответ)
         # сжимается до статуса и кода по игрокам; остальное не меняется при перезаписи.
         encoded = encode(room)
-        same = set(data) - {"ops", "match", "settings"}
+        same = set(data) - {"ops", "match", "seats", "settings"}
         assert {k: encoded[k] for k in same} == {k: data[k] for k in same}
         assert encoded["start_error"] is None
         # Название комнаты добавлено после снимка: читается как «не задано», остальное то же.
         assert encoded["settings"].pop("name") is None
         assert encoded["settings"] == data["settings"]
+        # listen_s места, artwork матча и artwork_asset_set_id раунда (ADR 0073) - новые поля
+        # со значением по умолчанию: старый снимок читается без шага _UPGRADES.
+        assert [{k: v for k, v in s.items() if k != "listen_s"} for s in encoded["seats"]] == data[
+            "seats"
+        ]
+        assert all(s["listen_s"] is None for s in encoded["seats"])
+        assert encoded["match"]["artwork"] is None
+        assert all(r["artwork_asset_set_id"] is None for r in encoded["match"]["plan"])
         encoded = encode(room)
         assert encode(decode(encoded)) == encoded
         legacy = {tuple(key.split(":", 1)) for key in data["ops"]}
@@ -88,3 +96,21 @@ def test_future_or_broken_snapshot_is_rejected() -> None:
         decode({**data, "seats": None})
     with pytest.raises(SnapshotError):
         loads(b"not json")
+
+
+async def test_artwork_and_listen_survive_snapshot_round_trip() -> None:
+    h = Harness(artwork_sets=True)
+    room, a = await h.room()
+    (b,) = await h.join(room, 1)
+    await h.start(room, a)
+    await h.ok(room, a, "listen", level=1, position_ms=2500)
+    assert room.match is not None
+    art_set = room.match.plan[0].artwork_asset_set_id
+    assert art_set is not None
+
+    restored = loads(dumps(room))
+
+    assert restored.seat_of(a).listen_s == 2 and restored.seat_of(b).listen_s is None  # type: ignore[union-attr]
+    assert restored.match is not None
+    assert restored.match.plan[0].artwork_asset_set_id == art_set
+    assert encode(restored) == encode(room)

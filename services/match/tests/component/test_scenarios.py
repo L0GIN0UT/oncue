@@ -9,11 +9,12 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Any
 
 import pytest
 from match_app import MatchApp, Player
-from match_doubles import TITLES
+from match_doubles import TITLES, plan_factory, seed_bodies
 from match_service.settings import Settings
 
 from gv_auth import Sanction
@@ -490,3 +491,67 @@ async def test_plan_failure_keeps_lobby_and_admin_abort(svc: MatchApp) -> None:
     assert aborted.status_code == 202, aborted.text
     gone = await svc.client.get(f"/v1/rooms/{code}", headers=a.headers)
     assert_problem(gone, 404, "match.room_not_found")
+
+
+# ----------------------------------------------------------------------------- listen, artwork
+async def test_duel_listen_position_and_reveal_artwork_without_leaks(app_factory: Any) -> None:
+    svc = await app_factory(listen_per_player_per_min=5)
+    svc.plans._factory = plan_factory(seed_bodies(), artwork=True)
+    a, b, outsider = svc.user(), svc.user(), svc.user()
+    code = (await svc.create(a, "music.duel.classic"))["code"]
+    await svc.join(code, b)
+    await _start(svc, a, code)
+
+    # Соперник слушает: метка в состоянии и сообщении player; ответа нет.
+    listened = await svc.ok(b, code, "listen", level=1, position_ms=2600)
+    assert listened["version"] > 0
+    seen = {p["user_id"]: p["listen_s"] for p in (await svc.state(a, code))["room"]["players"]}
+    assert seen == {str(a.user_id): None, str(b.user_id): 2}
+    again = await svc.ok(b, code, "listen", level=1, position_ms=2700)  # то же округление
+    assert again["version"] == listened["version"]
+    stale = await svc.ok(b, code, "listen", level=2, position_ms=1000)  # отстал на смене
+    assert stale["version"] == listened["version"]
+    # Не участник: ни ручки, ни состояния.
+    assert_problem(
+        await svc.post(outsider, code, "listen", level=1, position_ms=1),
+        403,
+        "match.not_participant",
+    )
+    assert (
+        await svc.client.get(f"/v1/rooms/{code}/state", headers=outsider.headers)
+    ).status_code == 403
+    # Троттлинг: лимит позиций в минуту (настройка) - 429.
+    await svc.ok(b, code, "listen", level=1, position_ms=3100)
+    await svc.ok(b, code, "listen", level=1, position_ms=3900)
+    assert_problem(
+        await svc.post(b, code, "listen", level=1, position_ms=500), 429, "match.rate_limited"
+    )
+
+    # До ревила ни картинки, ни ключей ответа: ни в состоянии, ни в канале.
+    before = await svc.state(a, code)
+    assert_no_secrets(before, TITLES[:1])
+    assert "artwork" not in json.dumps(before)
+    assert not [x for x in svc.links.issued if x.subject.endswith(":reveal")]
+    channel = _channel(svc, code)
+    assert any(m["kind"] == "player" and m["delta"].get("listen_s") == 2 for m in channel)
+    for message in channel:
+        assert "artwork" not in json.dumps(message)
+        assert_no_secrets(message, TITLES[:1])
+
+    win = await svc.ok(a, code, "match/guess", **_guess(await svc.state(a, code), TITLES[0]))
+    assert win["result"] == "exact"
+    await svc.until(b, code, lambda s: s["match"]["level"] == 2)
+    await svc.ok(b, code, "match/guess", **_guess(await svc.state(b, code), TITLES[0]))
+    reveal = await svc.phase(a, code, "reveal")
+    artwork = reveal["match"]["reveal"]["artwork"]
+    assert set(artwork) == {"url", "expires_at", "mime"} and artwork["url"].startswith("/media/a/")
+    delta = next(m for m in _channel(svc, code) if m["kind"] == "round_reveal")["delta"]
+    assert {k: v for k, v in delta["artwork"].items() if k != "expires_at"} == {
+        k: v for k, v in artwork.items() if k != "expires_at"
+    }
+    assert datetime.fromisoformat(delta["artwork"]["expires_at"]) == datetime.fromisoformat(
+        artwork["expires_at"]
+    )
+    # Позиция прослушивания не живёт дольше уровня.
+    assert all(p["listen_s"] is None for p in reveal["room"]["players"])
+    svc.realtime.assert_versions_contiguous(f"room:{code}")

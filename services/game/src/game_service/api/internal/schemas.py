@@ -134,6 +134,10 @@ class PlannedRound(BaseModel):
     reveal_asset_set_id: UUID | None = Field(
         default=None, description="Набор ассетов ревила (`clue.reveal`), если задан"
     )
+    artwork_asset_set_id: UUID | None = Field(
+        default=None,
+        description="Набор картинки ответа (обложка, постер; ADR 0073), если готов; иначе `null`",
+    )
     options: list[PlanOption] = Field(default_factory=list, description="Только формат `pick`")
 
 

@@ -133,6 +133,31 @@
         "title": "AdminRoomsPage",
         "type": "object"
       },
+      "Artwork": {
+        "description": "Картинка ответа в ревиле (ADR 0073).",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "expires_at",
+          "mime"
+        ],
+        "title": "Artwork",
+        "type": "object"
+      },
       "AwayRequest": {
         "additionalProperties": false,
         "description": "Отметка «отошёл» / «вернулся».",
@@ -630,6 +655,36 @@
           "meta"
         ],
         "title": "LevelClue",
+        "type": "object"
+      },
+      "ListenRequest": {
+        "additionalProperties": false,
+        "description": "Позиция прослушивания уровня (для метки «соперник слушает N с»).",
+        "properties": {
+          "level": {
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "op_id": {
+            "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
+            "title": "Op Id",
+            "type": "string"
+          },
+          "position_ms": {
+            "description": "Позиция воспроизведения; сверх длины зажимается",
+            "minimum": 0.0,
+            "title": "Position Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "op_id",
+          "level",
+          "position_ms"
+        ],
+        "title": "ListenRequest",
         "type": "object"
       },
       "MatchCommandResult": {
@@ -1306,6 +1361,19 @@
           "is_host": {
             "title": "Is Host",
             "type": "boolean"
+          },
+          "listen_s": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Сколько секунд игрок слушает открытый уровень (округлено, не больше длины подачи); `null` — неизвестно или не фаза `level_open`. Эфемерно, ответа не раскрывает",
+            "title": "Listen S"
           },
           "nickname": {
             "title": "Nickname",
@@ -2167,6 +2235,17 @@
       "RoundReveal": {
         "description": "Ответ раунда — только в фазе ``reveal`` и позже.",
         "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Artwork"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Картинка ответа (обложка, постер; ADR 0073): подписанная короткоживущая ссылка; `null` — картинки нет или она недоступна"
+          },
           "final_clue": {
             "anyOf": [
               {
@@ -5039,6 +5118,185 @@
           }
         },
         "summary": "Выйти из комнаты",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/rooms/{code}/listen": {
+      "post": {
+        "description": "Метка «соперник слушает N с»: владелец кладёт округлённое `listen_s` в сообщение `player` и в `players[]` комнаты. Только участник и только фаза `level_open` (иначе 409 `match.phase_mismatch`); позиция зажимается в длину подачи, устаревший `level` и повтор значения — 200 без изменений. Фронту слать не чаще раза в секунду и только при смене секунды; сверх `GV_MATCH__LISTEN_PER_PLAYER_PER_MIN` — 429. 404 `match.room_not_found` (нет комнаты или она закрыта), 403 `match.not_participant` (не в этой комнате), 409 `match.phase_mismatch` (команда не для текущей фазы), 429 `match.rate_limited`, 503 `match.rooms_unavailable`.",
+        "operationId": "listen_v1_rooms__code__listen_post",
+        "parameters": [
+          {
+            "description": "Код комнаты: 8 символов `[A-HJ-NP-Z2-9]` (без 0/O/1/I)",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "description": "Код комнаты: 8 символов `[A-HJ-NP-Z2-9]` (без 0/O/1/I)",
+              "examples": [
+                "K7MQ2ZXA"
+              ],
+              "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchCommandResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandAccepted"
+                }
+              }
+            },
+            "description": "Команда принята в поток комнаты, владелец не ответил вовремя (D6)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Позиция прослушивания уровня",
         "tags": [
           "match"
         ]
