@@ -463,8 +463,19 @@ def dev_seed_real(
         int, typer.Option("--package-units", min=1, help="Единиц в одном пакете-архиве")
     ] = 100,
     date_: Annotated[str | None, typer.Option("--date", help="День плановых наборов")] = None,
+    without_synthetic: Annotated[
+        bool,
+        typer.Option(
+            "--without-synthetic",
+            help="Чистый стенд только на реальных данных, без `gv dev seed`: плюс предметы, "
+            "события, social и featured-сборники; режимы без материала пропускаются",
+        ),
+    ] = False,
 ) -> None:
-    """Дополнительный засев реальными открытыми медиа (только local; после ``gv dev seed``)."""
+    """Дополнительный засев реальными открытыми медиа (только local; после ``gv dev seed``).
+
+    С ``--without-synthetic`` команда самодостаточна: синтетика не нужна.
+    """
     from datetime import date as date_type
 
     from gv_cli import seed as seed_module
@@ -509,6 +520,7 @@ def dev_seed_real(
             min_collection_size=min_collection_size,
             tracks_limit=tracks_limit,
             package_units=package_units,
+            without_synthetic=without_synthetic,
             echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN),
         )
     except seed_module.SeedError as exc:
