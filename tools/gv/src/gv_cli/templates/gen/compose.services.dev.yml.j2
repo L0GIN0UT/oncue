@@ -17,6 +17,9 @@ services:
 {% if s.name == "game" %}
       # Сиды режимов публикуются при старте (game.modes.bootstrap).
       GV_GAME__BOOTSTRAP_MODES_DIR: /seeds/game/modes
+      # Правка сида режима (например, параметры загадки) выходит новой версией, когда готов пул
+      # (`gv dev replan-assets`): проверка раз в минуту, а не раз в час.
+      GV_GAME__BOOTSTRAP_INTERVAL_S: "60"
     volumes:
       - ../../seeds/game/modes:/seeds/game/modes:ro
 {% endif %}

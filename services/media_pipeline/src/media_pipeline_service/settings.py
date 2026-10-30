@@ -70,6 +70,9 @@ class MediaSettings(BaseModel):
     backfill_batch: int = Field(default=200, ge=1, le=10_000)
     backfill_interval_s: float = Field(default=60, gt=0)
     backfill_jitter_s: float = Field(default=10, ge=0)
+    # Пересоздание наборов статических профилей (POST /admin/v1/asset-sets/replan): не больше
+    # единиц за один вызов.
+    replan_max_batch: int = Field(default=500, ge=1, le=10_000)
     # Свои загадки сборников (ADR 0029): лимит графем эмодзи (как у collections,
     # GV_COLLECTIONS__LIMITS__EMOJI_MAX_GRAPHEMES) и типы загадок, по профилям которых строятся
     # наборы со scope сборника (в 3b — только emoji).

@@ -24,6 +24,7 @@ from media_pipeline_service.api.common import AssetSetItem
 from media_pipeline_service.api.ugc import register_ugc_admin_routes
 from media_pipeline_service.application.commands.generation import RegenerateAssetSet
 from media_pipeline_service.application.commands.packages import PackageTooLargeError, SubmitPackage
+from media_pipeline_service.application.commands.profiles import ReplanStaticProfiles
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.commands.ugc import UgcUseCases
 from media_pipeline_service.application.dto import SourceProvenance
@@ -50,6 +51,26 @@ class RegenerateRequest(BaseModel):
     """Перегенерация набора."""
 
     reason: Reason
+
+
+class ReplanRequest(BaseModel):
+    """Пересоздание наборов статического профиля после правки `asset_profiles.yaml`."""
+
+    clue_type: str = Field(max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    domain: Literal["music", "film"]
+    after: UUID | None = Field(default=None, description="Курсор: `next_after` прошлой порции")
+    limit: int = Field(
+        default=200, ge=1, le=10_000, description="Единиц за вызов (не больше лимита сервиса)"
+    )
+    reason: Reason
+
+
+class ReplanResponse(BaseModel):
+    """Итог порции."""
+
+    processed: int = Field(ge=0, description="Просмотрено единиц")
+    scheduled: int = Field(ge=0, description="Наборов поставлено в генерацию")
+    next_after: UUID | None = Field(description="Курсор следующей порции; null - домен пройден")
 
 
 class UploadResponse(BaseModel):
@@ -185,6 +206,7 @@ def build_admin_router(
     upload: UploadSource,
     set_position: SetSourcePosition,
     regenerate: RegenerateAssetSet,
+    replan: ReplanStaticProfiles,
     list_sets: ListAssetSets,
     list_profiles: ListProfiles,
     list_sources: ListSources,
@@ -385,6 +407,35 @@ def build_admin_router(
             asset_set_id, actor_id=principal.user_id, reason=body.reason, idempotency_key=key
         )
         return AssetSetItem.of(view)
+
+    @router.post(
+        "/asset-sets/replan",
+        response_model=ReplanResponse,
+        summary="Досоздать наборы статического профиля для уже известных единиц (порция)",
+        description=(
+            "После правки `config/asset_profiles.yaml` меняется `params_hash`: у единиц, "
+            "загруженных раньше, нет наборов под новый хэш. Вызов планирует недостающие наборы "
+            "порции единиц домена (существующие не трогает); повторять с `after = next_after`, "
+            "пока `next_after` не `null`. Старые наборы остаются (по ним доигрываются начатые "
+            "сессии)."
+        ),
+        responses=problem_responses(401, 403, 409, 422),
+    )
+    async def replan_asset_sets(
+        body: ReplanRequest, principal: Regenerator, key: IdempotencyKey
+    ) -> ReplanResponse:
+        batch = await replan.execute(
+            clue_type=body.clue_type,
+            domain=body.domain,
+            after=body.after,
+            limit=body.limit,
+            actor_id=principal.user_id,
+            reason=body.reason,
+            idempotency_key=key,
+        )
+        return ReplanResponse(
+            processed=batch.processed, scheduled=batch.scheduled, next_after=batch.next_after
+        )
 
     @router.get(
         "/profiles",

@@ -779,6 +779,7 @@ class MediaHarness:
         from media_pipeline_service.application.commands.profiles import (
             ApplyClueAssetsRequested,
             BackfillDynamicProfiles,
+            ReplanStaticProfiles,
         )
         from media_pipeline_service.application.commands.sources import (
             SetSourcePosition,
@@ -939,6 +940,9 @@ class MediaHarness:
         )
         self.backfill = BackfillDynamicProfiles(
             uow, self.clock, self.directory, self.plan, self.storage, batch=backfill_batch
+        )
+        self.replan = ReplanStaticProfiles(
+            uow, self.clock, self.directory, self.plan, self.storage, max_limit=500
         )
         self.list_profiles = ListProfiles(uow, self.directory)
 
