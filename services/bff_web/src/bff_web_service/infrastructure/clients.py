@@ -41,6 +41,7 @@ from bff_web_service.application.dto import (
     CommentsCard,
     CosmeticCard,
     CustomClue,
+    DailyResult,
     DailyRoundStat,
     DailyStatus,
     Difficulty,
@@ -89,6 +90,7 @@ from bff_web_service.application.dto import (
     ResultRecord,
     ResultRound,
     Reveal,
+    RewardStreakCard,
     RoomSettings,
     RoundPlayerResult,
     RoundsChoice,
@@ -96,6 +98,7 @@ from bff_web_service.application.dto import (
     SanctionsCard,
     SeasonCard,
     SessionResult,
+    SessionRewardsCard,
     Share,
     Shelf,
     ShelfItem,
@@ -112,8 +115,15 @@ from bff_web_service.application.dto import (
     WheelCard,
     WheelSectorCard,
 )
-from bff_web_service.application.ports import UpstreamUnavailableError
+from bff_web_service.application.ports import (
+    ServiceTokens,
+    UpstreamRejectedError,
+    UpstreamUnavailableError,
+)
 from bff_web_service.infrastructure.http import UpstreamHttp
+from gv_core.errors import DependencyUnavailableError
+
+HTTP_UNAUTHORIZED = 401
 
 log = structlog.get_logger(__name__)
 
@@ -292,6 +302,10 @@ class _ResultIn(_In):
     presentation: Presentation = "score"
     record: _ResultRecordIn | None = None
     bracket: _BracketIn | None = None
+    mode_key: str | None = None
+    domain: Domain | None = None
+    day: date | None = None
+    daily: bool = False
 
     def dto(self) -> SessionResult:
         return SessionResult(
@@ -316,6 +330,29 @@ class _ResultIn(_In):
             if self.record is not None
             else None,
             bracket=self.bracket.dto() if self.bracket is not None else None,
+            mode_key=self.mode_key,
+            domain=self.domain,
+            day=self.day,
+            daily=self.daily,
+        )
+
+
+class _DailyResultIn(_In):
+    user_id: UUID
+    mode_key: str
+    domain: Domain
+    day: date
+    score: int = Field(ge=0)
+    max_score: int = Field(ge=0)
+
+    def dto(self) -> DailyResult:
+        return DailyResult(
+            user_id=self.user_id,
+            mode_key=self.mode_key,
+            domain=self.domain,
+            day=self.day,
+            score=self.score,
+            max_score=self.max_score,
         )
 
 
@@ -361,6 +398,7 @@ _MODES = TypeAdapter(list[_ModeIn])
 _COLLECTION_MODES = TypeAdapter(list[_CollectionModeIn])
 _DAILIES = TypeAdapter(list[_DailyIn])
 _RECORDS = TypeAdapter(list[_RecordIn])
+_DAILY_RESULTS = TypeAdapter(list[_DailyResultIn])
 _RESULT = TypeAdapter(_ResultIn)
 
 
@@ -386,7 +424,9 @@ class HttpGameClient:
         modes_ttl_s: int,
         cache_prefix: str,
         collection_modes_ttl_s: int = 30,
+        service_tokens: ServiceTokens | None = None,
     ) -> None:
+        self._service_tokens = service_tokens
         self._http, self._ttl = http, modes_ttl_s
         self._collection_modes_ttl, self._prefix = collection_modes_ttl_s, cache_prefix
         self._modes_key = f"{cache_prefix}game:modes:v1"
@@ -425,6 +465,32 @@ class HttpGameClient:
         """Итог своей завершённой сессии."""
         body = await self._http.get(f"/v1/sessions/{session_id}/result", token=token)
         return _parse(self._http.service, _RESULT, body).dto()
+
+    async def daily_results(
+        self, user_ids: Sequence[UUID], domain: Domain | None = None
+    ) -> list[DailyResult]:
+        """``GET /internal/v1/daily/results?user_ids=...`` под сервисным токеном bff_web."""
+        if self._service_tokens is None:
+            raise UpstreamUnavailableError(self._http.service, "service_auth_not_configured")
+        try:
+            token = await self._service_tokens.token()
+        except DependencyUnavailableError as exc:
+            raise UpstreamUnavailableError(self._http.service, "service_token_unavailable") from exc
+        pairs = [("user_ids", str(i)) for i in user_ids]
+        if domain is not None:
+            pairs.append(("domain", domain))
+        try:
+            body = await self._http.get(
+                f"/internal/v1/daily/results?{urlencode(pairs)}", token=token
+            )
+        except UpstreamRejectedError as exc:
+            if exc.status == HTTP_UNAUTHORIZED:
+                self._service_tokens.invalidate()
+            raise
+        results = [r.dto() for r in _parse(self._http.service, _DAILY_RESULTS, body)]
+        if not {r.user_id for r in results} <= set(user_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return results
 
     async def records(self, token: str) -> list[PersonalRecord]:
         """Личные рекорды субъекта токена (все режимы)."""
@@ -1310,6 +1376,37 @@ class _ProgressIn(_In):
         )
 
 
+class _RewardStreakIn(_In):
+    domain: Domain
+    current: int = Field(ge=1)
+
+
+class _SessionRewardsIn(_In):
+    session_id: UUID
+    settled: bool
+    xp: int = Field(ge=0)
+    verses: int = Field(ge=0)
+    level_before: int | None = Field(default=None, ge=1)
+    level_after: int | None = Field(default=None, ge=1)
+    streak: _RewardStreakIn | None = None
+
+    def dto(self) -> SessionRewardsCard:
+        return SessionRewardsCard(
+            session_id=self.session_id,
+            settled=self.settled,
+            xp=self.xp,
+            verses=self.verses,
+            level_before=self.level_before,
+            level_after=self.level_after,
+            streak=RewardStreakCard(self.streak.domain, self.streak.current)
+            if self.streak is not None
+            else None,
+        )
+
+
+_SESSION_REWARDS = TypeAdapter(_SessionRewardsIn)
+
+
 class _WalletIn(_In):
     earned: int = Field(ge=0)
     paid: int = Field(ge=0)
@@ -1504,6 +1601,12 @@ class HttpProgressionClient:
         """``GET /v1/me/progress``."""
         body = await self._http.get("/v1/me/progress", token=token)
         return _parse(self._http.service, _PROGRESS, body).dto()
+
+    async def session_rewards(self, token: str, session_id: UUID) -> SessionRewardsCard:
+        """``GET /v1/me/rewards?session_id=...``."""
+        query = urlencode({"session_id": str(session_id)})
+        body = await self._http.get(f"/v1/me/rewards?{query}", token=token)
+        return _parse(self._http.service, _SESSION_REWARDS, body).dto()
 
     async def wallet(self, token: str) -> WalletCard:
         """``GET /v1/me/wallet``."""

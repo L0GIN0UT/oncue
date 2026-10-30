@@ -65,6 +65,7 @@ from bff_web_service.application.queries.common import (
     mode_card,
 )
 from bff_web_service.application.queries.events import EventsContext, GetEventPage
+from bff_web_service.application.queries.feed import HomeFeed, ResultsFriends
 from bff_web_service.application.queries.library import GetLibraryPage, GetLibraryShelfPage
 from bff_web_service.application.queries.online import GetMatchPage, GetOnlinePage
 from bff_web_service.application.queries.progression import (
@@ -75,6 +76,7 @@ from bff_web_service.application.queries.progression import (
     HomeProgress,
 )
 from bff_web_service.application.queries.rating import GetLeaderboardsPage
+from bff_web_service.application.queries.rewards import ResultRewards
 from bff_web_service.domain import Block
 from gv_core.errors import ConflictError, ForbiddenError, NotFoundError, UnauthenticatedError
 
@@ -99,9 +101,12 @@ __all__ = [
     "GetShellPage",
     "GetShopPage",
     "GetSoloPage",
+    "HomeFeed",
     "HomeProgress",
     "Limiter",
     "PageLayout",
+    "ResultRewards",
+    "ResultsFriends",
     "collection_me",
     "daily_cards",
     "mode_card",
@@ -294,6 +299,7 @@ def result_summary(session_id: UUID, result: SessionResult) -> ResultSummary:
         presentation=result.presentation,
         record=result.record,
         bracket=result.bracket,
+        mode_key=result.mode_key,
     )
 
 
@@ -350,20 +356,23 @@ class GetHomePage:
         layout: PageLayout | None = None,
         progress: HomeProgress | None = None,
         events: EventsContext | None = None,
+        feed: HomeFeed | None = None,
     ) -> None:
         self._game, self._concurrency = game, concurrency
         self._layout = layout or PageLayout()
         self._progress = progress
         self._events = events
+        self._feed = feed
 
     async def __call__(self, viewer: Viewer) -> HomePage:
         """Собрать главную."""
         limiter = Limiter(self._concurrency)
-        modes, daily, progress, snapshot = await asyncio.gather(
+        modes, daily, progress, snapshot, feed = await asyncio.gather(
             limiter.attempt(self._game.list_modes()),
             _personal_daily(limiter, self._game, viewer, None),
             self._progress(viewer) if self._progress is not None else _no_progress(),
             self._events.snapshot(viewer) if self._events is not None else _no_snapshot(),
+            self._feed(viewer) if self._feed is not None else _no_feed(),
         )
         modes_block = block_of(modes, "modes")
         daily_block = block_of(daily, "dailies")
@@ -379,6 +388,7 @@ class GetHomePage:
                 weekly=weekly,
                 progress=progress,
                 event=snapshot.banner if snapshot is not None else None,
+                feed=feed,
             ),
             personal=viewer.is_personal,
         )
@@ -386,6 +396,10 @@ class GetHomePage:
 
 async def _no_snapshot() -> None:
     """События не подключены: блок ``event`` - ``null``."""
+
+
+async def _no_feed() -> None:
+    """Лента друзей не подключена: блок ``feed`` — ``null``."""
 
 
 async def _no_progress() -> None:
@@ -468,8 +482,17 @@ def _recordsblock_of(
 class GetResultsPage:
     """Экран результатов: итог из game + карточки catalog по ревилам."""
 
-    def __init__(self, game: GameClient, catalog: CatalogClient, *, concurrency: int) -> None:
+    def __init__(
+        self,
+        game: GameClient,
+        catalog: CatalogClient,
+        *,
+        concurrency: int,
+        rewards: ResultRewards | None = None,
+        friends: ResultsFriends | None = None,
+    ) -> None:
         self._game, self._catalog, self._concurrency = game, catalog, concurrency
+        self._rewards, self._friends = rewards, friends
 
     async def __call__(self, viewer: Viewer, session_id: UUID) -> ResultsPage:
         """Собрать экран.
@@ -489,10 +512,17 @@ class GetResultsPage:
             return ResultsPage(ResultsBlocks(Block.unavailable(), Block.unavailable()))
         except UpstreamRejectedError as exc:
             raise _rejection(exc) from exc
+        items, rewards, friends_today = await asyncio.gather(
+            self._items(limiter, _revealed_ids(result)),
+            self._rewards(viewer, session_id) if self._rewards is not None else _none(),
+            self._friends(viewer, result) if self._friends is not None else _none(),
+        )
         return ResultsPage(
             ResultsBlocks(
                 result=Block.ok(result_summary(session_id, result)),
-                items=await self._items(limiter, _revealed_ids(result)),
+                items=items,
+                rewards=rewards,
+                friends_today=friends_today,
             )
         )
 
@@ -509,6 +539,10 @@ class GetResultsPage:
                 return Block.unavailable()
             cards.append(item_card(block.data))
         return Block.ok(cards)
+
+
+async def _none() -> None:
+    """Необязательный блок итога не подключён: ``null``."""
 
 
 def _rejection(exc: UpstreamRejectedError) -> Exception:

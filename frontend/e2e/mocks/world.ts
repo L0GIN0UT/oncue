@@ -1088,6 +1088,7 @@ export class MockWorld {
         reveal: r.status === "void" ? null : this.reveal(s, r),
       })),
       share: { text: this.shareText(s) },
+      daily: Boolean(s.day && s.mode.source_type === "daily"),
       daily_stats:
         s.day && s.mode.source_type === "daily"
           ? s.rounds.map((r) => ({ index: r.index, exact_pct: DAILY_EXACT_PCT[r.index] ?? 0 }))

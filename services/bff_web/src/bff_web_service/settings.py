@@ -115,6 +115,22 @@ class PagesSettings(BaseModel):
             (предел источника — 12); больше игроков матча режутся на пачки.
         comments_limit: Комментариев в первой странице блока ``comments`` страницы сборника
             (дальше — курсор social напрямую; предел источника — 100).
+        friends_scan_limit: Сколько друзей опрашивать на результаты дейлика для ленты главной
+            и «среди друзей» итога (первые по списку social); счётчик «всего друзей» — по всем.
+        friends_results_batch_size: Игроков в одном вызове ``game /v1/daily/results``; не больше
+            ``GV_GAME__DAILY_RESULTS_MAX_USERS`` game (по умолчанию 50).
+        friends_relations_batch_size: Игроков в одном вызове ``social /v1/players/relations``
+            для видимости статистики друзей (предел источника — 50; лимит social считает
+            вызовы, поэтому пачка крупнее ``relations_batch_size``).
+        home_feed_deadline_s: Общий срок конвейера друзей (друзья, результаты, видимость,
+            оформление) для ленты главной и блока «среди друзей» итога; не успел — блок
+            ``unavailable``, остальная страница цела.
+        home_feed_items_limit: Друзей в ``feed.items`` (лучшие первыми); счётчики — по всем.
+        results_friends_limit: Друзей в ``friends_today.items`` итога дейлика.
+        results_rewards_deadline_s: Срок блока ``rewards`` итога вместе с повторами.
+        results_rewards_retries: Сколько раз переспросить progression, если награда ещё не
+            начислена (начисление асинхронное); 0 — не переспрашивать.
+        results_rewards_retry_delay_s: Пауза между повторами.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -137,6 +153,15 @@ class PagesSettings(BaseModel):
     default_theme_key: str = Field(default="default", pattern=r"^[a-z][a-z0-9_]*$", max_length=64)
     appearance_batch_size: int = Field(default=12, ge=1, le=12)
     comments_limit: int = Field(default=30, ge=1, le=100)
+    friends_scan_limit: int = Field(default=100, ge=1, le=500)
+    friends_results_batch_size: int = Field(default=50, ge=1, le=50)
+    friends_relations_batch_size: int = Field(default=50, ge=1, le=50)
+    home_feed_deadline_s: float = Field(default=1.5, gt=0, le=30)
+    home_feed_items_limit: int = Field(default=10, ge=1, le=50)
+    results_friends_limit: int = Field(default=5, ge=1, le=50)
+    results_rewards_deadline_s: float = Field(default=2.0, gt=0, le=30)
+    results_rewards_retries: int = Field(default=2, ge=0, le=5)
+    results_rewards_retry_delay_s: float = Field(default=0.5, ge=0, le=5)
 
 
 class Settings(ServiceSettings):

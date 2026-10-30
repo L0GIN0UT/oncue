@@ -106,6 +106,8 @@ def _ledger(name: str, *extra: Any) -> Table:
         CheckConstraint("reversal_of IS NULL OR reversal_of <> op_id", name="reversal_not_self"),
         # Свежие проводки игрока: обратный проход по индексу.
         Index(f"ix_{name}_user_at", "user_id", "at", "id"),
+        # Награды за игровую сессию игрока (``GET /v1/me/rewards``): точечное чтение по предмету.
+        Index(f"ix_{name}_user_source_ref", "user_id", "source_ref"),
         *extra,
     )
 

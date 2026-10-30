@@ -229,6 +229,23 @@ class SessionResult:
     presentation: Presentation = "score"
     record: ResultRecord | None = None
     bracket: Bracket | None = None
+    mode_key: str | None = None
+    domain: Domain | None = None
+    day: date | None = None
+    daily: bool = False
+    """Сессия дейлика (плановый набор с типом Source из настроек game)."""
+
+
+@dataclass(frozen=True, slots=True)
+class DailyResult:
+    """Завершённый дейлик игрока в текущем периоде (``game GET /v1/daily/results``)."""
+
+    user_id: UUID
+    mode_key: str
+    domain: Domain
+    day: date
+    score: int
+    max_score: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,6 +373,45 @@ class HomeBlocks:
     weekly: Block[list[DailyCard]]
     progress: Block[HomeProgressCard] | None = None
     event: EventBannerCard | None = None
+    feed: Block[DailyFeedCard] | None = None
+    """Друзья и дейлик: ``None`` — гость или аноним (источники не вызывались)."""
+
+
+@dataclass(frozen=True, slots=True)
+class FriendDailyResult:
+    """Результат друга в дейлике одного домена (бейдж на домен)."""
+
+    domain: Domain
+    mode_key: str
+    day: date
+    score: int
+    max_score: int
+
+
+@dataclass(frozen=True, slots=True)
+class FriendDailyCard:
+    """Друг, сыгравший дейлик в текущем периоде: ник, оформление и результаты по доменам."""
+
+    user_id: UUID
+    nickname: str
+    results: list[FriendDailyResult]
+    appearance: AppearanceCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DailyFeedCard:
+    """Лента дейлика друзей на главной.
+
+    Attributes:
+        friends_total: Всего друзей у зрителя.
+        friends_played: Сколько из них сыграли дейлик в текущем периоде и открыли статистику
+            (друг со скрытой статистикой не считается — это раскрыло бы, что он играл).
+        items: Первые ``GV_PAGES__HOME_FEED_ITEMS_LIMIT`` сыгравших, лучшие первыми.
+    """
+
+    friends_total: int
+    friends_played: int
+    items: list[FriendDailyCard]
 
 
 @dataclass(frozen=True, slots=True)
@@ -444,11 +500,99 @@ class ItemCard:
 
 
 @dataclass(frozen=True, slots=True)
+class RewardStreakCard:
+    """Серия дейлика, в которую засчитана сессия."""
+
+    domain: Domain
+    current: int
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRewardsCard:
+    """Награды за сессию (``progression GET /v1/me/rewards``)."""
+
+    session_id: UUID
+    settled: bool
+    xp: int
+    verses: int
+    level_before: int | None = None
+    level_after: int | None = None
+    streak: RewardStreakCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RewardsCard:
+    """Награды за игру на экране итогов.
+
+    Attributes:
+        settled: Начисление уже есть. ``False`` — ещё не начислено (асинхронно, по событию
+            game): клиент повторяет запрос позже, это не ошибка.
+        xp: Опыт за сессию (с бустом).
+        verses: Версы за сессию, целые.
+        level_before: Уровень до сессии; ``None`` — опыта нет.
+        level_after: Уровень после сессии.
+        leveled_up: Уровень вырос.
+        streak: Серия дейлика; ``None`` — не дейлик.
+    """
+
+    settled: bool
+    xp: int = 0
+    verses: int = 0
+    level_before: int | None = None
+    level_after: int | None = None
+    leveled_up: bool = False
+    streak: RewardStreakCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FriendsTodayRow:
+    """Друг и его результат в том же дейлике, что и итог зрителя."""
+
+    user_id: UUID
+    nickname: str
+    score: int
+    max_score: int
+    appearance: AppearanceCard | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FriendsTodayCard:
+    """Блок «среди друзей» итога дейлика: тот же режим и период.
+
+    Attributes:
+        my_place: Место зрителя среди сыгравших друзей и его самого (1 — лучший); равные
+            очки делят место.
+        friends_total: Всего друзей у зрителя.
+        friends_played: Друзей, сыгравших этот дейлик и открывших статистику.
+        average_score: Среднее очков сыгравших друзей (один знак); ``None`` — таких нет.
+        items: Сыгравшие друзья, лучшие первыми, не больше
+            ``GV_PAGES__RESULTS_FRIENDS_LIMIT``.
+    """
+
+    mode_key: str
+    domain: Domain
+    day: date
+    my_score: int
+    my_max_score: int
+    my_place: int
+    friends_total: int
+    friends_played: int
+    average_score: float | None
+    items: list[FriendsTodayRow]
+
+
+@dataclass(frozen=True, slots=True)
 class ResultsBlocks:
-    """Блоки экрана результатов."""
+    """Блоки экрана результатов.
+
+    ``rewards`` и ``friends_today`` необязательны и гаснут независимо (``unavailable``);
+    ``None`` — гость или аноним (источники не вызывались), у ``friends_today`` ещё и не дейлик.
+    """
 
     result: Block[ResultSummary]
     items: Block[list[ItemCard]]
+    rewards: Block[RewardsCard] | None = None
+    friends_today: Block[FriendsTodayCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)

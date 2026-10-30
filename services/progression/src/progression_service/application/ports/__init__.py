@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -93,6 +93,24 @@ class LedgerMismatch:
     stored: int
 
 
+@dataclass(frozen=True, slots=True)
+class SessionLedgerRows:
+    """Начисления журналов за одну игровую сессию игрока (чтение для экрана итогов).
+
+    Attributes:
+        xp: Сумма проводок опыта.
+        verses: Сумма кредитов Версов.
+        total_xp_after: Накопленный опыт по журналу сразу после последней проводки опыта
+            сессии; ``None``, если опыта за сессию нет.
+        op_ids: ``op_id`` проводок обоих журналов (по ним определяется дейлик).
+    """
+
+    xp: int = 0
+    verses: int = 0
+    total_xp_after: int | None = None
+    op_ids: tuple[str, ...] = ()
+
+
 class ConfigRepository(Protocol):
     """Версии конфига."""
 
@@ -155,6 +173,16 @@ class LedgerRepository(Protocol):
 
     async def recent_currency(self, user_id: UUID, limit: int) -> list[Entry]:
         """Последние проводки Версов игрока, новые первыми."""
+        ...
+
+    async def session_rows(
+        self, user_id: UUID, source_ref: str, reasons: Collection[str]
+    ) -> SessionLedgerRows:
+        """Начисления игрока по предмету ``source_ref`` (id игровой сессии) с причинами ``reasons``.
+
+        Только чтение: проводки отбираются по ``user_id`` и ``source_ref`` (чужая сессия даёт
+        пустой результат, неотличимый от «ещё не начислено»).
+        """
         ...
 
     async def mismatches(self, limit: int) -> list[LedgerMismatch]:

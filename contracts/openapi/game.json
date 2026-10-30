@@ -518,6 +518,54 @@
         "additionalProperties": true,
         "type": "object"
       },
+      "DailyResultOut": {
+        "description": "Завершённый дейлик одного игрока в текущем периоде (по режиму).",
+        "properties": {
+          "day": {
+            "description": "Начало периода набора",
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "max_score": {
+            "minimum": 0.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "mode_key",
+          "domain",
+          "day",
+          "score",
+          "max_score"
+        ],
+        "title": "DailyResultOut",
+        "type": "object"
+      },
       "DailyRoundStat": {
         "description": "Доля угадавших раунд дейлика (только пользователи).",
         "properties": {
@@ -2792,6 +2840,12 @@
             ],
             "description": "Сессия по сборнику"
           },
+          "daily": {
+            "default": false,
+            "description": "Сессия дейлика: плановый набор с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES` (результаты друзей считаются только для неё)",
+            "title": "Daily",
+            "type": "boolean"
+          },
           "daily_stats": {
             "anyOf": [
               {
@@ -2806,9 +2860,50 @@
             ],
             "title": "Daily Stats"
           },
+          "day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Период планового набора; иначе `null`",
+            "title": "Day"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "enum": [
+                  "music",
+                  "film"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Домен режима",
+            "title": "Domain"
+          },
           "max_score": {
             "title": "Max Score",
             "type": "integer"
+          },
+          "mode_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Режим сессии",
+            "title": "Mode Key"
           },
           "presentation": {
             "default": "score",
@@ -5406,6 +5501,146 @@
         "summary": "Поиск кандидатов в проекции game",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/internal/v1/daily/results": {
+      "get": {
+        "description": "Для bff_web (друзья на главной и в итогах дейлика): завершённые дейлики перечисленных пользователей в ТЕКУЩЕМ периоде (`day` режима), только очки; прошлых периодов, ответов и гостей нет, игроки без завершённой попытки не возвращаются. Сервисный токен с областью `daily.results` (audience = game): game дружбы не знает, кого показывать зрителю, решает bff по данным social. Не больше `GV_GAME__DAILY_RESULTS_MAX_USERS` игроков (422 `game.too_many_users`, `details.given/max`), лимит `GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN` на клиента (429). Режимы — с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES`.",
+        "operationId": "daily_results_internal_v1_daily_results_get",
+        "parameters": [
+          {
+            "description": "Игроки",
+            "in": "query",
+            "name": "user_ids",
+            "required": true,
+            "schema": {
+              "description": "Игроки",
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "User Ids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "music",
+                    "film"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DailyResultOut"
+                  },
+                  "title": "Response Daily Results Internal V1 Daily Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Результаты дейлика игроков в текущем периоде",
+        "tags": [
+          "internal"
         ]
       }
     },
