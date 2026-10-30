@@ -259,6 +259,9 @@ class GameContainer:
             self.adapters.limiter,
             subjects_per_min=self.settings.game_limits.subjects_per_min,
             playability_per_min=self.settings.game_limits.playability_per_min,
+            daily_results_per_min=self.settings.game_limits.daily_results_per_min,
+            daily_results_max_users=self.settings.game.daily_results_max_users,
+            daily_results_source_types=frozenset(self.settings.game.daily_results_source_types),
             candidate_limit=self.settings.game.candidate_limit,
         )
 

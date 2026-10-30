@@ -26,6 +26,7 @@ from bff_web_service.application.dto import (
     CollectionList,
     CollectionMode,
     CommentsCard,
+    DailyResult,
     DailyStatus,
     Domain,
     EventArchiveCard,
@@ -52,6 +53,7 @@ from bff_web_service.application.dto import (
     RatingCard,
     SanctionsCard,
     SessionResult,
+    SessionRewardsCard,
     Shelf,
     ShelfItems,
     ShopCatalogCard,
@@ -94,6 +96,18 @@ class UpstreamRejectedError(Exception):
         self.details = details or {}
 
 
+class ServiceTokens(Protocol):
+    """Сервисный токен bff_web для internal-ручек (``gv_auth.ServiceTokenProvider``)."""
+
+    async def token(self) -> str:
+        """Действующий токен."""
+        ...
+
+    def invalidate(self) -> None:
+        """Забыть токен (ответ 401)."""
+        ...
+
+
 class GameClient(Protocol):
     """Публичный API game (``/api/game/v1`` на gateway, внутри — ``/v1``)."""
 
@@ -105,6 +119,19 @@ class GameClient(Protocol):
         """Плановые режимы периода (дейлики и недельная сетка) субъекта токена.
 
         Личные, не кэшируются.
+        """
+        ...
+
+    async def daily_results(
+        self, user_ids: Sequence[UUID], domain: Domain | None = None
+    ) -> list[DailyResult]:
+        """Завершённые дейлики перечисленных пользователей в текущем периоде.
+
+        Internal-ручка game под сервисным токеном bff_web (область ``daily.results``), а не
+        токеном зрителя: кому можно показывать чужие очки, решает вызывающий по данным social.
+        Не больше ``GV_GAME__DAILY_RESULTS_MAX_USERS`` игроков за вызов. Не кэшируется. Токен
+        не получен (``GV_SERVICE_AUTH__*`` не заданы, identity недоступен) —
+        ``UpstreamUnavailableError``.
         """
         ...
 
@@ -257,6 +284,13 @@ class ProgressionClient(Protocol):
 
     async def wallet(self, token: str) -> WalletCard:
         """Версы (``/v1/me/wallet``)."""
+        ...
+
+    async def session_rewards(self, token: str, session_id: UUID) -> SessionRewardsCard:
+        """Награды за свою игровую сессию (``/v1/me/rewards``).
+
+        Ещё не начислено (или сессия чужая) — ``settled = false`` с нулями, не ошибка.
+        """
         ...
 
     async def quests(self, token: str) -> QuestsCard:

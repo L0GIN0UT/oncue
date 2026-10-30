@@ -1520,3 +1520,67 @@ async def test_package_over_limit_is_413_and_leaves_nothing(service: Service) ->
     assert response.status_code == 413
     assert response.json()["code"] == "package.archive_too_large"
     assert await _archive_keys(service) == []
+
+
+async def test_admin_replan_static_profile_batches_and_checks_rights(service: Service) -> None:
+    """Пересоздание наборов статического профиля: порция, курсор, права, ключ, ошибки."""
+    asset_set = await _ready_poster(service)
+    url = "/admin/v1/asset-sets/replan"
+    body = {"clue_type": "poster_masked", "domain": "film", "limit": 10, "reason": "новый хэш"}
+    headers = {**service.admin(), "Idempotency-Key": f"replan-{uuid7().hex}"}
+    response = await service.client.post(url, json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    # Набор под этот хэш уже есть: единица просмотрена, поставлять нечего, домен пройден.
+    assert response.json() == {"processed": 1, "scheduled": 0, "next_after": None}
+    assert (await service.client.post(url, json=body, headers=headers)).json() == response.json()
+    assert_problem(
+        await service.client.post(url, json={**body, "limit": 0}, headers=headers),
+        422,
+        "request.validation_failed",
+    )
+    assert_problem(
+        await service.client.post(
+            url,
+            json={**body, "clue_type": "no_such_clue"},
+            headers={**service.admin(), "Idempotency-Key": f"replan-{uuid7().hex}"},
+        ),
+        422,
+        "profile.not_found",
+    )
+    assert_problem(
+        await service.client.post(
+            url,
+            json=body,
+            headers={**service.admin("admin.access"), "Idempotency-Key": f"r-{uuid7().hex}"},
+        ),
+        403,
+        "auth.forbidden",
+    )
+    assert_problem(
+        await service.client.post(url, json=body, headers=service.admin()),
+        422,
+        "idempotency.key_required",
+    )
+    assert asset_set["status"] == "ready"
+
+
+async def test_admin_replan_schedules_missing_set_on_real_db(service: Service) -> None:
+    """Набора под текущий хэш профиля нет (как после правки yaml) → replan ставит и строит его."""
+    asset_set = await _ready_poster(service)
+    sets = TABLES.metadata.tables["asset_sets"]
+    assert service.infra.sessions is not None
+    async with service.infra.sessions() as session:
+        await session.execute(sa.delete(sets).where(sets.c.id == UUID(asset_set["asset_set_id"])))
+        await session.commit()
+    body = {"clue_type": "poster_masked", "domain": "film", "limit": 10, "reason": "новый хэш"}
+    headers = {**service.admin(), "Idempotency-Key": f"replan-{uuid7().hex}"}
+    response = await service.client.post("/admin/v1/asset-sets/replan", json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"processed": 1, "scheduled": 1, "next_after": None}
+    assert await service.run_tasks() == 1
+    listed = await service.client.get(
+        "/internal/v1/asset-sets", params={"media_item_id": asset_set["media_item_id"]}
+    )
+    (rebuilt,) = listed.json()
+    assert rebuilt["status"] == "ready"
+    assert rebuilt["asset_set_id"] != asset_set["asset_set_id"]

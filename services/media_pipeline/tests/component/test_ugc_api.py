@@ -45,6 +45,7 @@ async def ugc_client(media: Any) -> AsyncIterator[Client]:
                 upload=media.upload,
                 set_position=media.set_position,
                 regenerate=media.regenerate,
+                replan=media.replan,
                 list_sets=media.list_sets,
                 list_profiles=media.list_profiles,
                 list_sources=media.list_sources,

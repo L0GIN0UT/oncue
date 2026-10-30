@@ -743,6 +743,96 @@
         "title": "RejectRequest",
         "type": "object"
       },
+      "ReplanRequest": {
+        "description": "Пересоздание наборов статического профиля после правки `asset_profiles.yaml`.",
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Курсор: `next_after` прошлой порции",
+            "title": "After"
+          },
+          "clue_type": {
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Clue Type",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "description": "Единиц за вызов (не больше лимита сервиса)",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clue_type",
+          "domain",
+          "reason"
+        ],
+        "title": "ReplanRequest",
+        "type": "object"
+      },
+      "ReplanResponse": {
+        "description": "Итог порции.",
+        "properties": {
+          "next_after": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Курсор следующей порции; null - домен пройден",
+            "title": "Next After"
+          },
+          "processed": {
+            "description": "Просмотрено единиц",
+            "minimum": 0.0,
+            "title": "Processed",
+            "type": "integer"
+          },
+          "scheduled": {
+            "description": "Наборов поставлено в генерацию",
+            "minimum": 0.0,
+            "title": "Scheduled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processed",
+          "scheduled",
+          "next_after"
+        ],
+        "title": "ReplanResponse",
+        "type": "object"
+      },
       "ServiceMeta": {
         "description": "Сведения о сервисе.",
         "properties": {
@@ -1388,6 +1478,118 @@
           }
         },
         "summary": "Наборы ассетов единицы (для карточки в админке)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/v1/asset-sets/replan": {
+      "post": {
+        "description": "После правки `config/asset_profiles.yaml` меняется `params_hash`: у единиц, загруженных раньше, нет наборов под новый хэш. Вызов планирует недостающие наборы порции единиц домена (существующие не трогает); повторять с `after = next_after`, пока `next_after` не `null`. Старые наборы остаются (по ним доигрываются начатые сессии).",
+        "operationId": "replan_asset_sets_admin_v1_asset_sets_replan_post",
+        "parameters": [
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Досоздать наборы статического профиля для уже известных единиц (порция)",
         "tags": [
           "admin"
         ]

@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Response
+from fastapi import APIRouter, Depends, Path, Query, Response
 
 from gv_auth import Principal, require_user
 from gv_service import problem_responses
@@ -17,6 +17,8 @@ from progression_service.api.public.schemas import (
     DailyStreakView,
     MyProgress,
     PublicProgress,
+    SessionRewards,
+    SessionStreakView,
 )
 from progression_service.application.queries import ProgressQueries
 
@@ -70,6 +72,42 @@ def register_progress_routes(router: APIRouter, queries: ProgressQueries) -> Non
             ),
             boosts_queued=view.boost.queued,
             config_version=view.config_version,
+        )
+
+    @router.get(
+        "/me/rewards",
+        response_model=SessionRewards,
+        summary="Награды за мою игровую сессию",
+        description=(
+            "Опыт, Версы, уровень до/после и серия дейлика за сессию `session_id` (соло или "
+            "дейлик) — только текущего пользователя, по журналам начислений. Начисление "
+            "асинхронное: до него (а также за чужую или несуществующую сессию, или если "
+            "потолок съел всё) ответ 200 с `settled = false` и нулями — это не ошибка и не "
+            "раскрывает существование чужих сессий. Только чтение, в ledger ничего не пишется."
+        ),
+        responses=problem_responses(401, 403, 422),
+    )
+    async def my_rewards(
+        user: User,
+        response: Response,
+        session_id: Annotated[UUID, Query(description="Идентификатор игровой сессии")],
+    ) -> SessionRewards:
+        response.headers["Cache-Control"] = PRIVATE
+        view = await queries.session_rewards(user.user_id, session_id)
+        return SessionRewards(
+            session_id=view.session_id,
+            settled=view.settled,
+            xp=view.xp,
+            verses=view.verses,
+            level_before=view.level_before,
+            level_after=view.level_after,
+            streak=(
+                None
+                if view.streak is None
+                else SessionStreakView.model_validate(
+                    {"domain": view.streak.domain, "current": view.streak.current}
+                )
+            ),
         )
 
     @router.get(

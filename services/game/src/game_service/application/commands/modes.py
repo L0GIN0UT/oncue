@@ -33,7 +33,14 @@ from game_service.domain.errors import (
     ModeNotFoundError,
     ModeVersionNotFoundError,
 )
-from game_service.domain.modes import ConfigVersion, Draft, ModeLine, domain_of
+from game_service.domain.modes import (
+    ConfigVersion,
+    Draft,
+    ModeLine,
+    VersionStatus,
+    body_hash,
+    domain_of,
+)
 from gv_core.clock import Clock
 from gv_core.ids import uuid7
 from gv_db.idempotency import request_fingerprint, run_idempotent
@@ -625,12 +632,34 @@ def _read_seeds(directory: Path) -> list[tuple[str, Any]]:
     ]
 
 
+BOOTSTRAP_REASON = "bootstrap"
+
+
+def _seed_changed(latest: ConfigVersion, body: Mapping[str, Any]) -> bool:
+    """Сид отличается от последней версии, и та опубликована самим bootstrap."""
+    return (
+        latest.status is VersionStatus.PUBLISHED
+        and latest.actor_id is None
+        and latest.reason == BOOTSTRAP_REASON
+        and latest.rolled_back_from is None
+        and latest.body_hash != body_hash(body)
+    )
+
+
 class BootstrapModes:
     """Публикация сидов режимов из каталога (только local/ci, D8).
 
-    Публикует режим, только если у него ещё нет ни одной версии: повторный запуск и
-    несколько реплик безопасны (advisory lock ключа + проверка в транзакции). Пул не
-    проверяется — контент в local/ci загружается после старта сервиса.
+    Новый режим (ни одной версии) публикуется сразу: повторный запуск и несколько реплик
+    безопасны (advisory lock ключа + проверка в транзакции). Пул не проверяется — контент в
+    local/ci загружается после старта сервиса.
+
+    Правка сида (например, параметры загадки) у уже опубликованного режима выпускает НОВУЮ
+    версию, но только если последняя версия — от самого bootstrap (``actor_id`` пуст, причина
+    ``bootstrap``): версии админа и откаты не затираются. Новую версию публикуют, когда под её
+    ``params_hash`` в проекции уже есть ассеты и пул не меньше ``min_playable`` (иначе режим
+    остался бы без играбельных единиц, пока media-pipeline досоздаёт наборы): пока не готово —
+    режим остаётся на прежней версии, следующий запуск задачи повторит проверку. Начатые сессии и
+    наборы дня держат свою версию (``mode_version``), поэтому доигрываются по старым ассетам.
     """
 
     def __init__(
@@ -655,19 +684,37 @@ class BootstrapModes:
             key = body["key"]
             async with self._uow() as uow:
                 line = await uow.modes.get_line(key, for_update=True)
-                if line.latest is not None:
+                refresh = line.latest is not None
+                if line.latest is not None and not _seed_changed(line.latest, body):
+                    continue
+                if refresh and line.draft is not None:
+                    log.info("game.bootstrap_refresh_skipped_draft", mode_key=key)
                     continue
                 validation = await self._validator.execute(
-                    uow, body, key=key, check_pool=False, check_ladder=False
+                    uow, body, key=key, check_pool=refresh, check_ladder=False
                 )
+                if refresh and any(w["code"] == PROFILE_MISSING for w in validation["warnings"]):
+                    validation = {
+                        **validation,
+                        "ok": False,
+                        "errors": [{"path": "clue.params", "code": PROFILE_MISSING}],
+                    }
                 if not validation["ok"]:
+                    waiting_codes = {POOL_TOO_SMALL, PROFILE_MISSING}
+                    if refresh and all(e["code"] in waiting_codes for e in validation["errors"]):
+                        log.info(
+                            "game.bootstrap_refresh_waiting",
+                            mode_key=key,
+                            reasons=[e["path"] + ":" + e["code"] for e in validation["errors"]],
+                        )
+                        continue
                     log.error(
                         "game.bootstrap_config_invalid",
                         mode_key=key,
                         errors=[e["path"] + ":" + e["code"] for e in validation["errors"]],
                     )
                     continue
-                line.publish(body, actor_id=None, reason="bootstrap", now=self._clock.now())
+                line.publish(body, actor_id=None, reason=BOOTSTRAP_REASON, now=self._clock.now())
                 await uow.modes.save_line(line)
                 uow.track(line)
                 await uow.commit()

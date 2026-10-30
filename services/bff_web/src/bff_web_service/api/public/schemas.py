@@ -609,6 +609,43 @@ class SanctionsCard(BaseModel):
     items: list[SanctionCard]
 
 
+class FriendDailyResult(BaseModel):
+    """Результат друга в дейлике одного домена (бейдж на домен)."""
+
+    domain: Domain
+    mode_key: str
+    day: date = Field(description="Начало периода набора")
+    score: int = Field(ge=0)
+    max_score: int = Field(ge=0)
+
+
+class FriendDailyCard(BaseModel):
+    """Друг, сыгравший дейлик в текущем периоде: до одного результата на домен."""
+
+    user_id: UUID
+    nickname: str
+    results: list[FriendDailyResult]
+    appearance: AppearanceCard | None = Field(
+        default=None, description="Аватар, рамка, титул; null — источник не отдал"
+    )
+
+
+class DailyFeedCard(BaseModel):
+    """Лента дейлика друзей: результаты и счётчик «сыграли из всех друзей»."""
+
+    friends_total: int = Field(ge=0, description="Всего друзей")
+    friends_played: int = Field(
+        ge=0,
+        description=(
+            "Сыграли дейлик в текущем периоде и открыли статистику (друг со скрытой "
+            "статистикой не считается и не показывается); «друзья 4 из 9» = played из total"
+        ),
+    )
+    items: list[FriendDailyCard] = Field(
+        description="Лучшие первыми, не больше `GV_PAGES__HOME_FEED_ITEMS_LIMIT`"
+    )
+
+
 class HomeBlocks(BaseModel):
     """Блоки главной."""
 
@@ -621,6 +658,13 @@ class HomeBlocks(BaseModel):
     event: EventBannerCard | None = Field(
         default=None,
         description="5d: активное событие; null - нет события или progression недоступен",
+    )
+    feed: Block[DailyFeedCard] | None = Field(
+        default=None,
+        description=(
+            "Друзья и дейлик (результаты по доменам, счётчик «сыграли из всех»); null — гость "
+            "или аноним, источники не вызывались; unavailable — сбой любой части"
+        ),
     )
 
 
@@ -729,11 +773,71 @@ class ResultSummary(BaseModel):
     bracket: BracketSummary | None = Field(default=None, description="Только у сетки")
 
 
+class RewardStreakCard(BaseModel):
+    """Серия дейлика, в которую засчитана сессия."""
+
+    domain: Domain
+    current: int = Field(ge=1)
+
+
+class RewardsCard(BaseModel):
+    """Награды за игру. `settled = false` — ещё не начислено (асинхронно): повторить позже."""
+
+    settled: bool
+    xp: int = Field(ge=0, description="Опыт за сессию (с бустом)")
+    verses: int = Field(ge=0, description="Версы за сессию, целые")
+    level_before: int | None = Field(default=None, ge=1, description="Уровень до сессии")
+    level_after: int | None = Field(default=None, ge=1, description="Уровень после сессии")
+    leveled_up: bool = Field(description="Уровень вырос")
+    streak: RewardStreakCard | None = Field(
+        default=None, description="Серия дейлика на день сессии; null — не дейлик"
+    )
+
+
+class FriendsTodayRow(BaseModel):
+    """Друг и его результат в том же дейлике."""
+
+    user_id: UUID
+    nickname: str
+    score: int = Field(ge=0)
+    max_score: int = Field(ge=0)
+    appearance: AppearanceCard | None = None
+
+
+class FriendsTodayCard(BaseModel):
+    """«Среди друзей» итога дейлика: тот же режим и период, свой результат в сравнении."""
+
+    mode_key: str
+    domain: Domain
+    day: date
+    my_score: int = Field(ge=0)
+    my_max_score: int = Field(ge=0)
+    my_place: int = Field(ge=1, description="Место среди сыгравших друзей и вас; равные делят")
+    friends_total: int = Field(ge=0)
+    friends_played: int = Field(ge=0, description="Сыграли этот дейлик и открыли статистику")
+    average_score: float | None = Field(
+        default=None, description="Среднее очков сыгравших друзей; null — таких нет"
+    )
+    items: list[FriendsTodayRow] = Field(
+        description="Лучшие первыми, не больше `GV_PAGES__RESULTS_FRIENDS_LIMIT`"
+    )
+
+
 class ResultsBlocks(BaseModel):
     """Блоки экрана результатов."""
 
     result: Block[ResultSummary]
     items: Block[list[ItemCard]]
+    rewards: Block[RewardsCard] | None = Field(
+        default=None, description="Награды за игру; null — гость или аноним"
+    )
+    friends_today: Block[FriendsTodayCard] | None = Field(
+        default=None,
+        description=(
+            "Только итог дейлика текущего периода: друзья в том же режиме; null — гость, аноним, "
+            "не дейлик или период закончился"
+        ),
+    )
 
 
 class ResultsPage(BaseModel):

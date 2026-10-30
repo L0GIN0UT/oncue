@@ -738,6 +738,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Награды за мою игровую сессию
+         * @description Опыт, Версы, уровень до/после и серия дейлика за сессию `session_id` (соло или дейлик) — только текущего пользователя, по журналам начислений. Начисление асинхронное: до него (а также за чужую или несуществующую сессию, или если потолок съел всё) ответ 200 с `settled = false` и нулями — это не ошибка и не раскрывает существование чужих сессий. Только чтение, в ledger ничего не пишется.
+         */
+        get: operations["my_rewards_v1_me_rewards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/wallet": {
         parameters: {
             query?: never;
@@ -2590,6 +2610,60 @@ export interface components {
             service: string;
             /** Status */
             status: string;
+        };
+        /**
+         * SessionRewards
+         * @description Награды за игровую сессию текущего пользователя (экран итогов).
+         *
+         *     Начисление асинхронное (по событию game): пока его нет, `settled = false`, суммы нулевые —
+         *     это не ошибка, клиент спрашивает позже. Чужая сессия неотличима от неначисленной.
+         */
+        SessionRewards: {
+            /**
+             * Level After
+             * @description Уровень после сессии
+             */
+            level_after?: number | null;
+            /**
+             * Level Before
+             * @description Уровень до сессии; null — опыта нет
+             */
+            level_before?: number | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Settled
+             * @description Начисление за сессию уже есть
+             */
+            settled: boolean;
+            /** @description Серия дейлика на день сессии; null — не дейлик */
+            streak?: components["schemas"]["SessionStreakView"] | null;
+            /**
+             * Verses
+             * @description Начисленные Версы, целые
+             */
+            verses: number;
+            /**
+             * Xp
+             * @description Начисленный опыт (с бустом)
+             */
+            xp: number;
+        };
+        /**
+         * SessionStreakView
+         * @description Серия дейлика, в которую засчитана сессия.
+         */
+        SessionStreakView: {
+            /** Current */
+            current: number;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
         };
         /**
          * ShopCatalog
@@ -5540,6 +5614,59 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    my_rewards_v1_me_rewards_get: {
+        parameters: {
+            query: {
+                /** @description Идентификатор игровой сессии */
+                session_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRewards"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

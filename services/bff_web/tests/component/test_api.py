@@ -207,6 +207,18 @@ RESULT_BRACKET = {
 }
 
 
+SERVICE_TOKEN = TestTokenIssuer().issue_service("bff_web", "game", ["daily.results"])
+REWARDS_PENDING = {
+    "session_id": str(SESSION),
+    "settled": False,
+    "xp": 0,
+    "verses": 0,
+    "level_before": None,
+    "level_after": None,
+    "streak": None,
+}
+
+
 @dataclass
 class Stubs:
     game: ServiceStub
@@ -259,6 +271,7 @@ def _progression_defaults(progression: ServiceStub) -> None:
     """Событий нет: тесты 5a-5c не знают о них, тесты 5d переопределяют ответы."""
     progression.route("GET", "/v1/events/active").respond(200, json={"event": None})
     progression.route("GET", "/v1/me/events").respond(200, json={"items": []})
+    progression.route("GET", "/v1/me/rewards").respond(200, json=REWARDS_PENDING)
 
 
 @pytest.fixture
@@ -268,12 +281,16 @@ def stubs() -> Iterator[Stubs]:
         _social_defaults(social)
         progression = stack.enter_context(stub_service(PROGRESSION, service="progression"))
         _progression_defaults(progression)
+        identity = stack.enter_context(stub_service(IDENTITY, service="identity"))
+        identity.route("POST", "/internal/v1/service-tokens").respond(
+            200, json={"access_token": SERVICE_TOKEN, "token_type": "Bearer", "expires_in": 600}
+        )
         yield Stubs(
             social=social,
             progression=progression,
             game=stack.enter_context(stub_service(GAME, service="game")),
             catalog=stack.enter_context(stub_service(CATALOG, service="catalog")),
-            identity=stack.enter_context(stub_service(IDENTITY, service="identity")),
+            identity=identity,
             collections=stack.enter_context(stub_service(COLLECTIONS, service="collections")),
             library=stack.enter_context(stub_service(LIBRARY, service="library")),
             match=stack.enter_context(stub_service(MATCH, service="match")),
@@ -305,7 +322,11 @@ async def bff(
             "breaker_failures": 3,
         },
         page_cache={"key_prefix": prefix},
-        pages={"relations_batch_size": 3},
+        pages={"relations_batch_size": 3, "results_rewards_retry_delay_s": 0},
+        service_auth={
+            "token_url": f"{IDENTITY}/internal/v1/service-tokens",
+            "client_secret": "test-service-secret",
+        },
     )
     runtime = await Infrastructure.open(settings, DEFINITION.tables)
     try:
@@ -403,6 +424,7 @@ async def test_home_game_down_gives_unavailable_blocks_and_200(bff: Bff) -> None
             "weekly": {"status": "unavailable", "data": None},
             "progress": None,
             "event": None,
+            "feed": None,
         }
     }
 
@@ -3451,3 +3473,276 @@ async def test_my_matches_participants_degrade_to_empty(bff: Bff) -> None:
     assert body["status"] == "ok"
     [card] = body["blocks"]["my_matches"]["data"]["items"]
     assert card["participants"] == []
+
+
+# ---------------------------------------------------------------- PR-A: друзья, награды
+F1, F2, F3 = UUID(int=0xF1), UUID(int=0xF2), UUID(int=0xF3)
+FILM_DAILY = "film.daily.frame"
+
+
+def _feed_friends_routes(
+    bff: Bff, *, results: list[dict[str, Any]], hidden: frozenset[UUID] = frozenset()
+) -> dict[str, respx.Route]:
+    """Три друга, результаты game по запрошенным id, видимость статистики и оформление."""
+    social, game = bff.stubs.social, bff.stubs.game
+    friends = [
+        {"user_id": str(u), "nickname": f"friend{u.int & 0xFF:x}", "status": "offline"}
+        for u in (F1, F2, F3)
+    ]
+    social.route("GET", "/v1/me/friends").respond(200, json={"items": friends, "total": 3})
+
+    def relations(request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("user_ids")
+        items = [
+            {**RELATION_OPEN, "user_id": i, "stats_visible": UUID(i) not in hidden} for i in ids
+        ]
+        return httpx.Response(200, json={"items": items})
+
+    def daily_results(request: httpx.Request) -> httpx.Response:
+        ids = set(request.url.params.get_list("user_ids"))
+        return httpx.Response(200, json=[r for r in results if r["user_id"] in ids])
+
+    return {
+        "relations": social.route("GET", RELATIONS_PATH).mock(side_effect=relations),
+        "results": game.route("GET", "/internal/v1/daily/results").mock(side_effect=daily_results),
+        "appearance": _appearance_route(bff),
+    }
+
+
+def _daily_result(user: UUID, mode_key: str, score: int) -> dict[str, Any]:
+    return {
+        "user_id": str(user),
+        "mode_key": mode_key,
+        "domain": "music" if mode_key.startswith("music") else "film",
+        "day": "2026-10-10",
+        "score": score,
+        "max_score": 30,
+    }
+
+
+async def test_home_feed_shows_visible_friends_with_domain_badges_and_counter(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=DAILY)
+    _progression_routes(bff)
+    routes = _feed_friends_routes(
+        bff,
+        results=[
+            _daily_result(F1, "music.daily.classic", 21),
+            _daily_result(F1, FILM_DAILY, 12),
+            _daily_result(F2, "music.daily.classic", 30),  # статистика закрыта
+        ],
+        hidden=frozenset({F2}),
+    )
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == PRIVATE
+    feed = response.json()["blocks"]["feed"]
+    assert feed["status"] == "ok"
+    data = feed["data"]
+    assert (data["friends_total"], data["friends_played"]) == (3, 1)
+    [friend] = data["items"]
+    assert friend["user_id"] == str(F1) and friend["nickname"] == "friendf1"
+    assert [
+        (r["domain"], r["mode_key"], r["score"], r["max_score"]) for r in friend["results"]
+    ] == [
+        ("film", FILM_DAILY, 12, 30),
+        ("music", "music.daily.classic", 21, 30),
+    ]
+    assert friend["appearance"]["custom_avatar_url"] == "/media/avatars/p.webp"
+    # Очки закрытого друга не покидают bff; оформление - только у показанного.
+    assert str(F2) not in response.text  # закрытый друг не попадает ни в items, ни в оформление
+    asked = routes["results"].calls.last.request
+    # Очки чужих игроков запрашиваются сервисным токеном bff_web, а не токеном зрителя.
+    assert asked.headers["authorization"] == f"Bearer {SERVICE_TOKEN}"
+    assert token not in asked.headers["authorization"]
+    assert sorted(asked.url.params.get_list("user_ids")) == sorted(map(str, (F1, F2, F3)))
+    assert routes["appearance"].calls.last.request.url.params.get_list("user_ids") == [str(F1)]
+    assert "authorization" in routes["relations"].calls.last.request.headers
+
+
+async def test_home_feed_is_null_for_guest_and_anonymous_without_calls(bff: Bff) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=[])
+    routes = _feed_friends_routes(bff, results=[])
+
+    anonymous = await bff.client.get("/v1/pages/home")
+    guest = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue_guest()))
+
+    for response in (anonymous, guest):
+        assert response.status_code == 200
+        assert response.json()["blocks"]["feed"] is None
+    assert routes["results"].call_count == 0 and routes["relations"].call_count == 0
+
+
+@pytest.mark.parametrize("failure", ["503", "timeout", "garbage", "foreign-user"])
+async def test_home_feed_failure_hides_only_the_feed(bff: Bff, failure: str) -> None:
+    bff.stubs.game.route("GET", "/v1/modes").respond(200, json=MODES)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=DAILY)
+    _progression_routes(bff)
+    routes = _feed_friends_routes(bff, results=[])
+    results = routes["results"]
+    if failure == "timeout":
+        results.mock(side_effect=httpx.ReadTimeout("slow"))
+    elif failure == "garbage":
+        results.mock(side_effect=None).respond(200, json={"not": "a list"})
+    elif failure == "foreign-user":  # game вернул игрока, которого не спрашивали
+        results.mock(side_effect=None).respond(
+            200, json=[_daily_result(UUID(int=0xBAD), "music.daily.classic", 5)]
+        )
+    else:
+        results.mock(side_effect=None).respond(503)
+
+    response = await bff.client.get("/v1/pages/home", headers=bff.bearer(bff.issuer.issue()))
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["feed"] == UNAVAILABLE
+    assert blocks["dailies"]["status"] == "ok" and blocks["progress"]["status"] == "ok"
+
+
+DAILY_RESULT = {
+    **RESULT,
+    "mode_key": "music.daily.classic",
+    "domain": "music",
+    "day": "2026-10-10",
+    "daily": True,
+    "score": 20,
+}
+REWARDS_DONE = {
+    "session_id": str(SESSION),
+    "settled": True,
+    "xp": 60,
+    "verses": 5,
+    "level_before": 6,
+    "level_after": 7,
+    "streak": {"domain": "music", "current": 3},
+}
+
+
+async def test_results_page_daily_has_rewards_and_friends_today(bff: Bff) -> None:
+    token = bff.issuer.issue()
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=DAILY_RESULT)
+    bff.stubs.game.route("GET", "/v1/daily").respond(200, json=DAILY)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+    rewards = bff.stubs.progression.route("GET", "/v1/me/rewards").respond(200, json=REWARDS_DONE)
+    _feed_friends_routes(
+        bff,
+        results=[
+            _daily_result(F1, "music.daily.classic", 27),
+            _daily_result(F2, "music.daily.classic", 10),
+            _daily_result(F3, FILM_DAILY, 29),
+        ],
+    )
+
+    response = await bff.client.get(f"/v1/pages/results/{SESSION}", headers=bff.bearer(token))
+
+    assert response.status_code == 200, response.text
+    blocks = response.json()["blocks"]
+    assert blocks["rewards"] == {
+        "status": "ok",
+        "data": {
+            "settled": True,
+            "xp": 60,
+            "verses": 5,
+            "level_before": 6,
+            "level_after": 7,
+            "leveled_up": True,
+            "streak": {"domain": "music", "current": 3},
+        },
+    }
+    today = blocks["friends_today"]["data"]
+    assert (today["mode_key"], today["domain"], today["day"]) == (
+        "music.daily.classic",
+        "music",
+        "2026-10-10",
+    )
+    assert (today["my_score"], today["my_place"]) == (20, 2)
+    assert (today["friends_total"], today["friends_played"]) == (3, 2)
+    assert today["average_score"] == 18.5
+    assert [(r["user_id"], r["score"]) for r in today["items"]] == [(str(F1), 27), (str(F2), 10)]
+    assert blocks["result"]["data"]["mode_key"] == "music.daily.classic"
+    assert dict(rewards.calls.last.request.url.params) == {"session_id": str(SESSION)}
+    assert rewards.calls.last.request.headers["authorization"] == f"Bearer {token}"
+
+
+async def test_results_page_not_daily_has_rewards_but_no_friends_today(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+    bff.stubs.progression.route("GET", "/v1/me/rewards").respond(200, json=REWARDS_DONE)
+    routes = _feed_friends_routes(bff, results=[])
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    blocks = response.json()["blocks"]
+    assert blocks["rewards"]["status"] == "ok"
+    assert blocks["friends_today"] is None
+    assert routes["results"].call_count == 0
+
+
+async def test_results_page_rewards_pending_is_ok_not_an_error(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=RESULT)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+    rewards = bff.stubs.progression.route("GET", "/v1/me/rewards")  # по умолчанию: pending
+    rewards.respond(200, json=REWARDS_PENDING)
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    assert response.json()["blocks"]["rewards"]["data"]["settled"] is False
+    assert rewards.call_count == 3  # первая попытка и два повтора из настроек
+
+
+async def test_results_page_extra_blocks_fail_independently(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=DAILY_RESULT)
+    bff.stubs.game.route("GET", "/v1/daily").respond(503)  # нужен для периода «среди друзей»
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+    bff.stubs.progression.route("GET", "/v1/me/rewards").respond(503)
+    _feed_friends_routes(bff, results=[])
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue())
+    )
+
+    assert response.status_code == 200
+    blocks = response.json()["blocks"]
+    assert blocks["rewards"] == UNAVAILABLE
+    assert blocks["friends_today"] == UNAVAILABLE
+    assert blocks["result"]["status"] == "ok" and blocks["items"]["status"] == "ok"
+
+
+async def test_results_page_for_guest_skips_rewards_and_friends(bff: Bff) -> None:
+    bff.stubs.game.route("GET", f"/v1/sessions/{SESSION}/result").respond(200, json=DAILY_RESULT)
+    bff.stubs.catalog.route("GET", f"/v1/items/{ITEM}").respond(200, json=CARD)
+    rewards = bff.stubs.progression.route("GET", "/v1/me/rewards")
+    routes = _feed_friends_routes(bff, results=[])
+
+    response = await bff.client.get(
+        f"/v1/pages/results/{SESSION}", headers=bff.bearer(bff.issuer.issue_guest())
+    )
+
+    blocks = response.json()["blocks"]
+    assert blocks["rewards"] is None and blocks["friends_today"] is None
+    assert rewards.call_count == 0 and routes["results"].call_count == 0
+
+
+def test_new_blocks_are_optional_in_the_contract() -> None:
+    spec = json.loads(
+        (Path(__file__).resolve().parents[4] / "contracts" / "openapi" / "bff_web.json").read_text(
+            "utf-8"
+        )
+    )
+    schemas = spec["components"]["schemas"]
+    for model, fields in {
+        "HomeBlocks": {"feed"},
+        "ResultsBlocks": {"rewards", "friends_today"},
+        "FriendDailyCard": {"appearance"},
+    }.items():
+        assert fields <= set(schemas[model]["properties"])
+        assert not fields & set(schemas[model].get("required", []))

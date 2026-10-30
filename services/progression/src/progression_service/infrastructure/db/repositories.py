@@ -6,12 +6,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import date, datetime
 from types import TracebackType
 from typing import Any, Self
 from uuid import UUID
 
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction, async_sessionmaker
 
@@ -25,6 +26,7 @@ from progression_service.application.ports import (
     LedgerMismatch,
     ProgressRow,
     PublishedConfig,
+    SessionLedgerRows,
     XpEntry,
 )
 from progression_service.domain.config import ProgressionConfig
@@ -296,6 +298,46 @@ class SqlLedger(SqlLedgerRanges):
             .limit(limit)
         )
         return [self._entry(r) for r in rows]
+
+    async def session_rows(
+        self, user_id: UUID, source_ref: str, reasons: Collection[str]
+    ) -> SessionLedgerRows:
+        """Начисления игрока за сессию: чтение по индексам ``(user_id, source_ref)``."""
+        x, c = xp_ledger.c, currency_ledger.c
+        xp_rows = (
+            await self._s.execute(
+                select(x.id, x.op_id, x.amount, x.at)
+                .where(x.user_id == user_id, x.source_ref == source_ref, x.reason.in_(reasons))
+                .order_by(x.at, x.id)
+            )
+        ).all()
+        currency_rows = (
+            await self._s.execute(
+                select(c.op_id, c.amount).where(
+                    c.user_id == user_id,
+                    c.source_ref == source_ref,
+                    c.direction == Direction.CREDIT.value,
+                    c.reason.in_(reasons),
+                )
+            )
+        ).all()
+        total_after: int | None = None
+        if xp_rows:
+            last = xp_rows[-1]
+            total_after = int(
+                await self._s.scalar(
+                    select(func.coalesce(func.sum(x.amount), 0)).where(
+                        x.user_id == user_id, tuple_(x.at, x.id) <= tuple_(last.at, last.id)
+                    )
+                )
+                or 0
+            )
+        return SessionLedgerRows(
+            xp=sum(r.amount for r in xp_rows),
+            verses=sum(r.amount for r in currency_rows),
+            total_xp_after=total_after,
+            op_ids=tuple(r.op_id for r in (*xp_rows, *currency_rows)),
+        )
 
     async def mismatches(self, limit: int) -> list[LedgerMismatch]:
         """Расхождения суммы журнала с балансом и опытом."""

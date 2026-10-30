@@ -6,14 +6,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import NAMESPACE_OID, UUID, uuid5
 
 import structlog
 
 from gv_core.clock import Clock
+from gv_core.errors import InvalidInputError
 from gv_core.ids import uuid7
+from gv_db.idempotency import request_fingerprint, run_idempotent
 from media_pipeline_service.application.commands.catalog import PlanAssetSets
-from media_pipeline_service.application.ports import ObjectStorage, StorageArea, UnitOfWorkFactory
+from media_pipeline_service.application.ports import (
+    AdminAction,
+    ObjectStorage,
+    StorageArea,
+    UnitOfWorkFactory,
+)
 from media_pipeline_service.application.profiles import ProfileDirectory
 from media_pipeline_service.application.sources import delete_quietly
 from media_pipeline_service.domain.dynamic_profiles import (
@@ -247,3 +254,136 @@ class BackfillDynamicProfiles:
             await uow.commit()
         await delete_quietly(self._storage, StorageArea.ASSETS, stale)
         return len(ids)
+
+
+@dataclass(frozen=True, slots=True)
+class ReplanBatch:
+    """Итог порции пересоздания наборов.
+
+    Attributes:
+        processed: Сколько единиц просмотрено.
+        scheduled: Сколько наборов поставлено в генерацию (новых и перепланированных).
+        next_after: Курсор следующей порции; ``None`` — домен пройден до конца.
+    """
+
+    processed: int
+    scheduled: int
+    next_after: UUID | None
+
+    def to_json(self) -> dict[str, Any]:
+        """Для хранения ответа идемпотентной мутации."""
+        return {
+            "processed": self.processed,
+            "scheduled": self.scheduled,
+            "next_after": str(self.next_after) if self.next_after else None,
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> ReplanBatch:
+        """Обратное преобразование ``to_json``."""
+        after = data["next_after"]
+        return cls(data["processed"], data["scheduled"], UUID(after) if after else None)
+
+
+class ReplanStaticProfiles:
+    """Досоздать наборы СТАТИЧЕСКИХ профилей типа загадки для уже известных единиц, порциями.
+
+    Нужна после правки ``config/asset_profiles.yaml``: новые параметры меняют ``params_hash``,
+    а событий catalog по старым единицам не будет, поэтому наборов под новый хэш у них нет.
+    Работает тем же ``PlanAssetSets.plan_in(only=…)``, что и досоздание динамических профилей
+    (``BackfillDynamicProfiles``): создаёт только недостающие наборы, существующие не трогает
+    (старые наборы с прежним хэшем остаются — по ним доигрываются начатые сессии и наборы дня).
+    Повтор безопасен. Курсор — ``media_item_id`` последней просмотренной единицы домена.
+    """
+
+    def __init__(
+        self,
+        uow: UnitOfWorkFactory,
+        clock: Clock,
+        profiles: ProfileDirectory,
+        plan: PlanAssetSets,
+        storage: ObjectStorage,
+        *,
+        max_limit: int,
+    ) -> None:
+        self._uow = uow
+        self._clock = clock
+        self._profiles = profiles
+        self._plan = plan
+        self._storage = storage
+        self._max_limit = max_limit
+
+    async def execute(
+        self,
+        *,
+        clue_type: str,
+        domain: str,
+        after: UUID | None,
+        limit: int,
+        actor_id: UUID,
+        reason: str,
+        idempotency_key: str,
+    ) -> ReplanBatch:
+        """Обработать порцию единиц домена (идемпотентно по ``(actor_id, idempotency_key)``).
+
+        Raises:
+            InvalidInputError: ``limit`` вне ``1..max_limit`` или нет статического профиля
+                ``clue_type`` для домена (``profile.not_found``).
+            ConflictError: ``idempotency.key_reused`` / ``idempotency.in_progress``.
+        """
+        if not 1 <= limit <= self._max_limit:
+            raise InvalidInputError("limit вне допустимого диапазона", code="replan.bad_limit")
+        selected = [p for p in self._profiles.static.for_domain(domain) if p.clue_type == clue_type]
+        if not selected:
+            raise InvalidInputError("нет статического профиля", code="profile.not_found")
+        fingerprint = request_fingerprint(
+            "asset_sets.replan",
+            clue_type,
+            {"domain": domain, "after": str(after) if after else None, "limit": limit,
+             "reason": reason},
+        )  # fmt: skip
+        stale: list[str] = []
+        async with self._uow() as uow:
+
+            async def perform() -> dict[str, Any]:
+                ids = await uow.items.list_active_ids(domain, after=after, limit=limit)
+                scheduled = 0
+                for media_item_id in ids:
+                    for profile in selected:
+                        planned = await self._plan.plan_in(uow, media_item_id, only=profile)
+                        scheduled += len(planned.asset_set_ids)
+                        stale.extend(planned.stale_keys)
+                now = self._clock.now()
+                await uow.audit.record(
+                    AdminAction(
+                        actor_id=actor_id,
+                        action="asset_sets.replan",
+                        target_id=uuid5(NAMESPACE_OID, f"asset_sets.replan:{clue_type}:{domain}"),
+                        reason=reason,
+                        at=now,
+                        details={
+                            "clue_type": clue_type,
+                            "domain": domain,
+                            "items": len(ids),
+                            "scheduled": scheduled,
+                        },
+                    )
+                )
+                done = len(ids) < limit
+                return ReplanBatch(len(ids), scheduled, None if done else ids[-1]).to_json()
+
+            response, executed = await run_idempotent(
+                uow.idempotency, actor_id, idempotency_key, fingerprint, perform, status_code=200
+            )
+            await uow.commit()
+        batch = ReplanBatch.from_json(response)
+        if executed:
+            await delete_quietly(self._storage, StorageArea.ASSETS, stale)
+            log.info(
+                "asset_sets.replanned",
+                clue_type=clue_type,
+                domain=domain,
+                items=batch.processed,
+                scheduled=batch.scheduled,
+            )
+        return batch

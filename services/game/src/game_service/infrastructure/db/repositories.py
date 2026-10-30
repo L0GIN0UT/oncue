@@ -35,6 +35,7 @@ from game_service.application.ports import (
     AssetRequestRepository,
     BracketStatsRepository,
     CollectionRepository,
+    DailyScore,
     DailySetRepository,
     DailyStatsRepository,
     LadderRepository,
@@ -1302,6 +1303,33 @@ class SqlSessionRepository:
             .first()
         )
         return self._to_session(row) if row else None
+
+    async def finished_daily_scores(
+        self, periods: Sequence[tuple[str, date]], user_ids: Sequence[UUID]
+    ) -> list[DailyScore]:
+        """Завершённые попытки пользователей в периодах: один запрос по индексу попытки дня."""
+        if not periods or not user_ids:
+            return []
+        g = game_sessions.c
+        rows = await self._s.execute(
+            select(g.player_id, g.mode_key, g.day, g.domain, g.score, g.max_score).where(
+                or_(*(and_(g.mode_key == mode_key, g.day == day) for mode_key, day in periods)),
+                g.player_kind == str(PlayerKind.USER),
+                g.player_id.in_(list(user_ids)),
+                g.status == str(SessionStatus.FINISHED),
+            )
+        )
+        return [
+            DailyScore(
+                user_id=user_id,
+                mode_key=mode_key,
+                day=day,
+                domain=domain,
+                score=score,
+                max_score=max_score,
+            )
+            for user_id, mode_key, day, domain, score, max_score in rows
+        ]
 
     async def stale_ids(self, now: datetime, limit: int) -> list[UUID]:
         """Активные сессии без ходов дольше ``idle_timeout_s``."""
