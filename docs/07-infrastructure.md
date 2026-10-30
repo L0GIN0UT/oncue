@@ -126,7 +126,7 @@ tag:   vX.Y.Z → промоут образов (без пересборки) �
 | `CENTRIFUGO_TOKEN_HMAC_SECRET` | Centrifugo, identity | Секрет connection-токенов (`GV_REALTIME__CONNECTION_TOKEN_SECRET` у identity) |
 | `CENTRIFUGO_SUBSCRIPTION_HMAC_SECRET` | Centrifugo, match | Секрет subscription-токенов каналов комнат (`GV_REALTIME__SUBSCRIPTION_TOKEN_SECRET` у match); **обязан отличаться** от секрета connection-токенов, секреты ≥ 32 символов |
 | `CENTRIFUGO_ALLOWED_ORIGINS` | Centrifugo | Origin веб-клиента (dev — `https://localhost`); без него compose не стартует |
-| `GV_SERVICE_SECRET_BFF_WEB` | bff_web | Секрет сервисного токена bff_web для `progression /internal/v1/levels` (область `levels.read`); его sha256 — в `GV_SERVICE_CLIENTS` identity (запись `bff_web` генерирует `gv gen`) |
+| `GV_SERVICE_SECRET_BFF_WEB` | bff_web | Секрет сервисного токена bff_web для `game /internal/v1/daily/results` (область `daily.results`) и `progression /internal/v1/levels` (область `levels.read`); его sha256 — в `GV_SERVICE_CLIENTS` identity (запись `bff_web` генерирует `gv gen`) |
 | `GV_SERVICE_SECRET_MATCH` | match | Секрет сервисного токена match для game и media-pipeline; его sha256 — в `GV_SERVICE_CLIENTS` identity |
 
 **Онлайн (этап 4a).**

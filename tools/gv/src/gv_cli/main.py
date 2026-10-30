@@ -516,6 +516,67 @@ def dev_seed_real(
         raise typer.Exit(1) from exc
 
 
+@dev.command("replan-assets")
+def dev_replan_assets(
+    *,
+    clue_type: Annotated[
+        str, typer.Option("--clue-type", help="Тип загадки, чей профиль правили")
+    ] = "frame_progressive",
+    batch: Annotated[int, typer.Option("--batch", min=1, help="Единиц за вызов")] = 200,
+    no_wait_modes: Annotated[
+        bool,
+        typer.Option("--no-wait-modes", help="Не ждать новые версии режимов в game"),
+    ] = False,
+) -> None:
+    """Пересоздать наборы ассетов после правки профиля (только local; повтор безопасен).
+
+    Досоздаёт наборы статических профилей типа загадки под новые параметры у уже загруженных
+    единиц, ждёт их готовности и новых версий режимов game (сид -> версия при готовом пуле).
+    Старые наборы и версии остаются: начатые сессии доигрываются.
+    """
+    from gv_cli import replan as replan_module
+    from gv_cli import seed as seed_module
+
+    env = os.environ
+    secret_env = service_secret_env("admin")
+    missing = [
+        n
+        for n in ("GV_BOOTSTRAP_ADMIN__LOGIN", "GV_BOOTSTRAP_ADMIN__PASSWORD", secret_env)
+        if not env.get(n)
+    ]
+    if missing:
+        raise typer.BadParameter(f"нет переменных окружения: {', '.join(missing)}")
+
+    def url(name: str, default: str) -> str:
+        return env.get(f"GV_SEED__{name}_URL", default)
+
+    config = seed_module.SeedConfig(
+        identity_url=url("IDENTITY", "http://127.0.0.1:8100"),
+        catalog_url=url("CATALOG", "http://127.0.0.1:8101"),
+        media_url=url("MEDIA", "http://127.0.0.1:8102"),
+        game_url=url("GAME", "http://127.0.0.1:8103"),
+        collections_url=url("COLLECTIONS", "http://127.0.0.1:8106"),
+        progression_url=url("PROGRESSION", "http://127.0.0.1:8109"),
+        social_url=url("SOCIAL", "http://127.0.0.1:8111"),
+        admin_login=env["GV_BOOTSTRAP_ADMIN__LOGIN"],
+        admin_password=env["GV_BOOTSTRAP_ADMIN__PASSWORD"],
+        service_secret=env[secret_env],
+        repo_root=repo_root(),
+        assets_timeout_s=900.0,
+    )
+    try:
+        replan_module.run_replan(
+            config,
+            clue_type=clue_type,
+            batch=batch,
+            wait_modes=not no_wait_modes,
+            echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN),
+        )
+    except seed_module.SeedError as exc:
+        typer.secho(str(exc), fg="red")
+        raise typer.Exit(1) from exc
+
+
 @dev.command("secrets")
 def make_secrets() -> None:
     """Вывести содержимое .env со случайными паролями (сохранить в infra/compose/.env)."""

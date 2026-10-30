@@ -276,6 +276,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/daily/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Результаты дейлика игроков в текущем периоде
+         * @description Для bff_web (друзья на главной и в итогах дейлика): завершённые дейлики перечисленных пользователей в ТЕКУЩЕМ периоде (`day` режима), только очки; прошлых периодов, ответов и гостей нет, игроки без завершённой попытки не возвращаются. Сервисный токен с областью `daily.results` (audience = game): game дружбы не знает, кого показывать зрителю, решает bff по данным social. Не больше `GV_GAME__DAILY_RESULTS_MAX_USERS` игроков (422 `game.too_many_users`, `details.given/max`), лимит `GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN` на клиента (429). Режимы — с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES`.
+         */
+        get: operations["daily_results_internal_v1_daily_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/v1/modes/{mode_key}/versions/{version}": {
         parameters: {
             query?: never;
@@ -870,6 +890,34 @@ export interface components {
         };
         ConfigBody: {
             [key: string]: unknown;
+        };
+        /**
+         * DailyResultOut
+         * @description Завершённый дейлик одного игрока в текущем периоде (по режиму).
+         */
+        DailyResultOut: {
+            /**
+             * Day
+             * Format: date
+             * @description Начало периода набора
+             */
+            day: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Max Score */
+            max_score: number;
+            /** Mode Key */
+            mode_key: string;
+            /** Score */
+            score: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         /**
          * DailyRoundStat
@@ -1843,10 +1891,31 @@ export interface components {
             bracket?: components["schemas"]["BracketOut"] | null;
             /** @description Сессия по сборнику */
             collection?: components["schemas"]["CollectionRef"] | null;
+            /**
+             * Daily
+             * @description Сессия дейлика: плановый набор с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES` (результаты друзей считаются только для неё)
+             * @default false
+             */
+            daily: boolean;
             /** Daily Stats */
             daily_stats?: components["schemas"]["DailyRoundStat"][] | null;
+            /**
+             * Day
+             * @description Период планового набора; иначе `null`
+             */
+            day?: string | null;
+            /**
+             * Domain
+             * @description Домен режима
+             */
+            domain?: ("music" | "film") | null;
             /** Max Score */
             max_score: number;
+            /**
+             * Mode Key
+             * @description Режим сессии
+             */
+            mode_key?: string | null;
             /**
              * Presentation
              * @default score
@@ -3221,6 +3290,80 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    daily_results_internal_v1_daily_results_get: {
+        parameters: {
+            query: {
+                domain?: ("music" | "film") | null;
+                /** @description Игроки */
+                user_ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyResultOut"][];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

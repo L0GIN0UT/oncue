@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -150,3 +151,14 @@ class RoundPlan(BaseModel):
     seed: Seed
     rounds: list[PlannedRound] = Field(min_length=1, max_length=MAX_PLAN_ROUNDS)
     collections: list[PlanCollection] = Field(default_factory=list)
+
+
+class DailyResultOut(BaseModel):
+    """Завершённый дейлик одного игрока в текущем периоде (по режиму)."""
+
+    user_id: UUID
+    mode_key: str
+    domain: Domain
+    day: date = Field(description="Начало периода набора")
+    score: int = Field(ge=0)
+    max_score: int = Field(ge=0)

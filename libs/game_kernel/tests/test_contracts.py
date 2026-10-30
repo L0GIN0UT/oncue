@@ -360,6 +360,8 @@ CLUE_KEYS = (
     "description",
     "emoji",
 )
+# Загадки без плагина в ядре: ассет строит media, ответ показывает ревил (ADR 0073).
+ASSET_ONLY_KEYS = ("artwork",)
 SOURCE_KEYS = ("daily", "random", "marathon", "pair", "bracket", "collection")
 MATCHER_KEYS = ("title_alias", "metric_compare", "preference")
 SCORER_KEYS = ("by_level", "by_speed", "streak", "none", "party_speed")
@@ -384,7 +386,7 @@ def test_every_registered_plugin_has_a_contract() -> None:
     assert missing == []
     # Каждой схеме загадки и параметров режима соответствует зарегистрированный плагин.
     clue_files = {p.name.removesuffix(".params.v1.json") for p in CLUES.glob("*.params.v1.json")}
-    assert clue_files == set(CLUE_KEYS)
+    assert clue_files == {*CLUE_KEYS, *ASSET_ONLY_KEYS}
     sections = {"source": SOURCE_KEYS, "matcher": MATCHER_KEYS, "scorer": SCORER_KEYS}
     sections["end"] = END_KEYS
     sections["contest"] = CONTEST_KEYS
@@ -409,9 +411,13 @@ def test_golden_profile_params_parse_by_clue_models() -> None:
     registry = register_builtin(PluginRegistry())
     vectors = _load(CLUES / "params_hash.golden.json")["vectors"]
     profiles = [v for v in vectors if v["name"].startswith("profile:")]
-    assert {v["name"].split(":")[1] for v in profiles} == set(CLUE_KEYS)
+    assert {v["name"].split(":")[1] for v in profiles} == {*CLUE_KEYS, *ASSET_ONLY_KEYS}
     for vector in profiles:
-        clue = registry.clue(vector["name"].split(":")[1])
+        key = vector["name"].split(":")[1]
+        if key in ASSET_ONLY_KEYS:
+            assert params_hash(vector["params"]) == vector["params_hash"], vector["name"]
+            continue
+        clue = registry.clue(key)
         assert clue is not None
         clue.params_schema.model_validate(vector["params"])
         assert params_hash(vector["params"]) == vector["params_hash"], vector["name"]

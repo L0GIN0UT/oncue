@@ -246,8 +246,12 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     assert clients["notifications"]["audiences"] == {
         "identity": ["users.emails.read", "users.active.list"]
     }
-    # Онлайн: bff_web -> progression (уровни игроков), секрет в GV_SERVICE_SECRET_BFF_WEB.
-    assert clients["bff_web"]["audiences"] == {"progression": ["levels.read"]}
+    # bff_web -> game (очки дейлика друзей) и progression (уровни игроков), секрет в
+    # GV_SERVICE_SECRET_BFF_WEB.
+    assert clients["bff_web"]["audiences"] == {
+        "game": ["daily.results"],
+        "progression": ["levels.read"],
+    }
     assert service_secret_env("bff_web") == "GV_SERVICE_SECRET_BFF_WEB"
     secrets_seen = set()
     for client_id, client in clients.items():
@@ -316,6 +320,7 @@ def test_generated_compose_passes_stage2_settings() -> None:
 
     dev = yaml.safe_load(rendered["infra/compose/compose.services.dev.yml"])["services"]
     assert dev["game"]["environment"]["GV_GAME__BOOTSTRAP_MODES_DIR"] == "/seeds/game/modes"
+    assert dev["game"]["environment"]["GV_GAME__BOOTSTRAP_INTERVAL_S"] == "60"
     assert dev["game"]["volumes"] == ["../../seeds/game/modes:/seeds/game/modes:ro"]
     assert (ROOT / "infra/compose" / "../../seeds/game/modes").resolve().is_dir()
     assert dev["rating"]["environment"]["GV_RATING__BOOTSTRAP_LADDERS_DIR"] == (

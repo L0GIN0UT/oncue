@@ -10,8 +10,10 @@ from uuid import UUID
 from gv_core.clock import Clock
 from gv_core.errors import InvalidInputError, NotFoundError, RateLimitedError
 from progression_service.application.accrual.common import published_config
+from progression_service.application.accrual.daily import DAILY_REASON, parse_daily_op_id
+from progression_service.application.accrual.solo import SOLO_REASON
 from progression_service.application.boosts import BoostState, boost_state
-from progression_service.application.ports import UnitOfWorkFactory
+from progression_service.application.ports import ProgressionUnitOfWork, UnitOfWorkFactory
 from progression_service.application.ports.shop import AttemptLimiter
 from progression_service.domain import levels
 from progression_service.domain.ledger import Bucket, Entry
@@ -62,6 +64,37 @@ class PublicProgressView:
     level: int
     total_xp: int
     badges: tuple[BadgeRefView, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SessionStreakView:
+    """Серия дейлика домена, в которую засчитана сессия."""
+
+    domain: str
+    current: int
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRewardsView:
+    """Награды за свою игровую сессию (экран итогов).
+
+    Attributes:
+        settled: Начисление уже есть. ``False`` — начисления ещё нет (оно асинхронное, по
+            событию game), потолок съел всё или сессия не ваша: различить нельзя намеренно.
+        xp: Начисленный опыт (с бустом).
+        verses: Начисленные Версы (целые).
+        level_before: Уровень до сессии; ``None`` — опыта за сессию нет или нет конфига.
+        level_after: Уровень после сессии (по кривой действующего конфига).
+        streak: Серия дейлика на день сессии; ``None`` — не дейлик или серия ушла дальше.
+    """
+
+    session_id: UUID
+    settled: bool
+    xp: int = 0
+    verses: int = 0
+    level_before: int | None = None
+    level_after: int | None = None
+    streak: SessionStreakView | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,6 +230,50 @@ class ProgressQueries:
             paid=balances.get(Bucket.PAID, 0),
             recent=tuple(recent),
         )
+
+    async def session_rewards(self, user_id: UUID, session_id: UUID) -> SessionRewardsView:
+        """Награды за сессию текущего пользователя; чужая и неначисленная сессия — пусто.
+
+        Только чтение журналов по ``(user_id, source_ref)``: чужой ``session_id`` неотличим
+        от сессии, за которую ещё не начислено, поэтому существование чужих сессий не
+        раскрывается. Опыт за соло-сессию и за дейлик пишется одной транзакцией с Версами.
+        """
+        async with self._uow() as uow:
+            rows = await uow.ledger.session_rows(
+                user_id, str(session_id), (SOLO_REASON, DAILY_REASON)
+            )
+            if not rows.op_ids:
+                return SessionRewardsView(session_id=session_id, settled=False)
+            published = await uow.configs.published()
+            before = after = None
+            if published is not None and rows.total_xp_after is not None:
+                curve = published.config.levels
+                after = levels.level_for_xp(curve, rows.total_xp_after)
+                before = levels.level_for_xp(curve, max(0, rows.total_xp_after - rows.xp))
+            streak = await self._streak(uow, user_id, rows.op_ids)
+        return SessionRewardsView(
+            session_id=session_id,
+            settled=True,
+            xp=rows.xp,
+            verses=rows.verses,
+            level_before=before,
+            level_after=after,
+            streak=streak,
+        )
+
+    @staticmethod
+    async def _streak(
+        uow: ProgressionUnitOfWork, user_id: UUID, op_ids: tuple[str, ...]
+    ) -> SessionStreakView | None:
+        """Серия домена дейлика, если она всё ещё упирается в день этой сессии."""
+        parsed = next((p for p in map(parse_daily_op_id, op_ids) if p is not None), None)
+        if parsed is None:
+            return None
+        domain, day = parsed
+        current = (await uow.streaks.all(user_id)).get(domain)
+        if current is not None and current.last_day == day:
+            return SessionStreakView(domain=domain, current=current.current)
+        return None
 
     async def public_progress(self, user_id: UUID) -> PublicProgressView:
         """Публичный прогресс.

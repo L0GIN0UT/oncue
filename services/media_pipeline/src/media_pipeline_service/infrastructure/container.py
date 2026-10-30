@@ -38,6 +38,7 @@ from media_pipeline_service.application.commands.packages import (
 from media_pipeline_service.application.commands.profiles import (
     ApplyClueAssetsRequested,
     BackfillDynamicProfiles,
+    ReplanStaticProfiles,
 )
 from media_pipeline_service.application.commands.sources import SetSourcePosition, UploadSource
 from media_pipeline_service.application.commands.ugc import (
@@ -434,6 +435,18 @@ class MediaContainer:
             self.plan(),
             self.adapters.storage,
             batch=self.settings.media.backfill_batch,
+        )
+
+    @cached_property
+    def replan(self) -> ReplanStaticProfiles:
+        """Пересоздание наборов статических профилей (admin-ручка)."""
+        return ReplanStaticProfiles(
+            self.uow_factory(),
+            self.clock,
+            self.directory,
+            self.plan(),
+            self.adapters.storage,
+            max_limit=self.settings.media.replan_max_batch,
         )
 
     @cached_property

@@ -154,7 +154,7 @@ async def test_downgrade_0003_drops_reward_tables_only_and_reapplies(database_ur
 
 
 def test_alembic_has_single_head_and_linear_chain() -> None:
-    """Ревизии идут цепочкой 0001 → … → 0011: после слияния потоков голова одна."""
+    """Ревизии идут цепочкой 0001 → … → 0012: после слияния потоков голова одна."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -162,9 +162,10 @@ def test_alembic_has_single_head_and_linear_chain() -> None:
     config = Config()
     config.set_main_option("script_location", str(DEFINITION.migrations_path))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0011"]
+    assert script.get_heads() == ["0012"]
     chain = [rev.revision for rev in script.walk_revisions()]
     assert chain == [
+        "0012",
         "0011",
         "0010",
         "0009",

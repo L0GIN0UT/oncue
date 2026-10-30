@@ -513,9 +513,27 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[DailyFeedCard] */
+        Block_DailyFeedCard_: {
+            data?: components["schemas"]["DailyFeedCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[FriendsCard] */
         Block_FriendsCard_: {
             data?: components["schemas"]["FriendsCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[FriendsTodayCard] */
+        Block_FriendsTodayCard_: {
+            data?: components["schemas"]["FriendsTodayCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -794,6 +812,15 @@ export interface components {
         /** Block[ResultSummary] */
         Block_ResultSummary_: {
             data?: components["schemas"]["ResultSummary"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[RewardsCard] */
+        Block_RewardsCard_: {
+            data?: components["schemas"]["RewardsCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -1276,6 +1303,27 @@ export interface components {
             title_key: string;
         };
         /**
+         * DailyFeedCard
+         * @description Лента дейлика друзей: результаты и счётчик «сыграли из всех друзей».
+         */
+        DailyFeedCard: {
+            /**
+             * Friends Played
+             * @description Сыграли дейлик в текущем периоде и открыли статистику (друг со скрытой статистикой не считается и не показывается); «друзья 4 из 9» = played из total
+             */
+            friends_played: number;
+            /**
+             * Friends Total
+             * @description Всего друзей
+             */
+            friends_total: number;
+            /**
+             * Items
+             * @description Лучшие первыми, не больше `GV_PAGES__HOME_FEED_ITEMS_LIMIT`
+             */
+            items: components["schemas"]["FriendDailyCard"][];
+        };
+        /**
          * EventArchiveCard
          * @description Запуск события в архиве игрока (5d).
          */
@@ -1475,6 +1523,46 @@ export interface components {
             user_id: string;
         };
         /**
+         * FriendDailyCard
+         * @description Друг, сыгравший дейлик в текущем периоде: до одного результата на домен.
+         */
+        FriendDailyCard: {
+            /** @description Аватар, рамка, титул; null — источник не отдал */
+            appearance?: components["schemas"]["AppearanceCard"] | null;
+            /** Nickname */
+            nickname: string;
+            /** Results */
+            results: components["schemas"]["FriendDailyResult"][];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * FriendDailyResult
+         * @description Результат друга в дейлике одного домена (бейдж на домен).
+         */
+        FriendDailyResult: {
+            /**
+             * Day
+             * Format: date
+             * @description Начало периода набора
+             */
+            day: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /** Max Score */
+            max_score: number;
+            /** Mode Key */
+            mode_key: string;
+            /** Score */
+            score: number;
+        };
+        /**
          * FriendsCard
          * @description Блок друзей для хаба онлайна и лобби (приглашение в комнату).
          */
@@ -1485,6 +1573,68 @@ export interface components {
             items: components["schemas"]["FriendCard"][];
         };
         /**
+         * FriendsTodayCard
+         * @description «Среди друзей» итога дейлика: тот же режим и период, свой результат в сравнении.
+         */
+        FriendsTodayCard: {
+            /**
+             * Average Score
+             * @description Среднее очков сыгравших друзей; null — таких нет
+             */
+            average_score?: number | null;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
+            /**
+             * Friends Played
+             * @description Сыграли этот дейлик и открыли статистику
+             */
+            friends_played: number;
+            /** Friends Total */
+            friends_total: number;
+            /**
+             * Items
+             * @description Лучшие первыми, не больше `GV_PAGES__RESULTS_FRIENDS_LIMIT`
+             */
+            items: components["schemas"]["FriendsTodayRow"][];
+            /** Mode Key */
+            mode_key: string;
+            /** My Max Score */
+            my_max_score: number;
+            /**
+             * My Place
+             * @description Место среди сыгравших друзей и вас; равные делят
+             */
+            my_place: number;
+            /** My Score */
+            my_score: number;
+        };
+        /**
+         * FriendsTodayRow
+         * @description Друг и его результат в том же дейлике.
+         */
+        FriendsTodayRow: {
+            appearance?: components["schemas"]["AppearanceCard"] | null;
+            /** Max Score */
+            max_score: number;
+            /** Nickname */
+            nickname: string;
+            /** Score */
+            score: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * HomeBlocks
          * @description Блоки главной.
          */
@@ -1493,6 +1643,8 @@ export interface components {
             dailies: components["schemas"]["Block_list_DailyCard__"];
             /** @description 5d: активное событие; null - нет события или progression недоступен */
             event?: components["schemas"]["EventBannerCard"] | null;
+            /** @description Друзья и дейлик (результаты по доменам, счётчик «сыграли из всех»); null — гость или аноним, источники не вызывались; unavailable — сбой любой части */
+            feed?: components["schemas"]["Block_DailyFeedCard_"] | null;
             modes: components["schemas"]["Block_list_ModeCard__"];
             /** @description Прогресс игрока; null — гость или аноним */
             progress?: components["schemas"]["Block_HomeProgressCard_"] | null;
@@ -2529,8 +2681,12 @@ export interface components {
          * @description Блоки экрана результатов.
          */
         ResultsBlocks: {
+            /** @description Только итог дейлика текущего периода: друзья в том же режиме; null — гость, аноним, не дейлик или период закончился */
+            friends_today?: components["schemas"]["Block_FriendsTodayCard_"] | null;
             items: components["schemas"]["Block_list_ItemCard__"];
             result: components["schemas"]["Block_ResultSummary_"];
+            /** @description Награды за игру; null — гость или аноним */
+            rewards?: components["schemas"]["Block_RewardsCard_"] | null;
         };
         /**
          * ResultsPage
@@ -2570,6 +2726,54 @@ export interface components {
             session_id: string;
             /** Share Text */
             share_text: string;
+        };
+        /**
+         * RewardsCard
+         * @description Награды за игру. `settled = false` — ещё не начислено (асинхронно): повторить позже.
+         */
+        RewardsCard: {
+            /**
+             * Level After
+             * @description Уровень после сессии
+             */
+            level_after?: number | null;
+            /**
+             * Level Before
+             * @description Уровень до сессии
+             */
+            level_before?: number | null;
+            /**
+             * Leveled Up
+             * @description Уровень вырос
+             */
+            leveled_up: boolean;
+            /** Settled */
+            settled: boolean;
+            /** @description Серия дейлика на день сессии; null — не дейлик */
+            streak?: components["schemas"]["RewardStreakCard"] | null;
+            /**
+             * Verses
+             * @description Версы за сессию, целые
+             */
+            verses: number;
+            /**
+             * Xp
+             * @description Опыт за сессию (с бустом)
+             */
+            xp: number;
+        };
+        /**
+         * RewardStreakCard
+         * @description Серия дейлика, в которую засчитана сессия.
+         */
+        RewardStreakCard: {
+            /** Current */
+            current: number;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "music" | "film";
         };
         /**
          * RoomBlocks

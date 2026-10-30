@@ -17,16 +17,18 @@ profiles:
         - { seconds: 8 }
         - { seconds: 15 }
 
+  # Размытие кадров: 25, 20, 15, 10, 5 и 0 px (последний уровень - без размытия). Значения
+  # лежат только здесь и в seeds/game/modes/film.*.yaml (clue.params обязаны совпадать).
   - clue_type: frame_progressive
     profile_key: default
     domains: [film]
     params:
       levels:
-        - { blur_px: 48, crop: 0.35, max_width: 960 }
-        - { blur_px: 32, crop: 0.5, max_width: 960 }
-        - { blur_px: 20, crop: 0.7, max_width: 960 }
-        - { blur_px: 12, crop: 1.0, max_width: 960 }
-        - { blur_px: 6, crop: 1.0, max_width: 960 }
+        - { blur_px: 25, crop: 0.35, max_width: 960 }
+        - { blur_px: 20, crop: 0.5, max_width: 960 }
+        - { blur_px: 15, crop: 0.7, max_width: 960 }
+        - { blur_px: 10, crop: 1.0, max_width: 960 }
+        - { blur_px: 5, crop: 1.0, max_width: 960 }
         - { blur_px: 0, crop: 1.0, max_width: 960 }
 
   - clue_type: poster_masked

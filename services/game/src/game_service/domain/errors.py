@@ -240,3 +240,13 @@ class TooManyCollectionsError(InvalidInputError):
     """
 
     default_code = "game.too_many_collections"
+
+
+# ---------------------------------------------------------------- результаты друзей по дейлику
+class TooManyUsersError(InvalidInputError):
+    """Игроков в запросе результатов дейлика больше предела (422 ``game.too_many_users``).
+
+    ``details = {"given": int, "max": int}``; предел — ``GV_GAME__DAILY_RESULTS_MAX_USERS``.
+    """
+
+    default_code = "game.too_many_users"

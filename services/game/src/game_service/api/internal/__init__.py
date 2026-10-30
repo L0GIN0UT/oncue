@@ -1,8 +1,9 @@
 """Internal API (/internal/v1): только для других сервисов внутри сети (gateway отдаёт 404).
 
 Каждая ручка требует сервисный токен identity с ``aud`` = game
-(``GV_INTERNAL_AUTH__AUDIENCE``, по умолчанию имя сервиса) и областью ``rounds.plan``
-(клиент ``match``, §2.7 плана этапа 4). Пользовательский JWT — 401, сервисный без области —
+(``GV_INTERNAL_AUTH__AUDIENCE``, по умолчанию имя сервиса): планы раундов и тело конфига —
+область ``rounds.plan`` (клиент ``match``, §2.7 плана этапа 4), ``GET /daily/results`` — область
+``daily.results`` (клиент ``bff_web``). Пользовательский JWT — 401, сервисный без области —
 403 ``auth.forbidden``.
 
 План раундов содержит ключи ответа (античит §12 п. 1 плана этапа 4): он уходит только в ответ
@@ -12,20 +13,34 @@ match и не попадает ни в логи, ни в тексты ошибо
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 
 from game_service.api.common import ApiServices, NoStoreRoute
-from game_service.api.internal.schemas import ModeConfigBody, RoundPlan, RoundPlanRequest
+from game_service.api.internal.schemas import (
+    DailyResultOut,
+    ModeConfigBody,
+    RoundPlan,
+    RoundPlanRequest,
+)
+from game_service.api.public.schemas import Domain
 from game_service.application.queries.round_plans import RoundPlanQuery
 from gv_auth import ServiceAuthenticator, ServicePrincipal
 from gv_service import problem_responses
 
 ROUNDS_PLAN_SCOPE = "rounds.plan"
 """Область сервисного токена match → game (``GV_SERVICE_CLIENTS`` identity)."""
+DAILY_RESULTS_SCOPE = "daily.results"
+"""Область сервисного токена bff_web → game: очки дейлика игроков (приватность решает bff)."""
+MAX_DAILY_RESULTS_USERS = 100
+"""Жёсткий предел схемы; рабочий — ``GV_GAME__DAILY_RESULTS_MAX_USERS`` (422)."""
 
 Caller = Annotated[
     ServicePrincipal, Depends(ServiceAuthenticator().require_service(ROUNDS_PLAN_SCOPE))
+]
+ResultsCaller = Annotated[
+    ServicePrincipal, Depends(ServiceAuthenticator().require_service(DAILY_RESULTS_SCOPE))
 ]
 ModeKeyPath = Annotated[
     str,
@@ -91,5 +106,32 @@ def build_internal_router(c: ApiServices) -> APIRouter:
         caller: Caller,  # noqa: ARG001 — зависимость нужна ради авторизации
     ) -> ModeConfigBody:
         return ModeConfigBody.model_validate(await c.round_plans.mode_version(mode_key, version))
+
+    @router.get(
+        "/daily/results",
+        response_model=list[DailyResultOut],
+        summary="Результаты дейлика игроков в текущем периоде",
+        description=(
+            "Для bff_web (друзья на главной и в итогах дейлика): завершённые дейлики "
+            "перечисленных пользователей в ТЕКУЩЕМ периоде (`day` режима), только очки; прошлых "
+            "периодов, ответов и гостей нет, игроки без завершённой попытки не возвращаются. "
+            "Сервисный токен с областью `daily.results` (audience = game): game дружбы не знает, "
+            "кого показывать зрителю, решает bff по данным social. Не больше "
+            "`GV_GAME__DAILY_RESULTS_MAX_USERS` игроков (422 `game.too_many_users`, "
+            "`details.given/max`), лимит `GV_GAME_LIMITS__DAILY_RESULTS_PER_MIN` на клиента "
+            "(429). Режимы — с типом Source из `GV_GAME__DAILY_RESULTS_SOURCE_TYPES`."
+        ),
+        responses=problem_responses(401, 403, 422, 429, 503),
+    )
+    async def daily_results(
+        caller: ResultsCaller,
+        user_ids: Annotated[
+            list[UUID],
+            Query(min_length=1, max_length=MAX_DAILY_RESULTS_USERS, description="Игроки"),
+        ],
+        domain: Annotated[Domain | None, Query()] = None,
+    ) -> list[DailyResultOut]:
+        rows = await c.queries.daily_results(caller.client_id, user_ids, domain)
+        return [DailyResultOut.model_validate(r) for r in rows]
 
     return router

@@ -391,6 +391,33 @@
         "title": "Block[CommentsCard]",
         "type": "object"
       },
+      "Block_DailyFeedCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DailyFeedCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[DailyFeedCard]",
+        "type": "object"
+      },
       "Block_FriendsCard_": {
         "properties": {
           "data": {
@@ -416,6 +443,33 @@
           "status"
         ],
         "title": "Block[FriendsCard]",
+        "type": "object"
+      },
+      "Block_FriendsTodayCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FriendsTodayCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[FriendsTodayCard]",
         "type": "object"
       },
       "Block_HomeProgressCard_": {
@@ -740,6 +794,33 @@
           "status"
         ],
         "title": "Block[ResultSummary]",
+        "type": "object"
+      },
+      "Block_RewardsCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RewardsCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[RewardsCard]",
         "type": "object"
       },
       "Block_RoomCard_": {
@@ -2425,6 +2506,38 @@
         "title": "DailyCard",
         "type": "object"
       },
+      "DailyFeedCard": {
+        "description": "Лента дейлика друзей: результаты и счётчик «сыграли из всех друзей».",
+        "properties": {
+          "friends_played": {
+            "description": "Сыграли дейлик в текущем периоде и открыли статистику (друг со скрытой статистикой не считается и не показывается); «друзья 4 из 9» = played из total",
+            "minimum": 0.0,
+            "title": "Friends Played",
+            "type": "integer"
+          },
+          "friends_total": {
+            "description": "Всего друзей",
+            "minimum": 0.0,
+            "title": "Friends Total",
+            "type": "integer"
+          },
+          "items": {
+            "description": "Лучшие первыми, не больше `GV_PAGES__HOME_FEED_ITEMS_LIMIT`",
+            "items": {
+              "$ref": "#/components/schemas/FriendDailyCard"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "friends_total",
+          "friends_played",
+          "items"
+        ],
+        "title": "DailyFeedCard",
+        "type": "object"
+      },
       "EventArchiveCard": {
         "description": "Запуск события в архиве игрока (5d).",
         "properties": {
@@ -2897,6 +3010,87 @@
         "title": "FriendCard",
         "type": "object"
       },
+      "FriendDailyCard": {
+        "description": "Друг, сыгравший дейлик в текущем периоде: до одного результата на домен.",
+        "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppearanceCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Аватар, рамка, титул; null — источник не отдал"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FriendDailyResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname",
+          "results"
+        ],
+        "title": "FriendDailyCard",
+        "type": "object"
+      },
+      "FriendDailyResult": {
+        "description": "Результат друга в дейлике одного домена (бейдж на домен).",
+        "properties": {
+          "day": {
+            "description": "Начало периода набора",
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "max_score": {
+            "minimum": 0.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "domain",
+          "mode_key",
+          "day",
+          "score",
+          "max_score"
+        ],
+        "title": "FriendDailyResult",
+        "type": "object"
+      },
       "FriendsCard": {
         "description": "Блок друзей для хаба онлайна и лобби (приглашение в комнату).",
         "properties": {
@@ -2918,6 +3112,130 @@
           "incoming_requests"
         ],
         "title": "FriendsCard",
+        "type": "object"
+      },
+      "FriendsTodayCard": {
+        "description": "«Среди друзей» итога дейлика: тот же режим и период, свой результат в сравнении.",
+        "properties": {
+          "average_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Среднее очков сыгравших друзей; null — таких нет",
+            "title": "Average Score"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          },
+          "friends_played": {
+            "description": "Сыграли этот дейлик и открыли статистику",
+            "minimum": 0.0,
+            "title": "Friends Played",
+            "type": "integer"
+          },
+          "friends_total": {
+            "minimum": 0.0,
+            "title": "Friends Total",
+            "type": "integer"
+          },
+          "items": {
+            "description": "Лучшие первыми, не больше `GV_PAGES__RESULTS_FRIENDS_LIMIT`",
+            "items": {
+              "$ref": "#/components/schemas/FriendsTodayRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "my_max_score": {
+            "minimum": 0.0,
+            "title": "My Max Score",
+            "type": "integer"
+          },
+          "my_place": {
+            "description": "Место среди сыгравших друзей и вас; равные делят",
+            "minimum": 1.0,
+            "title": "My Place",
+            "type": "integer"
+          },
+          "my_score": {
+            "minimum": 0.0,
+            "title": "My Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode_key",
+          "domain",
+          "day",
+          "my_score",
+          "my_max_score",
+          "my_place",
+          "friends_total",
+          "friends_played",
+          "items"
+        ],
+        "title": "FriendsTodayCard",
+        "type": "object"
+      },
+      "FriendsTodayRow": {
+        "description": "Друг и его результат в том же дейлике.",
+        "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AppearanceCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_score": {
+            "minimum": 0.0,
+            "title": "Max Score",
+            "type": "integer"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname",
+          "score",
+          "max_score"
+        ],
+        "title": "FriendsTodayRow",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2950,6 +3268,17 @@
               }
             ],
             "description": "5d: активное событие; null - нет события или progression недоступен"
+          },
+          "feed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_DailyFeedCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Друзья и дейлик (результаты по доменам, счётчик «сыграли из всех»); null — гость или аноним, источники не вызывались; unavailable — сбой любой части"
           },
           "modes": {
             "$ref": "#/components/schemas/Block_list_ModeCard__"
@@ -5381,11 +5710,33 @@
       "ResultsBlocks": {
         "description": "Блоки экрана результатов.",
         "properties": {
+          "friends_today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_FriendsTodayCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только итог дейлика текущего периода: друзья в том же режиме; null — гость, аноним, не дейлик или период закончился"
+          },
           "items": {
             "$ref": "#/components/schemas/Block_list_ItemCard__"
           },
           "result": {
             "$ref": "#/components/schemas/Block_ResultSummary_"
+          },
+          "rewards": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_RewardsCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Награды за игру; null — гость или аноним"
           }
         },
         "required": [
@@ -5406,6 +5757,101 @@
           "blocks"
         ],
         "title": "ResultsPage",
+        "type": "object"
+      },
+      "RewardStreakCard": {
+        "description": "Серия дейлика, в которую засчитана сессия.",
+        "properties": {
+          "current": {
+            "minimum": 1.0,
+            "title": "Current",
+            "type": "integer"
+          },
+          "domain": {
+            "enum": [
+              "music",
+              "film"
+            ],
+            "title": "Domain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "current"
+        ],
+        "title": "RewardStreakCard",
+        "type": "object"
+      },
+      "RewardsCard": {
+        "description": "Награды за игру. `settled = false` — ещё не начислено (асинхронно): повторить позже.",
+        "properties": {
+          "level_after": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень после сессии",
+            "title": "Level After"
+          },
+          "level_before": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень до сессии",
+            "title": "Level Before"
+          },
+          "leveled_up": {
+            "description": "Уровень вырос",
+            "title": "Leveled Up",
+            "type": "boolean"
+          },
+          "settled": {
+            "title": "Settled",
+            "type": "boolean"
+          },
+          "streak": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RewardStreakCard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Серия дейлика на день сессии; null — не дейлик"
+          },
+          "verses": {
+            "description": "Версы за сессию, целые",
+            "minimum": 0.0,
+            "title": "Verses",
+            "type": "integer"
+          },
+          "xp": {
+            "description": "Опыт за сессию (с бустом)",
+            "minimum": 0.0,
+            "title": "Xp",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "settled",
+          "xp",
+          "verses",
+          "leveled_up"
+        ],
+        "title": "RewardsCard",
         "type": "object"
       },
       "RoomBlocks": {
