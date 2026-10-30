@@ -319,6 +319,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rooms/{code}/listen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Позиция прослушивания уровня
+         * @description Метка «соперник слушает N с»: владелец кладёт округлённое `listen_s` в сообщение `player` и в `players[]` комнаты. Только участник и только фаза `level_open` (иначе 409 `match.phase_mismatch`); позиция зажимается в длину подачи, устаревший `level` и повтор значения — 200 без изменений. Фронту слать не чаще раза в секунду и только при смене секунды; сверх `GV_MATCH__LISTEN_PER_PLAYER_PER_MIN` — 429. 404 `match.room_not_found` (нет комнаты или она закрыта), 403 `match.not_participant` (не в этой комнате), 409 `match.phase_mismatch` (команда не для текущей фазы), 429 `match.rate_limited`, 503 `match.rooms_unavailable`.
+         */
+        post: operations["listen_v1_rooms__code__listen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rooms/{code}/match/away": {
         parameters: {
             query?: never;
@@ -720,6 +740,21 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * Artwork
+         * @description Картинка ответа в ревиле (ADR 0073).
+         */
+        Artwork: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Mime */
+            mime: string;
+            /** Url */
+            url: string;
+        };
+        /**
          * AwayRequest
          * @description Отметка «отошёл» / «вернулся».
          */
@@ -922,6 +957,21 @@ export interface components {
             mime: string;
             /** Url */
             url: string;
+        };
+        /**
+         * ListenRequest
+         * @description Позиция прослушивания уровня (для метки «соперник слушает N с»).
+         */
+        ListenRequest: {
+            /** Level */
+            level: number;
+            /** Op Id */
+            op_id: string;
+            /**
+             * Position Ms
+             * @description Позиция воспроизведения; сверх длины зажимается
+             */
+            position_ms: number;
         };
         /**
          * MatchCommandResult
@@ -1206,6 +1256,11 @@ export interface components {
             away: boolean;
             /** Is Host */
             is_host: boolean;
+            /**
+             * Listen S
+             * @description Сколько секунд игрок слушает открытый уровень (округлено, не больше длины подачи); `null` — неизвестно или не фаза `level_open`. Эфемерно, ответа не раскрывает
+             */
+            listen_s?: number | null;
             /** Nickname */
             nickname: string;
             /**
@@ -1619,6 +1674,8 @@ export interface components {
          * @description Ответ раунда — только в фазе ``reveal`` и позже.
          */
         RoundReveal: {
+            /** @description Картинка ответа (обложка, постер; ADR 0073): подписанная короткоживущая ссылка; `null` — картинки нет или она недоступна */
+            artwork?: components["schemas"]["Artwork"] | null;
             /** @description null — ассет ревила недоступен */
             final_clue: components["schemas"]["LevelClue"] | null;
             /**
@@ -3034,6 +3091,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoomCommandResult"];
+                };
+            };
+            /** @description Команда принята в поток комнаты, владелец не ответил вовремя (D6) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandAccepted"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listen_v1_rooms__code__listen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Код комнаты: 8 символов `[A-HJ-NP-Z2-9]` (без 0/O/1/I) */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchCommandResult"];
                 };
             };
             /** @description Команда принята в поток комнаты, владелец не ответил вовремя (D6) */
