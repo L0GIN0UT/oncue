@@ -45,12 +45,14 @@ from bff_web_service.application.dto import (
     PackCard,
     PersonalRecord,
     PlayerAppearanceCard,
+    PlayerLevel,
     PlayerRelation,
     ProgressCard,
     PublicProgress,
     QuestsCard,
     QueuePoolCard,
     RatingCard,
+    RoomLobby,
     SanctionsCard,
     SessionResult,
     SessionRewardsCard,
@@ -241,6 +243,13 @@ class MatchClient(Protocol):
         """Сколько игроков ищут матч по каждому ladder-у и формату (4b, ADR 0038)."""
         ...
 
+    async def room(self, token: str, code: str) -> RoomLobby:
+        """Комната по коду: состав, настройки, фаза (``GET /v1/rooms/{code}``, без матча).
+
+        Нет комнаты — ``UpstreamRejectedError(404, match.room_not_found)``.
+        """
+        ...
+
 
 class RatingClient(Protocol):
     """Публичный API rating (4b).
@@ -277,6 +286,13 @@ class ProgressionClient(Protocol):
 
     Гость — ``UpstreamRejectedError(403)``, невалидный токен — 401.
     """
+
+    async def levels(self, user_ids: Sequence[UUID]) -> dict[UUID, PlayerLevel]:
+        """Уровни игроков пачкой (``/internal/v1/levels``, сервисный токен bff_web).
+
+        Скрытые профили в ответе нет. Токен не получен — ``UpstreamUnavailableError``.
+        """
+        ...
 
     async def progress(self, token: str) -> ProgressCard:
         """Уровень, опыт, серии дейлика, буст (``/v1/me/progress``)."""
@@ -388,6 +404,13 @@ class SocialClient(Protocol):
 
     async def sanctions(self, token: str) -> SanctionsCard:
         """Действующие санкции владельца (``/v1/me/sanctions``)."""
+        ...
+
+    async def online_count(self) -> int:
+        """Сколько игроков с аккаунтом онлайн (публичный ``/v1/presence/online-count``).
+
+        Без токена; ответ общий и кэшируется на секунды.
+        """
         ...
 
 

@@ -14,6 +14,7 @@ from gv_service import Infrastructure
 from social_service.application.config_admin import ConfigChange, ConfigCommands, ConfigQueries
 from social_service.application.friends import FriendsService
 from social_service.application.friends_projections import FriendsProjectionService
+from social_service.application.online_count import OnlineCounter
 from social_service.application.ports.cases import AuditEntry
 from social_service.application.ports.config import ConfigProvider, ConfigUnavailableError
 from social_service.application.ports.config_store import ConfigUnitOfWork
@@ -108,7 +109,19 @@ class SocialContainer:
         retry = self.settings.social.limiter_retry_after_s
         if self.infra.redis is None:
             return UnconfiguredPresence(retry)
-        return RedisPresenceStore(self.infra.redis, retry_after_s=retry)
+        return RedisPresenceStore(self.infra.redis, self.infra.clock, retry_after_s=retry)
+
+    @cached_property
+    def online_counter(self) -> OnlineCounter:
+        """Счётчик онлайна: общая копия числа на процесс."""
+        s = self.settings.social
+        return OnlineCounter(
+            self.presence,
+            self.limiter,
+            self.infra.clock,
+            cache_s=s.online_count_cache_s,
+            per_minute=s.online_count_per_minute,
+        )
 
     @property
     def friends(self) -> FriendsService:

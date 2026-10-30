@@ -9,6 +9,7 @@ import structlog
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from gv_core.clock import Clock
 from social_service.application.ports.friends import AttemptWindow
 from social_service.domain.friends import LimiterUnavailableError
 
@@ -16,6 +17,8 @@ log = structlog.get_logger(__name__)
 
 LIMITER_PREFIX = "social:limit:"
 PRESENCE_PREFIX = "social:presence:"
+PRESENCE_ONLINE_KEY = "social:presence-online"
+"""ZSET счётчика онлайна: член - ``user_id``, оценка - момент истечения (unix, секунды)."""
 
 
 class RedisAttemptLimiter:
@@ -60,14 +63,24 @@ class UnconfiguredLimiter:
 class RedisPresenceStore:
     """Присутствие: ключ ``social:presence:<user_id>`` с TTL."""
 
-    def __init__(self, redis: Redis, *, retry_after_s: int) -> None:
+    def __init__(self, redis: Redis, clock: Clock, *, retry_after_s: int) -> None:
         self._redis = redis
+        self._clock = clock
         self._retry_after_s = retry_after_s
 
     async def touch(self, user_id: UUID, ttl_s: int) -> None:
-        """Отметить игрока онлайн; недоступность Redis - 503."""
+        """Отметить игрока онлайн; недоступность Redis - 503.
+
+        Ключ игрока и запись счётчика (ZSET, оценка - момент истечения) обновляются одной
+        транзакцией; сам ZSET тоже получает TTL, чтобы не жить вечно без heartbeat.
+        """
+        expires_at = self._clock.now().timestamp() + ttl_s
         try:
-            await self._redis.set(f"{PRESENCE_PREFIX}{user_id}", "1", ex=ttl_s)
+            async with self._redis.pipeline(transaction=True) as pipe:
+                pipe.set(f"{PRESENCE_PREFIX}{user_id}", "1", ex=ttl_s)
+                pipe.zadd(PRESENCE_ONLINE_KEY, {str(user_id): expires_at})
+                pipe.expire(PRESENCE_ONLINE_KEY, ttl_s)
+                await pipe.execute()
         except RedisError as exc:
             raise LimiterUnavailableError(
                 "присутствие недоступно", details={"retry_after": self._retry_after_s}
@@ -85,6 +98,20 @@ class RedisPresenceStore:
             return set()
         return {u for u, v in zip(ids, values, strict=True) if v is not None}
 
+    async def count_online(self) -> int:
+        """Игроки с неистёкшей записью: ``ZREMRANGEBYSCORE`` по текущему времени и ``ZCARD``."""
+        now = self._clock.now().timestamp()
+        try:
+            async with self._redis.pipeline(transaction=True) as pipe:
+                pipe.zremrangebyscore(PRESENCE_ONLINE_KEY, "-inf", now)
+                pipe.zcard(PRESENCE_ONLINE_KEY)
+                _, count = await pipe.execute()
+        except RedisError as exc:
+            raise LimiterUnavailableError(
+                "счётчик онлайна недоступен", details={"retry_after": self._retry_after_s}
+            ) from exc
+        return int(count)
+
 
 class UnconfiguredPresence:
     """Нет Redis: присутствие недоступно, статус друзей - offline/in_match."""
@@ -101,3 +128,9 @@ class UnconfiguredPresence:
     async def online(self, user_ids: Collection[UUID]) -> set[UUID]:  # noqa: ARG002 - порт
         """Никто."""
         return set()
+
+    async def count_online(self) -> int:
+        """Счётчик недоступен."""
+        raise LimiterUnavailableError(
+            "присутствие не настроено (GV_REDIS_URL)", details={"retry_after": self._retry_after_s}
+        )

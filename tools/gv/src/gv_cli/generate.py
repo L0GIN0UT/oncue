@@ -38,8 +38,9 @@ SERVICE_CLIENTS: dict[str, dict[str, list[str]]] = {
     # подтверждённые адреса получателей рассылки у identity.
     "progression": {"media_pipeline": ["ugc.image"]},
     "notifications": {"identity": ["users.emails.read", "users.active.list"]},
-    # PR-A: bff_web берёт у game очки дейлика друзей (приватность решает bff по данным social).
-    "bff_web": {"game": ["daily.results"]},
+    # bff_web: очки дейлика друзей у game (приватность решает bff по данным social) и уровни
+    # игроков комнаты и лобби у progression (пачкой, без PII).
+    "bff_web": {"game": ["daily.results"], "progression": ["levels.read"]},
 }
 """Клиенты сервисных токенов для compose (D13 плана этапа 2): клиент → адресат → области.
 

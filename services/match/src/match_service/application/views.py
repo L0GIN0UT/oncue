@@ -79,6 +79,7 @@ def settings_json(room: Room) -> Json:
         "players_max": s.players_max,
         "visibility": s.visibility,
         "collection_ids": [str(c) for c in s.collection_ids],
+        "name": s.name,
     }
 
 

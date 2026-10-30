@@ -115,6 +115,12 @@ class RelationsRateLimitedError(RateLimitedError):
     default_code = "social.relations_rate_limited"
 
 
+class OnlineCountRateLimitedError(RateLimitedError):
+    """Публичный счётчик онлайна читают слишком часто."""
+
+    default_code = "social.online_count_rate_limited"
+
+
 class LimiterUnavailableError(DependencyUnavailableError):
     """Лимитер (Redis) недоступен: операция закрыта (fail-closed)."""
 

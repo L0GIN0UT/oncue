@@ -40,6 +40,7 @@ def routers(infra: Infrastructure) -> list[APIRouter]:
             win_trading=discussion.win_trading(),
         ),
         social.sanctions(),
+        online=lambda: social.online_counter,
     )
 
 

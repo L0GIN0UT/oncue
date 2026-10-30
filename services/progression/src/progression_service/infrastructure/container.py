@@ -171,6 +171,9 @@ class ProgressionContainer:
             self.uow_factory(),
             self.infra.clock,
             recent_limit=self.settings.progression.wallet_recent_limit,
+            limiter=_LateLimiter(self),
+            levels_max_users=self.settings.progression.levels_max_users,
+            levels_per_min=self.settings.progression.levels_per_min,
         )
 
     # ------------------------------------------------------------------ админка (поток P3)

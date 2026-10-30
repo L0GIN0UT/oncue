@@ -125,7 +125,9 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
             "Ошибки: 404 `match.mode_not_found` (нет опубликованного онлайн-шаблона), "
             "422 `match.mode_not_online`, 422 `match.setting_not_allowed` "
             "(`details.field`), 422 `match.collection_required`, 422 "
-            "`match.too_many_collections`, 404 `match.collection_not_found`, 403 "
+            "`match.too_many_collections`, 404 `match.collection_not_found`, 422 "
+            "`match.room_name_rejected` (`details.reason`: `denylist` | `link` | `too_long` | "
+            "`empty`), 403 "
             "`match.ranked_forbidden` (рейтинговые комнаты — только из очереди), 409 "
             "`match.active_room_conflict` (`details.code` — текущая комната), 429 "
             "`match.rate_limited` (`GV_MATCH__LOBBY_CREATE_PER_USER_PER_HOUR`), 503 "
@@ -152,6 +154,7 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
             change=change,
             key=key,
             request=body.model_dump(mode="json"),
+            name=body.name,
         )
         return RoomView.model_validate(view)
 

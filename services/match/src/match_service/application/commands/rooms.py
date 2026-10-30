@@ -156,6 +156,7 @@ class RoomLimits:
     listen_per_min: int = 120
     create_lock_ms: int = 5000
     pending_room_ms: int = 10_000
+    room_name_max_length: int = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,13 +215,15 @@ class RoomService:
         change: SettingsChange,
         key: str,
         request: Json,
+        name: str | None = None,
     ) -> Json:
         """Создать комнату по онлайн-шаблону; создатель — хост в слоте 0.
 
         Raises:
             MatchNotFoundError: ``match.mode_not_found``.
             MatchInvalidError: ``match.mode_not_online``, ``match.setting_not_allowed``,
-                ``match.collection_required``, ``match.too_many_collections``.
+                ``match.collection_required``, ``match.too_many_collections``,
+                ``match.room_name_rejected``.
             MatchForbiddenError: ``match.ranked_forbidden``.
             MatchConflictError: ``match.active_room_conflict``.
             ConflictError: ``idempotency.key_reused``.
@@ -232,6 +235,7 @@ class RoomService:
         replayed = await self._replay_create(actor, key, fingerprint)
         if replayed is not None:
             return replayed
+        cleaned_name = self._room_name(name)  # после повтора: denylist не ломает идемпотентность
         # Замок до лимита и проверок (аудит Н9): параллельные создания одним игроком
         # (проверка «одна активная комната» читает указатель, а комнаты по нему ещё нет).
         # Токен — отпечаток ключа и случайный хвост: снимаем только свой замок, а повтор
@@ -257,6 +261,7 @@ class RoomService:
             )
             tpl = await self._template(mode_key)
             settings = apply_settings(tpl.template, default_settings(tpl.template), change)
+            settings = replace(settings, name=cleaned_name)
             nickname = await self._users.nickname(actor.user_id) or ""
             return await self._create_room(
                 actor,
@@ -268,6 +273,24 @@ class RoomService:
             )
         finally:
             await self._player_rooms.unlock_create(actor.user_id, token)
+
+    def _room_name(self, name: str | None) -> str | None:
+        """Название комнаты: нормализация и denylist как у чата (``gv_text.ugc``).
+
+        Предел длины — ``room_name_max_length`` (настройка).
+        """
+        if name is None:
+            return None
+        try:
+            return self._ugc.check(
+                name, max_len=self._limits.room_name_max_length, forbid_links=True
+            )
+        except UgcViolation as exc:
+            raise MatchInvalidError(
+                "название комнаты отклонено",
+                code=errors.ROOM_NAME_REJECTED,
+                details={"reason": _UGC_REASONS.get(exc.code, "denylist")},
+            ) from exc
 
     async def _replay_create(self, actor: Actor, key: str, fingerprint: str) -> Json | None:
         """Повтор ``Idempotency-Key``: та же комната или 409 при другом теле."""

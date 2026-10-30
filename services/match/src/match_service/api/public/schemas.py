@@ -60,6 +60,8 @@ MAX_LEVELS = 20
 MAX_COLLECTIONS = 10
 """Потолок числа сборников комнаты в схеме; рабочий предел — ``max_collections`` режима."""
 CHAT_MAX_LENGTH = 200
+MAX_ROOM_NAME_LENGTH = 100
+"""Жёсткий предел схемы названия комнаты; рабочий — ``GV_MATCH__ROOM_NAME_MAX_LENGTH``."""
 
 
 class _Request(BaseModel):
@@ -102,6 +104,13 @@ class RoomSettings(BaseModel):
     players_max: int = Field(ge=2, le=MAX_PLAYERS)
     visibility: Visibility
     collection_ids: list[UUID] = Field(default_factory=list, max_length=MAX_COLLECTIONS)
+    name: str | None = Field(
+        default=None,
+        description=(
+            "Название комнаты, как его ввёл хост (`null` — не задано; «Комната <ник хоста>» "
+            "собирает bff)"
+        ),
+    )
 
 
 class SettingsOptions(BaseModel):
@@ -205,6 +214,7 @@ class OpenRoomCard(BaseModel):
 
     code: RoomCode
     mode: ModeRef
+    host_id: UUID = Field(description="Хост лобби (bff по нему берёт уровень и аватар)")
     host_nickname: str
     players: int = Field(ge=0, le=MAX_PLAYERS)
     players_max: int = Field(ge=2, le=MAX_PLAYERS)
@@ -235,6 +245,16 @@ class CreateRoomRequest(_Request):
 
     mode_key: ModeKey
     settings: SettingsOverride | None = None
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=MAX_ROOM_NAME_LENGTH,
+        description=(
+            "Название комнаты (необязательное). Рабочий предел длины — "
+            "`GV_MATCH__ROOM_NAME_MAX_LENGTH`, без ссылок и из denylist "
+            "(422 `match.room_name_rejected`, `details.reason`)"
+        ),
+    )
     collection_ids: list[UUID] | None = Field(
         default=None,
         min_length=1,

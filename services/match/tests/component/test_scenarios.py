@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from match_app import MatchApp, Player
 from match_doubles import TITLES, plan_factory, seed_bodies
+from match_service.settings import Settings
 
 from gv_auth import Sanction
 from gv_core.ids import uuid7
@@ -367,6 +368,38 @@ async def test_create_room_rules(svc: MatchApp) -> None:
         headers={**b.headers, "Idempotency-Key": "idem-room-0005"},
     )
     assert_problem(need_collection, 422, "match.collection_required")
+
+
+async def test_room_name_is_stored_validated_and_shown_in_lobby_list(svc: MatchApp) -> None:
+    a, b, c = svc.user(), svc.user(), svc.user()
+    body = {"settings": {"visibility": "public"}, "collection_ids": [str(uuid7())]}
+    named = await svc.create(a, "film.lobby.collection", name="  Вечер кино  ", **body)
+    assert named["settings"]["name"] == "Вечер кино"  # нормализация как у чата
+    unnamed = await svc.create(b, "film.lobby.collection", **body)
+    assert unnamed["settings"]["name"] is None
+    state = await svc.state(a, named["code"])
+    assert state["room"]["settings"]["name"] == "Вечер кино"
+    page = (await svc.client.get("/v1/rooms/open", headers=c.headers)).json()
+    names = {r["code"]: r["settings"]["name"] for r in page["items"]}
+    assert names == {named["code"]: "Вечер кино", unnamed["code"]: None}
+    hosts = {r["code"]: r["host_id"] for r in page["items"]}
+    assert hosts == {named["code"]: str(a.user_id), unnamed["code"]: str(b.user_id)}
+
+    limit = Settings().match.room_name_max_length
+    for n, (name, reason) in enumerate(
+        [
+            ("х" * (limit + 1), "too_long"),
+            ("заходи на evil.example.com", "link"),
+            ("хуй", "denylist"),
+        ]
+    ):
+        denied = await svc.client.post(
+            "/v1/rooms",
+            json={"mode_key": "music.duel.classic", "name": name},
+            headers={**c.headers, "Idempotency-Key": f"idem-name-000{n}"},
+        )
+        problem = assert_problem(denied, 422, "match.room_name_rejected")
+        assert problem["details"] == {"reason": reason}
 
 
 async def test_open_lobbies_list_and_room_not_found(svc: MatchApp) -> None:

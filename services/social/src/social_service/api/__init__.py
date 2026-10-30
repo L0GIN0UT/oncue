@@ -12,6 +12,7 @@ from social_service.api.admin.services import AdminServices
 from social_service.api.discussion_services import DiscussionServices
 from social_service.api.public import build_public_router
 from social_service.application.friends import FriendsService
+from social_service.application.online_count import OnlineCounter
 from social_service.application.sanctions import SanctionService
 
 
@@ -21,9 +22,11 @@ def build_routers(
     discussion: DiscussionServices,
     admin: AdminServices,
     sanctions: SanctionService,
+    *,
+    online: Callable[[], OnlineCounter],
 ) -> list[APIRouter]:
     """Все роутеры сервиса (use-cases приходят из composition root, ``main.py``)."""
     return [
-        build_public_router(infra, friends, discussion),
+        build_public_router(infra, friends, discussion, online),
         build_admin_router(admin, sanctions),
     ]

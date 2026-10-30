@@ -2853,6 +2853,51 @@
         "title": "PlayerAppearance",
         "type": "object"
       },
+      "PlayerLevel": {
+        "description": "Уровень игрока.",
+        "properties": {
+          "level": {
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "xp_in_level": {
+            "description": "Опыт внутри текущего уровня",
+            "minimum": 0.0,
+            "title": "Xp In Level",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "level",
+          "xp_in_level"
+        ],
+        "title": "PlayerLevel",
+        "type": "object"
+      },
+      "PlayerLevels": {
+        "description": "Уровни запрошенных игроков (порядок запроса, дубли схлопнуты).\n\nИгрока со скрытым профилем в ответе нет; игрок, ещё ничего не получавший, — 1 уровень.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlayerLevel"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "PlayerLevels",
+        "type": "object"
+      },
       "PlayersAppearance": {
         "description": "Оформление нескольких игроков (матч, профиль); неизвестные id пропускаются.",
         "properties": {
@@ -7766,6 +7811,122 @@
         "summary": "Выдать Версы вручную",
         "tags": [
           "progression-admin"
+        ]
+      }
+    },
+    "/internal/v1/levels": {
+      "get": {
+        "description": "Для bff_web (игроки комнаты и лобби): уровень и опыт внутри уровня по списку `user_ids` (повторяющийся параметр). Сервисный токен с областью `levels.read` (audience = progression). Не больше `GV_PROGRESSION__LEVELS_MAX_USERS` игроков (422 `progression.too_many_users`, `details.given/max`), лимит `GV_PROGRESSION__LEVELS_PER_MIN` на клиента (429 + `Retry-After`). Скрытый профиль в ответ не попадает, игрок без опыта — уровень 1. Нет конфига — 503.",
+        "operationId": "levels_internal_v1_levels_get",
+        "parameters": [
+          {
+            "description": "Игроки",
+            "in": "query",
+            "name": "user_ids",
+            "required": true,
+            "schema": {
+              "description": "Игроки",
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "User Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerLevels"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Уровни игроков пачкой",
+        "tags": [
+          "internal"
         ]
       }
     },

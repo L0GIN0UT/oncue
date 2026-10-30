@@ -230,7 +230,7 @@ export interface paths {
         put?: never;
         /**
          * Создать комнату
-         * @description Комната по онлайн-шаблону (`session.kind` ∈ duel/party/lobby); создатель — хост в слоте 0. Переопределения — только из `session.lobby.overridable` (D12). Ошибки: 404 `match.mode_not_found` (нет опубликованного онлайн-шаблона), 422 `match.mode_not_online`, 422 `match.setting_not_allowed` (`details.field`), 422 `match.collection_required`, 422 `match.too_many_collections`, 404 `match.collection_not_found`, 403 `match.ranked_forbidden` (рейтинговые комнаты — только из очереди), 409 `match.active_room_conflict` (`details.code` — текущая комната), 429 `match.rate_limited` (`GV_MATCH__LOBBY_CREATE_PER_USER_PER_HOUR`), 503 `match.game_unavailable`.
+         * @description Комната по онлайн-шаблону (`session.kind` ∈ duel/party/lobby); создатель — хост в слоте 0. Переопределения — только из `session.lobby.overridable` (D12). Ошибки: 404 `match.mode_not_found` (нет опубликованного онлайн-шаблона), 422 `match.mode_not_online`, 422 `match.setting_not_allowed` (`details.field`), 422 `match.collection_required`, 422 `match.too_many_collections`, 404 `match.collection_not_found`, 422 `match.room_name_rejected` (`details.reason`: `denylist` | `link` | `too_long` | `empty`), 403 `match.ranked_forbidden` (рейтинговые комнаты — только из очереди), 409 `match.active_room_conflict` (`details.code` — текущая комната), 429 `match.rate_limited` (`GV_MATCH__LOBBY_CREATE_PER_USER_PER_HOUR`), 503 `match.game_unavailable`.
          */
         post: operations["create_room_v1_rooms_post"];
         delete?: never;
@@ -838,6 +838,11 @@ export interface components {
             collection_ids?: string[] | null;
             /** Mode Key */
             mode_key: string;
+            /**
+             * Name
+             * @description Название комнаты (необязательное). Рабочий предел длины — `GV_MATCH__ROOM_NAME_MAX_LENGTH`, без ссылок и из denylist (422 `match.room_name_rejected`, `details.reason`)
+             */
+            name?: string | null;
             settings?: components["schemas"]["SettingsOverride"] | null;
         };
         /**
@@ -1174,6 +1179,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Host Id
+             * Format: uuid
+             * @description Хост лобби (bff по нему берёт уровень и аватар)
+             */
+            host_id: string;
             /** Host Nickname */
             host_nickname: string;
             mode: components["schemas"]["ModeRef"];
@@ -1560,6 +1571,11 @@ export interface components {
              * @description Окно уровня, с (у шаблона — первое окно)
              */
             level_window_s: number;
+            /**
+             * Name
+             * @description Название комнаты, как его ввёл хост (`null` — не задано; «Комната <ник хоста>» собирает bff)
+             */
+            name?: string | null;
             /** Players Max */
             players_max: number;
             /** Rounds */
