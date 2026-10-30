@@ -95,6 +95,7 @@ def _find_json(
         "diary": find.diary_after if state is FindState.FOUND else find.diary_before,
         "reward": {"xp": find.xp, "verses": find.verses},
         "play_page": find.play_page,
+        "task_i18n": find.task_i18n,
         "trigger": {
             "type": trigger.type,
             "page_key": trigger.page_key,

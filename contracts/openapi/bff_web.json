@@ -2703,6 +2703,18 @@
             "title": "State",
             "type": "string"
           },
+          "task_i18n": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ключ i18n текста задания («что сделать»); null - задания нет",
+            "title": "Task I18N"
+          },
           "title": {
             "title": "Title",
             "type": "string"

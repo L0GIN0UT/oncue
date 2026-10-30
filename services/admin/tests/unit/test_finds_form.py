@@ -40,6 +40,16 @@ def test_roundtrip_of_contract_example_is_lossless() -> None:
     assert _roundtrip(BODY) == BODY
 
 
+def test_task_i18n_is_set_and_cleared_by_form() -> None:
+    data = _post(BODY)
+    data["f1_task_i18n"] = "event.autumn_grove.duel_trail.task"
+    data["f0_task_i18n"] = ""
+    header, rows = ff.parse_post(data)
+    built = ff.build_body(BODY, header, rows)
+    assert built["finds"][1]["task_i18n"] == "event.autumn_grove.duel_trail.task"
+    assert "task_i18n" not in built["finds"][0]
+
+
 def test_unknown_fields_are_preserved() -> None:
     body = copy.deepcopy(BODY)
     body["future_top"] = {"a": 1}
@@ -108,6 +118,9 @@ def _errors(mutate: Any) -> dict[str, str]:
         ({"f0_xp": "5001"}, "f0_xp"),
         ({"f0_verses": "-1"}, "f0_verses"),
         ({"f0_title": ""}, "f0_title"),
+        ({"f0_task_i18n": "Bad Key"}, "f0_task_i18n"),
+        ({"f0_task_i18n": "nodots"}, "f0_task_i18n"),
+        ({"f0_task_i18n": "a." + "b" * 200}, "f0_task_i18n"),
         ({"f0_page_key": ""}, "f0_page_key"),
         ({"f1_metric": "nope"}, "f1_metric"),
         ({"f1_target": "0"}, "f1_target"),

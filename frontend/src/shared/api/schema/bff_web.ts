@@ -1402,6 +1402,11 @@ export interface components {
              * @enum {string}
              */
             state: "locked" | "open" | "found";
+            /**
+             * Task I18N
+             * @description Ключ i18n текста задания («что сделать»); null - задания нет
+             */
+            task_i18n?: string | null;
             /** Title */
             title: string;
             trigger: components["schemas"]["EventFindTriggerCard"];

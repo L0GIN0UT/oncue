@@ -76,6 +76,21 @@ async def test_active_banner_and_page_visibility(progression: Service) -> None:
     assert fin["state"] == "locked" and fin["trigger"]["progress"] is None
 
 
+async def test_find_task_key_is_returned_to_player_or_null(progression: Service) -> None:
+    ev = progression.ev
+    await progression.publish_config()
+    await progression.publish_event(
+        KEY,
+        ev.body(
+            ev.find("leaf", 1, task_i18n="event.autumn.leaf.task"),
+            ev.find("fin", 2, final=True),
+        ),
+    )
+    finds = finds_by_key(await page(progression, uuid7()))
+    assert finds["leaf"]["task_i18n"] == "event.autumn.leaf.task"
+    assert finds["fin"]["task_i18n"] is None
+
+
 async def test_event_pages_need_an_account(progression: Service) -> None:
     await progression.publish_config()
     assert_problem(await progression.client.get(f"/v1/events/{KEY}"), 401, "auth.unauthenticated")

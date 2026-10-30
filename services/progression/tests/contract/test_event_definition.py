@@ -46,6 +46,10 @@ def _extra_field(d: dict[str, Any]) -> None:
     d["finds"][0]["secret"] = 1
 
 
+def _bad_task_key(d: dict[str, Any]) -> None:
+    d["finds"][0]["task_i18n"] = "Bad Key"
+
+
 def _one_find(d: dict[str, Any]) -> None:
     d["finds"] = d["finds"][:1]
 
@@ -88,6 +92,15 @@ def test_example_is_valid_and_covers_variants() -> None:
     assert {f["trigger"]["type"] for f in finds} == {"server", "ui_spot"}
 
 
+def test_task_i18n_is_optional_and_example_has_both_variants() -> None:
+    finds = EXAMPLE["finds"]
+    assert "task_i18n" in finds[0]
+    assert any("task_i18n" not in f for f in finds)  # старые определения без поля валидны
+    data = mutated(lambda d: d["finds"][0].pop("task_i18n"))
+    assert list(VALIDATOR.iter_errors(data)) == []
+    EventDefinition.model_validate(data)
+
+
 def test_pydantic_body_accepts_example_and_round_trips() -> None:
     body = EventDefinition.model_validate(EXAMPLE)
     dumped = body.model_dump(mode="json", exclude_none=True)
@@ -102,6 +115,7 @@ def test_pydantic_body_accepts_example_and_round_trips() -> None:
         _bad_page,
         _x_over,
         _extra_field,
+        _bad_task_key,
         _one_find,
         _keys_other_metric,
         _keys_not_uuid,

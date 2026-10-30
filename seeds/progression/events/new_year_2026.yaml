@@ -17,6 +17,7 @@ body:
     - key: first_snow
       number: 1
       title: Первый снег
+      task_i18n: event.new_year_2026.first_snow.task
       diary_before: Говорят, снег выпадает тем, кто не пропускает ежедневную загадку.
       diary_after: Снежинки легли на подоконник - ежедневная загадка разгадана, первый след найден.
       x_pct: 12
@@ -28,6 +29,7 @@ body:
     - key: duel_icicle
       number: 2
       title: Ледяная сосулька
+      task_i18n: event.new_year_2026.duel_icicle.task
       diary_before: Сосулька блестит там, где решаются дуэли. Победите соперника один на один.
       diary_after: Сосулька упала к ногам победителя - дуэль выиграна.
       x_pct: 31
@@ -39,6 +41,7 @@ body:
     - key: gift_collection
       number: 3
       title: Подарок из сборника
+      task_i18n: event.new_year_2026.gift_collection.task
       diary_before: Под ёлкой лежит сборник. Сыграйте в новогодний сборник, чтобы развернуть подарок.
       diary_after: Подарок развёрнут - в сборнике нашлась блестящая игрушка.
       x_pct: 52
@@ -50,6 +53,7 @@ body:
     - key: frosty_frame
       number: 4
       title: Морозная рамка
+      task_i18n: event.new_year_2026.frosty_frame.task
       diary_before: Узор мороза рисуется на рамке. Наденьте любую рамку профиля.
       diary_after: Мороз лёг на вашу рамку - узор получился на славу.
       x_pct: 74
@@ -66,6 +70,7 @@ body:
     - key: lucky_wheel
       number: 5
       title: Колесо удачи
+      task_i18n: event.new_year_2026.lucky_wheel.task
       diary_before: Новогоднее колесо крутится три дня подряд - не пропустите ни одного.
       diary_after: Три дня подряд колесо вращалось для вас - праздничная удача на вашей стороне.
       x_pct: 88
@@ -77,6 +82,7 @@ body:
     - key: top_garland
       number: 6
       title: Гирлянда на вершине
+      task_i18n: event.new_year_2026.top_garland.task
       diary_before: Гирлянда зажигается на самом верху таблицы лидеров. Загляните туда.
       diary_after: Гирлянда замигала над рейтингом - след найден среди лидеров.
       x_pct: 18
@@ -88,6 +94,7 @@ body:
     - key: star_on_top
       number: 7
       title: Звезда на макушке
+      task_i18n: event.new_year_2026.star_on_top.task
       diary_before: Звезда ещё не зажглась - сначала найдите все остальные новогодние следы.
       diary_after: Звезда засияла на макушке ёлки - экспедиция завершена, с Новым годом!
       x_pct: 60
