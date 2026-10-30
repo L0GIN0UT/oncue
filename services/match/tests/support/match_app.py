@@ -315,6 +315,7 @@ def settings(database_url: str, redis_url: str, **match: Any) -> Settings:
         "state_per_player_per_min": 100_000,
         "join_by_code_per_user_per_min": 10_000,
         "emote_per_player_per_min": 1000,
+        "listen_per_player_per_min": 100_000,
         "presence_timeout_s": 120,
         "empty_lobby_close_s": 0,  # сценарии двигают FakeClock далеко: закрытие пустых - отдельно
         "ladder_cache_s": 0,

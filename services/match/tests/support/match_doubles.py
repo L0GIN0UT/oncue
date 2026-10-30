@@ -113,9 +113,12 @@ def answer_key(index: int, domain: str) -> AnswerKey:
 
 
 def plan_factory(
-    bodies: dict[str, dict[str, Any]], *, levels: int | None = None
+    bodies: dict[str, dict[str, Any]], *, levels: int | None = None, artwork: bool = False
 ) -> Callable[[RoundPlanRequest], RoundPlan]:
-    """Ответ ``FakeRoundPlanPort`` по запросу match: план из тела шаблона."""
+    """Ответ ``FakeRoundPlanPort`` по запросу match: план из тела шаблона.
+
+    ``artwork`` - в каждом раунде есть набор картинки ответа (ADR 0073).
+    """
 
     def build(request: RoundPlanRequest) -> RoundPlan:
         body = bodies[request.mode_key]
@@ -127,6 +130,7 @@ def plan_factory(
                 levels=tuple(
                     LevelAsset(level=lv, asset_set_id=uuid7()) for lv in range(1, n_levels + 1)
                 ),
+                artwork_asset_set_id=uuid7() if artwork else None,
             )
             for i in range(request.rounds)
         )

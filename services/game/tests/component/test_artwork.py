@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -93,3 +94,27 @@ async def test_other_player_cannot_read_reveal(game: Any) -> None:
     stranger = game.issuer.issue()
     response = await game.client.get(f"/v1/sessions/{snap['id']}", headers=bearer(stranger))
     assert_problem(response, 404, "game.session_not_found")
+
+
+# ----------------------------------------------------------------- план раундов для match
+async def test_round_plan_carries_artwork_asset_set_only_when_ready(
+    game: Any, service_token: Callable[..., str]
+) -> None:
+    from .test_stage4_online import DUEL, bearer, plan, targets
+
+    match_headers = bearer(service_token("match", "game", ["rounds.plan"]))
+
+    await bootstrap(game)
+    items = [await game.add_item(domain="film", ready_for=DUEL) for _ in range(6)]
+    with_art = {item: await game.ready_artwork(item, "film") for item in items[:3]}
+
+    response = await plan(game, match_headers, rounds=6)
+
+    assert response.status_code == 200, response.text
+    rounds = response.json()["rounds"]
+    by_item = {r["answer"]["media_item_id"]: r["artwork_asset_set_id"] for r in rounds}
+    assert len(by_item) == 6
+    for item in items:
+        expected = str(with_art[item]) if item in with_art else None
+        assert by_item[str(item)] == expected
+    assert set(targets(response)) == {str(i) for i in items}

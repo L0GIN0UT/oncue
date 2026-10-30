@@ -154,6 +154,7 @@ def _plan(r: PlannedRound) -> Json:
             for o in r.options
         ],
         "reveal_asset_set_id": str(r.reveal_asset_set_id) if r.reveal_asset_set_id else None,
+        "artwork_asset_set_id": str(r.artwork_asset_set_id) if r.artwork_asset_set_id else None,
     }
 
 
@@ -182,6 +183,7 @@ def _match(m: MatchState | None) -> Json | None:
         "contest": _contest(m.contest),
         "clue": _clue(m.clue),
         "final_clue": _clue(m.final_clue),
+        "artwork": _clue(m.artwork),
         "records": [
             {
                 "index": r.index,
@@ -295,6 +297,7 @@ def encode(room: Room) -> Json:
                 "presence": x.presence.value,
                 "away": x.away,
                 "ready": x.ready,
+                "listen_s": x.listen_s,
             }
             for x in room.seats
         ],
@@ -423,6 +426,7 @@ def _read_plan(d: Json) -> PlannedRound:
             for o in d.get("options", [])
         ),
         reveal_asset_set_id=_opt_uuid(d.get("reveal_asset_set_id")),
+        artwork_asset_set_id=_opt_uuid(d.get("artwork_asset_set_id")),
     )
 
 
@@ -452,6 +456,7 @@ def _read_match(d: Json | None) -> MatchState | None:
         contest=_read_contest(d.get("contest")),
         clue=_read_clue(d.get("clue")),
         final_clue=_read_clue(d.get("final_clue")),
+        artwork=_read_clue(d.get("artwork")),
         records=[
             RoundRecord(
                 index=int(r["index"]),
@@ -601,6 +606,7 @@ def _decode(d: Json) -> Room:
                 presence=Presence(x.get("presence", "online")),
                 away=bool(x.get("away", False)),
                 ready=bool(x.get("ready", False)),
+                listen_s=x.get("listen_s"),
             )
             for x in d["seats"]
         ],

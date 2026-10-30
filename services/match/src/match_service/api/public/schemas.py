@@ -140,6 +140,14 @@ class PlayerSlot(BaseModel):
     away: bool = Field(default=False, description="Игрок отметил «отошёл» (`match/away`)")
     ready: bool = Field(description="Готовность в лобби; сбрасывается при смене настроек")
     score: int = Field(default=0, ge=0, description="Очки в текущем матче")
+    listen_s: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Сколько секунд игрок слушает открытый уровень (округлено, не больше длины "
+            "подачи); `null` — неизвестно или не фаза `level_open`. Эфемерно, ответа не раскрывает"
+        ),
+    )
 
 
 class StartError(BaseModel):
@@ -330,6 +338,14 @@ class LevelClue(BaseModel):
     meta: ClueMeta
 
 
+class Artwork(BaseModel):
+    """Картинка ответа в ревиле (ADR 0073)."""
+
+    url: str
+    expires_at: datetime
+    mime: str
+
+
 class MatchPlayerView(BaseModel):
     """Игрок в матче для всех зрителей: статус без текста ответа."""
 
@@ -354,6 +370,13 @@ class RoundReveal(BaseModel):
     year: int | None
     persons: list[PersonOut]
     final_clue: LevelClue | None = Field(description="null — ассет ревила недоступен")
+    artwork: Artwork | None = Field(
+        default=None,
+        description=(
+            "Картинка ответа (обложка, постер; ADR 0073): подписанная короткоживущая ссылка; "
+            "`null` — картинки нет или она недоступна"
+        ),
+    )
 
 
 class MatchView(BaseModel):
@@ -486,6 +509,13 @@ class AwayRequest(_Command):
     """Отметка «отошёл» / «вернулся»."""
 
     away: bool
+
+
+class ListenRequest(_Command):
+    """Позиция прослушивания уровня (для метки «соперник слушает N с»)."""
+
+    level: int = Field(ge=1, le=MAX_LEVELS)
+    position_ms: int = Field(ge=0, description="Позиция воспроизведения; сверх длины зажимается")
 
 
 class MatchCommandResult(BaseModel):

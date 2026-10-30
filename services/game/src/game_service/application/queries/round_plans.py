@@ -21,6 +21,7 @@ from uuid import UUID
 
 import structlog
 
+from game_service.application.artwork import ARTWORK_CLUE_TYPE, ArtworkProfiles
 from game_service.application.catalog import ModeCatalog
 from game_service.application.ports import GameUnitOfWork, Json, UnitOfWorkFactory
 from game_service.application.rules import ModeRules
@@ -92,12 +93,21 @@ class RoundPlans:
         uow: Фабрика транзакций (только чтение проекций).
         catalog: Каталог режимов.
         candidate_limit: Сколько кандидатов запросить у порта (``GV_GAME__CANDIDATE_LIMIT``).
+        artwork: Профили картинки ответа по домену (ADR 0073); ``None`` — картинок в плане нет.
     """
 
-    def __init__(self, uow: UnitOfWorkFactory, catalog: ModeCatalog, *, candidate_limit: int):
+    def __init__(
+        self,
+        uow: UnitOfWorkFactory,
+        catalog: ModeCatalog,
+        *,
+        candidate_limit: int,
+        artwork: ArtworkProfiles | None = None,
+    ):
         self._uow = uow
         self._catalog = catalog
         self._candidate_limit = candidate_limit
+        self._artwork = artwork or ArtworkProfiles({})
 
     async def mode_version(self, key: str, version: int) -> Json:
         """Тело опубликованной или архивной версии.
@@ -264,6 +274,13 @@ class RoundPlans:
             if reveal_for is not None
             else {}
         )
+        # Картинка ответа (ADR 0073): только каталожный готовый набор, без сборников лобби.
+        artwork_hash = self._artwork.params_hash(rules.domain)
+        artwork = (
+            await _ready(uow, targets, ARTWORK_CLUE_TYPE, artwork_hash, ())
+            if artwork_hash is not None
+            else {}
+        )
         result: list[Json] = []
         for index, draw in enumerate(draws):
             target = draw.target.id
@@ -284,6 +301,9 @@ class RoundPlans:
                     ],
                     "reveal_asset_set_id": (
                         str(reveal[target].asset_set_id) if target in reveal else None
+                    ),
+                    "artwork_asset_set_id": (
+                        str(artwork[target].asset_set_id) if target in artwork else None
                     ),
                     "options": [
                         {

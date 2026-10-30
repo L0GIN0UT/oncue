@@ -214,6 +214,8 @@ class Room:
         """Сменить фазу (и сообщить ``phase``); команды прошлой фазы станут 409."""
         self.phase = phase
         self.phase_ends_at_ms = ends_at_ms
+        for seat in self.seats:
+            seat.listen_s = None  # позиция прослушивания относится к одному уровню
         self.phase_version = self.emit(
             "phase", phase=phase.value, phase_ends_at_ms=ends_at_ms, **data
         )

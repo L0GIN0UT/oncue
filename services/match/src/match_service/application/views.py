@@ -46,6 +46,13 @@ def clue_json(clue: Clue | None) -> Json | None:
     }
 
 
+def artwork_json(clue: Clue | None) -> Json | None:
+    """``Artwork`` ревила: ссылка на картинку ответа (ADR 0073)."""
+    if clue is None:
+        return None
+    return {"url": clue.url, "expires_at": iso(clue.expires_at_ms), "mime": clue.mime}
+
+
 def mode_ref(room: Room) -> Json:
     """``ModeRef`` (действующие формат и загадка комнаты)."""
     m = room.mode
@@ -112,6 +119,7 @@ def room_view(room: Room, now_ms: int) -> Json:
                 "away": s.away,
                 "ready": s.ready,
                 "score": _score(room, s.user_id),
+                "listen_s": s.listen_s,
             }
             for s in sorted(room.seats, key=lambda s: s.slot)
         ],
@@ -147,6 +155,7 @@ def _reveal(match: MatchState) -> Json:
         "year": key.year,
         "persons": [{"name": p.name, "role": p.role} for p in key.persons],
         "final_clue": clue_json(match.final_clue),
+        "artwork": artwork_json(match.artwork),
     }
 
 
@@ -246,6 +255,7 @@ def _player_delta(room: Room, user_id: str) -> Json | None:
         "away": seat.away,
         "score": _score(room, uid) if match is not None else None,
         "status": match.statuses.get(user_id) if in_round and match is not None else None,
+        "listen_s": seat.listen_s if in_round else None,
     }
 
 
@@ -265,6 +275,7 @@ def _round_reveal(room: Room, index: int) -> Json | None:
         "year": key.year,
         "persons": [{"name": p.name, "role": p.role} for p in key.persons],
         "final_clue": clue_json(match.final_clue) if match.round_index == index else None,
+        "artwork": artwork_json(match.artwork) if match.round_index == index else None,
         "results": [
             {
                 "user_id": str(r.user_id),

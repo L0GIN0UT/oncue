@@ -47,10 +47,12 @@ class Harness:
     poison_limit: int = 3
     op_users_max: int = 16
     empty_lobby_ms: int = 0
+    artwork_sets: bool = False
+    artwork_refresh_margin_ms: int = 10_000
     _ops: int = 0
 
     def __post_init__(self) -> None:
-        self.plans = FakeRoundPlanPort(factory=plan_factory(self.bodies))
+        self.plans = FakeRoundPlanPort(factory=plan_factory(self.bodies, artwork=self.artwork_sets))
         self.factory = factory()
         self.owner = RoomOwner(
             factory=self.factory,
@@ -72,6 +74,7 @@ class Harness:
                 empty_lobby_ms=self.empty_lobby_ms,
                 poison_limit=self.poison_limit,
                 op_users_max=self.op_users_max,
+                artwork_refresh_margin_ms=self.artwork_refresh_margin_ms,
             ),
         )
 

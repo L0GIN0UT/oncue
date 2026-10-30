@@ -84,6 +84,37 @@ def _plan_body(request: dict[str, Any]) -> dict[str, Any]:
 REQUEST = RoundPlanRequest(mode_key="film.party.frame", version=3, seed="a" * 32, rounds=1)
 
 
+async def test_plan_artwork_set_is_optional_for_old_and_new_game() -> None:
+    """Порядок выкладки (ADR 0073): старый game без поля -> `None`, новый -> набор."""
+    client = GameClient(GAME, Tokens(), timeout_s=1, breaker=CircuitBreaker(2, 60))
+    artwork_set = uuid7()
+    try:
+        with stub_service(GAME, service="game") as game:
+            route = game.route("POST", "/internal/v1/round-plans")
+            route.mock(side_effect=lambda r: httpx.Response(200, json=_plan_body(_json(r))))
+            old = await client.create_round_plan(REQUEST)
+            assert old.rounds[0].artwork_asset_set_id is None
+
+            def with_artwork(request: httpx.Request) -> httpx.Response:
+                body = _plan_body(_json(request))
+                body["rounds"][0]["artwork_asset_set_id"] = str(artwork_set)
+                return httpx.Response(200, json=body)
+
+            route.mock(side_effect=with_artwork)
+            new = await client.create_round_plan(REQUEST)
+            assert new.rounds[0].artwork_asset_set_id == artwork_set
+
+            def null_artwork(request: httpx.Request) -> httpx.Response:
+                body = _plan_body(_json(request))
+                body["rounds"][0]["artwork_asset_set_id"] = None
+                return httpx.Response(200, json=body)
+
+            route.mock(side_effect=null_artwork)
+            assert (await client.create_round_plan(REQUEST)).rounds[0].artwork_asset_set_id is None
+    finally:
+        await client.aclose()
+
+
 async def test_game_plan_parsed_and_errors_mapped() -> None:
     tokens = Tokens()
     client = GameClient(GAME, tokens, timeout_s=1, breaker=CircuitBreaker(2, 60))

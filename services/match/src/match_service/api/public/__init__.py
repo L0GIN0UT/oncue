@@ -44,6 +44,7 @@ from match_service.api.public.schemas import (
     GuessResult,
     JoinRequest,
     LeaveRequest,
+    ListenRequest,
     MatchCommandResult,
     MatchResult,
     MyMatchesPage,
@@ -471,6 +472,28 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
             "skip",
             body.op_id,
             body.model_dump(mode="json", exclude={"op_id"}),
+        )
+        return respond(outcome, MatchCommandResult)
+
+    @router.post(
+        "/rooms/{code}/listen",
+        response_model=MatchCommandResult,
+        summary="Позиция прослушивания уровня",
+        description=(
+            "Метка «соперник слушает N с»: владелец кладёт округлённое `listen_s` в сообщение "
+            "`player` и в `players[]` комнаты. Только участник и только фаза `level_open` "
+            "(иначе 409 `match.phase_mismatch`); позиция зажимается в длину подачи, устаревший "
+            "`level` и повтор значения — 200 без изменений. Фронту слать не чаще раза в секунду "
+            "и только при смене секунды; сверх `GV_MATCH__LISTEN_PER_PLAYER_PER_MIN` — 429. "
+            + _COMMON_ROOM_ERRORS
+        ),
+        responses=_ROOM_CMD,
+    )
+    async def listen(
+        code: RoomCodePath, body: ListenRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.listen(
+            actor_of(user), code, body.op_id, body.level, body.position_ms
         )
         return respond(outcome, MatchCommandResult)
 

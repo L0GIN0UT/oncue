@@ -270,6 +270,42 @@ def commit(
         room.emit("player", user_id=pid)
 
 
+def listen(room: Room, user_id: UUID, *, level: int, position_ms: int) -> bool:
+    """Позиция прослушивания игрока на открытом уровне (``listen_s`` в сообщении ``player``).
+
+    Значение округляется вниз до целых секунд и зажимается в длину подачи уровня
+    (``meta.seconds``), а без неё - в окно уровня. Устаревший уровень (клиент отстал на
+    смене) и повтор того же значения - без изменений и без ошибки.
+
+    Returns:
+        ``True``, если значение изменилось и ушло сообщением ``player``.
+
+    Raises:
+        MatchForbiddenError: не участник комнаты или матча.
+        MatchConflictError: ``match.phase_mismatch`` - уровень не открыт.
+    """
+    seat = room.require_seat(user_id)
+    room.require_phase(Phase.LEVEL_OPEN)
+    match = _match(room)
+    player = match.players.get(user_id)
+    contest = match.contest
+    if player is None or not player.active or contest is None:
+        raise MatchForbiddenError("вы не участник матча", code=errors.NOT_PARTICIPANT)
+    if level != contest.level:
+        return False
+    windows = (match.body.get("session") or {}).get("level_windows_s") or [0]
+    limit_s = float(windows[min(level, len(windows)) - 1])
+    seconds = match.clue.meta.get("seconds") if match.clue is not None else None
+    if isinstance(seconds, int | float) and not isinstance(seconds, bool) and seconds > 0:
+        limit_s = min(limit_s, float(seconds))
+    value = min(max(position_ms, 0), int(limit_s * 1000)) // 1000
+    if seat.listen_s == value:
+        return False
+    seat.listen_s = value
+    room.emit("player", user_id=str(user_id))
+    return True
+
+
 def refresh_statuses(room: Room, rules: MatchRules) -> None:
     """Обновить статусы игроков (виды комнаты строятся без ядра)."""
     match = room.match
@@ -396,6 +432,7 @@ def _open_level(room: Room, now_ms: int) -> list[Need]:
     contest = _contest(match)
     match.clue = None
     match.final_clue = None
+    match.artwork = None
     match.clue_pending = True
     room.touch(now_ms)
     room.set_phase(
@@ -522,12 +559,23 @@ def _finish_round(room: Room, rules: MatchRules, now_ms: int, *, void: bool) -> 
     return [NeedFinalClue(match.round_index)]
 
 
-def set_final_clue(room: Room, round_index: int, clue: Clue | None) -> None:
-    """Ассет ревила раунда получен (если ревил ещё идёт)."""
+def set_final_clue(
+    room: Room, round_index: int, clue: Clue | None, artwork: Clue | None = None
+) -> None:
+    """Ассет ревила и картинка ответа раунда получены (если ревил ещё идёт)."""
     match = room.match
     if match is None or room.phase is not Phase.REVEAL or match.round_index != round_index:
         return
     match.final_clue = clue
+    match.artwork = artwork
+
+
+def set_artwork(room: Room, round_index: int, artwork: Clue | None) -> None:
+    """Картинка ответа перевыдана или снята (если ревил этого раунда ещё идёт)."""
+    match = room.match
+    if match is None or room.phase is not Phase.REVEAL or match.round_index != round_index:
+        return
+    match.artwork = artwork
 
 
 # ----------------------------------------------------------------------------- выход
