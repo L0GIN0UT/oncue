@@ -30,11 +30,16 @@ from bff_web_service.application.dto import (
     OnlineChat,
     OnlineRules,
     OnlineStatus,
+    OpenRoom,
     OpenRooms,
     PersonalRecord,
     PlayerAppearanceCard,
+    PlayerLevel,
     QueuePoolCard,
     RatingCard,
+    RoomLobby,
+    RoomPlayer,
+    RoomSettings,
     SeasonCard,
     SessionResult,
     Shelf,
@@ -50,7 +55,12 @@ from bff_web_service.application.ports import (
     UpstreamRejectedError,
     UpstreamUnavailableError,
 )
-from bff_web_service.application.queries import GetLeaderboardsPage, GetMatchPage, GetOnlinePage
+from bff_web_service.application.queries import (
+    GetLeaderboardsPage,
+    GetMatchPage,
+    GetOnlinePage,
+    GetRoomPage,
+)
 from bff_web_service.domain import BlockStatus
 
 from gv_core.errors import (
@@ -127,7 +137,16 @@ class FakeMatch:
     pool: list[QueuePoolCard] | Exception = field(
         default_factory=lambda: [QueuePoolCard("film", "classic", 3)]
     )
+    lobby: RoomLobby | Exception | None = None
     calls: list[tuple[str, ...]] = field(default_factory=list)
+
+    async def room(self, token: str, code: str) -> RoomLobby:
+        self.calls.append(("room", token, code))
+        if self.lobby is None:
+            raise AssertionError("комнату этот тест не читает")
+        if isinstance(self.lobby, Exception):
+            raise self.lobby
+        return self.lobby
 
     async def queue_pool(self, token: str) -> list[QueuePoolCard]:
         self.calls.append(("pool", token))
@@ -830,3 +849,213 @@ async def test_leaderboards_without_ladders_and_key_blocks_hide() -> None:
     assert page.blocks.leaderboard.status is BlockStatus.UNAVAILABLE
     assert page.blocks.weekly.status is BlockStatus.UNAVAILABLE
     assert [c[0] for c in rating.calls] == ["ladders"]
+
+
+# ----------------------------------------------------------------------------- комнаты
+HOST = UUID(int=101)
+GUEST_PLAYER = UUID(int=102)
+SETTINGS = RoomSettings(
+    rounds=7,
+    level_window_s=15,
+    answer_format="classic",
+    clue_type="frame_progressive",
+    players_max=2,
+    visibility="public",
+)
+
+
+def open_room(code: str, host: UUID, name: str | None = None, nick: str = "Host") -> OpenRoom:
+    return OpenRoom(
+        code=code,
+        mode=MODE,
+        host_id=host,
+        host_nickname=nick,
+        players=1,
+        players_max=2,
+        settings=replace(SETTINGS, name=name),
+        created_at=AT,
+    )
+
+
+@dataclass
+class FakeLevels:
+    """Уровни игроков (progression, internal): пачки, сбои, журнал вызовов."""
+
+    known: dict[UUID, int] = field(default_factory=dict)
+    fail: Exception | None = None
+    calls: list[list[UUID]] = field(default_factory=list)
+
+    async def levels(self, user_ids: Sequence[UUID]) -> dict[UUID, PlayerLevel]:
+        self.calls.append(list(user_ids))
+        if self.fail is not None:
+            raise self.fail
+        return {u: PlayerLevel(u, self.known[u], 0) for u in user_ids if u in self.known}
+
+
+@dataclass
+class FakeSocialCount:
+    """social: только публичный счётчик онлайна."""
+
+    value: int | Exception = 128
+    calls: int = 0
+
+    async def friends(self, token: str) -> list[object]:
+        return []
+
+    async def incoming_requests(self, token: str) -> int:
+        return 0
+
+    async def online_count(self) -> int:
+        self.calls += 1
+        if isinstance(self.value, Exception):
+            raise self.value
+        return self.value
+
+
+def hub(
+    match: FakeMatch,
+    *,
+    levels: FakeLevels | None = None,
+    social: FakeSocialCount | None = None,
+    batch: int = 50,
+) -> GetOnlinePage:
+    return GetOnlinePage(
+        match,
+        FakeGame(),
+        FakeRating(),
+        concurrency=10,
+        rooms_limit=20,
+        matches_limit=10,
+        weekly_limit=2,
+        social=social,  # type: ignore[arg-type]  # фейк с одним методом
+        progression=levels,  # type: ignore[arg-type]  # фейк с одним методом
+        room_name_template="Комната {host}",
+        levels_batch_size=batch,
+    )
+
+
+async def test_hub_online_count_is_a_block_and_fails_alone() -> None:
+    page = await hub(FakeMatch(), social=FakeSocialCount(128))(USER)
+    assert page.blocks is not None and page.blocks.online_count is not None
+    assert page.blocks.online_count.data is not None
+    assert page.blocks.online_count.data.count == 128
+
+    down = await hub(FakeMatch(), social=FakeSocialCount(UpstreamUnavailableError("social", "x")))(
+        USER
+    )
+    assert down.blocks is not None and down.blocks.online_count is not None
+    assert down.blocks.online_count.status is BlockStatus.UNAVAILABLE
+    assert down.blocks.queues.status is BlockStatus.OK  # остальной хаб цел
+
+
+async def test_hub_without_social_has_no_online_count() -> None:
+    page = await hub(FakeMatch())(USER)
+    assert page.blocks is not None and page.blocks.online_count is None
+
+
+async def test_open_rooms_get_title_and_host_level_deduplicated() -> None:
+    other = UUID(int=103)
+    rooms = OpenRooms(
+        [
+            open_room("AAAAAAA2", HOST, name="Вечер кино"),
+            open_room("AAAAAAA3", other, nick="Маша"),
+            open_room("AAAAAAA4", HOST),
+        ]
+    )
+    levels = FakeLevels(known={HOST: 12})
+
+    page = await hub(FakeMatch(rooms=rooms), levels=levels)(USER)
+
+    assert levels.calls == [[HOST, other]]
+    assert page.blocks is not None and page.blocks.open_rooms.data is not None
+    got = [(r.title, r.host_level) for r in page.blocks.open_rooms.data.items]
+    assert got == [("Вечер кино", 12), ("Комната Маша", None), ("Комната Host", 12)]
+    assert page.blocks.open_rooms.data.items[0].settings.name == "Вечер кино"
+
+
+async def test_open_rooms_survive_progression_failure_without_levels() -> None:
+    rooms = OpenRooms([open_room("AAAAAAA2", HOST)])
+    levels = FakeLevels(fail=UpstreamUnavailableError("progression", "service_token_unavailable"))
+
+    page = await hub(FakeMatch(rooms=rooms), levels=levels)(USER)
+
+    assert page.blocks is not None and page.blocks.open_rooms.data is not None
+    [card] = page.blocks.open_rooms.data.items
+    assert (card.title, card.host_level) == ("Комната Host", None)
+
+
+def lobby() -> RoomLobby:
+    return RoomLobby(
+        code="AAAAAAA2",
+        mode=MODE,
+        host_id=HOST,
+        title="",
+        settings=SETTINGS,
+        players=[
+            RoomPlayer(user_id=HOST, nickname="Host", is_host=True, ready=True, presence="online"),
+            RoomPlayer(
+                user_id=GUEST_PLAYER, nickname="Anna", is_host=False, ready=False, presence="online"
+            ),
+        ],
+        players_min=2,
+        phase="lobby",
+    )
+
+
+def room_page(match: FakeMatch, levels: FakeLevels, batch: int = 50) -> GetRoomPage:
+    return GetRoomPage(
+        match,
+        levels,  # type: ignore[arg-type]  # фейк с одним методом
+        concurrency=10,
+        room_name_template="Комната {host}",
+        levels_batch_size=batch,
+    )
+
+
+async def test_room_page_adds_levels_and_default_title() -> None:
+    levels = FakeLevels(known={HOST: 7})
+    match = FakeMatch(lobby=lobby())
+
+    page = await room_page(match, levels)(USER, "AAAAAAA2")
+
+    assert match.calls == [("room", "user-token", "AAAAAAA2")]
+    room = page.blocks.room.data
+    assert room is not None
+    assert room.title == "Комната Host"
+    assert [(p.nickname, p.level) for p in room.players] == [("Host", 7), ("Anna", None)]
+
+
+async def test_room_page_keeps_host_given_name_and_survives_progression_failure() -> None:
+    named = replace(lobby(), settings=replace(SETTINGS, name="Тихий вечер"))
+    levels = FakeLevels(fail=UpstreamUnavailableError("progression", "timeout"))
+
+    page = await room_page(FakeMatch(lobby=named), levels)(USER, "AAAAAAA2")
+
+    room = page.blocks.room.data
+    assert room is not None
+    assert room.title == "Тихий вечер"
+    assert [p.level for p in room.players] == [None, None]
+
+
+async def test_room_page_levels_go_in_batches() -> None:
+    levels = FakeLevels(known={HOST: 3, GUEST_PLAYER: 4})
+    await room_page(FakeMatch(lobby=lobby()), levels, batch=1)(USER, "AAAAAAA2")
+    assert levels.calls == [[HOST], [GUEST_PLAYER]]
+
+
+async def test_room_page_guest_anonymous_and_match_errors() -> None:
+    levels = FakeLevels()
+    match = FakeMatch(lobby=lobby())
+    with pytest.raises(UnauthenticatedError):
+        await room_page(match, levels)(ANONYMOUS, "AAAAAAA2")
+    with pytest.raises(ForbiddenError):
+        await room_page(match, levels)(GUEST, "AAAAAAA2")
+    assert match.calls == [] and levels.calls == []
+
+    missing = FakeMatch(lobby=UpstreamRejectedError("match", 404, "match.room_not_found"))
+    with pytest.raises(NotFoundError):
+        await room_page(missing, levels)(USER, "AAAAAAA2")
+    down = FakeMatch(lobby=DOWN)
+    page = await room_page(down, levels)(USER, "AAAAAAA2")
+    assert page.blocks.room.status is BlockStatus.UNAVAILABLE
+    assert levels.calls == []

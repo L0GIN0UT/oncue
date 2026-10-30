@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from datetime import date, datetime
 from types import TracebackType
 from typing import Any, Self
@@ -175,6 +175,13 @@ class SqlProgress:
         """Прогресс без блокировки."""
         row = (await self._s.execute(select(progress).where(progress.c.user_id == user_id))).first()
         return None if row is None else self._row(row)
+
+    async def many(self, user_ids: Sequence[UUID]) -> list[ProgressRow]:
+        """Прогресс пачки игроков без блокировки."""
+        if not user_ids:
+            return []
+        rows = await self._s.execute(select(progress).where(progress.c.user_id.in_(user_ids)))
+        return [self._row(r) for r in rows]
 
     async def save(self, row: ProgressRow) -> None:
         """Сохранить опыт, уровень и версию конфига."""

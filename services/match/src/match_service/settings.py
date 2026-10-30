@@ -26,6 +26,7 @@ class MatchSettings(BaseModel):
         presence_timeout_s: Без heartbeat дольше — игрок «Отключён».
         max_rooms_per_instance: Комнат на один процесс ``rooms``.
         lobby_create_per_user_per_hour: Создание комнат пользователем.
+        room_name_max_length: Предел длины названия комнаты от хоста (≤ 100 — предел схемы).
         join_by_code_per_ip_per_min: Поиск комнаты по коду с одного IP (fail-closed).
         commands_per_player_per_s: Команды игрока в секунду.
         chat_per_player_per_min: Сообщения чата игрока в минуту.
@@ -97,6 +98,7 @@ class MatchSettings(BaseModel):
     presence_timeout_s: int = Field(default=12, ge=2, le=120)
     max_rooms_per_instance: int = Field(default=300, ge=1, le=10000)
     lobby_create_per_user_per_hour: int = Field(default=20, ge=1)
+    room_name_max_length: int = Field(default=40, ge=1, le=100)
     join_by_code_per_ip_per_min: int = Field(default=30, ge=1)
     commands_per_player_per_s: int = Field(default=10, ge=1)
     chat_per_player_per_min: int = Field(default=20, ge=1)

@@ -284,6 +284,7 @@ def encode(room: Room) -> Json:
             "players_max": s.players_max,
             "visibility": s.visibility,
             "collection_ids": _ids(s.collection_ids),
+            "name": s.name,
         },
         "host_id": str(room.host_id),
         "seats": [
@@ -590,6 +591,7 @@ def _decode(d: Json) -> Room:
             players_max=int(s["players_max"]),
             visibility=str(s["visibility"]),
             collection_ids=tuple(_uuid(c) for c in s.get("collection_ids", [])),
+            name=s.get("name"),
         ),
         host_id=_uuid(d["host_id"]),
         seats=[

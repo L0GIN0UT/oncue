@@ -45,6 +45,12 @@ async def _schemas(http: httpx.AsyncClient) -> dict[str, Any]:
         ("PlayerPage", "nickname"),
         ("MyMatchCard", "participants"),
         ("AppearanceCard", "custom_avatar_asset_id"),
+        ("OnlineBlocks", "online_count"),
+        ("OpenRoomCard", "title"),
+        ("OpenRoomCard", "host_id"),
+        ("OpenRoomCard", "host_level"),
+        ("RoomSettingsCard", "name"),
+        ("RoomPlayerCard", "level"),
     ],
 )
 def test_social_fields_are_optional(schemas: dict[str, Any], model: str, field: str) -> None:

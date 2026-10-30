@@ -17,6 +17,7 @@ from bff_web_service.application.queries import (
     GetPlayerPage,
     GetProfilePage,
     GetResultsPage,
+    GetRoomPage,
     GetSession,
     GetShellPage,
     GetShopPage,
@@ -39,6 +40,7 @@ class BffDeps:
     get_library_shelf: GetLibraryShelfPage
     get_online: GetOnlinePage
     get_match: GetMatchPage
+    get_room: GetRoomPage
     get_leaderboards: GetLeaderboardsPage
     get_profile: GetProfilePage
     get_player: GetPlayerPage
