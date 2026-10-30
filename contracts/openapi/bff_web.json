@@ -607,6 +607,33 @@
         "title": "Block[MyMatchesList]",
         "type": "object"
       },
+      "Block_OnlineCountCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnlineCountCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[OnlineCountCard]",
+        "type": "object"
+      },
       "Block_OpenRoomsList_": {
         "properties": {
           "data": {
@@ -794,6 +821,33 @@
           "status"
         ],
         "title": "Block[RewardsCard]",
+        "type": "object"
+      },
+      "Block_RoomCard_": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoomCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Block[RoomCard]",
         "type": "object"
       },
       "Block_SanctionsCard_": {
@@ -4308,6 +4362,17 @@
           "my_matches": {
             "$ref": "#/components/schemas/Block_MyMatchesList_"
           },
+          "online_count": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Block_OnlineCountCard_"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "«Игроков сейчас» (social, Redis presence; гости не считаются, число кэшируется на секунды); null — не вызывалось"
+          },
           "open_rooms": {
             "$ref": "#/components/schemas/Block_OpenRoomsList_"
           },
@@ -4369,6 +4434,21 @@
           "free_text"
         ],
         "title": "OnlineChatCard",
+        "type": "object"
+      },
+      "OnlineCountCard": {
+        "description": "Игроки с аккаунтом онлайн сейчас (social); гости не считаются.",
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "OnlineCountCard",
         "type": "object"
       },
       "OnlineModeCard": {
@@ -4581,6 +4661,32 @@
             "title": "Created At",
             "type": "string"
           },
+          "host_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Хост лобби (для аватара и профиля)",
+            "title": "Host Id"
+          },
+          "host_level": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень хоста (progression); null — не получен",
+            "title": "Host Level"
+          },
           "host_nickname": {
             "title": "Host Nickname",
             "type": "string"
@@ -4600,6 +4706,12 @@
           },
           "settings": {
             "$ref": "#/components/schemas/RoomSettingsCard"
+          },
+          "title": {
+            "default": "",
+            "description": "Название для показа: введённое хостом (`settings.name`) или «Комната <ник хоста>» по шаблону `GV_PAGES__ROOM_NAME_TEMPLATE`",
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
@@ -5754,6 +5866,143 @@
         "title": "RewardsCard",
         "type": "object"
       },
+      "RoomBlocks": {
+        "description": "Блоки экрана комнаты.",
+        "properties": {
+          "room": {
+            "$ref": "#/components/schemas/Block_RoomCard_"
+          }
+        },
+        "required": [
+          "room"
+        ],
+        "title": "RoomBlocks",
+        "type": "object"
+      },
+      "RoomCard": {
+        "description": "Комната по коду: состав и настройки без данных матча.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "host_id": {
+            "format": "uuid",
+            "title": "Host Id",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/MatchModeCard"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/RoomPlayerCard"
+            },
+            "title": "Players",
+            "type": "array"
+          },
+          "players_min": {
+            "minimum": 2.0,
+            "title": "Players Min",
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/RoomSettingsCard"
+          },
+          "title": {
+            "description": "Название для показа: введённое хостом или «Комната <ник хоста>»",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "mode",
+          "host_id",
+          "title",
+          "settings",
+          "players",
+          "players_min",
+          "phase"
+        ],
+        "title": "RoomCard",
+        "type": "object"
+      },
+      "RoomPage": {
+        "description": "``GET /v1/pages/rooms/{code}`` (только пользователь).",
+        "properties": {
+          "blocks": {
+            "$ref": "#/components/schemas/RoomBlocks"
+          }
+        },
+        "required": [
+          "blocks"
+        ],
+        "title": "RoomPage",
+        "type": "object"
+      },
+      "RoomPlayerCard": {
+        "description": "Место игрока в комнате (``match /v1/rooms/{code}``) с уровнем из progression.",
+        "properties": {
+          "away": {
+            "default": false,
+            "title": "Away",
+            "type": "boolean"
+          },
+          "is_host": {
+            "title": "Is Host",
+            "type": "boolean"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Уровень игрока (progression); null — не получен",
+            "title": "Level"
+          },
+          "nickname": {
+            "title": "Nickname",
+            "type": "string"
+          },
+          "presence": {
+            "enum": [
+              "online",
+              "disconnected",
+              "left"
+            ],
+            "title": "Presence",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname",
+          "is_host",
+          "ready",
+          "presence"
+        ],
+        "title": "RoomPlayerCard",
+        "type": "object"
+      },
       "RoomSettingsCard": {
         "description": "Действующие настройки комнаты (шаблон + переопределения хоста).",
         "properties": {
@@ -5778,6 +6027,18 @@
             "minimum": 1.0,
             "title": "Level Window S",
             "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Название, которое ввёл хост; null — не задано (см. `title`)",
+            "title": "Name"
           },
           "players_max": {
             "minimum": 2.0,
@@ -7853,6 +8114,115 @@
           }
         },
         "summary": "Экран результатов сессии",
+        "tags": [
+          "bff_web"
+        ]
+      }
+    },
+    "/v1/pages/rooms/{code}": {
+      "get": {
+        "description": "Комната по коду (match `/v1/rooms/{code}`) + уровни игроков (progression, internal-ручка под сервисным токеном bff_web). Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Нет комнаты — 404 `match.room_not_found`; match недоступен — блок `room` `unavailable`; progression недоступен — у игроков `level: null`. Всегда `private, no-store`.",
+        "operationId": "room_page_v1_pages_rooms__code__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          }
+        },
+        "summary": "Комната: состав, название и уровни игроков",
         "tags": [
           "bff_web"
         ]

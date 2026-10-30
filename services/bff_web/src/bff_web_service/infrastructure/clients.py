@@ -77,6 +77,7 @@ from bff_web_service.application.dto import (
     Person,
     PersonalRecord,
     PlayerAppearanceCard,
+    PlayerLevel,
     PlayerRelation,
     Presentation,
     Preset,
@@ -91,6 +92,8 @@ from bff_web_service.application.dto import (
     ResultRound,
     Reveal,
     RewardStreakCard,
+    RoomLobby,
+    RoomPlayer,
     RoomSettings,
     RoundPlayerResult,
     RoundsChoice,
@@ -937,11 +940,25 @@ class _RoomSettingsIn(_In):
     players_max: int = Field(ge=2)
     visibility: Literal["public", "private"]
     collection_ids: list[UUID] = Field(default_factory=list)
+    name: str | None = None
+
+    def dto(self) -> RoomSettings:
+        return RoomSettings(
+            rounds=self.rounds,
+            level_window_s=self.level_window_s,
+            answer_format=self.answer_format,
+            clue_type=self.clue_type,
+            players_max=self.players_max,
+            visibility=self.visibility,
+            collection_ids=list(self.collection_ids),
+            name=self.name,
+        )
 
 
 class _OpenRoomIn(_In):
     code: str = Field(pattern=r"^[A-HJ-NP-Z2-9]{8}$")
     mode: _MatchModeIn
+    host_id: UUID | None = None
     host_nickname: str
     players: int = Field(ge=0)
     players_max: int = Field(ge=2)
@@ -949,23 +966,56 @@ class _OpenRoomIn(_In):
     created_at: datetime
 
     def dto(self) -> OpenRoom:
-        st = self.settings
         return OpenRoom(
             code=self.code,
             mode=self.mode.dto(),
+            host_id=self.host_id,
             host_nickname=self.host_nickname,
             players=self.players,
             players_max=self.players_max,
-            settings=RoomSettings(
-                rounds=st.rounds,
-                level_window_s=st.level_window_s,
-                answer_format=st.answer_format,
-                clue_type=st.clue_type,
-                players_max=st.players_max,
-                visibility=st.visibility,
-                collection_ids=list(st.collection_ids),
-            ),
+            settings=self.settings.dto(),
             created_at=self.created_at,
+        )
+
+
+class _PlayerSlotIn(_In):
+    user_id: UUID
+    nickname: str
+    is_host: bool
+    presence: Literal["online", "disconnected", "left"]
+    away: bool = False
+    ready: bool
+
+    def dto(self) -> RoomPlayer:
+        return RoomPlayer(
+            user_id=self.user_id,
+            nickname=self.nickname,
+            is_host=self.is_host,
+            ready=self.ready,
+            presence=self.presence,
+            away=self.away,
+        )
+
+
+class _RoomViewIn(_In):
+    code: str
+    mode: _MatchModeIn
+    host_id: UUID
+    players: list[_PlayerSlotIn]
+    players_min: int = Field(ge=2)
+    settings: _RoomSettingsIn
+    phase: str
+
+    def dto(self) -> RoomLobby:
+        return RoomLobby(
+            code=self.code,
+            mode=self.mode.dto(),
+            host_id=self.host_id,
+            title="",
+            settings=self.settings.dto(),
+            players=[p.dto() for p in self.players],
+            players_min=self.players_min,
+            phase=self.phase,
         )
 
 
@@ -1083,6 +1133,7 @@ class _MatchResultIn(_In):
 
 
 _OPEN_ROOMS = TypeAdapter(_OpenRoomsIn)
+_ROOM_VIEW = TypeAdapter(_RoomViewIn)
 _MY_MATCHES = TypeAdapter(_MyMatchesIn)
 _MATCH_RESULT = TypeAdapter(_MatchResultIn)
 
@@ -1133,6 +1184,14 @@ class HttpMatchClient:
         """``GET /v1/queue/pool``."""
         body = await self._http.get("/v1/queue/pool", token=token)
         return [e.dto() for e in _parse(self._http.service, _QUEUE_POOL, body).items]
+
+    async def room(self, token: str, code: str) -> RoomLobby:
+        """``GET /v1/rooms/{code}``."""
+        body = await self._http.get(f"/v1/rooms/{code}", token=token)
+        view = _parse(self._http.service, _ROOM_VIEW, body)
+        if view.code != code:
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return view.dto()
 
 
 # ----------------------------------------------------------------------------- rating (4b)
@@ -1540,6 +1599,19 @@ _BADGES = TypeAdapter(_BadgesIn)
 _WHEEL = TypeAdapter(_WheelIn)
 
 
+class _PlayerLevelIn(_In):
+    user_id: UUID
+    level: int = Field(ge=1)
+    xp_in_level: int = Field(ge=0)
+
+
+class _PlayerLevelsIn(_In):
+    items: list[_PlayerLevelIn]
+
+
+_LEVELS = TypeAdapter(_PlayerLevelsIn)
+
+
 class HttpProgressionClient:
     """Публичный API progression: всё личное и не кэшируется, кроме активного события.
 
@@ -1554,10 +1626,37 @@ class HttpProgressionClient:
         active_event_ttl_s: int = 30,
         event_progress_ttl_s: int = 15,
         cache_prefix: str = "bff_web:",
+        service_tokens: ServiceTokens | None = None,
     ) -> None:
         self._http = http
         self._event_ttl, self._prefix = active_event_ttl_s, cache_prefix
         self._progress_ttl = event_progress_ttl_s
+        self._service_tokens = service_tokens
+
+    async def levels(self, user_ids: Sequence[UUID]) -> dict[UUID, PlayerLevel]:
+        """``GET /internal/v1/levels?user_ids=...`` под сервисным токеном bff_web.
+
+        Токен зрителя здесь не нужен и не уходит: уровни показываются игрокам комнаты, а
+        какие игроки видны зрителю, решает страница. Токен не получен (``GV_SERVICE_AUTH__*``
+        не заданы, identity недоступен) — ``UpstreamUnavailableError``.
+        """
+        if self._service_tokens is None:
+            raise UpstreamUnavailableError(self._http.service, "service_auth_not_configured")
+        try:
+            token = await self._service_tokens.token()
+        except DependencyUnavailableError as exc:
+            raise UpstreamUnavailableError(self._http.service, "service_token_unavailable") from exc
+        query = urlencode([("user_ids", str(i)) for i in user_ids])
+        try:
+            body = await self._http.get(f"/internal/v1/levels?{query}", token=token)
+        except UpstreamRejectedError as exc:
+            if exc.status == HTTP_UNAUTHORIZED:
+                self._service_tokens.invalidate()
+            raise
+        items = _parse(self._http.service, _LEVELS, body).items
+        if not {i.user_id for i in items} <= set(user_ids):
+            raise UpstreamUnavailableError(self._http.service, "contract_violation")
+        return {i.user_id: PlayerLevel(i.user_id, i.level, i.xp_in_level) for i in items}
 
     async def active_event(self) -> ActiveEvent | None:
         """``GET /v1/events/active`` (анонимно, общий кэш)."""
@@ -2048,11 +2147,40 @@ _COMMENTS = TypeAdapter(_CommentPageIn)
 _SANCTIONS = TypeAdapter(_SanctionListIn)
 
 
-class HttpSocialClient:
-    """Публичный API social: личное и комментарии; не кэшируется (ответ зависит от зрителя)."""
+class _OnlineCountIn(_In):
+    count: int = Field(ge=0)
 
-    def __init__(self, http: UpstreamHttp) -> None:
+
+_ONLINE_COUNT = TypeAdapter(_OnlineCountIn)
+
+
+class HttpSocialClient:
+    """Публичный API social: личное и комментарии; не кэшируется (ответ зависит от зрителя).
+
+    Исключение — общий счётчик «игроков онлайн»: он одинаков для всех и держится в кэше
+    ``online_count_ttl_s`` секунд.
+    """
+
+    def __init__(
+        self,
+        http: UpstreamHttp,
+        *,
+        online_count_ttl_s: int = 5,
+        cache_prefix: str = "bff_web:",
+    ) -> None:
         self._http = http
+        self._online_ttl = online_count_ttl_s
+        self._online_key = f"{cache_prefix}social:online_count:v1"
+
+    async def online_count(self) -> int:
+        """``GET /v1/presence/online-count`` (без токена, общий кэш)."""
+        body, cached = await self._http.get_public(
+            "/v1/presence/online-count", cache_key=self._online_key
+        )
+        count = _parse(self._http.service, _ONLINE_COUNT, body).count
+        if not cached:
+            await self._http.remember(self._online_key, body, self._online_ttl)
+        return count
 
     async def relation(self, token: str, user_id: UUID) -> PlayerRelation:
         """``GET /v1/players/{id}/relation``."""

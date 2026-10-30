@@ -256,6 +256,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pages/rooms/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Комната: состав, название и уровни игроков
+         * @description Комната по коду (match `/v1/rooms/{code}`) + уровни игроков (progression, internal-ручка под сервисным токеном bff_web). Только пользователь: без токена — 401, гость — 403 `auth.guest_forbidden`. Нет комнаты — 404 `match.room_not_found`; match недоступен — блок `room` `unavailable`; progression недоступен — у игроков `level: null`. Всегда `private, no-store`.
+         */
+        get: operations["room_page_v1_pages_rooms__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pages/shell": {
         parameters: {
             query?: never;
@@ -735,6 +755,15 @@ export interface components {
              */
             status: "ok" | "unavailable";
         };
+        /** Block[OnlineCountCard] */
+        Block_OnlineCountCard_: {
+            data?: components["schemas"]["OnlineCountCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
         /** Block[OpenRoomsList] */
         Block_OpenRoomsList_: {
             data?: components["schemas"]["OpenRoomsList"] | null;
@@ -792,6 +821,15 @@ export interface components {
         /** Block[RewardsCard] */
         Block_RewardsCard_: {
             data?: components["schemas"]["RewardsCard"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable";
+        };
+        /** Block[RoomCard] */
+        Block_RoomCard_: {
+            data?: components["schemas"]["RoomCard"] | null;
             /**
              * Status
              * @enum {string}
@@ -2101,6 +2139,8 @@ export interface components {
             /** @description Онлайн-режимы для создания комнаты (`game /v1/modes?session=online`) */
             modes: components["schemas"]["Block_list_OnlineModeCard__"];
             my_matches: components["schemas"]["Block_MyMatchesList_"];
+            /** @description «Игроков сейчас» (social, Redis presence; гости не считаются, число кэшируется на секунды); null — не вызывалось */
+            online_count?: components["schemas"]["Block_OnlineCountCard_"] | null;
             open_rooms: components["schemas"]["Block_OpenRoomsList_"];
             /** @description 4b: сколько игроков ищет матч (`match /v1/queue/pool`) */
             queues: components["schemas"]["Block_list_QueuePoolCard__"];
@@ -2125,6 +2165,14 @@ export interface components {
             free_text: boolean;
             /** Phrases */
             phrases: string[];
+        };
+        /**
+         * OnlineCountCard
+         * @description Игроки с аккаунтом онлайн сейчас (social); гости не считаются.
+         */
+        OnlineCountCard: {
+            /** Count */
+            count: number;
         };
         /**
          * OnlineModeCard
@@ -2227,6 +2275,16 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Host Id
+             * @description Хост лобби (для аватара и профиля)
+             */
+            host_id?: string | null;
+            /**
+             * Host Level
+             * @description Уровень хоста (progression); null — не получен
+             */
+            host_level?: number | null;
             /** Host Nickname */
             host_nickname: string;
             mode: components["schemas"]["MatchModeCard"];
@@ -2235,6 +2293,12 @@ export interface components {
             /** Players Max */
             players_max: number;
             settings: components["schemas"]["RoomSettingsCard"];
+            /**
+             * Title
+             * @description Название для показа: введённое хостом (`settings.name`) или «Комната <ник хоста>» по шаблону `GV_PAGES__ROOM_NAME_TEMPLATE`
+             * @default
+             */
+            title: string;
         };
         /**
          * OpenRoomsList
@@ -2717,6 +2781,78 @@ export interface components {
             domain: "music" | "film";
         };
         /**
+         * RoomBlocks
+         * @description Блоки экрана комнаты.
+         */
+        RoomBlocks: {
+            room: components["schemas"]["Block_RoomCard_"];
+        };
+        /**
+         * RoomCard
+         * @description Комната по коду: состав и настройки без данных матча.
+         */
+        RoomCard: {
+            /** Code */
+            code: string;
+            /**
+             * Host Id
+             * Format: uuid
+             */
+            host_id: string;
+            mode: components["schemas"]["MatchModeCard"];
+            /** Phase */
+            phase: string;
+            /** Players */
+            players: components["schemas"]["RoomPlayerCard"][];
+            /** Players Min */
+            players_min: number;
+            settings: components["schemas"]["RoomSettingsCard"];
+            /**
+             * Title
+             * @description Название для показа: введённое хостом или «Комната <ник хоста>»
+             */
+            title: string;
+        };
+        /**
+         * RoomPage
+         * @description ``GET /v1/pages/rooms/{code}`` (только пользователь).
+         */
+        RoomPage: {
+            blocks: components["schemas"]["RoomBlocks"];
+        };
+        /**
+         * RoomPlayerCard
+         * @description Место игрока в комнате (``match /v1/rooms/{code}``) с уровнем из progression.
+         */
+        RoomPlayerCard: {
+            /**
+             * Away
+             * @default false
+             */
+            away: boolean;
+            /** Is Host */
+            is_host: boolean;
+            /**
+             * Level
+             * @description Уровень игрока (progression); null — не получен
+             */
+            level?: number | null;
+            /** Nickname */
+            nickname: string;
+            /**
+             * Presence
+             * @enum {string}
+             */
+            presence: "online" | "disconnected" | "left";
+            /** Ready */
+            ready: boolean;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * RoomSettingsCard
          * @description Действующие настройки комнаты (шаблон + переопределения хоста).
          */
@@ -2732,6 +2868,11 @@ export interface components {
              * @description Окно уровня, с
              */
             level_window_s: number;
+            /**
+             * Name
+             * @description Название, которое ввёл хост; null — не задано (см. `title`)
+             */
+            name?: string | null;
             /** Players Max */
             players_max: number;
             /** Rounds */
@@ -3788,6 +3929,78 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    room_page_v1_pages_rooms__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoomPage"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

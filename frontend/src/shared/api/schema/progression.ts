@@ -494,6 +494,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/v1/levels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Уровни игроков пачкой
+         * @description Для bff_web (игроки комнаты и лобби): уровень и опыт внутри уровня по списку `user_ids` (повторяющийся параметр). Сервисный токен с областью `levels.read` (audience = progression). Не больше `GV_PROGRESSION__LEVELS_MAX_USERS` игроков (422 `progression.too_many_users`, `details.given/max`), лимит `GV_PROGRESSION__LEVELS_PER_MIN` на клиента (429 + `Retry-After`). Скрытый профиль в ответ не попадает, игрок без опыта — уровень 1. Нет конфига — 503.
+         */
+        get: operations["levels_internal_v1_levels_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/appearance": {
         parameters: {
             query?: never;
@@ -2214,6 +2234,34 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * PlayerLevel
+         * @description Уровень игрока.
+         */
+        PlayerLevel: {
+            /** Level */
+            level: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /**
+             * Xp In Level
+             * @description Опыт внутри текущего уровня
+             */
+            xp_in_level: number;
+        };
+        /**
+         * PlayerLevels
+         * @description Уровни запрошенных игроков (порядок запроса, дубли схлопнуты).
+         *
+         *     Игрока со скрытым профилем в ответе нет; игрок, ещё ничего не получавший, — 1 уровень.
+         */
+        PlayerLevels: {
+            /** Items */
+            items: components["schemas"]["PlayerLevel"][];
         };
         /**
          * PlayersAppearance
@@ -4909,6 +4957,79 @@ export interface operations {
             };
             /** @description Некорректные данные */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    levels_internal_v1_levels_get: {
+        parameters: {
+            query: {
+                /** @description Игроки */
+                user_ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerLevels"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

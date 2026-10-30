@@ -279,3 +279,10 @@ class PresenceStore(Protocol):
     async def online(self, user_ids: Collection[UUID]) -> set[UUID]:
         """Кто онлайн; недоступность хранилища - пустое множество (деградация)."""
         ...
+
+    async def count_online(self) -> int:
+        """Сколько игроков с аккаунтом онлайн (окно ``presence.ttl_s``).
+
+        Недоступность хранилища - ``LimiterUnavailableError`` (счётчик не подменяют нулём).
+        """
+        ...

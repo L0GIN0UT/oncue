@@ -1081,6 +1081,9 @@ class RoomSettingsCard(BaseModel):
     players_max: int = Field(ge=2)
     visibility: Literal["public", "private"]
     collection_ids: list[UUID] = Field(default_factory=list)
+    name: str | None = Field(
+        default=None, description="Название, которое ввёл хост; null — не задано (см. `title`)"
+    )
 
 
 class OpenRoomCard(BaseModel):
@@ -1093,6 +1096,17 @@ class OpenRoomCard(BaseModel):
     players_max: int = Field(ge=2)
     settings: RoomSettingsCard
     created_at: datetime
+    host_id: UUID | None = Field(default=None, description="Хост лобби (для аватара и профиля)")
+    title: str = Field(
+        default="",
+        description=(
+            "Название для показа: введённое хостом (`settings.name`) или «Комната <ник хоста>» "
+            "по шаблону `GV_PAGES__ROOM_NAME_TEMPLATE`"
+        ),
+    )
+    host_level: int | None = Field(
+        default=None, ge=1, description="Уровень хоста (progression); null — не получен"
+    )
 
 
 class OpenRoomsList(BaseModel):
@@ -1282,6 +1296,12 @@ class OnlineModeCard(BaseModel):
     online: OnlineRulesCard
 
 
+class OnlineCountCard(BaseModel):
+    """Игроки с аккаунтом онлайн сейчас (social); гости не считаются."""
+
+    count: int = Field(ge=0)
+
+
 class OnlineBlocks(BaseModel):
     """Блоки хаба онлайна: каждый деградирует независимо."""
 
@@ -1309,6 +1329,13 @@ class OnlineBlocks(BaseModel):
         default=None,
         description="5c: друзья со статусом и число входящих заявок (social); null — не вызывалось",
     )
+    online_count: Block[OnlineCountCard] | None = Field(
+        default=None,
+        description=(
+            "«Игроков сейчас» (social, Redis presence; гости не считаются, число кэшируется "
+            "на секунды); null — не вызывалось"
+        ),
+    )
 
 
 class OnlinePage(BaseModel):
@@ -1322,6 +1349,47 @@ class OnlinePage(BaseModel):
         )
     )
     blocks: OnlineBlocks | None = None
+
+
+class RoomPlayerCard(BaseModel):
+    """Место игрока в комнате (``match /v1/rooms/{code}``) с уровнем из progression."""
+
+    user_id: UUID
+    nickname: str
+    is_host: bool
+    ready: bool
+    presence: Literal["online", "disconnected", "left"]
+    away: bool = False
+    level: int | None = Field(
+        default=None, ge=1, description="Уровень игрока (progression); null — не получен"
+    )
+
+
+class RoomCard(BaseModel):
+    """Комната по коду: состав и настройки без данных матча."""
+
+    code: str
+    mode: MatchModeCard
+    host_id: UUID
+    title: str = Field(
+        description="Название для показа: введённое хостом или «Комната <ник хоста>»"
+    )
+    settings: RoomSettingsCard
+    players: list[RoomPlayerCard]
+    players_min: int = Field(ge=2)
+    phase: str
+
+
+class RoomBlocks(BaseModel):
+    """Блоки экрана комнаты."""
+
+    room: Block[RoomCard]
+
+
+class RoomPage(BaseModel):
+    """``GET /v1/pages/rooms/{code}`` (только пользователь)."""
+
+    blocks: RoomBlocks
 
 
 class MatchPlayerCard(BaseModel):

@@ -861,11 +861,17 @@ class RoomSettings:
     players_max: int
     visibility: Literal["public", "private"]
     collection_ids: list[UUID] = field(default_factory=list)
+    name: str | None = None
+    """Название комнаты, как его ввёл хост (``None`` — не задано)."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class OpenRoom:
-    """Открытое лобби (``match GET /v1/rooms/open``)."""
+    """Открытое лобби (``match GET /v1/rooms/open``).
+
+    ``title`` и ``host_level`` дописывает bff: название по шаблону (введённое хостом имя
+    или «Комната <ник хоста>») и уровень хоста из progression (``None`` — не получен).
+    """
 
     code: str
     mode: MatchMode
@@ -874,6 +880,66 @@ class OpenRoom:
     players_max: int
     settings: RoomSettings
     created_at: datetime
+    host_id: UUID | None = None
+    title: str = ""
+    host_level: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerLevel:
+    """Уровень игрока (``progression GET /internal/v1/levels``)."""
+
+    user_id: UUID
+    level: int
+    xp_in_level: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RoomPlayer:
+    """Место игрока в комнате; ``level`` дописывает bff (``None`` — progression не ответил)."""
+
+    user_id: UUID
+    nickname: str
+    is_host: bool
+    ready: bool
+    presence: Literal["online", "disconnected", "left"]
+    away: bool = False
+    level: int | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RoomLobby:
+    """Комната по коду (``match GET /v1/rooms/{code}``): состав и настройки без данных матча."""
+
+    code: str
+    mode: MatchMode
+    host_id: UUID
+    title: str
+    settings: RoomSettings
+    players: list[RoomPlayer]
+    players_min: int
+    phase: str
+
+
+@dataclass(frozen=True, slots=True)
+class RoomBlocks:
+    """Блоки экрана комнаты."""
+
+    room: Block[RoomLobby]
+
+
+@dataclass(frozen=True, slots=True)
+class RoomPage:
+    """``GET /v1/pages/rooms/{code}``."""
+
+    blocks: RoomBlocks
+
+
+@dataclass(frozen=True, slots=True)
+class OnlineCountCard:
+    """Игроки с аккаунтом онлайн сейчас (social, Redis; гости не считаются)."""
+
+    count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -1142,6 +1208,7 @@ class OnlineBlocks:
     seasons: Block[list[SeasonCard]]
     weekly: Block[list[WeeklyTopCard]]
     friends: Block[FriendsCard] | None = None
+    online_count: Block[OnlineCountCard] | None = None
 
 
 @dataclass(frozen=True, slots=True)

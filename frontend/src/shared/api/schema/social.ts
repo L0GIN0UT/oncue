@@ -667,6 +667,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/presence/online-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Сколько игроков онлайн
+         * @description Игроки с аккаунтом, приславшие heartbeat за последние `presence.ttl_s` секунд; гости не считаются. Публичная ручка без токена: число кэшируется в процессе (`GV_SOCIAL__ONLINE_COUNT_CACHE_S`), чтения с одного IP ограничены (`GV_SOCIAL__ONLINE_COUNT_PER_MINUTE`, 429 + `Retry-After`). Redis недоступен - 503.
+         */
+        get: operations["online_count_v1_presence_online_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/report-reasons": {
         parameters: {
             query?: never;
@@ -1145,6 +1165,14 @@ export interface components {
         MySanctions: {
             /** Items */
             items: components["schemas"]["MySanction"][];
+        };
+        /**
+         * OnlineCount
+         * @description Игроки с аккаунтом онлайн (гости не считаются).
+         */
+        OnlineCount: {
+            /** Count */
+            count: number;
         };
         /**
          * PlayerRelation
@@ -3947,6 +3975,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Problem"];
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    online_count_v1_presence_online_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnlineCount"];
                 };
             };
             /** @description Слишком много запросов */

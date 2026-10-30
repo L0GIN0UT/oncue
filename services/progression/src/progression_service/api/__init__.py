@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from gv_service import Infrastructure
 from progression_service.api.admin import build_admin_router
+from progression_service.api.internal import build_internal_router
 from progression_service.api.public import build_public_router
 from progression_service.application.admin import AdminServices
 from progression_service.application.badges import BadgeQueries
@@ -30,5 +31,6 @@ def build_api_routers(
     """Все роутеры сервиса: use-cases приходят из composition root (``main.py``)."""
     return [
         build_public_router(infra, queries, quests, badges, wheel=wheel, shop=shop, events=events),
+        build_internal_router(queries),
         build_admin_router(admin),
     ]

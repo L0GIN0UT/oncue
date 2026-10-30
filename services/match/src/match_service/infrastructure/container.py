@@ -463,6 +463,7 @@ class MatchContainer:
                 emote_per_min=m.emote_per_player_per_min,
                 create_lock_ms=m.create_lock_ms,
                 pending_room_ms=m.pending_room_ms,
+                room_name_max_length=m.room_name_max_length,
             ),
             audit=self.audit if self.infra.sessions is not None else None,
             sanctions=self.sanction_gate,

@@ -24,6 +24,7 @@ from bff_web_service.application.queries import (
     GetPlayerPage,
     GetProfilePage,
     GetResultsPage,
+    GetRoomPage,
     GetSession,
     GetShellPage,
     GetShopPage,
@@ -53,6 +54,18 @@ from bff_web_service.settings import Settings
 from gv_service import Infrastructure, ServiceAuthNotConfiguredError, build_service_token_provider
 
 log = structlog.get_logger(__name__)
+
+
+def _progression_tokens(infra: Infrastructure) -> ServiceTokens | None:
+    """Сервисный токен bff_web → progression (область ``levels.read``); не настроен — ``None``.
+
+    Без токена уровни игроков не заполняются (``level: null``), остальное работает.
+    """
+    try:
+        return build_service_token_provider(infra, "progression")
+    except ServiceAuthNotConfiguredError:
+        log.warning("bff.service_auth_not_configured", audience="progression")
+        return None
 
 
 def _game_tokens(infra: Infrastructure) -> ServiceTokens | None:
@@ -113,12 +126,17 @@ def build_deps(infra: Infrastructure) -> BffDeps:
     )
     progression = HttpProgressionClient(
         upstream("progression", up.progression_url),
+        service_tokens=_progression_tokens(infra),
         active_event_ttl_s=pc.active_event_ttl_s,
         event_progress_ttl_s=pc.event_progress_ttl_s,
         cache_prefix=pc.key_prefix,
     )
     notifications = HttpNotificationsClient(upstream("notifications", up.notifications_url))
-    social = HttpSocialClient(upstream("social", up.social_url))
+    social = HttpSocialClient(
+        upstream("social", up.social_url),
+        online_count_ttl_s=pc.online_count_ttl_s,
+        cache_prefix=pc.key_prefix,
+    )
     pages = settings.pages
     events = EventsContext(
         progression, default_theme_key=pages.default_theme_key, concurrency=up.max_concurrency
@@ -215,6 +233,16 @@ def build_deps(infra: Infrastructure) -> BffDeps:
             matches_limit=pages.online_matches_limit,
             weekly_limit=pages.online_weekly_limit,
             match_players_limit=pages.online_match_players_limit,
+            progression=progression,
+            room_name_template=pages.room_name_template,
+            levels_batch_size=pages.levels_batch_size,
+        ),
+        get_room=GetRoomPage(
+            match,
+            progression,
+            concurrency=up.max_concurrency,
+            room_name_template=pages.room_name_template,
+            levels_batch_size=pages.levels_batch_size,
         ),
         get_leaderboards=GetLeaderboardsPage(rating, concurrency=up.max_concurrency),
         get_match=GetMatchPage(

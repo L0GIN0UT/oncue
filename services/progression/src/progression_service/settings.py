@@ -79,6 +79,9 @@ class ProgressionSettings(BaseModel):
     event_claim_limit: str = Field(default="30/60", pattern=r"^[1-9][0-9]{0,5}/[1-9][0-9]{0,5}$")
     events_tick_interval_s: float = Field(default=30.0, gt=0)
     events_tick_jitter_s: float = Field(default=3.0, ge=0)
+    # Уровни игроков пачкой (internal, bff_web): игроков за вызов и вызовов в минуту на клиента.
+    levels_max_users: int = Field(default=50, ge=1, le=100)
+    levels_per_min: int = Field(default=600, ge=1, le=100_000)
     # Подсказка клиенту, когда лимитер попыток (Redis) недоступен и ввод кода закрыт (503).
     limiter_retry_after_s: int = Field(default=5, ge=1, le=300)
 

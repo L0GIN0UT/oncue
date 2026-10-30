@@ -27,7 +27,10 @@ export function useModeTitle() {
 const PILL =
   "inline-flex h-[30px] items-center rounded-full border-[1.5px] border-rule bg-stage px-3 text-xs font-semibold whitespace-nowrap";
 
-export function OpenRoomList({ rooms }: { rooms: OpenRoomCard[] }) {
+/** Карточка из match (`/lobbies`) или из bff (`host_id` необязателен). */
+type RoomRow = Omit<OpenRoomCard, "host_id"> & { host_id?: string | null };
+
+export function OpenRoomList({ rooms }: { rooms: RoomRow[] }) {
   const t = useTranslations();
   const title = useModeTitle();
   if (!rooms.length) {

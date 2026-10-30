@@ -345,6 +345,20 @@
             "title": "Mode Key",
             "type": "string"
           },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Название комнаты (необязательное). Рабочий предел длины — `GV_MATCH__ROOM_NAME_MAX_LENGTH`, без ссылок и из denylist (422 `match.room_name_rejected`, `details.reason`)",
+            "title": "Name"
+          },
           "settings": {
             "anyOf": [
               {
@@ -1088,6 +1102,12 @@
             "title": "Created At",
             "type": "string"
           },
+          "host_id": {
+            "description": "Хост лобби (bff по нему берёт уровень и аватар)",
+            "format": "uuid",
+            "title": "Host Id",
+            "type": "string"
+          },
           "host_nickname": {
             "title": "Host Nickname",
             "type": "string"
@@ -1114,6 +1134,7 @@
         "required": [
           "code",
           "mode",
+          "host_id",
           "host_nickname",
           "players",
           "players_max",
@@ -1859,6 +1880,18 @@
             "minimum": 1.0,
             "title": "Level Window S",
             "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Название комнаты, как его ввёл хост (`null` — не задано; «Комната <ник хоста>» собирает bff)",
+            "title": "Name"
           },
           "players_max": {
             "maximum": 6.0,
@@ -3949,7 +3982,7 @@
     },
     "/v1/rooms": {
       "post": {
-        "description": "Комната по онлайн-шаблону (`session.kind` ∈ duel/party/lobby); создатель — хост в слоте 0. Переопределения — только из `session.lobby.overridable` (D12). Ошибки: 404 `match.mode_not_found` (нет опубликованного онлайн-шаблона), 422 `match.mode_not_online`, 422 `match.setting_not_allowed` (`details.field`), 422 `match.collection_required`, 422 `match.too_many_collections`, 404 `match.collection_not_found`, 403 `match.ranked_forbidden` (рейтинговые комнаты — только из очереди), 409 `match.active_room_conflict` (`details.code` — текущая комната), 429 `match.rate_limited` (`GV_MATCH__LOBBY_CREATE_PER_USER_PER_HOUR`), 503 `match.game_unavailable`.",
+        "description": "Комната по онлайн-шаблону (`session.kind` ∈ duel/party/lobby); создатель — хост в слоте 0. Переопределения — только из `session.lobby.overridable` (D12). Ошибки: 404 `match.mode_not_found` (нет опубликованного онлайн-шаблона), 422 `match.mode_not_online`, 422 `match.setting_not_allowed` (`details.field`), 422 `match.collection_required`, 422 `match.too_many_collections`, 404 `match.collection_not_found`, 422 `match.room_name_rejected` (`details.reason`: `denylist` | `link` | `too_long` | `empty`), 403 `match.ranked_forbidden` (рейтинговые комнаты — только из очереди), 409 `match.active_room_conflict` (`details.code` — текущая комната), 429 `match.rate_limited` (`GV_MATCH__LOBBY_CREATE_PER_USER_PER_HOUR`), 503 `match.game_unavailable`.",
         "operationId": "create_room_v1_rooms_post",
         "parameters": [
           {

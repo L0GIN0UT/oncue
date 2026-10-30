@@ -246,8 +246,12 @@ def test_generated_identity_compose_has_email_code_settings() -> None:
     assert clients["notifications"]["audiences"] == {
         "identity": ["users.emails.read", "users.active.list"]
     }
-    # PR-A: bff_web -> game (очки дейлика друзей), секрет в GV_SERVICE_SECRET_BFF_WEB.
-    assert clients["bff_web"]["audiences"] == {"game": ["daily.results"]}
+    # bff_web -> game (очки дейлика друзей) и progression (уровни игроков), секрет в
+    # GV_SERVICE_SECRET_BFF_WEB.
+    assert clients["bff_web"]["audiences"] == {
+        "game": ["daily.results"],
+        "progression": ["levels.read"],
+    }
     assert service_secret_env("bff_web") == "GV_SERVICE_SECRET_BFF_WEB"
     secrets_seen = set()
     for client_id, client in clients.items():

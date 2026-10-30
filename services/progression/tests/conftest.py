@@ -666,7 +666,12 @@ async def progression(
         retry=RetryPolicy(max_attempts=2, base_delay=0.0, max_delay=0.0),
         sleep=no_sleep,
     )
-    app = create_app(DEFINITION, runtime, jwt_verifier=token_issuer.verifier())
+    app = create_app(
+        DEFINITION,
+        runtime,
+        jwt_verifier=token_issuer.verifier(),
+        service_jwt_verifier=token_issuer.verifier(audience="progression"),
+    )
     try:
         async with service_client(app) as client:
             yield ProgressionService(
