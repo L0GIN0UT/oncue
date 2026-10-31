@@ -2,12 +2,12 @@
   "version": 1,
   "items": [
     {
-      "key": "track:fma-123",
+      "key": "track:demo-123",
       "kind": "track",
       "media_item_id": "0192a3b4-c5d6-7e8f-9a0b-000000000101",
       "files": [
-        {"role": "audio", "path": "audio/fma-123.m4a"},
-        {"role": "cover", "path": "audio/fma-123.jpg"}
+        {"role": "audio", "path": "audio/demo-123.m4a"},
+        {"role": "cover", "path": "audio/demo-123.jpg"}
       ],
       "origin": "upload",
       "source_url": "https://freemusicarchive.org/music/example/track-123",

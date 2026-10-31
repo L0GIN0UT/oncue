@@ -441,9 +441,7 @@ def dev_seed_real(
     *,
     real_dir: Annotated[
         Path,
-        typer.Option(
-            "--real-dir", envvar="GV_REAL_MEDIA_DIR", help="Выгрузки tmdb/, fma/ и jamendo/"
-        ),
+        typer.Option("--real-dir", envvar="GV_REAL_MEDIA_DIR", help="Выгрузки tmdb/ и jamendo/"),
     ] = Path("C:/gv-media"),
     import_dir: Annotated[
         Path | None,

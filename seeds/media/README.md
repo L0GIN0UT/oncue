@@ -65,7 +65,6 @@ uv run gv dev seed [--date YYYY-MM-DD]
 
 ```bash
 uv run python seeds/media/fetch_tmdb.py        # фильмы TMDB → tmdb/ (ключ TMDB в .keys.env)
-uv run python seeds/media/fetch_fma.py --count 1000   # клипы FMA по 30 с → fma/clips
 uv run python seeds/media/fetch_jamendo.py --count 400  # Jamendo: клипы 30 с + обложки → jamendo/
 uv run gv dev seed-real --real-dir C:/gv-media --import-dir <каталог seeds/catalog стенда> \
     --ffmpeg <путь к ffmpeg>                   # переменные админа — как у `gv dev seed`
@@ -77,7 +76,7 @@ uv run gv dev seed-real --real-dir C:/gv-media --import-dir <каталог seed
   смонтирован в catalog; в git не попадают) и импортирует их; `overview` фильма уходит в
   `clue_texts.plot_raw` (загадка «описание»), `listens` трека — в `metrics.popularity`;
   poster/frames/audio/cover/album/license/origin/source_url в импорт не попадают;
-- читает три источника в `<real-dir>`: `tmdb/` (фильмы), `fma/` и `jamendo/` (треки; нет папки —
+- читает два источника в `<real-dir>`: `tmdb/` (фильмы) и `jamendo/` (треки; нет папки —
   источник пропускается). Треки Jamendo без клипа на диске отбрасываются, без файла обложки
   идут без неё; жанры приводятся к общему написанию (`hiphop` → `hip-hop`), `--tracks-limit`
   действует на каждый источник отдельно;
@@ -117,13 +116,13 @@ uv run gv dev seed-real --without-synthetic --real-dir C:/gv-media --import-dir 
 
 **Картинка ответа (`artwork`, ADR 0073).** Обложка и постер дают набор `artwork` (600×600 у
 трека из `cover`, 600×900 у фильма из `poster`, а без постера из кадра), его ждёт тот же шаг
-«наборы ассетов готовы». У треков FMA обложек нет, у них `Reveal.artwork` остаётся `null`
+«наборы ассетов готовы». Если файла обложки у трека нет, `Reveal.artwork` остаётся `null`
 (заглушку рисует фронтенд). Происхождение Jamendo: `origin=upload`, страница трека — в
 `source_url`, лицензия (`license_ccurl`) — в `license_note`: контракт манифеста значения
 `jamendo` не знает и не расширяется. Часть треков под NC/ND — только для локального стенда
-(см. раздел про Jamendo ниже). Треки Jamendo без прослушиваний (`popularity` нет) в жанровые
-сборники попадают после треков FMA — по ним сборник берёт самых популярных; в пул режимов
-(дейлики, случайные) они входят наравне.
+(см. раздел про Jamendo ниже). У треков Jamendo прослушиваний нет (`popularity` пусто), поэтому
+в жанровых сборниках они идут по ключу; в пул режимов
+(дейлики, случайные) входят наравне.
 
 ## Правка профиля ассетов на уже засеянном стенде
 
@@ -148,7 +147,7 @@ uv run gv dev replan-assets --clue-type frame_progressive   # переменны
 
 Выгрузка треков [Jamendo](https://developer.jamendo.com) (API v3.0) в `<root>/jamendo/`:
 `clips/<id>.mp3`, `covers/<album_id>.jpg` (600 px, один файл на альбом) и
-`catalog-tracks.jsonl` (формат как у FMA, плюс `source_url`, `origin: "jamendo"`, `cover`).
+`catalog-tracks.jsonl` (поля строки импорта каталога, плюс `source_url`, `origin: "jamendo"`, `cover`).
 Ключ — `JAMENDO_CLIENT_ID` в окружении или в `<root>/.keys.env`.
 
 - Берётся `--count` треков (по умолчанию 400) с равной квотой на ~12 жанров, по популярности;

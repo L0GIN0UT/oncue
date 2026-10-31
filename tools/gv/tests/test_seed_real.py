@@ -25,14 +25,12 @@ from gv_cli.seed_real import (
     film_collections,
     import_rows,
     load_jamendo_rows,
-    load_track_rows,
     music_collections,
     normalize_genre,
     package_manifest,
     prepare_audio,
     read_jsonl,
     split_batches,
-    track_from_meta,
     unit_files,
     unit_provenance,
     with_featured,
@@ -45,7 +43,7 @@ pytestmark = pytest.mark.unit
 
 def _track(n: int, genre: str, listens: int = 0) -> RealUnit:
     return RealUnit(
-        key=f"track:fma-{n}",
+        key=f"track:demo-{n}",
         domain="music",
         title=f"t{n}",
         year=2010,
@@ -79,7 +77,7 @@ class TestCatalogRow:
 
     def test_track_listens_become_popularity_and_html_is_unescaped(self) -> None:
         raw = {
-            "key": "track:fma-2",
+            "key": "track:demo-2",
             "kind": "track",
             "title": "A &amp; B",
             "year": None,
@@ -113,37 +111,6 @@ class TestReadJsonl:
             read_jsonl(path)
 
 
-class TestTrackRows:
-    def test_catalog_rows_without_clip_are_dropped(self, tmp_path: Path) -> None:
-        clips = tmp_path / "clips"
-        clips.mkdir()
-        (clips / "000001.mp3").write_bytes(b"x")
-        rows = [
-            {"key": "track:fma-1", "title": "a", "audio": "000001.mp3"},
-            {"key": "track:fma-2", "title": "b", "audio": "000002.mp3"},
-        ]
-        (tmp_path / "catalog-tracks.jsonl").write_text(
-            "\n".join(json.dumps(r) for r in rows), encoding="utf-8"
-        )
-        assert [r["key"] for r in load_track_rows(tmp_path)] == ["track:fma-1"]
-
-    def test_track_from_meta_requires_title_artist_genre(self) -> None:
-        meta = {
-            "title": "",
-            "artist": "a",
-            "genre": "rock",
-            "album": "",
-            "license": "",
-            "year": 1,
-            "listens": 0,
-        }
-        assert track_from_meta(5, meta) is None
-        built = track_from_meta(5, {**meta, "title": "t"})
-        assert built is not None
-        assert built["key"] == "track:fma-5"
-        assert built["audio"] == "000005.mp3"
-
-
 class TestCollections:
     def test_music_collections_by_genre_sorted_by_listens_and_capped(self) -> None:
         units = [_track(i, "folk", listens=i) for i in range(50)]
@@ -152,7 +119,7 @@ class TestCollections:
         assert [s.title for s in specs] == ["Фолк-подборка"]
         keys = [i.seed_key for i in specs[0].items]
         assert len(keys) == 40
-        assert keys[0] == "track:fma-49"
+        assert keys[0] == "track:demo-49"
         assert specs[0].default_mode_key == "music.collection.intro"
 
     def test_music_collections_limit_and_unknown_genre_title(self) -> None:
@@ -386,7 +353,6 @@ def _jamendo_unit(**extra: Any) -> RealUnit:
         "title": "t",
         "year": None,
         "genres": ("rock",),
-        "provider": "jamendo",
     }
     return RealUnit(**(fields | extra))
 
@@ -409,7 +375,7 @@ class TestJamendo:
         ("raw", "expected"),
         [("hiphop", "hip-hop"), ("Hip Hop", "hip-hop"), ("rock", "rock"), (" Jazz ", "jazz")],
     )
-    def test_genre_names_match_fma(self, raw: str, expected: str) -> None:
+    def test_genre_names_are_normalized(self, raw: str, expected: str) -> None:
         assert normalize_genre(raw) == expected
 
     def test_rows_normalize_genres(self, tmp_path: Path) -> None:
@@ -420,7 +386,7 @@ class TestJamendo:
         _make_jamendo(tmp_path, [_jamendo_row(1), _jamendo_row(2, album_id=8)])
         units = {u.key: u for u in build_units(tmp_path)}
         first = units["track:jamendo-1"]
-        assert (first.domain, first.provider) == ("music", "jamendo")
+        assert first.domain == "music"
         assert first.genres == ("rock", "dance")
         assert first.audio == tmp_path / "jamendo" / "clips" / "1.mp3"
         assert first.cover == tmp_path / "jamendo" / "covers" / "7.jpg"
@@ -454,7 +420,7 @@ class TestCoverFiles:
             ("cover", "7.jpg", None),
         ]
 
-    def test_fma_track_has_no_cover(self, tmp_path: Path) -> None:
+    def test_track_without_cover_uploads_audio_only(self, tmp_path: Path) -> None:
         files = unit_files(_track(1, "rock"), tmp_path / "a.m4a")
         assert [f.role for f in files] == ["audio"]
 
@@ -505,10 +471,7 @@ class TestProvenance:
     def test_jamendo_without_source_url_omits_it(self) -> None:
         assert "source_url" not in unit_provenance(_jamendo_unit())
 
-    def test_fma_and_tmdb_provenance_unchanged(self) -> None:
-        fma = unit_provenance(_track(1, "rock"))
-        assert fma["origin"] == "upload" and fma["license_note"].startswith("Free Music Archive")
-        assert "source_url" not in fma
+    def test_film_provenance_is_tmdb(self) -> None:
         assert unit_provenance(_film(550, 1999, 8.0))["origin"] == "tmdb"
 
 
