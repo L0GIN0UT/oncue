@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -45,7 +46,20 @@ class Consumer:
 
     def event(self, user_id: UUID, version: int, **payload: Any) -> EventEnvelope:
         envelope = load_example(EVENT)
-        base = {**envelope.payload, "user_id": str(user_id), "version": version}
+        # Сроки из примера уходят в прошлое: identity считает маску на «сейчас» и отбрасывает
+        # истёкшие санкции, поэтому сдвигаем их от часов сервиса.
+        expiry = (self.service.infra.clock.now() + timedelta(days=7)).isoformat()
+        active = [
+            {**entry, "expires_at": expiry if entry["expires_at"] else None}
+            for entry in envelope.payload["active"]
+        ]
+        base = {
+            **envelope.payload,
+            "user_id": str(user_id),
+            "version": version,
+            "active": active,
+            "next_expiry_at": expiry,
+        }
         return envelope.model_copy(update={"payload": {**base, **payload}})
 
     async def deliver(self, envelope: EventEnvelope) -> Outcome:
