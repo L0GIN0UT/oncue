@@ -5,10 +5,9 @@
 в git не хранятся):
 
 * ``tmdb/catalog-films.jsonl`` + ``tmdb/<id>/{poster,frame-1..6}.jpg`` — фильмы;
-* ``fma/clips/<id>.mp3`` (+ ``fma/catalog-tracks.jsonl`` или ``fma/meta/.../tracks.csv``) — треки;
 * ``jamendo/clips/<id>.mp3`` + ``jamendo/covers/<album_id>.jpg`` +
   ``jamendo/catalog-tracks.jsonl`` — треки с обложками (``seeds/media/fetch_jamendo.py``);
-  обложка грузится ролью ``cover``, у треков FMA обложек нет (``artwork`` ревила ``null``).
+  обложка грузится ролью ``cover``; нет файла обложки — ``artwork`` ревила ``null``.
 
 Шаги: каталожные файлы импорта (``real-films.jsonl``, ``real-tracks.jsonl``) → импорт →
 исходники (клипы перекодируются ffmpeg в 50 с, как синтетика) → ожидание наборов ассетов →
@@ -18,7 +17,6 @@
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import html
 import json
@@ -83,7 +81,6 @@ _ALLOWED_METRICS = frozenset(
 )
 _MAX_PLOT = 5000
 _MAX_TITLE = 300
-_YEAR_MIN, _YEAR_MAX = 1900, 2030
 # Происхождение исходников ``POST /admin/v1/sources`` и пометка лицензии.
 ORIGIN_TRACK = "upload"
 ORIGIN_FILM = "tmdb"
@@ -107,7 +104,7 @@ GENRE_TITLES: Mapping[str, str] = {
     "ambient": "Эмбиент",
     "lounge": "Лаунж",
 }
-# Написания жанра из разных источников → общий ключ (у FMA ``hip-hop``, у Jamendo ``hiphop``).
+# Написания жанра из разных источников → общий ключ (``hiphop`` у Jamendo → ``hip-hop``).
 GENRE_ALIASES: Mapping[str, str] = {"hiphop": "hip-hop", "hip hop": "hip-hop"}
 MUSIC_COVERS = ("vinyl", "neon", "night", "sunset", "forest", "ocean")
 MUSIC_MODE = "music.collection.intro"
@@ -128,7 +125,7 @@ class RealUnit:
     """Единица реального засева: ключ, домен и её файлы на диске.
 
     Attributes:
-        key: Ключ строки каталога (``film:tmdb-1``, ``track:fma-2``).
+        key: Ключ строки каталога (``film:tmdb-1``, ``track:jamendo-2``).
         domain: ``film``/``music``.
         title: Название (для сборников и отчёта).
         year: Год, если известен.
@@ -136,7 +133,6 @@ class RealUnit:
         rating: ``vote_average`` фильма; у трека — ``None``.
         popularity: Прослушивания трека; у фильма — ``None``.
         license: Лицензия трека (в ``license_note`` загрузки).
-        provider: Откуда трек: ``fma`` (по умолчанию) или ``jamendo``.
         source_url: Страница трека у источника (в ``source_url`` загрузки); пусто — не передаётся.
         audio: Исходный клип трека.
         cover: Обложка альбома трека (роль ``cover``); ``None`` — обложки нет.
@@ -152,7 +148,6 @@ class RealUnit:
     rating: float | None = None
     popularity: int | None = None
     license: str = ""
-    provider: str = "fma"
     source_url: str = ""
     audio: Path | None = None
     cover: Path | None = None
@@ -219,73 +214,6 @@ def write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> int:
     return len(lines)
 
 
-def _fma_meta_rows(csv_path: Path, wanted: set[int]) -> dict[int, dict[str, Any]]:
-    """Метаданные нужных треков из ``tracks.csv`` FMA (трёхстрочная шапка)."""
-    result: dict[int, dict[str, Any]] = {}
-    with csv_path.open(encoding="utf-8", newline="") as fh:
-        rows = csv.reader(fh)
-        top, sub = next(rows), next(rows)
-        next(rows)
-        idx = {(t, s): i for i, (t, s) in enumerate(zip(top, sub, strict=False))}
-        for row in rows:
-            if not row or not row[0].isdigit() or int(row[0]) not in wanted:
-                continue
-            released = row[idx[("album", "date_released")]]
-            created = row[idx[("track", "date_created")]]
-            year = (released or created or "")[:4]
-            result[int(row[0])] = {
-                "title": _clean(row[idx[("track", "title")]]),
-                "artist": _clean(row[idx[("artist", "name")]]),
-                "album": _clean(row[idx[("album", "title")]]),
-                "genre": row[idx[("track", "genre_top")]].strip().lower(),
-                "license": row[idx[("track", "license")]].strip(),
-                "year": int(year) if year.isdigit() and _YEAR_MIN < int(year) < _YEAR_MAX else None,
-                "listens": int(row[idx[("track", "listens")]] or 0),
-            }
-    return result
-
-
-def track_from_meta(track_id: int, meta: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Строка выгрузки трека из метаданных FMA; нет названия/артиста/жанра — ``None``."""
-    if not (meta["title"] and meta["artist"] and meta["genre"]):
-        return None
-    return {
-        "key": f"track:fma-{track_id}",
-        "kind": "track",
-        "title": meta["title"],
-        "year": meta["year"],
-        "persons": [{"name": meta["artist"], "role": "artist"}],
-        "genres": [meta["genre"]],
-        "metrics": {"duration_ms": 30000, "listens": meta["listens"]},
-        "album": meta["album"],
-        "license": meta["license"],
-        "audio": f"{track_id:06d}.mp3",
-    }
-
-
-def load_track_rows(fma_dir: Path) -> list[dict[str, Any]]:
-    """Треки с клипами на диске: каталог выгрузки, а недостающее — из ``tracks.csv``.
-
-    Выгрузка клипов идёт дольше записи каталога, поэтому строки без файла отбрасываются, а
-    клипы без строки достраиваются по метаданным FMA.
-    """
-    clips = {int(p.stem): p for p in (fma_dir / "clips").glob("*.mp3") if p.stat().st_size > 0}
-    catalog = fma_dir / "catalog-tracks.jsonl"
-    rows = {
-        int(str(r["key"]).rsplit("-", 1)[-1]): r
-        for r in (read_jsonl(catalog) if catalog.is_file() else [])
-    }
-    rows = {tid: r for tid, r in rows.items() if tid in clips}
-    missing = set(clips) - set(rows)
-    csv_path = fma_dir / "meta" / "fma_metadata" / "tracks.csv"
-    if missing and csv_path.is_file():
-        for tid, meta in _fma_meta_rows(csv_path, missing).items():
-            built = track_from_meta(tid, meta)
-            if built is not None:
-                rows[tid] = built
-    return [rows[tid] for tid in sorted(rows)]
-
-
 def normalize_genre(name: str) -> str:
     """Жанр в нижнем регистре и общем написании (``hiphop`` → ``hip-hop``)."""
     key = " ".join(name.lower().split())
@@ -297,7 +225,7 @@ def load_jamendo_rows(jamendo_dir: Path) -> list[dict[str, Any]]:
 
     Выгрузка (``seeds/media/fetch_jamendo.py``) может быть неполной: строки без клипа
     отбрасываются, трек без файла обложки идёт без неё (``artwork`` будет ``null``).
-    Жанры приводятся к написанию FMA (``hiphop`` → ``hip-hop``).
+    Жанры приводятся к общему написанию (``hiphop`` → ``hip-hop``).
     """
     catalog = jamendo_dir / "catalog-tracks.jsonl"
     if not catalog.is_file():
@@ -343,7 +271,7 @@ def _film_files(tmdb_dir: Path, row: Mapping[str, Any]) -> tuple[Path, tuple[Pat
 
 def build_units(real_dir: Path, *, tracks_limit: int | None = None) -> list[RealUnit]:
     """Все единицы засева с файлами; порядок — фильмы, затем треки по ключу."""
-    tmdb_dir, fma_dir, jamendo_dir = real_dir / "tmdb", real_dir / "fma", real_dir / "jamendo"
+    tmdb_dir, jamendo_dir = real_dir / "tmdb", real_dir / "jamendo"
     units: list[RealUnit] = []
     for row in load_film_rows(tmdb_dir):
         poster, frames = _film_files(tmdb_dir, row) or (None, ())
@@ -359,20 +287,6 @@ def build_units(real_dir: Path, *, tracks_limit: int | None = None) -> list[Real
                 frames=frames,
             )
         )
-    for row in load_track_rows(fma_dir)[:tracks_limit]:
-        metrics = row.get("metrics") or {}
-        units.append(
-            RealUnit(
-                key=str(row["key"]),
-                domain="music",
-                title=_clean(str(row["title"])),
-                year=row.get("year"),
-                genres=tuple(row.get("genres") or ()),
-                popularity=int(metrics.get("listens") or 0),
-                license=str(row.get("license") or ""),
-                audio=fma_dir / "clips" / str(row["audio"]),
-            )
-        )
     units.extend(
         RealUnit(
             key=str(row["key"]),
@@ -381,7 +295,6 @@ def build_units(real_dir: Path, *, tracks_limit: int | None = None) -> list[Real
             year=row.get("year"),
             genres=tuple(row.get("genres") or ()),
             license=str(row.get("license") or ""),
-            provider="jamendo",
             source_url=str(row.get("source_url") or ""),
             audio=jamendo_dir / "clips" / str(row["audio"]),
             cover=jamendo_dir / "covers" / str(row["cover"]) if row.get("cover") else None,
@@ -397,8 +310,7 @@ def import_rows(
     """Строки импорта (фильмы, треки) только для единиц ``units``."""
     keep = {u.key for u in units}
     films = [catalog_row(r) for r in load_film_rows(real_dir / "tmdb") if r["key"] in keep]
-    track_rows = [*load_track_rows(real_dir / "fma"), *load_jamendo_rows(real_dir / "jamendo")]
-    tracks = [catalog_row(r) for r in track_rows if r["key"] in keep]
+    tracks = [catalog_row(r) for r in load_jamendo_rows(real_dir / "jamendo") if r["key"] in keep]
     return films, tracks
 
 
@@ -607,16 +519,13 @@ def unit_files(unit: RealUnit, audio: Path | None) -> tuple[PackageFile, ...]:
 def unit_provenance(unit: RealUnit) -> dict[str, str]:
     """``origin``/``source_url``/``license_note`` записи манифеста (пустое не передаётся)."""
     if unit.domain == "music":
-        if unit.provider == "jamendo":
-            # Источник и лицензия — в своих полях, ``origin`` остаётся ``upload``: контракт
-            # манифеста значения ``jamendo`` не знает и не расширяется.
-            note = f"Jamendo, {unit.license or 'CC'} (local, ADR 0014)"
-            result = {"origin": ORIGIN_TRACK, "license_note": note}
-            if unit.source_url:
-                result["source_url"] = unit.source_url
-            return result
-        note = f"Free Music Archive, {unit.license or 'CC'} (local, ADR 0014)"
-        return {"origin": ORIGIN_TRACK, "license_note": note}
+        # Источник и лицензия — в своих полях, ``origin`` остаётся ``upload``: контракт
+        # манифеста значения ``jamendo`` не знает и не расширяется.
+        note = f"Jamendo, {unit.license or 'CC'} (local, ADR 0014)"
+        result = {"origin": ORIGIN_TRACK, "license_note": note}
+        if unit.source_url:
+            result["source_url"] = unit.source_url
+        return result
     tmdb_id = unit.key.rsplit("-", 1)[-1]
     return {
         "origin": ORIGIN_FILM,
@@ -992,7 +901,7 @@ def run_seed_real(
     """
     units = build_units(real_dir, tracks_limit=tracks_limit)
     if not units:
-        raise SeedError(f"в {real_dir} нет реальных единиц (tmdb/fma/jamendo)")
+        raise SeedError(f"в {real_dir} нет реальных единиц (tmdb/jamendo)")
     films, tracks = import_rows(real_dir, units)
     out = config.catalog_path()
     write_jsonl(out / REAL_FILMS_FILE, films)

@@ -306,7 +306,7 @@ async def test_terminal_package_is_not_processed_again(with_film: Any) -> None:
 async def test_item_level_errors(with_film: Any) -> None:
     media = with_film
     track = {
-        "key": "track:fma-1",
+        "key": "track:demo-1",
         "kind": "track",
         "media_item_id": str(ITEM),  # единица - фильм
         "files": [{"role": "audio", "path": "a.jpg"}],
@@ -318,7 +318,7 @@ async def test_item_level_errors(with_film: Any) -> None:
     package = await run(media, zip_of({"a.jpg": JPEG}, doc(track, no_id, unknown)))
     assert (package.status, package.done, package.failed) == (PackageStatus.FAILED, 0, 3)
     assert {e.item_key: e.code for e in package.errors} == {
-        "track:fma-1": "package.kind_mismatch",
+        "track:demo-1": "package.kind_mismatch",
         "film:no-id": "package.media_item_unresolved",
         "film:ghost": "media_item.not_found",
     }

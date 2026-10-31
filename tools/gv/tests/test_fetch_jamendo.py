@@ -85,7 +85,7 @@ def test_clip_command_cuts_thirty_seconds() -> None:
     assert cmd[-1] == "b.mp3"
 
 
-def test_catalog_row_matches_fma_shape() -> None:
+def test_catalog_row_has_import_fields() -> None:
     track = fj.parse_track(RAW, "electronic")
     row = fj.catalog_row(track)
     assert row["key"] == "track:jamendo-1214935"

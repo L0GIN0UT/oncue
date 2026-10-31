@@ -1333,7 +1333,7 @@ async def test_package_upload_end_to_end(service: Service) -> None:
         "version": 1,
         "items": [
             {
-                "key": "track:fma-1",
+                "key": "track:demo-1",
                 "kind": "track",
                 "media_item_id": item_id,
                 "files": [
@@ -1374,7 +1374,7 @@ async def test_package_upload_end_to_end(service: Service) -> None:
     assert (error["path"], error["role"], error["item_key"]) == (
         "audio/broken.m4a",
         "audio",
-        "track:fma-1",
+        "track:demo-1",
     )
     assert error["code"].startswith("source.")
     # исходник прошёл тот же приём, что и ручная загрузка: он виден в списке единицы
@@ -1404,7 +1404,7 @@ async def test_package_resend_with_new_key_does_not_duplicate_sources(service: S
         "version": 1,
         "items": [
             {
-                "key": "track:fma-2",
+                "key": "track:demo-2",
                 "kind": "track",
                 "media_item_id": item_id,
                 "files": [{"role": "audio", "path": "a.bin"}],

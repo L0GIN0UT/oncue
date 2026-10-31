@@ -5,9 +5,8 @@
 в окружении (или в `<root>/.keys.env`), в логи не пишется.
 
     uv run python seeds/media/fetch_jamendo.py --count 400
-
-Результат: `clips/<id>.mp3`, `covers/<album_id>.jpg`, `catalog-tracks.jsonl` (формат как у
-`fetch_fma.py`, плюс `source_url`, `origin`, `cover`). Полные треки не сохраняются: исходник
+Результат: `clips/<id>.mp3`, `covers/<album_id>.jpg`, `catalog-tracks.jsonl` (поля строки
+импорта каталога, плюс `source_url`, `origin`, `cover`). Полные треки не сохраняются: исходник
 нарезается ffmpeg и удаляется. Повторный запуск не качает готовое заново.
 
 Лицензии (`license_ccurl`) сохраняются как есть и НЕ фильтруются: часть треков под NC/ND —
@@ -100,7 +99,7 @@ def parse_track(raw: dict[str, Any], genre: str) -> dict[str, Any] | None:
 
 
 def catalog_row(track: dict[str, Any]) -> dict[str, Any]:
-    """Строка `catalog-tracks.jsonl`: те же поля, что у FMA, плюс происхождение и обложка."""
+    """Строка `catalog-tracks.jsonl`: поля импорта каталога, плюс происхождение и обложка."""
     return {
         "key": f"track:jamendo-{track['id']}",
         "kind": "track",

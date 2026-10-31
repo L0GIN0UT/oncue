@@ -36,7 +36,7 @@ def example() -> dict[str, Any]:
 def test_example_is_valid_and_parses() -> None:
     assert not list(validator().iter_errors(example()))
     manifest = parse_manifest(json.dumps(example()).encode(), max_files=100)
-    assert [i.key for i in manifest.items] == ["track:fma-123", "film:tmdb-550"]
+    assert [i.key for i in manifest.items] == ["track:demo-123", "film:tmdb-550"]
     assert manifest.file_count == 5
 
 
