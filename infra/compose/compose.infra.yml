@@ -131,7 +131,7 @@ services:
         limits: {memory: 512M}
 
   opensearch:
-    image: opensearchproject/opensearch:2.17.1
+    image: opensearchproject/opensearch:3.9.0
     restart: unless-stopped
     networks: [backend]
     logging: *logging
