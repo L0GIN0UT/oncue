@@ -441,7 +441,7 @@ def dev_seed_real(
     *,
     real_dir: Annotated[
         Path,
-        typer.Option("--real-dir", envvar="GV_REAL_MEDIA_DIR", help="Выгрузки tmdb/ и jamendo/"),
+        typer.Option("--real-dir", envvar="GV_REAL_MEDIA_DIR", help="Выгрузки tmdb/ и deezer/"),
     ] = Path("C:/gv-media"),
     import_dir: Annotated[
         Path | None,
@@ -454,12 +454,32 @@ def dev_seed_real(
         str | None, typer.Option("--ffmpeg", envvar="GV_FFMPEG", help="Путь к ffmpeg")
     ] = None,
     min_collection_size: Annotated[
-        int, typer.Option("--min-collection-size", help="Минимум треков в сборнике жанра")
+        int,
+        typer.Option(
+            "--min-collection-size",
+            min=1,
+            help="Минимум единиц в сборнике жанра, категории или десятилетия",
+        ),
     ] = 20,
+    collection_size: Annotated[
+        int, typer.Option("--collection-size", min=1, help="Размер сборника (самые популярные)")
+    ] = 50,
     tracks_limit: Annotated[int | None, typer.Option("--tracks-limit")] = None,
     package_units: Annotated[
         int, typer.Option("--package-units", min=1, help="Единиц в одном пакете-архиве")
     ] = 100,
+    ffmpeg_jobs: Annotated[
+        int,
+        typer.Option("--ffmpeg-jobs", min=1, help="Потоков перекодирования клипов"),
+    ] = min(8, os.cpu_count() or 4),
+    stall_timeout_min: Annotated[
+        float,
+        typer.Option(
+            "--stall-timeout-min",
+            min=0.1,
+            help="Сколько минут ждать наборы ассетов без единого нового готового набора",
+        ),
+    ] = 30.0,
     date_: Annotated[str | None, typer.Option("--date", help="День плановых наборов")] = None,
     without_synthetic: Annotated[
         bool,
@@ -516,8 +536,11 @@ def dev_seed_real(
             real_dir=real_dir,
             ffmpeg=ffmpeg or seed_real.default_ffmpeg(),
             min_collection_size=min_collection_size,
+            collection_size=collection_size,
             tracks_limit=tracks_limit,
             package_units=package_units,
+            ffmpeg_jobs=ffmpeg_jobs,
+            stall_timeout_s=stall_timeout_min * 60.0,
             without_synthetic=without_synthetic,
             echo=lambda msg: typer.secho(msg, fg=typer.colors.CYAN),
         )
