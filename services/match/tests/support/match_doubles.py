@@ -172,6 +172,19 @@ class MemoryStore:
 
 
 @dataclass
+class MemoryPresence:
+    """``PresenceStore`` в памяти: последний heartbeat по комнате."""
+
+    beats: dict[str, dict[UUID, int]] = field(default_factory=dict)
+
+    async def touch(self, code: str, user_id: UUID, now_ms: int) -> None:
+        self.beats.setdefault(code, {})[user_id] = now_ms
+
+    async def seen(self, code: str) -> dict[UUID, int]:
+        return dict(self.beats.get(code, {}))
+
+
+@dataclass
 class MemoryPlayerRooms:
     """``PlayerRooms`` в памяти (значение — ``code|ms``, как в Redis)."""
 

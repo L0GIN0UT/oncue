@@ -33,6 +33,7 @@ from match_service.api.common import (
     respond,
 )
 from match_service.api.public.schemas import (
+    ActiveRoom,
     AwayRequest,
     ChatRequest,
     CommandAccepted,
@@ -194,6 +195,24 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
     ) -> SpectateRoomsPage:
         return SpectateRoomsPage.model_validate(
             await services().room_queries.spectate_rooms(spectator.user_id, cursor, limit)
+        )
+
+    @router.get(
+        "/rooms/active",
+        response_model=ActiveRoom,
+        summary="Моя активная комната",
+        description=(
+            "Источник правды сервера для правила «одна активная комната» (D10): код и фаза "
+            "комнаты, в которой игрок состоит сейчас, или `code = null`, `phase = null`. "
+            "Комната закрыта, игрок вышел или молчит дольше `GV_MATCH__PRESENCE_TIMEOUT_S` - "
+            "пусто. Фронт при старте предлагает «Вернуться в комнату» или сбрасывает "
+            "устаревшее состояние. Ошибки: 401, 403 для гостя."
+        ),
+        responses=problem_responses(401, 403, 501),
+    )
+    async def active_room(user: User, request: Request) -> ActiveRoom:
+        return ActiveRoom.model_validate(
+            await services().rooms.active_room(actor_of(user, request))
         )
 
     @router.get(
