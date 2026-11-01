@@ -26,6 +26,7 @@ jobs:
   changes:
     name: Затронутые модули
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       any: ${{ steps.matrix.outputs.any }}
@@ -45,6 +46,7 @@ jobs:
   lint:
     name: Статические проверки и контракты
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with: { fetch-depth: 0 }
@@ -68,6 +70,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.any == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
@@ -111,6 +114,7 @@ jobs:
     # Пока frontend/package.json нет, job проходит без шагов (условие на каждом шаге).
     name: Фронтенд
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
@@ -165,6 +169,7 @@ jobs:
     # (templates/*.template) рендерит entrypoint образа, как при запуске.
     name: Конфиг gateway (nginx -t)
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Временный сертификат (nginx -t читает ssl_certificate)
@@ -351,6 +356,7 @@ jobs:
     # test может быть пропущен (нет затронутых модулей) — это не ошибка.
     if: always() && needs.lint.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') && needs.changes.outputs.any == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
