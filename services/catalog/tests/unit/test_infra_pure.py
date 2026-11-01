@@ -41,7 +41,7 @@ def test_index_mapping_has_edge_ngram_and_languages() -> None:
         assert mapping["fields"]["ru"]["analyzer"] == "russian"
         assert mapping["fields"]["en"]["analyzer"] == "english"
     assert body["mappings"]["dynamic"] == "strict"
-    assert concrete_index("catalog_media") == "catalog_media_v1"
+    assert concrete_index("catalog_media") == "catalog_media_v2"
 
 
 def test_queries_always_filter_active_and_domain() -> None:
@@ -75,6 +75,76 @@ def test_document_body_matches_mapping() -> None:
     assert set(doc) <= set(index_body()["mappings"]["properties"])
     assert doc["aliases"] == ["интерстеллар", "interstellar"]
     assert doc["status"] == "active"
+
+
+def _query(**kw: object) -> SearchQuery:
+    return SearchQuery(**{"normalized": "нолан", "domain": None, "limit": 5, **kw})  # type: ignore[arg-type]
+
+
+def test_autocomplete_body_searches_people_without_scope() -> None:
+    must = autocomplete_body(_query())["query"]["function_score"]["query"]["bool"]["must"]
+    clauses = must[0]["bool"]["should"]
+    assert {"match": {"people": {"query": "нолан", "operator": "and"}}} in clauses
+    assert any(c.get("multi_match", {}).get("type") == "cross_fields" for c in clauses)
+
+
+def test_autocomplete_body_scope_filters_person_and_ignores_names() -> None:
+    person = uuid7()
+    bool_query = autocomplete_body(_query(scope_person=person))["query"]["function_score"]["query"][
+        "bool"
+    ]
+    assert {"term": {"person_ids": str(person)}} in bool_query["filter"]
+    assert bool_query["must"] == [{"match": {"aliases": {"query": "нолан", "operator": "and"}}}]
+
+
+def test_document_body_has_people_ids_and_creator() -> None:
+    from catalog_service.domain.model import ItemData, PersonCredit, PersonRole
+
+    person = uuid7()
+    item = MediaItem.create(
+        uuid7(),
+        ItemData(
+            kind=MediaKind.TRACK,
+            title="Lose Yourself",
+            external_refs={ExternalSource.SPOTIFY: "1"},
+            persons=(PersonCredit(person, "Eminem", PersonRole.ARTIST, 0),),
+        ),
+        TitleNormalizer(),
+        current_year=2026,
+    )
+    doc = document_body(SearchDocument.from_item(item))
+    assert doc["people"] == ["Eminem"]
+    assert doc["person_ids"] == [str(person)]
+    assert doc["creator"] == "Eminem"
+
+
+def test_added_properties_are_in_index_mapping() -> None:
+    from catalog_service.infrastructure.search.opensearch import added_properties
+
+    assert set(added_properties()) <= set(index_body()["mappings"]["properties"])
+
+
+def test_bulk_lines_use_external_version_and_target_index() -> None:
+    from catalog_service.domain.model import ItemData
+    from catalog_service.infrastructure.search.reindex import bulk_lines, index_number
+
+    item = MediaItem.create(
+        uuid7(),
+        ItemData(kind=MediaKind.FILM, title="Т", external_refs={ExternalSource.TMDB: "1"}),
+        TitleNormalizer(),
+        current_year=2026,
+    )
+    doc = SearchDocument.from_item(item)
+    action, body = bulk_lines("catalog_media_v2", [doc])
+    assert action["index"] == {
+        "_index": "catalog_media_v2",
+        "_id": str(doc.id),
+        "version": doc.version,
+        "version_type": "external",
+    }
+    assert body["id"] == str(doc.id)
+    assert index_number("catalog_media_v2") == 2
+    assert index_number("catalog_media") is None
 
 
 def test_parse_hits() -> None:

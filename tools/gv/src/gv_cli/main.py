@@ -549,6 +549,38 @@ def dev_seed_real(
         raise typer.Exit(1) from exc
 
 
+def catalog_reindex_args(*, no_switch: bool, rollback: bool, batch: int) -> list[str]:
+    """Аргументы ``docker compose`` для ``catalog reindex`` внутри контейнера catalog."""
+    if no_switch and rollback:
+        raise typer.BadParameter("--no-switch и --rollback несовместимы")
+    args = ["exec", "-T", "catalog", "service-entry", "reindex", "--batch", str(batch)]
+    if no_switch:
+        args.append("--no-switch")
+    if rollback:
+        args.append("--rollback")
+    return args
+
+
+@dev.command("catalog-reindex")
+def dev_catalog_reindex(
+    *,
+    no_switch: Annotated[
+        bool, typer.Option("--no-switch", help="Собрать новый индекс, алиас не переключать")
+    ] = False,
+    rollback: Annotated[
+        bool, typer.Option("--rollback", help="Вернуть алиас на предыдущий индекс")
+    ] = False,
+    batch: Annotated[int, typer.Option("--batch", min=1, help="Документов в одном bulk")] = 500,
+) -> None:
+    """Пересобрать поисковый индекс catalog (OpenSearch) и атомарно переключить алиас.
+
+    Идемпотентно и возобновляемо: после обрыва запустите снова. Старый индекс остаётся,
+    откат — ``--rollback``. Требует запущенный контейнер catalog.
+    """
+    args = catalog_reindex_args(no_switch=no_switch, rollback=rollback, batch=batch)
+    raise typer.Exit(_compose(repo_root(), "services", args))
+
+
 @dev.command("replan-assets")
 def dev_replan_assets(
     *,

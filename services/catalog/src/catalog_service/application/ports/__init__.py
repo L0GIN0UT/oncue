@@ -36,6 +36,7 @@ __all__ = [
     "ImportEntrySource",
     "ImportFileReader",
     "ImportJobRepository",
+    "IndexMigrator",
     "MediaItemRepository",
     "MusicMetadataProvider",
     "PersonRepository",
@@ -340,4 +341,41 @@ class ImportEntrySource(Protocol):
             AppError: источник недоступен, нет такого объекта и т. п. — задание падает
                 с ``code`` ошибки.
         """
+        ...
+
+
+class IndexMigrator(Protocol):
+    """Пересборка поискового индекса в новый физический индекс с переключением алиаса."""
+
+    @property
+    def target(self) -> str:
+        """Имя физического индекса, в который собирается поиск."""
+        ...
+
+    async def live_indices(self) -> tuple[str, ...]:
+        """Физические индексы, на которые сейчас указывает алиас."""
+        ...
+
+    async def prepare(self) -> None:
+        """Создать целевой индекс, если его нет (идемпотентно)."""
+        ...
+
+    async def write(self, docs: Sequence[SearchDocument]) -> int:
+        """Записать документы в целевой индекс с внешней версией.
+
+        Returns:
+            Сколько документов записано (уже имеющиеся с не меньшей версией пропускаются).
+        """
+        ...
+
+    async def count(self) -> int:
+        """Число документов в целевом индексе (после ``refresh``)."""
+        ...
+
+    async def switch(self) -> tuple[str, ...]:
+        """Атомарно переключить алиас на целевой индекс; вернуть прежние индексы."""
+        ...
+
+    async def rollback(self) -> tuple[str, str]:
+        """Атомарно вернуть алиас на предыдущий индекс; вернуть ``(с какого, на какой)``."""
         ...

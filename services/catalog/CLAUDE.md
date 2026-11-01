@@ -26,3 +26,5 @@
 - `api` не импортирует `infrastructure`: роутеры зависят от `application.services.CatalogServices`, контейнер подставляет `main.py` (`container_for(infra)` — один на процесс).
 - Внешние источники выключены по умолчанию, у каждого свой rate-limit и circuit breaker; Яндекс Музыка — неофициальный клиент, только метаданные (ADR 0014).
 - Фейки портов catalog — `tests/support/catalog_fakes.py`: testkit не может их держать (библиотекам запрещено импортировать сервисы).
+- Автокомплит ищет по `aliases` (название, оригинал, транслит) и `people` (исполнители и режиссёры, `cross_fields`: «автор название»); в подсказке `creator` и `year`. `scope_person` (UUID персоны) — подсказки только её единиц из всего каталога, поиск только по названию, `subtitle`/`creator` скрыты (не выдать ответ); ключ кэша включает область.
+- Индекс `<alias>_vN`, сейчас `v2`. Новые поля добавляются в действующий индекс при `catalog migrate` (`prepare_resources`). Пересборка и откат: `service-entry reindex [--no-switch|--rollback]` / `gv dev catalog-reindex` (идемпотентно, внешняя версия, алиас переключается атомарно, v1 остаётся); шаги — `docs/handoff/catalog-search-reindex.md`.

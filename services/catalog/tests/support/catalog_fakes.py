@@ -260,6 +260,15 @@ class FakeCache:
         self.data.clear()
 
 
+def _name_words(names: tuple[str, ...]) -> list[str]:
+    """Имя целиком и каждое слово с продолжением: «нолан» находит «Кристофер Нолан»."""
+    out: list[str] = []
+    for name in names:
+        words = name.casefold().split()
+        out.extend(" ".join(words[i:]) for i in range(len(words)))
+    return out
+
+
 @dataclass
 class FakeSearch:
     """Поисковый бэкенд в памяти; ``down=True`` — недоступен."""
@@ -285,18 +294,22 @@ class FakeSearch:
         self.calls += 1
         if self.down:
             raise DependencyUnavailableError("down")
+        scope = query.scope_person
+        # Как в боевых бэкендах: имя автора ищется только вне области персоны.
         hits = [
             d
             for d in self.docs.values()
             if d.status == "active"
             and (query.domain is None or d.domain is query.domain)
+            and (scope is None or str(scope) in d.person_ids)
             and any(
                 a.startswith(query.normalized) if prefix else query.normalized in a
-                for a in d.aliases
+                for a in (*d.aliases, *(() if scope else _name_words(d.people)))
             )
         ]
         return [
-            Suggestion(d.id, d.domain, d.title, d.year, d.subtitle) for d in hits[: query.limit]
+            Suggestion(d.id, d.domain, d.title, d.year, d.subtitle, d.creator)
+            for d in hits[: query.limit]
         ]
 
 

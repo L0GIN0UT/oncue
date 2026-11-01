@@ -253,6 +253,13 @@ class MediaItem(AggregateRoot[uuid.UUID]):
         directors = [p.name for p in self.persons if p.role is PersonRole.DIRECTOR]
         return ", ".join(directors)[:MAX_TITLE_LEN] or None
 
+    @property
+    def creator(self) -> str | None:
+        """Исполнители трека или режиссёры фильма — для подсказки «название, автор, год»."""
+        role = PersonRole.ARTIST if self.kind is MediaKind.TRACK else PersonRole.DIRECTOR
+        names = [p.name for p in self.persons if p.role is role]
+        return ", ".join(names)[:MAX_TITLE_LEN] or None
+
     # ------------------------------------------------------------------ поведение
 
     def apply_import(

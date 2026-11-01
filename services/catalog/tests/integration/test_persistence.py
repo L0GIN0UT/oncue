@@ -310,6 +310,48 @@ async def test_trgm_autocomplete_and_search(container: CatalogContainer) -> None
         assert item_id not in {h.id for h in found}
 
 
+async def test_trgm_finds_by_person_and_scopes_to_person(container: CatalogContainer) -> None:
+    """Пункты 39 и 50: поиск по автору, область персоны на всех его единицах каталога."""
+    await upsert(container, film())
+    for ref, title in (("a1", "Lose Yourself"), ("a2", "Without Me"), ("a3", "Lose Control")):
+        await upsert(
+            container,
+            ImportedItem(
+                kind=MediaKind.TRACK,
+                title=title,
+                year=2002,
+                persons=(PersonRef("name:eminem", "Eminem", PersonRole.ARTIST),)
+                if ref != "a3"
+                else (PersonRef("name:missy", "Missy Elliott", PersonRole.ARTIST),),
+                external_refs={ExternalSource.SPOTIFY: ref},
+            ),
+        )
+    assert container.infra.sessions is not None
+    trgm = TrgmSearch(container.infra.sessions)
+
+    by_artist = await trgm.autocomplete(SearchQuery("eminem", None, 10))
+    assert {h.title for h in by_artist} == {"Lose Yourself", "Without Me"}
+    assert {h.creator for h in by_artist} == {"Eminem"}
+    by_director = await trgm.autocomplete(SearchQuery("нолан", None, 10))
+    assert [(h.title, h.creator, h.year) for h in by_director] == [
+        ("Интерстеллар", "Кристофер Нолан", 2014)
+    ]
+    # Название по-прежнему выше совпадения по автору.
+    assert (await trgm.autocomplete(SearchQuery("lose", None, 10)))[0].title.startswith("Lose")
+
+    async with container.uow() as uow:
+        eminem = next(
+            c.person_id
+            for item in await uow.items.get_many(
+                [h.id for h in by_artist if h.title == "Without Me"]
+            )
+            for c in item.persons
+        )
+    scoped = await trgm.autocomplete(SearchQuery("lo", None, 10, scope_person=eminem))
+    assert [h.title for h in scoped] == ["Lose Yourself"]  # без Lose Control и Without Me
+    assert await trgm.autocomplete(SearchQuery("eminem", None, 10, scope_person=eminem)) == []
+
+
 # ------------------------------------------------------------------ потребитель событий
 
 
