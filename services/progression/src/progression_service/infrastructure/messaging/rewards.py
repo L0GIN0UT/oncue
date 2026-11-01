@@ -36,6 +36,7 @@ class _CollectionPublished(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     collection_id: UUID
+    kind: Literal["ugc", "curated"] = "ugc"
     author_id: UUID | None
     domain: Literal["music", "film"]
     status: Literal["published", "hidden"]
@@ -85,6 +86,14 @@ class RewardHandlers:
     async def collection_published(self, envelope: EventEnvelope, session: AsyncSession) -> None:
         """Сборник опубликован автором (скрытые модератором не считаются)."""
         p = _parse_collection(envelope.payload)
+        # Проекция «сборник → автор» для защиты от накрутки (ugc_guard): независимо от статуса.
+        await self._container.record_collection_author(
+            session,
+            collection_id=p.collection_id,
+            kind=p.kind,
+            author_id=p.author_id,
+            now=envelope.occurred_at,
+        )
         if p.status != "published":
             return
         await self._tracker(session).on_collection_published(

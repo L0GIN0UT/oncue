@@ -442,6 +442,40 @@
       "minLength": 1,
       "type": "string"
     },
+    "ugc_guard": {
+      "additionalProperties": false,
+      "description": "Защита от накрутки наград через пользовательские сборники. Секция необязательна: без неё действуют значения по умолчанию (защита включена). Правила применяются к соло-сессиям и онлайн-матчам по сборнику; автор сборника определяется проекцией `collections.CollectionPublished`, для сборника без известного автора награда начисляется как раньше",
+      "properties": {
+        "own_collection_rewards": {
+          "default": false,
+          "description": "Давать ли опыт и Версы за прохождение собственного сборника (false — не давать)",
+          "type": "boolean"
+        },
+        "repeat_scope": {
+          "default": "ugc",
+          "description": "К каким сборникам применять окно повтора: ugc — пользовательские, all — все включая кураторские",
+          "enum": [
+            "ugc",
+            "all"
+          ],
+          "type": "string"
+        },
+        "repeat_window_hours": {
+          "default": 24,
+          "description": "Окно «игрок + сборник»: повторное прохождение в нём наград не даёт. 0 — проверка выключена; 87600 (10 лет) — «никогда не начислять повторно»",
+          "maximum": 87600,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ugc_daily_xp_cap": {
+          "description": "Суточный потолок опыта с пользовательских сборников (сутки по timezone конфига); нет ключа — без отдельного потолка",
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "verses": {
       "additionalProperties": false,
       "description": "Версы: начисление за игру и сетки наград рейтинга",
