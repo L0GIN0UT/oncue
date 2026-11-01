@@ -549,6 +549,25 @@ def dev_seed_real(
         raise typer.Exit(1) from exc
 
 
+@dev.command("progression-backfill-authors")
+def dev_progression_backfill_authors(
+    *,
+    collections_url: Annotated[
+        str, typer.Option("--collections-url", help="Адрес collections внутри сети compose")
+    ] = "http://collections:8000",
+) -> None:
+    """Догрузить авторов уже опубликованных сборников в проекцию progression (повтор безопасен).
+
+    Нужна один раз после выката защиты от накрутки: без записи об авторе правило «за свой
+    сборник наград нет» для старых сборников не работает. Читает публичный GET /v1/collections.
+    """
+    args = [
+        "exec", "-T", "progression", "service-entry", "backfill-collection-authors",
+        "--collections-url", collections_url,
+    ]  # fmt: skip
+    raise typer.Exit(_compose(repo_root(), "services", args))
+
+
 @dev.command("replan-assets")
 def dev_replan_assets(
     *,

@@ -217,6 +217,12 @@
     ]
   },
   "timezone": "Europe/Moscow",
+  "ugc_guard": {
+    "own_collection_rewards": false,
+    "repeat_window_hours": 24,
+    "repeat_scope": "ugc",
+    "ugc_daily_xp_cap": 500
+  },
   "verses": {
     "daily": 5,
     "duel": {

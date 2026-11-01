@@ -16,8 +16,9 @@ import structlog
 
 from gv_core.clock import Clock
 from progression_service.application.accrual.common import AccrualContractError, config_at
-from progression_service.application.accrual.posting import Poster, local_day
+from progression_service.application.accrual.posting import Poster, boosted, local_day
 from progression_service.application.accrual.solo import AccrualResult
+from progression_service.application.accrual.ugc_guard import NO_COLLECTION, decide
 from progression_service.application.ports import (
     NoopRewardHook,
     RewardHook,
@@ -53,6 +54,8 @@ class FinishedMatch:
     finished_at: datetime
     players: tuple[MatchPlayerResult, ...]
     rounds: tuple[RoundScores, ...]
+    collection_ids: tuple[UUID, ...] = ()
+    """Сборники матча (лобби): для защиты от накрутки через пользовательские сборники."""
 
 
 def rounds_stats(rounds: tuple[RoundScores, ...], user_id: UUID) -> tuple[int, int]:
@@ -73,6 +76,14 @@ def rounds_stats(rounds: tuple[RoundScores, ...], user_id: UUID) -> tuple[int, i
     return played, won
 
 
+def _fit_cap(base: int, multiplier: Decimal, remaining: int) -> int:
+    """Наибольшая база не больше ``base``, чей опыт с множителем влезает в ``remaining``."""
+    fitted = max(0, min(base, remaining))
+    while fitted > 0 and boosted(fitted, multiplier) > remaining:
+        fitted -= 1
+    return fitted
+
+
 class AccrueMatch:
     """Опыт и Версы игрокам матча одной транзакцией."""
 
@@ -83,7 +94,7 @@ class AccrueMatch:
         self._clock = clock
         self._hook: RewardHook = hook or NoopRewardHook()
 
-    async def execute(self, match: FinishedMatch) -> AccrualResult:
+    async def execute(self, match: FinishedMatch) -> AccrualResult:  # noqa: PLR0915 — один проход по игрокам в одной транзакции
         """Начислить игрокам матча.
 
         Raises:
@@ -118,7 +129,21 @@ class AccrueMatch:
                 await poster.lock_user(user_id)
                 counters = await uow.counters.lock(user_id, day)
                 xp_op = f"match:{ref}:{user_id}:xp"
-                if not await uow.ledger.has_xp(xp_op):
+                verse_op = f"match:{ref}:{user_id}:verse"
+                xp_pending = not await poster.accounted(xp_op)
+                verse_pending = not await poster.accounted(verse_op)
+                # Защита от накрутки (ugc_guard): свой сборник и повтор в окне наград не дают.
+                decision = NO_COLLECTION
+                if match.collection_ids and (xp_pending or verse_pending):
+                    decision = await decide(
+                        uow, cfg.ugc_guard, user_id, match.collection_ids, match.finished_at
+                    )
+                guard_reason = decision.verdict.mark_reason
+                if xp_pending and not decision.allowed:
+                    await poster.mark_if_capped(
+                        user_id, op_id=xp_op, raw=online.match_xp, paid=0, reason=guard_reason
+                    )
+                elif xp_pending:
                     multiplier = (
                         await self._hook.online_xp_multiplier(
                             uow, user_id, match.match_id, self._clock.now()
@@ -127,37 +152,56 @@ class AccrueMatch:
                         or (online.first_win_eligible and cfg.xp.first_win_bonus > 0)
                         else Decimal(1)
                     )
-                    await poster.xp(
+                    ugc_cap = cfg.ugc_guard.ugc_daily_xp_cap if decision.ugc else None
+                    match_xp = online.match_xp
+                    if ugc_cap is not None:
+                        match_xp = _fit_cap(match_xp, multiplier, ugc_cap - counters.ugc_xp)
+                    paid_xp = await poster.xp(
                         user_id,
                         op_id=xp_op,
-                        base_amount=online.match_xp,
+                        base_amount=match_xp,
                         reason=reason,
                         source_ref=ref,
                         multiplier=multiplier,
                     )
+                    if decision.ugc:
+                        counters.ugc_xp += paid_xp
                     first_win = online.first_win_eligible and cfg.xp.first_win_bonus > 0
                     if first_win and not counters.first_win_awarded:
-                        await poster.xp(
+                        bonus = cfg.xp.first_win_bonus
+                        if ugc_cap is not None:
+                            bonus = _fit_cap(bonus, multiplier, ugc_cap - counters.ugc_xp)
+                        paid_bonus = await poster.xp(
                             user_id,
                             op_id=f"first_win:{user_id}:{day.isoformat()}",
-                            base_amount=cfg.xp.first_win_bonus,
+                            base_amount=bonus,
                             reason=FIRST_WIN_REASON,
                             source_ref=ref,
                             multiplier=multiplier,
                         )
                         counters.first_win_awarded = True
-                verse_op = f"match:{ref}:{user_id}:verse"
-                if not await poster.accounted(verse_op):
+                        if decision.ugc:
+                            counters.ugc_xp += paid_bonus
+                if verse_pending:
                     raw = wallet.online_verses(cfg.verses, result, cfg.min_rounds_ratio)
+                    capped_verses = (
+                        wallet.cap_online_verses(cfg.verses, raw, counters.online_verses)
+                        if decision.allowed
+                        else 0
+                    )
                     paid = await poster.verses(
                         user_id,
                         op_id=verse_op,
-                        amount=wallet.cap_online_verses(cfg.verses, raw, counters.online_verses),
+                        amount=capped_verses,
                         reason=reason,
                         source_ref=ref,
                     )
                     await poster.mark_if_capped(
-                        user_id, op_id=verse_op, raw=raw, paid=paid, reason=reason
+                        user_id,
+                        op_id=verse_op,
+                        raw=raw,
+                        paid=paid,
+                        reason=reason if decision.allowed else guard_reason,
                     )
                     counters.online_verses += paid
                 await uow.counters.save(user_id, day, counters)

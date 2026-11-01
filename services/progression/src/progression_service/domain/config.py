@@ -43,6 +43,8 @@ BOUNDS: Mapping[str, int | float] = {
     "xp.party.other_place_bonus": _AMOUNT_MAX,
     "xp.first_win_of_day.bonus": _AMOUNT_MAX,
     "xp.solo_daily_cap": _AMOUNT_MAX,
+    "ugc_guard.repeat_window_hours": 87_600,
+    "ugc_guard.ugc_daily_xp_cap": _AMOUNT_MAX,
     "verses.solo_round": _AMOUNT_MAX,
     "verses.daily": _AMOUNT_MAX,
     "verses.duel.win": _AMOUNT_MAX,
@@ -378,6 +380,34 @@ class SpendConfig:
     bucket_order: tuple[str, ...]
 
 
+REPEAT_SCOPES = ("ugc", "all")
+
+
+@dataclass(frozen=True, slots=True)
+class UgcGuardConfig:
+    """Защита от накрутки наград через пользовательские сборники.
+
+    Секция конфига необязательна: если её нет, действуют эти значения по умолчанию (защита
+    включена), а не «без защиты».
+
+    Attributes:
+        own_collection_rewards: Давать ли награду (опыт и Версы) за прохождение собственного
+            сборника. ``False`` — не давать.
+        repeat_window_hours: Окно «игрок + сборник»: повторное прохождение в этом окне наград
+            не даёт. ``0`` — проверка выключена; очень большое значение (до 87 600 = 10 лет)
+            — «никогда не начислять повторно».
+        repeat_scope: К каким сборникам применять окно повтора: ``ugc`` (пользовательские)
+            или ``all`` (включая кураторские).
+        ugc_daily_xp_cap: Суточный потолок опыта с пользовательских сборников (по суткам
+            конфига); ``None`` — без отдельного потолка.
+    """
+
+    own_collection_rewards: bool = False
+    repeat_window_hours: int = 24
+    repeat_scope: str = "ugc"
+    ugc_daily_xp_cap: int | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class ProgressionConfig:
     """Разобранная и проверенная версия конфига.
@@ -395,6 +425,7 @@ class ProgressionConfig:
         shop: Магазин 5b; ``None`` - секции нет, магазин пуст.
         promo: Промокоды 5b; ``None`` - секции нет.
         spend: Порядок трат 5b; ``None`` - секции нет (тратится только ``earned``).
+        ugc_guard: Защита от накрутки через пользовательские сборники (по умолчанию включена).
     """
 
     timezone: str
@@ -409,6 +440,7 @@ class ProgressionConfig:
     shop: ShopConfig | None = None
     promo: PromoConfig | None = None
     spend: SpendConfig | None = None
+    ugc_guard: UgcGuardConfig = UgcGuardConfig()
 
     @property
     def tz(self) -> ZoneInfo:
@@ -440,6 +472,7 @@ class ProgressionConfig:
         shop = _shop(_obj(body, "shop")) if "shop" in body else None
         promo = _promo(_obj(body, "promo")) if "promo" in body else None
         spend = _spend(_obj(body, "spend")) if "spend" in body else None
+        ugc_guard = _ugc_guard(_obj(body, "ugc_guard")) if "ugc_guard" in body else UgcGuardConfig()
         return cls(
             timezone=timezone,
             levels=levels,
@@ -453,6 +486,7 @@ class ProgressionConfig:
             shop=shop,
             promo=promo,
             spend=spend,
+            ugc_guard=ugc_guard,
         )
 
 
@@ -870,6 +904,41 @@ def _spend(raw: Mapping[str, Any]) -> SpendConfig:
     if "earned" not in order:
         raise ConfigInvalidError("spend.bucket_order: нужен бакет earned")
     return SpendConfig(bucket_order=tuple(order))
+
+
+def _ugc_guard(raw: Mapping[str, Any]) -> UgcGuardConfig:
+    """Защита от накрутки: ключи необязательны, пропущенный берёт значение по умолчанию."""
+    defaults = UgcGuardConfig()
+    own = raw.get("own_collection_rewards", defaults.own_collection_rewards)
+    if not isinstance(own, bool):
+        raise ConfigInvalidError("ugc_guard.own_collection_rewards: ожидается true/false")
+    window = (
+        _int(raw, "repeat_window_hours", "ugc_guard.repeat_window_hours")
+        if "repeat_window_hours" in raw
+        else defaults.repeat_window_hours
+    )
+    scope = raw.get("repeat_scope", defaults.repeat_scope)
+    if scope not in REPEAT_SCOPES:
+        raise ConfigInvalidError(f"ugc_guard.repeat_scope: одно из {', '.join(REPEAT_SCOPES)}")
+    cap = (
+        _int(raw, "ugc_daily_xp_cap", "ugc_guard.ugc_daily_xp_cap")
+        if raw.get("ugc_daily_xp_cap") is not None
+        else None
+    )
+    unknown = set(raw) - {
+        "own_collection_rewards",
+        "repeat_window_hours",
+        "repeat_scope",
+        "ugc_daily_xp_cap",
+    }
+    if unknown:
+        raise ConfigInvalidError(f"ugc_guard: неизвестные ключи {sorted(unknown)}")
+    return UgcGuardConfig(
+        own_collection_rewards=own,
+        repeat_window_hours=window,
+        repeat_scope=str(scope),
+        ugc_daily_xp_cap=cap,
+    )
 
 
 def _check_multiplier(value: object) -> None:
