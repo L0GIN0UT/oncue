@@ -36,7 +36,7 @@ session:
   players: { min: 2, max: 6 }
   rounds: 10
   countdown_s: 3
-  level_windows_s: [25]
+  level_windows_s: [35]
   reveal_s: 5
   contest:
     type: parallel
@@ -46,7 +46,7 @@ session:
     visibility: private
     overridable:
       rounds: [5, 10, 15, 20]
-      level_window_s: [15, 25, 40]
+      level_window_s: [20, 35, 55]
       players_max: [2, 4, 6]
       visibility: [public, private]
   chat:

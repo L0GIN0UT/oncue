@@ -338,6 +338,7 @@ class SessionPresenter:
             "shown": await self._shown(session, r, rules, items),
             "options": self._options(r, items),
             "progress": self._progress(session, r, rules),
+            "subjects": [{"name": s.name, "role": s.role} for s in r.subjects],
         }
 
     @staticmethod
@@ -354,6 +355,7 @@ class SessionPresenter:
             "shown": [],
             "options": [],
             "progress": None,
+            "subjects": [],
         }
 
     @staticmethod

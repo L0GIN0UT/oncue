@@ -123,6 +123,9 @@ LOBBY_REQUIRED = "config.lobby_required"
 LOBBY_UNEXPECTED = "config.lobby_unexpected"
 """Код проблемы: настройки ``lobby`` у сессии другого вида."""
 
+SUBJECT_MODE_SOLO_ONLY = "config.subject_mode_solo_only"
+"""Код проблемы: ``single_subject`` в онлайн-режиме (область раунда есть только у соло)."""
+
 FREE_TEXT_LOBBY_ONLY = "config.free_text_lobby_only"
 """Код проблемы: свободный чат разрешён только в кастомном лобби (ADR 0036)."""
 
@@ -403,6 +406,9 @@ class EngineFactory:
             issues.append(ConfigIssue("session.lobby", LOBBY_UNEXPECTED))
         if session.chat.free_text and not is_lobby:
             issues.append(ConfigIssue("session.chat.free_text", FREE_TEXT_LOBBY_ONLY))
+        if config.answer.subject_mode == "single_subject":
+            # match не получает область раунда: режим молча стал бы default (ревью PR).
+            issues.append(ConfigIssue("answer.subject_mode", SUBJECT_MODE_SOLO_ONLY))
         if session.lobby is not None:
             issues.extend(self._overridable_issues(config, session, levels_count))
         return issues

@@ -275,6 +275,14 @@ class RoundOut(BaseModel):
     shown: list[ShownItem] = Field(default_factory=list)
     options: list[OptionOut] = Field(default_factory=list)
     progress: RoundProgress | None = None
+    subjects: list[PersonOut] = Field(
+        default_factory=list,
+        description=(
+            "Персоны, задающие область ответа раунда (сборник одного исполнителя, марафон): "
+            "ответом считается название, имя персоны не принимается, автоподсказка ищет только "
+            "по названиям этих персон. Пусто - область не ограничена. Необязательное поле"
+        ),
+    )
 
 
 class SessionSnapshot(BaseModel):

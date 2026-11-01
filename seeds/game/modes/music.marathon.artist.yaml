@@ -33,6 +33,7 @@ answer:
         - { min_len: 10, max_distance: 2 }
       accept_same_title: true
   partial: [artist]
+  subject_mode: title_only
 scoring:
   type: by_level
   params:

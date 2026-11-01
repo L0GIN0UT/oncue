@@ -10,15 +10,44 @@ source:
       kinds: [film]
       min_playable: 20
     presets:
+      # Пресеты по данным каталога (10 000 фильмов, сериалов, мультфильмов, аниме): до 1989
+      # (около 1 200 единиц), десятилетия и самые частые жанры (в каждом больше 1 000).
+      - id: to1989
+        title_i18n: modes.presets.to1989
+        filters: { years: { to: 1989 } }
       - id: y1990s
         title_i18n: modes.presets.y1990s
         filters: { years: { from: 1990, to: 1999 } }
-      - id: from2000
-        title_i18n: modes.presets.from2000
-        filters: { years: { from: 2000 } }
+      - id: y2000s
+        title_i18n: modes.presets.y2000s
+        filters: { years: { from: 2000, to: 2009 } }
+      - id: y2010s
+        title_i18n: modes.presets.y2010s
+        filters: { years: { from: 2010, to: 2019 } }
+      - id: y2020s
+        title_i18n: modes.presets.y2020s
+        filters: { years: { from: 2020 } }
       - id: drama
         title_i18n: modes.presets.drama
         filters: { genres_any: [драма] }
+      - id: comedy
+        title_i18n: modes.presets.comedy
+        filters: { genres_any: [комедия] }
+      - id: action
+        title_i18n: modes.presets.action
+        filters: { genres_any: [боевик, "боевик и приключения"] }
+      - id: thriller
+        title_i18n: modes.presets.thriller
+        filters: { genres_any: [триллер, криминал, детектив] }
+      - id: scifi
+        title_i18n: modes.presets.scifi
+        filters: { genres_any: [фантастика, "нф и фэнтези", фэнтези] }
+      - id: horror
+        title_i18n: modes.presets.horror
+        filters: { genres_any: [ужасы] }
+      - id: animation
+        title_i18n: modes.presets.animation
+        filters: { genres_any: [мультфильм] }
 clue:
   type: frame_progressive
   params:
