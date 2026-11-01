@@ -1,5 +1,5 @@
 # Дуэль 1×1 по музыке (план этапа 4, §0 п. 5; референс Songless §8.3): два уровня —
-# отрывок 4 с (окно 20 с, 12 очков) и 15 с (окно 30 с, 6 очков), 3 попытки на уровень,
+# отрывок 4 с (окно 25 с, 12 очков) и 15 с (окно 40 с, 6 очков), 3 попытки на уровень,
 # точный ответ соперника закрывает уровень для обоих (race). Только исполнитель — partial.
 # clue.params = профиль audio_intro/duel media-pipeline (D7: params_hash).
 key: music.duel.classic
@@ -39,7 +39,7 @@ session:
   players: { min: 2, max: 2 }
   rounds: 7
   countdown_s: 3
-  level_windows_s: [20, 30]
+  level_windows_s: [25, 40]
   reveal_s: 5
   contest:
     type: race

@@ -89,6 +89,9 @@ class DistractorsSpec(PluginSpec):
     count: Annotated[int, Field(strict=True, ge=1, le=7)]
 
 
+SubjectMode = Literal["default", "title_only", "single_subject"]
+
+
 class AnswerParamsSpec(_Spec):
     """Возможности источника ответа (ADR 0040).
 
@@ -108,12 +111,18 @@ class AnswerSpec(_Spec):
         matcher: Плагин сверки.
         partial: Ключи плагинов ``PartialRule`` (например ``artist``).
         params: Дистракторы формата ``pick`` (ADR 0040); у остальных форматов не задаётся.
+        subject_mode: Область ответа по персоне: ``default`` — как в ``partial``;
+            ``title_only`` — засчитывается только название, частичный ответ по персоне
+            отключён (марафон исполнителя или режиссёра); ``single_subject`` — то же, но
+            только когда раунд ограничен одной персоной (сборник одного исполнителя), иначе
+            как ``default``.
     """
 
     format: PluginKey
     matcher: MatcherSpec
     partial: tuple[PluginKey, ...] = Field(default=(), max_length=10)
     params: AnswerParamsSpec | None = None
+    subject_mode: SubjectMode = "default"
 
 
 class SoloSessionSpec(_Spec):

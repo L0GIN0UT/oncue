@@ -41,7 +41,7 @@ session:
   players: { min: 2, max: 2 }
   rounds: 7
   countdown_s: 3
-  level_windows_s: [15, 15, 15, 15, 15, 15]
+  level_windows_s: [15, 15, 20, 25, 30, 35]
   reveal_s: 5
   contest:
     type: race
