@@ -165,7 +165,8 @@ def test_emoji_shorter_than_media_profile_is_rejected() -> None:
     body = draft(items=(Item(A, "🎬🍿🎥🎭🌟"), Item(B, family * 5), Item(C, "кот")))
     with pytest.raises(PublishInvalidError) as exc:
         policy.publishable(Domain.FILM, body, KNOWN)
-    assert exc.value.details["errors"] == [
+    errors = [{k: v for k, v in e.items() if k != "message"} for e in exc.value.details["errors"]]
+    assert errors == [
         {"path": "items[0].custom.emoji", "code": "collections.emoji_too_short", "min": 6},
         {"path": "items[1].custom.emoji", "code": "collections.emoji_too_short", "min": 6},
         {"path": "items[2].custom.emoji", "code": "collections.emoji_invalid"},

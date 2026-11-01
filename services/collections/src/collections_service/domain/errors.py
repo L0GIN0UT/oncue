@@ -74,6 +74,15 @@ class NotCuratedError(ConflictError):
         super().__init__(message)
 
 
+class NotUgcError(ConflictError):
+    """Админ-удаление только для пользовательских сборников; кураторские правят куратором (409)."""
+
+    default_code = "collections.not_ugc"
+
+    def __init__(self, message: str = "сборник кураторский, а не пользовательский") -> None:
+        super().__init__(message)
+
+
 class NotPublishedError(ConflictError):
     """Действие только для опубликованного сборника (скрыть, «рекомендуемое»), 409."""
 
@@ -95,13 +104,23 @@ class DraftInvalidError(InvalidInputError):
     default_code = "collections.draft_invalid"
 
 
+_SHOWN_IN_TITLE = 3  # причин публикации в заголовке ответа
+
+
 class PublishInvalidError(InvalidInputError):
     """Сборник не проходит проверки публикации (422, ``details.errors`` — ``[{path, code}]``)."""
 
     default_code = "collections.publish_invalid"
 
     def __init__(self, errors: list[dict[str, Any]]) -> None:
-        super().__init__("сборник не проходит проверки публикации", details={"errors": errors})
+        shown = errors[:_SHOWN_IN_TITLE]
+        reasons = "; ".join(str(e["message"]) for e in shown if "message" in e)
+        rest = len(errors) - len(shown)
+        more = f" (и ещё {rest})" if rest > 0 else ""
+        text = "сборник не проходит проверки публикации"
+        super().__init__(
+            f"{text}: {reasons}{more}" if reasons else text, details={"errors": errors}
+        )
 
 
 class AuthorRestrictedError(ForbiddenError):

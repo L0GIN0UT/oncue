@@ -31,7 +31,7 @@ from collections_service.api.schemas import (
 )
 from collections_service.domain.model import DraftBody
 from gv_auth import Principal, require_perm
-from gv_service import IdempotencyKey, problem_responses
+from gv_service import IdempotencyKey, Reason, problem_responses
 
 ADMIN_ACCESS = "admin.access"
 Viewer = Annotated[Principal, Depends(require_perm(ADMIN_ACCESS, "collections.view"))]
@@ -173,6 +173,26 @@ def build_admin_router(c: ApiServices) -> APIRouter:
             admin_ctx(principal, body.reason, key), collection_id, hidden=False
         )
         return AdminCollectionOut.model_validate(data)
+
+    @router.delete(
+        "/collections/{collection_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        summary="Удалить пользовательский сборник",
+        description=(
+            "Для сборников, которые автор не может удалить сам (застрявшие черновики). "
+            "Черновик, опубликованный и скрытый; опубликованный даёт "
+            "`collections.CollectionDeleted`. Повтор — 204 без события. Кураторский — 409 "
+            "`collections.not_ugc`. Право `collections.unpublish`, причина в `reason` (аудит)."
+        ),
+        responses=_MUTATE,
+    )
+    async def admin_delete(
+        collection_id: CollectionId,
+        reason: Reason,
+        principal: Unpublisher,
+        key: IdempotencyKey,
+    ) -> None:
+        await c.admin.delete_user_collection(admin_ctx(principal, reason, key), collection_id)
 
     @router.put(
         "/collections/{collection_id}/featured",

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from collections_service.domain.error_messages import error_message
 from collections_service.domain.errors import (
     DraftInvalidError,
     PublishInvalidError,
@@ -108,7 +109,7 @@ class ItemInfo:
 
 
 def _error(path: str, code: str, **extra: Any) -> dict[str, Any]:
-    return {"path": path, "code": code, **extra}
+    return {"path": path, "code": code, **extra, "message": error_message(path, code, extra)}
 
 
 class CollectionPolicy:
@@ -233,7 +234,7 @@ class CollectionPolicy:
     ) -> tuple[Item, ...]:
         limits = self.limits
         if len(raw) < limits.items_min:
-            errors.append(_error("items", ITEMS_TOO_FEW, min=limits.items_min))
+            errors.append(_error("items", ITEMS_TOO_FEW, min=limits.items_min, actual=len(raw)))
         if len(raw) > limits.items_max:
             errors.append(_error("items", ITEMS_TOO_MANY, max=limits.items_max))
         seen: set[UUID] = set()

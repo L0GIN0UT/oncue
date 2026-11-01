@@ -77,7 +77,11 @@ async def test_blocked_item_is_removed_with_new_version(svc: Any) -> None:
     response = await svc.publish(author, cid, saved.json()["revision"])
     problem = assert_problem(response, 422, "collections.publish_invalid")
     assert problem["details"]["errors"] == [
-        {"path": "items[2]", "code": "collections.item_unavailable"}
+        {
+            "path": "items[2]",
+            "code": "collections.item_unavailable",
+            "message": "Единица №3 недоступна: её нет в каталоге или она скрыта",
+        }
     ]
 
 
