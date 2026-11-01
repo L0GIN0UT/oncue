@@ -368,3 +368,37 @@ async def test_my_collections_lists_drafts_and_published_with_cursor(svc: Any) -
     assert only[0]["hidden_by_moderator"] is False
     draft_row = next(i for i in seen if i == drafts[0]["collection_id"])
     assert draft_row
+
+
+async def test_publish_errors_explain_the_reason(svc: Any) -> None:
+    """422 при публикации: у каждой ошибки есть код и понятный текст, а detail их перечисляет."""
+    author = svc.user()
+    film = await svc.add_items(1)
+    cid = (await svc.create(author))["collection_id"]
+    body = {
+        "title": "мой сайт example.com",
+        "default_mode_key": "film.collection.frame",
+        "items": [{"media_item_id": str(film[0])}],
+    }
+    saved = await svc.save(author, cid, body, base=1)
+    response = await svc.publish(author, cid, saved.json()["revision"])
+    problem = assert_problem(response, 422, "collections.publish_invalid")
+    by_code = {e["code"]: e for e in problem["details"]["errors"]}
+    assert by_code["collections.items_too_few"]["message"] == "Нужно минимум 5 единиц, сейчас 1"
+    assert by_code["collections.items_too_few"]["min"] == 5
+    assert by_code["collections.title_invalid"]["message"] == "Название: содержит ссылку"
+    assert "Нужно минимум 5 единиц, сейчас 1" in problem["title"]
+
+
+async def test_delete_hidden_collection_is_idempotent(svc: Any) -> None:
+    author = svc.user()
+    cid = (await svc.published(author))["collection_id"]
+    moderator = svc.admin("admin.access", "collections.unpublish")
+    hidden = await svc.client.post(
+        f"/admin/v1/collections/{cid}/hide", json={"reason": "спам"}, headers=moderator.mutate()
+    )
+    assert hidden.status_code == 200
+    for _ in range(2):
+        response = await svc.client.delete(f"/v1/collections/{cid}", headers=author.mutate())
+        assert response.status_code == 204
+    assert len(await svc.events("collections.CollectionDeleted", cid)) == 1

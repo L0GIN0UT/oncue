@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from gv_core.ids import uuid7
 from gv_testkit import assert_event_matches_schema, assert_problem, load_example
 
 pytestmark = pytest.mark.component
@@ -204,3 +205,59 @@ async def test_restriction_lifecycle(svc: Any) -> None:
     )
     assert again.json()["restricted"] is False
     assert (await svc.create(author))["revision"] == 1
+
+
+async def test_admin_deletes_user_collection_idempotently(svc: Any) -> None:
+    """Застрявший сборник удаляется админом: черновик без события, опубликованный с ним."""
+    author = svc.user()
+    moderator = svc.admin("admin.access", "collections.unpublish")
+    draft = (await svc.create(author))["collection_id"]
+    published = (await svc.published(author))["collection_id"]
+    for cid in (draft, published):
+        for _ in range(2):  # повтор — тот же успех
+            response = await svc.client.delete(
+                f"/admin/v1/collections/{cid}",
+                params={"reason": "застрял у пользователя"},
+                headers=moderator.mutate(),
+            )
+            assert response.status_code == 204, response.text
+    assert await svc.events("collections.CollectionDeleted", draft) == []
+    assert len(await svc.events("collections.CollectionDeleted", published)) == 1
+    mine = (await svc.client.get("/v1/me/collections", headers=author.headers)).json()
+    assert mine["items"] == []
+    actions = await svc.sql("SELECT action FROM admin_actions ORDER BY created_at, id")
+    assert {a.action for a in actions} == {"collection.delete"}
+
+
+async def test_admin_delete_rejects_curated_missing_and_unprivileged(svc: Any) -> None:
+    items = await svc.add_items(5)
+    curator = svc.admin("admin.access", "collections.curate")
+    created = await svc.client.post(
+        "/admin/v1/collections",
+        json={
+            "domain": "film",
+            "title": "Рекомендуем",
+            "default_mode_key": "film.collection.frame",
+            "items": [{"media_item_id": str(i)} for i in items],
+            "reason": "подборка",
+        },
+        headers=curator.mutate(),
+    )
+    cid = created.json()["collection_id"]
+    moderator = svc.admin("admin.access", "collections.unpublish")
+    url = f"/admin/v1/collections/{cid}"
+    params = {"reason": "проверка"}
+    assert_problem(
+        await svc.client.delete(url, params=params, headers=moderator.mutate()),
+        409,
+        "collections.not_ugc",
+    )
+    assert_problem(
+        await svc.client.delete(
+            f"/admin/v1/collections/{uuid7()}", params=params, headers=moderator.mutate()
+        ),
+        404,
+        "collections.not_found",
+    )
+    plain = svc.admin("admin.access")
+    assert (await svc.client.delete(url, params=params, headers=plain.mutate())).status_code == 403

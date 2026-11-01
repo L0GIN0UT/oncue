@@ -23,8 +23,8 @@ from collections_service.application.ports import (
 )
 from collections_service.application.views import Presenter, restriction_json
 from collections_service.domain.collection import Collection
-from collections_service.domain.errors import CollectionNotFoundError
-from collections_service.domain.model import Domain, DraftBody, Status
+from collections_service.domain.errors import CollectionNotFoundError, NotUgcError
+from collections_service.domain.model import Domain, DraftBody, Kind, Status
 from collections_service.domain.policy import CollectionPolicy
 from gv_core.clock import Clock
 from gv_core.ids import uuid7
@@ -214,6 +214,32 @@ class AdminCommands:
             return await self._admin_out(uow, collection_id)
 
         return await self._mutate(ctx, action, collection_id, {}, perform)
+
+    async def delete_user_collection(self, ctx: AdminContext, collection_id: UUID) -> Json:
+        """Удалить пользовательский сборник (черновик, опубликованный или скрытый).
+
+        Для застрявших сборников, которые автор не может удалить сам. Опубликованный даёт
+        ``CollectionDeleted``; повтор по уже удалённому — успех без события.
+
+        Raises:
+            CollectionNotFoundError: такого сборника нет (404).
+            NotUgcError: кураторский сборник (409).
+        """
+
+        async def perform(uow: CollectionsUnitOfWork) -> Json:
+            collection = await uow.collections.get(collection_id, for_update=True)
+            if collection is None:
+                raise CollectionNotFoundError()
+            if collection.state.kind is Kind.CURATED:
+                raise NotUgcError()
+            changed = collection.delete(self._clock.now())
+            if changed:
+                await uow.collections.save(collection)
+                uow.track(collection)
+            await self._audit(uow, ctx, "collection.delete", collection_id, changed=changed)
+            return {}
+
+        return await self._mutate(ctx, "collection.delete", collection_id, {}, perform)
 
     async def set_featured(
         self, ctx: AdminContext, collection_id: UUID, *, featured: bool, rank: int | None

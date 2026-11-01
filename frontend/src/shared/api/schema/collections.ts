@@ -68,7 +68,11 @@ export interface paths {
          */
         put: operations["admin_update_admin_v1_collections__collection_id__put"];
         post?: never;
-        delete?: never;
+        /**
+         * Удалить пользовательский сборник
+         * @description Для сборников, которые автор не может удалить сам (застрявшие черновики). Черновик, опубликованный и скрытый; опубликованный даёт `collections.CollectionDeleted`. Повтор — 204 без события. Кураторский — 409 `collections.not_ugc`. Право `collections.unpublish`, причина в `reason` (аудит).
+         */
+        delete: operations["admin_delete_admin_v1_collections__collection_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -259,7 +263,7 @@ export interface paths {
         put?: never;
         /**
          * Опубликовать черновик
-         * @description Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, reason?}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.emoji_too_short` (`min`), `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).
+         * @description Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, message, reason?, min?, max?, actual?}]`: `code` — стабильный машинный код, `message` — готовый русский текст для показа («Нужно минимум 5 единиц, сейчас 3»), `path` — поле (`items`, `items[2]`, `title`); заголовок ответа перечисляет первые причины; `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.emoji_too_short` (`min`), `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).
          */
         post: operations["publish_v1_collections__collection_id__publish_post"];
         delete?: never;
@@ -1528,6 +1532,82 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminCollectionDetail"];
                 };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    admin_delete_admin_v1_collections__collection_id__delete: {
+        parameters: {
+            query: {
+                reason: string;
+            };
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Идентификатор сборника */
+                collection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Не аутентифицирован */
             401: {
