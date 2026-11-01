@@ -1,0 +1,77 @@
+# Стартовые артисты для fetch_deezer.py (по одному имени в строке; # — комментарий).
+# Дальше пул расширяется автоматически по «похожим артистам». Добавляйте своих.
+# Русскоязычные
+Земфира
+Кино
+ДДТ
+Сплин
+Мумий Тролль
+Би-2
+Ленинград
+Nautilus Pompilius
+Чайф
+Агата Кристи
+Нервы
+Louna
+Баста
+Скриптонит
+Oxxxymiron
+Noize MC
+Макс Корж
+Miyagi & Эндшпиль
+HammAli & Navai
+Jony
+Егор Крид
+Тима Белорусских
+Мот
+Zivert
+Monetochka
+Монеточка
+Полина Гагарина
+Дима Билан
+Сергей Лазарев
+Макс Барских
+Artik & Asti
+Anna Asti
+Элджей
+Little Big
+Ранеткi
+Дайте танк (!)
+Ваня Дмитриенко
+Люся Чеботина
+Клава Кока
+Градусы
+Rauf & Faik
+Kai Angel
+Три дня дождя
+Звери
+Иванушки International
+Игорь Николаев
+Алла Пугачёва
+Валерий Меладзе
+Григорий Лепс
+Любэ
+Руки Вверх
+Natan
+Мари Краймбрери
+# Международные
+The Weeknd
+Taylor Swift
+Drake
+Billie Eilish
+Ed Sheeran
+Dua Lipa
+Eminem
+Queen
+The Beatles
+Metallica
+Linkin Park
+Nirvana
+Coldplay
+Imagine Dragons
+Rihanna
+Beyoncé
+Adele
+Bruno Mars
+Kendrick Lamar
+Daft Punk
