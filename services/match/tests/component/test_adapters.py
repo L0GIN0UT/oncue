@@ -24,7 +24,7 @@ from match_service.infrastructure.realtime import (
 )
 from pydantic import SecretStr
 
-from gv_core.errors import DependencyUnavailableError, GoneError
+from gv_core.errors import AppError, DependencyUnavailableError, GoneError
 from gv_core.ids import uuid7
 from gv_game_kernel import AssetRef
 from gv_service import RealtimeSettings
@@ -329,5 +329,59 @@ async def test_game_plan_sends_overrides_only_when_chosen_and_maps_refusals() ->
                 "reason": "incompatible",
                 "errors": errors,
             }
+    finally:
+        await client.aclose()
+
+
+# ----------------------------------------------------------------------------- повтор плана (п. 23)
+def _plan_client(retries: int) -> GameClient:
+    return GameClient(
+        GAME,
+        Tokens(),
+        timeout_s=1,
+        breaker=CircuitBreaker(10, 60),
+        plan_retries=retries,
+        retry_pause_s=0,
+    )
+
+
+async def test_plan_is_retried_once_after_read_timeout() -> None:
+    """game не уложился в таймаут: один повтор берёт план, комната не падает в start_failed."""
+    client = _plan_client(1)
+    attempts: list[int] = []
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json=_plan_body(_json(request)))
+
+    try:
+        with stub_service(GAME, service="game") as game:
+            game.route("POST", "/internal/v1/round-plans").mock(side_effect=flaky)
+            plan = await client.create_round_plan(REQUEST)
+        assert plan.mode_version == 3 and len(attempts) == 2
+    finally:
+        await client.aclose()
+
+
+async def test_plan_gives_up_after_retries_and_does_not_retry_client_errors() -> None:
+    client = _plan_client(1)
+    try:
+        with stub_service(GAME, service="game") as game:
+            route = game.route("POST", "/internal/v1/round-plans")
+            route.mock(side_effect=httpx.ReadTimeout("slow"))
+            with pytest.raises(MatchUnavailableError):
+                await client.create_round_plan(REQUEST)
+            assert route.call_count == 2  # одна попытка и один повтор
+            route.reset()
+            route.mock(
+                return_value=httpx.Response(
+                    422, json={"code": "game.pool_too_small", "details": {}}
+                )
+            )
+            with pytest.raises(AppError):
+                await client.create_round_plan(REQUEST)
+            assert route.call_count == 1  # 4xx - не сбой, повтора нет
     finally:
         await client.aclose()

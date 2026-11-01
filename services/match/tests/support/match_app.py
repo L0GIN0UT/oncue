@@ -317,6 +317,7 @@ def settings(database_url: str, redis_url: str, **match: Any) -> Settings:
         "emote_per_player_per_min": 1000,
         "listen_per_player_per_min": 100_000,
         "presence_timeout_s": 120,
+        "presence_release_s": 0,  # фоновая чистка указателей - отдельным тестом
         "empty_lobby_close_s": 0,  # сценарии двигают FakeClock далеко: закрытие пустых - отдельно
         "ladder_cache_s": 0,
     }

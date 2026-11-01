@@ -23,7 +23,15 @@ class MatchSettings(BaseModel):
         lease_renew_s: Продление lease.
         reply_timeout_ms: Сколько api ждёт ответа владельца, затем 202 (D6).
         tick_s: Период heartbeat клиента (D10).
-        presence_timeout_s: Без heartbeat дольше — игрок «Отключён».
+        presence_timeout_s: Без heartbeat дольше — игрок «Отключён»; тот же срок делает
+            указатель ``player:{id}:room`` устаревшим при явном входе в другую комнату.
+        presence_release_s: Игрок лобби/итогов без heartbeat дольше освобождает указатель
+            комнаты в фоне (0 - выключено); в идущем матче не действует.
+        plan_retries: Повторов запроса плана раундов у game при таймауте/сетевом сбое.
+        start_failed_backoff_s: Пауза подбора игрока после сорванного старта комнаты; каждый
+            следующий срыв подряд удваивает её (до ``start_failed_backoff_max_s``).
+        start_failed_max_attempts: Срывов подряд до прекращения поиска
+            (``match.start_unavailable``).
         max_rooms_per_instance: Комнат на один процесс ``rooms``.
         lobby_create_per_user_per_hour: Создание комнат пользователем.
         room_name_max_length: Предел длины названия комнаты от хоста (≤ 100 — предел схемы).
@@ -96,7 +104,10 @@ class MatchSettings(BaseModel):
     lease_renew_s: float = Field(default=3, gt=0, le=60)
     reply_timeout_ms: int = Field(default=1500, ge=50, le=1800)
     tick_s: int = Field(default=5, ge=1, le=60)
-    presence_timeout_s: int = Field(default=12, ge=2, le=120)
+    # Клиент шлёт тик раз в tick_s (5 с): 25 с переживает 401 с обновлением токена, 429 и
+    # паузы фоновой вкладки; короче - ложное «Отключён» (пункт 31 замечаний тестирования).
+    presence_timeout_s: int = Field(default=25, ge=2, le=120)
+    presence_release_s: int = Field(default=90, ge=0, le=3600)
     max_rooms_per_instance: int = Field(default=300, ge=1, le=10000)
     lobby_create_per_user_per_hour: int = Field(default=20, ge=1)
     room_name_max_length: int = Field(default=40, ge=1, le=100)
@@ -137,10 +148,17 @@ class MatchSettings(BaseModel):
     stream_maxlen: int = Field(default=2000, ge=100)
     game_url: str = "http://game:8000"
     game_audience: str = "game"
-    game_timeout_s: float = Field(default=1.2, gt=0, le=30)
+    # План раундов под нагрузкой (засев, холодный game) не укладывался в 1,2 с: старт рейтинговой
+    # комнаты падал в start_failed (пункт 23). Один повтор - plan_retries.
+    game_timeout_s: float = Field(default=5, gt=0, le=30)
+    plan_retries: int = Field(default=1, ge=0, le=3)
+    # Срыв старта рейтинговой комнаты: пауза растёт вдвое, потом поиск прекращается (п. 23).
+    start_failed_backoff_s: float = Field(default=2, ge=0, le=300)
+    start_failed_backoff_max_s: float = Field(default=30, ge=0, le=3600)
+    start_failed_max_attempts: int = Field(default=5, ge=1, le=100)
     media_url: str = "http://media-pipeline:8000"
     media_audience: str = "media_pipeline"
-    media_timeout_s: float = Field(default=1.0, gt=0, le=30)
+    media_timeout_s: float = Field(default=3, gt=0, le=30)
     breaker_failures: int = Field(default=5, ge=1)
     breaker_cooldown_s: float = Field(default=15, gt=0)
     partitions_ahead_months: int = Field(default=3, ge=1, le=24)
@@ -168,6 +186,8 @@ class MatchSettings(BaseModel):
             raise ValueError(
                 "GV_MATCH__EMPTY_LOBBY_CLOSE_S не должен быть меньше PRESENCE_TIMEOUT_S"
             )
+        if 0 < self.presence_release_s <= self.presence_timeout_s:
+            raise ValueError("GV_MATCH__PRESENCE_RELEASE_S должен быть больше PRESENCE_TIMEOUT_S")
         if self.rooms_poll_ms >= _REDIS_SOCKET_TIMEOUT_MS:
             raise ValueError("GV_MATCH__ROOMS_POLL_MS должен быть меньше socket_timeout Redis")
         if self.matcher_poll_ms >= _REDIS_SOCKET_TIMEOUT_MS:

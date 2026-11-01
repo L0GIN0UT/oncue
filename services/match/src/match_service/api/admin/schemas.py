@@ -46,3 +46,17 @@ class AbortRoomRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: Reason
+
+
+class ResetPlayerRoomRequest(BaseModel):
+    """Сброс указателя «активная комната» игрока (служебная команда); причина — в аудит."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Reason
+
+
+class ResetPlayerRoomResult(BaseModel):
+    """Что освобождено: код комнаты, на которую указывал указатель (`null` - указателя не было)."""
+
+    released_code: RoomCode | None = None

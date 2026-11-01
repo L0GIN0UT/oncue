@@ -94,6 +94,19 @@ async def test_heartbeat_is_rate_limited_per_user(
     assert "retry-after" in limited.headers
 
 
+async def test_heartbeat_tolerates_retries_after_token_refresh_and_tab_switches(
+    social: Social, friends: tuple[UUID, UUID]
+) -> None:
+    """Штатный тик + повтор после 401 + возврат на вкладку + поиск пары не упираются в 429.
+
+    Раньше предел 3 за окно давал 429 во время поиска пары (пункт 31 замечаний тестирования).
+    """
+    _, bobby = friends
+    for _ in range(5):
+        response = await social.client.post("/v1/me/presence", headers=social.headers(bobby))
+        assert response.status_code == 204
+
+
 # ---------------------------------------------------------------------- приглашения
 
 

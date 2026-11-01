@@ -34,7 +34,7 @@ from gv_text.ugc import (
     UgcPolicy,
     UgcViolation,
 )
-from match_service.application.owner import claim_room, new_code, replay
+from match_service.application.owner import active_room_of, claim_room, new_code, replay
 from match_service.application.ports import (
     AdminAction,
     AdminAudit,
@@ -43,6 +43,7 @@ from match_service.application.ports import (
     Json,
     ModeSource,
     PlayerRooms,
+    PresenceStore,
     RateLimiter,
     RoomCommand,
     RoomStore,
@@ -157,6 +158,8 @@ class RoomLimits:
     create_lock_ms: int = 5000
     pending_room_ms: int = 10_000
     room_name_max_length: int = 40
+    presence_stale_ms: int = 0
+    """Молчащий в комнате дольше игрок комнату не удерживает (``presence_timeout_s``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +190,9 @@ class RoomService:
         limits: RoomLimits,
         audit: AdminAudit | None = None,
         sanctions: SanctionGate | None = None,
+        presence: PresenceStore | None = None,
     ) -> None:
+        self._presence = presence
         self._sanctions = sanctions
         self._store = store
         self._bus = bus
@@ -368,7 +373,69 @@ class RoomService:
             code,
             now_ms=self._now_ms(),
             pending_ms=self._limits.pending_room_ms,
+            presence=self._presence,
+            stale_ms=self._limits.presence_stale_ms,
         )
+
+    # ------------------------------------------------------------------ активная комната
+    async def active_room(self, actor: Actor) -> Json:
+        """Моя активная комната: ``{code, phase}`` или пустые поля (источник правды сервера)."""
+        found = await active_room_of(
+            self._player_rooms,
+            self._store,
+            actor.user_id,
+            now_ms=self._now_ms(),
+            pending_ms=self._limits.pending_room_ms,
+            presence=self._presence,
+            stale_ms=self._limits.presence_stale_ms,
+        )
+        return (
+            {"code": found.code, "phase": found.phase} if found else {"code": None, "phase": None}
+        )
+
+    async def reset_pointer(self, admin_id: UUID, user_id: UUID, op_id: str, reason: str) -> Json:
+        """Служебный сброс ``player:{id}:room`` застрявшего игрока (``match.manage``).
+
+        Освобождается только указатель: комната и место в ней не трогаются (закрытие
+        комнаты - отдельный ``abort``). Нет указателя - ничего не пишется, ``released_code``
+        пуст. Причина - только в аудит (``admin_actions``, ``room_code`` - освобождённая).
+
+        Raises:
+            ConflictError: ``idempotency.key_reused`` - ключ уже потрачен на другое действие.
+            MatchUnavailableError: аудит недоступен (без БД сброс не выполняется).
+        """
+        pointer = await self._player_rooms.pointer(user_id)
+        if pointer is None:
+            return {"released_code": None}
+        if self._audit is None:
+            raise MatchUnavailableError("аудит недоступен: база данных не настроена")
+        requested = AdminAction(
+            actor_id=admin_id,
+            action="player.room_pointer_reset",
+            room_code=pointer.code,
+            match_id=None,
+            reason=f"{user_id}: {reason}",
+            idempotency_key=op_id,
+            at=self._clock.now(),
+        )
+        stored = await self._audit.record(requested)
+        if (stored.action, stored.room_code, stored.reason) != (
+            requested.action,
+            requested.room_code,
+            requested.reason,
+        ):
+            raise ConflictError(
+                "Idempotency-Key уже использован с другим запросом",
+                code="idempotency.key_reused",
+            )
+        await self._player_rooms.release(user_id, pointer.code)
+        log.info(
+            "match.pointer_reset",
+            admin_id=str(admin_id),
+            user_id=str(user_id),
+            room=pointer.code,
+        )
+        return {"released_code": pointer.code}
 
     # ------------------------------------------------------------------ команды
     async def command(
@@ -384,7 +451,14 @@ class RoomService:
         """
         if kind not in ONLINE_EXEMPT_KINDS:
             await require_online(self._sanctions, actor, strict=kind in ONLINE_ENTRY_KINDS)
-        room = await self._require_room(code)
+        try:
+            room = await self._require_room(code)
+        except MatchNotFoundError:
+            if kind == "leave":
+                # Явный выход работает из любого состояния: закрытая или пропавшая комната
+                # не должна оставлять игроку указатель (иначе 409 при следующем входе).
+                await self._player_rooms.release(actor.user_id, code)
+            raise
         command = RoomCommand(op_id=op_id, kind=kind, user_id=actor.user_id, data=data or {})
         stored = room.op_reply(actor.user_id, op_id)
         saved = replay(room, command, stored, self._now_ms()) if stored is not None else None
@@ -403,7 +477,7 @@ class RoomService:
     async def _require_room(self, code: str) -> Room:
         room = await self._store.load(code)
         if room is None or room.is_closed:
-            raise MatchNotFoundError("комнаты нет или она закрыта", code=errors.ROOM_NOT_FOUND)
+            raise errors.room_gone(room.close_reason if room is not None else None)
         return room
 
     async def join(self, actor: Actor, code: str, op_id: str) -> CommandOutcome:

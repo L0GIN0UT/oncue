@@ -18,6 +18,46 @@
         "title": "AbortRoomRequest",
         "type": "object"
       },
+      "ActiveRoom": {
+        "description": "Моя активная комната (источник правды сервера, правило D10: одна на игрока).\n\nПусто (`code = null`), если игрок нигде не состоит: комната закрыта, он вышел или молчит\nдольше `GV_MATCH__PRESENCE_TIMEOUT_S`. Фронт при старте решает по этому ответу: показать\n«Вернуться в комнату» или сбросить устаревшее состояние.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lobby",
+                  "countdown",
+                  "level_open",
+                  "level_closed",
+                  "reveal",
+                  "summary",
+                  "paused",
+                  "closed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          }
+        },
+        "title": "ActiveRoom",
+        "type": "object"
+      },
       "AdminRoomCard": {
         "description": "Активная комната для раздела «Матчи» админки.",
         "properties": {
@@ -1797,6 +1837,42 @@
         "title": "ResetMemoryRequest",
         "type": "object"
       },
+      "ResetPlayerRoomRequest": {
+        "additionalProperties": false,
+        "description": "Сброс указателя «активная комната» игрока (служебная команда); причина — в аудит.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "ResetPlayerRoomRequest",
+        "type": "object"
+      },
+      "ResetPlayerRoomResult": {
+        "description": "Что освобождено: код комнаты, на которую указывал указатель (`null` - указателя не было).",
+        "properties": {
+          "released_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released Code"
+          }
+        },
+        "title": "ResetPlayerRoomResult",
+        "type": "object"
+      },
       "ResultPlayer": {
         "description": "Игрок в итоге матча (§2.2: ``place``, ``outcome``, ``finish``).",
         "properties": {
@@ -2955,6 +3031,160 @@
           }
         },
         "summary": "Итог матча",
+        "tags": [
+          "match-admin"
+        ]
+      }
+    },
+    "/admin/v1/players/{user_id}/active-room/reset": {
+      "post": {
+        "description": "Служебная команда для застрявшего игрока (`match.active_room_conflict`): освобождает `player:{id}:room`. Комната и место в ней не меняются (закрыть комнату - `abort`). Нет указателя - `released_code = null`. Причина и ключ - в аудит. Ошибки: 409 `idempotency.key_reused`, 503 `match.unavailable` (аудит).",
+        "operationId": "reset_player_room_admin_v1_players__user_id__active_room_reset_post",
+        "parameters": [
+          {
+            "description": "Игрок",
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "description": "Игрок",
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPlayerRoomRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetPlayerRoomResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Сбросить указатель активной комнаты игрока",
         "tags": [
           "match-admin"
         ]
@@ -4226,6 +4456,73 @@
           }
         },
         "summary": "Создать комнату",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/rooms/active": {
+      "get": {
+        "description": "Источник правды сервера для правила «одна активная комната» (D10): код и фаза комнаты, в которой игрок состоит сейчас, или `code = null`, `phase = null`. Комната закрыта, игрок вышел или молчит дольше `GV_MATCH__PRESENCE_TIMEOUT_S` - пусто. Фронт при старте предлагает «Вернуться в комнату» или сбрасывает устаревшее состояние. Ошибки: 401, 403 для гостя.",
+        "operationId": "active_room_v1_rooms_active_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveRoom"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          }
+        },
+        "summary": "Моя активная комната",
         "tags": [
           "match"
         ]

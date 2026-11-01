@@ -28,6 +28,7 @@ from match_service.application.matchmaking import (
     Matchmaker,
     QueueHooks,
     RankedTemplates,
+    StartFailurePolicy,
 )
 from match_service.application.owner import OwnerSettings, RoomOwner, is_transient
 from match_service.application.ports import (
@@ -236,6 +237,7 @@ class MatchContainer:
             _tokens(self.infra, m.game_audience),
             timeout_s=m.game_timeout_s,
             breaker=CircuitBreaker(m.breaker_failures, m.breaker_cooldown_s),
+            plan_retries=m.plan_retries,
         )
         self.infra.add_closer(client.aclose)
         return client
@@ -382,10 +384,20 @@ class MatchContainer:
                 pending_room_ms=m.pending_room_ms,
                 empty_lobby_ms=int(m.empty_lobby_close_s * MS),
                 artwork_refresh_margin_ms=int(m.artwork_refresh_margin_s * MS),
+                presence_release_ms=int(m.presence_release_s * MS),
             ),
             transient=_transient,
-            ranked=QueueHooks(self.ranked_queue),
+            ranked=QueueHooks(
+                self.ranked_queue,
+                clock=self.infra.clock,
+                policy=StartFailurePolicy(
+                    backoff_ms=int(m.start_failed_backoff_s * MS),
+                    backoff_max_ms=int(m.start_failed_backoff_max_s * MS),
+                    max_attempts=m.start_failed_max_attempts,
+                ),
+            ),
             spectators=self.spectators,
+            presence=self.presence,
         )
 
     @cached_property
@@ -411,6 +423,7 @@ class MatchContainer:
                 tick_per_min=m.queue_tick_per_user_per_min,
                 pending_room_ms=m.pending_room_ms,
                 window_s=m.rate_window_s,
+                presence_stale_ms=m.presence_timeout_s * MS,
             ),
             sanctions=self.sanction_gate,
         )
@@ -466,7 +479,9 @@ class MatchContainer:
                 create_lock_ms=m.create_lock_ms,
                 pending_room_ms=m.pending_room_ms,
                 room_name_max_length=m.room_name_max_length,
+                presence_stale_ms=m.presence_timeout_s * MS,
             ),
+            presence=self.presence,
             audit=self.audit if self.infra.sessions is not None else None,
             sanctions=self.sanction_gate,
         )

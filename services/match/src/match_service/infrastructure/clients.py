@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
@@ -109,7 +110,9 @@ class _Client:
         timeout_s: float,
         breaker: CircuitBreaker,
         client: httpx.AsyncClient | None,
+        retry_pause_s: float = 0.2,
     ) -> None:
+        self._retry_pause_s = retry_pause_s
         self._name = name
         self._tokens = tokens
         self._breaker = breaker
@@ -119,7 +122,27 @@ class _Client:
         """Закрыть HTTP-клиент."""
         await self._http.aclose()
 
-    async def _call(self, method: str, path: str, json: Any = None) -> httpx.Response:
+    async def _call(
+        self, method: str, path: str, json: Any = None, *, retries: int = 0
+    ) -> httpx.Response:
+        """Вызов с ``retries`` повторами при сети/таймауте/5xx (только идемпотентные вызовы).
+
+        Ответы 4xx не повторяются (это не сбой). Разомкнутый breaker повтор отменяет.
+        """
+        for attempt in range(retries + 1):
+            try:
+                return await self._call_once(method, path, json)
+            except AppError as exc:
+                if attempt == retries or self._breaker.is_open:
+                    raise
+                CALLS.labels(self._name, "retry").inc()
+                log.warning(
+                    "match.dependency_retry", dep=self._name, attempt=attempt + 1, code=exc.code
+                )
+                await asyncio.sleep(self._retry_pause_s)
+        raise AssertionError("недостижимо: последняя попытка либо вернула ответ, либо подняла")
+
+    async def _call_once(self, method: str, path: str, json: Any = None) -> httpx.Response:
         if self._breaker.is_open:
             CALLS.labels(self._name, "breaker_open").inc()
             raise self._unavailable()
@@ -158,10 +181,19 @@ class GameClient(_Client):
         timeout_s: float,
         breaker: CircuitBreaker,
         client: httpx.AsyncClient | None = None,
+        plan_retries: int = 0,
+        retry_pause_s: float = 0.2,
     ) -> None:
         super().__init__(
-            "game", base_url, tokens, timeout_s=timeout_s, breaker=breaker, client=client
+            "game",
+            base_url,
+            tokens,
+            timeout_s=timeout_s,
+            breaker=breaker,
+            client=client,
+            retry_pause_s=retry_pause_s,
         )
+        self._plan_retries = plan_retries
         self._bodies: dict[tuple[str, int], dict[str, Any]] = {}  # Any: тело ModeConfig
 
     def _unavailable(self) -> AppError:
@@ -186,6 +218,9 @@ class GameClient(_Client):
                 "exclude_ids": [str(x) for x in request.exclude_ids],
                 **_overrides(request),
             },
+            # План детерминирован по seed: повтор безопасен; под нагрузкой game отвечает дольше
+            # таймаута (пункт 23 замечаний), один повтор спасает старт без новой комнаты.
+            retries=self._plan_retries,
         )
         if response.status_code != httpx.codes.OK:
             raise self._plan_error(response)
