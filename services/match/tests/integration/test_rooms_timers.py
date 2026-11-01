@@ -214,6 +214,19 @@ async def _play(stack: Stack, players: list[UUID], code: str, style: str) -> lis
             await asyncio.sleep(0.05)
 
 
+async def _wait_finished(stack: Stack, timeout_s: float = 10.0) -> None:
+    """Дождаться записи итога в Postgres (двойник).
+
+    Итог пишется после снимка (D8): runner сохраняет комнату в ``SUMMARY``, публикует,
+    подтверждает команды, индексирует и только потом вызывает ``persist``. Тест видит
+    ``SUMMARY`` по снимку и может прочитать записи раньше, чем они появятся (на медленном
+    CI-раннере это случается), поэтому запись ждётся, а не читается сразу.
+    """
+    async with asyncio.timeout(timeout_s):
+        while not stack.records.finished:  # noqa: ASYNC110 — у двойника записей нет события
+            await asyncio.sleep(0.02)
+
+
 @pytest.mark.parametrize(
     ("key", "style"),
     [
@@ -241,6 +254,7 @@ async def test_match_reaches_summary_on_timers_without_commands(
         lateness = await _play(stack, [host, *others], code, style)
         room = await stack.load(code)
         assert room.match is not None and room.match.round_index == ROUNDS - 1
+        await _wait_finished(stack)
         assert len(stack.records.finished) == 1
         # Runner просыпается к дедлайну, а не раз в poll_ms (2 с).
         if style != "all_answer":
