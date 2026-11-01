@@ -35,11 +35,24 @@ class SuggestionOut(BaseModel):
     title: str
     year: int | None
     subtitle: str | None
+    creator: str | None = Field(
+        description=(
+            "Исполнители трека или режиссёры фильма; для различения одноимённых. "
+            "`null` в подсказках с `scope_person`: автор там уже известен и не раскрывается."
+        )
+    )
 
     @classmethod
     def of(cls, s: Suggestion) -> SuggestionOut:
         """Из DTO."""
-        return cls(id=s.id, domain=s.domain, title=s.title, year=s.year, subtitle=s.subtitle)
+        return cls(
+            id=s.id,
+            domain=s.domain,
+            title=s.title,
+            year=s.year,
+            subtitle=s.subtitle,
+            creator=s.creator,
+        )
 
 
 class SuggestionList(BaseModel):
@@ -115,7 +128,7 @@ def build_public_router(c: CatalogServices) -> APIRouter:
     @router.get(
         "/autocomplete",
         response_model=SuggestionList,
-        summary="Автокомплит названий (только активные единицы)",
+        summary="Автокомплит по названию, алиасам, исполнителю и режиссёру (только активные)",
         dependencies=[Depends(rate_limit)],
         responses=problem_responses(422, 429),
     )
@@ -123,8 +136,20 @@ def build_public_router(c: CatalogServices) -> APIRouter:
         q: Annotated[str, Query(max_length=_Q_HARD_MAX, description="Префикс, ≤ 64 символов")],
         domain: MediaDomain | None = None,
         limit: Annotated[int, Query(ge=1, le=50)] = 10,
+        scope_person: Annotated[
+            uuid.UUID | None,
+            Query(
+                description=(
+                    "Область подсказок: id персоны каталога (`person_id`, UUID), заданной "
+                    "режимом (исполнитель сборника или марафона, режиссёр). Подсказки — только "
+                    "её единицы из ВСЕГО каталога (не из состава сборника), поиск идёт по "
+                    "названию и алиасам, автор в ответе скрыт. Значение берётся из ответа "
+                    "раунда game (необязательное поле «персона, задающая область»)."
+                )
+            ),
+        ] = None,
     ) -> SuggestionList:
-        hits = await c.autocomplete(q, domain, limit)
+        hits = await c.autocomplete(q, domain, limit, scope_person)
         return SuggestionList(items=[SuggestionOut.of(s) for s in hits])
 
     @router.get(

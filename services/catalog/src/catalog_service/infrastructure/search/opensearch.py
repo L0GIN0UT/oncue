@@ -1,7 +1,10 @@
 """Поисковый индекс в OpenSearch.
 
-Индекс ``<alias>_v1`` и алиас ``<alias>`` (по умолчанию ``catalog_media``): смена маппинга —
-новый индекс ``_v2``, переиндексация и атомарное переключение алиаса, без простоя.
+Индекс ``<alias>_v2`` и алиас ``<alias>`` (по умолчанию ``catalog_media``): смена маппинга —
+новый индекс ``_vN``, переиндексация (``catalog_service.infrastructure.search.reindex``) и
+атомарное переключение алиаса, без простоя. v2 добавил ``people``/``person_ids``/``creator``
+(поиск по исполнителю и режиссёру, область подсказок); эти поля совместимо добавляются и в
+действующий v1 (``put_mapping``), так что новый образ работает до переиндексации.
 Запись идёт с ``version_type=external`` (версия агрегата): повтор и устаревшее событие
 отклоняются самим OpenSearch (409) — индексация идемпотентна и учитывает порядок.
 
@@ -24,8 +27,9 @@ from gv_core.errors import DependencyUnavailableError
 
 log = structlog.get_logger(__name__)
 
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 _TEXT_FIELDS = ("title", "aliases")
+_SOURCE_FIELDS = ["id", "domain", "title", "year", "subtitle", "creator"]
 
 
 def concrete_index(alias: str) -> str:
@@ -44,6 +48,15 @@ def _text_field() -> dict[str, Any]:
             "en": {"type": "text", "analyzer": "english"},
             "raw": {"type": "keyword", "ignore_above": 300},
         },
+    }
+
+
+def added_properties() -> dict[str, Any]:
+    """Поля, появившиеся в v2: безопасно добавляются в v1 без пересоздания."""
+    return {
+        "people": _text_field(),
+        "person_ids": {"type": "keyword"},
+        "creator": {"type": "keyword", "index": False},
     }
 
 
@@ -83,6 +96,7 @@ def index_body() -> dict[str, Any]:
                 "subtitle": {"type": "keyword", "index": False},
                 "year": {"type": "integer"},
                 "popularity": {"type": "float"},
+                **added_properties(),
             },
         },
     }
@@ -101,6 +115,9 @@ def document_body(doc: SearchDocument) -> dict[str, Any]:
         "subtitle": doc.subtitle,
         "year": doc.year,
         "popularity": doc.popularity,
+        "people": list(doc.people),
+        "person_ids": list(doc.person_ids),
+        "creator": doc.creator,
     }
 
 
@@ -109,13 +126,15 @@ def _filters(query: SearchQuery) -> list[dict[str, Any]]:
     filters: list[dict[str, Any]] = [{"term": {"status": "active"}}]
     if query.domain is not None:
         filters.append({"term": {"domain": query.domain.value}})
+    if query.scope_person is not None:
+        filters.append({"term": {"person_ids": str(query.scope_person)}})
     return filters
 
 
 def _ranked(bool_query: dict[str, Any], limit: int) -> dict[str, Any]:
     return {
         "size": limit,
-        "_source": ["id", "domain", "title", "year", "subtitle"],
+        "_source": _SOURCE_FIELDS,
         "query": {
             "function_score": {
                 "query": {"bool": bool_query},
@@ -131,11 +150,37 @@ def _ranked(bool_query: dict[str, Any], limit: int) -> dict[str, Any]:
 
 
 def autocomplete_body(query: SearchQuery) -> dict[str, Any]:
-    """Префиксный запрос: все слова запроса — префиксы слов алиаса."""
+    """Префиксный запрос: все слова запроса — префиксы слов алиаса.
+
+    Без области ищет и по именам исполнителей и режиссёров (в том числе «автор название»
+    через ``cross_fields``). В области персоны (``scope_person``) — только по названию и
+    алиасам: имя автора там ничего не даёт и не должно подсвечивать ответ.
+    """
+    by_title = {"match": {"aliases": {"query": query.normalized, "operator": "and"}}}
+    if query.scope_person is None:
+        must: dict[str, Any] = {
+            "bool": {
+                "should": [
+                    by_title,
+                    {"match": {"people": {"query": query.normalized, "operator": "and"}}},
+                    {
+                        "multi_match": {
+                            "query": query.normalized,
+                            "type": "cross_fields",
+                            "fields": ["aliases", "people"],
+                            "operator": "and",
+                        }
+                    },
+                ],
+                "minimum_should_match": 1,
+            }
+        }
+    else:
+        must = by_title
     return _ranked(
         {
             "filter": _filters(query),
-            "must": [{"match": {"aliases": {"query": query.normalized, "operator": "and"}}}],
+            "must": [must],
             "should": [
                 {"prefix": {"aliases.raw": {"value": query.normalized, "boost": 3}}},
                 {"term": {"aliases.raw": {"value": query.normalized, "boost": 5}}},
@@ -178,6 +223,7 @@ def parse_hits(response: dict[str, Any]) -> list[Suggestion]:
                     "title": src["title"],
                     "year": src.get("year"),
                     "subtitle": src.get("subtitle"),
+                    "creator": src.get("creator"),
                 }
             )
         )
@@ -207,6 +253,16 @@ class OpenSearchIndex:
                     await self._client.indices.create(index=index, body=index_body())
                 await self._client.indices.put_alias(index=index, name=self._alias)
                 log.info("catalog.search_index_created", index=index, alias=self._alias)
+            else:
+                # Действующий индекс старой версии: добавляем только новые поля. Это
+                # совместимо (dynamic=strict разрешает расширение маппинга) и идемпотентно.
+                try:
+                    await self._client.indices.put_mapping(
+                        index=self._alias, body={"properties": added_properties()}
+                    )
+                except OpenSearchException:
+                    # Не мешаем записи событий: маппинг донастроит ``catalog migrate``.
+                    log.warning("catalog.search_mapping_update_failed", alias=self._alias)
         except OpenSearchException as exc:
             raise DependencyUnavailableError(
                 "OpenSearch недоступен", code="catalog.search_unavailable"

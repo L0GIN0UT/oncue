@@ -93,6 +93,7 @@ class Suggestion:
     title: str
     year: int | None
     subtitle: str | None
+    creator: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         """Для кэша."""
@@ -102,6 +103,7 @@ class Suggestion:
             "title": self.title,
             "year": self.year,
             "subtitle": self.subtitle,
+            "creator": self.creator,
         }
 
     @classmethod
@@ -113,6 +115,7 @@ class Suggestion:
             title=str(data["title"]),
             year=None if data.get("year") is None else int(data["year"]),
             subtitle=None if data.get("subtitle") is None else str(data["subtitle"]),
+            creator=None if data.get("creator") is None else str(data["creator"]),
         )
 
 
@@ -123,6 +126,10 @@ class SearchQuery:
     normalized: str
     domain: MediaDomain | None
     limit: int
+    scope_person: uuid.UUID | None = None
+
+
+_SEARCHABLE_ROLES = frozenset({PersonRole.ARTIST, PersonRole.DIRECTOR})
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,10 +147,15 @@ class SearchDocument:
     subtitle: str | None
     aliases: tuple[str, ...]
     popularity: float
+    # Исполнители и режиссёры: имена — для поиска по персоне, id — для области подсказок.
+    people: tuple[str, ...] = ()
+    person_ids: tuple[str, ...] = ()
+    creator: str | None = None
 
     @classmethod
     def from_item(cls, item: MediaItem) -> SearchDocument:
         """Собрать документ из агрегата."""
+        searchable = [p for p in item.persons if p.role in _SEARCHABLE_ROLES]
         return cls(
             id=item.id,
             version=item.version,
@@ -156,6 +168,9 @@ class SearchDocument:
             subtitle=item.subtitle,
             aliases=tuple(a.normalized for a in item.aliases),
             popularity=item.metrics.popularity or 0.0,
+            people=tuple(dict.fromkeys(p.name for p in searchable)),
+            person_ids=tuple(dict.fromkeys(str(p.person_id) for p in searchable)),
+            creator=item.creator,
         )
 
 

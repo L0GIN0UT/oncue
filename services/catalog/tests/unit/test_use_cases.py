@@ -495,6 +495,71 @@ async def test_autocomplete_clamps_limit(env: Env) -> None:
     assert len(await autocomplete(env, None, fallback)("брат", None, 100)) == 10
 
 
+async def index_all(env: Env, search: FakeSearch) -> None:
+    for item in env.store.items.values():
+        await search.index(SearchDocument.from_item(item))
+
+
+async def test_autocomplete_finds_film_by_director(env: Env) -> None:
+    """Пункт 39: запрос «Нолан» находит фильм режиссёра; в подсказке есть автор и год."""
+    search = FakeSearch()
+    await env.upsert(film())
+    await index_all(env, search)
+    [hit] = await autocomplete(env, None, search)("нолан", None, 5)
+    assert hit.title == "Интерстеллар"
+    assert hit.creator == "Кристофер Нолан"
+    assert hit.year == 2014
+
+
+async def test_autocomplete_finds_track_by_artist(env: Env) -> None:
+    """Пункт 39: запрос по исполнителю находит его трек."""
+    search = FakeSearch()
+    await env.upsert(track("t1", "Bohemian Rhapsody"))
+    await index_all(env, search)
+    [hit] = await autocomplete(env, None, search)("queen", MediaDomain.MUSIC, 5)
+    assert hit.title == "Bohemian Rhapsody"
+    assert hit.creator == "Queen"
+
+
+async def test_autocomplete_scope_limits_to_person_and_hides_author(env: Env) -> None:
+    """Пункт 50: в области персоны только её единицы, автор в подсказке скрыт."""
+    search = FakeSearch()
+    await env.upsert(track("t1", "Bohemian Rhapsody"))
+    await env.upsert(
+        dataclasses.replace(
+            track("t2", "Bohemian Like You"),
+            persons=(PersonRef("name:dandy", "The Dandy Warhols", PersonRole.ARTIST),),
+        )
+    )
+    await index_all(env, search)
+    queen = next(
+        c.person_id for i in env.store.items.values() for c in i.persons if c.name == "Queen"
+    )
+    ac = autocomplete(env, None, search)
+    assert len(await ac("bohemian", None, 10)) == 2
+    [hit] = await ac("bohemian", None, 10, queen)
+    assert hit.title == "Bohemian Rhapsody"
+    assert hit.creator is None
+    assert hit.subtitle is None
+    # Имя автора в области персоны ничего не находит: поиск только по названию.
+    assert await ac("queen", None, 10, queen) == []
+
+
+async def test_autocomplete_cache_does_not_mix_scopes(env: Env) -> None:
+    """Ответ без области не отдаётся на запрос с областью и наоборот."""
+    search = FakeSearch()
+    await env.upsert(track("t1", "Bohemian Rhapsody"))
+    await index_all(env, search)
+    queen = next(c.person_id for i in env.store.items.values() for c in i.persons)
+    ac = autocomplete(env, None, search)
+    [plain] = await ac("bohemian", None, 10)
+    [scoped] = await ac("bohemian", None, 10, queen)
+    assert plain.creator == "Queen"
+    assert scoped.creator is None
+    assert (await ac("bohemian", None, 10))[0].creator == "Queen"
+    assert (await ac("bohemian", None, 10, uuid.uuid4())) == []
+
+
 async def test_search_falls_back(env: Env) -> None:
     primary, fallback = FakeSearch(down=True), FakeSearch()
     await indexed(env, fallback)

@@ -189,7 +189,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Автокомплит названий (только активные единицы) */
+        /** Автокомплит по названию, алиасам, исполнителю и режиссёру (только активные) */
         get: operations["autocomplete_v1_autocomplete_get"];
         put?: never;
         post?: never;
@@ -674,6 +674,11 @@ export interface components {
          * @description Подсказка автокомплита.
          */
         SuggestionOut: {
+            /**
+             * Creator
+             * @description Исполнители трека или режиссёры фильма; для различения одноимённых. `null` в подсказках с `scope_person`: автор там уже известен и не раскрывается.
+             */
+            creator: string | null;
             domain: components["schemas"]["MediaDomain"];
             /**
              * Id
@@ -1502,6 +1507,8 @@ export interface operations {
                 limit?: number;
                 /** @description Префикс, ≤ 64 символов */
                 q: string;
+                /** @description Область подсказок: id персоны каталога (`person_id`, UUID), заданной режимом (исполнитель сборника или марафона, режиссёр). Подсказки — только её единицы из ВСЕГО каталога (не из состава сборника), поиск идёт по названию и алиасам, автор в ответе скрыт. Значение берётся из ответа раунда game (необязательное поле «персона, задающая область»). */
+                scope_person?: string | null;
             };
             header?: never;
             path?: never;
