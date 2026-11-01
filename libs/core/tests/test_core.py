@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,7 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from gv_core import AggregateRoot, DomainEvent, InvalidInputError, RequestContext
+from gv_core import AggregateRoot, DomainEvent, InvalidInputError, RequestContext, ids
 from gv_core.context import bind_context, current_context
 from gv_core.ids import uuid7, uuid7_timestamp_ms
 from gv_core.pagination import clamp_limit, decode_cursor, encode_cursor
@@ -18,6 +19,16 @@ pytestmark = pytest.mark.unit
 
 
 class TestUuid7:
+    @pytest.fixture(autouse=True)
+    def _isolated_generator(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Состояние генератора монотонно на весь процесс: тест с меткой из будущего
+        (``timestamp_ms`` — 2033 или 2096 год) иначе «залипает» на ней для всех последующих
+        тестов процесса (ночной ``gv test`` гоняет все модули в одном).
+        ``monkeypatch`` вернёт прежние значения после теста.
+        """
+        monkeypatch.setattr(ids, "_last_ms", ids._last_ms)
+        monkeypatch.setattr(ids, "_counter", ids._counter)
+
     def test_version_and_variant(self) -> None:
         value = uuid7()
         assert value.version == 7
@@ -36,6 +47,11 @@ class TestUuid7:
     def test_timestamp_roundtrip(self) -> None:
         ts = 4_000_000_000_000
         assert uuid7_timestamp_ms(uuid7(timestamp_ms=ts)) >= ts
+
+    def test_explicit_future_timestamp_does_not_leak_into_next_tests(self) -> None:
+        """Идёт сразу после тестов с метками 2033 и 2096 годов: генератор не должен их помнить."""
+        now_ms = time.time_ns() // 1_000_000
+        assert uuid7_timestamp_ms(uuid7()) < now_ms + 60_000
 
     def test_timestamp_rejects_other_versions(self) -> None:
         with pytest.raises(ValueError, match="v4"):
