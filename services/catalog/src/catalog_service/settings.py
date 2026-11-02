@@ -22,6 +22,9 @@ class OpenSearchSettings(BaseModel):
     url: str | None = None
     index: str = Field(default="catalog_media", pattern=r"^[a-z][a-z0-9_\-]*$")
     timeout_s: float = Field(default=2.0, gt=0)
+    # Разовая команда ``reindex``: bulk и refresh идут дольше обычных запросов поиска.
+    reindex_timeout_s: float = Field(default=120.0, gt=0)
+    reindex_batch: int = Field(default=500, ge=1, le=5000)
 
 
 class TmdbSettings(BaseModel):

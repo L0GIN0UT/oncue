@@ -50,7 +50,9 @@ describe("useAutocomplete", () => {
         if (new URL(request.url).searchParams.get("q") !== "брат") return undefined;
         await delay(1000);
         return HttpResponse.json({
-          items: [{ id: "x", domain: "film", title: "Брат", year: 1997, subtitle: null }],
+          items: [
+            { id: "x", domain: "film", title: "Брат", year: 1997, subtitle: null, creator: null },
+          ],
         });
       }),
     );

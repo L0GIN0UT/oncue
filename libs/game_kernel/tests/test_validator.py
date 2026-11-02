@@ -205,7 +205,7 @@ BROKEN: list[tuple[str, str, Any, ConfigIssue]] = [
         "music.random.classic",
         "source.params.pool.genres_any",
         ["pop"],
-        ConfigIssue("source.params.presets[2].filters.genres_any", "config.preset_filter_empty"),
+        ConfigIssue("source.params.presets[6].filters.genres_any", "config.preset_filter_empty"),
     ),
     (
         "music.random.classic",

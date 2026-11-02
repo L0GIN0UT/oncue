@@ -189,7 +189,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Автокомплит названий (только активные единицы) */
+        /** Автокомплит по названию, алиасам, исполнителю и режиссёру (только активные) */
         get: operations["autocomplete_v1_autocomplete_get"];
         put?: never;
         post?: never;
@@ -674,6 +674,11 @@ export interface components {
          * @description Подсказка автокомплита.
          */
         SuggestionOut: {
+            /**
+             * Creator
+             * @description Исполнители трека или режиссёры фильма; для различения одноимённых. `null` в подсказках с `scope_person`: автор там уже известен и не раскрывается.
+             */
+            creator: string | null;
             domain: components["schemas"]["MediaDomain"];
             /**
              * Id
@@ -1502,6 +1507,8 @@ export interface operations {
                 limit?: number;
                 /** @description Префикс, ≤ 64 символов */
                 q: string;
+                /** @description Область подсказок: UUID персоны каталога (`person_id`), которую задаёт режим (исполнитель сборника или марафона, режиссёр). Значение клиент берёт из ответа раунда game, поле `subjects[].id`, и передаёт как есть. Подсказки — только единицы этой персоны из ВСЕГО каталога (не из состава сборника), поиск по названию и алиасам, `subtitle` и `creator` скрыты. Не UUID — 422. Статус: параметр реализован в catalog; ограничение заработает, когда game отдаст персону в раунде, а фронт начнёт передавать её сюда. */
+                scope_person?: string | null;
             };
             header?: never;
             path?: never;

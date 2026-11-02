@@ -37,6 +37,7 @@ from match_service.application.ports import (
     Users,
 )
 from match_service.application.rules import ModeTemplate, RulesFactory
+from match_service.domain import errors
 from match_service.domain.errors import MatchConflictError, MatchUnavailableError
 from match_service.domain.model import Phase, Presence
 from match_service.domain.queue import FORMAT_ANSWER, Candidate, pair_batch
@@ -164,6 +165,9 @@ class Matchmaker:
         if size < 2:  # noqa: PLR2004 — нужна пара
             return 0
         records = await self._queue.waiting(ladder.ladder, fmt, self._settings.batch_max)
+        now_ms = self._now_ms()
+        # Игроки на паузе после сорванного старта ждут (иначе комната в секунду - пункт 23).
+        records = [r for r in records if r.retry_at_ms <= now_ms]
         if len(records) < 2:  # noqa: PLR2004
             return 0
         template = await self._templates.resolve(ladder, fmt)
@@ -330,11 +334,41 @@ class Matchmaker:
         raise MatchUnavailableError("не удалось выдать код рейтинговой комнаты")
 
 
+@dataclass(frozen=True, slots=True)
+class StartFailurePolicy:
+    """Что делать с игроками, когда старт рейтинговой комнаты сорван (``start_failed``).
+
+    Attributes:
+        backoff_ms: Пауза после первого срыва; каждый следующий удваивает её.
+        backoff_max_ms: Потолок паузы.
+        max_attempts: После стольких срывов подряд поиск прекращается с ошибкой
+            ``match.start_unavailable`` (без нового круга комнат).
+        notice_ttl_s: Сколько живёт сообщение об ошибке для игрока, который не опрашивает очередь.
+    """
+
+    backoff_ms: int = 2000
+    backoff_max_ms: int = 30_000
+    max_attempts: int = 5
+    notice_ttl_s: int = 60
+
+    def delay_ms(self, failures: int) -> int:
+        """Пауза после ``failures``-го срыва подряд: ``backoff × 2^(n-1)``, не больше потолка."""
+        return min(self.backoff_max_ms, self.backoff_ms << max(0, failures - 1))
+
+
 class QueueHooks:
     """``RankedHooks``: комната сообщает очереди о старте матча и срыве отсчёта."""
 
-    def __init__(self, queue: QueueStore) -> None:
+    def __init__(
+        self,
+        queue: QueueStore,
+        *,
+        clock: Clock,
+        policy: StartFailurePolicy | None = None,
+    ) -> None:
         self._queue = queue
+        self._clock = clock
+        self._policy = policy or StartFailurePolicy()
 
     async def started(self, room: Room) -> None:
         """Матч идёт: записи очереди обоих игроков больше не нужны."""
@@ -342,9 +376,35 @@ class QueueHooks:
             await self._queue.release(seat.user_id, room.code)
 
     async def aborted(self, room: Room, survivors: Sequence[UUID]) -> None:
-        """Срыв отсчёта: оставшиеся — в поиск с прежним ``entered_at``, ушедшие — прочь."""
+        """Срыв отсчёта: оставшиеся — в поиск с прежним ``entered_at``, ушедшие — прочь.
+
+        Если комната закрыта из-за отказа старта (``start_error``), игроков не гоняем по кругу
+        «комната - срыв - комната» каждую секунду: пауза растёт вдвое, а после лимита поиск
+        прекращается с понятной ошибкой (пункт 23 замечаний тестирования).
+        """
+        failed_start = room.start_error is not None
         for seat in room.seats:
-            if seat.user_id in survivors and seat.presence is not Presence.LEFT:
-                await self._queue.requeue(seat.user_id, room.code)
-            else:
+            if seat.user_id not in survivors or seat.presence is Presence.LEFT:
                 await self._queue.release(seat.user_id, room.code)
+            elif failed_start:
+                await self._requeue_after_failed_start(seat.user_id, room.code)
+            else:
+                # Иной срыв (выход соперника) счётчик срывов старта не обнуляет: лимит не обойти.
+                record = await self._queue.get(seat.user_id)
+                await self._queue.requeue(
+                    seat.user_id,
+                    room.code,
+                    failures=record.start_failures if record is not None else 0,
+                )
+
+    async def _requeue_after_failed_start(self, user_id: UUID, code: str) -> None:
+        record = await self._queue.get(user_id)
+        failures = (record.start_failures if record is not None else 0) + 1
+        if failures >= self._policy.max_attempts:
+            await self._queue.release(user_id, code)
+            await self._queue.fail(user_id, errors.START_UNAVAILABLE, self._policy.notice_ttl_s)
+            log.warning("match.ranked_start_gave_up", user_id=str(user_id), failures=failures)
+            return
+        now_ms = int(self._clock.now().timestamp() * 1000)
+        retry_at = now_ms + self._policy.delay_ms(failures)
+        await self._queue.requeue(user_id, code, failures=failures, retry_at_ms=retry_at)

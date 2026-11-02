@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, Path, Query, status
 
 from gv_auth import Principal, require_perm
 from gv_service import IdempotencyKey, problem_responses
-from match_service.api.admin.schemas import AbortRoomRequest, AdminRoomsPage
+from match_service.api.admin.schemas import (
+    AbortRoomRequest,
+    AdminRoomsPage,
+    ResetPlayerRoomRequest,
+    ResetPlayerRoomResult,
+)
 from match_service.api.common import NoStoreRoute, RoomCodePath, ServicesProvider
 from match_service.api.public.schemas import CommandAccepted, Cursor, MatchResult, Phase
 
@@ -60,6 +65,27 @@ def build_admin_router(services: ServicesProvider) -> APIRouter:
     ) -> CommandAccepted:
         outcome = await services().rooms.abort(principal.user_id, code, key, body.reason)
         return CommandAccepted.model_validate(outcome.body)
+
+    @router.post(
+        "/players/{user_id}/active-room/reset",
+        response_model=ResetPlayerRoomResult,
+        summary="Сбросить указатель активной комнаты игрока",
+        description=(
+            "Служебная команда для застрявшего игрока (`match.active_room_conflict`): "
+            "освобождает `player:{id}:room`. Комната и место в ней не меняются (закрыть "
+            "комнату - `abort`). Нет указателя - `released_code = null`. Причина и ключ - в "
+            "аудит. Ошибки: 409 `idempotency.key_reused`, 503 `match.unavailable` (аудит)."
+        ),
+        responses=problem_responses(401, 403, 409, 422, 501, 503),
+    )
+    async def reset_player_room(
+        user_id: Annotated[UUID, Path(description="Игрок")],
+        body: ResetPlayerRoomRequest,
+        principal: Manager,
+        key: IdempotencyKey,
+    ) -> ResetPlayerRoomResult:
+        result = await services().rooms.reset_pointer(principal.user_id, user_id, key, body.reason)
+        return ResetPlayerRoomResult.model_validate(result)
 
     @router.get(
         "/matches/{match_id}",

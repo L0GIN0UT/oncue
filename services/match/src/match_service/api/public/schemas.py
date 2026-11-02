@@ -687,3 +687,15 @@ class SpectateRoomsPage(BaseModel):
 
     items: list[SpectateRoomCard]
     next_cursor: str | None = None
+
+
+class ActiveRoom(BaseModel):
+    """Моя активная комната (источник правды сервера, правило D10: одна на игрока).
+
+    Пусто (`code = null`), если игрок нигде не состоит: комната закрыта, он вышел или молчит
+    дольше `GV_MATCH__PRESENCE_TIMEOUT_S`. Фронт при старте решает по этому ответу: показать
+    «Вернуться в комнату» или сбросить устаревшее состояние.
+    """
+
+    code: RoomCode | None = None
+    phase: Phase | None = None

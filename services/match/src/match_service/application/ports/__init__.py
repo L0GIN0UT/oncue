@@ -433,6 +433,8 @@ class QueueRecord:
         entered_at_ms: Вход в очередь; при возврате после срыва отсчёта сохраняется.
         state: ``searching`` | ``matched``.
         room_code: Комната дуэли при ``matched``.
+        start_failures: Сколько раз подряд сорвался старт комнаты этой пары (план game).
+        retry_at_ms: До этого момента матчер игрока не берёт (пауза после сорванного старта).
     """
 
     user_id: UUID
@@ -442,6 +444,8 @@ class QueueRecord:
     entered_at_ms: int
     state: str
     room_code: str | None = None
+    start_failures: int = 0
+    retry_at_ms: int = 0
 
 
 class QueueStore(Protocol):
@@ -491,8 +495,21 @@ class QueueStore(Protocol):
         """Сменить код комнаты в записях (коллизия кода)."""
         ...
 
-    async def requeue(self, user_id: UUID, code: str) -> bool:
-        """Срыв отсчёта: вернуть в поиск с прежним ``entered_at`` (запись всё ещё за ``code``)."""
+    async def requeue(
+        self, user_id: UUID, code: str, *, failures: int = 0, retry_at_ms: int = 0
+    ) -> bool:
+        """Срыв отсчёта: вернуть в поиск с прежним ``entered_at`` (запись всё ещё за ``code``).
+
+        ``failures`` и ``retry_at_ms`` - счётчик сорванных стартов и пауза до следующего подбора.
+        """
+        ...
+
+    async def fail(self, user_id: UUID, reason: str, ttl_s: int) -> None:
+        """Оставить игроку короткоживущее сообщение, почему поиск прекращён."""
+        ...
+
+    async def take_failure(self, user_id: UUID) -> str | None:
+        """Забрать (и стереть) сообщение ``fail``: показывается один раз."""
         ...
 
     async def release(self, user_id: UUID, code: str) -> None:

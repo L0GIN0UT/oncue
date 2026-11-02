@@ -18,6 +18,7 @@ from gv_core.errors import ConflictError
 from gv_db.idempotency import request_fingerprint
 from match_service.application.commands.rooms import Actor, effective_actor
 from match_service.application.matchmaking import RankedTemplates
+from match_service.application.owner import ActiveRoom, active_room_of
 from match_service.application.ports import (
     CommandBus,
     IdempotentCreates,
@@ -40,8 +41,9 @@ from match_service.domain.errors import (
     MatchForbiddenError,
     MatchInvalidError,
     MatchNotFoundError,
+    MatchUnavailableError,
 )
-from match_service.domain.model import Phase, Presence
+from match_service.domain.model import Phase
 from match_service.domain.queue import MATCHED, RESERVED, SEARCHING
 
 log = structlog.get_logger(__name__)
@@ -58,6 +60,8 @@ class QueueLimits:
     pending_room_ms: int
     tick_s: int = 5
     window_s: int = 60
+    presence_stale_ms: int = 0
+    """Молчащий в комнате дольше игрок комнату не удерживает (``presence_timeout_s``)."""
 
 
 class QueueService:
@@ -145,6 +149,7 @@ class QueueService:
             )
         existing = await self._existing(actor, ladder_key, fmt)
         if existing is None:
+            await self._queue.take_failure(actor.user_id)  # новый поиск - старая ошибка не нужна
             rating = await self._ladders.rating(actor.user_id, ladder_key)
             existing, _ = await self._queue.enter(
                 actor.user_id,
@@ -170,12 +175,12 @@ class QueueService:
                         details={"queue": {"ladder": record.ladder, "format": record.format}},
                     )
                 return record
-        code = await self._active_room(actor)
-        if code is not None:
+        active = await self._active_room(actor)
+        if active is not None:
             raise MatchConflictError(
                 "у вас уже есть активная комната",
                 code=errors.ACTIVE_ROOM_CONFLICT,
-                details={"code": code},
+                details={"code": active.code, "phase": active.phase},
             )
         return None
 
@@ -185,21 +190,17 @@ class QueueService:
         room = await self._store.load(record.room_code)
         return room is not None and not room.is_closed
 
-    async def _active_room(self, actor: Actor) -> str | None:
-        """Код активной комнаты игрока (правило D10, как ``claim_room``)."""
-        pointer = await self._player_rooms.pointer(actor.user_id)
-        if pointer is None:
-            return None
-        room = await self._store.load(pointer.code)
-        if room is None:
-            return (
-                pointer.code
-                if self._now_ms() - pointer.since_ms < self._limits.pending_room_ms
-                else None
-            )
-        seat = room.seat_of(actor.user_id)
-        busy = not room.is_closed and (seat is None or seat.presence is not Presence.LEFT)
-        return pointer.code if busy else None
+    async def _active_room(self, actor: Actor) -> ActiveRoom | None:
+        """Активная комната игрока (правило D10, одно с ``claim_room``)."""
+        return await active_room_of(
+            self._player_rooms,
+            self._store,
+            actor.user_id,
+            now_ms=self._now_ms(),
+            pending_ms=self._limits.pending_room_ms,
+            presence=self._presence,
+            stale_ms=self._limits.presence_stale_ms,
+        )
 
     # ------------------------------------------------------------------ tick
     async def tick(self, actor: Actor) -> Json:
@@ -226,6 +227,11 @@ class QueueService:
             )
         record = await self._queue.get(actor.user_id)
         if record is None or not await self._queue.touch(actor.user_id):
+            if await self._queue.take_failure(actor.user_id) == errors.START_UNAVAILABLE:
+                # Матчер сдался после серии сорванных стартов: говорим об этом один раз.
+                raise MatchUnavailableError(
+                    "не удалось запустить матч, попробуйте позже", code=errors.START_UNAVAILABLE
+                )
             raise MatchNotFoundError("вы не в очереди", code=errors.NOT_IN_QUEUE)
         if record.state == MATCHED and record.room_code is not None:
             await self._presence.touch(record.room_code, actor.user_id, self._now_ms())

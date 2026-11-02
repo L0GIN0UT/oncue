@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import structlog
@@ -62,7 +62,12 @@ class _SearchBase:
         self._limits = limits
 
     def _query(
-        self, q: str, domain: MediaDomain | None, limit: int, max_limit: int
+        self,
+        q: str,
+        domain: MediaDomain | None,
+        limit: int,
+        max_limit: int,
+        scope_person: uuid.UUID | None = None,
     ) -> SearchQuery | None:
         if len(q) > self._limits.max_query_len:
             raise InvalidInputError(
@@ -72,7 +77,7 @@ class _SearchBase:
         normalized = self._normalizer.normalize(q)
         if len(normalized) < self._limits.min_prefix:
             return None
-        return SearchQuery(normalized, domain, max(1, min(limit, max_limit)))
+        return SearchQuery(normalized, domain, max(1, min(limit, max_limit)), scope_person)
 
     async def _with_fallback(self, query: SearchQuery, *, autocomplete: bool) -> list[Suggestion]:
         if self._primary is not None:
@@ -103,17 +108,35 @@ class Autocomplete(_SearchBase):
         super().__init__(primary, fallback, normalizer, limits)
         self._cache = cache
 
-    async def __call__(self, q: str, domain: MediaDomain | None, limit: int) -> list[Suggestion]:
-        """Подсказки; слишком короткий префикс — пустой список."""
-        query = self._query(q, domain, limit, self._limits.max_autocomplete)
+    async def __call__(
+        self,
+        q: str,
+        domain: MediaDomain | None,
+        limit: int,
+        scope_person: uuid.UUID | None = None,
+    ) -> list[Suggestion]:
+        """Подсказки; слишком короткий префикс — пустой список.
+
+        Args:
+            scope_person: Только единицы этой персоны (из всего каталога). Автор в подсказке
+                скрыт (``subtitle`` и ``creator`` — ``None``): он уже известен игроку, а
+                подпись трека не должна выдавать ответ.
+        """
+        query = self._query(q, domain, limit, self._limits.max_autocomplete, scope_person)
         if query is None:
             return []
-        key = f"{query.domain.value if query.domain else 'all'}:{query.limit}:{query.normalized}"
+        scope = f"p={scope_person}" if scope_person else "all"
+        key = (
+            f"{query.domain.value if query.domain else 'all'}:{scope}:"
+            f"{query.limit}:{query.normalized}"
+        )
         if self._cache is not None:
             cached = await self._cache.get(key)
             if cached is not None:
                 return cached
         result = await self._with_fallback(query, autocomplete=True)
+        if scope_person is not None:
+            result = [replace(s, subtitle=None, creator=None) for s in result]
         if self._cache is not None:
             await self._cache.set(key, result)
         return result
