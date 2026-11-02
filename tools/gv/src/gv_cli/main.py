@@ -468,6 +468,10 @@ def dev_seed_real(
     package_units: Annotated[
         int, typer.Option("--package-units", min=1, help="Единиц в одном пакете-архиве")
     ] = 100,
+    package_concurrency: Annotated[
+        int,
+        typer.Option("--package-concurrency", min=1, help="Пакетов, отправляемых параллельно"),
+    ] = 1,
     ffmpeg_jobs: Annotated[
         int,
         typer.Option("--ffmpeg-jobs", min=1, help="Потоков перекодирования клипов"),
@@ -539,6 +543,7 @@ def dev_seed_real(
             collection_size=collection_size,
             tracks_limit=tracks_limit,
             package_units=package_units,
+            package_concurrency=package_concurrency,
             ffmpeg_jobs=ffmpeg_jobs,
             stall_timeout_s=stall_timeout_min * 60.0,
             without_synthetic=without_synthetic,

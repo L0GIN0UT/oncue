@@ -52,6 +52,8 @@ from zoneinfo import ZoneInfo
 import httpx
 import yaml
 
+from gv_cli.jsonl import split_lines
+
 # Причина действия для аудита admin-мутаций (``gv_service.Reason``: 3..500 символов).
 REASON = "сиды e2e"
 # Audience сервисного токена для входа в админку (identity выдаёт токен с scope admin_sessions).
@@ -1708,7 +1710,7 @@ def _missing_summary(missing: Iterable[str], shown: int = 10) -> str:
 def _jsonl_keys(path: Path) -> set[str]:
     """Ключи ``key`` из строк JSONL (пустые строки и строки с ``#`` пропускаются)."""
     keys: set[str] = set()
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in split_lines(path.read_text(encoding="utf-8")):
         if not line.strip() or line.startswith("#"):
             continue
         row = json.loads(line)

@@ -12,8 +12,12 @@
 2. Берёт топ-треки каждого артиста (до 99 штук, поле `rank` = популярность).
 3. Убирает дубли одной песни (альбомные и сборные версии, ремастеры, «feat.»), а ремиксы,
    мэшапы, живые и акустические версии оставляет как отдельные треки.
-4. Берёт `--count` самых популярных, обогащает годом и жанром альбома.
-5. Скачивает превью (свежая ссылка перед каждым скачиванием) и обложки.
+4. Год песни - самый ранний среди альбомов всех её версий. Берёт `--count` самых популярных,
+   но сначала добирает квоты по десятилетиям (`--decade-min`, по умолчанию не меньше 600 треков
+   на 80-е и 90-е). Если квота не набрана, обход артистов расширяется до `--max-artists`,
+   а потом берётся сколько есть: в конце печатается таблица «десятилетие: получено / квота».
+5. Скачивает превью (свежая ссылка перед каждым скачиванием), обложки и фото артистов
+   (`picture_big` в `deezer/artists/<id>.jpg`; ссылка в строке каталога - `artist_photo`).
 Скрипт возобновляемый: кэш в `deezer/cache/`, уже скачанные файлы не качаются заново.
 
     uv run python fetch_deezer.py --count 10000
@@ -216,6 +220,7 @@ def crawl_artists(target: int) -> dict[str, Any]:
                             "link": t.get("link") or "",
                             "artist_id": aid,
                             "artist": (t.get("artist") or {}).get("name") or "",
+                            "artist_picture": (t.get("artist") or {}).get("picture_big") or "",
                             "album_id": album.get("id"),
                             "album": album.get("title") or "",
                             "cover": album.get("cover_big") or "",
@@ -235,18 +240,39 @@ def crawl_artists(target: int) -> dict[str, Any]:
 # --- отбор ----------------------------------------------------------------------------------
 
 
-def select_tracks(visited: dict[str, Any], count: int, per_artist: int) -> list[dict[str, Any]]:
+def dedupe_tracks(visited: dict[str, Any]) -> list[dict[str, Any]]:
+    """Песни без дублей по убыванию популярности.
+
+    Из версий одной песни остаётся самая популярная, а альбомы всех версий собираются в
+    ``album_ids``: год песни берётся самый ранний (хит часто лежит и на сборнике более
+    позднего года).
+    """
     best: dict[tuple[int, str], dict[str, Any]] = {}
+    albums: dict[tuple[int, str], set[int]] = {}
     for tracks in visited.values():
         for t in tracks:
             if _BAD_TITLE.search(t["title"]) or not t["title"] or len(t["title"]) > 80:
                 continue
             key = (t["artist_id"], normalized_title(t["title"], t["version"]))
+            if t.get("album_id"):
+                albums.setdefault(key, set()).add(int(t["album_id"]))
             if key not in best or t["rank"] > best[key]["rank"]:
                 best[key] = t
+    result = [{**t, "album_ids": sorted(albums.get(k, ()))} for k, t in best.items()]
+    return sorted(result, key=lambda x: -x["rank"])
+
+
+def select_tracks(visited: dict[str, Any], count: int, per_artist: int) -> list[dict[str, Any]]:
+    return limit_per_artist(dedupe_tracks(visited), count, per_artist)
+
+
+def limit_per_artist(
+    candidates: Iterable[dict[str, Any]], count: int, per_artist: int
+) -> list[dict[str, Any]]:
+    """Первые ``count`` кандидатов по порядку, не больше ``per_artist`` на артиста."""
     by_artist: dict[int, int] = {}
     chosen: list[dict[str, Any]] = []
-    for t in sorted(best.values(), key=lambda x: -x["rank"]):
+    for t in candidates:
         if by_artist.get(t["artist_id"], 0) >= per_artist:
             continue
         by_artist[t["artist_id"]] = by_artist.get(t["artist_id"], 0) + 1
@@ -256,11 +282,124 @@ def select_tracks(visited: dict[str, Any], count: int, per_artist: int) -> list[
     return chosen
 
 
-def enrich_albums(tracks: Iterable[dict[str, Any]]) -> dict[str, Any]:
+# --- год и квоты по десятилетиям -------------------------------------------------------------
+
+
+def album_year(info: dict[str, Any] | None) -> int | None:
+    """Год выпуска альбома из ``release_date`` (``0000-00-00`` и мусор - нет года)."""
+    year = str((info or {}).get("date") or "")[:4]
+    return int(year) if year.isdigit() and 1900 < int(year) < 2100 else None
+
+
+def earliest_year(album_ids: Iterable[int], albums: dict[str, Any]) -> int | None:
+    """Самый ранний год среди альбомов всех версий песни."""
+    years = [y for a in album_ids if (y := album_year(albums.get(str(a)))) is not None]
+    return min(years) if years else None
+
+
+def parse_quotas(spec: str) -> dict[int, int]:
+    """``1980=600,1990=600`` → ``{1980: 600, 1990: 600}`` (начало десятилетия → минимум)."""
+    quotas: dict[int, int] = {}
+    for part in filter(None, (p.strip() for p in spec.split(","))):
+        decade, _, minimum = part.partition("=")
+        if not (decade.strip().isdigit() and minimum.strip().isdigit()):
+            raise ValueError(f"квота «{part}»: ожидается ГГГГ=число, например 1980=600")
+        quotas[int(decade) // 10 * 10] = int(minimum)
+    return quotas
+
+
+def pick_with_quotas(
+    candidates: Iterable[dict[str, Any]],
+    albums: dict[str, Any],
+    count: int,
+    per_artist: int,
+    quotas: dict[int, int],
+) -> list[dict[str, Any]]:
+    """``count`` треков: сначала самые популярные из каждого десятилетия с квотой, затем остальные.
+
+    ``candidates`` отсортированы по популярности. Квота не набрана - берётся сколько есть.
+    Лимит ``per_artist`` действует на весь результат. Порядок результата - по популярности.
+    """
+    ordered = list(candidates)
+    reserved: set[int] = set()
+    by_artist: dict[int, int] = {}
+    for decade, minimum in sorted(quotas.items()):
+        taken = 0
+        for i, t in enumerate(ordered):
+            if taken >= minimum:
+                break
+            year = earliest_year(t.get("album_ids") or (), albums)
+            if year is None or year // 10 * 10 != decade or i in reserved:
+                continue
+            if by_artist.get(t["artist_id"], 0) >= per_artist:
+                continue
+            reserved.add(i)
+            by_artist[t["artist_id"]] = by_artist.get(t["artist_id"], 0) + 1
+            taken += 1
+    for i, t in enumerate(ordered):
+        if len(reserved) >= count:
+            break
+        if i in reserved or by_artist.get(t["artist_id"], 0) >= per_artist:
+            continue
+        reserved.add(i)
+        by_artist[t["artist_id"]] = by_artist.get(t["artist_id"], 0) + 1
+    return [ordered[i] for i in sorted(reserved)]
+
+
+def decade_counts(chosen: Iterable[dict[str, Any]], albums: dict[str, Any]) -> dict[int, int]:
+    """Сколько треков в каждом десятилетии (0 - год неизвестен)."""
+    got: dict[int, int] = {}
+    for t in chosen:
+        year = earliest_year(t.get("album_ids") or (), albums)
+        key = year // 10 * 10 if year else 0
+        got[key] = got.get(key, 0) + 1
+    return got
+
+
+def quota_shortfalls(
+    chosen: Iterable[dict[str, Any]], albums: dict[str, Any], quotas: dict[int, int]
+) -> dict[int, int]:
+    """Десятилетия, где квота не набрана: начало десятилетия → сколько не хватает."""
+    got = decade_counts(chosen, albums)
+    return {d: q - got.get(d, 0) for d, q in quotas.items() if got.get(d, 0) < q}
+
+
+def quota_table(
+    chosen: Iterable[dict[str, Any]], albums: dict[str, Any], quotas: dict[int, int]
+) -> list[str]:
+    """Строки «десятилетие: получено / квота» по всем десятилетиям выборки и квот."""
+    got = decade_counts(chosen, albums)
+    lines = []
+    for decade in sorted(set(got) | set(quotas)):
+        label = f"{decade}-е" if decade else "год неизвестен"
+        quota = f"{quotas[decade]}" if decade in quotas else "-"
+        mark = " (МЕНЬШЕ КВОТЫ)" if got.get(decade, 0) < quotas.get(decade, 0) else ""
+        lines.append(f"  {label}: {got.get(decade, 0)} / {quota}{mark}")
+    return lines
+
+
+def has_artist_photo(url: str) -> bool:
+    """У артиста без фото Deezer отдаёт заглушку с пустым хэшем (``/images/artist//``)."""
+    return bool(url) and "/artist//" not in url
+
+
+def display_title(title: str, version: str) -> str:
+    """Название трека: версию («feat.», «Remastered») добавляем, только если её ещё нет в названии."""
+    version = (version or "").strip()
+    if version and version.lower() not in title.lower():
+        return f"{title} {version}".strip()
+    return title
+
+
+def enrich_albums(tracks: Iterable[dict[str, Any]], *, limit: int | None = None) -> dict[str, Any]:
+    """Даты и жанры альбомов всех версий треков; новых запросов не больше ``limit``."""
     albums: dict[str, Any] = load_json("albums.json", {})
-    todo = sorted(
-        {t["album_id"] for t in tracks if t["album_id"] and str(t["album_id"]) not in albums}
-    )
+    wanted: set[int] = set()
+    for t in tracks:
+        wanted.update(t.get("album_ids") or ([t["album_id"]] if t.get("album_id") else []))
+    todo = sorted(a for a in wanted if str(a) not in albums)
+    if limit is not None:
+        todo = todo[:limit]
 
     def fetch(album_id: int) -> tuple[int, dict[str, Any]]:
         data = api_get(f"/album/{album_id}")
@@ -350,31 +489,110 @@ def fetch_files(tracks: list[dict[str, Any]]) -> set[int]:
     return done
 
 
+def fetch_artist_photos(tracks: Iterable[dict[str, Any]]) -> set[int]:
+    """Фото артистов (``picture_big``) в ``deezer/artists/<id>.jpg``; вернуть id скачанных.
+
+    Ссылка берётся из обхода (``artist_picture``), а если кэш обхода старый и поля нет,
+    запрашивается ``/artist/<id>``. Заглушка «нет фото» не скачивается.
+    """
+    urls: dict[int, str] = {}
+    for t in tracks:
+        urls.setdefault(t["artist_id"], t.get("artist_picture") or "")
+    done: set[int] = set()
+    lock = threading.Lock()
+
+    def work(item: tuple[int, str]) -> None:
+        artist_id, url = item
+        dest = OUT / "artists" / f"{artist_id}.jpg"
+        if not (dest.is_file() and dest.stat().st_size >= 2_000):
+            url = url or api_get(f"/artist/{artist_id}").get("picture_big") or ""
+            if not has_artist_photo(url) or not download(url, dest, 2_000):
+                return
+        with lock:
+            done.add(artist_id)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(work, urls.items()))
+    print(f"фото артистов: {len(done)}/{len(urls)}", flush=True)
+    return done
+
+
+def choose_tracks(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Обход, дедупликация, альбомы и выбор треков с квотами по десятилетиям.
+
+    Альбомы подгружаются порциями по убыванию популярности и только пока квоты или общее число
+    не набраны. Квоты не набраны на всём пуле - обход расширяется (до ``--max-artists``).
+    """
+    quotas = parse_quotas(args.decade_min)
+    target = args.artists
+    while True:
+        visited = crawl_artists(target)
+        candidates = dedupe_tracks(visited)
+        albums: dict[str, Any] = load_json("albums.json", {})
+        spent, seen = 0, 0
+        chosen: list[dict[str, Any]] = []
+        while seen < len(candidates):
+            chunk = candidates[seen : seen + 600]
+            seen += len(chunk)
+            before = len(albums)
+            albums = enrich_albums(chunk, limit=max(args.album_budget - spent, 0))
+            spent += len(albums) - before
+            chosen = pick_with_quotas(
+                candidates[:seen], albums, args.count, args.per_artist, quotas
+            )
+            if len(chosen) >= args.count and not quota_shortfalls(chosen, albums, quotas):
+                break
+            if spent >= args.album_budget:
+                break
+        short = quota_shortfalls(chosen, albums, quotas)
+        grown = target < args.max_artists and len(visited) >= target
+        if not short or not grown:
+            break
+        print(f"квоты не набраны {short}: расширяю обход артистов", flush=True)
+        target = min(target + 1000, args.max_artists)
+    print("десятилетия: получено / квота", flush=True)
+    for line in quota_table(chosen, albums, quotas):
+        print(line, flush=True)
+    if short:
+        print(f"ВНИМАНИЕ: квоты не набраны полностью (не хватает {short}), берём сколько есть")
+    return chosen, albums
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--count", type=int, default=10000, help="сколько треков оставить")
     ap.add_argument("--artists", type=int, default=3000, help="сколько артистов обойти")
+    ap.add_argument(
+        "--max-artists", type=int, default=6000, help="до скольких расширять обход ради квот"
+    )
     ap.add_argument("--per-artist", type=int, default=40, help="максимум треков одного артиста")
+    ap.add_argument(
+        "--decade-min",
+        default="1980=600,1990=600",
+        help="минимум треков по десятилетиям, ГГГГ=число через запятую (пусто - без квот)",
+    )
+    ap.add_argument(
+        "--album-budget", type=int, default=30000, help="максимум новых запросов /album за запуск"
+    )
     args = ap.parse_args()
 
-    visited = crawl_artists(args.artists)
-    chosen = select_tracks(visited, args.count, args.per_artist)
+    chosen, albums = choose_tracks(args)
     print(f"после удаления дублей выбрано треков: {len(chosen)}", flush=True)
-    albums = enrich_albums(chosen)
     done = fetch_files(chosen)
+    photos = fetch_artist_photos(t for t in chosen if t["id"] in done)
 
     rows = []
     for t in chosen:
         if t["id"] not in done:
             continue
         info = albums.get(str(t["album_id"])) or {}
-        year = str(info.get("date") or "")[:4]
+        year = earliest_year(t.get("album_ids") or [t["album_id"]], albums)
         rows.append(
             {
                 "key": f"track:deezer-{t['id']}",
                 "kind": "track",
-                "title": t["title"] if not t["version"] else f"{t['title']} {t['version']}".strip(),
-                "year": int(year) if year.isdigit() and 1900 < int(year) < 2100 else None,
+                "title": display_title(t["title"], t["version"]),
+                "year": year,
                 "persons": [{"name": t["artist"], "role": "artist"}],
                 "genres": [genre_key(info.get("genres") or [])],
                 "metrics": {"duration_ms": 30000, "listens": t["rank"]},
@@ -384,6 +602,11 @@ def main() -> None:
                 "origin": "deezer",
                 "audio": f"{t['id']}.mp3",
                 "cover": f"{t['album_id']}.jpg",
+                **(
+                    {"artist_photo": f"artists/{t['artist_id']}.jpg"}
+                    if t["artist_id"] in photos
+                    else {}
+                ),
             }
         )
     (OUT / "catalog-tracks.jsonl").write_text(
