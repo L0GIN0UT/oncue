@@ -19,7 +19,7 @@ from media_pipeline_service.domain.packages import PackageRejectedError, Package
 from media_pipeline_service.domain.sources import SourceKind, SourceOrigin
 
 from gv_core import uuid7
-from gv_core.errors import ConflictError
+from gv_core.errors import ConflictError, DependencyUnavailableError
 
 from .test_use_cases import ACTOR, ITEM, JPEG, snapshot
 
@@ -413,3 +413,149 @@ async def test_orphan_archives_are_swept_only_when_old_and_unreferenced(with_fil
     assert await media.sweep_package_orphans.sweep() == 1
     left = media.storage.keys(StorageArea.SOURCES)
     assert old not in left and fresh in left and live in left
+
+
+# ---------------------------------------------------------------- логи разбора (проблема 6)
+def _events(logs: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
+    return [e for e in logs if e["event"] == name]
+
+
+async def test_logs_start_manifest_file_errors_and_summary(with_film: Any) -> None:
+    from structlog.testing import capture_logs
+
+    archive = zip_of(
+        {"ok.jpg": JPEG, "fake.jpg": b"MZ\x90\x00 not a jpeg"},
+        doc(
+            film(
+                [
+                    {"role": "frame", "path": "ok.jpg"},
+                    {"role": "frame", "path": "fake.jpg"},
+                    {"role": "frame", "path": "missing.jpg"},
+                ]
+            )
+        ),
+    )
+    with capture_logs() as logs:
+        package = await run(with_film, archive, reason="секретная причина админа")
+    names = [e["event"] for e in logs]
+    assert names.index("package.started") < names.index("package.manifest_loaded")
+    assert names.index("package.manifest_loaded") < names.index("package.processed")
+    started = _events(logs, "package.started")[0]
+    assert started["package_id"] == str(package.id)
+    assert _events(logs, "package.manifest_loaded")[0]["files"] == 3
+    failed = {e["path"]: e for e in _events(logs, "package.file_failed")}
+    assert set(failed) == {"fake.jpg", "missing.jpg"}
+    assert failed["missing.jpg"]["error_code"] == "package.file_missing"
+    assert failed["missing.jpg"]["key"] == "film:tmdb-550"
+    assert failed["fake.jpg"]["error_code"].startswith("source.")
+    (summary,) = _events(logs, "package.processed")
+    assert (summary["status"], summary["total"], summary["done"], summary["failed"]) == (
+        "partial",
+        3,
+        1,
+        2,
+    )
+    assert "duration_s" in summary
+    assert "секретная причина" not in str(logs)  # причина админа в логи не попадает
+
+
+async def test_unexpected_crash_is_logged_with_type_and_traceback(with_film: Any) -> None:
+    from structlog.testing import capture_logs
+
+    media = with_film
+    submitted = await submit(
+        media, zip_of({"a.jpg": JPEG}, doc(film([{"role": "frame", "path": "a.jpg"}])))
+    )
+
+    async def boom(*_: Any, **__: Any) -> None:
+        raise RuntimeError("неожиданный сбой")
+
+    media.process_package._manifest = boom
+    with capture_logs() as logs:
+        await media.process_package.execute(submitted.package_id)
+    (crashed,) = _events(logs, "package.crashed")
+    assert crashed["error_type"] == "RuntimeError"
+    assert crashed["exc_info"] is True  # трассировка уходит в лог, клиенту - без деталей
+    assert crashed["package_id"] == str(submitted.package_id)
+    (summary,) = _events(logs, "package.processed")
+    assert summary["status"] == "failed"
+
+
+async def test_unexpected_file_crash_is_logged_with_key_and_path(with_film: Any) -> None:
+    from structlog.testing import capture_logs
+
+    media = with_film
+    submitted = await submit(
+        media, zip_of({"a.jpg": JPEG}, doc(film([{"role": "frame", "path": "a.jpg"}])))
+    )
+
+    async def boom(*_: Any, **__: Any) -> None:
+        raise ValueError("сбой на файле")
+
+    media.process_package._upload.execute = boom
+    with capture_logs() as logs:
+        await media.process_package.execute(submitted.package_id)
+    (crashed,) = _events(logs, "package.file_crashed")
+    assert (crashed["key"], crashed["path"], crashed["error_type"]) == (
+        "film:tmdb-550",
+        "a.jpg",
+        "ValueError",
+    )
+    assert _events(logs, "package.file_failed")[0]["error_code"] == "package.internal_error"
+
+
+async def test_progress_is_logged_every_n_files(
+    with_film: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from media_pipeline_service.application.commands import packages
+    from structlog.testing import capture_logs
+
+    monkeypatch.setattr(packages, "_PROGRESS_EVERY", 2)
+    files = {f"{i}.jpg": JPEG + bytes([i]) for i in range(5)}
+    archive = zip_of(
+        files,
+        doc(film([{"role": "frame", "path": p, "position": n + 1} for n, p in enumerate(files)])),
+    )
+    with capture_logs() as logs:
+        await run(with_film, archive)
+    assert [e["handled"] for e in _events(logs, "package.progress")] == [2, 4]
+
+
+async def test_dependency_outage_is_logged_before_retry(with_film: Any) -> None:
+    from structlog.testing import capture_logs
+
+    media = with_film
+    submitted = await submit(
+        media, zip_of({"a.jpg": JPEG}, doc(film([{"role": "frame", "path": "a.jpg"}])))
+    )
+
+    async def down(*_: Any, **__: Any) -> None:
+        raise DependencyUnavailableError("s3 недоступен")
+
+    media.process_package._manifest = down
+    with capture_logs() as logs, pytest.raises(DependencyUnavailableError):
+        await media.process_package.execute(submitted.package_id)
+    (retry,) = _events(logs, "package.retry")
+    assert retry["error_type"] == "DependencyUnavailableError"
+
+
+async def test_file_crash_tracebacks_are_capped_by_keep_errors(with_film: Any) -> None:
+    from structlog.testing import capture_logs
+
+    media = with_film
+    keep = media.process_package._keep_errors
+    count = keep + 3
+    files = {f"{i}.jpg": JPEG + bytes([i]) for i in range(count)}
+    entries = [{"role": "frame", "path": p, "position": n + 1} for n, p in enumerate(files)]
+    submitted = await submit(media, zip_of(files, doc(film(entries))))
+
+    async def boom(*_: Any, **__: Any) -> None:
+        raise ValueError("сбой на файле")
+
+    media.process_package._upload.execute = boom
+    with capture_logs() as logs:
+        await media.process_package.execute(submitted.package_id)
+    crashed = _events(logs, "package.file_crashed")
+    assert len(crashed) == count
+    assert sum(1 for e in crashed if e.get("exc_info")) == keep  # трассировки только до лимита
+    assert len(_events(logs, "package.file_failed")) == keep
