@@ -246,6 +246,7 @@ class OpenSearchIndex:
         """Создать индекс и алиас, если их нет (идемпотентно)."""
         if self._ready:
             return
+        mapping_ok = True
         try:
             if not await self._client.indices.exists_alias(name=self._alias):
                 index = concrete_index(self._alias)
@@ -261,13 +262,15 @@ class OpenSearchIndex:
                         index=self._alias, body={"properties": added_properties()}
                     )
                 except OpenSearchException:
-                    # Не мешаем записи событий: маппинг донастроит ``catalog migrate``.
+                    # Не роняем запись событий (маппинг мог добавить ``catalog migrate``), но и
+                    # не считаем индекс готовым: следующий вызов повторит донастройку.
+                    mapping_ok = False
                     log.warning("catalog.search_mapping_update_failed", alias=self._alias)
         except OpenSearchException as exc:
             raise DependencyUnavailableError(
                 "OpenSearch недоступен", code="catalog.search_unavailable"
             ) from exc
-        self._ready = True
+        self._ready = mapping_ok
 
     async def index(self, doc: SearchDocument) -> bool:
         """Записать документ с внешней версией; устаревшая версия — ``False``."""

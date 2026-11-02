@@ -9,18 +9,24 @@ from gv_cli.main import catalog_reindex_args
 
 pytestmark = pytest.mark.unit
 
+BASE = ["exec", "-T", "catalog", "service-entry", "reindex"]
 
-def test_default_runs_service_entry_reindex_in_catalog() -> None:
-    assert catalog_reindex_args(no_switch=False, rollback=False, batch=500) == [
-        "exec", "-T", "catalog", "service-entry", "reindex", "--batch", "500",
+
+def test_default_has_no_batch_so_settings_apply() -> None:
+    assert catalog_reindex_args(no_switch=False, rollback=False, batch=None) == BASE
+
+
+def test_flags_and_batch_are_passed() -> None:
+    assert catalog_reindex_args(no_switch=True, rollback=False, batch=100) == [
+        *BASE, "--batch", "100", "--no-switch",
     ]  # fmt: skip
+    assert catalog_reindex_args(no_switch=False, rollback=False, batch=None, recreate=True)[-1] == (
+        "--recreate"
+    )
+    assert catalog_reindex_args(no_switch=False, rollback=True, batch=None)[-1] == "--rollback"
 
 
-def test_flags_are_passed() -> None:
-    assert catalog_reindex_args(no_switch=True, rollback=False, batch=100)[-1] == "--no-switch"
-    assert catalog_reindex_args(no_switch=False, rollback=True, batch=100)[-1] == "--rollback"
-
-
-def test_no_switch_and_rollback_conflict() -> None:
+@pytest.mark.parametrize("kw", [{"no_switch": True}, {"recreate": True}])
+def test_rollback_conflicts(kw: dict[str, bool]) -> None:
     with pytest.raises(typer.BadParameter):
-        catalog_reindex_args(no_switch=True, rollback=True, batch=1)
+        catalog_reindex_args(**{"no_switch": False, "rollback": True, "batch": None, **kw})

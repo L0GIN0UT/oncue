@@ -25,7 +25,7 @@ import structlog
 
 from catalog_service.application.dto import SearchDocument
 from catalog_service.application.ports import IndexMigrator, PrefixCache, UnitOfWorkFactory
-from gv_core.errors import DependencyUnavailableError
+from gv_core.errors import DependencyUnavailableError, InvalidInputError
 
 log = structlog.get_logger(__name__)
 
@@ -80,28 +80,48 @@ class RebuildIndex:
         """Один проход «БД → индекс» без переключения алиаса; вернуть число записанных.
 
         Нужен после отката: события, пришедшие после переключения, писались только в новый
-        индекс, и прежний надо догнать из БД.
+        индекс, и прежний надо догнать из БД. Проверяет полноту индекса после прохода.
+
+        Raises:
+            DependencyUnavailableError: ``catalog.reindex_incomplete`` — после прохода в
+                индексе меньше документов, чем единиц в БД.
         """
         await self._migrator.prepare()
-        _, written, _ = await self._pass()
+        seen, written, _ = await self._pass()
+        indexed = await self._migrator.count()
+        if indexed < seen:
+            raise DependencyUnavailableError(
+                f"в индексе {indexed} документов из {seen}", code="catalog.reindex_incomplete"
+            )
         if self._cache is not None:
             await self._cache.invalidate()
         return written
 
-    async def __call__(self, *, switch: bool = True) -> ReindexReport:
+    async def __call__(self, *, switch: bool = True, recreate: bool = False) -> ReindexReport:
         """Выполнить пересборку.
 
         Повторный запуск после обрыва безопасен: уже записанные версии пропускаются.
 
         Args:
             switch: ``False`` — только собрать индекс, алиас не трогать (репетиция).
+            recreate: Удалить целевой индекс и собрать с нуля. Нужно, когда содержимое
+                документов исправили без смены версии агрегата: иначе внешняя версия
+                пропустит их как «уже записанные».
 
         Raises:
             DependencyUnavailableError: ``catalog.reindex_incomplete`` — в целевом индексе
                 меньше документов, чем единиц в БД; алиас не переключён.
+            InvalidInputError: ``catalog.reindex_target_live`` — ``recreate`` для боевого индекса.
         """
         previous = await self._migrator.live_indices()
         already_live = self._migrator.target in previous
+        if recreate:
+            if already_live:
+                raise InvalidInputError(
+                    "целевой индекс сейчас боевой: пересоздавать его нельзя",
+                    code="catalog.reindex_target_live",
+                )
+            await self._migrator.drop_target()
         await self._migrator.prepare()
         _, written, _ = await self._pass()
         # Догоняющий проход: события, пришедшие во время основного, писались в старый индекс.
@@ -124,7 +144,7 @@ class RebuildIndex:
                 # Окно между догоняющим проходом и переключением: события писались в старый.
                 _, c_written, _ = await self._pass()
                 written += c_written
-            except DependencyUnavailableError:
+            except Exception:
                 log.exception("catalog.reindex_post_switch_failed")
         log.info(
             "catalog.reindex_done",

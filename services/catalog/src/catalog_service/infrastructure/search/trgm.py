@@ -82,10 +82,19 @@ class TrgmSearch:
                 )
             )
             candidates = by_title
+        elif fuzzy_only:
+            # /v1/search ищет только по названиям (как OpenSearch): персоны только в подсказках.
+            candidates = by_title
         else:
             # Поиск ещё и по имени исполнителя или режиссёра; совпавшее по имени ниже
-            # совпавшего по названию (prefix_hit = 0).
-            name = func.lower(persons.c.name)
+            # совпавшего по названию (prefix_hit = 0). Имя приводим к виду нормализатора:
+            # нижний регистр, ё как е, без знаков препинания (акценты не снимаются).
+            name = func.regexp_replace(
+                func.replace(func.lower(persons.c.name), "ё", "е"),
+                "[^[:alnum:] ]",
+                "",
+                "g",
+            )
             person_condition = or_(
                 name.like(prefix, escape="\\"),
                 name.like("% " + prefix, escape="\\"),

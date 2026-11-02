@@ -166,6 +166,86 @@ async def test_opensearch_autocomplete_by_artist_and_scope(opensearch_url: str) 
         await index.close()
 
 
+async def test_ensure_index_retries_mapping_after_failure(opensearch_url: str) -> None:
+    """Сбой put_mapping не оставляет индекс готовым: следующая запись повторяет донастройку."""
+    from opensearchpy.exceptions import ConnectionError as OsConnectionError
+
+    alias = f"cattest-{uuid7().hex[-12:]}"
+    index = OpenSearchIndex(opensearch_url, alias, timeout_s=10)
+    client = index._client
+    old_body = index_body()
+    for name in added_properties():
+        del old_body["mappings"]["properties"][name]
+    try:
+        await client.indices.create(index=f"{alias}_v1", body=old_body)
+        await client.indices.put_alias(index=f"{alias}_v1", name=alias)
+        real = client.indices.put_mapping
+        calls = 0
+
+        async def flaky(*args: Any, **kwargs: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise OsConnectionError("N/A", "таймаут", Exception())
+            return await real(*args, **kwargs)
+
+        client.indices.put_mapping = flaky  # type: ignore[method-assign]
+        await index.ensure_index()
+        assert not index._ready
+        await index.ensure_index()
+        assert index._ready
+        assert calls == 2
+    finally:
+        await client.indices.delete(index=f"{alias}_v*", ignore_unavailable=True)
+        await index.close()
+
+
+async def test_prepare_resources_upgrades_live_index(opensearch_url: str) -> None:
+    from catalog_service.main import prepare_resources
+    from catalog_service.settings import Settings
+
+    alias = f"cattest-{uuid7().hex[-12:]}"
+    settings = Settings()
+    settings.opensearch.url = opensearch_url
+    settings.opensearch.index = alias
+    index = OpenSearchIndex(opensearch_url, alias, timeout_s=10)
+    old_body = index_body()
+    for name in added_properties():
+        del old_body["mappings"]["properties"][name]
+    try:
+        await index._client.indices.create(index=f"{alias}_v1", body=old_body)
+        await index._client.indices.put_alias(index=f"{alias}_v1", name=alias)
+        await prepare_resources(settings)
+        mapping = await index._client.indices.get_mapping(index=f"{alias}_v1")
+        assert set(added_properties()) <= set(mapping[f"{alias}_v1"]["mappings"]["properties"])
+    finally:
+        await index._client.indices.delete(index=f"{alias}_v*", ignore_unavailable=True)
+        await index.close()
+
+
+async def test_migrator_drops_only_non_live_target(opensearch_url: str) -> None:
+    from gv_core.errors import InvalidInputError
+
+    alias = f"cattest-{uuid7().hex[-12:]}"
+    index = OpenSearchIndex(opensearch_url, alias, timeout_s=10)
+    client = index._client
+    try:
+        await client.indices.create(index=f"{alias}_v1", body=index_body())
+        await client.indices.put_alias(index=f"{alias}_v1", name=alias)
+        migrator = OpenSearchMigrator(client, alias)
+        await migrator.prepare()
+        await migrator.write([_track("Lose Yourself", "Eminem", uuid7())])
+        await migrator.drop_target()  # не боевой: удаляется
+        await migrator.prepare()
+        assert await migrator.count() == 0
+        await migrator.switch()
+        with pytest.raises(InvalidInputError):
+            await migrator.drop_target()  # боевой: нельзя
+    finally:
+        await client.indices.delete(index=f"{alias}_v*", ignore_unavailable=True)
+        await index.close()
+
+
 async def test_reindex_upgrades_old_index_and_switches_alias(opensearch_url: str) -> None:
     """Старый v1: ensure_index добавляет поля, пересборка идёт в v2, откат возможен."""
     alias = f"cattest-{uuid7().hex[-12:]}"

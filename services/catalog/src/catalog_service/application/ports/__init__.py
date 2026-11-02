@@ -360,6 +360,14 @@ class IndexMigrator(Protocol):
         """Создать целевой индекс, если его нет (идемпотентно)."""
         ...
 
+    async def drop_target(self) -> None:
+        """Удалить целевой индекс, если он есть и не стоит за алиасом (пересборка с нуля).
+
+        Raises:
+            InvalidInputError: ``catalog.reindex_target_live`` — индекс сейчас боевой.
+        """
+        ...
+
     async def write(self, docs: Sequence[SearchDocument]) -> int:
         """Записать документы в целевой индекс с внешней версией.
 

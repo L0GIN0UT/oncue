@@ -549,13 +549,19 @@ def dev_seed_real(
         raise typer.Exit(1) from exc
 
 
-def catalog_reindex_args(*, no_switch: bool, rollback: bool, batch: int) -> list[str]:
+def catalog_reindex_args(
+    *, no_switch: bool, rollback: bool, batch: int | None, recreate: bool = False
+) -> list[str]:
     """Аргументы ``docker compose`` для ``catalog reindex`` внутри контейнера catalog."""
-    if no_switch and rollback:
-        raise typer.BadParameter("--no-switch и --rollback несовместимы")
-    args = ["exec", "-T", "catalog", "service-entry", "reindex", "--batch", str(batch)]
+    if rollback and (no_switch or recreate):
+        raise typer.BadParameter("--rollback несовместим с --no-switch и --recreate")
+    args = ["exec", "-T", "catalog", "service-entry", "reindex"]
+    if batch is not None:  # иначе берётся GV_CATALOG__OPENSEARCH__REINDEX_BATCH
+        args += ["--batch", str(batch)]
     if no_switch:
         args.append("--no-switch")
+    if recreate:
+        args.append("--recreate")
     if rollback:
         args.append("--rollback")
     return args
@@ -570,14 +576,21 @@ def dev_catalog_reindex(
     rollback: Annotated[
         bool, typer.Option("--rollback", help="Вернуть алиас на предыдущий индекс")
     ] = False,
-    batch: Annotated[int, typer.Option("--batch", min=1, help="Документов в одном bulk")] = 500,
+    recreate: Annotated[
+        bool, typer.Option("--recreate", help="Удалить целевой (не боевой) индекс, собрать с нуля")
+    ] = False,
+    batch: Annotated[
+        int | None, typer.Option("--batch", min=1, help="Документов в одном bulk (из настроек)")
+    ] = None,
 ) -> None:
     """Пересобрать поисковый индекс catalog (OpenSearch) и атомарно переключить алиас.
 
     Идемпотентно и возобновляемо: после обрыва запустите снова. Старый индекс остаётся,
     откат — ``--rollback``. Требует запущенный контейнер catalog.
     """
-    args = catalog_reindex_args(no_switch=no_switch, rollback=rollback, batch=batch)
+    args = catalog_reindex_args(
+        no_switch=no_switch, rollback=rollback, batch=batch, recreate=recreate
+    )
     raise typer.Exit(_compose(repo_root(), "services", args))
 
 

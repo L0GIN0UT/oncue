@@ -22,7 +22,7 @@ from catalog_service.infrastructure.search.opensearch import (
     document_body,
     index_body,
 )
-from gv_core.errors import DependencyUnavailableError
+from gv_core.errors import DependencyUnavailableError, InvalidInputError
 
 log = structlog.get_logger(__name__)
 
@@ -80,7 +80,7 @@ class OpenSearchMigrator:
             return ()
         except OpenSearchException as exc:
             raise _unavailable() from exc
-        return tuple(sorted(found))
+        return tuple(sorted(found, key=lambda name: (index_number(name) or 0, name)))
 
     async def prepare(self) -> None:
         """Создать целевой индекс, если его нет."""
@@ -90,6 +90,18 @@ class OpenSearchMigrator:
                 log.info("catalog.reindex_index_created", index=self.target)
         except OpenSearchException as exc:
             raise _unavailable() from exc
+
+    async def drop_target(self) -> None:
+        """Удалить целевой индекс (не боевой)."""
+        if self.target in await self.live_indices():
+            raise InvalidInputError(
+                "целевой индекс сейчас боевой", code="catalog.reindex_target_live"
+            )
+        try:
+            await self._client.indices.delete(index=self.target, ignore_unavailable=True)
+        except OpenSearchException as exc:
+            raise _unavailable() from exc
+        log.info("catalog.reindex_index_dropped", index=self.target)
 
     async def write(self, docs: Sequence[SearchDocument]) -> int:
         """Записать порцию; конфликт версий (уже есть не меньшая) — пропуск.

@@ -352,6 +352,31 @@ async def test_trgm_finds_by_person_and_scopes_to_person(container: CatalogConta
     assert await trgm.autocomplete(SearchQuery("eminem", None, 10, scope_person=eminem)) == []
 
 
+async def test_trgm_person_match_ignores_punctuation_and_yo_and_stays_out_of_search(
+    container: CatalogContainer,
+) -> None:
+    for ref, title, artist in (("n1", "Sweet Child", "Guns N' Roses"), ("n2", "Ёлки", "Ёжик")):
+        await upsert(
+            container,
+            ImportedItem(
+                kind=MediaKind.TRACK,
+                title=title,
+                persons=(PersonRef(f"name:{ref}", artist, PersonRole.ARTIST),),
+                external_refs={ExternalSource.SPOTIFY: ref},
+            ),
+        )
+    await upsert(container, film())
+    assert container.infra.sessions is not None
+    trgm = TrgmSearch(container.infra.sessions)
+
+    assert [h.title for h in await trgm.autocomplete(SearchQuery("guns n roses", None, 5))] == [
+        "Sweet Child"
+    ]
+    assert [h.title for h in await trgm.autocomplete(SearchQuery("ежик", None, 5))] == ["Ёлки"]
+    # /v1/search, как в OpenSearch, по именам авторов не ищет.
+    assert await trgm.search(SearchQuery("нолан", None, 5)) == []
+
+
 # ------------------------------------------------------------------ потребитель событий
 
 

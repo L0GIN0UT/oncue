@@ -14,7 +14,7 @@ from catalog_service.application.dto import ImportedItem, SearchDocument
 from catalog_service.domain.model import ExternalSource, MediaKind
 from catalog_service.domain.normalization import TitleNormalizer
 
-from gv_core.errors import DependencyUnavailableError
+from gv_core.errors import DependencyUnavailableError, InvalidInputError
 from gv_testkit import FakeClock
 
 pytestmark = pytest.mark.unit
@@ -28,6 +28,7 @@ class FakeMigrator:
     target: str = "catalog_media_v2"
     docs: dict[uuid.UUID, int] = field(default_factory=dict)
     prepared: int = 0
+    dropped: int = 0
     switches: int = 0
     lose: int = 0  # сколько документов «потерять» при подсчёте (проверка полноты)
 
@@ -36,6 +37,10 @@ class FakeMigrator:
 
     async def prepare(self) -> None:
         self.prepared += 1
+
+    async def drop_target(self) -> None:
+        self.dropped += 1
+        self.docs.clear()
 
     async def write(self, docs: Sequence[SearchDocument]) -> int:
         written = 0
@@ -166,3 +171,49 @@ async def test_sync_catches_up_without_switching() -> None:
     assert await RebuildIndex(lambda: FakeCatalogUow(store), migrator, cache).sync() == 3
     assert migrator.switches == 0
     assert cache.invalidations == 1
+
+
+async def test_any_error_after_switch_does_not_fail_rebuild() -> None:
+    """Не только DependencyUnavailableError: сбой БД или Redis после переключения не фатален."""
+    store = CatalogStore()
+    await _seed(store, 2)
+
+    class BrokenCache(FakeCache):
+        async def invalidate(self) -> None:
+            raise RuntimeError("redis упал")
+
+    migrator = FakeMigrator()
+    report = await RebuildIndex(lambda: FakeCatalogUow(store), migrator, BrokenCache())()
+    assert report.switched
+    assert migrator.live == ("catalog_media_v2",)
+
+
+async def test_recreate_drops_target_and_rebuilds_from_scratch() -> None:
+    """Содержимое исправили без смены версии: --recreate собирает заново, а не пропускает."""
+    store, migrator = CatalogStore(), FakeMigrator()
+    await _seed(store, 3)
+    rebuild = RebuildIndex(lambda: FakeCatalogUow(store), migrator, None)
+    await rebuild(switch=False)
+    assert (await rebuild(switch=False)).written == 0  # без recreate всё пропущено
+    report = await rebuild(switch=False, recreate=True)
+    assert migrator.dropped == 1
+    assert report.written == 3
+
+
+async def test_recreate_refuses_live_target() -> None:
+    store = CatalogStore()
+    migrator = FakeMigrator(live=("catalog_media_v2",))
+    with pytest.raises(InvalidInputError) as exc:
+        await RebuildIndex(lambda: FakeCatalogUow(store), migrator, None)(recreate=True)
+    assert exc.value.code == "catalog.reindex_target_live"
+    assert migrator.dropped == 0
+
+
+async def test_sync_fails_when_index_stays_incomplete() -> None:
+    """Откат: если прежний индекс после догонки неполон, это ошибка, а не тихий успех."""
+    store, cache = CatalogStore(), FakeCache()
+    await _seed(store, 3)
+    with pytest.raises(DependencyUnavailableError) as exc:
+        await RebuildIndex(lambda: FakeCatalogUow(store), FakeMigrator(lose=1), cache).sync()
+    assert exc.value.code == "catalog.reindex_incomplete"
+    assert cache.invalidations == 0
