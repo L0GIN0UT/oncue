@@ -71,6 +71,7 @@ function match(patch: Partial<MatchView> = {}): MatchView {
     level: 1,
     levels_count: 2,
     clue: null,
+    awaiting_clips: false,
     reveal: null,
     players: [
       { user_id: A, score: 0, status: "thinking" },
