@@ -19,6 +19,12 @@
 В каждой категории не меньше `--min-per-category` (150) тайтлов: если по порогу голосов не
 набралось, скрипт добирает по жанрам. Общее число не меньше `--total` (10000): недостающее
 добирается в «Фильмах» и «Сериалах». Оставляются только тайтлы с афишей и полным набором кадров.
+
+Кадры для режима «по кадру»: только без языка (`iso_639_1` пусто), иначе это афишные композиции и
+заставки с надписями. Если чистых меньше шести, добираются кадры с языком, но не больше двух на
+тайтл и только с оценкой не ниже `--frame-min-vote` (5.0); кадр, повторяющий афишу (dHash,
+нужен Pillow), отбрасывается. Шесть не набралось - тайтл отбрасывается.
+Фото режиссёров (создателей сериала) - `tmdb/persons/<id>.jpg`, ссылка в строке - `director_photo`.
 Скрипт возобновляемый: уже скачанные файлы не качаются заново.
 
     uv run python fetch_tmdb_popular.py --total 10000
@@ -36,6 +42,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -123,6 +130,123 @@ def download(url: str, dest: Path) -> bool:
     return False
 
 
+# --- кадры и фото ----------------------------------------------------------------------------
+
+FRAME_MIN_VOTE = 5.0  # добор кадров с языком (надписи) - только с такой оценкой и выше
+SETTINGS = {"min_vote": 5.0}  # меняется флагом --frame-min-vote
+MAX_LANG_FRAMES = 2  # и не больше стольких на тайтл, остальные - только чистые
+POSTER_HASH_DISTANCE = 6  # кадр с такой дистанцией dHash до афиши считается её повтором
+
+
+def rank_frames(
+    backdrops: list[dict[str, Any]], min_vote: float = FRAME_MIN_VOTE
+) -> list[dict[str, Any]]:
+    """Кандидаты в кадры по приоритету: чистые (без языка) по оценке, затем «с надписью».
+
+    Кадр с языком (`iso_639_1` задан) часто афишная композиция или заставка с названием, поэтому
+    в запас попадают только кадры с оценкой не ниже `min_vote`.
+    """
+
+    def vote(b: dict[str, Any]) -> float:
+        return float(b.get("vote_average") or 0)
+
+    clean = sorted((b for b in backdrops if b.get("iso_639_1") is None), key=lambda b: -vote(b))
+    lang = sorted(
+        (b for b in backdrops if b.get("iso_639_1") is not None and vote(b) >= min_vote),
+        key=lambda b: -vote(b),
+    )
+    return clean + lang
+
+
+def pick_frames(
+    backdrops: list[dict[str, Any]],
+    accept: Callable[[dict[str, Any], int], bool],
+    *,
+    frames: int = FRAMES,
+    min_vote: float = FRAME_MIN_VOTE,
+    max_lang: int = MAX_LANG_FRAMES,
+) -> list[dict[str, Any]] | None:
+    """Выбрать `frames` кадров; `accept(кадр, позиция)` скачивает и проверяет (False - отбросить).
+
+    Чистые кадры идут первыми, кадров с языком берётся не больше `max_lang`. Если набрать
+    `frames` не удалось, тайтл отбрасывается (None): замену не придумываем.
+    """
+    chosen: list[dict[str, Any]] = []
+    lang = 0
+    for backdrop in rank_frames(backdrops, min_vote):
+        if len(chosen) >= frames:
+            break
+        is_lang = backdrop.get("iso_639_1") is not None
+        if is_lang and lang >= max_lang:
+            continue
+        if accept(backdrop, len(chosen) + 1):
+            chosen.append(backdrop)
+            lang += is_lang
+    return chosen if len(chosen) >= frames else None
+
+
+def dhash(path: Path) -> int | None:
+    """Перцептивный хэш картинки 9x8 (dHash); None - Pillow нет или файл не читается."""
+    try:
+        from PIL import Image  # noqa: PLC0415 - Pillow нужен скрипту только для этой проверки
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as image:
+            small = image.convert("L").resize((9, 8))
+            pixels = small.tobytes()
+    except OSError:
+        return None
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (pixels[row * 9 + col] > pixels[row * 9 + col + 1])
+    return bits
+
+
+def repeats_poster(frame: Path, poster: Path, distance: int = POSTER_HASH_DISTANCE) -> bool:
+    """Кадр повторяет афишу (хэши почти равны). Без Pillow проверка пропускается (False)."""
+    a, b = dhash(frame), dhash(poster)
+    return a is not None and b is not None and (a ^ b).bit_count() <= distance
+
+
+def collect_frames(
+    backdrops: list[dict[str, Any]], folder: Path, *, min_vote: float, poster: Path
+) -> list[str] | None:
+    """Скачать шесть кадров `frame-1..6.jpg` в `folder`; None - набрать не удалось."""
+
+    def accept(backdrop: dict[str, Any], position: int) -> bool:
+        dest = folder / f"frame-{position}.jpg"
+        if not download(f"{IMG}/w1280{backdrop['file_path']}", dest):
+            return False
+        if repeats_poster(dest, poster):
+            dest.unlink(missing_ok=True)
+            return False
+        return True
+
+    picked = pick_frames(backdrops, accept, min_vote=min_vote)
+    return None if picked is None else [f"frame-{i}.jpg" for i in range(1, len(picked) + 1)]
+
+
+def credits_people(details: dict[str, Any], media: str) -> tuple[list[dict[str, Any]], str]:
+    """Режиссёры фильма (до двух) или создатели сериала с `id` и `profile_path`."""
+    if media == "movie":
+        crew = details.get("credits", {}).get("crew", [])
+        return [c for c in crew if c.get("job") == "Director"][:2], "director"
+    return list(details.get("created_by", []))[:2], "creator"
+
+
+def person_photo(people: list[dict[str, Any]], out: Path) -> str | None:
+    """Фото первого человека с `profile_path` в `persons/<id>.jpg`; путь относительно `tmdb/`."""
+    for person in people:
+        path = person.get("profile_path")
+        if path and person.get("id"):
+            rel = f"persons/{person['id']}.jpg"
+            if download(f"{IMG}/w342{path}", out / rel):
+                return rel
+    return None
+
+
 # --- один тайтл -----------------------------------------------------------------------------
 
 
@@ -140,26 +264,16 @@ def build_row(media: str, mid: int, category: str, out: Path) -> dict[str, Any] 
     poster = details.get("poster_path") or ""
     if not poster or not download(f"{IMG}/w500{poster}", folder / "poster.jpg"):
         return None
-    backdrops = sorted(
+    frames = collect_frames(
         images.get("backdrops", []),
-        key=lambda b: (b.get("iso_639_1") is not None, -float(b.get("vote_average", 0))),
+        folder,
+        min_vote=SETTINGS["min_vote"],
+        poster=folder / "poster.jpg",
     )
-    frames: list[str] = []
-    for i, backdrop in enumerate(backdrops[:FRAMES], 1):
-        if download(f"{IMG}/w1280{backdrop['file_path']}", folder / f"frame-{i}.jpg"):
-            frames.append(f"frame-{i}.jpg")
-    if len(frames) < FRAMES:
+    if frames is None:
         return None
-    if media == "movie":
-        people = [
-            c["name"]
-            for c in details.get("credits", {}).get("crew", [])
-            if c.get("job") == "Director"
-        ][:2]
-        role = "director"
-    else:
-        people = [c["name"] for c in details.get("created_by", [])][:2]
-        role = "creator"
+    people, role = credits_people(details, media)
+    photo = person_photo(people, out)
     original = (
         english.get("original_title")
         or english.get("original_name")
@@ -176,7 +290,7 @@ def build_row(media: str, mid: int, category: str, out: Path) -> dict[str, Any] 
         "original_title": original if original != title else None,
         "year": int(str(date)[:4]),
         "aliases": [],
-        "persons": [{"name": x, "role": role} for x in people],
+        "persons": [{"name": x["name"], "role": role} for x in people],
         "genres": [g["name"].lower() for g in details.get("genres", [])],
         "metrics": {
             "vote_average": details.get("vote_average"),
@@ -190,6 +304,7 @@ def build_row(media: str, mid: int, category: str, out: Path) -> dict[str, Any] 
         "folder": f"{category}/{media}-{mid}",
         "poster": "poster.jpg",
         "frames": frames,
+        **({"director_photo": photo} if photo else {}),
     }
 
 
@@ -341,6 +456,26 @@ def write_catalogs(state: State) -> None:
     )
 
 
+def backfill_persons(state: State) -> None:
+    """Дозагрузить фото режиссёров для уже выгруженных тайтлов (кадры и афиши не трогаются)."""
+    done = 0
+    for k, row in list(state.rows.items()):
+        if row.get("director_photo"):
+            continue
+        media, _, mid = k.partition(":")
+        extra = {"append_to_response": "credits"} if media == "movie" else {}
+        people, _role = credits_people(get(f"/{media}/{mid}", language="ru-RU", **extra), media)
+        photo = person_photo(people, state.out)
+        if photo:
+            row["director_photo"] = photo
+            done += 1
+            if done % 200 == 0:
+                state.save()
+                print(f"фото режиссёров: {done}", flush=True)
+    state.save()
+    print(f"фото режиссёров дозагружено: {done}", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--total", type=int, default=10000, help="сколько тайтлов не меньше")
@@ -349,7 +484,24 @@ def main() -> None:
     ap.add_argument("--series", type=int, default=2400)
     ap.add_argument("--movies", type=int, default=6000)
     ap.add_argument("--min-per-category", type=int, default=150)
+    ap.add_argument(
+        "--frame-min-vote",
+        type=float,
+        default=FRAME_MIN_VOTE,
+        help="оценка, с которой кадр с надписью (язык задан) годится в добор, если чистых мало",
+    )
+    ap.add_argument(
+        "--backfill-persons",
+        action="store_true",
+        help="только дозагрузить фото режиссёров для уже выгруженных тайтлов",
+    )
     args = ap.parse_args()
+    SETTINGS["min_vote"] = args.frame_min_vote
+    if args.backfill_persons:
+        state = State(ROOT / "tmdb")
+        backfill_persons(state)
+        write_catalogs(state)
+        return
     quotas = {
         "Аниме": args.anime,
         "Мультфильмы": args.cartoons,

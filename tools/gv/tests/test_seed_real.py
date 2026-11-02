@@ -100,6 +100,23 @@ class TestCatalogRow:
         assert row["clue_texts"] == {"plot_raw": "Сюжет."}
         assert not {"overview", "poster", "frames"} & set(row)
 
+    def test_person_photo_links_stay_out_of_the_import(self) -> None:
+        """Фото персон скачиваются, но в каталог пока не идут (пункт 48, интеграции нет)."""
+        film = {
+            "key": "film:tmdb-1",
+            "kind": "film",
+            "title": "Ф",
+            "director_photo": "persons/1.jpg",
+        }
+        track = {
+            "key": "track:deezer-1",
+            "kind": "track",
+            "title": "Т",
+            "artist_photo": "artists/2.jpg",
+        }
+        assert "director_photo" not in catalog_row(film)
+        assert "artist_photo" not in catalog_row(track)
+
     def test_track_listens_become_popularity_and_html_is_unescaped(self) -> None:
         raw = {
             "key": "track:demo-2",
