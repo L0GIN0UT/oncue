@@ -30,6 +30,7 @@ import {
 } from "@/features/rating/labels";
 import { pointsToNext } from "@/features/rating/logic";
 import { SeasonLine } from "@/features/rating/RatingPanel";
+import { ConflictDialog } from "@/features/match/ActiveRoomConflict";
 import { useMatchFound } from "./use-match-found";
 import { useQueue } from "./use-queue";
 
@@ -50,6 +51,7 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
   const ladderLabel = useLadderLabel();
   const formatLabel = useFormatLabel();
   const { state, enter, leave, dismiss } = useQueue();
+  const [leaveOpen, setLeaveOpen] = useState(false);
   const [pickedLadder, setPickedLadder] = useState<string | null>(null);
   const [pickedFormat, setPickedFormat] = useState<Record<string, QueueFormat>>({});
 
@@ -222,10 +224,36 @@ export function QueuePanel({ queues, ratings = [], seasons = null }: Props) {
           <p role="alert" className="text-miss">
             {dt(state.errorKey, t("match.error.generic"))}
           </p>
+          {leaveOpen && state.roomCode && ladder && format && (
+            // Тот же диалог, что при 409 на вход в комнату: «выйти и искать» повторяет поиск.
+            <ConflictDialog
+              leaveLabel={t("match.conflict.leaveAndSearch")}
+              pending={{
+                conflict: { code: state.roomCode, phase: null },
+                retry: async () => undefined,
+              }}
+              onClose={() => setLeaveOpen(false)}
+              onRetry={async () => {
+                setLeaveOpen(false);
+                dismiss();
+                await enter(ladder, format);
+              }}
+            />
+          )}
           <div className="flex gap-3">
             {state.roomCode && (
               <Button asChild variant="secondary" size="sm">
                 <Link href={`/room/${state.roomCode}`}>{t("rating.queue.toRoom")}</Link>
+              </Button>
+            )}
+            {state.roomCode && ladder && format && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setLeaveOpen(true)}
+                data-testid="queue-leave-and-search"
+              >
+                {t("match.conflict.leaveAndSearch")}
               </Button>
             )}
             <Button variant="ghost" size="sm" onClick={dismiss}>

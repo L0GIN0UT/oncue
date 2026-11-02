@@ -156,6 +156,33 @@ describe("QueuePanel — очередь рейтинговой дуэли", () =
     expect(screen.queryByTestId("queue-error")).not.toBeInTheDocument();
   });
 
+  it("409 «уже в комнате»: «Выйти и искать» — диалог, leave старой комнаты и повтор поиска", async () => {
+    const leaves: string[] = [];
+    let enters = 0;
+    server.use(
+      notInQueue(),
+      http.post(`${Q}/enter`, () => {
+        enters += 1;
+        return enters === 1
+          ? problem(409, "match.active_room_conflict", { code: "ABCD2345", phase: "lobby" })
+          : HttpResponse.json(ticket({ ladder: "music", format: "classic" }));
+      }),
+      http.post("*/api/match/v1/rooms/:code/leave", ({ params }) => {
+        leaves.push(String(params.code));
+        return HttpResponse.json({ version: 2, room: {} });
+      }),
+    );
+    renderWithProviders(<QueuePanel queues={QUEUES} />);
+    await userEvent.click(screen.getByRole("radio", { name: "Музыка" }));
+    await userEvent.click(screen.getByTestId("queue-enter-music-classic"));
+    await userEvent.click(await screen.findByTestId("queue-leave-and-search"));
+    expect(await screen.findByTestId("active-room-conflict")).toHaveTextContent("ABCD2345");
+    await userEvent.click(screen.getByTestId("conflict-leave"));
+    await waitFor(() => expect(leaves).toEqual(["ABCD2345"]));
+    await waitFor(() => expect(enters).toBe(2));
+    expect(screen.queryByTestId("queue-error")).not.toBeInTheDocument();
+  });
+
   it("блок queues недоступен — понятное сообщение, без кнопок", () => {
     server.use(notInQueue());
     renderWithProviders(<QueuePanel queues={null} />);

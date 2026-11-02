@@ -14,7 +14,7 @@ import { useDynamicT } from "@/shared/i18n/dynamic";
 import { conflictOf, isLivePhase, useLeaveRoom, type RoomConflict } from "./active-room";
 import { matchErrorKey } from "./errors";
 
-type Pending = { conflict: RoomConflict; retry: () => Promise<void> };
+export type Pending = { conflict: RoomConflict; retry: () => Promise<void> };
 
 /**
  * Обёртка действия, которое может упереться в чужую активную комнату.
@@ -57,14 +57,23 @@ export function useActiveRoomConflict(): {
   return { guard, dialog };
 }
 
-function ConflictDialog({
+/**
+ * Диалог «выйти из комнаты». Варианты: `conflict` (409 на вход — есть «Вернуться в комнату»)
+ * и `leave` (явный выход из плашки: тот же диалог и то же предупреждение о сдаче, без
+ * «Вернуться»). `leaveLabel` — подпись главной кнопки («Выйти и искать» в очереди).
+ */
+export function ConflictDialog({
   pending,
   onClose,
   onRetry,
+  variant = "conflict",
+  leaveLabel,
 }: {
   pending: Pending;
   onClose: () => void;
   onRetry: () => Promise<void>;
+  variant?: "conflict" | "leave";
+  leaveLabel?: string;
 }) {
   const t = useTranslations();
   const dt = useDynamicT();
@@ -73,6 +82,17 @@ function ConflictDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { code, phase } = pending.conflict;
+  const title =
+    variant === "leave"
+      ? t("match.conflict.leaveTitle", { code })
+      : t("match.conflict.title", { code });
+  // Фаза неизвестна (старый сервер): предупреждаем осторожно, не утверждая, что идёт матч.
+  const body =
+    phase === null
+      ? t("match.conflict.bodyUnknown")
+      : isLivePhase(phase)
+        ? t("match.conflict.bodyLive")
+        : t("match.conflict.bodyIdle");
 
   const leaveAndGo = async () => {
     setBusy(true);
@@ -90,14 +110,12 @@ function ConflictDialog({
     <Modal
       open
       onClose={busy ? () => undefined : onClose}
-      aria-label={t("match.conflict.title", { code })}
+      aria-label={title}
       data-testid="active-room-conflict"
     >
       <div className="flex flex-col gap-4 p-6">
-        <h2 className="font-display text-xl font-bold">{t("match.conflict.title", { code })}</h2>
-        <p className="text-ink-muted">
-          {isLivePhase(phase) ? t("match.conflict.bodyLive") : t("match.conflict.bodyIdle")}
-        </p>
+        <h2 className="font-display text-xl font-bold">{title}</h2>
+        <p className="text-ink-muted">{body}</p>
         {error && (
           <p role="alert" className="text-miss" data-testid="conflict-error">
             {error}
@@ -105,16 +123,18 @@ function ConflictDialog({
         )}
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={leaveAndGo} disabled={busy} data-testid="conflict-leave">
-            {busy ? t("match.conflict.leaving") : t("match.conflict.leaveAndGo")}
+            {busy ? t("match.conflict.leaving") : (leaveLabel ?? t("match.conflict.leaveAndGo"))}
           </Button>
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => router.push(`/room/${code}`)}
-            data-testid="conflict-back"
-          >
-            {t("match.conflict.back")}
-          </Button>
+          {variant === "conflict" && (
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => router.push(`/room/${code}`)}
+              data-testid="conflict-back"
+            >
+              {t("match.conflict.back")}
+            </Button>
+          )}
           <Button variant="ghost" disabled={busy} onClick={onClose} data-testid="conflict-cancel">
             {t("match.conflict.cancel")}
           </Button>
