@@ -559,3 +559,32 @@ async def test_event_without_tags_gives_empty_collection_tags(game: Any) -> None
         await game.outbox(), "game.GameFinished", {"session_id": snap["id"]}
     )
     assert finished.payload["collection_tags"] == []
+
+
+# ============================================================== область ответа (пункт 49)
+async def test_single_artist_collection_exposes_subject_id_and_mixed_does_not(game: Any) -> None:
+    """Снимок отдаёт персону области (с id для автоподсказки) только у сборника одного
+    исполнителя; смешанный сборник и ответ ревила id персон не раскрывают."""
+    await bootstrap(game)
+    token = game.issuer.issue()
+    artist = (uuid7(), "Solo Singer")
+    solo = await publish(
+        game,
+        [await game.add_item(domain="music", ready_for=INTRO, artist=artist) for _ in range(6)],
+        domain="music",
+    )
+    mixed = await publish(
+        game,
+        [
+            await game.add_item(domain="music", ready_for=INTRO, artist=(uuid7(), f"Band {i}"))
+            for i in range(6)
+        ],
+        domain="music",
+    )
+    one = await start(game, token, INTRO, collection_id=str(solo))
+    assert one.status_code == 201, one.text
+    first = one.json()["rounds"][0]
+    assert first["subjects"] == [{"id": str(artist[0]), "name": "Solo Singer", "role": "artist"}]
+    many = await start(game, token, INTRO, collection_id=str(mixed))
+    assert many.status_code == 201, many.text
+    assert all(r["subjects"] == [] for r in many.json()["rounds"])
