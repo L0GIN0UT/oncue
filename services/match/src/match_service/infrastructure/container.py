@@ -385,6 +385,7 @@ class MatchContainer:
                 empty_lobby_ms=int(m.empty_lobby_close_s * MS),
                 artwork_refresh_margin_ms=int(m.artwork_refresh_margin_s * MS),
                 presence_release_ms=int(m.presence_release_s * MS),
+                clip_ready_max_wait_ms=int(m.clip_ready_max_wait_s * MS),
             ),
             transient=_transient,
             ranked=QueueHooks(

@@ -541,6 +541,15 @@ class RoomService:
             actor, code, "listen", op_id, {"level": level, "position_ms": position_ms}
         )
 
+    async def clip_ready(
+        self, actor: Actor, code: str, op_id: str, round_index: int | None, level: int | None
+    ) -> CommandOutcome:
+        """«Фрагмент загружен» / объявление поддержки: общий лимит команд игрока."""
+        data: Json = {}
+        if round_index is not None and level is not None:
+            data = {"round_index": round_index, "level": level}
+        return await self.command(actor, code, "clip_ready", op_id, data)
+
     async def chat(self, actor: Actor, code: str, op_id: str, text: str) -> CommandOutcome:
         """Свободный чат лобби: санкции, лимиты, ``gv_text.ugc`` + denylist (ADR 0030).
 

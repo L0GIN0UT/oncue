@@ -36,6 +36,7 @@ from match_service.api.public.schemas import (
     ActiveRoom,
     AwayRequest,
     ChatRequest,
+    ClipReadyRequest,
     CommandAccepted,
     CreateRoomRequest,
     Cursor,
@@ -516,6 +517,32 @@ def build_public_router(services: ServicesProvider) -> APIRouter:  # noqa: PLR09
     ) -> MatchCommandResult | JSONResponse:
         outcome = await services().rooms.listen(
             actor_of(user), code, body.op_id, body.level, body.position_ms
+        )
+        return respond(outcome, MatchCommandResult)
+
+    @router.post(
+        "/rooms/{code}/clip-ready",
+        response_model=MatchCommandResult,
+        summary="Фрагмент уровня загружен",
+        description=(
+            "Необязательная команда общего старта таймера (пункт 24 замечаний тестирования). "
+            "Без `round_index` и `level` - объявление, что клиент умеет подтверждать (слать при "
+            "входе в комнату и после переподключения): с этого момента таймер каждого уровня "
+            "ждёт этого игрока. С ними - подтверждение уровня: когда подтвердили все ожидаемые "
+            "(отключившихся не ждём) либо прошло `GV_MATCH__CLIP_READY_MAX_WAIT_S`, "
+            "приходит сообщение `level_started` с настоящим `phase_ends_at`. Пока затвор "
+            "закрыт (`level_opened.awaiting_clips`), ответы и пропуск дают 409 "
+            "`match.phase_mismatch` (`details.awaiting_clips`). Клиент без команды "
+            "работает как раньше. Устаревший уровень и повтор - 200 без изменений. "
+            + _COMMON_ROOM_ERRORS
+        ),
+        responses=_ROOM_CMD,
+    )
+    async def clip_ready(
+        code: RoomCodePath, body: ClipReadyRequest, user: User
+    ) -> MatchCommandResult | JSONResponse:
+        outcome = await services().rooms.clip_ready(
+            actor_of(user), code, body.op_id, body.round_index, body.level
         )
         return respond(outcome, MatchCommandResult)
 
