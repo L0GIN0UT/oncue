@@ -42,6 +42,7 @@ from typing import Any
 
 import httpx
 
+from gv_cli.jsonl import dumps_line, split_lines
 from gv_cli.seed import (
     FRAMES_PER_FILM,
     REASON,
@@ -229,7 +230,7 @@ class RealUnit:
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Строки JSONL (пустые и ``#`` пропускаются); битая строка — :class:`SeedError`."""
     rows: list[dict[str, Any]] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for number, line in enumerate(split_lines(path.read_text(encoding="utf-8")), start=1):
         if not line.strip() or line.startswith("#"):
             continue
         try:
@@ -302,9 +303,9 @@ def catalog_row(raw: Mapping[str, Any]) -> dict[str, Any]:
 
 def write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> int:
     """Записать строки JSONL; вернуть их число."""
-    lines = [json.dumps(r, ensure_ascii=False) for r in rows]
+    lines = [dumps_line(r) for r in rows]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return len(lines)
 
 

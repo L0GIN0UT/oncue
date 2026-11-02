@@ -37,11 +37,17 @@ FRAMES_PER_FILM = 6
 FRAME_SIZE = (1280, 720)
 
 
+def _split_lines(text: str) -> list[str]:
+    r"""Строки только по ``\n``: ``splitlines()`` режет и по U+2028, U+2029, U+0085."""
+    lines = [line.removesuffix("\r") for line in text.split("\n")]
+    return lines[:-1] if lines and lines[-1] == "" else lines
+
+
 def _rows(directory: Path = CATALOG) -> list[dict[str, object]]:
     """Строки всех файлов импорта каталога (``*.jsonl``) — сиды этапа 2 и синтетика 3a."""
     rows: list[dict[str, object]] = []
     for path in sorted(directory.glob("*.jsonl")):
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = _split_lines(path.read_text(encoding="utf-8"))
         rows += [json.loads(line) for line in lines if line.strip() and not line.startswith("#")]
     return rows
 
