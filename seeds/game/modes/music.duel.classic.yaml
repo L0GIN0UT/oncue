@@ -12,6 +12,8 @@ source:
     pool:
       kinds: [track]
       min_playable: 20
+      popularity_top_pct: 30
+      popularity_weight: sqrt
 clue:
   type: audio_intro
   params:

@@ -64,7 +64,12 @@ async def test_classic_draw_rounds_wraps_draw(key: str, seed_body: SeedBody) -> 
 
 async def test_daily_draw_is_unchanged_by_stage3a(seed_body: SeedBody) -> None:
     """Сиды этапа 2: набор дня по фиксированному seed не меняется (регресс розыгрыша)."""
-    engine = build_engine(seed_body("music.daily.classic"))
+    body = seed_body("music.daily.classic")
+    # Без популярности (ADR 0074 добавил в сид порог и веса): розыгрыш равномерный, как на этапе 2.
+    pool = body["source"]["params"]["pool"]
+    pool.pop("popularity_top_pct")
+    pool.pop("popularity_weight")
+    engine = build_engine(body)
     items = [media_item(f"T{i}", aliases=[f"t{i}"]) for i in range(12)]
     ctx = engine.draw_context(seed=b"fixed-seed", candidates=FakeCandidatePort(items))
     picked = [int(i.id) for i in await engine.draw(ctx)]

@@ -11,6 +11,8 @@ source:
     pool:
       kinds: [film]
       min_playable: 20
+      popularity_top_pct: 30
+      popularity_weight: sqrt
 clue:
   type: frame_progressive
   params:

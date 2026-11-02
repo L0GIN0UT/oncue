@@ -36,6 +36,11 @@
                 "type": "array",
                 "uniqueItems": true
               },
+              "popularity_top_pct": {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "number"
+              },
               "min_popularity": {
                 "minimum": 0,
                 "type": "number"

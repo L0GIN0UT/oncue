@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import date, datetime, timedelta
@@ -47,6 +48,7 @@ from gv_game_kernel.builtin.matching import HIGHER, LOWER
 from gv_game_kernel.builtin.pool import (
     PoolFilters,
     PoolParams,
+    PopularityWeight,
     build_query,
     filters_issues,
     min_playable,
@@ -106,13 +108,59 @@ def _pool_too_small(available: int, required: int) -> PoolTooSmallError:
     )
 
 
-def _sample(items: Sequence[MediaItemRef], n: int, rng: SeededRandom) -> list[MediaItemRef]:
-    """``n`` различных единиц из ``items``; порядок кандидатов фиксируется сортировкой."""
+MIN_POPULARITY_WEIGHT = 0.05
+"""Нижняя граница веса: единица без популярности или в самом низу ранга всё же может выпасть."""
+
+
+def popularity_weights(
+    items: Sequence[MediaItemRef], mode: PopularityWeight
+) -> dict[UUID, float] | None:
+    """Веса выборки по рангу популярности внутри ``items`` (ADR 0074); ``None`` - равномерно.
+
+    ``r`` - процентильный ранг единицы (0 у единиц без популярности, 1 у самой популярной,
+    ничьи делят средний ранг); вес: ``sqrt`` - ``√r``, ``log`` - ``log10(1 + 9r)``; оба в
+    ``(0, 1]``, не ниже ``MIN_POPULARITY_WEIGHT``. Ранг, а не сама метрика: у фильмов
+    популярность порядка 10-500, у треков до ~1e6, ранг не зависит от масштаба.
+    """
+    if mode == "none":
+        return None
+    unique = {item.id: item for item in items}
+    known = sorted((i.popularity, i.id) for i in unique.values() if i.popularity is not None)
+    rank: dict[UUID, float] = {}
+    start = 0
+    while start < len(known):
+        end = start
+        while end + 1 < len(known) and known[end + 1][0] == known[start][0]:
+            end += 1
+        average = (start + end) / 2 + 1  # средний 1-based ранг группы ничьих
+        for _, key in known[start : end + 1]:
+            rank[key] = average / len(known)
+        start = end + 1
+    transform = math.sqrt if mode == "sqrt" else (lambda r: math.log10(1 + 9 * r))
+    return {key: max(MIN_POPULARITY_WEIGHT, transform(rank.get(key, 0.0))) for key in unique}
+
+
+def _sample(
+    items: Sequence[MediaItemRef],
+    n: int,
+    rng: SeededRandom,
+    weight: PopularityWeight = "none",
+) -> list[MediaItemRef]:
+    """``n`` различных единиц из ``items``; порядок кандидатов фиксируется сортировкой.
+
+    С весами (``weight`` не ``none``) - выборка без возвращения Эфраимидиса-Спиракиса:
+    ключ ``u^(1/w)``, берутся ``n`` наибольших; детерминирована при одном seed.
+    """
     unique = {item.id: item for item in items}
     ordered = [unique[key] for key in sorted(unique)]
     if len(ordered) < n:
         raise _pool_too_small(len(ordered), n)
-    return rng.sample(ordered, n)
+    weights = popularity_weights(ordered, weight)
+    if weights is None:
+        return rng.sample(ordered, n)
+    keyed = [(rng.random() ** (1.0 / weights[item.id]), item) for item in ordered]
+    keyed.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in keyed[:n]]
 
 
 def _require_n(n: int) -> None:
@@ -177,22 +225,23 @@ class DailySource:
         _require_n(n)
         p = typed(params, DailyParams)
         base = self._query(p, ctx)
+        weight = p.pool.popularity_weight
         rng = SeededRandom(ctx.seed)
         fresh = await ctx.candidates.candidates(
             _with_exclude(base, ctx.exclude_ids), ctx.candidate_limit
         )
         fresh = [item for item in fresh if item.id not in ctx.exclude_ids]
         if len({item.id for item in fresh}) >= n or not ctx.exclude_ids:
-            return _sample(fresh, n, rng)
+            return _sample(fresh, n, rng, weight)
         # Свежих не хватает: берём все свежие и добираем из недавних.
         everything = await ctx.candidates.candidates(base, ctx.candidate_limit)
         fresh_ids = {item.id for item in fresh}
         recent = [item for item in everything if item.id not in fresh_ids]
-        picked = _sample(fresh, len(fresh_ids), rng) if fresh_ids else []
+        picked = _sample(fresh, len(fresh_ids), rng, weight) if fresh_ids else []
         missing = n - len(picked)
         if len({item.id for item in recent}) < missing:
             raise _pool_too_small(len(fresh_ids) + len({i.id for i in recent}), n)
-        return picked + _sample(recent, missing, rng)
+        return picked + _sample(recent, missing, rng, weight)
 
     @staticmethod
     def _query(p: DailyParams, ctx: DrawContext) -> PoolQuery:
@@ -306,7 +355,8 @@ class RandomSource:
         query = _with_exclude(query, ctx.exclude_ids)
         items = await ctx.candidates.candidates(query, ctx.candidate_limit)
         items = [item for item in items if item.id not in ctx.exclude_ids]
-        return _sample(items, n, SeededRandom(ctx.seed))
+        weight = typed(params, RandomParams).pool.popularity_weight
+        return _sample(items, n, SeededRandom(ctx.seed), weight)
 
     def presets(self, params: BaseModel) -> list[Preset]:
         """Пресеты в порядке конфига."""

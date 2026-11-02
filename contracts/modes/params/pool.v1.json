@@ -32,6 +32,22 @@
       "minimum": 1,
       "type": "integer"
     },
+    "popularity_top_pct": {
+      "description": "Только верхние N% по популярности среди единиц домена, вида, жанров и лет (ADR 0074)",
+      "maximum": 100,
+      "minimum": 1,
+      "type": "number"
+    },
+    "popularity_weight": {
+      "default": "none",
+      "description": "Веса случайной выборки по рангу популярности: none - равномерно, sqrt и log - популярные чаще (ADR 0074)",
+      "enum": [
+        "none",
+        "sqrt",
+        "log"
+      ],
+      "type": "string"
+    },
     "min_popularity": {
       "minimum": 0,
       "type": "number"
