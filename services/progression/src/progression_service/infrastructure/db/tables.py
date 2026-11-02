@@ -148,11 +148,35 @@ daily_counters = Table(
     Column("solo_verses", BigInteger, nullable=False, server_default=text("0")),
     Column("online_verses", BigInteger, nullable=False, server_default=text("0")),
     Column("first_win_awarded", Boolean, nullable=False, server_default=text("false")),
+    # 0013: опыт суток с пользовательских сборников (потолок ``ugc_guard.ugc_daily_xp_cap``).
+    Column("ugc_xp", BigInteger, nullable=False, server_default=text("0")),
     PrimaryKeyConstraint("user_id", "day"),
     CheckConstraint(
         "solo_xp >= 0 AND solo_verses >= 0 AND online_verses >= 0", name="counters_non_negative"
     ),
+    CheckConstraint("ugc_xp >= 0", name="ugc_xp_non_negative"),
 )
+
+collection_authors = Table(
+    "collection_authors",
+    _md,
+    Column("collection_id", Uuid(as_uuid=True), primary_key=True),
+    Column("kind", String(8), nullable=False),
+    Column("author_id", Uuid(as_uuid=True), nullable=True),
+    _ts("updated_at"),
+    CheckConstraint("kind IN ('ugc', 'curated')", name="kind_known"),
+)
+"""Проекция «сборник → автор» из ``collections.CollectionPublished`` (0013)."""
+
+collection_play_marks = Table(
+    "collection_play_marks",
+    _md,
+    Column("user_id", Uuid(as_uuid=True), nullable=False),
+    Column("collection_id", Uuid(as_uuid=True), nullable=False),
+    Column("rewarded_at", DateTime(timezone=True), nullable=False),
+    PrimaryKeyConstraint("user_id", "collection_id"),
+)
+"""Когда игроку последний раз засчитали награду за сборник (окно повтора из конфига)."""
 
 daily_streaks = Table(
     "daily_streaks",

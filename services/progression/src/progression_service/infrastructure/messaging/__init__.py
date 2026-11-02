@@ -136,6 +136,8 @@ class _MatchFinished(_Payload):
     finished_at: AwareDatetime
     players: list[_Player] = Field(min_length=2, max_length=6)
     rounds: list[_MatchRound] = Field(max_length=50)
+    # Сборники лобби (необязательно: события старого формата); для защиты от накрутки.
+    collection_ids: list[UUID] = Field(default_factory=list, max_length=10)
 
 
 class _Placed(_Payload):
@@ -211,6 +213,7 @@ def _match(p: _MatchFinished) -> FinishedMatch:
             for x in p.players
         ),
         rounds=rounds,
+        collection_ids=tuple(dict.fromkeys(p.collection_ids)),
     )
 
 
@@ -261,6 +264,7 @@ def build_event_handlers(infra: Infrastructure) -> EventHandlerRegistry:  # noqa
                 day=p.day,
                 finished_at=p.finished_at,
                 round_points=tuple(r.points for r in p.rounds if r.outcome != _VOID),
+                collection_id=p.collection_id,
             )
         )
         played = [r for r in p.rounds if r.outcome != _VOID]

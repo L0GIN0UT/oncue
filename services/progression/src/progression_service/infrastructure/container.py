@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from functools import cached_property
 from uuid import UUID
 
@@ -142,6 +143,22 @@ class ProgressionContainer:
     def accrue_season(self, session: AsyncSession) -> AccrueSeason:
         """Итог сезона."""
         return AccrueSeason(self.uow_factory(session), self.infra.clock)
+
+    async def record_collection_author(
+        self,
+        session: AsyncSession,
+        *,
+        collection_id: UUID,
+        kind: str,
+        author_id: UUID | None,
+        now: datetime,
+    ) -> None:
+        """Записать сборник в проекцию авторов (идемпотентно) в транзакции consumer."""
+        async with self.uow_factory(session)() as uow:
+            await uow.collection_authors.upsert(
+                collection_id, kind=kind, author_id=author_id, now=now
+            )
+            await uow.commit()
 
     def tracker(self, session: AsyncSession) -> ProgressTracker:
         """Метрики, задания и бейджи в транзакции consumer."""

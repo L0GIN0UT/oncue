@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -65,6 +65,15 @@ class DailyCounters:
     solo_verses: int = 0
     online_verses: int = 0
     first_win_awarded: bool = False
+    ugc_xp: int = 0  # опыт суток с пользовательских сборников (потолок ugc_guard)
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionOwner:
+    """Сборник из проекции ``CollectionPublished``: вид и автор (``None`` — у куратора)."""
+
+    kind: str
+    author_id: UUID | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +250,30 @@ class CounterRepository(Protocol):
         ...
 
 
+class CollectionAuthorRepository(Protocol):
+    """Проекция «сборник → автор, вид» (progression не читает БД collections)."""
+
+    async def upsert(
+        self, collection_id: UUID, *, kind: str, author_id: UUID | None, now: datetime
+    ) -> None:
+        """Записать или обновить сборник (идемпотентно)."""
+        ...
+
+    async def get_many(self, collection_ids: Iterable[UUID]) -> dict[UUID, CollectionOwner]:
+        """Известные сборники из списка (неизвестных в словаре нет)."""
+        ...
+
+
+class PlayMarkRepository(Protocol):
+    """Метки «игроку засчитана награда за сборник» для окна повтора."""
+
+    async def claim(
+        self, user_id: UUID, collection_id: UUID, *, at: datetime, not_after: datetime
+    ) -> bool:
+        """Атомарно занять награду; ``False`` - повтор внутри окна."""
+        ...
+
+
 class MarkRepository(Protocol):
     """Нулевые отметки предметов (``accrual_marks``): сумма после потолка 0, проводки нет."""
 
@@ -297,6 +330,12 @@ class ProgressionUnitOfWork(Protocol):
 
     @property
     def marks(self) -> MarkRepository: ...
+
+    @property
+    def collection_authors(self) -> CollectionAuthorRepository: ...
+
+    @property
+    def play_marks(self) -> PlayMarkRepository: ...
 
     @property
     def streaks(self) -> StreakRepository: ...
