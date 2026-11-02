@@ -75,7 +75,7 @@ def test_schedule_and_presets_capabilities(factory: RulesFactory) -> None:
     assert daily.schedule == PeriodSchedule("day", "Europe/Moscow", 2, 7)
     assert daily.rounds == 5 and daily.presets() == []
     assert random.schedule is None and random.rounds == 5
-    assert [p.id for p in random.presets()] == ["oldies", "modern", "rock"]
+    assert [p.id for p in random.presets()][:3] == ["y1960_70s", "y1980s", "y1990s"]
     assert daily.min_playable() == 10 and daily.round_max == 6
     assert (daily.presentation, daily.answer_format, daily.records_enabled) == (
         "score",

@@ -54,6 +54,10 @@ from progression_service.infrastructure.db.repositories_shop import (
     SqlPacks,
     SqlPromos,
 )
+from progression_service.infrastructure.db.repositories_ugc import (
+    SqlCollectionAuthors,
+    SqlPlayMarks,
+)
 from progression_service.infrastructure.db.tables import (
     TABLES,
     accrual_marks,
@@ -410,6 +414,7 @@ class SqlCounters:
             solo_verses=int(r.solo_verses),
             online_verses=int(r.online_verses),
             first_win_awarded=bool(r.first_win_awarded),
+            ugc_xp=int(r.ugc_xp),
         )
 
     async def lock(self, user_id: UUID, day: date) -> DailyCounters:
@@ -438,6 +443,7 @@ class SqlCounters:
                 solo_verses=counters.solo_verses,
                 online_verses=counters.online_verses,
                 first_win_awarded=counters.first_win_awarded,
+                ugc_xp=counters.ugc_xp,
             )
         )
 
@@ -547,6 +553,8 @@ class SqlProgressionUnitOfWork:
     balances: SqlBalances
     counters: SqlCounters
     marks: SqlMarks
+    collection_authors: SqlCollectionAuthors
+    play_marks: SqlPlayMarks
     streaks: SqlStreaks
     rewards: SqlRewardPeriods
     quests: SqlQuests
@@ -602,6 +610,8 @@ class SqlProgressionUnitOfWork:
         self.balances = SqlBalances(s)
         self.counters = SqlCounters(s)
         self.marks = SqlMarks(s)
+        self.collection_authors = SqlCollectionAuthors(s)
+        self.play_marks = SqlPlayMarks(s)
         self.streaks = SqlStreaks(s)
         self.rewards = SqlRewardPeriods(s)
         self.quests = SqlQuests(s)

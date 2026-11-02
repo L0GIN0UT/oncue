@@ -154,7 +154,7 @@ async def test_downgrade_0003_drops_reward_tables_only_and_reapplies(database_ur
 
 
 def test_alembic_has_single_head_and_linear_chain() -> None:
-    """Ревизии идут цепочкой 0001 → … → 0012: после слияния потоков голова одна."""
+    """Ревизии идут цепочкой 0001 → … → 0013: после слияния потоков голова одна."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -162,9 +162,10 @@ def test_alembic_has_single_head_and_linear_chain() -> None:
     config = Config()
     config.set_main_option("script_location", str(DEFINITION.migrations_path))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["0012"]
+    assert script.get_heads() == ["0013"]
     chain = [rev.revision for rev in script.walk_revisions()]
     assert chain == [
+        "0013",
         "0012",
         "0011",
         "0010",
@@ -222,3 +223,31 @@ async def test_downgrade_0007_is_blocked_by_data_and_empty_one_reapplies(
         await apply_migrations(database_url, DEFINITION.migrations_path)
     finally:
         await engine.dispose()
+
+
+async def test_0013_adds_ugc_guard_storage_and_is_reversible(database_url: str) -> None:
+    """0013 только добавляет: таблицы проекции и меток, колонка ugc_xp с нулём по умолчанию."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    await apply_migrations(database_url, DEFINITION.migrations_path)
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            tables = set(
+                (
+                    await conn.execute(text("SELECT table_name FROM information_schema.tables"))
+                ).scalars()
+            )
+            default = (
+                await conn.execute(
+                    text(
+                        "SELECT column_default FROM information_schema.columns "
+                        "WHERE table_name = 'daily_counters' AND column_name = 'ugc_xp'"
+                    )
+                )
+            ).scalar_one()
+    finally:
+        await engine.dispose()
+    assert {"collection_authors", "collection_play_marks"} <= tables
+    assert default == "0"

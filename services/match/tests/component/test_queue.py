@@ -485,3 +485,98 @@ async def test_ticket_carries_heartbeat_period_for_the_client(svc: MatchApp) -> 
     ticked = (await svc.queue_tick(player)).json()
     tick_s = svc.infra.settings.match.tick_s  # type: ignore[attr-defined]  # настройки match
     assert entered["tick_s"] == ticked["tick_s"] == tick_s
+
+
+# ------------------------------------------------------------------ цикл start_failed (п. 23)
+async def _closed_rooms(svc: MatchApp) -> int:
+    """Сколько закрытых комнат уже создал матчер."""
+    closed = 0
+    async for key in svc.redis.scan_iter("{room:*}:snap"):
+        raw = await svc.redis.get(key)
+        closed += int(raw is not None and b'"closed"' in raw)
+    return closed
+
+
+async def _wait_closed_rooms(svc: MatchApp, count: int) -> None:
+    async with asyncio.timeout(8):
+        while await _closed_rooms(svc) < count:  # noqa: ASYNC110 - опрос Redis, события нет
+            await asyncio.sleep(0.05)
+
+
+async def test_start_failure_backs_off_instead_of_a_room_per_second(app_factory: Any) -> None:
+    """Сорванный старт: пауза с нарастанием, новая комната не каждую секунду."""
+    from gv_core.errors import DependencyUnavailableError
+
+    svc: MatchApp = await app_factory(
+        start_failed_backoff_s=10, start_failed_backoff_max_s=60, start_failed_max_attempts=5
+    )
+
+    async def down(request: Any) -> Any:
+        raise DependencyUnavailableError("game недоступен")
+
+    svc.plans.create_round_plan = down  # type: ignore[method-assign]
+    await svc.ladder("music")
+    a, b = svc.user(), svc.user()
+    await svc.enter(a)
+    await svc.enter(b)
+    await _wait_closed_rooms(svc, 1)
+    for _ in range(4):  # 8 с фейкового времени < паузы 10 с: нового подбора быть не должно
+        svc.clock.advance(seconds=2)
+        await asyncio.sleep(0.4)
+    assert await _closed_rooms(svc) == 1
+    for player in (a, b):  # игроки при этом всё ещё в поиске
+        await svc.queue_state(player, lambda t: t["state"] == "searching")
+    svc.clock.advance(seconds=3)  # пауза прошла - вторая попытка
+    await _wait_closed_rooms(svc, 2)
+    for _ in range(4):  # вторая пауза вдвое длиннее (20 с): за 8 с третьей комнаты нет
+        svc.clock.advance(seconds=2)
+        await asyncio.sleep(0.4)
+    assert await _closed_rooms(svc) == 2
+
+
+async def test_start_failure_gives_up_after_limit_with_clear_error(app_factory: Any) -> None:
+    from gv_core.errors import DependencyUnavailableError
+
+    svc: MatchApp = await app_factory(
+        start_failed_backoff_s=1, start_failed_backoff_max_s=1, start_failed_max_attempts=2
+    )
+
+    async def down(request: Any) -> Any:
+        raise DependencyUnavailableError("game недоступен")
+
+    svc.plans.create_round_plan = down  # type: ignore[method-assign]
+    await svc.ladder("music")
+    a, b = svc.user(), svc.user()
+    await svc.enter(a)
+    await svc.enter(b)
+    await _wait_closed_rooms(svc, 1)
+    svc.clock.advance(seconds=2)
+    await _wait_closed_rooms(svc, 2)
+    for player in (a, b):  # лимит исчерпан: понятная ошибка, а не вечный поиск
+        problem = None
+        async with asyncio.timeout(6):
+            while problem is None:
+                response = await svc.queue_tick(player)
+                if response.status_code != 200:
+                    problem = response
+                await asyncio.sleep(0.05)
+        assert_problem(problem, 503, "match.start_unavailable")
+        assert_problem(
+            await svc.queue_tick(player), 404, "match.not_in_queue"
+        )  # сообщение один раз
+    svc.clock.advance(seconds=30)
+    await asyncio.sleep(1.0)
+    assert await _closed_rooms(svc) == 2  # комнат больше нет: цикл остановлен
+
+
+async def test_new_search_clears_stale_start_unavailable_notice(svc: MatchApp) -> None:
+    await svc.ladder("music")
+    a = svc.user()
+    from match_service.infrastructure.container import container_for
+
+    container = container_for(svc.infra, None)
+    await container.ranked_queue.fail(a.user_id, "match.start_unavailable", 60)
+    assert (await svc.enter(a)).status_code == 200
+    await svc.queue_tick(a)
+    await svc.client.post("/v1/queue/leave", headers={**a.headers, "Idempotency-Key": a.op()})
+    assert_problem(await svc.queue_tick(a), 404, "match.not_in_queue")  # а не устаревшее 503

@@ -296,8 +296,9 @@ class ProgressionService:
         finished_at: datetime | None = None,
         session_id: UUID | None = None,
         rounds: list[dict[str, Any]] | None = None,
+        collection_id: UUID | None = None,
     ) -> EventEnvelope:
-        """``game.GameFinished`` (``user_id = None`` — гость)."""
+        """``game.GameFinished`` (``user_id = None`` — гость; ``collection_id`` — по сборнику)."""
         base = load_example("game.GameFinished")
         sid = session_id or uuid7()
         payload = {
@@ -308,6 +309,7 @@ class ProgressionService:
             "day": None if day is None else day.isoformat(),
             "finished_at": (finished_at or self.clock.now()).isoformat(),
             "rounds": rounds or [exact_round(i, p) for i, p in enumerate(points)],
+            "collection_id": None if collection_id is None else str(collection_id),
         }
         return base.model_copy(update={"aggregate_id": str(sid), "payload": payload})
 
@@ -335,6 +337,7 @@ class ProgressionService:
         aborted: bool = False,
         finished_at: datetime | None = None,
         match_id: UUID | None = None,
+        collection_ids: list[UUID] | None = None,
     ) -> EventEnvelope:
         """``match.MatchFinished``; игрок — ``{user_id, place, outcome, finish}``."""
         base = load_example("match.MatchFinished")
@@ -374,6 +377,7 @@ class ProgressionService:
             ],
             "rounds": body,
             "finished_at": (finished_at or self.clock.now()).isoformat(),
+            "collection_ids": [str(c) for c in collection_ids or []],
         }
         return base.model_copy(update={"aggregate_id": str(mid), "payload": payload})
 
@@ -416,7 +420,12 @@ class ProgressionService:
         )
 
     def collection_published(
-        self, author: UUID | None, *, collection_id: UUID | None = None, status: str = "published"
+        self,
+        author: UUID | None,
+        *,
+        collection_id: UUID | None = None,
+        status: str = "published",
+        kind: str = "ugc",
     ) -> EventEnvelope:
         """``collections.CollectionPublished`` (новый ``event_id`` на каждый вызов)."""
         base = load_example("collections.CollectionPublished")
@@ -426,6 +435,7 @@ class ProgressionService:
             "collection_id": str(cid),
             "author_id": None if author is None else str(author),
             "status": status,
+            "kind": kind,
         }
         return base.model_copy(update={"aggregate_id": str(cid), "payload": payload})
 

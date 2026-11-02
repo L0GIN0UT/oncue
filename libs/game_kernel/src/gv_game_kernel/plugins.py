@@ -30,7 +30,7 @@ from gv_game_kernel.ports import (
     PoolQuery,
     SubjectQuery,
 )
-from gv_game_kernel.refs import AssetRef, MediaItemRef
+from gv_game_kernel.refs import AssetRef, MediaItemRef, PersonRef
 from gv_game_kernel.round import Guess, MatchVerdict, RoundOutcome, RoundRules
 from gv_game_kernel.spec import ModeConfig
 from gv_text import TitleNormalizer
@@ -198,11 +198,15 @@ class RoundDraw:
         target: Загаданная единица (по ней выдаётся загадка и считается ответ).
         shown: Единицы, которые клиент видит открыто (опорная единица пары).
         options: Варианты ответа формата ``pick`` (пусто — классический ввод).
+        subjects: Персоны, ограничивающие область ответа раунда (сборник одного исполнителя,
+            марафон): по ним ``answer.subject_mode`` отключает частичный ответ; пусто — область
+            не ограничена.
     """
 
     target: MediaItemRef
     shown: tuple[MediaItemRef, ...] = ()
     options: tuple[OptionSpec, ...] = ()
+    subjects: tuple[PersonRef, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,6 +338,21 @@ class SubjectSource(Protocol):
 
     def max_subjects(self, params: BaseModel) -> int:
         """Сколько персон игрок может выбрать за сессию."""
+        ...
+
+
+@runtime_checkable
+class ScopedSource(Protocol):
+    """Источник, у которого раунды ограничены персонами (марафон, сборник одного исполнителя).
+
+    Персоны попадают в ``RoundDraw.subjects``: по ним ``answer.subject_mode`` решает, что
+    ответом считается только название, а клиент ограничивает автоподсказку.
+    """
+
+    async def subjects(
+        self, ctx: DrawContext, params: BaseModel, items: Sequence[MediaItemRef]
+    ) -> tuple[PersonRef, ...]:
+        """Персоны, задающие область ответа раундов с единицами ``items`` (пусто - нет)."""
         ...
 
 

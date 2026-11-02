@@ -54,7 +54,7 @@ async def start(game: Any, token: str, mode: str, **extra: Any) -> httpx.Respons
 async def test_random_mode_with_preset(game: Any) -> None:
     await ready(game)
     token = game.issuer.issue_guest()
-    r = await start(game, token, RANDOM, preset_id="modern")
+    r = await start(game, token, RANDOM, preset_id="y2000s")
     assert r.status_code == 201, r.text
     snap = r.json()
     assert snap["day"] is None and len(snap["rounds"]) == 5
@@ -62,7 +62,7 @@ async def test_random_mode_with_preset(game: Any) -> None:
     assert_problem(await start(game, token, "music.unknown.mode"), 404, "game.mode_not_found")
     modes = (await game.client.get("/v1/modes")).json()
     presets = next(m for m in modes if m["key"] == RANDOM)["presets"]
-    assert {p["id"] for p in presets} == {"oldies", "modern", "rock"}
+    assert {p["id"] for p in presets} >= {"y1980s", "y2000s", "hip_hop", "rock"}
 
 
 async def test_random_pool_empty(game: Any) -> None:

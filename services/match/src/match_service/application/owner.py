@@ -45,6 +45,7 @@ from match_service.application.ports import (
     Json,
     MatchRecords,
     PlayerRooms,
+    PresenceStore,
     RankedHooks,
     RoomCommand,
     RoomStore,
@@ -85,6 +86,9 @@ RANKED_DROPS = Counter(
 )
 PERSIST_FAILURES = Counter(
     "gv_match_persist_failures_total", "Неудачные записи начала или итога матча в Postgres"
+)
+PLAYER_DISCONNECTS = Counter(
+    "gv_match_player_disconnects_total", "Игроки, ставшие «Отключён»", ["reason"]
 )
 COMMAND_APPLY_SECONDS = Histogram(
     "gv_match_command_apply_seconds", "Применение команды владельцем комнаты", ["kind"]
@@ -175,6 +179,8 @@ class OwnerSettings:
     pending_room_ms: int = 10_000
     empty_lobby_ms: int = 0
     artwork_refresh_margin_ms: int = 10_000
+    presence_release_ms: int = 0
+    """Молчащий дольше игрок лобби/итогов освобождает ``player:{id}:room`` (0 - не чистить)."""
 
     @property
     def timing(self) -> Timing:
@@ -201,6 +207,71 @@ PERSIST_BACKOFF_MAX_S = 30.0
 POISON_REASON = "internal_error"
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveRoom:
+    """Активная комната игрока: код и фаза (``GET /rooms/active``, ``details`` 409)."""
+
+    code: str
+    phase: str
+
+
+async def _silent_for_too_long(
+    presence: PresenceStore | None, room: Room, user_id: UUID, *, now_ms: int, stale_ms: int
+) -> bool:
+    """Игрок не слал heartbeat в ``room`` дольше ``stale_ms`` (вкладку закрыли).
+
+    Нет источника присутствия или он недоступен - не устарело: прежнее поведение безопаснее
+    ложного освобождения указателя.
+    """
+    seat = room.seat_of(user_id)
+    if presence is None or stale_ms <= 0 or seat is None:
+        return False
+    try:
+        seen = await presence.seen(room.code)
+    except Exception:
+        log.warning("match.presence_unavailable_for_claim", room=room.code)
+        return False
+    return now_ms - max(seen.get(user_id, 0), seat.joined_at_ms) >= stale_ms
+
+
+async def active_room_of(
+    player_rooms: PlayerRooms,
+    store: RoomStore,
+    user_id: UUID,
+    *,
+    now_ms: int,
+    pending_ms: int,
+    presence: PresenceStore | None = None,
+    stale_ms: int = 0,
+) -> ActiveRoom | None:
+    """Активная комната игрока по правилу D10 или ``None`` (единый источник правды сервера).
+
+    Указатель живой, если комната не закрыта и игрок из неё не вышел (место есть и не
+    ``left`` - или места ещё нет: вход в процессе), либо если комнаты ещё нет, а указатель
+    свежее ``pending_ms`` (создание в процессе). С ``presence`` и ``stale_ms`` игрок,
+    молчащий в комнате дольше ``stale_ms``, комнату не удерживает.
+    """
+    pointer = await player_rooms.pointer(user_id)
+    if pointer is None:
+        return None
+    room = await store.load(pointer.code)
+    if room is None:
+        if now_ms - pointer.since_ms < pending_ms:
+            return ActiveRoom(pointer.code, Phase.LOBBY.value)
+        return None
+    seat = room.seat_of(user_id)
+    busy = not room.is_closed and (seat is None or seat.presence is not Presence.LEFT)
+    # Идущий матч молчащего игрока держит: его судьбу решают пауза и grace матча, а не явный
+    # вход в другую комнату (иначе один игрок окажется в двух комнатах).
+    if (
+        busy
+        and room.phase in (Phase.LOBBY, Phase.SUMMARY)
+        and await _silent_for_too_long(presence, room, user_id, now_ms=now_ms, stale_ms=stale_ms)
+    ):
+        return None
+    return ActiveRoom(pointer.code, room.phase.value) if busy else None
+
+
 async def claim_room(
     player_rooms: PlayerRooms,
     store: RoomStore,
@@ -209,18 +280,20 @@ async def claim_room(
     *,
     now_ms: int,
     pending_ms: int,
+    presence: PresenceStore | None = None,
+    stale_ms: int = 0,
 ) -> None:
     """Занять ``player:{id}:room`` под комнату ``code`` (одна активная комната, D10).
 
-    Указатель на другую комнату мешает, если та не закрыта и игрок из неё не вышел (место
-    есть и не ``left`` — или места ещё нет: вход в процессе), либо если комнаты ещё нет, а
-    указатель свежее ``pending_ms`` (создание в процессе). Иначе указатель устарел и
-    заменяется compare-and-set по старому значению: параллельный захват не потеряется.
+    Указатель на другую комнату мешает по правилу ``active_room_of`` (в том числе
+    ``stale_ms``: закрытая вкладка не держит игрока дольше ``presence_timeout_s``). Иначе
+    указатель устарел и заменяется compare-and-set по старому значению: параллельный
+    захват не потеряется.
 
     Raises:
-        MatchConflictError: ``match.active_room_conflict``.
+        MatchConflictError: ``match.active_room_conflict`` (``details``: ``code``, ``phase``).
     """
-    for _ in range(4):  # повтор — только если указатель поменялся между чтением и заменой
+    for _ in range(4):  # повтор - только если указатель поменялся между чтением и заменой
         if await player_rooms.claim(user_id, code, now_ms):
             return
         current = await player_rooms.pointer(user_id)
@@ -228,17 +301,20 @@ async def claim_room(
             continue
         if current.code == code:
             return
-        other = await store.load(current.code)
-        if other is None:
-            busy = now_ms - current.since_ms < pending_ms
-        else:
-            seat = other.seat_of(user_id)
-            busy = not other.is_closed and (seat is None or seat.presence is not Presence.LEFT)
-        if busy:
+        busy = await active_room_of(
+            player_rooms,
+            store,
+            user_id,
+            now_ms=now_ms,
+            pending_ms=pending_ms,
+            presence=presence,
+            stale_ms=stale_ms,
+        )
+        if busy is not None:
             raise MatchConflictError(
                 "у вас уже есть активная комната",
                 code=errors.ACTIVE_ROOM_CONFLICT,
-                details={"code": current.code},
+                details={"code": busy.code, "phase": busy.phase},
             )
         if await player_rooms.replace(user_id, current, code, now_ms):
             return
@@ -369,7 +445,9 @@ class RoomOwner:
         transient: Callable[[BaseException], bool] = is_transient,
         ranked: RankedHooks | None = None,
         spectators: SpectatorRegistry | None = None,
+        presence: PresenceStore | None = None,
     ) -> None:
+        self._presence = presence
         self._factory = factory
         self._plans = plans
         self._assets = assets
@@ -388,6 +466,8 @@ class RoomOwner:
         self._spectators_done: set[str] = set()
         self._failures: dict[str, tuple[str, int]] = {}
         self._tick_failures: dict[str, int] = {}
+        self._released: set[tuple[str, UUID]] = set()
+        self._disconnected_at: dict[tuple[str, UUID], int] = {}
         self._persist_backoff: dict[str, tuple[int, int]] = {}
         self._settings = settings
         self._timing = settings.timing
@@ -528,8 +608,11 @@ class RoomOwner:
         if room.is_closed:
             return
         try:
+            before = {s.user_id: s.presence for s in room.seats}
             match_fsm.presence(room, self.rules_for(room), self._timing, seen, self._now())
+            self._log_presence_changes(room, before, seen)
             await self.settle(room)
+            await self._release_silent_pointers(room, seen)
         except Exception as exc:
             if self._transient(exc):
                 raise
@@ -537,6 +620,77 @@ class RoomOwner:
             await self._tick_failed(room)
         else:
             self._tick_failures.pop(room.code, None)
+
+    def _log_presence_changes(
+        self, room: Room, before: dict[UUID, Presence], seen: dict[UUID, int]
+    ) -> None:
+        """Лог причин и таймингов «Отключён» / возврата (иначе разбирать нечего, пункт 31).
+
+        Сервер видит одну причину - ``presence_timeout`` (нет heartbeat дольше порога); обрыв
+        сокета и 401 до match не доходят и узнаются по разрыву между heartbeat: ``silent_s`` и
+        ``offline_s`` сверяются с логами gateway/identity по времени. ``left`` и кик - отдельные
+        события команд, здесь не дублируются.
+        """
+        now = self._now()
+        timeout_ms = self._settings.presence_timeout_ms
+        for seat in room.seats:
+            was = before.get(seat.user_id)
+            key = (room.code, seat.user_id)
+            if was is Presence.ONLINE and seat.presence is Presence.DISCONNECTED:
+                silent_ms = now - max(seen.get(seat.user_id, 0), seat.joined_at_ms)
+                self._disconnected_at[key] = now
+                PLAYER_DISCONNECTS.labels("presence_timeout").inc()
+                log.info(
+                    "match.player_disconnected",
+                    room=room.code,
+                    user_id=str(seat.user_id),
+                    reason="presence_timeout",
+                    silent_s=silent_ms // 1000,
+                    timeout_s=timeout_ms // 1000,
+                    phase=room.phase.value,
+                )
+            elif was is Presence.DISCONNECTED and seat.presence is Presence.ONLINE:
+                since = self._disconnected_at.pop(key, now)
+                log.info(
+                    "match.player_reconnected",
+                    room=room.code,
+                    user_id=str(seat.user_id),
+                    offline_s=(now - since) // 1000,
+                    phase=room.phase.value,
+                )
+
+    async def _release_silent_pointers(self, room: Room, seen: dict[UUID, int]) -> None:
+        """Игрок лобби/итогов молчит дольше ``presence_release_ms`` - отпустить его указатель.
+
+        Только вне матча (``lobby``/``summary``): идущий матч держит игрока, выбывание решает
+        grace. Место не трогаем - вернувшийся heartbeat забирает указатель обратно. Закрытая
+        вкладка без ``leave`` иначе держала бы ``player:{id}:room`` до конца жизни комнаты.
+        """
+        limit = self._settings.presence_release_ms
+        if limit <= 0 or room.is_closed or room.phase not in (Phase.LOBBY, Phase.SUMMARY):
+            return
+        now = self._now()
+        for seat in room.seats:
+            if seat.presence is Presence.LEFT:
+                continue
+            key = (room.code, seat.user_id)
+            silent_for = now - max(seen.get(seat.user_id, 0), seat.joined_at_ms)
+            if silent_for >= limit:
+                if key not in self._released:
+                    self._released.add(key)
+                    await self._player_rooms.release(seat.user_id, room.code)
+                    log.info(
+                        "match.pointer_released",
+                        room=room.code,
+                        user_id=str(seat.user_id),
+                        silent_s=silent_for // 1000,
+                    )
+            elif key in self._released:
+                self._released.discard(key)
+                if not await self._player_rooms.claim(seat.user_id, room.code, now):
+                    log.warning(
+                        "match.pointer_reclaim_failed", room=room.code, user_id=str(seat.user_id)
+                    )
 
     async def _tick_failed(self, room: Room) -> None:
         """Сбой тика; ``poison_limit`` подряд — комната прерывается."""
@@ -579,6 +733,8 @@ class RoomOwner:
         if room.is_closed:
             for seat in room.seats:
                 await self._player_rooms.release(seat.user_id, room.code)
+                self._released.discard((room.code, seat.user_id))
+                self._disconnected_at.pop((room.code, seat.user_id), None)
 
     async def _drop_spectators(self, room: Room) -> None:
         """Матч закончился: подписки наблюдателей отзываются (как при кике).
@@ -820,6 +976,8 @@ class RoomOwner:
             room.code,
             now_ms=self._now(),
             pending_ms=self._settings.pending_room_ms,
+            presence=self._presence,
+            stale_ms=self._settings.presence_timeout_ms,
         )
 
     # ------------------------------------------------------------------ лобби
@@ -828,7 +986,7 @@ class RoomOwner:
         seat = room.seat_of(user)
         fresh = seat is None or seat.presence is Presence.LEFT
         if room.is_closed:
-            raise MatchNotFoundError("комната закрыта", code=errors.ROOM_NOT_FOUND)
+            raise errors.room_gone(room.close_reason)
         if not fresh:
             match_fsm.rejoin(room, user, now)  # возврат по ссылке: снять паузу сразу
             return self._room_result(room)
@@ -843,8 +1001,14 @@ class RoomOwner:
     async def _leave(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
         user = cmd.user_id
         if room.is_closed:
-            raise MatchNotFoundError("комната закрыта", code=errors.ROOM_NOT_FOUND)
-        room.require_seat(user)
+            await self._player_rooms.release(user, room.code)
+            raise errors.room_gone(room.close_reason)
+        seat = room.seat_of(user)
+        if seat is None or seat.presence is Presence.LEFT:
+            # Уже не участник (вышел, выбыл, вход не завершён): выход идемпотентен и обязан
+            # освободить указатель, иначе игрок застрянет в 409 (пункты 18, 28).
+            await self._player_rooms.release(user, room.code)
+            return self._room_result(room)
         if room.in_match:
             match_fsm.leave(room, self._require_rules(room), self._timing, user, now)
         else:

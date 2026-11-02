@@ -1806,6 +1806,11 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "active" | "finished" | "void";
+            /**
+             * Subjects
+             * @description Персоны, задающие область ответа раунда (сборник одного исполнителя, марафон): ответом считается название, имя персоны не принимается, автоподсказка ищет только по названиям этих персон. Пусто - область не ограничена. Необязательное поле
+             */
+            subjects?: components["schemas"]["RoundSubjectOut"][];
         };
         /**
          * RoundPlan
@@ -1863,6 +1868,21 @@ export interface components {
             stage?: number | null;
             /** Streak */
             streak?: number | null;
+        };
+        /**
+         * RoundSubjectOut
+         * @description Персона, задающая область ответа раунда (известна игроку: марафон, сборник персоны).
+         */
+        RoundSubjectOut: {
+            /**
+             * Id
+             * @description person_id каталога: клиент передаёт его как scope_person в автоподсказку
+             */
+            id?: string | null;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
         };
         /**
          * SaveDraftRequest

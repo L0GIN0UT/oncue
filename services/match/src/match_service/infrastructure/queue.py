@@ -83,7 +83,7 @@ _REQUEUE = """
 local state = redis.call('HGET', KEYS[1], 'state')
 if state ~= 'matched' and state ~= 'reserved' then return 0 end
 if redis.call('HGET', KEYS[1], 'room') ~= ARGV[1] then return 0 end
-redis.call('HSET', KEYS[1], 'state', 'searching', 'room', '')
+redis.call('HSET', KEYS[1], 'state', 'searching', 'room', '', 'fails', ARGV[4], 'retry_at', ARGV[5])
 redis.call('PEXPIRE', KEYS[1], ARGV[2])
 redis.call('ZADD', KEYS[2], redis.call('HGET', KEYS[1], 'rating'), ARGV[3])
 redis.call('ZADD', KEYS[3], redis.call('HGET', KEYS[1], 'entered_at'), ARGV[3])
@@ -118,6 +118,9 @@ def parse(user_id: UUID, raw: Mapping[Any, Any]) -> QueueRecord | None:
         entered_at_ms=int(fields["entered_at"]),
         state=fields["state"],
         room_code=fields.get("room") or None,
+        # Поля появились позже: записи, созданные старым кодом, читаются с нулями.
+        start_failures=int(fields.get("fails") or 0),
+        retry_at_ms=int(fields.get("retry_at") or 0),
     )
 
 
@@ -278,8 +281,19 @@ class RedisQueue:
         for user_id in users:
             await self._set_room(keys=[keys.queue_player(user_id)], args=[old, new])
 
-    async def requeue(self, user_id: UUID, code: str) -> bool:
-        """Вернуть в поиск с прежним ``entered_at``."""
+    async def fail(self, user_id: UUID, reason: str, ttl_s: int) -> None:
+        """Причина прекращённого поиска: игрок увидит её один раз при ближайшем ``tick``."""
+        await self._redis.set(keys.queue_failure(user_id), reason, ex=ttl_s)
+
+    async def take_failure(self, user_id: UUID) -> str | None:
+        """Забрать и стереть причину (``GETDEL``)."""
+        raw = await self._redis.getdel(keys.queue_failure(user_id))
+        return _text(raw) if raw is not None else None
+
+    async def requeue(
+        self, user_id: UUID, code: str, *, failures: int = 0, retry_at_ms: int = 0
+    ) -> bool:
+        """Вернуть в поиск с прежним ``entered_at``; пауза и счётчик срывов - в запись."""
         name = await self._name(user_id)
         if name is None:
             return False
@@ -291,7 +305,7 @@ class RedisQueue:
                     keys.queue_age(name),
                     keys.queue_reserved(name),
                 ],
-                args=[code, self._ttl_ms, str(user_id)],
+                args=[code, self._ttl_ms, str(user_id), failures, retry_at_ms],
             )
         )
 

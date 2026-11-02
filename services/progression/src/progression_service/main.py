@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -9,6 +10,7 @@ from fastapi import APIRouter
 from gv_core.errors import DependencyUnavailableError
 from gv_service import Infrastructure, ServiceDefinition, ServiceSettings, main
 from progression_service.api import build_api_routers
+from progression_service.backfill_cli import backfill_main
 from progression_service.infrastructure import jobs
 from progression_service.infrastructure.adapters import hmac_key
 from progression_service.infrastructure.container import container_for
@@ -65,5 +67,8 @@ DEFINITION = ServiceDefinition(
 
 
 def run() -> None:
-    """Консольная точка входа."""
+    """Консольная точка входа. ``backfill-collection-authors`` - разовая команда оператора."""
+    if sys.argv[1:2] == ["backfill-collection-authors"]:
+        backfill_main()
+        return
     main(DEFINITION)

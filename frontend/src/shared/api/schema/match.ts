@@ -22,6 +22,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/players/{user_id}/active-room/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Сбросить указатель активной комнаты игрока
+         * @description Служебная команда для застрявшего игрока (`match.active_room_conflict`): освобождает `player:{id}:room`. Комната и место в ней не меняются (закрыть комнату - `abort`). Нет указателя - `released_code = null`. Причина и ключ - в аудит. Ошибки: 409 `idempotency.key_reused`, 503 `match.unavailable` (аудит).
+         */
+        post: operations["reset_player_room_admin_v1_players__user_id__active_room_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/rooms": {
         parameters: {
             query?: never;
@@ -639,6 +659,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rooms/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Моя активная комната
+         * @description Источник правды сервера для правила «одна активная комната» (D10): код и фаза комнаты, в которой игрок состоит сейчас, или `code = null`, `phase = null`. Комната закрыта, игрок вышел или молчит дольше `GV_MATCH__PRESENCE_TIMEOUT_S` - пусто. Фронт при старте предлагает «Вернуться в комнату» или сбрасывает устаревшее состояние. Ошибки: 401, 403 для гостя.
+         */
+        get: operations["active_room_v1_rooms_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rooms/open": {
         parameters: {
             query?: never;
@@ -690,6 +730,20 @@ export interface components {
         AbortRoomRequest: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * ActiveRoom
+         * @description Моя активная комната (источник правды сервера, правило D10: одна на игрока).
+         *
+         *     Пусто (`code = null`), если игрок нигде не состоит: комната закрыта, он вышел или молчит
+         *     дольше `GV_MATCH__PRESENCE_TIMEOUT_S`. Фронт при старте решает по этому ответу: показать
+         *     «Вернуться в комнату» или сбросить устаревшее состояние.
+         */
+        ActiveRoom: {
+            /** Code */
+            code?: string | null;
+            /** Phase */
+            phase?: ("lobby" | "countdown" | "level_open" | "level_closed" | "reveal" | "summary" | "paused" | "closed") | null;
         };
         /**
          * AdminRoomCard
@@ -1494,6 +1548,22 @@ export interface components {
             op_id: string;
         };
         /**
+         * ResetPlayerRoomRequest
+         * @description Сброс указателя «активная комната» игрока (служебная команда); причина — в аудит.
+         */
+        ResetPlayerRoomRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * ResetPlayerRoomResult
+         * @description Что освобождено: код комнаты, на которую указывал указатель (`null` - указателя не было).
+         */
+        ResetPlayerRoomResult: {
+            /** Released Code */
+            released_code?: string | null;
+        };
+        /**
          * ResultPlayer
          * @description Игрок в итоге матча (§2.2: ``place``, ``outcome``, ``finish``).
          */
@@ -1977,6 +2047,96 @@ export interface operations {
             };
             /** @description Не реализовано */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reset_player_room_admin_v1_players__user_id__active_room_reset_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused. */
+                "Idempotency-Key"?: string | null;
+            };
+            path: {
+                /** @description Игрок */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPlayerRoomRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetPlayerRoomResult"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4951,6 +5111,56 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    active_room_v1_rooms_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveRoom"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

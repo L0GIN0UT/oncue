@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Annotated, Any, ClassVar, Literal
@@ -72,7 +72,7 @@ from gv_game_kernel.plugins import (
     RoundPick,
 )
 from gv_game_kernel.ports import PlayableFor, PoolQuery, SubjectQuery
-from gv_game_kernel.refs import MediaItemRef
+from gv_game_kernel.refs import MediaItemRef, PersonRef
 from gv_game_kernel.spec import I18nKey, ModeConfig
 
 ROUNDS_MISMATCH = "config.rounds_mismatch"
@@ -545,6 +545,21 @@ class CollectionSource:
             return rng.sample(fresh, n)
         return rng.sample(fresh, len(fresh)) + rng.sample(recent, n - len(fresh))
 
+    async def subjects(
+        self, ctx: DrawContext, params: BaseModel, items: Sequence[MediaItemRef]
+    ) -> tuple[PersonRef, ...]:
+        """Единственная персона, общая для ВСЕХ играбельных единиц сборников (область ответа).
+
+        Сборник одного исполнителя (режиссёра) - все его единицы имеют одну общую персону с
+        ролью из ``SCOPE_ROLES``. Если общих персон нет или их больше одной (сборник
+        смешанный, или у каждого трека совпадает несколько исполнителей), область не
+        ограничена: частичный ответ по исполнителю остаётся осмысленным.
+        """
+        p = typed(params, CollectionParams)
+        every = [item for items_ in await self._lists(ctx, p) for item in items_]
+        common = _common_persons(every)
+        return common if len(common) == 1 else ()
+
     def presets(self, params: BaseModel) -> list[Preset]:
         """У сборника пресетов нет."""
         typed(params, CollectionParams)
@@ -582,6 +597,29 @@ def _round_robin(lists: Sequence[Sequence[MediaItemRef]]) -> list[MediaItemRef]:
     """Чередование списков по кругу: a1, b1, c1, a2, b2, … (кончившийся список пропускается)."""
     longest = max((len(items) for items in lists), default=0)
     return [items[i] for i in range(longest) for items in lists if i < len(items)]
+
+
+SCOPE_ROLES = frozenset({"artist", "director"})
+"""Роли персон, которые задают область ответа (ответ - название, а не имя персоны)."""
+
+
+def _unique_persons(persons: Iterable[PersonRef]) -> tuple[PersonRef, ...]:
+    """Персоны без повторов по ``id``, в порядке первого появления."""
+    seen: dict[UUID, PersonRef] = {}
+    for person in persons:
+        seen.setdefault(person.id, person)
+    return tuple(seen.values())
+
+
+def _common_persons(items: Sequence[MediaItemRef]) -> tuple[PersonRef, ...]:
+    """Персоны ролей ``SCOPE_ROLES``, которые есть у КАЖДОЙ единицы (пусто, если единиц нет)."""
+    if not items:
+        return ()
+    first = {p.id: p for p in items[0].persons if p.role in SCOPE_ROLES}
+    common = set(first)
+    for item in items[1:]:
+        common &= {p.id for p in item.persons if p.role in SCOPE_ROLES}
+    return tuple(first[key] for key in first if key in common)
 
 
 # ----------------------------------------------------------------------------- общее 3a
@@ -691,6 +729,13 @@ class MarathonSource:
         picked = SeededRandom(ctx.seed).sample(items, min(n, len(items)))
         order = _MARATHON_ORDER[p.order]
         return sorted(picked, key=order) if order is not None else picked
+
+    async def subjects(
+        self, ctx: DrawContext, params: BaseModel, items: Sequence[MediaItemRef]
+    ) -> tuple[PersonRef, ...]:
+        """Выбранные игроком персоны, которые есть у разыгранных единиц (область ответа)."""
+        typed(params, MarathonParams)
+        return _unique_persons(p for item in items for p in item.persons if p.id in ctx.subject_ids)
 
     def presets(self, params: BaseModel) -> list[Preset]:
         """Пресетов нет: игрок выбирает персон."""

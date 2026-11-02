@@ -2493,6 +2493,137 @@
       }
     },
     "/admin/v1/collections/{collection_id}": {
+      "delete": {
+        "description": "Для сборников, которые автор не может удалить сам (застрявшие черновики). Черновик, опубликованный и скрытый; опубликованный даёт `collections.CollectionDeleted`. Повтор — 204 без события. Кураторский — 409 `collections.not_ugc`. Право `collections.unpublish`, причина в `reason` (аудит).",
+        "operationId": "admin_delete_admin_v1_collections__collection_id__delete",
+        "parameters": [
+          {
+            "description": "Идентификатор сборника",
+            "in": "path",
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "description": "Идентификатор сборника",
+              "format": "uuid",
+              "title": "Collection Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reason",
+            "required": true,
+            "schema": {
+              "maxLength": 500,
+              "minLength": 3,
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Обязателен. Ключ идемпотентности: 8–128 символов [A-Za-z0-9_.:-]. Повтор с тем же ключом и телом возвращает сохранённый ответ, с другим телом — 409 idempotency.key_reused.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          }
+        },
+        "summary": "Удалить пользовательский сборник",
+        "tags": [
+          "admin"
+        ]
+      },
       "get": {
         "description": "Опубликованный состав; у ни разу не опубликованного — состав черновика.",
         "operationId": "admin_get_admin_v1_collections__collection_id__get",
@@ -4616,7 +4747,7 @@
     },
     "/v1/collections/{collection_id}/publish": {
       "post": {
-        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, reason?}]`: `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.emoji_too_short` (`min`), `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).",
+        "description": "Новая `content_version` и событие `collections.CollectionPublished`. Ошибки: 409 `collections.draft_conflict` (ревизия устарела, `details.current`), 409 `collections.hidden`, 409 `collections.deleted`, 422 `collections.publish_invalid` (`details.errors` — `[{path, code, message, reason?, min?, max?, actual?}]`: `code` — стабильный машинный код, `message` — готовый русский текст для показа («Нужно минимум 5 единиц, сейчас 3»), `path` — поле (`items`, `items[2]`, `title`); заголовок ответа перечисляет первые причины; `collections.items_too_few`, `collections.items_too_many`, `collections.item_duplicate`, `collections.item_domain_mismatch`, `collections.item_unavailable`, `collections.mode_invalid`, `collections.emoji_invalid`, `collections.emoji_too_short` (`min`), `collections.tag_unknown`, `collections.tags_too_many`, `collections.cover_unknown`, `collections.title_invalid`, `collections.description_invalid`; `reason` — код `ugc.*`), 429 `collections.publish_limit` (`details.retry_after`), 503 `collections.limiter_unavailable` (лимитер недоступен, fail-closed).",
         "operationId": "publish_v1_collections__collection_id__publish_post",
         "parameters": [
           {

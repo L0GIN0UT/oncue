@@ -12,6 +12,7 @@ import structlog
 from gv_core.clock import Clock
 from progression_service.application.accrual.common import config_at
 from progression_service.application.accrual.posting import Poster, local_day
+from progression_service.application.accrual.ugc_guard import NO_COLLECTION, decide
 from progression_service.application.ports import UnitOfWorkFactory
 from progression_service.domain import experience, wallet
 
@@ -41,6 +42,7 @@ class SoloSession:
     day: date | None
     finished_at: datetime
     round_points: tuple[int, ...]
+    collection_id: UUID | None = None
 
 
 class AccrueSolo:
@@ -75,9 +77,25 @@ class AccrueSolo:
             xp_op = f"game.session:{ref}:xp"
             verse_op = f"game.session:{ref}:verse"
             xp = verses = 0
-            if not await poster.accounted(xp_op):
+            xp_pending = not await poster.accounted(xp_op)
+            verse_pending = not await poster.accounted(verse_op)
+            # Защита от накрутки (ugc_guard): свой сборник и повтор в окне наград не дают.
+            decision = NO_COLLECTION
+            if session.collection_id is not None and (xp_pending or verse_pending):
+                decision = await decide(
+                    uow, cfg.ugc_guard, user_id, (session.collection_id,), session.finished_at
+                )
+            reason = SOLO_REASON if decision.allowed else decision.verdict.mark_reason
+            if xp_pending:
                 raw_xp = experience.solo_session_xp(cfg.xp, session.round_points)
-                capped = experience.apply_cap(raw_xp, counters.solo_xp, cfg.xp.solo_daily_cap)
+                capped = (
+                    experience.apply_cap(raw_xp, counters.solo_xp, cfg.xp.solo_daily_cap)
+                    if decision.allowed
+                    else 0
+                )
+                ugc_cap = cfg.ugc_guard.ugc_daily_xp_cap
+                if decision.ugc and ugc_cap is not None:
+                    capped = experience.apply_cap(capped, counters.ugc_xp, ugc_cap)
                 xp = await poster.xp(
                     user_id,
                     op_id=xp_op,
@@ -86,12 +104,16 @@ class AccrueSolo:
                     source_ref=ref,
                 )
                 await poster.mark_if_capped(
-                    user_id, op_id=xp_op, raw=raw_xp, paid=xp, reason=SOLO_REASON
+                    user_id, op_id=xp_op, raw=raw_xp, paid=xp, reason=reason
                 )
-            if not await poster.accounted(verse_op):
+            if verse_pending:
                 raw_verses = wallet.solo_session_verses(cfg.verses, len(session.round_points))
-                capped = experience.apply_cap(
-                    raw_verses, counters.solo_verses, cfg.verses.solo_daily_cap
+                capped = (
+                    experience.apply_cap(
+                        raw_verses, counters.solo_verses, cfg.verses.solo_daily_cap
+                    )
+                    if decision.allowed
+                    else 0
                 )
                 verses = await poster.verses(
                     user_id,
@@ -101,10 +123,12 @@ class AccrueSolo:
                     source_ref=ref,
                 )
                 await poster.mark_if_capped(
-                    user_id, op_id=verse_op, raw=raw_verses, paid=verses, reason=SOLO_REASON
+                    user_id, op_id=verse_op, raw=raw_verses, paid=verses, reason=reason
                 )
             counters.solo_xp += xp
             counters.solo_verses += verses
+            if decision.ugc:
+                counters.ugc_xp += xp
             await uow.counters.save(user_id, day, counters)
             await uow.commit()
         log.info("progression.solo_accrued", session_id=ref, xp=xp, verses=verses)

@@ -63,7 +63,10 @@ async def test_join_conflicts_full_room_and_active_room() -> None:
 
     other, _ = await h.room(code="ABCDEFGH")
     busy = await h.cmd(other, b, "join", nickname="b")
-    assert _code(busy) == "match.active_room_conflict" and busy["details"] == {"code": room.code}
+    assert _code(busy) == "match.active_room_conflict" and busy["details"] == {
+        "code": room.code,
+        "phase": "lobby",
+    }
     # Повторный вход участника — реконнект без конфликта.
     assert (await h.cmd(room, b, "join", nickname="b"))["status"] == 200
 
@@ -142,7 +145,9 @@ async def test_duel_attempts_and_window_open_next_level() -> None:
     assert room.match is not None and room.match.contest is not None
     assert room.match.contest.level == 1 and room.match.statuses[str(b)] == "answered"
 
-    await h.tick(room, 20)
+    # Окно первого уровня берётся из сида режима (level_windows_s), а не из константы.
+    contest = room.match.contest
+    await h.tick(room, (contest.level_ends_at_ms - contest.level_opened_at_ms) // 1000)
     assert room.match.contest.level == 2 and room.phase is Phase.LEVEL_OPEN
     late = await h.ok(room, a, "guess", **h.guess_data(room, h.title(room)))
     assert late["result"] == "exact"

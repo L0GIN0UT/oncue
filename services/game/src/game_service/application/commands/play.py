@@ -63,6 +63,7 @@ from game_service.domain.session import (
     Round,
     RoundAssets,
     RoundOption,
+    RoundSubject,
 )
 from gv_core.clock import Clock
 from gv_core.errors import AppError, GoneError, InvalidInputError
@@ -76,6 +77,7 @@ from gv_game_kernel import (
     MediaItemRef,
     ModeEngine,
     OptionSpec,
+    PersonRef,
     RoundDraw,
     RoundNotFinishedError,
     RoundOutcome,
@@ -156,6 +158,7 @@ def planned_of(draw: RoundDraw) -> PlannedRound:
             )
             for o in draw.options
         ),
+        subjects=tuple(RoundSubject(p.id, p.name, p.role) for p in draw.subjects),
     )
 
 
@@ -181,6 +184,7 @@ def draw_of(round_: Round, items: Mapping[UUID, CatalogItem], domain: str) -> Ro
             )
             for o in round_.options
         ),
+        subjects=tuple(PersonRef(id=s.id, name=s.name, role=s.role) for s in round_.subjects),
     )
 
 

@@ -105,7 +105,7 @@ class RoomQueries:
     async def _room(self, code: str) -> Room:
         room = await self._store.load(code)
         if room is None or room.is_closed:
-            raise MatchNotFoundError("комнаты нет или она закрыта", code=errors.ROOM_NOT_FOUND)
+            raise errors.room_gone(room.close_reason if room is not None else None)
         return room
 
     async def _participant(self, code: str, user_id: UUID, *, closed: bool = False) -> Room:

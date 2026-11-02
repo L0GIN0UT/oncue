@@ -199,6 +199,15 @@ class PersonOut(BaseModel):
     role: str
 
 
+class RoundSubjectOut(PersonOut):
+    """Персона, задающая область ответа раунда (известна игроку: марафон, сборник персоны)."""
+
+    id: UUID | None = Field(
+        default=None,
+        description="person_id каталога: клиент передаёт его как scope_person в автоподсказку",
+    )
+
+
 class FinalClue(BaseModel):
     """Полный ассет для ревила."""
 
@@ -275,6 +284,14 @@ class RoundOut(BaseModel):
     shown: list[ShownItem] = Field(default_factory=list)
     options: list[OptionOut] = Field(default_factory=list)
     progress: RoundProgress | None = None
+    subjects: list[RoundSubjectOut] = Field(
+        default_factory=list,
+        description=(
+            "Персоны, задающие область ответа раунда (сборник одного исполнителя, марафон): "
+            "ответом считается название, имя персоны не принимается, автоподсказка ищет только "
+            "по названиям этих персон. Пусто - область не ограничена. Необязательное поле"
+        ),
+    )
 
 
 class SessionSnapshot(BaseModel):

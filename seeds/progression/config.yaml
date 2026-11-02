@@ -42,6 +42,17 @@ verses:
     - {from: 11, to: 100, amount: 150}
     - {from: 101, to: 1000, amount: 50}
 
+# Защита от накрутки через пользовательские сборники (соло и матчи по сборнику).
+# own_collection_rewards: false - за свой сборник опыт и Версы не даются.
+# repeat_window_hours: повторное прохождение того же сборника тем же игроком в окне наград не даёт
+#   (0 - выключено; 87600 - "никогда не начислять повторно"); repeat_scope: ugc | all.
+# ugc_daily_xp_cap: суточный потолок опыта с пользовательских сборников (нет ключа - без потолка).
+ugc_guard:
+  own_collection_rewards: false
+  repeat_window_hours: 24
+  repeat_scope: ugc
+  ugc_daily_xp_cap: 500
+
 quests:
   daily_count: 3
   weekly_count: 10

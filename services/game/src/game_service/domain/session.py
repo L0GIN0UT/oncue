@@ -109,6 +109,23 @@ class ShownItem:
 
 
 @dataclass(frozen=True, slots=True)
+class RoundSubject:
+    """Персона, ограничивающая область ответа раунда (сборник одного исполнителя, марафон).
+
+    Хранится вместе с раундом (имя и роль), чтобы снимок не загружал цель идущего раунда.
+
+    Attributes:
+        id: ``person_id`` каталога.
+        name: Отображаемое имя.
+        role: ``artist`` | ``director``.
+    """
+
+    id: UUID
+    name: str
+    role: str
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedRound:
     """Разыгранный, но ещё не выданный раунд (скрыт от клиента, D4).
 
@@ -116,11 +133,13 @@ class PlannedRound:
         target: Загаданная единица.
         shown: Открыто показанные единицы.
         options: Варианты ответа (пусто — классический ввод).
+        subjects: Персоны, задающие область ответа (``answer.subject_mode``); пусто — нет.
     """
 
     target: UUID
     shown: tuple[UUID, ...] = ()
     options: tuple[RoundOption, ...] = ()
+    subjects: tuple[RoundSubject, ...] = ()
 
     def item_ids(self) -> list[UUID]:
         """Все единицы раунда (цель, показанные, варианты) без повторов."""
@@ -169,6 +188,8 @@ class Round:
         stage: Этап раунда для UI (тур сетки) или ``None``.
         reveal_asset: Набор ревила другого типа или ``None``.
         artwork_asset: Набор картинки ответа (ADR 0073) или ``None``.
+        subjects: Персоны, задающие область ответа (необязательное поле JSON раунда; у
+            старых снимков пусто).
     """
 
     index: int
@@ -186,6 +207,7 @@ class Round:
     stage: int | None = None
     reveal_asset: AssetRef | None = None
     artwork_asset: AssetRef | None = None
+    subjects: tuple[RoundSubject, ...] = ()
 
     @property
     def finished(self) -> bool:
@@ -478,6 +500,7 @@ class GameSession(AggregateRoot[UUID]):
             stage=stage,
             reveal_asset=assets.reveal,
             artwork_asset=assets.artwork,
+            subjects=planned.subjects,
         )
         if assets.asset is None:
             r.state = kernel_round.void(r.state)
