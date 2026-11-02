@@ -67,6 +67,7 @@ from game_service.domain.session import (
     PlayerRef,
     Round,
     RoundOption,
+    RoundSubject,
     SessionStatus,
     ShownItem,
 )
@@ -1093,7 +1094,16 @@ def _round_json(r: Round) -> dict[str, Any]:
         "stage": r.stage,
         "reveal_asset": _asset_json(r.reveal_asset),
         "artwork_asset": _asset_json(r.artwork_asset),
+        "subjects": [_subject_json(s) for s in r.subjects],
     }
+
+
+def _subject_json(s: RoundSubject) -> dict[str, str]:
+    return {"id": str(s.id), "name": s.name, "role": s.role}
+
+
+def _subject_of(raw: dict[str, Any]) -> RoundSubject:
+    return RoundSubject(id=UUID(raw["id"]), name=raw["name"], role=raw["role"])
 
 
 def _round_of(r: dict[str, Any]) -> Round:
@@ -1117,6 +1127,7 @@ def _round_of(r: dict[str, Any]) -> Round:
         stage=r.get("stage"),
         reveal_asset=_asset_of(r.get("reveal_asset")),
         artwork_asset=_asset_of(r.get("artwork_asset")),
+        subjects=tuple(_subject_of(s) for s in r.get("subjects", ())),
     )
 
 
@@ -1125,6 +1136,7 @@ def _planned_json(p: PlannedRound) -> dict[str, Any]:
         "target": str(p.target),
         "shown": [str(x) for x in p.shown],
         "options": [_option_json(o) for o in p.options],
+        "subjects": [_subject_json(s) for s in p.subjects],
     }
 
 
@@ -1133,6 +1145,7 @@ def _planned_of(raw: dict[str, Any]) -> PlannedRound:
         target=UUID(raw["target"]),
         shown=tuple(UUID(x) for x in raw.get("shown", ())),
         options=tuple(_option_of(o) for o in raw.get("options", ())),
+        subjects=tuple(_subject_of(s) for s in raw.get("subjects", ())),
     )
 
 

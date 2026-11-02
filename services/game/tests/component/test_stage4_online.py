@@ -102,7 +102,7 @@ async def test_online_modes_listed_only_with_session_online(game: Any) -> None:
         "kind": "duel",
         "players": {"min": 2, "max": 2},
         "rounds": 7,
-        "level_windows_s": [20, 30],
+        "level_windows_s": [25, 40],
         "contest_type": "race",
         "ranked": False,
         "ladder": None,

@@ -480,6 +480,16 @@
           "maxItems": 10,
           "type": "array",
           "uniqueItems": true
+        },
+        "subject_mode": {
+          "default": "default",
+          "description": "Область ответа по персоне: default - как в partial; title_only - засчитывается только название, частичный ответ по персоне отключён (марафон исполнителя или режиссёра); single_subject - то же, но только когда раунд ограничен одной персоной (сборник одного исполнителя), иначе как default",
+          "enum": [
+            "default",
+            "title_only",
+            "single_subject"
+          ],
+          "type": "string"
         }
       },
       "required": [

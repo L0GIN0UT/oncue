@@ -80,7 +80,10 @@ def test_collections_alternate_without_shuffle(seed_body: SeedBody) -> None:
     got = _draw(engine, port, 10, ids=(C1, C2, C3))
     assert got == [a[0], b[0], c[0], a[1], b[1], c[1], a[2], c[2], a[3], a[4]]
     # Каждый сборник запрошен со своим scope (свои наборы ассетов сборника, ADR 0029).
-    assert [q[2].scope for q in port.queries if q[2] is not None] == [C1, C2, C3]
+    # Первые три запроса - розыгрыш; ещё три - поиск общей персоны (answer.subject_mode шаблона).
+    scopes = [q[2].scope for q in port.queries if q[2] is not None]
+    assert scopes[:3] == [C1, C2, C3]
+    assert set(scopes) == {C1, C2, C3}
 
 
 def test_shared_items_are_not_repeated(seed_body: SeedBody) -> None:

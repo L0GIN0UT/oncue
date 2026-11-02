@@ -10,15 +10,44 @@ source:
       kinds: [track]
       min_playable: 20
     presets:
-      - id: oldies
-        title_i18n: modes.presets.oldies
-        filters: { years: { to: 1989 } }
-      - id: modern
-        title_i18n: modes.presets.modern
-        filters: { years: { from: 1990 } }
+      # Пресеты по данным каталога (10 000 треков): десятилетия и жанры. 60-70-е объединены
+      # (в каталоге их меньше 100 треков). «Хиты» (верхние N% по популярности) - ADR 0074.
+      - id: y1960_70s
+        title_i18n: modes.presets.y1960_70s
+        filters: { years: { from: 1960, to: 1979 } }
+      - id: y1980s
+        title_i18n: modes.presets.y1980s
+        filters: { years: { from: 1980, to: 1989 } }
+      - id: y1990s
+        title_i18n: modes.presets.y1990s
+        filters: { years: { from: 1990, to: 1999 } }
+      - id: y2000s
+        title_i18n: modes.presets.y2000s
+        filters: { years: { from: 2000, to: 2009 } }
+      - id: y2010s
+        title_i18n: modes.presets.y2010s
+        filters: { years: { from: 2010, to: 2019 } }
+      - id: y2020s
+        title_i18n: modes.presets.y2020s
+        filters: { years: { from: 2020 } }
+      - id: hip_hop
+        title_i18n: modes.presets.hip_hop
+        filters: { genres_any: [hip-hop] }
+      - id: pop
+        title_i18n: modes.presets.pop
+        filters: { genres_any: [pop] }
       - id: rock
         title_i18n: modes.presets.rock
         filters: { genres_any: [rock, рок, hard-rock] }
+      - id: alternative
+        title_i18n: modes.presets.alternative
+        filters: { genres_any: [alternative] }
+      - id: rnb
+        title_i18n: modes.presets.rnb
+        filters: { genres_any: [rnb] }
+      - id: electronic
+        title_i18n: modes.presets.electronic
+        filters: { genres_any: [electronic, dance] }
 clue:
   type: audio_intro
   params:

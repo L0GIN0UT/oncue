@@ -81,6 +81,7 @@ from gv_game_kernel.plugins import (
     RoundOption,
     RoundPick,
     RoundSource,
+    ScopedSource,
     Scorer,
     Source,
     SubjectSource,
@@ -93,7 +94,7 @@ from gv_game_kernel.ports import (
     PoolQuery,
     SubjectQuery,
 )
-from gv_game_kernel.refs import AssetRef, MediaItemRef
+from gv_game_kernel.refs import AssetRef, MediaItemRef, PersonRef
 from gv_game_kernel.round import (
     Guess,
     GuessKind,
@@ -489,11 +490,24 @@ class ModeEngine:
         count = n or self.config.session.rounds
         if isinstance(self.source, RoundSource):
             return await self.source.draw_rounds(ctx, self.source_params, count)
-        draws = [
-            RoundDraw(target=item)
-            for item in await self.source.draw(ctx, self.source_params, count)
-        ]
+        items = await self.source.draw(ctx, self.source_params, count)
+        subjects = await self._subjects(ctx, items)
+        draws = [RoundDraw(target=item, subjects=subjects) for item in items]
         return await self._with_distractors(ctx, draws)
+
+    async def _subjects(
+        self, ctx: DrawContext, items: Sequence[MediaItemRef]
+    ) -> tuple[PersonRef, ...]:
+        """Персоны, ограничивающие область ответа (``RoundDraw.subjects``).
+
+        Только при ``answer.subject_mode`` не ``default`` и у источника-``ScopedSource``;
+        иначе область не ограничена.
+        """
+        if self.config.answer.subject_mode == "default" or not isinstance(
+            self.source, ScopedSource
+        ):
+            return ()
+        return await self.source.subjects(ctx, self.source_params, items)
 
     async def _with_distractors(self, ctx: DrawContext, draws: list[RoundDraw]) -> list[RoundDraw]:
         """Варианты ``pick`` раундам без них: верная единица + неверные из пула (ADR 0040).
@@ -718,7 +732,21 @@ class ModeEngine:
                 raise ValueError("ответ option_id сверяется только с составом раунда (draw)")
             self.option(draw, answer.option_id)
         ctx = self._match_ctx if draw is None else replace(self._match_ctx, draw=draw)
+        if self.title_only_for(draw):
+            ctx = replace(ctx, partial_rules=())
         return self.matcher.match(answer, item, self.matcher_params, ctx)
+
+    def title_only_for(self, draw: RoundDraw | None) -> bool:
+        """Засчитывается ли в раунде только название (``answer.subject_mode``, пункт 49).
+
+        ``title_only`` - всегда; ``single_subject`` - если раунд ограничен ровно одной
+        персоной (``draw.subjects``); ``default`` - никогда. Ядро не ветвится по ключам
+        плагинов: отключается весь набор правил частичного ответа.
+        """
+        mode = self.config.answer.subject_mode
+        if mode == "title_only":
+            return True
+        return mode == "single_subject" and draw is not None and len(draw.subjects) == 1
 
     @property
     def solo_session(self) -> SoloSessionSpec:
