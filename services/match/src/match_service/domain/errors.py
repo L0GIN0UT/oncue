@@ -35,6 +35,7 @@ COLLECTION_NOT_FOUND = "match.collection_not_found"
 RANKED_FORBIDDEN = "match.ranked_forbidden"
 ACTIVE_ROOM_CONFLICT = "match.active_room_conflict"
 GAME_UNAVAILABLE = "match.game_unavailable"
+START_UNAVAILABLE = "match.start_unavailable"
 ROOM_FULL = "match.room_full"
 MATCH_IN_PROGRESS = "match.match_in_progress"
 KICKED = "match.kicked"
@@ -71,6 +72,20 @@ class MatchNotFoundError(NotFoundError):
     """404: комната, игрок или матч не найдены."""
 
     default_code = ROOM_NOT_FOUND
+
+
+def room_gone(close_reason: str | None) -> MatchNotFoundError:
+    """404 «комнаты нет или она закрыта» с причиной закрытия в ``details.reason``.
+
+    Причину (``empty``, ``empty_timeout``, ``idle``, ``finished``, ``start_failed`` ...) знает
+    только закрытая комната, пока жив её снимок; нет комнаты вовсе - ``not_found``. Фронт
+    показывает понятное сообщение вместо безликого «пусто» (пункт 22 замечаний тестирования).
+    """
+    return MatchNotFoundError(
+        "комнаты нет или она закрыта",
+        code=ROOM_NOT_FOUND,
+        details={"reason": close_reason or "not_found"},
+    )
 
 
 class MatchForbiddenError(ForbiddenError):

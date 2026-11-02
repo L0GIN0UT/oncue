@@ -98,6 +98,11 @@ def queue_player(user_id: UUID) -> str:
     return f"{QUEUE_TAG}:p:{user_id}"
 
 
+def queue_failure(user_id: UUID) -> str:
+    """Причина прекращённого поиска (показывается игроку один раз)."""
+    return f"{QUEUE_TAG}:f:{user_id}"
+
+
 def queue_owner(name: str) -> str:
     """Lease матчера очереди ``instance|epoch``."""
     return f"{QUEUE_TAG}:lease:{name}"

@@ -63,7 +63,10 @@ async def test_join_conflicts_full_room_and_active_room() -> None:
 
     other, _ = await h.room(code="ABCDEFGH")
     busy = await h.cmd(other, b, "join", nickname="b")
-    assert _code(busy) == "match.active_room_conflict" and busy["details"] == {"code": room.code}
+    assert _code(busy) == "match.active_room_conflict" and busy["details"] == {
+        "code": room.code,
+        "phase": "lobby",
+    }
     # Повторный вход участника — реконнект без конфликта.
     assert (await h.cmd(room, b, "join", nickname="b"))["status"] == 200
 
