@@ -281,8 +281,11 @@ async def test_ranked_disconnect_past_grace_is_tech_loss(svc: MatchApp) -> None:
     await _start(svc, a, code)
     svc.online.discard(b.user_id)
     # Пауза на двоих, затем grace (30 с шаблона): отключившийся — tech_loss.
-    await svc.advance(code, [a], 130)
-    await svc.advance(code, [a], 130)
+    # Шаги короче presence_timeout_s (120 с): иначе владелец успевает тикнуть между сдвигом
+    # часов и heartbeat игрока `a`, считает отключённым и его, и тогда матч заканчивается иначе
+    # (гонка теста, не сервиса: падало и на чистом main).
+    for _ in range(5):
+        await svc.advance(code, [a], 60)
     await svc.phase(a, code, "summary")
     (finished,) = await _outbox(svc, "match.MatchFinished")
     standings = {p["user_id"]: p for p in finished.payload["players"]}
