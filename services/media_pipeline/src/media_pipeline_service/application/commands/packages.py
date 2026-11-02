@@ -50,6 +50,11 @@ from media_pipeline_service.domain.packages import (
 
 log = structlog.get_logger(__name__)
 
+# Раз во сколько обработанных файлов пакет пишет строку прогресса.
+_PROGRESS_EVERY = 100
+# Длина пути файла в логе (путь приходит из архива).
+_LOG_PATH_MAX = 200
+
 _ZIP_MAGIC = b"PK\x03\x04"
 
 
@@ -258,23 +263,45 @@ class ProcessPackage:
                 # Другой воркер обрабатывает пакет (повторная доставка задачи): вернуть в очередь
                 # позже, а не терять задачу - вдруг тот воркер упадёт.
                 raise TaskNotVisibleError(f"пакет {package_id} обрабатывается другим воркером")
-            package.start(self._clock.now())
+            started_at = self._clock.now()
+            package.start(started_at)
             archive_key = package.archive_key
             await uow.packages.save(package)
             await uow.commit()
+        log.info("package.started", package_id=str(package.id), archive_bytes=package.archive_bytes)
         try:
             await self._run(package, archive_key)
-        except DependencyUnavailableError:
+        except DependencyUnavailableError as exc:
+            log.warning(
+                "package.retry",
+                package_id=str(package.id),
+                error_type=type(exc).__name__,
+                done=package.done,
+                failed=package.failed,
+            )
             raise
         except PackageRejectedError as exc:
             await self._fail(package, exc.code, str(exc))
         except GenerationError as exc:
+            log.warning(
+                "package.archive_error",
+                package_id=str(package.id),
+                error_type=type(exc).__name__,
+                retryable=exc.retryable,
+            )
             if exc.retryable:
                 raise DependencyUnavailableError("хранилище пакетов недоступно") from exc
             await self._fail(package, "package.archive_unavailable", "архив пакета недоступен")
-        except Exception:
+        except Exception as exc:
             # Неожиданное не должно оставлять пакет в `processing`, а архив - в S3 навсегда.
-            log.exception("package.crashed", package_id=str(package.id))
+            log.exception(
+                "package.crashed",
+                package_id=str(package.id),
+                error_type=type(exc).__name__,
+                total=package.total,
+                done=package.done,
+                failed=package.failed,
+            )
             await self._fail(package, "package.internal_error", "внутренняя ошибка разбора пакета")
         await self._cleanup(package, archive_key)
         log.info(
@@ -284,6 +311,8 @@ class ProcessPackage:
             total=package.total,
             done=package.done,
             failed=package.failed,
+            errors_dropped=package.errors_dropped,
+            duration_s=round((self._clock.now() - started_at).total_seconds(), 1),
         )
 
     async def _cleanup(self, package: ImportPackage, archive_key: str) -> None:
@@ -302,6 +331,12 @@ class ProcessPackage:
                 manifest = await self._manifest(archive)
                 package.set_total(manifest.file_count)
                 await self._save(package)
+                log.info(
+                    "package.manifest_loaded",
+                    package_id=str(package.id),
+                    items=len(manifest.items),
+                    files=manifest.file_count,
+                )
                 for item in manifest.items:
                     await self._process_item(package, archive, item)
                 package.finish(self._clock.now())
@@ -339,6 +374,7 @@ class ProcessPackage:
             else:
                 await self._upload_file(package, archive, item, file, position)
             await self._save(package)
+            self._log_progress(package)
 
     async def _item_error(self, item: ManifestItem) -> tuple[str, str] | None:
         """Ошибка всей записи (единица не определена, неизвестна или другого вида)."""
@@ -386,9 +422,16 @@ class ProcessPackage:
             self._failed(
                 package, item, path=file.path, role=file.role, code=exc.code, message=str(exc)
             )
-        except Exception:
+        except Exception as exc:
             # Один файл не должен ронять пакет; причину видно в логе, клиенту - без деталей.
-            log.exception("package.file_failed", package_id=str(package.id), key=item.key)
+            log.exception(
+                "package.file_crashed",
+                package_id=str(package.id),
+                key=item.key,
+                path=file.path[:_LOG_PATH_MAX],
+                role=file.role,
+                error_type=type(exc).__name__,
+            )
             self._failed(
                 package,
                 item,
@@ -420,6 +463,30 @@ class ProcessPackage:
             message=message,
             keep_errors=self._keep_errors,
         )
+        # Ошибок в статусе не больше `keep_errors`; в лог пишем столько же, остальное - счётчик.
+        if package.failed <= self._keep_errors:
+            log.warning(
+                "package.file_failed",
+                package_id=str(package.id),
+                key=item.key,
+                path=path[:_LOG_PATH_MAX],
+                role=role,
+                error_code=code,
+            )
+
+    @staticmethod
+    def _log_progress(package: ImportPackage) -> None:
+        """Строка прогресса раз в `_PROGRESS_EVERY` обработанных файлов."""
+        handled = package.done + package.failed
+        if handled and handled % _PROGRESS_EVERY == 0:
+            log.info(
+                "package.progress",
+                package_id=str(package.id),
+                handled=handled,
+                total=package.total,
+                done=package.done,
+                failed=package.failed,
+            )
 
     @staticmethod
     def _upload_key(
