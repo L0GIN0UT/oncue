@@ -29,7 +29,7 @@ export function ItemSearch({ domain, added, full, onAdd }: Props) {
     client.setQueryData<ItemLite>(itemLiteKey(s.id), {
       title: s.title,
       year: s.year,
-      subtitle: s.subtitle,
+      subtitle: s.creator ?? s.subtitle,
     });
     onAdd(s.id);
   };
@@ -58,7 +58,7 @@ export function ItemSearch({ domain, added, full, onAdd }: Props) {
                     {s.title}
                   </span>
                   <span dir="auto" className="block truncate text-[13px] text-ink-muted">
-                    {[s.year, s.subtitle].filter(Boolean).join(", ")}
+                    {[s.creator ?? s.subtitle, s.year].filter(Boolean).join(", ")}
                   </span>
                 </span>
                 <Button

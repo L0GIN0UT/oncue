@@ -1238,6 +1238,7 @@ export class MockWorld {
         title: i.title,
         year: i.year,
         subtitle: i.person.name,
+        creator: i.person.name,
       }));
   }
 
