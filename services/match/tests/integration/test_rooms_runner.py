@@ -291,9 +291,15 @@ async def test_missing_or_unreadable_snapshot_leaves_active_index(cluster: Clust
     async def forgotten() -> bool:
         return await cluster.redis.zcard(keys.ACTIVE) == 0
 
+    async def released() -> bool:
+        # Запись из индекса убирается раньше, чем узел отпускает lease: ждём освобождения.
+        return (
+            await cluster.owner_of("MISSING1") is None
+            and await cluster.owner_of("BROKEN01") is None
+        )
+
     await _until(forgotten)
-    assert await cluster.owner_of("MISSING1") is None
-    assert await cluster.owner_of("BROKEN01") is None
+    await _until(released)
 
 
 async def test_actor_stops_when_lease_is_stolen(cluster: Cluster) -> None:

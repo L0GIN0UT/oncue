@@ -226,8 +226,9 @@ async def test_solo_start_of_online_mode_is_rejected_before_side_effects(game: A
 
     assert await _session_rows(game) == 0
     assert len(await game.outbox()) == outbox_before
-    # Лимиты не тронуты: новых окон в Redis нет (Redis общий для прогонов — сравниваем).
-    assert {k async for k in redis.scan_iter(match="game:rl:*")} == limits_before
+    # Лимиты не тронуты: новых окон в Redis нет. Redis общий для прогонов, окна чужих
+    # тестов истекают по TTL прямо во время проверки, поэтому исчезнувшие ключи не считаем.
+    assert {k async for k in redis.scan_iter(match="game:rl:*")} <= limits_before
     # Онлайн-режим не попадает в плановые наборы (дейлик).
     daily = (await game.client.get("/v1/daily", headers=bearer(user))).json()
     assert DUEL not in {d["mode_key"] for d in daily}
