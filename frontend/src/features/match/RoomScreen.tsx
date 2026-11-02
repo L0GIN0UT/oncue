@@ -10,7 +10,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { RefreshCw, WifiOff } from "lucide-react";
 import { isApiError } from "@/shared/api/errors";
@@ -21,10 +21,13 @@ import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useNow } from "@/features/daily/use-now";
 import { useModeTitle } from "@/features/online/lists";
 import { OnlineGate } from "@/features/online/OnlineGate";
+import { ACTIVE_ROOM_KEY } from "./active-room";
+import { useActiveRoomConflict } from "./ActiveRoomConflict";
 import { fetchRoom, fetchRoomState, useMyUserId } from "./api";
 import { isRoomCode, normalizeRoomCode } from "./code";
 import { sendCommand } from "./commands";
 import { matchErrorKey } from "./errors";
+import { LeaveToOnline } from "./LeaveToOnline";
 import { LobbyPanel } from "./LobbyPanel";
 import { MatchStage, type MatchCommands } from "./MatchStage";
 import { MatchSummaryView } from "./MatchSummaryView";
@@ -118,6 +121,7 @@ function RoomPreview({
   const modeTitle = useModeTitle();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { guard, dialog } = useActiveRoomConflict();
   const full =
     room.players.filter((p) => p.presence !== "left").length >= room.settings.players_max;
 
@@ -125,8 +129,12 @@ function RoomPreview({
     setBusy(true);
     setError(null);
     try {
-      await sendCommand(room.code, "join", {});
-      onJoined();
+      // Уже есть активная комната: диалог «выйти и продолжить» повторит этот же вход.
+      const result = await guard(async () => {
+        await sendCommand(room.code, "join", {});
+        onJoined();
+      });
+      if (result === "conflict") setBusy(false);
     } catch (e) {
       setError(dt(matchErrorKey(e), t("match.error.generic")));
       setBusy(false);
@@ -173,6 +181,7 @@ function RoomPreview({
           {error}
         </p>
       )}
+      {dialog}
     </div>
   );
 }
@@ -196,6 +205,7 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
   const dt = useDynamicT();
   const toast = useToast();
   const router = useRouter();
+  const client = useQueryClient();
   const { store, status, fatal, clock, command, resync } = useRoom(code, { enabled: true });
   const [votedRematch, setVotedRematch] = useState(false);
   const [ownRematch, setOwnRematch] = useState<string | null>(null);
@@ -236,6 +246,9 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
     resetMemory: () => command("reset-memory", {}),
     leave: async () => {
       await command("leave", {});
+      // Состояние комнаты на фронте сбрасываем сразу: плашка «вы в комнате» и вход не ждут сервера.
+      client.setQueryData(ACTIVE_ROOM_KEY, null);
+      client.removeQueries({ queryKey: ["room-entry", code] });
       router.push("/online");
     },
   };
@@ -249,7 +262,20 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
       // Ошибку чата (отказ denylist) показывает сама панель чата — пробрасываем.
       return command("match/chat", { text });
     },
+    // Подтверждение загрузки не меняет состояние комнаты: идёт мимо редьюсера и без ресинка.
+    clipReady: (round_index: number, level: number) =>
+      sendCommand(code, "clip-ready", { round_index, level }),
   };
+
+  // Объявляем серверу, что умеем подтверждать загрузку: с этого момента таймер уровней ждёт нас.
+  // Старый сервер ответит 404/405 — не страшно, всё работает как раньше.
+  // Повторяем после обрыва связи (offline → online): метка на сервере живёт в снимке комнаты,
+  // но переобъявиться дёшево, а после кика и повторного входа метка новая.
+  const joinedRoom = state !== null;
+  const offline = status.offline;
+  useEffect(() => {
+    if (joinedRoom && !offline) void sendCommand(code, "clip-ready", {}).catch(() => undefined);
+  }, [code, joinedRoom, offline]);
 
   if (fatal) {
     const kicked = isApiError(fatal, "match.not_participant") || isApiError(fatal, "match.kicked");
@@ -258,9 +284,7 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
         <h1 className="font-display text-2xl font-bold">
           {kicked ? t("match.error.kicked") : t("match.error.room_not_found")}
         </h1>
-        <Button asChild variant="secondary">
-          <Link href="/online">{t("match.toOnline")}</Link>
-        </Button>
+        <LeaveToOnline code={code} />
       </div>
     );
   }
@@ -336,9 +360,7 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
       ) : room.phase === "closed" ? (
         <div className="flex flex-col items-start gap-4 pt-8" data-testid="room-closed">
           <h1 className="font-display text-2xl font-bold">{t("match.closed")}</h1>
-          <Button asChild variant="secondary">
-            <Link href="/online">{t("match.toOnline")}</Link>
-          </Button>
+          <LeaveToOnline code={code} />
         </div>
       ) : (
         <MatchStage
@@ -397,9 +419,7 @@ function SummaryActions({
           </Button>
         )
       )}
-      <Button asChild size="lg" variant="secondary">
-        <Link href="/online">{t("match.toOnline")}</Link>
-      </Button>
+      <LeaveToOnline code={code} size="lg" data-testid="summary-to-online" />
     </div>
   );
 }

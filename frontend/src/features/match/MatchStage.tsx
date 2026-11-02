@@ -7,7 +7,7 @@
  * (`level_opened`), исход своего ответа — только в ответе команды; время и очки считает сервер.
  * «Сдаться»/«Выйти» стоит в левом слоте шапки.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Coffee, LogOut } from "lucide-react";
 import type { GuessOut, MatchAnswer, RoomState } from "@/shared/api/types";
@@ -24,6 +24,7 @@ import { GameShellSlots } from "@/features/shell/game-shell-slots";
 import { useModeTitle } from "@/features/online/lists";
 import { isKnownAnswerFormat, matchAnswerRegistry } from "./answers/registry";
 import { ChatPanel } from "./ChatPanel";
+import { MatchAudioClue } from "./MatchAudioClue";
 import { PhaseTimer, useRemainingSeconds } from "./PhaseTimer";
 import { PlayersRail } from "./PlayersRail";
 import { canAnswer, type FeedItem, type RoomStore } from "./room-store";
@@ -39,6 +40,8 @@ export type MatchCommands = {
   away: (away: boolean) => Promise<unknown>;
   emote: (kind: "emote" | "phrase", key: string) => Promise<unknown>;
   chat: (text: string) => Promise<unknown>;
+  /** «Фрагмент уровня загружен» (`POST /clip-ready`): сервер стартует общий таймер. */
+  clipReady: (roundIndex: number, level: number) => Promise<unknown>;
 };
 
 type Props = {
@@ -63,6 +66,8 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
   const [progress, setProgress] = useState<{ tag: string; value: number | null } | null>(null);
   const clue = useLevelClue(code, room.phase === "level_open" ? match?.clue : null);
   const Clue = clue.data ? clueRegistry[clue.data.kind] : null;
+  const confirmedTag = useRef<string | null>(null);
+  const [clipRetry, setClipRetry] = useState(0);
   const format = room.settings.answer_format;
   const Answer = isKnownAnswerFormat(format) ? matchAnswerRegistry[format] : null;
   const level = match?.level ?? null;
@@ -95,6 +100,25 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
 
   const levelOpen = (room.phase === "level_open" || room.phase === "level_closed") && match;
   const roundTag = `${match?.round_index}:${level}`;
+
+  // Общий старт таймера: сервер держит таймер, пока фрагмент грузится у всех (awaiting_clips).
+  // Фрагмент уже скачан целиком в Blob (useLevelClue), поэтому «готов» — это данные в руках, а не
+  // canplaythrough (на мобильных без жеста оно не приходит). Провал загрузки тоже подтверждаем:
+  // соперник ждать не должен. Один раз на уровень; при ошибке отправки повторим на следующем рендере.
+  const awaiting = room.phase === "level_open" && match?.awaiting_clips === true;
+  const ready = clue.isError || !!clue.data;
+  const clipReady = commands.clipReady;
+  const roundIndex = match?.round_index ?? null;
+  useEffect(() => {
+    if (!awaiting || !ready || roundIndex === null || level === null) return;
+    if (confirmedTag.current === roundTag) return;
+    confirmedTag.current = roundTag;
+    void clipReady(roundIndex, level).catch(() => {
+      if (confirmedTag.current !== roundTag) return;
+      confirmedTag.current = null;
+      setTimeout(() => setClipRetry((n) => n + 1), 1_500); // 429/сеть: ещё одна попытка
+    });
+  }, [awaiting, ready, roundIndex, level, roundTag, clipReady, clipRetry]);
   const playing = progress?.tag === roundTag ? progress.value : null;
   const guesses: GuessOut[] = me && match && me.round_index === match.round_index ? me.guesses : [];
   const rowsTotal = guesses.length + (me?.attempts_left ?? 0);
@@ -191,7 +215,13 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
         </p>
       )}
 
-      {(room.phase === "level_open" || room.phase === "reveal") && (
+      {awaiting && (
+        <p role="status" className="text-sm text-ink-muted" data-testid="awaiting-clips">
+          {t("match.awaitingClips")}
+        </p>
+      )}
+
+      {((room.phase === "level_open" && !awaiting) || room.phase === "reveal") && (
         <PhaseTimer
           clock={clock}
           endsAt={room.phase_ends_at}
@@ -246,6 +276,13 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
               >
                 {t("match.levelClosed")}
               </div>
+            ) : clue.data && clue.data.kind === "audio" ? (
+              <MatchAudioClue
+                key={roundTag}
+                clue={clue.data}
+                scene={clueSceneOf(room.settings.clue_type)}
+                onProgress={(value) => setProgress({ tag: roundTag, value })}
+              />
             ) : Clue && clue.data ? (
               <Clue
                 clue={clue.data}

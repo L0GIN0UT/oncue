@@ -12,6 +12,7 @@ import { ListRow } from "@/shared/ui/list-row";
 import { Tile } from "@/shared/ui/tile";
 import { StatusDot } from "@/features/friends/StatusDot";
 import { useHasSanction } from "@/features/sanctions/use-sanctions";
+import { ReturnToRoomBanner } from "@/features/match/ReturnToRoomBanner";
 import { useLadderLabel } from "@/features/rating/labels";
 import { signedDelta } from "@/features/rating/logic";
 import type { WeeklyTop } from "@/shared/api/types";
@@ -67,6 +68,8 @@ export function OnlineHub() {
   return (
     <div className="flex flex-col gap-5 pt-2" data-testid="online">
       <h1 className="sr-only">{t("online.title")}</h1>
+
+      <ReturnToRoomBanner />
 
       {banned && (
         <p

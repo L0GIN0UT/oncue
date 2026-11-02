@@ -9,6 +9,7 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useActiveRoomConflict } from "@/features/match/ActiveRoomConflict";
 import { createRoom } from "@/features/match/api";
 import { matchErrorKey } from "@/features/match/errors";
 import type { Domain } from "@/shared/api/types";
@@ -37,6 +38,7 @@ export function CreateRoom({
   const [picked, setPicked] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { guard, dialog } = useActiveRoomConflict();
   const Plus = icons.plus;
   const Chevron = icons.next;
 
@@ -44,8 +46,12 @@ export function CreateRoom({
     setBusy(modeKey);
     setError(null);
     try {
-      const room = await createRoom({ mode_key: modeKey });
-      router.push(`/room/${room.code}`);
+      // Уже есть активная комната: диалог «выйти и продолжить» повторит это же создание.
+      const result = await guard(async () => {
+        const room = await createRoom({ mode_key: modeKey });
+        router.push(`/room/${room.code}`);
+      });
+      if (result === "conflict") setBusy(null);
     } catch (e) {
       setError(dt(matchErrorKey(e), t("match.error.generic")));
       setBusy(null);
@@ -138,6 +144,7 @@ export function CreateRoom({
           )}
         </div>
       )}
+      {dialog}
     </div>
   );
 }
