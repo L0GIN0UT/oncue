@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 import zipfile
@@ -72,6 +73,7 @@ PACKAGE_ERRORS_SHOWN = 10
 PACKAGE_TERMINAL = frozenset({"done", "partial", "failed"})
 # Подряд отвергнутых пакетов, после которых засев останавливается (системный сбой, не битый файл).
 PACKAGE_REJECTS_LIMIT = 3
+PACKAGE_CONCURRENCY = 1
 # Ожидание наборов: таймаут только на отсутствие прогресса, а не на всё ожидание сразу.
 STALL_TIMEOUT_S = 1800.0
 # Пауза между проходами опроса: на 20 000 единиц один проход — тысячи запросов.
@@ -820,6 +822,7 @@ class RealSeeder(Seeder):
         units: Sequence[RealUnit],
         *,
         package_units: int = PACKAGE_UNITS,
+        package_concurrency: int = PACKAGE_CONCURRENCY,
         package_timeout_s: float = PACKAGE_TIMEOUT_S,
         stall_timeout_s: float = STALL_TIMEOUT_S,
         pass_pause_s: float = PASS_PAUSE_S,
@@ -828,6 +831,9 @@ class RealSeeder(Seeder):
         super().__init__(config, **kwargs)
         self._units = list(units)
         self._package_units = package_units
+        self._package_concurrency = max(1, package_concurrency)
+        self._token_lock = threading.RLock()
+        self._broken_lock = threading.Lock()
         self._package_timeout_s = package_timeout_s
         self._stall_timeout_s = stall_timeout_s
         self._pass_pause_s = pass_pause_s
@@ -844,9 +850,10 @@ class RealSeeder(Seeder):
 
     def _keep_token(self) -> None:
         """Обновить admin-токен, если он старше ``TOKEN_REFRESH_S`` (засев дольше его жизни)."""
-        if time.monotonic() - self._token_at > TOKEN_REFRESH_S:
-            self.authenticate()
-            self._token_at = time.monotonic()
+        with self._token_lock:
+            if time.monotonic() - self._token_at > TOKEN_REFRESH_S:
+                self.authenticate()
+                self._token_at = time.monotonic()
 
     def authenticate(self) -> str:
         """Вход в админку с отметкой времени токена."""
@@ -929,15 +936,29 @@ class RealSeeder(Seeder):
                 entries.append(PackageEntry(unit, ref.media_item_id, files))
         batches = split_batches(entries, self._package_units)
         rejects = 0
-        for number, batch in enumerate(batches, start=1):
-            failed, rejected = self._send_package_soft(batch, f"{number}/{len(batches)}")
-            self.broken.update(failed)
-            rejects = rejects + 1 if rejected else 0
-            if rejects >= PACKAGE_REJECTS_LIMIT:
-                raise SeedError(
-                    f"отвергнуто {rejects} пакета подряд — похоже на системный сбой, "
-                    f"а не битые файлы: {next(iter(failed.values()))}"
-                )
+        pool = ThreadPoolExecutor(max_workers=self._package_concurrency)
+        try:
+            # Пакеты отправляются параллельно (media-pipeline разбирает их независимо), а итоги
+            # собираются в порядке номеров: подряд идущие отвергнутые пакеты — системный сбой.
+            def send(item: tuple[int, Sequence[PackageEntry]]) -> tuple[dict[str, str], bool]:
+                return self._send_package_soft(item[1], f"{item[0]}/{len(batches)}")
+
+            numbered = enumerate(batches, start=1)
+            # Один поток — прежний последовательный порядок: после системного сбоя дальше не идём.
+            results = (
+                map(send, numbered) if self._package_concurrency == 1 else pool.map(send, numbered)
+            )
+            for failed, rejected in results:
+                with self._broken_lock:
+                    self.broken.update(failed)
+                rejects = rejects + 1 if rejected else 0
+                if rejects >= PACKAGE_REJECTS_LIMIT:
+                    raise SeedError(
+                        f"отвергнуто {rejects} пакета подряд — похоже на системный сбой, "
+                        f"а не битые файлы: {next(iter(failed.values()))}"
+                    )
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
         pending = {
             u.key: items[u.key].media_item_id
             for u in sorted(self._units, key=lambda u: u.key)
@@ -1294,6 +1315,7 @@ def run_seed_real(
     collection_size: int = COLLECTION_SIZE,
     tracks_limit: int | None = None,
     package_units: int = PACKAGE_UNITS,
+    package_concurrency: int = PACKAGE_CONCURRENCY,
     ffmpeg_jobs: int = FFMPEG_JOBS,
     stall_timeout_s: float = STALL_TIMEOUT_S,
     without_synthetic: bool = False,
@@ -1328,6 +1350,7 @@ def run_seed_real(
         config,
         units,
         package_units=package_units,
+        package_concurrency=package_concurrency,
         stall_timeout_s=stall_timeout_s,
         echo=echo,
     )

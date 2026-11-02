@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -1233,6 +1235,8 @@ class TestUploadReal:
         seeder._units = units
         seeder._audio = {}
         seeder._package_units = 2
+        seeder._package_concurrency = 1
+        seeder._broken_lock = threading.Lock()
         seeder._uploaded = lambda _item: set()  # type: ignore[method-assign]
         answers = iter(outcomes)
         seeder.sent = []  # type: ignore[attr-defined]
@@ -1263,6 +1267,55 @@ class TestUploadReal:
         assert seeder.upload_real(items) == 4  # одна единица в broken - её не ждут
         assert [label for label, _ in seeder.sent] == ["1/3", "2/3", "3/3"]
         assert set(seeder.broken) == {"film:tmdb-2"}
+
+    def test_packages_are_sent_in_parallel(self) -> None:
+        units, items = self._units(6)
+        seeder = self._seeder(units, [])
+        seeder._package_concurrency = 3
+        gate = threading.Barrier(3, timeout=5)  # три пакета обязаны быть в полёте одновременно
+        failed_by_label = {"2/3": {"film:tmdb-2"}}
+
+        def send(batch: Any, label: str = "") -> set[str]:
+            gate.wait()
+            return failed_by_label.get(label, set())
+
+        seeder._send_package = send  # type: ignore[method-assign]
+        assert seeder.upload_real(items) == 5
+        assert set(seeder.broken) == {"film:tmdb-2"}
+
+    def test_parallel_rejects_in_a_row_stop_the_seed(self) -> None:
+        units, items = self._units(10)
+        seeder = self._seeder(units, [])
+        seeder._package_concurrency = 2
+
+        def send(batch: Any, label: str = "") -> set[str]:
+            raise SeedError("package.too_big")
+
+        seeder._send_package = send  # type: ignore[method-assign]
+        with pytest.raises(SeedError, match="системный сбой"):
+            seeder.upload_real(items)
+
+    def test_token_refresh_is_serialized(self) -> None:
+        seeder = _waiting_seeder({})
+        seeder._token_lock = threading.RLock()
+        seeder._token_at = -1e9
+        calls: list[int] = []
+
+        def authenticate() -> str:
+            calls.append(1)
+            time.sleep(0.05)  # остальные потоки ждут блокировку и видят свежий токен
+            seeder._token_at = time.monotonic()
+            return "t"
+
+        seeder.authenticate = authenticate  # type: ignore[method-assign]
+        threads = [
+            threading.Thread(target=lambda: RealSeeder._keep_token(seeder)) for _ in range(8)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert len(calls) == 1
 
     def test_rejected_package_marks_its_units_and_goes_on(self) -> None:
         units, items = self._units(5)
