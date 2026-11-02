@@ -2616,7 +2616,7 @@
           "subjects": {
             "description": "Персоны, задающие область ответа раунда (сборник одного исполнителя, марафон): ответом считается название, имя персоны не принимается, автоподсказка ищет только по названиям этих персон. Пусто - область не ограничена. Необязательное поле",
             "items": {
-              "$ref": "#/components/schemas/PersonOut"
+              "$ref": "#/components/schemas/RoundSubjectOut"
             },
             "title": "Subjects",
             "type": "array"
@@ -2781,6 +2781,38 @@
           }
         },
         "title": "RoundProgress",
+        "type": "object"
+      },
+      "RoundSubjectOut": {
+        "description": "Персона, задающая область ответа раунда (известна игроку: марафон, сборник персоны).",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "person_id каталога: клиент передаёт его как scope_person в автоподсказку",
+            "title": "Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role"
+        ],
+        "title": "RoundSubjectOut",
         "type": "object"
       },
       "SaveDraftRequest": {
