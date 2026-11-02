@@ -188,7 +188,7 @@ export class RoomLink {
     for (const m of pending) this.deps.onMessage(m);
   }
 
-  private async tick(): Promise<void> {
+  private async tick(retried = false): Promise<void> {
     const sentAt = this.localNow();
     try {
       const result = await this.deps.tick(this.gate.version);
@@ -202,6 +202,13 @@ export class RoomLink {
       }
     } catch (e) {
       if (this.stopped) return;
+      // 401: токен истёк, а сессию обновил refresh (apiFetch или соседняя вкладка) уже после
+      // отправки. Тик не теряем — повторяем сразу один раз; потерянный тик давал «Отключён»
+      // у соперника (пункт 31). Второй 401 подряд — не «исключён из комнаты»: ждём период.
+      if (isApiError(e) && e.status === 401) {
+        if (!retried) await this.tick(true);
+        return;
+      }
       // До первого снимка tick тоже может не знать игрока — ресинк повторит вход.
       if (this.isFatal(e) && this.hadState) this.fail(e);
     }
@@ -240,7 +247,8 @@ export class RoomLink {
   }
 
   private isFatal(e: unknown): boolean {
-    return isApiError(e) && (e.status === 403 || e.status === 404 || e.status === 401);
+    // 401 — не фатально: сессию лечит refresh, комната и место в ней на сервере остаются.
+    return isApiError(e) && (e.status === 403 || e.status === 404);
   }
 
   private fail(e: unknown): void {

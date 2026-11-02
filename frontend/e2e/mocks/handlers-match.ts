@@ -125,6 +125,26 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       return HttpResponse.json({ items: mw.openRooms(), next_cursor: null }, { headers: NO_STORE });
     }),
 
+    // Моя активная комната (источник правды сервера): код и фаза или пусто.
+    http.get(`${m}/rooms/active`, ({ request }) => {
+      const userId = userOf(request);
+      if (userId instanceof Response) return userId;
+      const code = mw.playerRoom.get(userId);
+      const room = code ? mw.rooms.get(code) : undefined;
+      const body =
+        room && room.phase !== "closed"
+          ? { code: room.code, phase: room.phase }
+          : { code: null, phase: null };
+      return HttpResponse.json(body, { headers: NO_STORE });
+    }),
+
+    // Подтверждение «фрагмент загружен»: мок таймер не держит, просто принимает.
+    http.post(`${m}/rooms/:code/clip-ready`, ({ request }) => {
+      const userId = userOf(request);
+      if (userId instanceof Response) return userId;
+      return HttpResponse.json({ version: 0 }, { headers: NO_STORE });
+    }),
+
     http.get(`${m}/rooms/:code`, ({ request, params }) => {
       const userId = userOf(request);
       if (userId instanceof Response) return userId;
@@ -228,7 +248,10 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
       if (!def) return problem(404, "match.mode_not_found");
       const active = mw.playerRoom.get(userId);
       if (active && mw.rooms.get(active)?.phase !== "closed")
-        return problem(409, "match.active_room_conflict", { code: active });
+        return problem(409, "match.active_room_conflict", {
+          code: active,
+          phase: mw.rooms.get(active)?.phase,
+        });
       const ids = body.collection_ids ?? [];
       if (def.source === "collection") {
         if (!ids.length) return problem(422, "match.collection_required");
@@ -252,7 +275,10 @@ export function createMatchHandlers(world: MockWorld, mw: MatchWorld): HttpHandl
             return problem(409, "match.room_full");
           const active = mw.playerRoom.get(userId);
           if (active && active !== room.code && mw.rooms.get(active)?.phase !== "closed")
-            return problem(409, "match.active_room_conflict", { code: active });
+            return problem(409, "match.active_room_conflict", {
+              code: active,
+              phase: mw.rooms.get(active)?.phase,
+            });
           mw.addPlayer(room, userId);
           if (mw.scenario.joinStateLagMs)
             room.joinLag.set(userId, mw.now() + mw.scenario.joinStateLagMs);
