@@ -423,6 +423,7 @@ export class MatchWorld {
       level: room.phase === "level_open" || room.phase === "level_closed" ? m.level : null,
       levels_count: room.def.levels,
       clue: room.phase === "level_open" ? m.clue : null,
+      // Мок таймер не держит: затвор подтверждений загрузки всегда открыт.
       awaiting_clips: false,
       reveal: revealing && item ? this.revealOf(item) : null,
       players: room.players.map((p) => {
