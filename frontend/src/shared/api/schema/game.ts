@@ -1806,6 +1806,11 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "active" | "finished" | "void";
+            /**
+             * Subjects
+             * @description Персоны, задающие область ответа раунда (сборник одного исполнителя, марафон): ответом считается название, имя персоны не принимается, автоподсказка ищет только по названиям этих персон. Пусто - область не ограничена. Необязательное поле
+             */
+            subjects?: components["schemas"]["PersonOut"][];
         };
         /**
          * RoundPlan
