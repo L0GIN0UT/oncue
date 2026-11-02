@@ -176,6 +176,10 @@ def match_view(room: Room) -> Json | None:
         "level": match.contest.level if level_open and match.contest is not None else None,
         "levels_count": match.levels_count,
         "clue": clue_json(match.clue) if level_open else None,
+        "awaiting_clips": bool(level_open and match.clip_gate is not None),
+        "clip_wait_ends_at": (
+            iso(match.clip_gate.deadline_ms) if level_open and match.clip_gate is not None else None
+        ),
         "players": [
             {
                 "user_id": str(p.user_id),
@@ -326,11 +330,22 @@ def _delta(room: Room, change: Change, now_ms: int) -> Json | None:  # noqa: PLR
         }
     if kind == "level_opened":
         clue = data.get("clue")
-        return {
+        opened: dict[str, Any] = {
             "round_index": data["round_index"],
             "level": data["level"],
             "phase_ends_at": iso(data.get("phase_ends_at_ms")),
             "clue": clue_json(clue if isinstance(clue, Clue) else None),
+        }
+        if data.get("awaiting_clips"):
+            # Таймер ещё не идёт: phase_ends_at предварительный, настоящий придёт в level_started.
+            opened["awaiting_clips"] = True
+            opened["clip_wait_ends_at"] = iso(data.get("clip_wait_ends_at_ms"))
+        return opened
+    if kind == "level_started":
+        return {
+            "round_index": data["round_index"],
+            "level": data["level"],
+            "phase_ends_at": iso(data.get("phase_ends_at_ms")),
         }
     if kind == "level_closed":
         return {

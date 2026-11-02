@@ -48,6 +48,7 @@ class Harness:
     op_users_max: int = 16
     empty_lobby_ms: int = 0
     presence_release_ms: int = 0
+    clip_ready_max_wait_ms: int = 0
     artwork_sets: bool = False
     artwork_refresh_margin_ms: int = 10_000
     _ops: int = 0
@@ -74,6 +75,7 @@ class Harness:
                 presence_timeout_ms=PRESENCE_TIMEOUT_MS,
                 empty_lobby_ms=self.empty_lobby_ms,
                 presence_release_ms=self.presence_release_ms,
+                clip_ready_max_wait_ms=self.clip_ready_max_wait_ms,
                 poison_limit=self.poison_limit,
                 op_users_max=self.op_users_max,
                 artwork_refresh_margin_ms=self.artwork_refresh_margin_ms,

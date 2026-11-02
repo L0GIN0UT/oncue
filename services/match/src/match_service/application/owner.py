@@ -181,6 +181,8 @@ class OwnerSettings:
     artwork_refresh_margin_ms: int = 10_000
     presence_release_ms: int = 0
     """Молчащий дольше игрок лобби/итогов освобождает ``player:{id}:room`` (0 - не чистить)."""
+    clip_ready_max_wait_ms: int = 0
+    """Предел ожидания «фрагмент загружен» до общего старта таймера уровня (0 - выключено)."""
 
     @property
     def timing(self) -> Timing:
@@ -190,6 +192,7 @@ class OwnerSettings:
             presence_timeout_ms=self.presence_timeout_ms,
             memory_limit=self.memory_limit,
             empty_lobby_ms=self.empty_lobby_ms,
+            clip_max_wait_ms=self.clip_ready_max_wait_ms,
         )
 
 
@@ -197,7 +200,7 @@ ROOM_RESULT_KINDS = frozenset(
     {"join", "leave", "ready", "settings", "kick", "transfer_host", "reset_memory", "start"}
 )
 """Команды, чей ответ — ``RoomCommandResult`` (версия и вид комнаты)."""
-UNREMEMBERED_KINDS = frozenset({"listen"})
+UNREMEMBERED_KINDS = frozenset({"listen", "clip_ready"})
 """Частые эфемерные команды: их ``op_id`` не занимает окно (иначе вытеснят повтор ответа)."""
 CHAT_PHASES = frozenset({Phase.LOBBY, Phase.REVEAL, Phase.SUMMARY})
 """Свободный чат — только вне уровня: иначе подсказка ответа соперникам (аудит §7)."""
@@ -489,6 +492,7 @@ class RoomOwner:
             "chat": self._chat,
             "away": self._away,
             "listen": self._listen,
+            "clip_ready": self._clip_ready,
             "rename": self._rename,
             "remove": self._remove,
             "evict": self._evict,
@@ -840,6 +844,7 @@ class RoomOwner:
                 level=need.level,
                 clue=clue,
                 now_ms=self._now(),
+                clip_wait_ms=self._timing.clip_max_wait_ms,
             )
         )
 
@@ -1308,6 +1313,20 @@ class RoomOwner:
             cmd.user_id,
             level=int(cmd.data["level"]),
             position_ms=int(cmd.data["position_ms"]),
+        )
+        return self._version(room)
+
+    async def _clip_ready(self, room: Room, cmd: RoomCommand, now: int) -> Builder:
+        """«Фрагмент загружен» / объявление поддержки; устаревшее и повтор - 200 без изменений."""
+        if room.is_closed:
+            raise errors.room_gone(room.close_reason)
+        round_index, level = cmd.data.get("round_index"), cmd.data.get("level")
+        match_fsm.clip_ready(
+            room,
+            cmd.user_id,
+            round_index=int(round_index) if round_index is not None else None,
+            level=int(level) if level is not None else None,
+            now_ms=now,
         )
         return self._version(room)
 

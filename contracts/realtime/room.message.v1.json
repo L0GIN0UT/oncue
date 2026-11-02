@@ -233,6 +233,15 @@
       "additionalProperties": false,
       "description": "Открыт уровень загадки: ссылка уровня появляется только здесь (null — ассет недоступен, раунд void)",
       "properties": {
+        "awaiting_clips": {
+          "description": "Есть клиенты, ждущие загрузки фрагмента: таймер не идёт, phase_ends_at предварительный, настоящий придёт в level_started. Поля нет — таймер идёт сразу (как раньше)",
+          "type": "boolean"
+        },
+        "clip_wait_ends_at": {
+          "description": "Предел ожидания подтверждений; только вместе с awaiting_clips",
+          "format": "date-time",
+          "type": "string"
+        },
         "clue": {
           "anyOf": [
             {
@@ -264,6 +273,33 @@
         "level",
         "phase_ends_at",
         "clue"
+      ],
+      "type": "object"
+    },
+    "LevelStartedDelta": {
+      "additionalProperties": false,
+      "description": "Общий старт таймера уровня: подтвердили все ожидаемые клиенты либо истёк максимум ожидания (GV_MATCH__CLIP_READY_MAX_WAIT_S). Приходит только после level_opened с awaiting_clips",
+      "properties": {
+        "level": {
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "phase_ends_at": {
+          "description": "Настоящий конец окна уровня: отсчёт у всех идёт с момента этого сообщения",
+          "format": "date-time",
+          "type": "string"
+        },
+        "round_index": {
+          "maximum": 49,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "round_index",
+        "level",
+        "phase_ends_at"
       ],
       "type": "object"
     },
@@ -703,6 +739,25 @@
       "if": {
         "properties": {
           "kind": {
+            "const": "level_started"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "delta": {
+            "$ref": "#/$defs/LevelStartedDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
             "const": "level_closed"
           }
         },
@@ -820,7 +875,7 @@
       "type": "object"
     },
     "kind": {
-      "description": "Вид изменения: lobby, player, phase, level_opened, level_closed, round_reveal, summary, chat, emote, closed",
+      "description": "Вид изменения: lobby, player, phase, level_opened, level_started, level_closed, round_reveal, summary, chat, emote, closed",
       "maxLength": 32,
       "pattern": "^[a-z][a-z0-9_]*$",
       "type": "string"

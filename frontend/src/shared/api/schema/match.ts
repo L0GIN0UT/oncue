@@ -279,6 +279,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rooms/{code}/clip-ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Фрагмент уровня загружен
+         * @description Необязательная команда общего старта таймера (пункт 24 замечаний тестирования). Без `round_index` и `level` - объявление, что клиент умеет подтверждать (слать при входе в комнату и после переподключения): с этого момента таймер каждого уровня ждёт этого игрока. С ними - подтверждение уровня: когда подтвердили все ожидаемые (отключившихся не ждём) либо прошло `GV_MATCH__CLIP_READY_MAX_WAIT_S`, приходит сообщение `level_started` с настоящим `phase_ends_at`. Пока затвор закрыт (`level_opened.awaiting_clips`), ответы и пропуск дают 409 `match.phase_mismatch` (`details.awaiting_clips`). Клиент без команды работает как раньше. Устаревший уровень и повтор - 200 без изменений. 404 `match.room_not_found` (нет комнаты или она закрыта), 403 `match.not_participant` (не в этой комнате), 409 `match.phase_mismatch` (команда не для текущей фазы), 429 `match.rate_limited`, 503 `match.rooms_unavailable`.
+         */
+        post: operations["clip_ready_v1_rooms__code__clip_ready_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rooms/{code}/join": {
         parameters: {
             query?: never;
@@ -844,6 +864,22 @@ export interface components {
             text: string;
         };
         /**
+         * ClipReadyRequest
+         * @description «Фрагмент уровня загружен» либо объявление, что клиент умеет такие подтверждения.
+         *
+         *     Без `round_index` и `level` - только объявление (слать при входе в комнату и после
+         *     переподключения): с этого момента таймер уровней ждёт этого игрока. С ними - подтверждение
+         *     конкретного уровня (после `canplaythrough` или показа кадра).
+         */
+        ClipReadyRequest: {
+            /** Level */
+            level?: number | null;
+            /** Op Id */
+            op_id: string;
+            /** Round Index */
+            round_index?: number | null;
+        };
+        /**
          * ClueMeta
          * @description Параметры уровня загадки для UI (``hint_fields`` плагина ядра).
          */
@@ -1106,6 +1142,17 @@ export interface components {
          * @description Матч для любого участника (и в дельтах канала): без плана и ключей ответа.
          */
         MatchView: {
+            /**
+             * Awaiting Clips
+             * @description Фрагмент ещё грузится у участников: таймер уровня не идёт, `phase_ends_at` комнаты предварительный; общий старт придёт сообщением `level_started`
+             * @default false
+             */
+            awaiting_clips: boolean;
+            /**
+             * Clip Wait Ends At
+             * @description Предел ожидания подтверждений (`GV_MATCH__CLIP_READY_MAX_WAIT_S`)
+             */
+            clip_wait_ends_at?: string | null;
             /** @description Только после открытия уровня (`level_opened`) */
             clue?: components["schemas"]["LevelClue"] | null;
             /**
@@ -3002,6 +3049,122 @@ export interface operations {
             };
             /** @description Не реализовано */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    clip_ready_v1_rooms__code__clip_ready_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Код комнаты: 8 символов `[A-HJ-NP-Z2-9]` (без 0/O/1/I) */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipReadyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchCommandResult"];
+                };
+            };
+            /** @description Команда принята в поток комнаты, владелец не ответил вовремя (D6) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandAccepted"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Конфликт состояния */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много запросов */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не реализовано */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Зависимость временно недоступна */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

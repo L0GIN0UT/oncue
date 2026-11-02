@@ -38,6 +38,7 @@ from gv_game_kernel.outcome import Placement
 from match_service.domain import errors
 from match_service.domain.errors import MatchConflictError, MatchForbiddenError
 from match_service.domain.model import (
+    ClipGate,
     Clue,
     MatchFinish,
     MatchPlayer,
@@ -152,12 +153,15 @@ class Timing:
         memory_limit: Сколько единиц помнит лобби (``exclude_ids`` плана).
         empty_lobby_ms: ``GV_MATCH__EMPTY_LOBBY_CLOSE_S`` - лобби, где никто не онлайн дольше
             этого срока, закрывается владельцем (0 - выключено); шина не участвует.
+        clip_max_wait_ms: ``GV_MATCH__CLIP_READY_MAX_WAIT_S`` - предел ожидания подтверждений
+            «фрагмент загружен» до общего старта таймера уровня (0 - выключено).
     """
 
     idle_ms: int
     presence_timeout_ms: int
     memory_limit: int
     empty_lobby_ms: int = 0
+    clip_max_wait_ms: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +239,12 @@ def require_turn(
     player = match.players.get(user_id)
     if player is None or not player.active:
         raise MatchForbiddenError("вы не участник матча", code=errors.NOT_PARTICIPANT)
+    if match.clip_gate is not None:
+        raise MatchConflictError(
+            "фрагмент ещё загружается у участников: таймер не запущен",
+            code=errors.PHASE_MISMATCH,
+            details={"awaiting_clips": True},
+        )
     contest = match.contest
     if (
         contest is None
@@ -268,6 +278,114 @@ def commit(
     room.touch(now_ms)
     if _status_of(rules, state, pid) != before:
         room.emit("player", user_id=pid)
+
+
+def clip_ready(
+    room: Room,
+    user_id: UUID,
+    *,
+    round_index: int | None,
+    level: int | None,
+    now_ms: int,
+) -> bool:
+    """«Фрагмент загружен» (команда ``clip_ready``) или объявление поддержки (без уровня).
+
+    Без ``round_index``/``level`` клиент лишь объявляет, что умеет подтверждать: с этого
+    момента его ждёт общий старт таймера. Подтверждение чужого или уже прошедшего уровня,
+    повтор и подтверждение без затвора - без изменений и без ошибки (клиент мог отстать).
+
+    Returns:
+        ``True``, если подтверждение учтено.
+
+    Raises:
+        MatchForbiddenError: не участник комнаты.
+    """
+    seat = room.require_seat(user_id)
+    seat.clip_sync = True
+    match = room.match
+    gate = match.clip_gate if match is not None else None
+    if (
+        match is None
+        or gate is None
+        or round_index is None
+        or level is None
+        or (gate.round_index, gate.level) != (round_index, level)
+        or user_id not in gate.waiting
+        or user_id in gate.ready
+    ):
+        return False
+    match.clip_gate = replace(gate, ready=(*gate.ready, user_id))
+    _settle_gate(room, now_ms)
+    return True
+
+
+def _open_gate(room: Room, match: MatchState, now_ms: int, wait_ms: int) -> ClipGate | None:
+    """Закрыть затвор уровня: ждём подтверждений тех онлайн-игроков, что их умеют слать."""
+    contest = match.contest
+    if wait_ms <= 0 or contest is None:
+        return None
+    awaited = [seat for seat in room.seats if _awaited(room, seat.user_id)]
+    # Смешанная комната (есть клиент без подтверждений: старая вкладка, постепенный деплой):
+    # затвор не закрываем - такой клиент не знает про awaiting_clips, видел бы бегущий
+    # таймер и получал бы 409 на ответы. Старые клиенты работают как раньше.
+    if not awaited or not all(seat.clip_sync for seat in awaited):
+        return None
+    waiting = tuple(seat.user_id for seat in awaited)
+    match.clip_gate = ClipGate(
+        round_index=match.round_index,
+        level=contest.level,
+        since_ms=now_ms,
+        deadline_ms=now_ms + wait_ms,
+        waiting=waiting,
+    )
+    return match.clip_gate
+
+
+def _awaited(room: Room, user_id: UUID) -> bool:
+    """Игрок онлайн и в матче - его подтверждение стоит ждать."""
+    seat = room.seat_of(user_id)
+    match = room.match
+    player = match.players.get(user_id) if match is not None else None
+    return (
+        seat is not None
+        and seat.presence is Presence.ONLINE
+        and player is not None
+        and player.active
+    )
+
+
+def _settle_gate(room: Room, now_ms: int, *, force: bool = False) -> None:
+    """Открыть затвор, если подтвердили все ожидаемые (онлайн), вышел срок или ``force``."""
+    match = room.match
+    gate = match.clip_gate if match is not None else None
+    if match is None or gate is None:
+        return
+    contest = match.contest
+    if (
+        contest is None
+        or room.phase is not Phase.LEVEL_OPEN
+        or (gate.round_index, gate.level) != (match.round_index, contest.level)
+    ):
+        match.clip_gate = None  # затвор устарел (уровень сменился)
+        return
+    pending = [u for u in gate.waiting if u not in gate.ready and _awaited(room, u)]
+    if pending and not force and now_ms < gate.deadline_ms:
+        return
+    shift = max(0, now_ms - gate.since_ms)
+    match.clip_gate = None
+    match.contest = replace(
+        contest,
+        level_opened_at_ms=_shift(contest.level_opened_at_ms, shift),
+        level_ends_at_ms=_shift(contest.level_ends_at_ms, shift),
+    )
+    room.phase_ends_at_ms = _shift(room.phase_ends_at_ms, shift)
+    room.touch(now_ms)
+    room.emit(
+        "level_started",
+        round_index=gate.round_index,
+        level=gate.level,
+        phase_ends_at_ms=room.phase_ends_at_ms,
+    )
 
 
 def listen(room: Room, user_id: UUID, *, level: int, position_ms: int) -> bool:
@@ -388,6 +506,9 @@ def _step_level(room: Room, rules: MatchRules, timing: Timing, now_ms: int) -> l
     match = room.match
     if match is None or match.contest is None or match.clue_pending:
         return None
+    _settle_gate(room, now_ms)
+    if match.clip_gate is not None:
+        return None  # таймер уровня стоит, пока грузятся фрагменты (общий старт по сигналу)
     if rules.level_closed(match.contest, now_ms) or _expired(room, now_ms):
         return _close_level(room, rules, now_ms)
     return None
@@ -434,6 +555,7 @@ def _open_level(room: Room, now_ms: int) -> list[Need]:
     match.final_clue = None
     match.artwork = None
     match.clue_pending = True
+    match.clip_gate = None
     room.touch(now_ms)
     room.set_phase(
         Phase.LEVEL_OPEN,
@@ -453,8 +575,13 @@ def set_clue(
     level: int,
     clue: Clue | None,
     now_ms: int,
+    clip_wait_ms: int = 0,
 ) -> list[Need]:
     """Ссылка открытого уровня получена.
+
+    ``clip_wait_ms`` > 0 включает общий старт таймера: если среди онлайн-игроков есть те, кто
+    объявил поддержку ``clip_ready``, таймер уровня стоит, пока они не подтвердят загрузку
+    фрагмента или не истечёт ``clip_wait_ms`` (``level_opened.awaiting_clips``).
 
     ``None`` — ассет недоступен (D11, решение оркестратора): на уровне 1 раунд ``void`` для
     всех; на следующих — угадавшие на прошлых уровнях сохраняют очки, раунд ``void`` только
@@ -471,12 +598,15 @@ def set_clue(
         return []  # уровень уже сменился (например, пауза или выход) — ссылка не нужна
     match.clue_pending = False
     match.clue = clue
+    gate = _open_gate(room, match, now_ms, clip_wait_ms) if clue is not None else None
     room.emit(
         "level_opened",
         round_index=round_index,
         level=level,
         phase_ends_at_ms=room.phase_ends_at_ms,
         clue=clue,
+        awaiting_clips=gate is not None,
+        clip_wait_ends_at_ms=gate.deadline_ms if gate is not None else None,
     )
     if clue is None:
         if level == 1:
@@ -492,6 +622,7 @@ def set_clue(
 def _close_level(room: Room, rules: MatchRules, now_ms: int) -> list[Need]:
     match = _match(room)
     contest = _contest(match)
+    match.clip_gate = None
     room.emit(
         "level_closed",
         round_index=match.round_index,
@@ -513,6 +644,7 @@ def _close_level(room: Room, rules: MatchRules, now_ms: int) -> list[Need]:
 def _finish_round(room: Room, rules: MatchRules, now_ms: int, *, void: bool) -> list[Need]:
     match = _match(room)
     contest = _contest(match)
+    match.clip_gate = None
     plan = match.current
     results: list[PlayerRoundResult] = []
     for uid in sorted(match.players, key=lambda u: match.players[u].slot):
@@ -709,6 +841,7 @@ def _on_disconnect(room: Room, user_id: UUID, now_ms: int) -> None:
         return
     player.disconnected_at_ms = now_ms
     if len(match.active_ids()) == PAUSE_PLAYERS and room.phase is not Phase.PAUSED:
+        _settle_gate(room, now_ms, force=True)  # пауза считает остаток от настоящего окна
         remaining = (
             None if room.phase_ends_at_ms is None else max(0, room.phase_ends_at_ms - now_ms)
         )
@@ -813,6 +946,7 @@ def _end(room: Room, rules: MatchRules, timing: Timing, finish: MatchFinish, now
     match.finished_at_ms = now_ms
     match.paused = None
     match.clue = None
+    match.clip_gate = None
     left = {
         _pid(p.user_id)
         for p in match.players.values()

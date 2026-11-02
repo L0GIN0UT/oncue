@@ -42,10 +42,13 @@ def test_saved_v1_snapshot_is_readable_and_stable() -> None:
         assert encoded["settings"] == data["settings"]
         # listen_s места, artwork матча и artwork_asset_set_id раунда (ADR 0073) - новые поля
         # со значением по умолчанию: старый снимок читается без шага _UPGRADES.
-        assert [{k: v for k, v in s.items() if k != "listen_s"} for s in encoded["seats"]] == data[
-            "seats"
-        ]
-        assert all(s["listen_s"] is None for s in encoded["seats"])
+        # clip_sync места и clip_gate матча (общий старт таймера) - тоже новые поля с умолчанием.
+        new_seat_keys = {"listen_s", "clip_sync"}
+        assert [
+            {k: v for k, v in s.items() if k not in new_seat_keys} for s in encoded["seats"]
+        ] == data["seats"]
+        assert all(s["listen_s"] is None and s["clip_sync"] is False for s in encoded["seats"])
+        assert encoded["match"]["clip_gate"] is None
         assert encoded["match"]["artwork"] is None
         assert all(r["artwork_asset_set_id"] is None for r in encoded["match"]["plan"])
         encoded = encode(room)
@@ -114,3 +117,21 @@ async def test_artwork_and_listen_survive_snapshot_round_trip() -> None:
     assert restored.match is not None
     assert restored.match.plan[0].artwork_asset_set_id == art_set
     assert encode(restored) == encode(room)
+
+
+async def test_clip_gate_and_capability_survive_snapshot_without_schema_bump() -> None:
+    """Затвор общего старта таймера переживает смену владельца; старый снимок читается без него."""
+    h = Harness(clip_ready_max_wait_ms=10_000)
+    room, host = await h.room()
+    (guest,) = await h.join(room, 1)
+    await h.ok(room, host, "clip_ready")
+    await h.ok(room, guest, "clip_ready")
+    await h.start(room, host)
+    assert room.match is not None and room.match.clip_gate is not None
+    back = loads(dumps(room))
+    assert back.seat_of(host).clip_sync is True
+    assert back.match is not None and back.match.clip_gate == room.match.clip_gate
+    old = encode(room)
+    del old["match"]["clip_gate"]
+    assert decode(old).match.clip_gate is None  # снимок до затвора
+    assert SCHEMA_VERSION == 1

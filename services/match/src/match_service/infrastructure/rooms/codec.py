@@ -27,6 +27,7 @@ from match_service.domain.model import (
     SCHEMA_VERSION,
     AnswerKey,
     ChatRules,
+    ClipGate,
     Clue,
     LevelAsset,
     MatchFinish,
@@ -230,7 +231,34 @@ def _match(m: MatchState | None) -> Json | None:
         "statuses": m.statuses,
         "clue_pending": m.clue_pending,
         "paused_at_ms": m.paused_at_ms,
+        "clip_gate": _gate(m.clip_gate),
     }
+
+
+def _gate(g: ClipGate | None) -> Json | None:
+    if g is None:
+        return None
+    return {
+        "round_index": g.round_index,
+        "level": g.level,
+        "since_ms": g.since_ms,
+        "deadline_ms": g.deadline_ms,
+        "waiting": [str(u) for u in g.waiting],
+        "ready": [str(u) for u in g.ready],
+    }
+
+
+def _read_gate(d: Json | None) -> ClipGate | None:
+    if d is None:
+        return None
+    return ClipGate(
+        round_index=int(d["round_index"]),
+        level=int(d["level"]),
+        since_ms=int(d["since_ms"]),
+        deadline_ms=int(d["deadline_ms"]),
+        waiting=tuple(UUID(u) for u in d.get("waiting", [])),
+        ready=tuple(UUID(u) for u in d.get("ready", [])),
+    )
 
 
 def _options(o: SettingsOptions | None) -> Json | None:
@@ -299,6 +327,7 @@ def encode(room: Room) -> Json:
                 "away": x.away,
                 "ready": x.ready,
                 "listen_s": x.listen_s,
+                "clip_sync": x.clip_sync,
             }
             for x in room.seats
         ],
@@ -504,6 +533,7 @@ def _read_match(d: Json | None) -> MatchState | None:
         statuses=dict(d.get("statuses", {})),
         clue_pending=bool(d.get("clue_pending", False)),
         paused_at_ms=d.get("paused_at_ms"),
+        clip_gate=_read_gate(d.get("clip_gate")),
     )
 
 
@@ -609,6 +639,7 @@ def _decode(d: Json) -> Room:
                 away=bool(x.get("away", False)),
                 ready=bool(x.get("ready", False)),
                 listen_s=x.get("listen_s"),
+                clip_sync=bool(x.get("clip_sync", False)),
             )
             for x in d["seats"]
         ],

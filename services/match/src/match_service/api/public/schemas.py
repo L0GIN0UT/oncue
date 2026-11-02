@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 ROOM_CODE_PATTERN = r"^[A-HJ-NP-Z2-9]{8}$"
 """Код комнаты (D12): 8 символов без 0/O/1/I."""
@@ -410,6 +410,17 @@ class MatchView(BaseModel):
     clue: LevelClue | None = Field(
         default=None, description="Только после открытия уровня (`level_opened`)"
     )
+    awaiting_clips: bool = Field(
+        default=False,
+        description=(
+            "Фрагмент ещё грузится у участников: таймер уровня не идёт, `phase_ends_at` "
+            "комнаты предварительный; общий старт придёт сообщением `level_started`"
+        ),
+    )
+    clip_wait_ends_at: datetime | None = Field(
+        default=None,
+        description="Предел ожидания подтверждений (`GV_MATCH__CLIP_READY_MAX_WAIT_S`)",
+    )
     players: list[MatchPlayerView] = Field(max_length=MAX_PLAYERS)
     reveal: RoundReveal | None = Field(default=None, description="Только в фазе reveal")
 
@@ -536,6 +547,24 @@ class ListenRequest(_Command):
 
     level: int = Field(ge=1, le=MAX_LEVELS)
     position_ms: int = Field(ge=0, description="Позиция воспроизведения; сверх длины зажимается")
+
+
+class ClipReadyRequest(_Command):
+    """«Фрагмент уровня загружен» либо объявление, что клиент умеет такие подтверждения.
+
+    Без `round_index` и `level` - только объявление (слать при входе в комнату и после
+    переподключения): с этого момента таймер уровней ждёт этого игрока. С ними - подтверждение
+    конкретного уровня (после `canplaythrough` или показа кадра).
+    """
+
+    round_index: int | None = Field(default=None, ge=0, lt=MAX_ROUNDS)
+    level: int | None = Field(default=None, ge=1, le=MAX_LEVELS)
+
+    @model_validator(mode="after")
+    def _both_or_none(self) -> ClipReadyRequest:
+        if (self.round_index is None) != (self.level is None):
+            raise ValueError("round_index и level задаются вместе или не задаются")
+        return self
 
 
 class MatchCommandResult(BaseModel):

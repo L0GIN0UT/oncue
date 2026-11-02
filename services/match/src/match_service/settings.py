@@ -25,6 +25,8 @@ class MatchSettings(BaseModel):
         tick_s: Период heartbeat клиента (D10).
         presence_timeout_s: Без heartbeat дольше — игрок «Отключён»; тот же срок делает
             указатель ``player:{id}:room`` устаревшим при явном входе в другую комнату.
+        clip_ready_max_wait_s: Предел ожидания подтверждений «фрагмент загружен» перед общим
+            стартом таймера уровня (0 - выключено); ждутся только клиенты, объявившие поддержку.
         presence_release_s: Игрок лобби/итогов без heartbeat дольше освобождает указатель
             комнаты в фоне (0 - выключено); в идущем матче не действует.
         plan_retries: Повторов запроса плана раундов у game при таймауте/сетевом сбое.
@@ -108,6 +110,9 @@ class MatchSettings(BaseModel):
     # паузы фоновой вкладки; короче - ложное «Отключён» (пункт 31 замечаний тестирования).
     presence_timeout_s: int = Field(default=25, ge=2, le=120)
     presence_release_s: int = Field(default=90, ge=0, le=3600)
+    # Общий старт таймера уровня: ждём подтверждений «фрагмент загружен» не дольше (друзья
+    # через Porthole грузят медленнее); 0 - выключено, клиенты без подтверждений не ждутся.
+    clip_ready_max_wait_s: float = Field(default=10, ge=0, le=60)
     max_rooms_per_instance: int = Field(default=300, ge=1, le=10000)
     lobby_create_per_user_per_hour: int = Field(default=20, ge=1)
     room_name_max_length: int = Field(default=40, ge=1, le=100)

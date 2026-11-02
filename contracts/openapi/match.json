@@ -273,6 +273,48 @@
         "title": "ChatRequest",
         "type": "object"
       },
+      "ClipReadyRequest": {
+        "additionalProperties": false,
+        "description": "«Фрагмент уровня загружен» либо объявление, что клиент умеет такие подтверждения.\n\nБез `round_index` и `level` - только объявление (слать при входе в комнату и после\nпереподключения): с этого момента таймер уровней ждёт этого игрока. С ними - подтверждение\nконкретного уровня (после `canplaythrough` или показа кадра).",
+        "properties": {
+          "level": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "op_id": {
+            "pattern": "^[A-Za-z0-9_.:-]{8,128}$",
+            "title": "Op Id",
+            "type": "string"
+          },
+          "round_index": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 50.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round Index"
+          }
+        },
+        "required": [
+          "op_id"
+        ],
+        "title": "ClipReadyRequest",
+        "type": "object"
+      },
       "ClueMeta": {
         "description": "Параметры уровня загадки для UI (``hint_fields`` плагина ядра).",
         "properties": {
@@ -879,6 +921,25 @@
       "MatchView": {
         "description": "Матч для любого участника (и в дельтах канала): без плана и ключей ответа.",
         "properties": {
+          "awaiting_clips": {
+            "default": false,
+            "description": "Фрагмент ещё грузится у участников: таймер уровня не идёт, `phase_ends_at` комнаты предварительный; общий старт придёт сообщением `level_started`",
+            "title": "Awaiting Clips",
+            "type": "boolean"
+          },
+          "clip_wait_ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Предел ожидания подтверждений (`GV_MATCH__CLIP_READY_MAX_WAIT_S`)",
+            "title": "Clip Wait Ends At"
+          },
           "clue": {
             "anyOf": [
               {
@@ -4878,6 +4939,185 @@
           }
         },
         "summary": "Комната по коду",
+        "tags": [
+          "match"
+        ]
+      }
+    },
+    "/v1/rooms/{code}/clip-ready": {
+      "post": {
+        "description": "Необязательная команда общего старта таймера (пункт 24 замечаний тестирования). Без `round_index` и `level` - объявление, что клиент умеет подтверждать (слать при входе в комнату и после переподключения): с этого момента таймер каждого уровня ждёт этого игрока. С ними - подтверждение уровня: когда подтвердили все ожидаемые (отключившихся не ждём) либо прошло `GV_MATCH__CLIP_READY_MAX_WAIT_S`, приходит сообщение `level_started` с настоящим `phase_ends_at`. Пока затвор закрыт (`level_opened.awaiting_clips`), ответы и пропуск дают 409 `match.phase_mismatch` (`details.awaiting_clips`). Клиент без команды работает как раньше. Устаревший уровень и повтор - 200 без изменений. 404 `match.room_not_found` (нет комнаты или она закрыта), 403 `match.not_participant` (не в этой комнате), 409 `match.phase_mismatch` (команда не для текущей фазы), 429 `match.rate_limited`, 503 `match.rooms_unavailable`.",
+        "operationId": "clip_ready_v1_rooms__code__clip_ready_post",
+        "parameters": [
+          {
+            "description": "Код комнаты: 8 символов `[A-HJ-NP-Z2-9]` (без 0/O/1/I)",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "description": "Код комнаты: 8 символов `[A-HJ-NP-Z2-9]` (без 0/O/1/I)",
+              "examples": [
+                "K7MQ2ZXA"
+              ],
+              "pattern": "^[A-HJ-NP-Z2-9]{8}$",
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipReadyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchCommandResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandAccepted"
+                }
+              }
+            },
+            "description": "Команда принята в поток комнаты, владелец не ответил вовремя (D6)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не аутентифицирован"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Недостаточно прав"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не найдено"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Конфликт состояния"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Некорректные данные"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Слишком много запросов"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Не реализовано"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Зависимость временно недоступна"
+          }
+        },
+        "summary": "Фрагмент уровня загружен",
         "tags": [
           "match"
         ]

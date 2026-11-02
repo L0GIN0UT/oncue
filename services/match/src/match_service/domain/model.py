@@ -177,6 +177,9 @@ class Seat:
     ready: bool = False
     listen_s: int | None = None
     """Сколько секунд игрок слушает открытый уровень (эфемерно, ответа не раскрывает)."""
+    clip_sync: bool = False
+    """Клиент умеет подтверждать «фрагмент загружен» (команда ``clip_ready``): только такие игроки
+    задерживают общий старт таймера уровня; остальные работают как раньше."""
 
 
 # ----------------------------------------------------------------------------- план
@@ -319,6 +322,31 @@ class MatchPlayer:
 
 
 @dataclass(frozen=True, slots=True)
+class ClipGate:
+    """Общий старт таймера уровня: ждём подтверждений «фрагмент загружен» (команда ``clip_ready``).
+
+    Пока затвор закрыт, таймер уровня стоит; открывается, когда подтвердили все ожидаемые
+    (отключившиеся не ждём) или наступил ``deadline_ms``. Тогда окно уровня сдвигается на
+    простой (``now - since_ms``) и уходит сообщение ``level_started``.
+
+    Attributes:
+        round_index: Раунд затвора.
+        level: Уровень затвора.
+        since_ms: Когда ссылка уровня выдана клиентам (отсюда считается простой).
+        deadline_ms: Предел ожидания (``GV_MATCH__CLIP_READY_MAX_WAIT_S``).
+        waiting: Игроки, чьё подтверждение ждём (умеют ``clip_ready``, онлайн, в матче).
+        ready: Уже подтвердившие.
+    """
+
+    round_index: int
+    level: int
+    since_ms: int
+    deadline_ms: int
+    waiting: tuple[UUID, ...]
+    ready: tuple[UUID, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Paused:
     """Пауза дуэли при отключении (D10): во что вернуться и сколько оставалось."""
 
@@ -391,6 +419,7 @@ class MatchState:
     statuses: dict[str, str] = field(default_factory=dict)
     clue_pending: bool = False
     paused_at_ms: int | None = None
+    clip_gate: ClipGate | None = None
 
     @property
     def rounds_total(self) -> int:
