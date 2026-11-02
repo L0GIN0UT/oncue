@@ -51,10 +51,10 @@ export function AnswerBox({
       <>
         <span className="min-w-0 truncate">
           <span>{s.title}</span>
-          {s.subtitle && (
+          {(s.creator ?? s.subtitle) && (
             <>
               {" — "}
-              <b className="font-semibold text-ink">{s.subtitle}</b>
+              <b className="font-semibold text-ink">{s.creator ?? s.subtitle}</b>
             </>
           )}
         </span>
