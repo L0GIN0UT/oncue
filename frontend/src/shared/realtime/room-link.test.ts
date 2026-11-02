@@ -243,6 +243,32 @@ describe("RoomLink: tick и обрывы", () => {
     t.link.stop();
   });
 
+  it("401 на tick — тик повторяется сразу, а не теряется до следующего периода", async () => {
+    const t = setup();
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const calls = t.tick.mock.calls.length;
+    t.tick.mockRejectedValueOnce(new ApiError(401, { code: "auth.token_expired" }));
+    await vi.advanceTimersByTimeAsync(1_000); // один период fallback-тика
+    expect(t.tick.mock.calls.length - calls).toBe(2); // неудачный и немедленный повтор
+    expect(t.onFatal).not.toHaveBeenCalled();
+    t.link.stop();
+  });
+
+  it("401 дважды подряд — не «исключён из комнаты»: связь живёт, ждём следующий период", async () => {
+    const t = setup();
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(0);
+    t.tick.mockRejectedValue(new ApiError(401, { code: "auth.unauthenticated" }));
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(t.onFatal).not.toHaveBeenCalled();
+    expect(t.transport.stopped).toBe(false);
+    t.tick.mockImplementation(async () => ({ server_now: NOW, version: 1, state: null }));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(t.onFatal).not.toHaveBeenCalled();
+    t.link.stop();
+  });
+
   it("403/404 — связь останавливается, onFatal", async () => {
     const t = setup();
     t.link.start();

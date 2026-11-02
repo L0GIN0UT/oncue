@@ -391,3 +391,51 @@ test("вход с 202 и запаздывающим снимком; поле о�
   await expect(rival.getByRole("combobox")).toBeDisabled();
   await expect(page.getByRole("combobox")).toBeEnabled();
 });
+
+test("409 «вы уже в комнате»: диалог «выйти и продолжить» выводит из старой комнаты и входит в новую", async ({
+  page,
+  player,
+}) => {
+  await login(page);
+  const mine = await createRoom(page, "music.duel.classic");
+  const rival = await player("rival");
+  const theirs = await createRoom(rival, "music.duel.classic");
+
+  await page.goto(`/room/${theirs}`);
+  await page.getByTestId("join-room").click();
+  const dialog = page.getByTestId("active-room-conflict");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(mine);
+
+  // «Отмена» оставляет всё как есть, кнопка входа снова доступна.
+  await page.getByTestId("conflict-cancel").click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByTestId("join-room")).toBeEnabled();
+
+  // «Выйти и продолжить»: leave старой комнаты и тот же вход повторяется.
+  await page.getByTestId("join-room").click();
+  await page.getByTestId("conflict-leave").click();
+  await expect(page.getByTestId("room-code")).toHaveText(theirs);
+  await expect(page.getByTestId("player-rival")).toBeVisible();
+});
+
+test("плашка «Вы в комнате»: сервер помнит комнату, выход очищает состояние сразу", async ({
+  page,
+}) => {
+  await login(page);
+  const code = await createRoom(page, "music.duel.classic");
+
+  // Ушли в онлайн, не выходя: сервер всё ещё держит игрока — плашка с возвратом.
+  await page.goto("/online");
+  const banner = page.getByTestId("return-to-room");
+  await expect(banner).toContainText(code);
+  await page.getByTestId("return-to-room-go").click();
+  await expect(page).toHaveURL(new RegExp(`/room/${code}$`));
+
+  // Явный выход: плашки нет, новая комната создаётся без 409.
+  await page.goto("/online");
+  await page.getByTestId("return-to-room-leave").click();
+  await expect(banner).toBeHidden();
+  await createRoomFromHub(page, "music.duel.classic");
+  await expect(page).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+});

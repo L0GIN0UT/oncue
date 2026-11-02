@@ -37,6 +37,15 @@ export type LevelOpenedDelta = {
   level: number;
   phase_ends_at: string;
   clue: LevelClue | null;
+  /** Фрагмент ещё грузится у участников: `phase_ends_at` предварительный, таймер не идёт. */
+  awaiting_clips?: boolean;
+  clip_wait_ends_at?: string;
+};
+/** Общий старт таймера уровня: настоящий конец окна (после подтверждений загрузки). */
+export type LevelStartedDelta = {
+  round_index: number;
+  level: number;
+  phase_ends_at: string;
 };
 export type LevelClosedDelta = {
   round_index: number;
@@ -81,6 +90,7 @@ export type KnownRoomMessage =
   | Envelope<"player", PlayerDelta>
   | Envelope<"phase", PhaseDelta>
   | Envelope<"level_opened", LevelOpenedDelta>
+  | Envelope<"level_started", LevelStartedDelta>
   | Envelope<"level_closed", LevelClosedDelta>
   | Envelope<"round_reveal", RoundRevealDelta>
   | Envelope<"summary", SummaryDelta>
@@ -96,6 +106,7 @@ export const KNOWN_KINDS = new Set<string>([
   "player",
   "phase",
   "level_opened",
+  "level_started",
   "level_closed",
   "round_reveal",
   "summary",

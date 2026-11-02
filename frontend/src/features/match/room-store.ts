@@ -224,6 +224,9 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
         round_index: d.round_index,
         level: d.level,
         clue: d.clue,
+        // Старый сервер поля не шлёт — таймер идёт сразу, как раньше.
+        awaiting_clips: d.awaiting_clips === true,
+        clip_wait_ends_at: d.awaiting_clips === true ? (d.clip_wait_ends_at ?? null) : null,
         reveal: null,
         players: match.players.map((p) => ({
           ...p,
@@ -239,12 +242,24 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
       return { ...next, reveal: null };
     }
 
+    case "level_started": {
+      // Общий старт таймера: настоящий конец окна уровня, затвор подтверждений открыт.
+      const next = withRoom(store, v, { ...room, phase_ends_at: m.delta.phase_ends_at });
+      return withMatch(next, (match) => ({
+        ...match,
+        awaiting_clips: false,
+        clip_wait_ends_at: null,
+      }));
+    }
+
     case "level_closed": {
       const d = m.delta;
       const byUser = new Map(d.players.map((p) => [p.user_id, p]));
       const next = withRoom(store, v, { ...room, phase: "level_closed" });
       return withMatch(next, (match) => ({
         ...match,
+        awaiting_clips: false,
+        clip_wait_ends_at: null,
         players: match.players.map((p) => {
           const u = byUser.get(p.user_id);
           return u ? { ...p, status: u.status } : p;
@@ -309,6 +324,8 @@ export function canAnswer(store: RoomStore, myId: string | null): boolean {
   const { state, meStale } = store;
   const match = state?.match;
   if (!state || !match || state.room.phase !== "level_open" || match.level === null) return false;
+  // Таймер ещё не пошёл (грузится фрагмент): сервер ответил бы 409, поле не активируем.
+  if (match.awaiting_clips === true) return false;
   if (store.lockedLevel === `${match.round_index}:${match.level}`) return false;
   const me = state.me;
   if (me && !meStale && me.round_index === match.round_index) {

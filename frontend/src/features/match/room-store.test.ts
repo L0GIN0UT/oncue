@@ -123,6 +123,45 @@ describe("roomReducer", () => {
     expect(s.state!.match!.players.map((p) => p.status)).toEqual(["guessed", "missed"]);
   });
 
+  it("level_opened с awaiting_clips → таймер не идёт, level_started даёт общий старт", () => {
+    const clue = {
+      level: 1,
+      kind: "audio" as const,
+      url: "/media/a/x.wav",
+      expires_at: NOW,
+      mime: "audio/wav",
+      meta: {},
+    };
+    const opened = send(snapshot(), 11, "level_opened", {
+      round_index: 0,
+      level: 1,
+      phase_ends_at: "2026-10-22T10:00:20Z",
+      clue,
+      awaiting_clips: true,
+      clip_wait_ends_at: "2026-10-22T10:00:10Z",
+    });
+    expect(opened.state!.match!.awaiting_clips).toBe(true);
+    expect(opened.state!.match!.clip_wait_ends_at).toBe("2026-10-22T10:00:10Z");
+    const started = send(opened, 12, "level_started", {
+      round_index: 0,
+      level: 1,
+      phase_ends_at: "2026-10-22T10:00:31Z",
+    });
+    expect(started.state!.match!.awaiting_clips).toBe(false);
+    expect(started.state!.room.phase_ends_at).toBe("2026-10-22T10:00:31Z");
+    expect(started.state!.room.version).toBe(12);
+  });
+
+  it("level_opened без awaiting_clips (старый сервер) — таймер идёт сразу", () => {
+    const s = send(snapshot(), 11, "level_opened", {
+      round_index: 0,
+      level: 1,
+      phase_ends_at: "2026-10-22T10:00:20Z",
+      clue: null,
+    });
+    expect(s.state!.match!.awaiting_clips).toBe(false);
+  });
+
   it("level_opened следующего раунда — новая загадка, статусы сброшены, me устарел", () => {
     const s = send(snapshot(), 11, "level_opened", {
       round_index: 1,
@@ -279,6 +318,24 @@ describe("roomReducer", () => {
     it("level_closed — нельзя", () => {
       const s = send(withMe({}), 11, "level_closed", { round_index: 0, level: 1, players: [] });
       expect(canAnswer(s, A)).toBe(false);
+    });
+
+    it("пока фрагмент грузится у участников (awaiting_clips) — нельзя, после level_started — можно", () => {
+      const opened = send(withMe({}), 11, "level_opened", {
+        round_index: 0,
+        level: 1,
+        phase_ends_at: "2026-10-22T10:00:20Z",
+        clue: null,
+        awaiting_clips: true,
+        clip_wait_ends_at: "2026-10-22T10:00:10Z",
+      });
+      expect(canAnswer(opened, A)).toBe(false);
+      const started = send(opened, 12, "level_started", {
+        round_index: 0,
+        level: 1,
+        phase_ends_at: "2026-10-22T10:00:30Z",
+      });
+      expect(canAnswer(started, A)).toBe(true);
     });
 
     it("пропуск на уровне 1 → level_opened уровня 2 того же раунда: поле активно сразу, снимок запрошен", () => {

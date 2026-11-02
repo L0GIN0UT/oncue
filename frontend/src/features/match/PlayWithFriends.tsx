@@ -17,6 +17,7 @@ import { Button } from "@/shared/ui/button";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { useViewer } from "@/features/auth/session";
 import { withNext } from "@/features/auth/AuthForms";
+import { useActiveRoomConflict } from "./ActiveRoomConflict";
 import { createRoom } from "./api";
 import { matchErrorKey } from "./errors";
 
@@ -46,6 +47,7 @@ export function PlayWithFriends({
   const viewer = useViewer();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { guard, dialog } = useActiveRoomConflict();
   const modes = useQuery({
     queryKey: ["game", "modes", "online", domain],
     queryFn: async () =>
@@ -61,8 +63,11 @@ export function PlayWithFriends({
     setBusy(true);
     setError(null);
     try {
-      const room = await createRoom({ mode_key: template.key, collection_ids: [collectionId] });
-      router.push(`/room/${room.code}`);
+      const result = await guard(async () => {
+        const room = await createRoom({ mode_key: template.key, collection_ids: [collectionId] });
+        router.push(`/room/${room.code}`);
+      });
+      if (result === "conflict") setBusy(false);
     } catch (e) {
       setError(dt(matchErrorKey(e), t("match.error.generic")));
       setBusy(false);
@@ -99,6 +104,7 @@ export function PlayWithFriends({
           {error}
         </p>
       )}
+      {dialog}
     </div>
   );
 }
