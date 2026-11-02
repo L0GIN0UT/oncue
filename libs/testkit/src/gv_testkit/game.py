@@ -209,12 +209,49 @@ class FakeCandidatePort:
         playable: Iterable[tuple[UUID, str, str]] | None = None,
     ) -> None:
         self.items = list(items)
+        self._cutoffs: dict[tuple[object, ...], float | None] = {}
         self._playable = None if playable is None else set(playable)
         self.queries: list[tuple[PoolQuery, int]] = []
 
     def add(self, *items: MediaItemRef) -> None:
         """Добавить единицы в пул."""
         self.items.extend(items)
+        self._cutoffs.clear()
+
+    def _cutoff(self, q: PoolQuery) -> float | None:
+        """Граница ``popularity_top_pct``: ``percentile_cont(1 - pct/100)`` популярности единиц
+        домена, видов, жанров и лет запроса (без играбельности и исключений, ADR 0074)."""
+        pct = q.popularity_top_pct
+        if pct is None:
+            return None
+        key = (q.domain, q.kinds, q.genres_any, q.year_from, q.year_to, pct)
+        if key not in self._cutoffs:
+            base = PoolQuery(
+                domain=q.domain,
+                kinds=q.kinds,
+                genres_any=q.genres_any,
+                year_from=q.year_from,
+                year_to=q.year_to,
+            )
+            values = sorted(
+                i.popularity
+                for i in self.items
+                if i.popularity is not None and self.matches(i, base)
+            )
+            if not values:
+                self._cutoffs[key] = None
+            else:
+                pos = (len(values) - 1) * (1 - pct / 100)
+                low = int(pos)
+                high = min(low + 1, len(values) - 1)
+                self._cutoffs[key] = values[low] + (values[high] - values[low]) * (pos - low)
+        return self._cutoffs[key]
+
+    def _in_top(self, item: MediaItemRef, q: PoolQuery) -> bool:
+        if q.popularity_top_pct is None:
+            return True
+        cutoff = self._cutoff(q)
+        return cutoff is not None and item.popularity is not None and item.popularity >= cutoff
 
     def matches(self, item: MediaItemRef, q: PoolQuery) -> bool:
         """Подходит ли единица под запрос (та же семантика ждётся от SQL-адаптера game)."""
@@ -224,6 +261,7 @@ class FakeCandidatePort:
             not q.genres_any or bool(q.genres_any & set(item.genres)),
             q.year_from is None or (item.year is not None and item.year >= q.year_from),
             q.year_to is None or (item.year is not None and item.year <= q.year_to),
+            self._in_top(item, q),
             q.min_popularity is None
             or (item.popularity is not None and item.popularity >= q.min_popularity),
             item.id not in q.exclude_ids,

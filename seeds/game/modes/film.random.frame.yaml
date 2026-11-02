@@ -48,6 +48,9 @@ source:
       - id: animation
         title_i18n: modes.presets.animation
         filters: { genres_any: [мультфильм] }
+      - id: hits
+        title_i18n: modes.presets.hits
+        filters: { popularity_top_pct: 20 }
 clue:
   type: frame_progressive
   params:

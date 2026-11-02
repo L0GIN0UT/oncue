@@ -529,6 +529,8 @@ def _pool_filter(query: PoolQuery) -> list[Any]:
         conditions.append(c.year <= query.year_to)
     if query.min_popularity is not None:
         conditions.append(c.popularity >= query.min_popularity)
+    if query.popularity_top_pct is not None:
+        conditions.append(c.popularity >= _top_cutoff(query))
     if query.exclude_ids:
         conditions.append(c.media_item_id.not_in(sorted(query.exclude_ids)))
     if query.playable_for is not None:
@@ -538,6 +540,34 @@ def _pool_filter(query: PoolQuery) -> list[Any]:
     if query.has_metric is not None:
         conditions.append(c.metrics.has_key(query.has_metric))
     return conditions
+
+
+def _top_cutoff(query: PoolQuery) -> Any:
+    """Граница ``popularity_top_pct`` (ADR 0074): ``percentile_cont(1 - pct/100)`` популярности
+    активных единиц домена, видов, жанров и лет запроса. Играбельность и исключения в расчёт
+    не входят - граница не «плавает» от готовности ассетов. Семантика -
+    ``gv_testkit.game.FakeCandidatePort._cutoff``."""
+    base = catalog_items.alias("pool_pop")
+    c = base.c
+    conditions: list[Any] = [
+        c.domain == query.domain,
+        c.status == str(ItemStatus.ACTIVE),
+        c.popularity.is_not(None),
+    ]
+    if query.kinds:
+        conditions.append(c.kind.in_(sorted(query.kinds)))
+    if query.genres_any:
+        conditions.append(c.genres.overlap(sorted(query.genres_any)))
+    if query.year_from is not None:
+        conditions.append(c.year >= query.year_from)
+    if query.year_to is not None:
+        conditions.append(c.year <= query.year_to)
+    fraction = 1 - (query.popularity_top_pct or 100.0) / 100
+    return (
+        select(func.percentile_cont(fraction).within_group(c.popularity))
+        .where(*conditions)
+        .scalar_subquery()
+    )
 
 
 def _scope_filter(scope: UUID | None) -> Any:

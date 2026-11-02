@@ -169,6 +169,8 @@ features: { share: true }
 
 Source `collection` (`register_collection`) подключается в game на этапе 3. Розыгрыш детерминирован: кандидаты сортируются по `id`, затем `SeededRandom(seed).sample`.
 
+**Популярность** ([ADR 0074](adr/0074-source-popularity-bias.md)). В `pool` (и в `filters` пресета) `popularity_top_pct` (1–100) оставляет верхние N% по популярности внутри домена, видов, жанров и лет запроса (границу считает адаптер порта, у единиц без популярности порога нет); `popularity_weight` (`none` | `sqrt` | `log`) задаёт веса `daily` и `random` по процентильному рангу: популярные выпадают чаще, малоизвестные не исчезают. Популярность единицы — `metrics.popularity`, иначе `metrics.listens`.
+
 ### 5.1a. Плагины ядра этапа 3a
 
 Тоже регистрирует `register_builtin` ([ADR 0023](adr/0023-round-draw-answer-formats-end-rules.md), [0026](adr/0026-reveal-with-other-clue-type.md), [0027](adr/0027-period-sets-preference-modes-records.md); план — [stage-3a](plans/stage-3a.md) §4). Параметры — `contracts/clues/<key>.params.v1.json` и `contracts/modes/params/<вид>.<key>.v1.json`.

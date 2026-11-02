@@ -207,3 +207,50 @@ async def test_0007_skips_index_without_pg_trgm(database_url: str) -> None:
         assert await _index_def(engine) is None
     finally:
         await engine.dispose()
+
+
+async def test_0009_backfills_popularity_from_listens_keeping_both_scales(
+    database_url: str,
+) -> None:
+    """0009 (expand-only): популярность треков из ``listens``; фильмы с дробной популярностью
+    и строки с уже заполненной популярностью не меняются, нечисловой ``listens`` пропускается."""
+    path = DEFINITION.migrations_path
+    assert path is not None
+    await asyncio.to_thread(run_migrations, path, database_url, "0008")
+    track, film, filled, broken, bare = (uuid7() for _ in range(5))
+    rows = [
+        (track, "music", "track", '{"listens": 987654}', None),
+        (film, "film", "film", '{"popularity": 123.456}', 123.456),
+        (filled, "music", "track", '{"listens": 5}', 42.5),
+        (broken, "music", "track", '{"listens": "many"}', None),
+        (bare, "music", "track", "{}", None),
+    ]
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as conn:
+            for item_id, domain, kind, metrics, popularity in rows:
+                await conn.execute(
+                    text(
+                        "INSERT INTO catalog_items (media_item_id, domain, kind, status, "
+                        "version, title, metrics, popularity) VALUES (:id, :d, :k, 'active', "
+                        "1, 'x', CAST(:m AS jsonb), :p)"
+                    ),
+                    {"id": item_id, "d": domain, "k": kind, "m": metrics, "p": popularity},
+                )
+        await asyncio.to_thread(run_migrations, path, database_url)
+        async with engine.connect() as conn:
+            found = {
+                r.media_item_id: r.popularity
+                for r in await conn.execute(
+                    text("SELECT media_item_id, popularity FROM catalog_items")
+                )
+            }
+    finally:
+        await engine.dispose()
+    assert found == {
+        track: 987654.0,
+        film: 123.456,
+        filled: 42.5,
+        broken: None,
+        bare: None,
+    }

@@ -166,9 +166,17 @@ def _parse[M: BaseModel](model: type[M], payload: dict[str, Any]) -> M:
         ) from exc
 
 
+POPULARITY_METRICS = ("popularity", "listens")
+"""Метрики каталога, из которых берётся популярность единицы, по приоритету (ADR 0074):
+у фильмов ``popularity``, у треков ``listens`` (ранг Deezer)."""
+
+
 def _popularity(metrics: dict[str, Any] | None) -> float | None:
-    value = (metrics or {}).get("popularity")
-    return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+    for name in POPULARITY_METRICS:
+        value = (metrics or {}).get(name)
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            return float(value)
+    return None
 
 
 def _collection_snapshot(p: _CollectionPayload, at: datetime) -> CollectionSnapshot:

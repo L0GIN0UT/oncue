@@ -91,3 +91,26 @@ def test_music_genre_presets_use_catalog_genres() -> None:
     assert presets["rnb"]["filters"]["genres_any"] == ["rnb"]
     for key in ("pop", "rock", "alternative", "electronic"):
         assert presets[key]["filters"]["genres_any"]
+
+
+# ----------------------------------------------------------------------------- популярность
+@pytest.mark.parametrize(
+    "key", ["music.daily.classic", "film.daily.frame", "music.duel.classic", "film.duel.frame"]
+)
+def test_daily_and_duel_seeds_use_top_part_with_weights(key: str) -> None:
+    """Пункт 32: дейлики и дуэли по умолчанию берут верхние 30% и взвешивают по рангу."""
+    pool = _seed(key)["source"]["params"]["pool"]
+    assert pool["popularity_top_pct"] == 30
+    assert pool["popularity_weight"] == "sqrt"
+    assert pool["min_playable"] >= _seed(key)["session"]["rounds"]
+
+
+def test_daily_keeps_exclude_recent_days_with_top_pool() -> None:
+    assert _seed("music.daily.classic")["source"]["params"]["exclude_recent_days"] >= 1
+
+
+@pytest.mark.parametrize("key", ["music.random.classic", "film.random.frame"])
+def test_hits_preset_is_top_twenty_percent(key: str) -> None:
+    presets = {p["id"]: p for p in _seed(key)["source"]["params"]["presets"]}
+    assert presets["hits"]["filters"] == {"popularity_top_pct": 20}
+    assert presets["hits"]["title_i18n"] == "modes.presets.hits"

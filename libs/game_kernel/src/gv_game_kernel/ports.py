@@ -73,6 +73,9 @@ class PoolQuery:
         year_from: Год не раньше.
         year_to: Год не позже.
         min_popularity: Популярность не ниже.
+        popularity_top_pct: Только верхние N% по популярности среди единиц домена, вида, жанров
+            и лет запроса (ADR 0074); границу считает адаптер порта, единицы без популярности
+            в такую выборку не входят.
         playable_for: Только единицы с готовыми ассетами под параметры загадки.
         exclude_ids: Исключить единицы (например, из недавних наборов дня).
         person_ids_any: Хотя бы одна из персон (марафон и сетка по персоне; пусто — без
@@ -86,6 +89,7 @@ class PoolQuery:
     year_from: int | None = None
     year_to: int | None = None
     min_popularity: float | None = None
+    popularity_top_pct: float | None = None
     playable_for: PlayableFor | None = None
     exclude_ids: frozenset[UUID] = frozenset()
     person_ids_any: frozenset[UUID] = frozenset()

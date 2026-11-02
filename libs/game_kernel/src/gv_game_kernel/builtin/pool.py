@@ -26,6 +26,7 @@ MIN_PLAYABLE_BELOW_ROUNDS = "config.min_playable_below_rounds"
 Genre = Annotated[str, Field(min_length=1, max_length=64)]
 Kind = Literal["track", "film"]
 Year = Annotated[StrictInt, Field(ge=1800, le=2100)]
+PopularityWeight = Literal["none", "sqrt", "log"]
 
 _UNIQUE = {"uniqueItems": True}
 
@@ -62,13 +63,15 @@ class PoolFilters(PluginParams):
         | None
     ) = None
     min_popularity: Annotated[StrictFloat, Field(ge=0)] | None = None
+    popularity_top_pct: Annotated[StrictFloat, Field(ge=1, le=100)] | None = None
     years: YearRange | None = None
 
 
 class PoolParams(PoolFilters):
-    """Пул источника (``pool.v1.json``): фильтры и минимум играбельных единиц."""
+    """Пул источника (``pool.v1.json``): фильтры, веса выборки и минимум играбельных единиц."""
 
     min_playable: Annotated[StrictInt, Field(ge=1, le=100000)] | None = None
+    popularity_weight: PopularityWeight = "none"
 
 
 def _years(f: PoolFilters) -> tuple[int | None, int | None]:
@@ -90,7 +93,7 @@ def _max[N: (int, float)](a: N | None, b: N | None) -> N | None:
     return max(values) if values else None
 
 
-def _min(a: int | None, b: int | None) -> int | None:
+def _min[N: (int, float)](a: N | None, b: N | None) -> N | None:
     """Наименьшая из заданных границ."""
     values = [v for v in (a, b) if v is not None]
     return min(values) if values else None
@@ -135,6 +138,7 @@ def build_query(
         year_from=_max(pf, ef),
         year_to=_min(pt, et),
         min_popularity=_max(pool.min_popularity, f.min_popularity),
+        popularity_top_pct=_min(pool.popularity_top_pct, f.popularity_top_pct),
         playable_for=playable_for,
     )
 
