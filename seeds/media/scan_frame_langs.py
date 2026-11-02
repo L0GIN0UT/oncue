@@ -81,6 +81,9 @@ def process(
         return result | {"status": "ok"}
     fixed = root / "tmdb-fixed" / folder
     poster = root / "tmdb" / folder / "poster.jpg"
+    base = (root / "tmdb-fixed").resolve()
+    if base not in fixed.resolve().parents:  # пустая папка или «..» в каталоге: не выходим из base
+        raise ValueError(f"недопустимая папка фильма: {folder!r}")
     # собранное прошлым запуском не считаем: набираем заново в пустой папке
     shutil.rmtree(fixed, ignore_errors=True)
     frames = ft.collect_frames(backdrops, fixed, min_vote=min_vote, poster=poster)
@@ -130,7 +133,9 @@ def api_backdrops(media: str, mid: str) -> list[dict[str, Any]] | None:
     return images.get("backdrops") if images else None
 
 
-def scan(root: Path, *, limit: int | None, workers: int, min_vote: float) -> None:
+def scan(
+    root: Path, *, limit: int | None, workers: int, min_vote: float, fresh: bool = False
+) -> None:
     ft.ROOT = root
     catalog = root / "tmdb" / "catalog-films.jsonl"
     rows = [
@@ -139,7 +144,7 @@ def scan(root: Path, *, limit: int | None, workers: int, min_vote: float) -> Non
     if limit:
         rows = rows[:limit]
     state_path = root / "tmdb-fixed" / STATE_NAME
-    results = load_state(state_path)
+    results = {} if fresh else load_state(state_path)
     todo = [r for r in rows if r["key"] not in results]
     print(f"фильмов {len(rows)}, уже проверено {len(rows) - len(todo)}, осталось {len(todo)}")
     lock = threading.Lock()
@@ -148,7 +153,10 @@ def scan(root: Path, *, limit: int | None, workers: int, min_vote: float) -> Non
     def work(row: dict[str, Any]) -> None:
         try:
             result = process(row, root=root, get_backdrops=api_backdrops, min_vote=min_vote)
-        except OSError as exc:  # диск или сеть: фильм повторится при следующем запуске
+        except (
+            OSError,
+            ValueError,
+        ) as exc:  # диск, сеть или папка вне корня: фильм повторится при следующем запуске
             print(f"{row['key']}: пропущен ({type(exc).__name__})", flush=True)
             return
         with lock:
@@ -176,9 +184,20 @@ def main() -> None:
     )
     ap.add_argument("--limit", type=int, default=None, help="проверить только первые N фильмов")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument(
+        "--fresh",
+        action="store_true",
+        help="игнорировать scan-state.json (нужно после смены --frame-min-vote)",
+    )
     ap.add_argument("--frame-min-vote", type=float, default=ft.FRAME_MIN_VOTE)
     args = ap.parse_args()
-    scan(args.root, limit=args.limit, workers=args.workers, min_vote=args.frame_min_vote)
+    scan(
+        args.root,
+        limit=args.limit,
+        workers=args.workers,
+        min_vote=args.frame_min_vote,
+        fresh=args.fresh,
+    )
 
 
 if __name__ == "__main__":

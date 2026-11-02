@@ -213,7 +213,13 @@ def repeats_poster(frame: Path, poster: Path, distance: int = POSTER_HASH_DISTAN
 def collect_frames(
     backdrops: list[dict[str, Any]], folder: Path, *, min_vote: float, poster: Path
 ) -> list[str] | None:
-    """Скачать шесть кадров `frame-1..6.jpg` в `folder`; None - набрать не удалось."""
+    """Скачать шесть кадров `frame-1..6.jpg` в `folder`; None - набрать не удалось.
+
+    Кадры прошлых запусков удаляются: `download` не перекачивает существующий файл, и чужой кадр
+    (с языком, из другого выбора) был бы принят без проверки.
+    """
+    for old in folder.glob("frame-*.jpg"):
+        old.unlink()
 
     def accept(backdrop: dict[str, Any], position: int) -> bool:
         dest = folder / f"frame-{position}.jpg"

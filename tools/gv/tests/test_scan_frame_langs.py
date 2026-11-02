@@ -166,3 +166,32 @@ class TestScan:
         # повторный запуск возобновляется и не запрашивает проверенное
         monkeypatch.setattr(scan, "api_backdrops", lambda *_: pytest.fail("повторный запрос"))
         scan.scan(tmp_path, limit=None, workers=2, min_vote=5.0)
+
+
+class TestSafety:
+    def test_folder_outside_fixed_root_is_refused(
+        self, scan: ModuleType, tmp_path: Path, fake_download: list[Path]
+    ) -> None:
+        keep = tmp_path / "tmdb-fixed" / "scan-state.json"
+        keep.parent.mkdir()
+        keep.write_text("{}", encoding="utf-8")
+        backdrops = [*_clean(5), _b("/en.jpg", "en", 8.0)]
+        for bad in ("", "..", "../tmdb"):
+            row = _row(5) | {"folder": bad}
+            with pytest.raises(ValueError, match="недопустимая папка"):
+                scan.process(row, root=tmp_path, get_backdrops=lambda *_: backdrops, min_vote=5.0)
+        assert keep.is_file()
+
+    def test_collect_frames_drops_stale_frames_of_previous_runs(
+        self, scan: ModuleType, tmp_path: Path, fake_download: list[Path]
+    ) -> None:
+        folder = tmp_path / "film"
+        folder.mkdir()
+        (folder / "frame-1.jpg").write_bytes(b"old-with-text")
+        (folder / "poster.jpg").write_bytes(b"poster")
+        frames = scan.ft.collect_frames(
+            _clean(6), folder, min_vote=5.0, poster=folder / "poster.jpg"
+        )
+        assert frames == [f"frame-{i}.jpg" for i in range(1, 7)]
+        assert (folder / "frame-1.jpg").read_bytes() == b"jpg"  # перекачан, не старый
+        assert (folder / "poster.jpg").read_bytes() == b"poster"
