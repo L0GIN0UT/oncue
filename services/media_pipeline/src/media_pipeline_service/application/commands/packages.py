@@ -424,7 +424,10 @@ class ProcessPackage:
             )
         except Exception as exc:
             # Один файл не должен ронять пакет; причину видно в логе, клиенту - без деталей.
-            log.exception(
+            # Трассировка - только пока ошибок меньше `keep_errors`: архив из тысяч падающих
+            # файлов не должен породить тысячи трассировок, остальное видно в счётчике.
+            write = log.exception if package.failed < self._keep_errors else log.warning
+            write(
                 "package.file_crashed",
                 package_id=str(package.id),
                 key=item.key,

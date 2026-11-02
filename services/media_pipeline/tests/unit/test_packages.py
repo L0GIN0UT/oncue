@@ -537,3 +537,25 @@ async def test_dependency_outage_is_logged_before_retry(with_film: Any) -> None:
         await media.process_package.execute(submitted.package_id)
     (retry,) = _events(logs, "package.retry")
     assert retry["error_type"] == "DependencyUnavailableError"
+
+
+async def test_file_crash_tracebacks_are_capped_by_keep_errors(with_film: Any) -> None:
+    from structlog.testing import capture_logs
+
+    media = with_film
+    keep = media.process_package._keep_errors
+    count = keep + 3
+    files = {f"{i}.jpg": JPEG + bytes([i]) for i in range(count)}
+    entries = [{"role": "frame", "path": p, "position": n + 1} for n, p in enumerate(files)]
+    submitted = await submit(media, zip_of(files, doc(film(entries))))
+
+    async def boom(*_: Any, **__: Any) -> None:
+        raise ValueError("сбой на файле")
+
+    media.process_package._upload.execute = boom
+    with capture_logs() as logs:
+        await media.process_package.execute(submitted.package_id)
+    crashed = _events(logs, "package.file_crashed")
+    assert len(crashed) == count
+    assert sum(1 for e in crashed if e.get("exc_info")) == keep  # трассировки только до лимита
+    assert len(_events(logs, "package.file_failed")) == keep
