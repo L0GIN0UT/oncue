@@ -177,7 +177,9 @@ class FileImportProvider:
         """Строки файла; ошибка строки не прерывает чтение."""
         path = self._path(file_id)
         lines = await asyncio.to_thread(path.read_text, "utf-8")
-        for number, raw in enumerate(lines.splitlines(), start=1):
+        # Только по "\n": str.splitlines() режет и по U+2028/U+2029/U+0085, которые
+        # json.dumps(ensure_ascii=False) оставляет внутри строковых значений.
+        for number, raw in enumerate(lines.split("\n"), start=1):
             if number > self._max_lines:
                 yield ValueError(f"строка {number}: превышен лимит строк {self._max_lines}")
                 return

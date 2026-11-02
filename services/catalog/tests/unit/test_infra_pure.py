@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -182,6 +183,29 @@ async def test_file_provider_skips_comments_and_limits_lines(tmp_path: Path) -> 
     entries = [e async for e in FileImportProvider(tmp_path, max_lines=4).read("t.jsonl")]
     assert sum(not isinstance(e, ValueError) for e in entries) == 2
     assert isinstance(entries[-1], ValueError)
+
+
+@pytest.mark.parametrize("separator", [" ", " ", "\u0085", "\x0b", "\x0c", "\x1c"])
+async def test_file_provider_splits_only_on_newline(tmp_path: Path, separator: str) -> None:
+    """Юникод-разделители строк внутри значения не режут запись (описание фильма, U+2028)."""
+    first = json.dumps(
+        {"key": "a", "kind": "film", "title": f"Начало{separator}конец"}, ensure_ascii=False
+    )
+    second = json.dumps({"key": "b", "kind": "film", "title": "Второй"}, ensure_ascii=False)
+    # CRLF и пустая строка: читаем по \n, \r отбрасывается.
+    (tmp_path / "t.jsonl").write_bytes(f"{first}\r\n\n{second}\n".encode())
+    entries = [e async for e in FileImportProvider(tmp_path).read("t.jsonl")]
+    assert len(entries) == 2
+    assert not any(isinstance(e, ValueError) for e in entries)
+
+
+async def test_file_provider_line_numbers_follow_newlines(tmp_path: Path) -> None:
+    """Номер строки в ошибке считается по \\n, даже если выше есть U+2028."""
+    good = json.dumps({"key": "a", "kind": "film", "title": "A B"}, ensure_ascii=False)
+    (tmp_path / "t.jsonl").write_text(f"{good}\nне json\n", "utf-8")
+    entries = [e async for e in FileImportProvider(tmp_path).read("t.jsonl")]
+    assert isinstance(entries[1], ValueError)
+    assert "строка 2" in str(entries[1])
 
 
 @pytest.mark.parametrize(
