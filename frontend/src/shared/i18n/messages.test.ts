@@ -4,12 +4,17 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import messages from "../../../messages/ru.json";
 import { SOCIAL_ERROR_CODES, SOCIAL_EXTRA_KEYS } from "@/features/friends/errors";
 import { CHAT_REJECT_REASONS, MATCH_ERROR_CODES } from "@/features/match/errors";
 
 const root = path.resolve(import.meta.dirname, "../../..");
+
+// Тесты обходят все исходники и читают их синхронно: в полном прогоне (100+ файлов в jsdom
+// параллельно, диск и CPU заняты) они не укладываются в 5 с по умолчанию. Таймаут — запас от
+// нагрузки, а не разрешение работать медленно.
+vi.setConfig({ testTimeout: 30_000 });
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
