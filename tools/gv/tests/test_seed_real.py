@@ -50,15 +50,23 @@ from gv_cli.seed_real import (
 pytestmark = pytest.mark.unit
 
 
-def _track(n: int, genre: str, listens: int = 0) -> RealUnit:
+def _track(
+    n: int,
+    genre: str,
+    listens: int = 0,
+    *,
+    year: int | None = None,
+    artists: tuple[str, ...] = (),
+) -> RealUnit:
     return RealUnit(
         key=f"track:demo-{n}",
         domain="music",
         title=f"t{n}",
-        year=2010,
+        year=year,
         genres=(genre,),
         popularity=listens,
         audio=Path(f"{n:06d}.mp3"),
+        artists=artists,
     )
 
 
@@ -1415,6 +1423,242 @@ class TestAssetsDisabled:
         seeder = _waiting_seeder({"a": [_sets("disabled")]}, stall_s=0.05)
         with pytest.raises(SeedError, match="нет прогресса"):
             seeder._wait_unit_assets({"k:a": "a"})
+
+
+def _keys(spec: CollectionSpec) -> list[str]:
+    return [i.seed_key for i in spec.items]
+
+
+def _by_key(units: list[RealUnit], **kwargs: Any) -> dict[str, CollectionSpec]:
+    return {s.key: s for s in music_collections(units, **kwargs)}
+
+
+class TestMusicArtistLimit:
+    def test_top_limits_tracks_per_artist(self) -> None:
+        units = [_track(i, "pop", listens=1000 - i, artists=("Star",)) for i in range(10)]
+        units += [_track(100 + i, "pop", listens=i, artists=(f"A{i}",)) for i in range(30)]
+        top = _by_key(units, min_size=5, max_size=20)["real-music-top"]
+        star = [k for k in _keys(top) if int(k.rsplit("-", 1)[1]) < 100]
+        assert len(star) == seed_real.MAX_TRACKS_PER_ARTIST_TOP == 2
+        assert star == ["track:demo-0", "track:demo-1"]  # остаются самые популярные
+
+    def test_other_collections_use_general_limit(self) -> None:
+        units = [_track(i, "rock", listens=100 - i, artists=("Band",)) for i in range(10)]
+        units += [_track(100 + i, "rock", listens=i, artists=(f"B{i}",)) for i in range(30)]
+        rock = _by_key(units, min_size=5, max_size=50)["real-music-rock"]
+        band = [k for k in _keys(rock) if int(k.rsplit("-", 1)[1]) < 100]
+        assert len(band) == seed_real.MAX_TRACKS_PER_ARTIST == 3
+
+    def test_limits_are_parameters(self) -> None:
+        units = [_track(i, "rock", listens=100 - i, artists=("Band",)) for i in range(10)]
+        units += [_track(100 + i, "rock", listens=i, artists=(f"B{i}",)) for i in range(30)]
+        specs = _by_key(units, min_size=5, max_size=50, max_per_artist=1, max_per_artist_top=1)
+        for key in ("real-music-rock", "real-music-top"):
+            band = [k for k in _keys(specs[key]) if int(k.rsplit("-", 1)[1]) < 100]
+            assert len(band) == 1
+
+    def test_any_artist_of_a_track_counts_and_names_ignore_case(self) -> None:
+        units = [_track(i, "pop", listens=100 - i, artists=("Star", "Guest")) for i in range(3)]
+        units += [_track(10 + i, "pop", listens=50 - i, artists=("STAR",)) for i in range(3)]
+        units += [_track(20 + i, "pop", listens=i, artists=(f"A{i}",)) for i in range(30)]
+        top = _by_key(units, min_size=5, max_size=10)["real-music-top"]
+        assert len([k for k in _keys(top) if int(k.rsplit("-", 1)[1]) < 20]) == 2
+
+    def test_tracks_without_artists_are_not_limited(self) -> None:
+        units = [_track(i, "pop", listens=i) for i in range(30)]
+        assert len(_by_key(units, min_size=5, max_size=30)["real-music-top"].items) == 30
+
+    def test_collection_is_skipped_when_limit_leaves_too_few(self) -> None:
+        units = [_track(i, "pop", listens=i, artists=("Solo",)) for i in range(30)]
+        assert music_collections(units, min_size=5, max_size=50) == []
+
+
+class TestMusicTopDecadeShare:
+    def test_top_caps_one_decade_share(self) -> None:
+        units = [_track(i, "pop", listens=10_000 - i, year=2025) for i in range(100)]
+        units += [_track(200 + i, "pop", listens=5_000 - i, year=2015) for i in range(100)]
+        units += [_track(300 + i, "pop", listens=i, year=1995) for i in range(100)]
+        top = _by_key(units, min_size=5, max_size=50)["real-music-top"]
+        assert len(top.items) == 50
+        recent = [k for k in _keys(top) if int(k.rsplit("-", 1)[1]) < 200]
+        assert len(recent) == 17 == int(50 * seed_real.TOP_DECADE_SHARE)  # 0,34 от 50
+
+    def test_top_fills_without_quota_when_not_enough(self) -> None:
+        units = [_track(i, "pop", listens=10_000 - i, year=2025) for i in range(100)]
+        units += [_track(200 + i, "pop", listens=i, year=1995) for i in range(5)]
+        top = _by_key(units, min_size=5, max_size=50)["real-music-top"]
+        assert len(top.items) == 50  # 17 + 5 по квоте, остальное добрано без квот
+        assert sum(int(k.rsplit("-", 1)[1]) >= 200 for k in _keys(top)) == 5
+
+    def test_fill_keeps_artist_limit(self) -> None:
+        units = [
+            _track(i, "pop", listens=10_000 - i, year=2025, artists=("Star",)) for i in range(40)
+        ]
+        units += [
+            _track(100 + i, "pop", listens=i, year=2025, artists=(f"A{i}",)) for i in range(20)
+        ]
+        top = _by_key(units, min_size=5, max_size=50)["real-music-top"]
+        star = [k for k in _keys(top) if int(k.rsplit("-", 1)[1]) < 100]
+        assert len(star) == 2 and len(top.items) == 22
+
+    def test_top_is_sorted_by_popularity(self) -> None:
+        units = [_track(i, "pop", listens=i, year=1990 + i % 30) for i in range(80)]
+        top = _by_key(units, min_size=5, max_size=30)["real-music-top"]
+        listens = [int(k.rsplit("-", 1)[1]) for k in _keys(top)]
+        assert listens == sorted(listens, reverse=True)
+
+
+class TestMusicDecades:
+    def _units(self) -> list[RealUnit]:
+        years = [1965, 1979, 1980, 1989, 1990, 1999, 2000, 2009, 2010, 2019, 2020, 2026]
+        return [
+            _track(n * 100 + i, "pop", listens=i, year=year)
+            for n, year in enumerate(years)
+            for i in range(6)
+        ]
+
+    def test_decade_collections_keys_titles_and_membership(self) -> None:
+        specs = _by_key(self._units(), min_size=10, max_size=50)
+        assert [k for k in specs if k != "real-music-top" and "pop" not in k] == [
+            "real-music-pre1980",
+            "real-music-1980s",
+            "real-music-1990s",
+            "real-music-2000s",
+            "real-music-2010s",
+            "real-music-2020s",
+        ]
+        titles = {k: s.title for k, s in specs.items()}
+        assert titles["real-music-pre1980"] == "Золотой век (до 1980)"
+        assert titles["real-music-1980s"] == "Хиты 80-х"
+        assert titles["real-music-1990s"] == "Хиты 90-х"
+        assert titles["real-music-2000s"] == "2000-е"
+        assert titles["real-music-2010s"] == "2010-е"
+        assert titles["real-music-2020s"] == "2020-е"
+        assert all(s.key.isascii() for s in specs.values())
+        assert all(s.default_mode_key == "music.collection.intro" for s in specs.values())
+
+    def test_boundaries_belong_to_exactly_one_decade(self) -> None:
+        specs = _by_key(self._units(), min_size=10, max_size=50)
+        assert len(specs["real-music-pre1980"].items) == 12  # 1965 и 1979
+        for key in ("1980s", "1990s", "2000s", "2010s", "2020s"):
+            assert len(specs[f"real-music-{key}"].items) == 12
+        decade_keys = {f"real-music-{k}" for _s, k, _t in seed_real.MUSIC_DECADES}
+        decade_keys.add(f"real-music-{seed_real.MUSIC_PRE_KEY}")
+        members = [set(_keys(specs[k])) for k in decade_keys]
+        assert sum(len(m) for m in members) == len(set().union(*members))
+
+    def test_decade_sorted_by_popularity_and_limited_by_artist(self) -> None:
+        units = [_track(i, "pop", listens=100 - i, year=1985, artists=("Star",)) for i in range(8)]
+        units += [
+            _track(100 + i, "pop", listens=i, year=1985, artists=(f"A{i}",)) for i in range(20)
+        ]
+        keys = _keys(_by_key(units, min_size=10, max_size=50)["real-music-1980s"])
+        assert keys[:3] == ["track:demo-0", "track:demo-1", "track:demo-2"]
+        assert len([k for k in keys if int(k.rsplit("-", 1)[1]) < 100]) == 3
+        assert len(keys) == 23
+
+    def test_small_decades_and_unknown_years_are_skipped(self) -> None:
+        units = [_track(i, "pop", year=1985) for i in range(9)]
+        units += [_track(100 + i, "pop", year=None) for i in range(20)]
+        units += [_track(200 + i, "pop", year=2030) for i in range(20)]
+        specs = _by_key(units, min_size=10)
+        assert "real-music-1980s" not in specs
+        assert set(specs) == {"real-music-top", "real-music-pop"}
+
+    def test_decades_go_between_top_and_genres(self) -> None:
+        units = [_track(i, "pop", year=1995) for i in range(25)]
+        assert [s.key for s in music_collections(units, min_size=20)] == [
+            "real-music-top",
+            "real-music-1990s",
+            "real-music-pop",
+        ]
+
+    def test_decade_size_is_a_parameter(self) -> None:
+        units = [_track(i, "pop", listens=i, year=1995) for i in range(40)]
+        assert len(_by_key(units, min_size=10, max_size=15)["real-music-1990s"].items) == 15
+
+
+class TestQuotaSlots:
+    def test_track_rejected_by_artist_limit_does_not_spend_decade_slot(self) -> None:
+        # Star: 10 самых популярных треков 2025 года; лимит топа 2 → 8 отклонённых не тратят слоты.
+        units = [
+            _track(i, "pop", listens=10_000 - i, year=2025, artists=("Star",)) for i in range(10)
+        ]
+        units += [
+            _track(100 + i, "pop", listens=i, year=2025, artists=(f"A{i}",)) for i in range(40)
+        ]
+        units += [
+            _track(200 + i, "pop", listens=i, year=1995, artists=(f"B{i}",)) for i in range(40)
+        ]
+        units += [
+            _track(300 + i, "pop", listens=i, year=2005, artists=(f"C{i}",)) for i in range(40)
+        ]
+        top = _by_key(units, min_size=5, max_size=50)["real-music-top"]
+        recent = [k for k in _keys(top) if int(k.rsplit("-", 1)[1]) < 200]
+        assert len(recent) == 17  # 2 Star + 15 остальных: слот тратят только взятые треки
+
+
+class TestClassicalCleanup:
+    def test_classical_is_renamed(self) -> None:
+        units = [_track(i, "classical", artists=(f"C{i}",)) for i in range(25)]
+        assert _by_key(units, min_size=20)["real-music-classical"].title == "Классическая музыка"
+
+    def test_excluded_artists_are_removed_from_genre_only(self) -> None:
+        units = [_track(i, "classical", listens=i, artists=(f"Composer {i}",)) for i in range(25)]
+        units += [
+            _track(100, "classical", listens=999, artists=("Pitbull",)),
+            _track(101, "classical", listens=998, artists=("BASTILLE",)),  # регистр не важен
+            _track(102, "classical", listens=997, artists=("Ramin Djawadi", "Orchestra")),
+        ]
+        specs = _by_key(units, min_size=20, max_size=50)
+        classical = _keys(specs["real-music-classical"])
+        assert len(classical) == 25
+        assert not {"track:demo-100", "track:demo-101", "track:demo-102"} & set(classical)
+        top = _keys(specs["real-music-top"])
+        assert "track:demo-100" in top  # в топе исполнитель остаётся
+
+    def test_decades_are_not_filtered_by_genre_exclusions(self) -> None:
+        units = [_track(i, "pop", year=1995, artists=(f"A{i}",)) for i in range(20)]
+        units += [_track(100, "classical", listens=99, year=1995, artists=("Pitbull",))]
+        assert "track:demo-100" in _keys(_by_key(units, min_size=20)["real-music-1990s"])
+
+    def test_classical_below_min_size_after_cleanup_is_skipped(self) -> None:
+        units = [_track(i, "classical", artists=(f"C{i}",)) for i in range(15)]
+        units += [_track(100 + i, "classical", artists=("Pitbull",)) for i in range(10)]
+        assert "real-music-classical" not in _by_key(units, min_size=20)
+
+    def test_exclusion_list_is_a_parameter(self) -> None:
+        units = [_track(i, "jazz", artists=(f"J{i}",)) for i in range(22)]
+        units += [_track(100, "jazz", listens=99, artists=("Pop Star",))]
+        specs = _by_key(units, min_size=20, excluded_artists={"jazz": frozenset({"pop star"})})
+        assert "track:demo-100" not in _keys(specs["real-music-jazz"])
+
+    def test_exclusion_names_are_casefolded(self) -> None:
+        excluded = seed_real.GENRE_EXCLUDED_ARTISTS["classical"]
+        assert all(name == name.casefold() for name in excluded)
+
+
+class TestTrackArtists:
+    def test_artists_are_read_from_persons(self, tmp_path: Path) -> None:
+        folder = tmp_path / "deezer"
+        (folder / "clips").mkdir(parents=True)
+        (folder / "clips" / "1.mp3").write_bytes(b"x")
+        row = {
+            "key": "track:deezer-1",
+            "kind": "track",
+            "title": "T",
+            "year": 1999,
+            "genres": ["pop"],
+            "audio": "1.mp3",
+            "persons": [
+                {"name": "Main", "role": "artist"},
+                {"name": "Writer", "role": "director"},
+                {"name": "Guest", "role": "artist"},
+            ],
+        }
+        (folder / "catalog-tracks.jsonl").write_text(json.dumps(row), encoding="utf-8")
+        (unit,) = [u for u in build_units(tmp_path) if u.domain == "music"]
+        assert unit.artists == ("Main", "Guest")
 
 
 class TestRobustRows:
