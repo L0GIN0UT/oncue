@@ -7,13 +7,14 @@ import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useDynamicT } from "@/shared/i18n/dynamic";
 import { optionForKey } from "@/features/game/answers/pick";
+import { Button } from "@/shared/ui/button";
 import type { MatchAnswerProps } from "./types";
 
 const fromField = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 
-export function PickMatchAnswer({ me, disabled, onGuess }: MatchAnswerProps) {
+export function PickMatchAnswer({ me, disabled, lastLevel, onGuess, onSkip }: MatchAnswerProps) {
   const t = useTranslations();
   const dt = useDynamicT();
   const options = useMemo(() => me?.options ?? [], [me?.options]);
@@ -32,30 +33,44 @@ export function PickMatchAnswer({ me, disabled, onGuess }: MatchAnswerProps) {
   }, [disabled, onGuess, options]);
 
   return (
-    <ul className="grid gap-2.5" aria-label={t("game.optionsLabel")}>
-      {options.map((option, i) => (
-        <li key={option.option_id}>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onGuess({ option_id: option.option_id })}
-            data-testid={`match-option-${i}`}
-            aria-keyshortcuts={String(i + 1)}
-            className="flex min-h-[68px] w-full items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-2 text-left transition-colors hover:border-rule-strong disabled:pointer-events-none disabled:opacity-45"
-          >
-            <kbd
-              aria-hidden
-              className="tabular rounded-md border-[1.5px] border-rule px-2 py-0.5 text-sm text-ink-muted"
+    <div className="flex flex-col gap-2.5">
+      <ul className="grid gap-2.5" aria-label={t("game.optionsLabel")}>
+        {options.map((option, i) => (
+          <li key={option.option_id}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onGuess({ option_id: option.option_id })}
+              data-testid={`match-option-${i}`}
+              aria-keyshortcuts={String(i + 1)}
+              className="flex min-h-[68px] w-full items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-[18px] py-2 text-left transition-colors hover:border-rule-strong disabled:pointer-events-none disabled:opacity-45"
             >
-              {i + 1}
-            </kbd>
-            <span className="font-display text-base font-medium" dir="auto">
-              {option.title ??
-                (option.label_key ? dt(option.label_key, option.option_id) : option.option_id)}
-            </span>
-          </button>
-        </li>
-      ))}
-    </ul>
+              <kbd
+                aria-hidden
+                className="tabular rounded-md border-[1.5px] border-rule px-2 py-0.5 text-sm text-ink-muted"
+              >
+                {i + 1}
+              </kbd>
+              <span className="font-display text-base font-medium" dir="auto">
+                {option.title ??
+                  (option.label_key ? dt(option.label_key, option.option_id) : option.option_id)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {lastLevel && (
+        <Button
+          variant="quiet"
+          size="sm"
+          className="self-center"
+          disabled={disabled}
+          onClick={onSkip}
+          data-testid="match-give-up"
+        >
+          {t("game.giveUp")}
+        </Button>
+      )}
+    </div>
   );
 }

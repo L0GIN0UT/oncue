@@ -9,6 +9,11 @@ export type MatchAnswerProps = {
   disabled: boolean;
   /** Можно пропустить уровень (есть следующий уровень). */
   canSkip: boolean;
+  /**
+   * Последний уровень раунда: пропуска «на следующий» нет, а `onSkip` (`/match/skip`) завершает
+   * раунд для меня — в интерфейсе это «Сдаться».
+   */
+  lastLevel: boolean;
   onGuess: (answer: MatchAnswer) => void;
   onSkip: () => void;
   /** Меняется при новом раунде или уровне: поле ответа берёт фокус. */

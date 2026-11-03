@@ -32,6 +32,21 @@ describe("ошибки сборников", () => {
     expect(errorText(t, { code: "<script>" })).toBe("Что-то пошло не так. Попробуйте ещё раз.");
   });
 
+  it("неизвестный клиенту код с текстом сервера — текст сервера; известный код — наш текст", () => {
+    const message = "Нужно минимум 5 единиц, сейчас 3";
+    expect(errorText(t, { code: "collections.something_new", message })).toBe(message);
+    expect(errorText(t, { code: "collections.items_too_few", min: 5, message: "иначе" })).toBe(
+      "Слишком мало единиц: нужно не меньше 5",
+    );
+    const e = new ApiError(422, {
+      code: "collections.publish_invalid",
+      details: { errors: [{ path: "items", code: "collections.something_new", message }] },
+    });
+    expect(fieldErrorsOf(e)).toEqual([
+      { path: "items", code: "collections.something_new", message },
+    ]);
+  });
+
   it("details.errors разбирается без доверия к форме", () => {
     const e = new ApiError(422, {
       code: "collections.publish_invalid",

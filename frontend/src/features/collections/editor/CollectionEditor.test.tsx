@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -104,6 +104,80 @@ describe("CollectionEditor", () => {
     // Ошибка эмодзи — и в строке единицы.
     const row = screen.getByTestId(`editor-item-${films[0]!.id}`);
     expect(within(row).getAllByText("Свои эмодзи: нужно не меньше 6").length).toBeGreaterThan(0);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("после отказа публикации страница прокручивается к списку причин", async () => {
+    const user = userEvent.setup();
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    onTestFinished(() => {
+      // jsdom не реализует scrollIntoView: возвращаем как было, чтобы мок не тек в другие тесты.
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    });
+    const c = playerDraft(2, null);
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={30} />);
+    expect(scroll).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId("editor-publish"));
+    const errors = await screen.findByTestId("editor-errors");
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts.at(-1)).toBe(errors);
+  });
+
+  it("«Удалить» в редакторе: сначала подтверждение, потом DELETE и возврат в «Мои сборники»", async () => {
+    const user = userEvent.setup();
+    const c = playerDraft();
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={30} />);
+    await user.click(screen.getByTestId("editor-delete"));
+    expect(c.status).toBe("draft"); // без подтверждения ничего не удалено
+    await user.click(screen.getByTestId("editor-delete-confirm"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/me/collections"));
+    expect(c.status).toBe("deleted");
+  });
+
+  it("правка и сразу «Удалить»: автосохранение не идёт, локальной копии не остаётся", async () => {
+    const user = userEvent.setup();
+    const c = playerDraft();
+    const saves = recordSaves();
+    // DELETE «висит»: за это время успевает сработать таймер автосохранения.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.delete("*/api/collections/v1/collections/:id", async () => {
+        await gate;
+        c.status = "deleted";
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={250} />);
+    await user.type(screen.getByTestId("editor-title"), "!");
+    await user.click(screen.getByTestId("editor-delete"));
+    await user.click(screen.getByTestId("editor-delete-confirm"));
+    await new Promise((r) => setTimeout(r, 450));
+    release();
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/me/collections"));
+    expect(saves).toEqual([]);
+    expect(localStorage.getItem(`gv:collection-draft:${c.id}`)).toBeNull();
+  });
+
+  it("предупреждение называет сборник; «Отмена» возвращает кнопку", async () => {
+    const user = userEvent.setup();
+    const c = playerDraft();
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={30} />);
+    await user.click(screen.getByTestId("editor-delete"));
+    expect(screen.getByTestId("editor-delete-warning")).toHaveTextContent(
+      "Удалить сборник «Мой сборник»?",
+    );
+  });
+
+  it("«Удалить» можно отменить", async () => {
+    const user = userEvent.setup();
+    const c = playerDraft();
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={30} />);
+    await user.click(screen.getByTestId("editor-delete"));
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.getByTestId("editor-delete")).toBeInTheDocument();
+    expect(c.status).toBe("draft");
     expect(push).not.toHaveBeenCalled();
   });
 

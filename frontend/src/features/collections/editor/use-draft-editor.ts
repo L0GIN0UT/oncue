@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isApiError } from "@/shared/api/errors";
 import type { DraftOut } from "@/shared/api/types";
 import { newIdempotencyKey } from "@/shared/lib/id";
-import { publishDraft, saveDraft } from "../api";
+import { deleteCollection, publishDraft, saveDraft } from "../api";
 import { fieldErrorsOf } from "../errors";
 import { draftReducer, initDraft, isDirty, type DraftAction, type DraftState } from "./draft";
 import { clearLocalCopy, deviceLabel, readLocalCopy, writeLocalCopy } from "./local-copy";
@@ -41,6 +41,9 @@ export function useDraftEditor(draft: DraftOut, debounceMs = AUTOSAVE_DEBOUNCE_M
   const [lastError, setLastError] = useState<unknown>(null);
   const [retryAt, setRetryAt] = useState(0);
 
+  // Сборник удаляется: автосохранение и запись локальной копии больше ничего не делают.
+  const deleted = useRef(false);
+
   const dispatch = useCallback((a: DraftAction) => {
     ref.current = draftReducer(ref.current, a);
     setState(ref.current);
@@ -50,7 +53,7 @@ export function useDraftEditor(draft: DraftOut, debounceMs = AUTOSAVE_DEBOUNCE_M
   const save = useCallback(async (): Promise<boolean> => {
     while (pending.current) await pending.current;
     const s = ref.current;
-    if (s.conflict) return false;
+    if (deleted.current || s.conflict) return false;
     if (!isDirty(s)) return true;
     dispatch({ type: "saveStarted" });
     label.current ||= deviceLabel();
@@ -98,6 +101,7 @@ export function useDraftEditor(draft: DraftOut, debounceMs = AUTOSAVE_DEBOUNCE_M
 
   // Локальная копия: есть несохранённое — пишем, всё на сервере — удаляем.
   useEffect(() => {
+    if (deleted.current) return;
     if (isDirty(state) || state.conflict)
       writeLocalCopy(id, { body: state.body, baseRevision: state.revision });
     else clearLocalCopy(id);
@@ -142,5 +146,21 @@ export function useDraftEditor(draft: DraftOut, debounceMs = AUTOSAVE_DEBOUNCE_M
     }
   }, [dispatch, id, save]);
 
-  return { state, dispatch, save, publish, keepMine, takeTheirs, lastError };
+  /**
+   * Удалить сборник: дождаться идущего сохранения, остановить автосохранение, `DELETE` и очистка
+   * локальной копии. При ошибке автосохранение возобновляется, ошибка летит вызывающему.
+   */
+  const remove = useCallback(async () => {
+    while (pending.current) await pending.current;
+    deleted.current = true;
+    try {
+      await deleteCollection(id);
+    } catch (e) {
+      deleted.current = false;
+      throw e;
+    }
+    clearLocalCopy(id);
+  }, [id]);
+
+  return { state, dispatch, save, publish, keepMine, takeTheirs, remove, lastError };
 }

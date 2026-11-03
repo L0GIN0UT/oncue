@@ -898,6 +898,7 @@
       "likes": "{count, plural, one {# лайк} few {# лайка} other {# лайков}}",
       "delete": "Удалить",
       "deleteConfirm": "Да, удалить",
+      "deleteWarning": "Удалить сборник «{title}»? Это нельзя отменить: пропадут и страница сборника, и лайки.",
       "cancel": "Отмена"
     },
     "editor": {
