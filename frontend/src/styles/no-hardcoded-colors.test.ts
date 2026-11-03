@@ -6,7 +6,12 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Тест обходит все исходники и читает их синхронно: в полном прогоне (100+ файлов в jsdom
+// параллельно, диск и CPU заняты) он не укладывается в 5 с по умолчанию. Таймаут — запас от
+// нагрузки, а не разрешение работать медленно.
+vi.setConfig({ testTimeout: 30_000 });
 
 const srcDir = path.resolve(import.meta.dirname, "..");
 
