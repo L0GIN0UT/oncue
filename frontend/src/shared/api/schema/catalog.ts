@@ -182,6 +182,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/stats/easiest-content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Самые угадываемые единицы
+         * @description Единицы с наибольшей долей точных ответов при показах не меньше порога (по умолчанию GV_STATS__REPORT_MIN_SHOWN). Статистика не используется в подборе.
+         */
+        get: operations["easiest_content_admin_v1_stats_easiest_content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/autocomplete": {
         parameters: {
             query?: never;
@@ -463,6 +483,62 @@ export interface components {
             status: "draft" | "approved";
             /** Tagline */
             tagline: string | null;
+        };
+        /**
+         * DifficultyOut
+         * @description Единица в режиме: сколько раз показана и как часто угадана.
+         */
+        DifficultyOut: {
+            /**
+             * Avg Time Ms
+             * @description Среднее время точного ответа
+             */
+            avg_time_ms: number | null;
+            domain: components["schemas"]["MediaDomain"];
+            /** Exact */
+            exact: number;
+            /**
+             * Exact By Level
+             * @description Точные ответы по уровням: {уровень: число}
+             */
+            exact_by_level: {
+                [key: string]: number;
+            };
+            /**
+             * Exact Rate
+             * @description Доля точных ответов: exact / shown
+             */
+            exact_rate: number;
+            /** Gave Up */
+            gave_up: number;
+            /**
+             * Media Item Id
+             * Format: uuid
+             */
+            media_item_id: string;
+            /**
+             * Median Time Ms
+             * @description Приближённая медиана (по корзинам гистограммы, точность - полширины корзины); для ответов дольше последней корзины - её середина, то есть оценка снизу
+             */
+            median_time_ms: number | null;
+            /** Miss */
+            miss: number;
+            /** Mode Key */
+            mode_key: string;
+            /** Partial */
+            partial: number;
+            /** Shown */
+            shown: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * DifficultyReport
+         * @description Отчёт «самые лёгкие единицы».
+         */
+        DifficultyReport: {
+            /** Items */
+            items: components["schemas"]["DifficultyOut"][];
         };
         /**
          * ImportCounters
@@ -1490,6 +1566,61 @@ export interface operations {
             };
             /** @description Зависимость временно недоступна */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    easiest_content_admin_v1_stats_easiest_content_get: {
+        parameters: {
+            query?: {
+                domain?: components["schemas"]["MediaDomain"] | null;
+                limit?: number | null;
+                min_shown?: number | null;
+                mode_key?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DifficultyReport"];
+                };
+            };
+            /** @description Не аутентифицирован */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректные данные */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
