@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { Bookmark } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useSessionInfo } from "@/features/auth/session";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
@@ -99,6 +100,14 @@ export function SiteHeader() {
             >
               <Verses aria-hidden className="size-4 text-music" />
               <span className="tabular">{balance != null ? f.number(balance) : "—"}</span>
+            </Link>
+            <Link
+              href="/library"
+              data-testid="nav-library"
+              aria-label={t("nav.library")}
+              className="grid size-10 flex-none place-items-center rounded-full border-[1.5px] border-rule bg-stage text-ink-muted transition-colors hover:border-rule-strong hover:text-ink"
+            >
+              <Bookmark aria-hidden className="size-[22px]" />
             </Link>
             <Link
               href="/leaderboards"

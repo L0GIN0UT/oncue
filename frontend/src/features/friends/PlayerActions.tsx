@@ -5,7 +5,7 @@
  * подаётся только из матча (`context_match_id`), в профиле её нет.
  */
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { PlayerSocialCard } from "@/shared/api/types";
 import { Button } from "@/shared/ui/button";
@@ -13,21 +13,36 @@ import { playerQueryKey } from "@/features/progression/api";
 import { AddFriendButton } from "./AddFriendButton";
 import { ErrorLine } from "./ErrorLine";
 import { useSocialAction } from "./use-action";
-import { blockPlayer, friendsKeys, removeFriend, unblockPlayer } from "./api";
+import {
+  acceptRequest,
+  blockPlayer,
+  declineRequest,
+  friendsKeys,
+  removeFriend,
+  requestsQueryOptions,
+  unblockPlayer,
+} from "./api";
 
 export function PlayerActions({ userId, social }: { userId: string; social: PlayerSocialCard }) {
   const t = useTranslations();
   const client = useQueryClient();
   const action = useSocialAction();
   const [confirmBlock, setConfirmBlock] = useState(false);
+  // Игрок сам прислал заявку: вместо «Добавить» — «Принять» и «Отклонить» (id заявки — из списка).
+  const requests = useQuery({
+    ...requestsQueryOptions,
+    enabled: !social.is_friend && !social.blocked_by_me,
+  });
+  const incoming = requests.data?.incoming.find((r) => r.user_id === userId) ?? null;
 
-  const run = async (scope: string, fn: () => Promise<void>) => {
+  const run = async (scope: string, fn: (key: string) => Promise<void>) => {
     const r = await action.run(scope, fn);
     if (!r.ok) return;
     setConfirmBlock(false);
     await Promise.all([
       client.invalidateQueries({ queryKey: playerQueryKey(userId) }),
       client.invalidateQueries({ queryKey: friendsKeys.list }),
+      client.invalidateQueries({ queryKey: friendsKeys.requests }),
       client.invalidateQueries({ queryKey: friendsKeys.blocks }),
     ]);
   };
@@ -68,7 +83,35 @@ export function PlayerActions({ userId, social }: { userId: string; social: Play
                 </Button>
               </>
             )}
-            {!social.is_friend && social.can_send_request && (
+            {!social.is_friend && incoming && (
+              <>
+                <span className="text-sm text-ink-muted" data-testid="player-requested-you">
+                  {t("social.player.requestedYou")}
+                </span>
+                <Button
+                  size="sm"
+                  disabled={action.busy}
+                  onClick={() =>
+                    void run(`accept:${incoming.id}`, (key) => acceptRequest(incoming.id, key))
+                  }
+                  data-testid="player-accept-request"
+                >
+                  {t("social.requests.accept")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={action.busy}
+                  onClick={() =>
+                    void run(`decline:${incoming.id}`, (key) => declineRequest(incoming.id, key))
+                  }
+                  data-testid="player-decline-request"
+                >
+                  {t("social.requests.decline")}
+                </Button>
+              </>
+            )}
+            {!social.is_friend && !incoming && !requests.isPending && social.can_send_request && (
               <AddFriendButton userId={userId} testId="player-add-friend" />
             )}
             {confirmBlock ? (

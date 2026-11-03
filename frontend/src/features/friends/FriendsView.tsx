@@ -26,20 +26,17 @@ import {
   cancelRequest,
   declineRequest,
   fetchFriends,
-  fetchRequests,
   friendsKeys,
   removeFriend,
+  requestsQueryOptions,
 } from "./api";
 
 export function FriendsView({ initialTab = "friends" }: { initialTab?: TabId }) {
   const t = useTranslations();
   const viewer = useViewer();
   const [tab, setTab] = useState<TabId>(initialTab);
-  const requests = useQuery({
-    queryKey: friendsKeys.requests,
-    queryFn: fetchRequests,
-    enabled: viewer.kind === "user",
-  });
+  // Счётчик на вкладке и список заявок обновляются раз в период (новые — без перезагрузки).
+  const requests = useQuery({ ...requestsQueryOptions, enabled: viewer.kind === "user" });
 
   if (!viewer.pending && viewer.kind !== "user")
     return <ProfileGate variant={viewer.kind === "guest" ? "guest" : "login"} />;
@@ -204,7 +201,7 @@ function RequestsPanel() {
   const f = useFormatter();
   const client = useQueryClient();
   const action = useSocialAction();
-  const query = useQuery({ queryKey: friendsKeys.requests, queryFn: fetchRequests });
+  const query = useQuery(requestsQueryOptions);
 
   if (query.isPending)
     return (
@@ -248,9 +245,14 @@ function RequestsPanel() {
                 data-testid={`request-in-${r.nickname}`}
                 className="flex min-h-14 flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
               >
-                <span dir="auto" className="min-w-32 flex-1 font-medium">
+                <Link
+                  href={`/players/${r.user_id}`}
+                  dir="auto"
+                  className="min-w-32 flex-1 font-medium underline-offset-4 hover:underline"
+                  data-testid="request-profile-link"
+                >
                   {r.nickname}
-                </span>
+                </Link>
                 <time dateTime={r.created_at} className="text-xs text-ink-faint">
                   {date(r.created_at)}
                 </time>
@@ -290,9 +292,14 @@ function RequestsPanel() {
                 data-testid={`request-out-${r.nickname}`}
                 className="flex min-h-14 flex-wrap items-center gap-3 rounded-[var(--radius-control)] border-[1.5px] border-rule bg-stage px-4 py-2"
               >
-                <span dir="auto" className="min-w-32 flex-1 font-medium">
+                <Link
+                  href={`/players/${r.user_id}`}
+                  dir="auto"
+                  className="min-w-32 flex-1 font-medium underline-offset-4 hover:underline"
+                  data-testid="request-profile-link"
+                >
                   {r.nickname}
-                </span>
+                </Link>
                 <time dateTime={r.created_at} className="text-xs text-ink-faint">
                   {date(r.created_at)}
                 </time>
