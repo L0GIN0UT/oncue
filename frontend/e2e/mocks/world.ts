@@ -424,6 +424,12 @@ export type Scenario = {
    * свежую ссылку даёт только `POST .../final-clue`.
    */
   staleRevealLinks?: boolean;
+  /**
+   * Реальный game отдаёт в ревиле `artwork` (обложка, постер; ADR 0073) всегда, когда она есть,
+   * в том числе рядом с кадром `final_clue` режимов blackout/кадра. Включённый флаг воспроизводит
+   * это: без него моки скрывают регрессии «обложка подменила кадр».
+   */
+  revealArtwork?: boolean;
   /** Этап 5a: блоки профиля (`progress`, `wallet`, `quests`, `badges`, `wheel`) и `home`, которые гаснут. */
   progressDown?: string[];
   /** Этап 5a: спин колеса отвечает 409 `progression.wheel_disabled`. */
@@ -944,6 +950,13 @@ export class MockWorld {
       persons: [{ name: item.person.name, role: item.person.role }],
       metric: s.mode.source_type === "pair" ? metricOf(item) : null,
       final_clue: this.finalClue(s, r),
+      artwork: this.scenario.revealArtwork
+        ? {
+            url: this.assetUrl("image", 0, 0, 900 + r.index),
+            expires_at: new Date(this.now().getTime() + 60_000).toISOString(),
+            mime: "image/svg+xml",
+          }
+        : null,
     };
   }
 
