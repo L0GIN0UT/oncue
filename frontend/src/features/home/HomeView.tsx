@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import type { HomePage } from "@/shared/api/types";
 import { blockData } from "@/shared/api/blocks";
+import { useRetryUnavailableOnce } from "@/shared/api/page-blocks";
 import { useViewer } from "@/features/auth/session";
 import { useShellEvent } from "@/features/events/use-event";
 import { homeQueryKey, useHomePage, useRecoverPersonalBlocks } from "@/features/daily/DailyCards";
@@ -23,7 +24,9 @@ export function HomeView({ initial }: { initial: HomePage | null }) {
   const t = useTranslations();
   const client = useQueryClient();
   const viewer = useViewer();
-  const { data } = useHomePage(initial);
+  const { data, refetch } = useHomePage(initial);
+  // Витрина режимов погасла — один повтор (личные блоки лечит useRecoverPersonalBlocks).
+  useRetryUnavailableOnce(data, refetch, ["modes"]);
   // Оболочка (shell) обновляется сразу после находки; блок главной — запасной источник.
   const shellEvent = useShellEvent();
   const blocks = data?.blocks;

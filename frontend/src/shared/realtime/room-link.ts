@@ -42,6 +42,14 @@ export type RoomLinkDeps = {
   onFatal?: (error: unknown) => void;
 };
 
+/** Сколько ждать после 429, мс: `Retry-After` или `details.retry_after` (с); `null` — не 429. */
+export function rateLimitDelayMs(e: unknown): number | null {
+  if (!isApiError(e) || e.status !== 429) return null;
+  const fromBody = e.details?.retry_after;
+  const seconds = e.retryAfterS ?? (typeof fromBody === "number" && fromBody > 0 ? fromBody : null);
+  return seconds !== null ? Math.ceil(seconds * 1000) : 0;
+}
+
 export class RoomLink {
   readonly clock: ServerClock;
   private readonly gate: VersionGate;
@@ -53,6 +61,12 @@ export class RoomLink {
   private acceptedTimer: ReturnType<typeof setTimeout> | null = null;
   private resyncing: Promise<void> | null = null;
   private resyncAgain = false;
+  /** Раньше этого момента (по `localNow`) новый `GET /state` не шлём: частота и `retry_after`. */
+  private nextResyncAt = 0;
+  private sleepTimer: ReturnType<typeof setTimeout> | null = null;
+  private sleepDone: (() => void) | null = null;
+  /** Номер запуска: ожидание, начатое до `stop()`/`start()`, нового запуска не касается. */
+  private epoch = 0;
   private stopped = true;
   /** Был ли хоть один снимок: до него 403/404 — гонка входа, а не исключение из комнаты. */
   private hadState = false;
@@ -74,6 +88,7 @@ export class RoomLink {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.epoch += 1;
     this.entryRetriesLeft = this.config.entryRetries;
     this.armOffline();
     void this.resync();
@@ -100,6 +115,9 @@ export class RoomLink {
     for (const t of [this.tickTimer, this.offlineTimer, this.acceptedTimer, this.entryTimer])
       if (t) clearTimeout(t);
     this.tickTimer = this.offlineTimer = this.acceptedTimer = this.entryTimer = null;
+    if (this.sleepTimer) clearTimeout(this.sleepTimer);
+    this.sleepTimer = null;
+    this.sleepDone?.();
     this.deps.transport?.stop();
   }
 
@@ -143,9 +161,16 @@ export class RoomLink {
       return this.resyncing;
     }
     const run = async () => {
+      let rateLimited = 0;
+      const epoch = this.epoch;
       do {
         this.resyncAgain = false;
+        // Слишком частые просьбы ждут окна: пока ждём, новые просьбы сливаются в этот же запрос.
+        const wait = Math.min(this.nextResyncAt - this.localNow(), this.config.resyncMaxWaitMs);
+        if (wait > 0) await this.sleep(wait);
+        if (this.stopped || epoch !== this.epoch) return;
         const sentAt = this.localNow();
+        this.nextResyncAt = sentAt + this.config.resyncMinMs;
         try {
           const state = await this.deps.fetchState();
           if (this.stopped) return;
@@ -158,6 +183,16 @@ export class RoomLink {
             if (this.retryEntry()) return;
             return this.fail(e);
           }
+          // 429: не раньше `retry_after`; повторяем несколько раз, дальше снимок принесёт tick.
+          const retryAfterMs = rateLimitDelayMs(e);
+          if (retryAfterMs !== null) {
+            // Окно сдвигаем и после последнего повтора: следующий tick не должен сразу получить 429.
+            this.nextResyncAt = this.localNow() + Math.max(retryAfterMs, this.config.resyncMinMs);
+            if (rateLimited < this.config.resyncRateLimitRetries) {
+              rateLimited += 1;
+              this.resyncAgain = true;
+            }
+          }
           // Сеть или 5xx: снимок принесёт следующий tick.
         }
       } while (this.resyncAgain && !this.stopped);
@@ -166,6 +201,16 @@ export class RoomLink {
       this.resyncing = null;
     });
     return this.resyncing;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.sleepDone = resolve;
+      this.sleepTimer = setTimeout(() => {
+        this.sleepTimer = null;
+        resolve();
+      }, ms);
+    });
   }
 
   /** Повторить снимок после гонки входа; `false` — повторы кончились или снимок уже был. */

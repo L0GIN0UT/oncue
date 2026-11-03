@@ -8,10 +8,11 @@
  */
 import Link from "next/link";
 import { useId, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { api, unwrap } from "@/shared/api/client";
 import { blockData } from "@/shared/api/blocks";
+import { keepLastKnownBlocks, useRetryUnavailableOnce } from "@/shared/api/page-blocks";
 import type {
   DailyCard,
   Domain,
@@ -36,6 +37,9 @@ import { useIcons } from "@/shared/ui/theme-provider";
 import { Tile } from "@/shared/ui/tile";
 
 const ALL = "all";
+const SOLO_QUERY_KEY = ["page", "solo"] as const;
+/** Общие блоки страницы (не личные): при сбое остаются прежними, а не «недоступно». */
+const SOLO_SHARED_BLOCKS = ["modes", "random"] as const;
 /** Виды режимов, которые макет показывает плитками со строками, а не карточками сетки. */
 const ROW_SOURCES = new Set(["marathon", "pair"]);
 const asRows = (g: ModeGroup) => g.presentation !== "score" || ROW_SOURCES.has(g.source_type);
@@ -49,11 +53,19 @@ export function SoloHub({ initial }: { initial: SoloPage | null }) {
   const dt = useDynamicT();
   const panelId = useId();
   const viewer = useViewer();
-  const { data } = useQuery({
-    queryKey: ["page", "solo"],
-    queryFn: async (): Promise<SoloPage> => unwrap(await api().web.GET("/v1/pages/solo")),
+  const client = useQueryClient();
+  const { data, refetch } = useQuery({
+    queryKey: SOLO_QUERY_KEY,
+    // Витрина режимов погасла — один повтор, а если и он не помог, остаются последние данные.
+    queryFn: async (): Promise<SoloPage> =>
+      keepLastKnownBlocks(
+        client.getQueryData<SoloPage>(SOLO_QUERY_KEY),
+        unwrap(await api().web.GET("/v1/pages/solo")),
+        SOLO_SHARED_BLOCKS,
+      ),
     initialData: initial ?? undefined,
   });
+  useRetryUnavailableOnce(data, refetch, SOLO_SHARED_BLOCKS);
   const [domain, setDomain] = useState<Domain>("music");
   const [filter, setFilter] = useState<string>(ALL);
   const [open, setOpen] = useState<string | null>(null);
