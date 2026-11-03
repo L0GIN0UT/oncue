@@ -2,7 +2,8 @@
  * Сессия браузера. `gv_access` — HttpOnly, поэтому признак сессии — cookie `gv_csrf`
  * (identity выдаёт её вместе с access при входе, refresh и гостевой сессии).
  */
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, unwrap } from "@/shared/api/client";
 import { isApiError } from "@/shared/api/errors";
 import type { SessionInfo } from "@/shared/api/types";
@@ -11,13 +12,92 @@ import { csrfToken } from "@/shared/lib/cookies";
 
 export const sessionQueryKey = ["session"] as const;
 
-/** Кто играет: пользователь, гость или никто (bff `GET /v1/session`). */
-export function useSessionInfo() {
-  return useQuery({
+/** Пауза перед единственным автоповтором, если имя пользователя не пришло, мс. */
+export const NAME_RETRY_MS = 1_500;
+
+/**
+ * Пользователь без имени: identity на миг был недоступен, и bff отдал субъекта без
+ * `display_name` (ответ при этом 200). Это сбой, а не состояние — имя вот-вот появится.
+ */
+export const isNameless = (data: SessionInfo | undefined): boolean =>
+  data?.subject?.kind === "user" && !data.subject.display_name;
+
+/** Анонимный ответ при живой cookie сессии: access отозван или просрочен, а refresh ещё жив. */
+const lostSession = (data: SessionInfo | undefined): boolean =>
+  data !== undefined && data.subject === null && csrfToken() !== null;
+
+/**
+ * Общие флаги «повтор уже был» живут в кеше запросов, а не в состоянии хука: `useSessionInfo`
+ * зовут десятки экранов, и один сбой должен получить ровно один повтор на всё приложение, даже
+ * если шапка перемонтировалась (игровой маршрут и обратно).
+ */
+const nameRetryKey = ["session", "name-retry"] as const;
+const recoveryKey = ["session", "recovery"] as const;
+
+function useSharedFlag(key: readonly string[]): boolean {
+  const { data } = useQuery({
+    queryKey: key,
+    queryFn: () => false,
+    enabled: false,
+    initialData: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  return data;
+}
+
+/**
+ * Кто играет: пользователь, гость или никто (bff `GET /v1/session`).
+ *
+ * Возврат на вкладку и сеть перезапрашивают сессию (по `staleTime`; у пользователя без имени он
+ * нулевой). `nameResolving` — имя не пришло и повтор ещё не отработал: экран показывает
+ * скелетон, а не «Игрок».
+ *
+ * С `{ keep: true }` (только шапка) хук сам лечит сбои, по одному разу на приложение: если имя
+ * не пришло — повтор через {@link NAME_RETRY_MS}; если bff ответил «аноним» при живой cookie
+ * сессии — refresh и повторный запрос.
+ */
+export function useSessionInfo({ keep = false }: { keep?: boolean } = {}) {
+  const client = useQueryClient();
+  const query = useQuery({
     queryKey: sessionQueryKey,
     queryFn: async (): Promise<SessionInfo> => unwrap(await api().web.GET("/v1/session")),
-    staleTime: 60_000,
+    staleTime: (q) => (isNameless(q.state.data) ? 0 : 60_000),
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+  const { data, refetch, isFetching } = query;
+  const nameless = isNameless(data);
+  const lost = lostSession(data);
+  const nameRetried = useSharedFlag(nameRetryKey);
+
+  useEffect(() => {
+    if (!keep) return;
+    // Имя пришло / сессия вернулась — следующий сбой снова получит свой повтор.
+    if (!nameless && client.getQueryData(nameRetryKey)) client.setQueryData(nameRetryKey, false);
+    if (!lost && client.getQueryData(recoveryKey)) client.setQueryData(recoveryKey, false);
+  }, [keep, client, nameless, lost]);
+
+  useEffect(() => {
+    if (!keep || !nameless || nameRetried) return;
+    const timer = setTimeout(() => {
+      if (client.getQueryData(nameRetryKey)) return; // другой экземпляр уже повторил
+      void refetch(); // сначала запрос, потом флаг: между ними скелетон не гаснет
+      client.setQueryData(nameRetryKey, true);
+    }, NAME_RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [keep, nameless, nameRetried, client, refetch]);
+
+  useEffect(() => {
+    const csrf = csrfToken();
+    if (!keep || !lost || !csrf || client.getQueryData(recoveryKey)) return;
+    client.setQueryData(recoveryKey, true);
+    void refreshSession(csrf).then((ok) => {
+      if (ok) void refetch();
+    });
+  }, [keep, lost, client, refetch]);
+
+  return { ...query, nameResolving: nameless && (!nameRetried || isFetching) };
 }
 
 /**

@@ -3,19 +3,29 @@
  * Запрос страницы «главная» bff (`GET /api/web/v1/pages/home` с cookie, D2): SSR отдаёт публичный
  * каркас, клиент догружает личный статус. Здесь же восстановление сессии для личных блоков.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api, unwrap } from "@/shared/api/client";
+import { keepLastKnownBlocks } from "@/shared/api/page-blocks";
 import type { HomePage } from "@/shared/api/types";
 import { recoverSession } from "@/features/auth/session";
 
 export const homeQueryKey = ["page", "home"] as const;
 
+/** Общие блоки главной (не личные): при сбое остаются прежними, а не «недоступно». */
+const HOME_SHARED_BLOCKS = ["modes"] as const;
+
 export function useHomePage(initial: HomePage | null, { enabled = true } = {}) {
+  const client = useQueryClient();
   return useQuery({
     enabled,
     queryKey: homeQueryKey,
-    queryFn: async (): Promise<HomePage> => unwrap(await api().web.GET("/v1/pages/home")),
+    queryFn: async (): Promise<HomePage> =>
+      keepLastKnownBlocks(
+        client.getQueryData<HomePage>(homeQueryKey),
+        unwrap(await api().web.GET("/v1/pages/home")),
+        HOME_SHARED_BLOCKS,
+      ),
     initialData: initial ?? undefined,
   });
 }

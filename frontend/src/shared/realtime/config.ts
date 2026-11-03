@@ -20,6 +20,15 @@ export type RealtimeConfig = {
    */
   entryRetries: number;
   entryRetryMs: number;
+  /**
+   * Не чаще одного `GET /state` за столько мс: после переподключения и дыр в версиях ресинки
+   * просят подряд, а снимок — тяжёлый запрос. Лишние просьбы сливаются в один запрос.
+   */
+  resyncMinMs: number;
+  /** 429 на снимок (`retry_after`): столько раз ждём и повторяем, потом снимок принесёт tick. */
+  resyncRateLimitRetries: number;
+  /** Потолок ожидания снимка (окно и `retry_after`), мс: огромный `Retry-After` или скачок часов не вешают ресинк. */
+  resyncMaxWaitMs: number;
 };
 
 export const DEFAULT_REALTIME_CONFIG: RealtimeConfig = {
@@ -30,4 +39,7 @@ export const DEFAULT_REALTIME_CONFIG: RealtimeConfig = {
   bufferLimit: 100,
   entryRetries: 5,
   entryRetryMs: 600,
+  resyncMinMs: 1_000,
+  resyncRateLimitRetries: 3,
+  resyncMaxWaitMs: 30_000,
 };
