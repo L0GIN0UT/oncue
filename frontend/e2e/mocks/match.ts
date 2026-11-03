@@ -35,6 +35,11 @@ export type MatchScenario = {
   countdownMs?: number;
   /** Очередь: «ищем дольше обычного» с первого ответа (`slow`). */
   queueSlow?: boolean;
+  /**
+   * Очередь: запись найденной пары уже снята (матч стартовал), и `queue/tick` отвечает 404
+   * `not_in_queue`, хотя игрок в комнате — стык очередь → комната (пункт 60).
+   */
+  queueRecordGone?: boolean;
   /** rating: через сколько мс после итога матча отвечает `/changes` (до этого 404), по умолчанию 1500. */
   ratingDelayMs?: number;
   /** rating недоступен: `/changes` отвечает 503. */

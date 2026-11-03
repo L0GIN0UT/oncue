@@ -110,6 +110,25 @@ describe("roomReducer", () => {
     expect(s.state!.match!.players[1]!.status).toBe("answered");
   });
 
+  it("player: возврат на связь сразу снимает «Отошёл» (disconnected → online)", () => {
+    let s = send(snapshot(), 11, "player", { user_id: B, presence: "disconnected", away: true });
+    expect(s.state!.room.players[1]).toMatchObject({ presence: "disconnected", away: true });
+    // Дельта без поля away (старый сервер) всё равно снимает отметку; с полем — берёт его.
+    s = send(s, 12, "player", { user_id: B, presence: "online" });
+    expect(s.state!.room.players[1]).toMatchObject({ presence: "online", away: false });
+    s = send(s, 13, "player", { user_id: B, presence: "online", away: true });
+    expect(s.state!.room.players[1]).toMatchObject({ presence: "online", away: true });
+    // Уже онлайн и без поля away — отметку не трогаем.
+    s = send(s, 14, "player", { user_id: B, presence: "online", ready: false });
+    expect(s.state!.room.players[1]).toMatchObject({ away: true, ready: false });
+  });
+
+  it("closed no_show: причина доступна экрану комнаты", () => {
+    const s = send(snapshot(), 11, "closed", { reason: "no_show" });
+    expect(s.state!.room.phase).toBe("closed");
+    expect(s.closedReason).toBe("no_show");
+  });
+
   it("level_closed: статусы игроков, фаза", () => {
     const s = send(snapshot(), 11, "level_closed", {
       round_index: 0,

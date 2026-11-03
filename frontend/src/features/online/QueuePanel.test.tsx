@@ -219,9 +219,10 @@ describe("QueuePanel — очередь рейтинговой дуэли", () =
     expect(screen.getByTestId("queue-cancel")).toBeEnabled();
   });
 
-  it("404 на heartbeat: сообщение «вас убрали из очереди»", async () => {
+  it("404 на heartbeat, комнаты нет: сообщение «вас убрали из очереди»", async () => {
     let ticks = 0;
     server.use(
+      http.get("*/api/match/v1/rooms/active", () => HttpResponse.json({ code: null, phase: null })),
       http.post(`${Q}/enter`, () => HttpResponse.json(ticket())),
       http.post(`${Q}/tick`, () => {
         ticks += 1;
@@ -235,5 +236,21 @@ describe("QueuePanel — очередь рейтинговой дуэли", () =
     expect(await screen.findByRole("alert", {}, { timeout: 4000 })).toHaveTextContent(
       "Вас убрали из очереди",
     );
+  });
+
+  it("404 на heartbeat, но игрок уже в комнате пары: «соперник найден» и переход, без «убрали»", async () => {
+    push.mockClear();
+    server.use(
+      http.get("*/api/match/v1/rooms/active", () =>
+        HttpResponse.json({ code: "K7MQ2XWP", phase: "countdown" }),
+      ),
+      http.post(`${Q}/enter`, () => HttpResponse.json(ticket())),
+      http.post(`${Q}/tick`, () => problem(404, "match.not_in_queue")),
+    );
+    renderWithProviders(<QueuePanel queues={QUEUES} />);
+    await userEvent.click(screen.getByTestId("queue-enter-film-classic"));
+    expect(await screen.findByTestId("queue-found", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/room/K7MQ2XWP"), { timeout: 4000 });
   });
 });

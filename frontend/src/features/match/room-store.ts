@@ -158,7 +158,12 @@ function applyMessage(store: RoomStore, m: KnownRoomMessage): RoomStore {
                 ...p,
                 presence: d.presence,
                 ...(d.ready !== undefined ? { ready: d.ready } : {}),
-                ...(d.away !== undefined ? { away: d.away } : {}),
+                // Вернувшийся на связь — уже не «отошёл», даже если дельта без поля away.
+                ...(d.away !== undefined
+                  ? { away: d.away }
+                  : d.presence === "online" && p.presence !== "online"
+                    ? { away: false }
+                    : {}),
                 ...(typeof d.score === "number" ? { score: d.score } : {}),
               }
             : p,

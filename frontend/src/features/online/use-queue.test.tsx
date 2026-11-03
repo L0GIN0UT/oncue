@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { ApiError, NetworkError } from "@/shared/api/errors";
 import type { QueueTicket } from "@/shared/api/types";
 import { enterQueue, leaveQueue, tickQueue } from "@/features/match/queue-api";
+import { fetchActiveRoom } from "@/features/match/active-room";
 import { QUEUE_REMOVED_KEY, QUEUE_SESSION_EXPIRED_KEY } from "./queue-state";
 import { useQueue } from "./use-queue";
 
@@ -12,6 +13,9 @@ vi.mock("@/features/match/queue-api", () => ({
   leaveQueue: vi.fn(),
 }));
 
+vi.mock("@/features/match/active-room", () => ({ fetchActiveRoom: vi.fn() }));
+
+const activeRoom = vi.mocked(fetchActiveRoom);
 const enter = vi.mocked(enterQueue);
 const tick = vi.mocked(tickQueue);
 const leave = vi.mocked(leaveQueue);
@@ -59,6 +63,8 @@ beforeEach(() => {
   tick.mockReset();
   leave.mockReset();
   leave.mockResolvedValue(undefined);
+  activeRoom.mockReset();
+  activeRoom.mockResolvedValue(null);
 });
 afterEach(() => {
   setHidden(false);
@@ -177,6 +183,67 @@ describe("useQueue — фоновая вкладка", () => {
     act(() => setHidden(false));
     await advance(0);
     expect(tick).not.toHaveBeenCalled();
+  });
+});
+
+describe("useQueue — стык очередь → комната (пункт 60)", () => {
+  it("404 на tick, а игрок уже в комнате пары: идём в неё, а не «вас убрали»", async () => {
+    const { result } = await searching();
+    activeRoom.mockResolvedValueOnce({ code: "K7MQ2XWP", phase: "countdown" });
+    tick.mockRejectedValueOnce(notInQueue());
+    await advance(5000);
+    expect(activeRoom).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toMatchObject({ phase: "matched", roomCode: "K7MQ2XWP" });
+  });
+
+  it("404 и комнаты нет — прежнее «вас убрали из очереди»", async () => {
+    const { result } = await searching();
+    tick.mockRejectedValueOnce(notInQueue());
+    await advance(5000);
+    expect(result.current.state).toMatchObject({
+      phase: "error",
+      errorKey: QUEUE_REMOVED_KEY,
+    });
+  });
+
+  it("не удалось спросить комнату — не «убрали», повторим на следующем tick", async () => {
+    const { result } = await searching();
+    activeRoom.mockRejectedValueOnce(new NetworkError());
+    tick.mockRejectedValueOnce(notInQueue());
+    await advance(5000);
+    expect(result.current.state.phase).toBe("searching");
+    activeRoom.mockResolvedValueOnce({ code: "K7MQ2XWP", phase: "level_open" });
+    tick.mockRejectedValueOnce(notInQueue());
+    await advance(5000);
+    expect(result.current.state).toMatchObject({ phase: "matched", roomCode: "K7MQ2XWP" });
+  });
+
+  it("два клиента одной пары: первый узнаёт по tick, второй — по 404 + активной комнате", async () => {
+    const x = await searching();
+    const y = await searching();
+    tick.mockResolvedValueOnce(ticket({ state: "matched", room_code: "K7MQ2XWP" }));
+    tick.mockRejectedValueOnce(notInQueue());
+    activeRoom.mockResolvedValueOnce({ code: "K7MQ2XWP", phase: "countdown" });
+    await advance(5000);
+    for (const client of [x, y]) {
+      expect(client.result.current.state).toMatchObject({
+        phase: "matched",
+        roomCode: "K7MQ2XWP",
+      });
+    }
+  });
+
+  it("отмена во время запроса комнаты: ответ устарел и состояние не меняет", async () => {
+    const { result } = await searching();
+    let resolveRoom: (v: { code: string; phase: "countdown" }) => void = () => undefined;
+    activeRoom.mockReturnValueOnce(new Promise((r) => (resolveRoom = r)));
+    tick.mockRejectedValueOnce(notInQueue());
+    await advance(5000);
+    await act(async () => {
+      await result.current.leave();
+    });
+    await act(async () => resolveRoom({ code: "K7MQ2XWP", phase: "countdown" }));
+    expect(result.current.state.phase).toBe("idle");
   });
 });
 

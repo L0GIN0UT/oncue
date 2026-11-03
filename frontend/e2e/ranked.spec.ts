@@ -118,6 +118,34 @@ test("очередь: ожидание, подсказка, отмена; вто
   await expectAccessible(page);
 });
 
+test("стык очередь → комната: запись снята, tick отвечает 404, а первый игрок всё равно попадает в комнату", async ({
+  page,
+  player,
+  scenario,
+}) => {
+  await scenario({ match: { queueRecordGone: true } });
+  await login(page);
+  await page.goto("/online");
+  await pickLadder(page, "music");
+  await page.getByTestId("queue-enter-music-classic").click();
+  await expect(page.getByTestId("queue-searching")).toBeVisible();
+
+  const rival = await player("rival");
+  await rival.goto("/online");
+  await pickLadder(rival, "music");
+  await rival.getByTestId("queue-enter-music-classic").click();
+  await expect(rival.getByTestId("queue-found")).toBeVisible();
+  await expect(rival).toHaveURL(/\/room\/[A-HJ-NP-Z2-9]{8}$/);
+  const code = (await rival.getByTestId("room-code").textContent())!.trim();
+
+  // Первому игроку tick отвечает 404, но «Вас убрали из очереди» не появляется: клиент спрашивает
+  // активную комнату и входит в неё.
+  await expectQueueFound(page);
+  await expect(page.getByTestId("queue-error")).toHaveCount(0);
+  await expect(page).toHaveURL(`/room/${code}`);
+  await expect(page.getByTestId("player-rival")).toBeVisible();
+});
+
 test("rating недоступен: итог рейтингового матча цел, блок — «появится позже»", async ({
   page,
   player,

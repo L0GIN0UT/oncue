@@ -200,7 +200,9 @@ export function createRatingHandlers(world: MockWorld, mw: MatchWorld): HttpHand
       if (!csrfOk(request)) return problem(403, "auth.csrf_failed");
       const q = mw.queue.get(userId);
       if (q) q.ticks += 1;
-      else if (!mw.queueMatched.has(userId)) return problem(404, "match.not_in_queue");
+      else if (!mw.queueMatched.has(userId) || mw.scenario.queueRecordGone) {
+        return problem(404, "match.not_in_queue");
+      }
       return HttpResponse.json(ticket(userId, 2), { headers: NO_STORE });
     }),
 
