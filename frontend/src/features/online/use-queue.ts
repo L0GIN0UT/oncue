@@ -6,7 +6,9 @@
  *
  * Правила:
  * - вернулись на вкладку — `tick` сразу (фоновая вкладка тикает редко, запись могла истечь);
- * - 404 на `tick` в поиске — «вас убрали из очереди»; 401/403 — «сессия истекла», остановка;
+ * - 404 на `tick` в поиске — сначала `GET /rooms/active`: игрок уже в комнате найденной пары
+ *   (запись очереди снимается на старте матча) — идём в неё; комнаты нет — «вас убрали из
+ *   очереди»; 401/403 — «сессия истекла», остановка;
  * - отмена: 404 `not_in_queue` = успех; провал оставляет поиск (запись жива) с сообщением;
  * - уход со страницы в `entering`/`searching` снимает игрока с очереди, а ответ `enter`,
  *   пришедший после ухода, не применяется — сразу `leave`.
@@ -15,12 +17,22 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { isApiError } from "@/shared/api/errors";
 import type { QueueFormat } from "@/shared/api/types";
 import { enterQueue, leaveQueue, tickQueue } from "@/features/match/queue-api";
+import { fetchActiveRoom } from "@/features/match/active-room";
 import { matchErrorKey } from "@/features/match/errors";
 import { initialQueue, QUEUE_SESSION_EXPIRED_KEY, queueReducer } from "./queue-state";
 
 /** Пауза между повторами `leave` при 409 `match.queue_matching` и число повторов (пара резервируется). */
 const LEAVE_RETRY_MS = 1000;
 const LEAVE_RETRIES = 2;
+
+/** Активная комната игрока; `undefined` — спросить не удалось (повторим на следующем tick). */
+async function activeRoomOrUnknown() {
+  try {
+    return await fetchActiveRoom();
+  } catch {
+    return undefined;
+  }
+}
 
 export function useQueue() {
   const [state, dispatch] = useReducer(queueReducer, initialQueue);
@@ -49,7 +61,15 @@ export function useQueue() {
       // Сообщения — только если игрок действительно ждал: при загрузке хаба 404 — норма.
       const waiting = phase.current === "searching";
       if (isApiError(e, "match.not_in_queue")) {
-        if (waiting) dispatch({ type: "gone" });
+        if (waiting) {
+          const room = await activeRoomOrUnknown();
+          // Пока спрашивали комнату, игрок мог отменить поиск или начать новый.
+          if (room !== undefined && mounted.current && epoch.current === started) {
+            // Комната в итогах/закрытая — не «пара найдена» (указатель мог освободиться с лагом).
+            const live = room && room.phase !== "summary" && room.phase !== "closed";
+            dispatch(live ? { type: "found", roomCode: room.code } : { type: "gone" });
+          }
+        }
       } else if (isApiError(e) && (e.status === 401 || e.status === 403)) {
         if (waiting) {
           dispatch({ type: "failed", errorKey: QUEUE_SESSION_EXPIRED_KEY, roomCode: null });

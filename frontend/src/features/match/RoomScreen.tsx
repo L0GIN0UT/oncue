@@ -31,6 +31,7 @@ import { LeaveToOnline } from "./LeaveToOnline";
 import { LobbyPanel } from "./LobbyPanel";
 import { MatchStage, type MatchCommands } from "./MatchStage";
 import { MatchSummaryView } from "./MatchSummaryView";
+import { NoShowNotice } from "./NoShowNotice";
 import { PlayersRail } from "./PlayersRail";
 import type { FeedItem, RoomStore } from "./room-store";
 import { useReleaseLevelClues } from "./use-level-clue";
@@ -357,6 +358,8 @@ function RoomLive({ code, myId }: { code: string; myId: string | null }) {
             />
           }
         />
+      ) : room.phase === "closed" && store.closedReason === "no_show" ? (
+        <NoShowNotice />
       ) : room.phase === "closed" ? (
         <div className="flex flex-col items-start gap-4 pt-8" data-testid="room-closed">
           <h1 className="font-display text-2xl font-bold">{t("match.closed")}</h1>

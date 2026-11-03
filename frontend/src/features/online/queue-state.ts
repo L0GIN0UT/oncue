@@ -35,6 +35,8 @@ export type QueueAction =
   | { type: "left" }
   /** Heartbeat ответил 404: записи в очереди больше нет. */
   | { type: "gone" }
+  /** 404 на tick, но сервер держит игрока в комнате (пара найдена, запись очереди уже снята). */
+  | { type: "found"; roomCode: string }
   | { type: "failed"; errorKey: string; roomCode: string | null };
 
 export const initialQueue: QueueState = { phase: "idle" };
@@ -74,6 +76,16 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
         : state;
     case "left":
       return initialQueue;
+    case "found":
+      // Пара найдена, пока tick не дошёл: это «соперник найден», а не «вас убрали».
+      return state.phase === "searching"
+        ? {
+            phase: "matched",
+            ladder: state.ladder,
+            format: state.format,
+            roomCode: action.roomCode,
+          }
+        : state;
     case "gone":
       return state.phase === "idle"
         ? state
