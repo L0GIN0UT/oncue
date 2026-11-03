@@ -21,7 +21,7 @@ import type {
   MySanctions,
 } from "@/shared/api/types";
 import { newIdempotencyKey } from "@/shared/lib/id";
-import { COMMENTS_PAGE_SIZE } from "./config";
+import { COMMENTS_PAGE_SIZE, FRIENDS_REFRESH_MS } from "./config";
 
 export { newIdempotencyKey };
 
@@ -53,6 +53,14 @@ export async function removeFriend(userId: string): Promise<void> {
 export async function fetchRequests(): Promise<FriendRequests> {
   return unwrap(await api().social.GET("/v1/me/friend-requests"));
 }
+
+/** Заявки с обновлением раз в период, пока экран открыт: новые появляются без перезагрузки. */
+export const requestsQueryOptions = {
+  queryKey: friendsKeys.requests,
+  queryFn: fetchRequests,
+  refetchInterval: FRIENDS_REFRESH_MS,
+  refetchIntervalInBackground: false,
+} as const;
 
 /** Заявка по нику, коду или id игрока: ровно одно поле. */
 export async function sendRequest(

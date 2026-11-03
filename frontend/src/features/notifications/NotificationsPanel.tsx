@@ -14,6 +14,7 @@ import { ListRow } from "@/shared/ui/list-row";
 import { PillTabs } from "@/shared/ui/pill-tabs";
 import { useIcons } from "@/shared/ui/theme-provider";
 import { useViewer } from "@/features/auth/session";
+import { friendNotificationLink } from "./friend";
 import { roomInviteHref } from "./invite";
 import { useNotificationFeed } from "./NotificationsView";
 
@@ -148,6 +149,7 @@ function PanelRow({
   const { bell: Bell } = useIcons();
   const isRead = item.read_at !== null;
   const invite = roomInviteHref(item);
+  const friend = friendNotificationLink(item);
   const body = (
     <ListRow
       lead={
@@ -188,6 +190,17 @@ function PanelRow({
           }}
           data-testid="notification-join"
           aria-label={`${t("notifications.join")}: ${item.title}`}
+        >
+          {body}
+        </Link>
+      ) : friend ? (
+        <Link
+          href={friend.href}
+          onClick={() => {
+            if (!isRead) onRead();
+            onNavigate();
+          }}
+          data-testid="notification-friend-link"
         >
           {body}
         </Link>

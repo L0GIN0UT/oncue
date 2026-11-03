@@ -15,6 +15,7 @@ import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 import { useViewer } from "@/features/auth/session";
 import { ProfileGate } from "@/features/progression/ProfileView";
+import { friendNotificationLink } from "./friend";
 import { roomInviteHref } from "./invite";
 import { unreadIn, withAllRead, withRead, type ListData } from "./cache";
 import {
@@ -176,6 +177,7 @@ export function Row({ item, onRead }: { item: NotificationItem; onRead: () => vo
   const f = useFormatter();
   const isRead = item.read_at !== null;
   const invite = roomInviteHref(item);
+  const friend = friendNotificationLink(item);
   return (
     <li
       data-testid="notification-item"
@@ -213,6 +215,18 @@ export function Row({ item, onRead }: { item: NotificationItem; onRead: () => vo
               aria-label={`${t("notifications.join")}: ${item.title}`}
             >
               {t("notifications.join")}
+            </Link>
+          </Button>
+        )}
+        {friend && (
+          <Button asChild size="sm" variant="secondary">
+            <Link
+              href={friend.href}
+              onClick={isRead ? undefined : onRead}
+              data-testid="notification-friend-link"
+              aria-label={`${t(friend.labelKey)}: ${item.title}`}
+            >
+              {t(friend.labelKey)}
             </Link>
           </Button>
         )}
