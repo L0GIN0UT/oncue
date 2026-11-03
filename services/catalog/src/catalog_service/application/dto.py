@@ -224,6 +224,44 @@ class ClueStatus:
     error_code: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ContentStatsRow:
+    """Агрегаты единицы в режиме (строка хранилища) с карточкой для отчёта."""
+
+    media_item_id: uuid.UUID
+    mode_key: str
+    title: str
+    domain: str
+    shown: int
+    exact: int
+    partial: int
+    miss: int
+    gave_up: int
+    time_sum_ms: int
+    time_count: int
+    level_buckets: dict[int, int]
+    time_buckets: dict[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class ContentDifficulty:
+    """Строка отчёта «самые лёгкие»: доли и время посчитаны из агрегатов."""
+
+    media_item_id: uuid.UUID
+    mode_key: str
+    title: str
+    domain: str
+    shown: int
+    exact: int
+    partial: int
+    miss: int
+    gave_up: int
+    exact_rate: float
+    avg_time_ms: int | None
+    median_time_ms: int | None
+    exact_by_level: dict[int, int]
+
+
 def admin_item_view(item: MediaItem) -> dict[str, Any]:
     """Карточка единицы для admin-API (JSON-совместимая; хранится для идемпотентности)."""
     snapshot = item.snapshot()

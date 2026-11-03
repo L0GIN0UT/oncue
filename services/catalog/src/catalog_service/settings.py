@@ -121,6 +121,23 @@ class CatalogSettings(BaseModel):
     items_batch_max: int = Field(default=50, ge=1, le=500)
 
 
+class StatsSettings(BaseModel):
+    """Статистика угадываний по контенту (ADR 0076, ``GV_STATS__*``)."""
+
+    # Ширина корзины гистограммы времени точного ответа; по ней считается медиана.
+    # Менять после накопления данных нельзя без пересчёта: корзины хранятся номером (ADR 0076).
+    time_bucket_ms: int = Field(default=1000, ge=100, le=60_000)
+    # Номер последней корзины: более долгие ответы копятся в ней (размер таблицы ограничен).
+    time_bucket_max: int = Field(default=120, ge=1, le=1000)
+    # Как игрок закончил матч (players[].finish), чтобы его раунды учитывались.
+    match_counted_finishes: tuple[str, ...] = ("completed",)
+    count_aborted_matches: bool = False
+    # Отчёт «самые лёгкие»: порог показов по умолчанию и пределы выдачи.
+    report_min_shown: int = Field(default=30, ge=1)
+    report_limit_default: int = Field(default=20, ge=1, le=500)
+    report_limit_max: int = Field(default=100, ge=1, le=500)
+
+
 class NormalizerSettings(BaseModel):
     """Нормализация названий."""
 
@@ -142,6 +159,7 @@ class Settings(ServiceSettings):
     imports: ImportSettings = ImportSettings()
     normalizer: NormalizerSettings = NormalizerSettings()
     catalog: CatalogSettings = CatalogSettings()
+    stats: StatsSettings = StatsSettings()
 
     @model_validator(mode="after")
     def _seed_texts_only_in_dev(self) -> Settings:

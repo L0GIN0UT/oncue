@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import Protocol
 
 from catalog_service.application.dto import (
     AdminItemFilter,
     ClueStatus,
+    ContentStatsRow,
     ImportedItem,
     ItemSummary,
     RecordedAction,
@@ -17,6 +18,7 @@ from catalog_service.application.dto import (
     Suggestion,
 )
 from catalog_service.domain.clue_texts import ClueTexts
+from catalog_service.domain.content_stats import StatsDelta, StatsKey
 from catalog_service.domain.import_job import ImportJob
 from catalog_service.domain.media_item import MediaItem
 from catalog_service.domain.model import ExternalSource, MediaDomain
@@ -31,6 +33,7 @@ __all__ = [
     "CatalogUnitOfWork",
     "ClueStatusRepository",
     "ClueTextsRepository",
+    "ContentStatsRepository",
     "FilmMetadataProvider",
     "IdempotencyStore",
     "ImportEntrySource",
@@ -181,6 +184,20 @@ class RepublishJobRepository(Protocol):
         ...
 
 
+class ContentStatsRepository(Protocol):
+    """Агрегаты угадываний по контенту (ADR 0076)."""
+
+    async def add(self, deltas: Mapping[StatsKey, StatsDelta]) -> None:
+        """Прибавить инкременты к счётчикам (создать строку, если её нет)."""
+        ...
+
+    async def easiest(
+        self, *, min_shown: int, limit: int, mode_key: str | None, domain: str | None
+    ) -> list[ContentStatsRow]:
+        """Самые «угадываемые» пары: доля точных ответов по убыванию, затем показы."""
+        ...
+
+
 class CatalogUnitOfWork(UnitOfWork, Protocol):
     """Транзакция каталога с репозиториями, привязанными к ней."""
 
@@ -223,6 +240,11 @@ class CatalogUnitOfWork(UnitOfWork, Protocol):
     @property
     def republish(self) -> RepublishJobRepository:
         """Задания переопубликации."""
+        ...
+
+    @property
+    def content_stats(self) -> ContentStatsRepository:
+        """Статистика угадываний по контенту."""
         ...
 
 

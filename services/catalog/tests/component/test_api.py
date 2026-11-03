@@ -559,3 +559,25 @@ async def test_items_batch_limits(client: httpx.AsyncClient) -> None:
     assert_problem(await client.get("/v1/items", params=too_many), 422, "catalog.batch_too_large")
     assert (await client.get("/v1/items")).status_code == 422
     assert (await client.get("/v1/items", params={"ids": "x"})).status_code == 422
+
+
+async def test_stats_report_is_admin_only_and_bounded(
+    client: httpx.AsyncClient,
+    catalog_infra: Infrastructure,
+    container: CatalogContainer,
+    token_issuer: TestTokenIssuer,
+) -> None:
+    url = "/admin/v1/stats/easiest-content"
+    assert_problem(await client.get(url), 401, "auth.unauthenticated")
+    assert_problem(
+        await client.get(url, headers=auth(token_issuer, "catalog.import")), 403, "auth.forbidden"
+    )
+    viewer = auth(token_issuer, "admin.access")
+    empty = await client.get(url, headers=viewer)
+    assert (empty.status_code, empty.json()) == (200, {"items": []})
+    # Потолок размера выдачи берётся из настроек, а не из кода запроса.
+    over = container.settings.stats.report_limit_max + 1
+    assert_problem(
+        await client.get(url, params={"limit": over}, headers=viewer), 422, "input.invalid"
+    )
+    assert (await client.get(url, params={"min_shown": 0}, headers=viewer)).status_code == 422
