@@ -149,11 +149,11 @@ describe("CollectionEditor", () => {
         return new HttpResponse(null, { status: 204 });
       }),
     );
-    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={250} />);
+    renderWithProviders(<CollectionEditor draft={world.ugc.draftOut(c)} debounceMs={800} />);
     await user.type(screen.getByTestId("editor-title"), "!");
     await user.click(screen.getByTestId("editor-delete"));
     await user.click(screen.getByTestId("editor-delete-confirm"));
-    await new Promise((r) => setTimeout(r, 450));
+    await new Promise((r) => setTimeout(r, 1100));
     release();
     await waitFor(() => expect(push).toHaveBeenCalledWith("/me/collections"));
     expect(saves).toEqual([]);

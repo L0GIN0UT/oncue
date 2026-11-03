@@ -2,11 +2,13 @@
 /**
  * Ревил раунда матча: ответ раскрывается только в фазе `reveal` (античит), финальная подсказка —
  * тем же реестром `clueRegistry`, результаты игроков — уровень угадывания и очки раунда.
+ * Обложка или постер — `reveal.artwork`; нет его — заглушка.
  */
 import { useTranslations } from "next-intl";
 import type { Domain, PlayerSlot } from "@/shared/api/types";
 import type { RoundRevealDelta } from "@/shared/realtime";
 import { useDynamicT } from "@/shared/i18n/dynamic";
+import { AnswerArt } from "@/features/game/AnswerArt";
 import { RevealSave } from "@/features/game/RevealSave";
 import { clueRegistry } from "@/features/game/clues/registry";
 import { useLevelClue } from "./use-level-clue";
@@ -32,6 +34,14 @@ export function RoundRevealPanel({ code, reveal, players, domain }: Props) {
       className="flex flex-col gap-4 rounded-[var(--radius-ticket)] border-[1.5px] border-rule bg-stage p-5"
       data-testid="match-reveal"
     >
+      <div className="flex justify-center">
+        <AnswerArt
+          domain={domain}
+          artwork={reveal.artwork}
+          title={reveal.title}
+          className={domain === "film" ? "w-[120px]" : "w-[160px]"}
+        />
+      </div>
       <div className="flex flex-col items-center gap-1 text-center">
         <p className="text-[13px] text-ink-muted">{t("match.reveal.answer")}</p>
         <h2

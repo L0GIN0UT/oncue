@@ -1,8 +1,9 @@
+"use client";
 /**
  * Обложка, постер или кадр: картинка из бэкенда или плоская заглушка токенного цвета. Чип в углу
  * (`label`) — подпись поверх нижнего градиента. Размер задаёт родитель (ширина), форму — `ratio`.
  */
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/shared/lib/cn";
 
 const RATIOS = {
@@ -30,6 +31,9 @@ export function Cover({
   placeholder?: ReactNode;
   className?: string;
 }) {
+  // Ссылка могла истечь или не открыться: тогда, как без картинки, показываем заглушку.
+  const [failed, setFailed] = useState<string | null>(null);
+  const shown = src && failed !== src ? src : null;
   return (
     <div
       data-testid="cover"
@@ -39,10 +43,15 @@ export function Cover({
         className,
       )}
     >
-      {src ? (
+      {shown ? (
         // Картинка приходит с бэкенда (media), размеры заранее неизвестны: оптимизатор Next не нужен.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt} className="size-full object-cover" />
+        <img
+          src={shown}
+          alt={alt}
+          className="size-full object-cover"
+          onError={() => setFailed(shown)}
+        />
       ) : (
         <span aria-hidden className="grid size-full place-items-center text-ink-dim">
           {placeholder}
