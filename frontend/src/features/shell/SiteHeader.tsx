@@ -60,7 +60,7 @@ export function SiteHeader() {
 
       <nav
         aria-label={t("nav.sections")}
-        className="order-last flex w-full items-center justify-between gap-1 md:order-none md:w-auto md:justify-center md:gap-2"
+        className="order-last flex w-full flex-wrap items-center justify-between gap-1 md:order-none md:w-auto md:flex-nowrap md:justify-center md:gap-2"
       >
         {NAV_ITEMS.map((item, i) => (
           <span key={item.key} className="flex items-center gap-1 md:gap-2">
@@ -74,7 +74,7 @@ export function SiteHeader() {
               data-testid={`nav-${item.key}`}
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
-                "rounded-[10px] px-2 py-2 font-display text-sm font-extrabold tracking-[-0.02em] whitespace-nowrap transition-colors sm:text-base md:px-2.5 md:text-lg",
+                "rounded-[10px] px-1 py-2 font-display text-sm font-extrabold tracking-[-0.02em] whitespace-nowrap transition-colors sm:px-2 sm:text-base md:px-2.5 md:text-lg",
                 active === item.key ? "text-music" : "text-ink-faint hover:text-ink",
               )}
             >
@@ -87,6 +87,15 @@ export function SiteHeader() {
       <div className="ml-auto flex min-w-0 items-center justify-end gap-2 md:ml-0 md:flex-1">
         {isUser ? (
           <>
+            {/* Левее колокольчика: так он и его панель остаются на прежнем месте. */}
+            <Link
+              href="/library"
+              data-testid="nav-library"
+              aria-label={t("nav.library")}
+              className="grid size-10 flex-none place-items-center rounded-full border-[1.5px] border-rule bg-stage text-ink-muted transition-colors hover:border-rule-strong hover:text-ink"
+            >
+              <Bookmark aria-hidden className="size-[22px]" />
+            </Link>
             <NotificationBell />
             <Link
               href="/shop"
@@ -100,14 +109,6 @@ export function SiteHeader() {
             >
               <Verses aria-hidden className="size-4 text-music" />
               <span className="tabular">{balance != null ? f.number(balance) : "—"}</span>
-            </Link>
-            <Link
-              href="/library"
-              data-testid="nav-library"
-              aria-label={t("nav.library")}
-              className="grid size-10 flex-none place-items-center rounded-full border-[1.5px] border-rule bg-stage text-ink-muted transition-colors hover:border-rule-strong hover:text-ink"
-            >
-              <Bookmark aria-hidden className="size-[22px]" />
             </Link>
             <Link
               href="/leaderboards"
