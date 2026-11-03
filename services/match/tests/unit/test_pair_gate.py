@@ -102,6 +102,22 @@ async def test_everyone_present_before_deadline_is_not_a_no_show() -> None:
     assert not room.is_closed and room.pair_deadline_ms is None
 
 
+async def test_reconnect_clears_manual_away_mark() -> None:
+    """Пункт 61: «Отошёл», поставленный до обрыва, не висит у соперника после возврата."""
+    h = Harness()
+    room, _ = await h.room()
+    (guest,) = await h.join(room, 1)
+    room.set_away(guest, away=True, now_ms=h.now_ms())
+    h.offline.add(guest)
+    await h.tick(room, PRESENCE_TIMEOUT_MS / 1000 + 1)
+    assert room.seat_of(guest).away is True  # пока нет на связи, отметка сохраняется
+    room.pull_changes()
+    h.offline.discard(guest)
+    await h.tick(room, 1)
+    delta = _player_delta(room, str(guest))
+    assert delta["presence"] == "online" and delta["away"] is False
+
+
 async def test_reconnect_publishes_player_delta_with_online_presence() -> None:
     """Пункт 61: возврат игрока рассылается дельтой ``player`` с ``presence=online``."""
     h = Harness()

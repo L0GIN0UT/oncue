@@ -329,6 +329,9 @@ class Room:
         if seat is None or seat.presence is not Presence.DISCONNECTED:
             return False
         seat.presence = Presence.ONLINE
+        # Вернувшийся на связь - уже не «отошёл»: ручная отметка не должна пережить обрыв и
+        # висеть у соперника (пункт 61); дельта ``player`` несёт оба поля сразу.
+        seat.away = False
         self.touch(now_ms)
         self.emit("player", user_id=str(user_id))
         return True
