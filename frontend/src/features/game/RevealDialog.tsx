@@ -252,8 +252,10 @@ function AgreePct({ pct }: { pct: number }) {
 }
 
 /**
- * Обложка или постер ответа (`artwork`); нет его — кадр финальной подсказки, если он есть;
- * иначе заглушка (аудио в модалке не играет).
+ * Картинка ответа. Кадр финальной подсказки (`final_clue.kind === "image"`) — содержание ответа
+ * (ревил `audio_blackout` и кадровые режимы, ADR 0026), поэтому обложка его не заменяет: кадр
+ * качается и показывается всегда. Обложка или постер (`artwork`) — когда финальный ассет не
+ * картинка (музыка: аудио) или кадр не скачался. Нет ничего — заглушка домена.
  */
 function FinalArt({
   sessionId,
@@ -269,10 +271,11 @@ function FinalArt({
   const t = useTranslations();
   const artwork = round.reveal?.artwork ?? null;
   const initial = round.reveal?.final_clue ?? null;
-  // Кадр качаем, только когда обложки нет: с обложкой он не нужен.
-  const frame = !artwork && initial?.kind === "image" ? initial : null;
-  const { objectUrl } = useFinalClue(sessionId, round.index, frame);
-  if (artwork) return <AnswerArt domain={domain} artwork={artwork} title={title} />;
+  const frame = initial?.kind === "image" ? initial : null;
+  const { objectUrl, failed } = useFinalClue(sessionId, round.index, frame);
+  if (artwork && (!frame || failed)) {
+    return <AnswerArt domain={domain} artwork={artwork} title={title} />;
+  }
   if (frame && objectUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- blob: скачанного ассета ответа раунда
