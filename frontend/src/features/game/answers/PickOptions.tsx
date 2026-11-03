@@ -16,7 +16,9 @@ import type { AnswerProps } from "./types";
 /** Нажатие пришло из поля ввода — клавиши выбора не перехватываем. */
 const fromField = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
-  (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  (target.isContentEditable ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+    target.closest("[role=slider]") !== null);
 
 export function PickOptions({ round, disabled, onMove }: AnswerProps) {
   const t = useTranslations();

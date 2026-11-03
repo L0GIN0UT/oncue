@@ -12,7 +12,9 @@ import type { MatchAnswerProps } from "./types";
 
 const fromField = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
-  (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+  (target.isContentEditable ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
+    target.closest("[role=slider]") !== null);
 
 export function PickMatchAnswer({ me, disabled, lastLevel, onGuess, onSkip }: MatchAnswerProps) {
   const t = useTranslations();

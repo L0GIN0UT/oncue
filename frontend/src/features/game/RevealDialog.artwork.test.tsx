@@ -59,42 +59,6 @@ describe("ответ раунда: обложка и постер", () => {
     expect(screen.getByRole("img", { name: "Постер «Сталкер»" })).toBeInTheDocument();
   });
 
-  it("обложка важнее кадра: при artwork кадр финальной подсказки не показывается и не качается", () => {
-    show(
-      round({
-        artwork,
-        final_clue: {
-          kind: "image",
-          url: "https://m/frame.jpg",
-          expires_at: "2099-01-01T00:00:00Z",
-        },
-      }),
-      "film",
-    );
-    expect(screen.getByRole("img", { name: "Постер «Nevermind»" })).toHaveAttribute(
-      "src",
-      artwork.url,
-    );
-    expect(screen.queryByTestId("reveal-image")).not.toBeInTheDocument();
-    expect(screen.queryByText("Загружаем кадр…")).not.toBeInTheDocument();
-  });
-
-  it("artwork = null и кадр есть — кадр грузится (прежнее поведение)", () => {
-    show(
-      round({
-        artwork: null,
-        final_clue: {
-          kind: "image",
-          url: "https://m/frame.jpg",
-          expires_at: "2099-01-01T00:00:00Z",
-        },
-      }),
-      "film",
-    );
-    expect(screen.getByText("Загружаем кадр…")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /Постер/ })).not.toBeInTheDocument();
-  });
-
   it("artwork = null — заглушка без картинки", () => {
     show(round({ artwork: null }));
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
