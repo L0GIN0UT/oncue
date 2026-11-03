@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, NetworkError } from "@/shared/api/errors";
 import type { RoomState, TickResult } from "@/shared/api/types";
 import type { RoomMessage } from "./message";
-import { RoomLink, type LinkStatus } from "./room-link";
+import type { RealtimeConfig } from "./config";
+import { RoomLink, rateLimitDelayMs, type LinkStatus } from "./room-link";
 import type { RoomTransport, TransportHandlers } from "./transport";
 
 const NOW = "2026-10-22T10:00:00.000Z";
@@ -37,7 +38,9 @@ class FakeTransport implements RoomTransport {
   }
 }
 
-function setup(opts: { stateVersion?: number; transport?: boolean } = {}) {
+function setup(
+  opts: { stateVersion?: number; transport?: boolean; config?: Partial<RealtimeConfig> } = {},
+) {
   let serverVersion = opts.stateVersion ?? 1;
   const transport = opts.transport === false ? null : new FakeTransport();
   const fetchState = vi.fn(async () => state(serverVersion));
@@ -58,6 +61,8 @@ function setup(opts: { stateVersion?: number; transport?: boolean } = {}) {
     onMessage: (m) => messages.push(m.version),
     onStatus: (s) => statuses.push(s),
     onFatal,
+    // Ограничение частоты снимков проверяют отдельные тесты; остальные ждут снимок сразу.
+    config: { resyncMinMs: 0, ...opts.config },
   });
   return {
     link,
@@ -315,5 +320,118 @@ describe("RoomLink: tick и обрывы", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(t.fetchState).toHaveBeenCalledTimes(6);
     expect(t.onFatal).toHaveBeenCalledOnce();
+  });
+});
+
+describe("RoomLink: частота GET /state и retry_after", () => {
+  const flush = () => vi.advanceTimersByTimeAsync(0);
+
+  it("серия просьб ресинка за окно — один запрос сразу и один после окна", async () => {
+    const t = setup({ transport: false, config: { resyncMinMs: 1000 } });
+    t.link.start();
+    await flush();
+    expect(t.fetchState).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 5; i++) void t.link.resync();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(t.fetchState).toHaveBeenCalledTimes(1); // окно ещё не прошло
+    await vi.advanceTimersByTimeAsync(600);
+    expect(t.fetchState).toHaveBeenCalledTimes(2); // пять просьб слиты в один запрос
+    t.link.stop();
+  });
+
+  it("429 с Retry-After: следующий снимок не раньше, потом повтор и успех", async () => {
+    const t = setup({ transport: false, config: { resyncMinMs: 100 } });
+    t.fetchState.mockRejectedValueOnce(new ApiError(429, { code: "http.429" }, 7));
+    t.link.start();
+    await flush();
+    expect(t.fetchState).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(6_900);
+    expect(t.fetchState).toHaveBeenCalledTimes(1); // ждём retry_after
+    await vi.advanceTimersByTimeAsync(200);
+    expect(t.fetchState).toHaveBeenCalledTimes(2);
+    expect(t.states.at(-1)).toBe(1);
+    t.link.stop();
+  });
+
+  it("429 без заголовка: retry_after берётся из details; без значения — окно resyncMinMs", async () => {
+    expect(rateLimitDelayMs(new ApiError(429, { code: "x", details: { retry_after: 3 } }))).toBe(
+      3000,
+    );
+    expect(rateLimitDelayMs(new ApiError(429, { code: "x" }))).toBe(0);
+    expect(rateLimitDelayMs(new ApiError(500, { code: "x" }))).toBeNull();
+    expect(rateLimitDelayMs(new NetworkError())).toBeNull();
+  });
+
+  it("429 повторяется не бесконечно: после лимита повторов снимок приносит tick", async () => {
+    const t = setup({ config: { resyncMinMs: 100, resyncRateLimitRetries: 2 } });
+    t.fetchState.mockRejectedValue(new ApiError(429, { code: "http.429" }, 1));
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(t.fetchState).toHaveBeenCalledTimes(3); // первый + 2 повтора
+    t.link.stop();
+  });
+
+  it("после последнего повтора 429 окно остаётся сдвинутым: tick не бьёт в /state сразу", async () => {
+    const t = setup({ config: { resyncMinMs: 100, resyncRateLimitRetries: 0 } });
+    t.fetchState.mockRejectedValue(new ApiError(429, { code: "http.429" }, 10));
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(t.fetchState).toHaveBeenCalledTimes(1);
+    void t.link.resync(); // просьба внутри окна retry_after
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(t.fetchState).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(t.fetchState).toHaveBeenCalledTimes(2);
+    t.link.stop();
+  });
+
+  it("огромный Retry-After не вешает ресинк дольше потолка", async () => {
+    const t = setup({
+      transport: false,
+      config: { resyncMinMs: 100, resyncMaxWaitMs: 5_000, resyncRateLimitRetries: 1 },
+    });
+    t.fetchState.mockRejectedValueOnce(new ApiError(429, { code: "http.429" }, 3600));
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(4_900);
+    expect(t.fetchState).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(t.fetchState).toHaveBeenCalledTimes(2);
+    t.link.stop();
+  });
+
+  it("429, затем 403: комната закрыта — onFatal, без новых запросов", async () => {
+    const t = setup({ transport: false, config: { resyncMinMs: 100 } });
+    t.fetchState
+      .mockRejectedValueOnce(new ApiError(429, { code: "http.429" }, 1))
+      .mockRejectedValue(new ApiError(403, { code: "match.not_participant" }));
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(t.onFatal).toHaveBeenCalledTimes(1);
+  });
+
+  it("stop и start во время ожидания: старый цикл не оживает, запросов не больше нужного", async () => {
+    const t = setup({ transport: false, config: { resyncMinMs: 1000 } });
+    t.link.start();
+    await flush();
+    void t.link.resync(); // ждёт окно
+    t.link.stop();
+    t.link.start();
+    await vi.advanceTimersByTimeAsync(1_200);
+    // Первый запуск — 1 запрос; после перезапуска — один запрос нового цикла (старый не ожил).
+    expect(t.fetchState.mock.calls.length).toBeLessThanOrEqual(3);
+    const before = t.fetchState.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(300);
+    expect(t.fetchState.mock.calls.length).toBe(before);
+    t.link.stop();
+  });
+
+  it("stop во время ожидания окна не оставляет запросов", async () => {
+    const t = setup({ transport: false, config: { resyncMinMs: 1000 } });
+    t.link.start();
+    await flush();
+    void t.link.resync();
+    t.link.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(t.fetchState).toHaveBeenCalledTimes(1);
   });
 });

@@ -28,7 +28,7 @@ export function SiteHeader() {
   const f = useFormatter();
   const icons = useIcons();
   const pathname = usePathname();
-  const { data } = useSessionInfo();
+  const { data, nameResolving } = useSessionInfo({ keep: true });
   const subject = data?.subject ?? null;
   const isUser = subject?.kind === "user";
   const active = activeNav(pathname);
@@ -125,9 +125,20 @@ export function SiteHeader() {
               dir="auto"
             >
               <Avatar name={subject.display_name} size="sm" className="border-2 border-music" />
-              <span className="max-w-32 truncate max-sm:sr-only" data-testid="user-name">
-                {subject.display_name ?? t("nav.player")}
-              </span>
+              {subject.display_name || !nameResolving ? (
+                <span className="max-w-32 truncate max-sm:sr-only" data-testid="user-name">
+                  {subject.display_name ?? t("nav.player")}
+                </span>
+              ) : (
+                // Имя вот-вот придёт (сбой identity): скелетон, а не «Игрок».
+                <span
+                  aria-busy
+                  className="h-3.5 w-20 animate-pulse rounded-full bg-rule max-sm:sr-only"
+                  data-testid="user-name-skeleton"
+                >
+                  <span className="sr-only">{t("common.loading")}</span>
+                </span>
+              )}
             </Link>
           </>
         ) : (
