@@ -11,6 +11,8 @@ export type FieldError = {
   reason?: string;
   min?: number;
   max?: number;
+  /** Готовый русский текст сервера — показываем, только если кода нет в словаре клиента. */
+  message?: string;
 };
 
 export type FieldRef =
@@ -53,7 +55,16 @@ export function fieldErrorsOf(e: unknown): FieldError[] {
     const path = str(o.path);
     const code = str(o.code);
     if (!path || !code) return [];
-    return [{ path, code, reason: str(o.reason), min: num(o.min), max: num(o.max) }];
+    return [
+      {
+        path,
+        code,
+        reason: str(o.reason),
+        min: num(o.min),
+        max: num(o.max),
+        message: str(o.message),
+      },
+    ];
   });
 }
 
@@ -69,10 +80,14 @@ const codeKey = (code: string): Key | null =>
  * Текст ошибки по коду (`collections.*`, `library.*`, `game.*`, `auth.*`), уточнённый причиной
  * `ugc.*` (`details.reason`). Неизвестный код — общий текст.
  */
-export function errorText(t: T, error: Pick<FieldError, "code" | "reason" | "min" | "max">) {
+export function errorText(
+  t: T,
+  error: Pick<FieldError, "code" | "reason" | "min" | "max" | "message">,
+) {
   const values = { min: error.min ?? 0, max: error.max ?? 0 };
   const key = codeKey(error.code);
-  const base = key && t.has(key) ? t(key, values) : t("errors.unknown");
+  // Новый код сервера, которого клиент ещё не знает: лучше его текст, чем «что-то пошло не так».
+  const base = key && t.has(key) ? t(key, values) : (error.message ?? t("errors.unknown"));
   const reason = error.reason ? codeKey(error.reason) : null;
   return reason && t.has(reason) ? `${base}: ${t(reason, values)}` : base;
 }

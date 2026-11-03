@@ -4,10 +4,10 @@
  * `GET /v1/meta`, режим, состав (поиск в catalog, порядок, играбельность, свои эмодзи),
  * автосохранение с экраном конфликта и публикация с ошибками по полям.
  */
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { isApiError } from "@/shared/api/errors";
 import type { DraftOut, MetaLimits, TagOut } from "@/shared/api/types";
@@ -133,6 +133,9 @@ export function CollectionEditor({
     items.map((i) => i.media_item_id),
   );
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const client = useQueryClient();
+  const errorsBlock = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
   const modeId = useId();
@@ -155,6 +158,24 @@ export function CollectionEditor({
       type: "edit",
       patch: { tags: on ? selectedTags.filter((k) => k !== tag.key) : [...selectedTags, tag.key] },
     });
+  };
+
+  // Список причин стоит вверху, а «Опубликовать» — внизу: после отказа показываем причины.
+  const hasErrors = state.errors.length > 0;
+  useEffect(() => {
+    if (hasErrors) errorsBlock.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [hasErrors, state.errors]);
+
+  const onDelete = async () => {
+    setBusy(true);
+    try {
+      await editor.remove();
+      await client.invalidateQueries({ queryKey: collectionKeys.mine });
+      router.push("/me/collections");
+    } catch (e) {
+      toast(apiErrorText(t, e));
+      setBusy(false);
+    }
   };
 
   const onPublish = async () => {
@@ -229,6 +250,7 @@ export function CollectionEditor({
 
       {state.errors.length > 0 && (
         <div
+          ref={errorsBlock}
           role="alert"
           className="flex flex-col gap-1 rounded-[var(--radius-control)] border-[1.5px] border-miss-line bg-miss-fill px-4 py-3"
           data-testid="editor-errors"
@@ -427,6 +449,46 @@ export function CollectionEditor({
         <Button asChild size="lg" variant="secondary">
           <Link href="/me/collections">{t("collections.mine.title")}</Link>
         </Button>
+        {confirmingDelete ? (
+          <>
+            <p
+              className="basis-full text-sm text-ink-muted"
+              role="alert"
+              data-testid="editor-delete-warning"
+            >
+              {t("collections.mine.deleteWarning", {
+                title: body.title || t("collections.untitled"),
+              })}
+            </p>
+            <Button
+              size="lg"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void onDelete()}
+              data-testid="editor-delete-confirm"
+            >
+              {t("collections.mine.deleteConfirm")}
+            </Button>
+            <Button
+              size="lg"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              {t("collections.mine.cancel")}
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="lg"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => setConfirmingDelete(true)}
+            data-testid="editor-delete"
+          >
+            {t("collections.mine.delete")}
+          </Button>
+        )}
       </div>
     </div>
   );

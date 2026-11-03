@@ -303,6 +303,7 @@ export function MatchStage({ code, state, store, clock, myId, bubbles, act, comm
                 me={me ?? null}
                 disabled={!myOpen || busy}
                 canSkip={level !== null && level < match.levels_count}
+                lastLevel={level !== null && level >= match.levels_count}
                 onGuess={onGuess}
                 onSkip={onSkip}
                 focusKey={`${match.round_index}:${level}`}
